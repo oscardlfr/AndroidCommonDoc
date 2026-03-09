@@ -1,0 +1,31 @@
+{
+  "captured_at": "2026-03-16T23:42:49Z",
+  "layer": "L0",
+  "target_root": "AndroidCommonDoc",
+  "hub_docs": {
+    "present": 0,
+    "total": 13,
+    "coverage_pct": 0.0,
+    "missing": ["architecture", "compose", "di", "error-handling", "gradle", "guides", "navigation", "offline-first", "resources", "storage", "testing", "ui", "archive"]
+  },
+  "monitor_urls": {
+    "present": 26,
+    "total": 56,
+    "coverage_pct": 46.4
+  },
+  "detekt_rules": {
+    "present": 4,
+    "total": 56,
+    "coverage_pct": 7.1
+  },
+  "planning_ref_violations": 3,
+  "planning_ref_files": [
+    ".claude/commands/doc-check.md",
+    ".claude/commands/merge-track.md",
+    ".claude/commands/sync-roadmap.md"
+  ],
+  "line_limit_violations": 0,
+  "total_docs_excl_archive": 56,
+  "total_chars": 247503,
+  "estimated_tokens": 61876
+}

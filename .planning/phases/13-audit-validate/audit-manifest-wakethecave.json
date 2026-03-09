@@ -1,0 +1,4554 @@
+{
+  "project": "WakeTheCave",
+  "path": "C:/Users/34645/AndroidStudioProjects/WakeTheCave/WakeTheCave",
+  "layer": "L2",
+  "audit_mode": "read-only",
+  "generated": "2026-03-14T17:46:44.480Z",
+  "file_count": 209,
+  "files": [
+    {
+      "path": "docs/01-architecture/accessibility-guide.md",
+      "directory": "docs/01-architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "ui-screen-patterns"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/01-architecture/architecture-validation.md",
+      "directory": "docs/01-architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/01-architecture/automation-system-architecture.md",
+      "directory": "docs/01-architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "viewmodel-state-patterns",
+        "viewmodel-state-management"
+      ],
+      "notes": "valuable domain insight - automation system architecture"
+    },
+    {
+      "path": "docs/01-architecture/automation-system-kmp-compliance.md",
+      "directory": "docs/01-architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight - automation system architecture"
+    },
+    {
+      "path": "docs/01-architecture/current-architecture-issues.md",
+      "directory": "docs/01-architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "testing-patterns-coverage"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/01-architecture/datasources-guide.md",
+      "directory": "docs/01-architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/01-architecture/decisions/005-data-layer-strategy.md",
+      "directory": "docs/01-architecture/decisions",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/01-architecture/domain-error-mapping-proposal.md",
+      "directory": "docs/01-architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns"
+      ],
+      "notes": "valuable domain insight"
+    },
+    {
+      "path": "docs/01-architecture/error-handling-guide.md",
+      "directory": "docs/01-architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "viewmodel-state-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/01-architecture/integration-refactoring-plan.md",
+      "directory": "docs/01-architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/01-architecture/kmp-storage-vs-database.md",
+      "directory": "docs/01-architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/01-architecture/module-structure-kmp.md",
+      "directory": "docs/01-architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/01-architecture/patterns/api-version-compatibility-2026-validated.md",
+      "directory": "docs/01-architecture/patterns",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/01-architecture/patterns/command-execution-guide.md",
+      "directory": "docs/01-architecture/patterns",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight"
+    },
+    {
+      "path": "docs/01-architecture/patterns/consolidated-architecture-final.md",
+      "directory": "docs/01-architecture/patterns",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns"
+      ],
+      "notes": "valuable domain insight; completed work"
+    },
+    {
+      "path": "docs/01-architecture/patterns/README.md",
+      "directory": "docs/01-architecture/patterns",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "viewmodel-state-patterns"
+      ],
+      "notes": "references Now in Android patterns"
+    },
+    {
+      "path": "docs/01-architecture/patterns/screen-implementation-guide.md",
+      "directory": "docs/01-architecture/patterns",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-patterns",
+        "ui-screen-patterns"
+      ],
+      "notes": "deprecated, points to AndroidCommonDoc"
+    },
+    {
+      "path": "docs/01-architecture/patterns/testing-patterns.md",
+      "directory": "docs/01-architecture/patterns",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "testing-patterns",
+        "testing-patterns-coroutines",
+        "testing-patterns-coverage",
+        "testing-patterns-fakes",
+        "viewmodel-state-patterns",
+        "ui-screen-patterns",
+        "kmp-architecture",
+        "offline-first-caching",
+        "compose-resources-patterns"
+      ],
+      "notes": "completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/01-architecture/patterns/ui-patterns.md",
+      "directory": "docs/01-architecture/patterns",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "ui-screen-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": "deprecated, points to AndroidCommonDoc"
+    },
+    {
+      "path": "docs/01-architecture/patterns/viewmodel-patterns.md",
+      "directory": "docs/01-architecture/patterns",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "viewmodel-state-patterns"
+      ],
+      "notes": "deprecated, points to AndroidCommonDoc; references Now in Android patterns"
+    },
+    {
+      "path": "docs/01-architecture/refactoring/onboarding-permissions-jit-strategy.md",
+      "directory": "docs/01-architecture/refactoring",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "ui-screen-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/01-architecture/retry-architecture-and-ui-components.md",
+      "directory": "docs/01-architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "viewmodel-state-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/02-plans/architecture-before-after.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/02-plans/architecture-decisions-summary.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/02-plans/architecture-refactor-kmp-ready.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "testing-patterns-coverage",
+        "offline-first-caching"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/02-plans/bugs-known-issues.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight"
+    },
+    {
+      "path": "docs/02-plans/consolidated-architecture-implementation-plan.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/02-plans/domain-exception-actual-status.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/02-plans/domain-exception-migration-COMPLETED.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/02-plans/domain-exception-pending-verification.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "testing-patterns-coverage"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/02-plans/final-decisions-confirmed.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-sync"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/02-plans/firebase-integration-strategy.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/02-plans/improvements-timing-recommendation.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "ui-screen-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/02-plans/kmp-migration.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "kmp-architecture",
+        "offline-first-caching"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/02-plans/nav3-scene-strategies-integration-plan.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "viewmodel-navigation",
+        "ui-screen-patterns"
+      ],
+      "notes": "references Now in Android patterns"
+    },
+    {
+      "path": "docs/02-plans/phase-0-final-package-structure.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/02-plans/phase-0-package-refactor-guide.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/02-plans/presets-automations-tabs-future.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "ui-screen-patterns"
+      ],
+      "notes": "references Now in Android patterns"
+    },
+    {
+      "path": "docs/02-plans/REFACTOR-QUICKSTART.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/02-plans/regions-support-implementation.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/02-plans/roadmap-and-priorities.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "viewmodel-state-patterns",
+        "ui-screen-patterns",
+        "offline-first-caching",
+        "compose-resources-patterns"
+      ],
+      "notes": "valuable domain insight - automation system architecture; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/02-plans/session-auth-implementation-plan.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/02-plans/settings-kmp-migration-phase4.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "ui-screen-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/02-plans/technical-improvements-plan.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/02-plans/testing-implementation-plan.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/02-plans/ui-improvements-plan.md",
+      "directory": "docs/02-plans",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "ui-screen-patterns"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/03-integrations/api-analysis.md",
+      "directory": "docs/03-integrations",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight - smart home device catalog"
+    },
+    {
+      "path": "docs/03-integrations/api-legal-analysis.md",
+      "directory": "docs/03-integrations",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight"
+    },
+    {
+      "path": "docs/03-integrations/api-technical-analysis.md",
+      "directory": "docs/03-integrations",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight - smart home device catalog"
+    },
+    {
+      "path": "docs/03-integrations/compatibility-implementation.md",
+      "directory": "docs/03-integrations",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "viewmodel-state-patterns"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/03-integrations/compatibility-testing-coverage.md",
+      "directory": "docs/03-integrations",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/03-integrations/integration-roadmap.md",
+      "directory": "docs/03-integrations",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight - smart home device catalog; completed work"
+    },
+    {
+      "path": "docs/03-integrations/sdk-architecture.md",
+      "directory": "docs/03-integrations",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight"
+    },
+    {
+      "path": "docs/04-proposals/device-integrations.md",
+      "directory": "docs/04-proposals",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/04-proposals/mcp-agent-skills-integration.md",
+      "directory": "docs/04-proposals",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "references Now in Android patterns"
+    },
+    {
+      "path": "docs/04-proposals/module-architecture-proposal.md",
+      "directory": "docs/04-proposals",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/04-proposals/owasp-logging-system.md",
+      "directory": "docs/04-proposals",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/04-proposals/platform-abstraction.md",
+      "directory": "docs/04-proposals",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/04-proposals/repository-structure.md",
+      "directory": "docs/04-proposals",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/04-proposals/result-strategy-analysis.md",
+      "directory": "docs/04-proposals",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "references Now in Android patterns"
+    },
+    {
+      "path": "docs/04-proposals/routines-and-integration.md",
+      "directory": "docs/04-proposals",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "references Now in Android patterns"
+    },
+    {
+      "path": "docs/05-ui-ux/ui-prd-v2.md",
+      "directory": "docs/05-ui-ux",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "viewmodel-state-patterns",
+        "offline-first-caching"
+      ],
+      "notes": "valuable domain insight - smart home device catalog"
+    },
+    {
+      "path": "docs/06-firebase/app-name-and-firebase-considerations.md",
+      "directory": "docs/06-firebase",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/06-firebase/package-name-change-guide.md",
+      "directory": "docs/06-firebase",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/06-firebase/post-setup-checklist.md",
+      "directory": "docs/06-firebase",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/06-firebase/pricing-analysis.md",
+      "directory": "docs/06-firebase",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight"
+    },
+    {
+      "path": "docs/06-firebase/setup-guide.md",
+      "directory": "docs/06-firebase",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/07-distribution/country-detection.md",
+      "directory": "docs/07-distribution",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight"
+    },
+    {
+      "path": "docs/07-distribution/geographic-distribution.md",
+      "directory": "docs/07-distribution",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight"
+    },
+    {
+      "path": "docs/07-distribution/SMART_HOME_DEVICE_CATEGORIES_COMPLETE.md",
+      "directory": "docs/07-distribution",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "valuable domain insight - smart home device catalog"
+    },
+    {
+      "path": "docs/08-reference/androidify-testing-patterns-analysis.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "testing-patterns",
+        "testing-patterns-coroutines",
+        "viewmodel-state-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/08-reference/app-module-pattern-alignment-report.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "viewmodel-state-patterns",
+        "viewmodel-events",
+        "viewmodel-state-management"
+      ],
+      "notes": "completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/08-reference/data-storage-guide.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/08-reference/e2e-koin-migration-status.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/08-reference/e2e-session-testing-cases.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/08-reference/implementation-summary.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/08-reference/kmp-package-reorganization.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "kmp-architecture",
+        "offline-first-caching"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/08-reference/logging-events-catalog.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight - automation system architecture; completed work"
+    },
+    {
+      "path": "docs/08-reference/module-migration-guide.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/08-reference/oauth-library-decision.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/08-reference/operation-measurement-implementation.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/08-reference/string-resources-guidelines.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "viewmodel-state-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": "references Now in Android patterns"
+    },
+    {
+      "path": "docs/08-reference/test-coverage-guide.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "testing-patterns",
+        "testing-patterns-coroutines",
+        "testing-patterns-coverage",
+        "offline-first-caching"
+      ],
+      "notes": "references Now in Android patterns"
+    },
+    {
+      "path": "docs/08-reference/test-coverage-progress.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "testing-patterns",
+        "testing-patterns-coroutines",
+        "testing-patterns-coverage",
+        "viewmodel-state-patterns",
+        "offline-first-sync"
+      ],
+      "notes": "completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/08-reference/test-review-analysis.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "testing-patterns",
+        "testing-patterns-coroutines",
+        "viewmodel-state-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/08-reference/testdispatcher-comparison-analysis.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "testing-patterns",
+        "testing-patterns-coroutines",
+        "viewmodel-state-patterns"
+      ],
+      "notes": "references Now in Android patterns"
+    },
+    {
+      "path": "docs/08-reference/testing-coverage.md",
+      "directory": "docs/08-reference",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "testing-patterns",
+        "testing-patterns-coroutines",
+        "viewmodel-state-patterns",
+        "ui-screen-patterns"
+      ],
+      "notes": "completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/AGENT_START_PROMPT.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight - automation system architecture; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/AGENT_START_PROMPT_STORAGE.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "valuable domain insight; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/ai-testing-workflow.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "testing-patterns-coverage"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/ANTIGRAVITY_CONTEXT.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "testing-patterns-coverage",
+        "ui-screen-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": "valuable domain insight; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/accessibility-body-message-analysis-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/accessibility-compliance-audit-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "compose-resources-patterns"
+      ],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/accessibility-components-audit-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "ui-screen-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/accessibility-improvements-plan-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/accessibility-pending-tasks-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/accessibility-remaining-patterns-analysis-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/accessibility-test-coverage-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/alignment-refactor-plan-mostly-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/ANALISIS_CONSOLIDACION_DOC.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/analysis-settings-viewmodel-dependencies-resolved-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/android-tests-alignment-plan-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/api-version-compatibility-obsolete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/auth-and-oauth-proposal-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "kmp-architecture"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/auth-consolidation-plan-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/auth-module-reorganization-plan-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "kmp-architecture"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/automation-conflict-detection-issue.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-management"
+      ],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/automation-phase5-test-coverage-review.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/automation-phase5-tests-fix-summary.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/automation-system-implementation-plan-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/automation-viewmodel-refactor-plan.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "testing-patterns-coroutines",
+        "viewmodel-state-patterns",
+        "viewmodel-state-management"
+      ],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/biometric-integration-ui-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-navigation"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/command-execution-pattern-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/command-execution-strategies-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/command-executor-abstraction-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/command-executor-adapter-registry-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/complete-documentation-analysis-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/concurrency-metrics-error-handling-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "viewmodel-state-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/consolidated-architecture-action-plan-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/consolidated-architecture-validation-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/current-architecture-invalid-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-patterns",
+        "viewmodel-navigation",
+        "viewmodel-state-management",
+        "kmp-architecture",
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/current-phase-status-consolidated-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/datasources-architecture-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/datasources-checklist-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/datasources-implementation-guide-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/datasources-implementation-plan-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/DOCUMENTATION-ALIGNMENT-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/documentation-cleanup-2026-01-complete.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/documentation-cleanup-2026-01-final.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/documentation-cleanup-2026-01-summary.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/documentation-cleanup-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/documentation-cleanup-summary-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/documentation-cleanup-summary.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/documentation-consolidation-plan-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/documentation-consolidation-summary-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/documentation-consolidation-summary.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/documentation-organization-final-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/documentation-organization-summary-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/documentation-organization-work-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/documentation-reorganization-2026-01-summary.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/DOCUMENTATION_REORGANIZATION_COMPLETE.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/DOCUMENTATION_REORGANIZATION_PLAN.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/DOCUMENTATION_REORGANIZATION_SUMMARY.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/DOCUMENTATION_UNIFICATION_PLAN.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/DOCUMENTATION_UNIFICATION_SUMMARY.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/e2e-test-cases-plan-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/error-handling-flow-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/error-handling-strategy-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/fase7-5-validation.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "testing-patterns-coroutines",
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/firebase-logging-cache-implementation-summary-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "error-handling-patterns"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/firebase-logging-cache-plan-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "error-handling-patterns"
+      ],
+      "notes": "archived historical document; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/firebase-logging-strategy-update-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/firebase-modular-split-plan-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/firebase-session-kmp-roadmap-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/future-architecture-obsolete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/implementation-roadmap-2024.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/IMPLEMENTATION-STATUS-ANALYSIS.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/integration-roadmap-alignment-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/kmp-reorganization-execution-plan.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/kmp-structure-unified.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "kmp-architecture",
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/model-migration-duplicate-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/network-executor-progress.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/next-steps-analysis.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "kmp-architecture"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/NEXT_STEPS-consolidated-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/onboarding-udf-refactoring-plan-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "testing-patterns",
+        "testing-patterns-coroutines",
+        "viewmodel-state-patterns",
+        "viewmodel-navigation",
+        "viewmodel-state-management",
+        "ui-screen-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/other-folders-analysis-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/password-manager-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/PLAN-CONSOLIDATION-2026-01-executed.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/plans-analysis-consolidation-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/PLANS-INDEX-consolidated-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/preset-command-executor-fallback-explanation-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/priority-comparison.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/project-cleanup-analysis.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/refactoring-priority.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/session-e2e-verification-plan-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/session-integration-end-to-end-plan-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/session-integration-validation-summary-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/session-management-and-auth-architecture-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/session-management-now-in-android-validation-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-patterns",
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/storage-consolidation-plan-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/storage-migration-guide-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/storage-modules-reorganization-plan-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/storage-package-fix-summary-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/storage-package-migration-guide-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document"
+    },
+    {
+      "path": "docs/archive/syncstrategy-datasources-integration-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/testing-v2-navigation-coverage-plan-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-navigation"
+      ],
+      "notes": "archived historical document; completed work"
+    },
+    {
+      "path": "docs/archive/turbine-removal-plan-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "testing-patterns",
+        "testing-patterns-coroutines",
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/viewmodel-alignment-complete-summary-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/viewmodel-alignment-phase4-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/viewmodel-alignment-phase5-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/viewmodel-alignment-phase6-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "viewmodel-state-patterns"
+      ],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/archive/viewmodel-alignment-plan-complete-2026-01.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "advisory_superseded",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "testing-patterns",
+        "testing-patterns-coroutines",
+        "viewmodel-state-patterns",
+        "viewmodel-state-management"
+      ],
+      "notes": "archived historical document; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/feature-module-alignment-status.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "viewmodel-state-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/feature-presets-alignment-report.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "viewmodel-state-patterns",
+        "viewmodel-state-management",
+        "ui-screen-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs/GITIGNORE_NOTES.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": ""
+    },
+    {
+      "path": "docs/main-prompt.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "testing-patterns",
+        "testing-patterns-coroutines",
+        "viewmodel-state-patterns",
+        "ui-screen-patterns",
+        "offline-first-caching"
+      ],
+      "notes": "valuable domain insight - automation system architecture; completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs/OTHER_FOLDERS_ANALYSIS.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "completed work"
+    },
+    {
+      "path": "docs/PENDING_TASKS_TRACKING.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "valuable domain insight - automation system architecture; completed work"
+    },
+    {
+      "path": "docs/README.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "completed work; references Now in Android patterns"
+    },
+    {
+      "path": "docs2/01-domain/domain-layer.md",
+      "directory": "docs2/01-domain",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs2/02-data/data-layer.md",
+      "directory": "docs2/02-data",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs2/03-presentation/presentation-layer.md",
+      "directory": "docs2/03-presentation",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "viewmodel-state-patterns",
+        "viewmodel-navigation",
+        "viewmodel-state-management",
+        "ui-screen-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs2/04-infrastructure/auth.md",
+      "directory": "docs2/04-infrastructure",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [],
+      "notes": "references Now in Android patterns"
+    },
+    {
+      "path": "docs2/04-infrastructure/firebase.md",
+      "directory": "docs2/04-infrastructure",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-sync"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs2/04-infrastructure/integrations.md",
+      "directory": "docs2/04-infrastructure",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs2/04-infrastructure/storage.md",
+      "directory": "docs2/04-infrastructure",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "offline-first-caching"
+      ],
+      "notes": "references Now in Android patterns"
+    },
+    {
+      "path": "docs2/05-cross-cutting/error-handling.md",
+      "directory": "docs2/05-cross-cutting",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "compose-resources-patterns"
+      ],
+      "notes": ""
+    },
+    {
+      "path": "docs2/05-cross-cutting/testing.md",
+      "directory": "docs2/05-cross-cutting",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "testing-patterns",
+        "testing-patterns-coroutines",
+        "viewmodel-state-patterns",
+        "ui-screen-patterns"
+      ],
+      "notes": "references Now in Android patterns"
+    },
+    {
+      "path": "docs2/README.md",
+      "directory": "docs2",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "l0_candidate": false,
+      "l0_rationale": null,
+      "action": "keep_L2",
+      "overlaps_with": [
+        "error-handling-patterns",
+        "viewmodel-state-patterns",
+        "offline-first-caching",
+        "compose-resources-patterns"
+      ],
+      "notes": "completed work; references Now in Android patterns"
+    }
+  ],
+  "summary": {
+    "total_files": 209,
+    "by_directory": {
+      "docs/01-architecture": 12,
+      "docs/01-architecture/decisions": 1,
+      "docs/01-architecture/patterns": 8,
+      "docs/01-architecture/refactoring": 1,
+      "docs/02-plans": 24,
+      "docs/03-integrations": 7,
+      "docs/04-proposals": 8,
+      "docs/05-ui-ux": 1,
+      "docs/06-firebase": 5,
+      "docs/07-distribution": 3,
+      "docs/08-reference": 17,
+      "docs": 11,
+      "docs/archive": 101,
+      "docs2/01-domain": 1,
+      "docs2/02-data": 1,
+      "docs2/03-presentation": 1,
+      "docs2/04-infrastructure": 4,
+      "docs2/05-cross-cutting": 2,
+      "docs2": 1
+    },
+    "by_classification": {
+      "ACTIVE": 82,
+      "SUPERSEDED": 104,
+      "UNIQUE": 23
+    },
+    "by_recommended_layer": {
+      "L0": 0,
+      "L1": 0,
+      "L2": 209
+    },
+    "ai_readiness_avg": 3.69,
+    "l0_promotion_candidates": 0,
+    "l0_candidates_list": [],
+    "advisory_recommendations": [
+      "docs/archive has 101 superseded files that could be cleaned up or consolidated",
+      "3 files are deprecated and point to AndroidCommonDoc as canonical source",
+      "docs2/ has a clean Architecture-layer structure (10 files) that could serve as a documentation template model",
+      "23 files contain unique domain knowledge not found elsewhere",
+      "110 files overlap with existing AndroidCommonDoc L0 pattern docs - content already covered at L0 level"
+    ]
+  }
+}

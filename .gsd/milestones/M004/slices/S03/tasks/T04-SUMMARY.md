@@ -1,0 +1,140 @@
+---
+id: T04
+parent: S03
+milestone: M004
+provides: []
+requires: []
+affects: []
+key_files: []
+key_decisions: []
+patterns_established: []
+observability_surfaces: []
+drill_down_paths: []
+duration: 
+verification_result: passed
+completed_at: 
+blocker_discovered: false
+---
+# T04: 14.1-docs-subdirectory-reorganization 04
+
+**# Phase 14.1 Plan 04: L2 DawSync Docs Reorganization Summary**
+
+## What Happened
+
+# Phase 14.1 Plan 04: L2 DawSync Docs Reorganization Summary
+
+**DawSync 44 files reorganized into 9 domain subdirectories with category frontmatter, CODEX_AUDITY archived, delegate paths updated, and docs/README.md generated**
+
+## Performance
+
+- **Duration:** 6 min
+- **Started:** 2026-03-14T23:18:28Z
+- **Completed:** 2026-03-14T23:24:43Z
+- **Tasks:** 1
+- **Files modified:** 44
+
+## Accomplishments
+- All 10 flat .md files + 1 .pdf moved to business/ (5), product/ (3), tech/ (3) subdirectories
+- CODEX_AUDITY/ (5 audit docs) moved to archive/CODEX_AUDITY/
+- sync engine web.drawio moved to architecture/diagrams/
+- Category frontmatter added to 35 DawSync .md docs across all active subdirectories
+- Cross-references in TECHNOLOGY_CHEATSHEET.md updated for new relative paths (14 links fixed)
+- 3 stale references to superseded docs fixed to point to current active equivalents
+- DawSync delegate files updated: freemium-gate-checker.md and roadmap.md command
+- CLAUDE_CODE_WORKFLOW.md canonical path updated to L0 guides/ location
+- docs/README.md generated with subdirectory table, classification system, and key entry points
+- Zero .md or .pdf files remain at docs/ root (only README.md + subdirectories)
+
+## Task Commits
+
+Each task was committed atomically:
+
+1. **Task 1: Move flat DawSync docs to subdirectories + add category frontmatter** - `b407ca17` (feat) -- in DawSync repo
+
+## Files Created/Modified
+- `docs/README.md` -- Auto-generated L2 docs index with subdirectory table
+- `docs/business/BUSINESS_STRATEGY.md` -- Moved from root, added category: business
+- `docs/business/DawSync_Business_Plan.pdf` -- Moved from root
+- `docs/business/VIABILITY_AUDIT.md` -- Moved from root, added category: business
+- `docs/business/SCALING_PLAN.md` -- Moved from root, added category: business
+- `docs/business/DAWSYNC_PARA_ARTISTAS.md` -- Moved from root, added category: business
+- `docs/product/PRODUCT_SPEC.md` -- Moved from root, added category: product
+- `docs/product/FEATURE_INVENTORY.md` -- Moved from root, added category: product
+- `docs/product/RISKS_RULES.md` -- Moved from root, added category: product
+- `docs/tech/TECHNOLOGY_CHEATSHEET.md` -- Moved from root, added category: tech, fixed cross-references
+- `docs/tech/CLAUDE_CODE_WORKFLOW.md` -- Moved from root, updated canonical path
+- `docs/tech/SBOM.md` -- Moved from root, added category: tech
+- `docs/archive/CODEX_AUDITY/` -- 5 audit files moved from root CODEX_AUDITY/
+- `docs/architecture/diagrams/sync engine web.drawio` -- Moved from root
+- `docs/architecture/PATTERNS.md` -- Added category: architecture
+- `docs/architecture/PRODUCER_CONSUMER.md` -- Added category: architecture
+- `docs/architecture/SYSTEM_ARCHITECTURE.md` -- Added category: architecture
+- `docs/architecture/diagrams/LEGEND.md` -- Added category: architecture
+- `docs/architecture/diagrams/README.md` -- Added category: architecture
+- `docs/guides/{6 files}` -- Added category: guides
+- `docs/legal/{11 files}` -- Added category: legal
+- `docs/references/ABLETON_TEST_DATA.md` -- Added category: references
+- `docs/references/ANDROID_2026.md` -- Added category: references
+- `.claude/agents/freemium-gate-checker.md` -- Updated docs/BUSINESS_STRATEGY.md path
+- `.claude/commands/roadmap.md` -- Updated docs/FEATURE_INVENTORY.md path (2 references)
+
+## Decisions Made
+- DawSync architecture/diagrams/ already well-organized in A-H prefixed subdirectories (60+ diagrams) -- no further domain grouping needed
+- CODEX_AUDITY files moved as-is to archive/ preserving internal structure -- no frontmatter added per plan spec (nested artifacts)
+- VST3_SPEC.yaml is a YAML reference file, not markdown -- skipped for category frontmatter
+- Stale TECHNOLOGY_CHEATSHEET.md references to superseded docs (GRADLE_PATTERNS.md, NAVIGATION_GUIDE.md, KMP_RESOURCES_CONVENTION.md) fixed to point to current active equivalents (PRODUCER_CONSUMER.md, NAVIGATION.md, KMP_RESOURCES.md)
+- CLAUDE_CODE_WORKFLOW.md canonical path updated from `AndroidCommonDoc/docs/claude-code-workflow.md` to `AndroidCommonDoc/docs/guides/claude-code-workflow.md` to reflect L0 reorganization from Plan 02
+
+## Deviations from Plan
+
+### Auto-fixed Issues
+
+**1. [Rule 1 - Bug] Fixed stale cross-references in TECHNOLOGY_CHEATSHEET.md**
+- **Found during:** Task 1 (cross-reference update)
+- **Issue:** TECHNOLOGY_CHEATSHEET.md had 3 references to docs that were superseded in Phase 14-09 (GRADLE_PATTERNS.md, NAVIGATION_GUIDE.md, KMP_RESOURCES_CONVENTION.md). These were already broken before this plan.
+- **Fix:** Updated to point to current active equivalents: PRODUCER_CONSUMER.md, NAVIGATION.md, KMP_RESOURCES.md with correct relative paths
+- **Files modified:** docs/tech/TECHNOLOGY_CHEATSHEET.md
+- **Verification:** All links now resolve to existing files
+- **Committed in:** b407ca17
+
+**2. [Rule 2 - Missing Critical] Updated DawSync delegate file references**
+- **Found during:** Task 1 (delegate file audit)
+- **Issue:** freemium-gate-checker.md referenced `docs/BUSINESS_STRATEGY.md` and roadmap.md referenced `docs/FEATURE_INVENTORY.md` -- both paths broken after file moves
+- **Fix:** Updated to `docs/business/BUSINESS_STRATEGY.md` and `docs/product/FEATURE_INVENTORY.md`
+- **Files modified:** .claude/agents/freemium-gate-checker.md, .claude/commands/roadmap.md
+- **Verification:** All delegate file references point to existing paths
+- **Committed in:** b407ca17
+
+**3. [Rule 1 - Bug] Updated CLAUDE_CODE_WORKFLOW.md canonical path**
+- **Found during:** Task 1 (frontmatter update)
+- **Issue:** Delegate's canonical path referenced `AndroidCommonDoc/docs/claude-code-workflow.md` but L0 reorganization (Plan 02) moved it to `AndroidCommonDoc/docs/guides/claude-code-workflow.md`
+- **Fix:** Updated canonical field in frontmatter
+- **Files modified:** docs/tech/CLAUDE_CODE_WORKFLOW.md
+- **Verification:** Canonical path matches actual L0 file location
+- **Committed in:** b407ca17
+
+---
+
+**Total deviations:** 3 auto-fixed (2 bugs, 1 missing critical)
+**Impact on plan:** All fixes necessary for reference correctness. The plan instructed to audit delegate files and update cross-references -- these deviations are expected findings from that audit.
+
+## Issues Encountered
+- Pre-existing modified files in DawSync working tree (settings.gradle.kts, coverage-full-report.md, etc.) required careful staging to ensure only plan-related changes were committed.
+
+## User Setup Required
+
+None - no external service configuration required.
+
+## Next Phase Readiness
+- DawSync (L2) fully restructured -- all 3 projects (L0, L1, L2) now have domain-based subdirectories
+- Ready for Plan 05 (vault optimization: category routing, category-grouped MOCs)
+- Ready for Plan 06 (cross-project validation, vault re-sync)
+- validate-doc-structure tool from Plan 02 can verify DawSync structure
+
+## Self-Check: PASSED
+
+All 6 key files/directories verified present. Commit b407ca17 verified in git log. 0 flat .md/.pdf files at docs/ root (only README.md).
+
+---
+*Phase: 14.1-docs-subdirectory-reorganization*
+*Completed: 2026-03-15*

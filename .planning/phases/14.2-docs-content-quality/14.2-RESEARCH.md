@@ -1,0 +1,492 @@
+# Phase 14.2: Documentation Content Quality & Cross-Layer References - Research
+
+**Researched:** 2026-03-15
+**Domain:** Documentation content quality, YAML frontmatter standardization, hub+sub-doc splitting, cross-layer deduplication, MCP tooling extension
+**Confidence:** HIGH
+
+## Summary
+
+Phase 14.2 is a content-level documentation quality pass across three projects (AndroidCommonDoc L0, shared-kmp-libs L1, DawSync L2) plus two DawSync subprojects (web/, SessionRecorder-VST3/). The work divides into five distinct workstreams: (1) splitting oversized docs into hub+sub-doc format, (2) standardizing YAML frontmatter on all docs that are missing fields, (3) eliminating L1/L2 content duplication by replacing with L0 reference blocks, (4) extending MCP tooling with new quality validation checks, and (5) auditing DawSync subproject doc responsibilities.
+
+The existing codebase provides strong foundations: 9 hub docs at L0 already demonstrate the hub+sub-doc pattern, the doc-template.md defines all frontmatter fields and size limits, and the MCP scanner/validator infrastructure is extensible. The primary gap is at L2 (DawSync) where 62 of 95 active docs lack frontmatter entirely, and 30 docs with frontmatter have only the `category` field (missing scope, sources, targets, slug, status, layer, description, version, last_updated). At L1, 8 of 24 docs are missing description/version/last_updated fields.
+
+**Primary recommendation:** Execute L0 first (split oversized standalone/sub-docs, establish reference targets), then L1 (add missing fields, split oversized, add l0_refs), then L2 (full frontmatter + l0_refs + splitting). MCP tooling updates should be done before the content work so validators can verify quality during implementation.
+
+<user_constraints>
+
+## User Constraints (from CONTEXT.md)
+
+### Locked Decisions
+- **All docs, all layers** get hub+sub-doc treatment when they exceed limits
+- Hub <100 lines, sub-docs <300 lines, 500 lines absolute max (carried from Phase 14)
+- **Active docs only** -- archived docs (archive/) stay as-is, no splitting
+- L0: 8 standalone docs (250-342 lines) evaluated for splitting based on content structure
+- L1: oversized active docs (convention-plugins 514 lines, api-exposure-pattern 333 lines) split
+- L2: 17 active docs over 400 lines split (PRODUCT_SPEC 1667, TESTING 868, NAVIGATION 648, etc.)
+- **Full frontmatter on ALL docs** -- scope, sources, targets, slug, status, layer, category, description, version, last_updated
+- Applies to all 133 DawSync docs + DawSyncWeb + SessionRecorder-VST3 docs
+- **Re-audit existing** category assignments from Phase 14.1 (verify correctness, don't trust blindly)
+- Business/legal/product docs get same frontmatter fields adapted to domain
+- DawSyncWeb and SessionRecorder-VST3 included in this phase
+- **Replace duplicated content with L0 reference blocks** -- delete duplicated sections, replace with standardized reference block format
+- **Audit before removing** -- check for valuable L2 content that should be promoted to L0 BEFORE deleting. Zero content loss
+- **New `l0_refs` frontmatter field** -- lists L0 slugs this doc delegates to
+- **Both frontmatter + inline blocks** -- `l0_refs` enables automated validation; inline blocks help human readers
+- **DawSyncWeb delegates to DawSync** -- marketing/product/legal docs live in DawSync (parent L2). DawSyncWeb references via delegation. SessionRecorder-VST3 same pattern
+- **Audit DawSync + DawSyncWeb .planning/** -- create unified doc responsibility map
+- **5/5 AI-readiness everywhere** -- domain-appropriate criteria per doc type
+- **Extend validate-doc-structure** with new quality checks (l0_refs validation, section limits, hub size, no doc over 500 lines, frontmatter completeness score)
+- PatternMetadata extended with `l0_refs` field
+- Scanner extracts and validates cross-layer references
+
+### Claude's Discretion
+- Exact splitting threshold for L0 docs in the 250-342 line range (professional judgment)
+- How to structure L0 reference blocks (exact markdown format)
+- Hub+sub-doc split points for each oversized doc (which sections become sub-docs)
+- Execution order across projects (L0 first to establish references, then L1/L2)
+- Which L2 content gets promoted to L0 during dedup audit
+- Domain-appropriate quality criteria definitions per doc type
+- DawSync subproject doc discovery and delegation mechanism
+
+### Deferred Ideas (OUT OF SCOPE)
+None -- discussion stayed within phase scope.
+
+</user_constraints>
+
+## Standard Stack
+
+### Core
+| Library | Version | Purpose | Why Standard |
+|---------|---------|---------|--------------|
+| vitest | ^3.0.0 | Test framework for MCP server | Already used across all 45 test files |
+| yaml | ^2.8.2 | YAML frontmatter parsing | Already used by frontmatter.ts |
+| @modelcontextprotocol/sdk | 1.27.1 | MCP server framework | Already used for all MCP tools |
+| zod | ^3.24.0 | Schema validation for tool inputs | Already used in all tool registrations |
+| TypeScript | ^5.7.0 | MCP server language | Already used |
+
+### Supporting
+| Tool | Purpose | When to Use |
+|------|---------|-------------|
+| validate-doc-structure MCP tool | Quality validation | Extended with new checks for this phase |
+| scanDirectory() | Frontmatter extraction | Extended to extract l0_refs field |
+| parseFrontmatter() | YAML parsing | No changes needed -- already generic |
+
+### No New Dependencies
+This phase requires zero new libraries. All work extends existing MCP server code and modifies documentation content files.
+
+## Architecture Patterns
+
+### Current Doc Architecture (Established)
+
+```
+AndroidCommonDoc (L0)
+  docs/
+    testing/
+      testing-patterns.md          (HUB - 108 lines)
+      testing-patterns-coroutines.md  (SUB-DOC - 230 lines, parent: testing-patterns)
+      testing-patterns-schedulers.md  (SUB-DOC - 215 lines)
+      testing-patterns-fakes.md       (SUB-DOC - 153 lines)
+      testing-patterns-coverage.md    (SUB-DOC - 135 lines)
+    di/
+      di-patterns.md               (STANDALONE - 296 lines, splitting candidate)
+    storage/
+      storage-patterns.md          (STANDALONE - 281 lines, splitting candidate)
+    ...
+
+shared-kmp-libs (L1)
+  docs/
+    guides/
+      convention-plugins.md        (514 lines - MUST SPLIT)
+      api-exposure-pattern.md      (333 lines - MUST SPLIT)
+    ...
+
+DawSync (L2)
+  docs/
+    product/
+      PRODUCT_SPEC.md              (1667 lines - MUST SPLIT)
+    guides/
+      TESTING.md                   (868 lines - MUST SPLIT)
+    ...
+```
+
+### Hub+Sub-doc Pattern (Replicate)
+
+Hub doc structure (max 100 lines):
+```markdown
+---
+scope: [domain1, domain2]
+sources: [library]
+targets: [android, desktop, ios, jvm]
+version: N
+last_updated: "YYYY-MM"
+description: "Hub doc: ..."
+slug: topic-name
+status: active
+layer: L0
+category: subcategory
+monitor_urls: [...]
+---
+
+# Title
+
+## Overview
+[1-2 paragraphs + key rules as bullet list]
+
+## Sub-documents
+- **[sub-doc-1](sub-doc-1.md)**: Description
+- **[sub-doc-2](sub-doc-2.md)**: Description
+
+## Quick Reference
+[Most common patterns, copy-paste ready]
+
+## References
+[External links]
+```
+
+Sub-doc structure (max 300 lines):
+```markdown
+---
+scope: [domain1, specific-topic]
+sources: [library]
+targets: [android, desktop, ios, jvm]
+version: N
+last_updated: "YYYY-MM"
+description: "Specific topic description"
+slug: topic-name-subtopic
+status: active
+layer: L0
+parent: topic-name
+category: subcategory
+---
+
+# Title
+[Self-contained content, loadable without hub]
+```
+
+### L0 Reference Block Pattern (New -- Claude's Discretion)
+
+Recommended format for inline L0 reference blocks in L1/L2 docs:
+
+```markdown
+> **L0 Reference**: For generic [topic] patterns, see [L0 slug](path/to/l0/doc.md).
+> This document covers only [project]-specific extensions and overrides.
+```
+
+Corresponding frontmatter:
+```yaml
+l0_refs: [testing-patterns, error-handling-patterns]
+```
+
+### L2 Frontmatter for Non-Technical Docs
+
+Business/legal/product docs adapt the mandatory fields:
+```yaml
+---
+scope: [business, strategy]
+sources: [internal]
+targets: [web, android, desktop]
+slug: business-strategy
+status: active
+layer: L2
+category: business
+description: "DawSync business strategy and market positioning"
+version: 1
+last_updated: "2026-03"
+---
+```
+
+### Anti-Patterns to Avoid
+- **Splitting archive docs**: Archive stays as-is (locked decision)
+- **Breaking cross-references during splits**: When splitting a doc into hub+sub-docs, all internal and external cross-references must be updated to point to the correct sub-doc
+- **Destroying L2-specific content during dedup**: Audit BEFORE deleting -- some L2 content may need L0 promotion first
+- **Frontmatter-only category**: DawSync currently has only `category:` in frontmatter -- must add ALL 10 required fields, not just patch
+
+## Don't Hand-Roll
+
+| Problem | Don't Build | Use Instead | Why |
+|---------|-------------|-------------|-----|
+| YAML parsing | Custom frontmatter parser | Existing `parseFrontmatter()` in frontmatter.ts | Handles BOM, CRLF, edge cases |
+| Doc discovery | Custom file walker | Existing `scanDirectory()` / `findDocsFiles()` | Already handles archive exclusion, recursive scan |
+| Cross-project validation | Per-project scripts | Extend `validateDocsDirectory()` | Already has cross-project support via project-discovery |
+| l0_refs resolution | Custom slug lookup | Extend scanner to extract l0_refs, validate against L0 registry | Registry already knows all L0 slugs |
+| Line counting for size limits | bash wc -l per file | Integrate into validateDocsDirectory() | Single-pass validation, structured JSON output |
+
+## Common Pitfalls
+
+### Pitfall 1: Breaking Scanner by Requiring l0_refs
+**What goes wrong:** Adding l0_refs as a required field in PatternMetadata breaks all existing docs that don't have it.
+**Why it happens:** Scanner currently requires scope/sources/targets arrays. Adding another required field breaks backward compatibility.
+**How to avoid:** l0_refs MUST be optional in PatternMetadata (same as monitor_urls, rules, parent). Scanner extracts it when present, ignores when absent.
+**Warning signs:** Tests failing after adding l0_refs to types.ts.
+
+### Pitfall 2: DawSync Diagram Docs Frontmatter Scope
+**What goes wrong:** Attempting to add full frontmatter (scope/sources/targets) to 62 DawSync architecture diagram docs that are project-specific.
+**Why it happens:** Diagram docs are DawSync-internal (repository-specific, not pattern docs).
+**How to avoid:** For diagram docs, `sources: [dawsync]` and `targets: [android, desktop]` are appropriate. These are L2 docs with `project: DawSync`. They will not appear in L0/L1 searches but will be discoverable with project filter.
+**Warning signs:** Long lists of irrelevant diagram docs appearing in find-pattern results.
+
+### Pitfall 3: Cross-Reference Breakage During Splitting
+**What goes wrong:** After splitting a 1667-line PRODUCT_SPEC.md into hub+sub-docs, all docs that referenced sections within PRODUCT_SPEC.md now have broken links.
+**Why it happens:** Internal section anchors (e.g., `PRODUCT_SPEC.md#feature-12`) move to sub-doc files.
+**How to avoid:** After each split, grep for all references to the original filename across the project and update them.
+**Warning signs:** Broken markdown links in vault or cross-references.
+
+### Pitfall 4: L0 Reference Block Creates Circular Dependency
+**What goes wrong:** L2 doc references L0, but L0 doc has a "See also" link back to L2 project.
+**Why it happens:** Natural desire to create bidirectional navigation.
+**How to avoid:** Reference flow is one-directional: L2 -> L0. L0 docs NEVER reference L1/L2 docs. L0 is generic, layer-agnostic.
+**Warning signs:** L0 docs mentioning "DawSync" or "shared-kmp-libs" in content (frontmatter `project` field is OK for L1).
+
+### Pitfall 5: Frontmatter Breaks YAML Parsing
+**What goes wrong:** Adding frontmatter to DawSync business/legal docs that contain special YAML characters in descriptions (colons, quotes, brackets).
+**Why it happens:** Doc titles like "Plan Legal: Espana + UE" contain YAML-significant characters.
+**How to avoid:** Always quote description values. Use the existing parseFrontmatter() which handles edge cases.
+**Warning signs:** Scanner silently skipping docs after frontmatter addition.
+
+### Pitfall 6: SessionRecorder-VST3 Is Not a Standard Docs Structure
+**What goes wrong:** Trying to treat SessionRecorder-VST3 markdown files (README.md, TESTING.md, EULA.md, etc.) as pattern docs with the same frontmatter.
+**Why it happens:** These are standard project docs, not pattern docs.
+**How to avoid:** SessionRecorder-VST3 docs get adapted frontmatter (scope/sources/targets appropriate for C++ VST3 plugin). Delegation to DawSync parent for shared docs (legal, business).
+**Warning signs:** scope: [vst3, audio] and sources: [juce, steinberg-sdk] are correct for these docs.
+
+## Code Examples
+
+### Extending PatternMetadata with l0_refs
+
+```typescript
+// Source: mcp-server/src/registry/types.ts
+export interface PatternMetadata {
+  scope: string[];
+  sources: string[];
+  targets: string[];
+  version?: number;
+  last_updated?: string;
+  description?: string;
+  slug?: string;
+  status?: string;
+  excludable_sources?: string[];
+  monitor_urls?: MonitorUrl[];
+  rules?: RuleDefinition[];
+  layer?: Layer;
+  parent?: string;
+  project?: string;
+  category?: string;
+  l0_refs?: string[];  // NEW: L0 slugs this doc delegates to
+}
+```
+
+### Scanner l0_refs Extraction
+
+```typescript
+// Source: mcp-server/src/registry/scanner.ts (extend metadata extraction)
+l0_refs: Array.isArray(data.l0_refs)
+  ? (data.l0_refs as string[])
+  : undefined,
+```
+
+### Validation: l0_refs Resolves to Valid L0 Slugs
+
+```typescript
+// Pseudocode for validate-doc-structure extension
+async function validateL0Refs(
+  entries: RegistryEntry[],
+  l0Slugs: Set<string>,
+): string[] {
+  const errors: string[] = [];
+  for (const entry of entries) {
+    if (entry.metadata.l0_refs) {
+      for (const ref of entry.metadata.l0_refs) {
+        if (!l0Slugs.has(ref)) {
+          errors.push(
+            `${entry.slug}: l0_refs "${ref}" does not resolve to any L0 doc`
+          );
+        }
+      }
+    }
+  }
+  return errors;
+}
+```
+
+### Validation: Size Limit Checks
+
+```typescript
+// Pseudocode for validate-doc-structure extension
+function checkSizeLimits(
+  filepath: string,
+  content: string,
+  metadata: { parent?: string },
+): string[] {
+  const errors: string[] = [];
+  const lines = content.split("\n").length;
+  const isHub = content.includes("## Sub-documents");
+
+  if (isHub && lines > 100) {
+    errors.push(`${path.basename(filepath)}: hub doc is ${lines} lines (max 100)`);
+  }
+  if (lines > 500) {
+    errors.push(`${path.basename(filepath)}: ${lines} lines exceeds 500-line absolute max`);
+  }
+  // Section checks
+  const sections = content.split(/^## /m);
+  for (const section of sections) {
+    const sectionLines = section.split("\n").length;
+    if (sectionLines > 150) {
+      const sectionName = section.split("\n")[0]?.trim() || "unknown";
+      errors.push(`${path.basename(filepath)}: section "${sectionName}" is ${sectionLines} lines (max 150)`);
+    }
+  }
+  return errors;
+}
+```
+
+## Current Inventory (Verified)
+
+### L0 AndroidCommonDoc: 42 active docs
+
+| Type | Count | Oversized? |
+|------|-------|------------|
+| Hub docs | 9 | All under 100 lines (compliant) |
+| Sub-docs | 27 | 2 over 300 lines: offline-first-architecture (342), viewmodel-state-management (333) |
+| Standalone | 6 | 3 over 250 lines: di-patterns (296), storage-patterns (281), doc-template (267) |
+| README.md | 1 | No frontmatter (correct -- auto-generated) |
+
+### L1 shared-kmp-libs: 24 active docs + README
+
+| Frontmatter Status | Count |
+|-------------------|-------|
+| Full frontmatter (all 10 fields) | 16 |
+| Missing description/version/last_updated | 8 (domain-billing, domain-gdpr, domain-misc, firebase-modules, foundation-modules, io-network-modules, module-catalog, README) |
+| Oversized (>300 lines) | 2: convention-plugins (514), api-exposure-pattern (333) |
+| No frontmatter | 1: README.md |
+
+### L2 DawSync: 95 active docs
+
+| Frontmatter Status | Count |
+|-------------------|-------|
+| Category-only frontmatter (missing 9 fields) | 30 |
+| No frontmatter at all | 62 (60 diagram docs + README + ABLETON_TEST_DATA) |
+| Frontmatter with all fields | 0 |
+| Oversized (>300 lines, non-diagram) | 18 docs (see CONTEXT.md list) |
+
+### DawSync Subprojects
+
+| Subproject | Location | Markdown Files | Current Frontmatter |
+|------------|----------|---------------|-------------------|
+| DawSyncWeb | DawSync/web/ | 1 (README.md) | None |
+| SessionRecorder-VST3 | DawSync/SessionRecorder-VST3/ | 8 (README, TESTING, CHANGELOG, EULA, MACOS_BUILD, 2x installer README, src/README) | None |
+
+### Work Volume Summary
+
+| Workstream | Estimated File Count |
+|------------|---------------------|
+| L0 splitting (standalone + oversized sub-docs) | 5-8 files modified/created |
+| L1 frontmatter completion | 8 files modified |
+| L1 splitting (convention-plugins, api-exposure-pattern) | 2 docs -> ~6 files |
+| L1 l0_refs addition | ~10 files modified |
+| L2 frontmatter standardization (non-diagram) | 30 files modified |
+| L2 diagram frontmatter addition | 62 files modified |
+| L2 splitting (18 oversized docs) | 18 docs -> ~50-60 files |
+| L2 l0_refs + dedup | ~15 files modified |
+| L2 subproject docs (SessionRecorder-VST3) | 8 files modified |
+| MCP tooling (types, scanner, validator, tests) | ~6 files modified |
+| **Total estimated** | **~180-220 file operations** |
+
+## State of the Art
+
+| Old Approach (Pre-14.2) | Current Approach (14.2) | Impact |
+|--------------------------|------------------------|--------|
+| DawSync docs: category-only frontmatter | Full 10-field frontmatter on every doc | Enables MCP discovery, vault indexing, find-pattern filtering |
+| L2 duplicates L0 content inline | L0 reference blocks + l0_refs frontmatter | Eliminates content drift, single source of truth |
+| Standalone oversized docs | Hub+sub-doc pattern everywhere | Token-efficient AI agent loading |
+| Manual quality assessment | Automated quality checks in validate-doc-structure | Repeatable, CI-ready validation |
+| No cross-layer reference tracking | l0_refs field + automated validation | Detects broken/stale cross-layer references |
+
+## Execution Order Recommendation
+
+1. **MCP Tooling First** -- Extend types, scanner, validator with l0_refs, size checks, frontmatter completeness. This gives the implementer validation tools to verify work as it progresses.
+2. **L0 Splits** -- Split oversized L0 standalone docs and sub-docs. This establishes stable reference targets for L1/L2.
+3. **L1 Quality** -- Complete L1 frontmatter, split oversized, add l0_refs.
+4. **L2 Frontmatter** -- Add full frontmatter to all 95 DawSync docs (including 62 diagram docs).
+5. **L2 Dedup + Splits** -- Replace duplicated content with L0 reference blocks, split oversized docs.
+6. **Subproject Delegation** -- Handle DawSyncWeb and SessionRecorder-VST3 doc delegation.
+7. **Quality Gate** -- Run extended validate-doc-structure across all projects, vault re-sync.
+
+## Open Questions
+
+1. **DawSyncWeb docs location**
+   - What we know: DawSyncWeb is at DawSync/web/. It has 1 markdown file (README.md). The CONTEXT.md mentions "marketing/product/legal docs live in DawSync parent."
+   - What's unclear: Whether DawSyncWeb needs its own docs/ directory or if it just delegates everything to DawSync parent.
+   - Recommendation: Since DawSyncWeb has almost no docs, keep delegation simple -- reference DawSync parent docs. No separate docs/ directory needed.
+
+2. **Diagram doc frontmatter depth**
+   - What we know: 62 diagram docs currently have NO frontmatter. They are very project-specific (DawSync repository, usecase, and engine diagrams).
+   - What's unclear: How deep the frontmatter should go -- full 10 fields or adapted subset?
+   - Recommendation: Full 10 fields per locked decision, with adapted values: `scope: [architecture, diagrams]`, `sources: [dawsync]`, `targets: [android, desktop]`, `layer: L2`, `category: architecture`. This is mechanical/templated work.
+
+3. **ABLETON_TEST_DATA.md (1619 lines) splitting strategy**
+   - What we know: It is a reference doc with test data specifications. Very large.
+   - What's unclear: Whether it is truly "active" or closer to reference/archive material.
+   - Recommendation: Classify as active reference doc. Split into hub+sub-docs by test data category.
+
+## Validation Architecture
+
+### Test Framework
+| Property | Value |
+|----------|-------|
+| Framework | vitest ^3.0.0 |
+| Config file | mcp-server/package.json (scripts.test: "vitest run") |
+| Quick run command | `cd mcp-server && npm test` |
+| Full suite command | `cd mcp-server && npm test` |
+
+### Phase Requirements -> Test Map
+| Req ID | Behavior | Test Type | Automated Command | File Exists? |
+|--------|----------|-----------|-------------------|-------------|
+| N/A-01 | l0_refs field extracted by scanner | unit | `cd mcp-server && npx vitest run tests/unit/registry/scanner.test.ts -t "l0_refs"` | Needs extension |
+| N/A-02 | l0_refs resolves to valid L0 slugs | unit | `cd mcp-server && npx vitest run tests/unit/tools/validate-doc-structure.test.ts -t "l0_refs"` | Needs extension |
+| N/A-03 | Size limit checks (hub <100, absolute <500, section <150) | unit | `cd mcp-server && npx vitest run tests/unit/tools/validate-doc-structure.test.ts -t "size"` | Needs extension |
+| N/A-04 | Frontmatter completeness score | unit | `cd mcp-server && npx vitest run tests/unit/tools/validate-doc-structure.test.ts -t "completeness"` | Needs creation |
+| N/A-05 | All L0 docs pass extended validation | integration | `cd mcp-server && npx vitest run tests/integration/doc-structure.test.ts` | Exists, needs extension |
+| N/A-06 | All L1 docs pass extended validation | integration | `cd mcp-server && npx vitest run tests/integration/doc-structure.test.ts` | Exists, needs extension |
+| N/A-07 | All L2 docs pass extended validation | integration | `cd mcp-server && npx vitest run tests/integration/doc-structure.test.ts` | Exists, needs extension |
+| N/A-08 | No active doc exceeds 500 lines | integration | `cd mcp-server && npx vitest run tests/integration/doc-structure.test.ts -t "500"` | Needs creation |
+| N/A-09 | Hub docs under 100 lines | integration | `cd mcp-server && npx vitest run tests/integration/doc-structure.test.ts -t "hub"` | Needs creation |
+
+### Sampling Rate
+- **Per task commit:** `cd mcp-server && npm test` (runs all unit + integration tests)
+- **Per wave merge:** `cd mcp-server && npm test` (full suite, same command)
+- **Phase gate:** Full suite green + validate-doc-structure reports 0 errors across all 3 projects
+
+### Wave 0 Gaps
+- [ ] `mcp-server/tests/unit/registry/scanner.test.ts` -- extend with l0_refs extraction tests
+- [ ] `mcp-server/tests/unit/tools/validate-doc-structure.test.ts` -- extend with size limit + l0_refs validation + frontmatter completeness tests
+- [ ] `mcp-server/tests/integration/doc-structure.test.ts` -- extend with size limit assertions, l0_refs resolution, frontmatter completeness across all 3 projects
+
+## Sources
+
+### Primary (HIGH confidence)
+- Direct codebase inspection of all source files referenced in this document
+- `docs/guides/doc-template.md` -- canonical template defining all frontmatter fields and size limits
+- `docs/testing/testing-patterns.md` -- model hub doc (108 lines, 4 sub-docs)
+- `docs/gradle/gradle-patterns.md` -- model hub doc (73 lines, 3 sub-docs)
+- `mcp-server/src/registry/types.ts` -- PatternMetadata interface (current state)
+- `mcp-server/src/registry/scanner.ts` -- Scanner implementation (l0_refs extension point identified)
+- `mcp-server/src/tools/validate-doc-structure.ts` -- Validator implementation (extension point identified)
+- `mcp-server/tests/integration/doc-structure.test.ts` -- Integration test patterns
+- `~/.androidcommondoc/vault-config.json` -- Current vault configuration
+
+### Secondary (MEDIUM confidence)
+- File counts and sizes verified via `wc -l` across all three projects
+- Frontmatter field presence verified via grep across all docs
+
+## Metadata
+
+**Confidence breakdown:**
+- Standard stack: HIGH -- No new libraries, all extensions to existing code
+- Architecture: HIGH -- Hub+sub-doc pattern already proven with 9 existing hubs
+- Pitfalls: HIGH -- Based on codebase inspection, not speculation
+- Work volume: MEDIUM -- File counts verified but splitting creates variable new file counts
+- L2 frontmatter: HIGH -- Gap analysis verified with line-by-line field checks
+
+**Research date:** 2026-03-15
+**Valid until:** 2026-04-15 (stable domain, internal tooling)

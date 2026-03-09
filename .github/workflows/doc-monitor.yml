@@ -1,0 +1,42 @@
+name: Doc Source Monitoring
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Weekly Monday 9am UTC
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: 'Monitoring tier (1, 2, 3, or all)'
+        default: 'all'
+        type: string
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - run: npm ci
+        working-directory: mcp-server
+
+      - run: npm run build
+        working-directory: mcp-server
+
+      - name: Run monitoring
+        run: node build/cli/monitor-sources.js --tier ${{ inputs.tier || 'all' }} --output reports/monitoring-report.json
+        working-directory: mcp-server
+        env:
+          ANDROID_COMMON_DOC: ${{ github.workspace }}
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: monitoring-report-${{ github.run_number }}
+          path: mcp-server/reports/
+          retention-days: 30

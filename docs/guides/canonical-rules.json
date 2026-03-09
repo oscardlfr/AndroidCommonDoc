@@ -1,0 +1,435 @@
+{
+  "version": "1.0.0",
+  "generated": "2026-03-16",
+  "description": "Canonical rule checklist extracted from all CLAUDE.md files in the KMP ecosystem. Used by validate-claude-md MCP tool and smoke tests.",
+  "rules": [
+    {
+      "id": "SRC-01",
+      "category": "source-sets",
+      "rule": "Default hierarchy template is automatic since Kotlin 1.9.20 -- only call applyDefaultHierarchyTemplate() explicitly when reapplying after custom source set configuration",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "SRC-02",
+      "category": "source-sets",
+      "rule": "commonMain: Pure Kotlin ONLY (no android.*, java.*, platform.* imports)",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "SRC-03",
+      "category": "source-sets",
+      "rule": "jvmMain: Shared JVM code when Android + Desktop need same impl -- DO NOT duplicate code across androidMain + desktopMain",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "SRC-04",
+      "category": "source-sets",
+      "rule": "appleMain: Shared Apple code when iOS + macOS need same impl -- DO NOT duplicate code across iosMain + macosMain",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "NAME-01",
+      "category": "naming",
+      "rule": "FLAT module names: core-json-api, core-network-ktor (NOT nested core-json:api) -- AGP 9+ circular dependency bug",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "NAME-02",
+      "category": "naming",
+      "rule": "File naming by source set: commonMain .kt, jvmMain .jvm.kt, appleMain .apple.kt, androidMain .android.kt, desktopMain .desktop.kt",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "ARCH-01",
+      "category": "architecture",
+      "rule": "5-layer architecture: UI (Compose/SwiftUI) > ViewModel (UiState/events) > Domain (UseCases/Repository interfaces) > Data (Repository impls/DataSources) > Model (data classes/enums/sealed types)",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "ARCH-02",
+      "category": "architecture",
+      "rule": "Layer dependency direction: UI depends on ViewModel, ViewModel on UseCases, Domain on Model, Data on Domain + Platform. Model depends on nothing",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "ERR-01",
+      "category": "error-handling",
+      "rule": "Use com.example.shared.core.result.Result<T> for all operations",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "ERR-02",
+      "category": "error-handling",
+      "rule": "ALWAYS rethrow CancellationException in catch blocks",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "ERR-03",
+      "category": "error-handling",
+      "rule": "DomainException hierarchy from core-error for typed errors",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "VM-01",
+      "category": "viewmodel",
+      "rule": "UiState: ALWAYS sealed interface (NEVER data class with boolean flags)",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "VM-02",
+      "category": "viewmodel",
+      "rule": "Expose UiState via StateFlow with stateIn(WhileSubscribed(5_000))",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "VM-03",
+      "category": "viewmodel",
+      "rule": "Ephemeral events: state-based (nullable UiState field + onEventConsumed callback, NOT Channel or MutableSharedFlow)",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "VM-04",
+      "category": "viewmodel",
+      "rule": "Navigation: State-driven (NOT Channel-based)",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "VM-05",
+      "category": "viewmodel",
+      "rule": "NO platform deps in ViewModels (no Context, Resources, UIKit)",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "VM-06",
+      "category": "viewmodel",
+      "rule": "UiText for user-facing strings (StringResource / DynamicString)",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TEST-01",
+      "category": "testing",
+      "rule": "Pure-Kotlin fakes over mocks (FakeRepository, FakeClock)",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "TEST-02",
+      "category": "testing",
+      "rule": "runTest for ALL coroutine tests",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TEST-03",
+      "category": "testing",
+      "rule": "Sequential execution: maxParallelForks = 1 (file locking on Windows)",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "TEST-04",
+      "category": "testing",
+      "rule": "StateFlow: subscribe in backgroundScope with UnconfinedTestDispatcher BEFORE actions",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TEST-05",
+      "category": "testing",
+      "rule": "Schedulers: test via triggerNow(), NEVER test infinite loops directly",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TEST-06",
+      "category": "testing",
+      "rule": "Inject testDispatcher into UseCases (not Dispatchers.Default)",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "DI-01",
+      "category": "di",
+      "rule": "Koin 4.1.1 for dependency injection",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "DI-02",
+      "category": "di",
+      "rule": "Module declarations in each module's di/ package",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "DI-03",
+      "category": "di",
+      "rule": "koinViewModel() in Compose",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "DI-04",
+      "category": "di",
+      "rule": "Koin before Activity launch in tests",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "NAV-01",
+      "category": "navigation",
+      "rule": "Navigation3 (androidx.navigation3) with @Serializable routes for Android + Desktop Compose",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "NAV-02",
+      "category": "navigation",
+      "rule": "iOS/macOS use native SwiftUI NavigationStack",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "COMP-01",
+      "category": "compose",
+      "rule": "Resources MUST be in src/commonMain/composeResources/ (NOT custom source sets)",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "COMP-02",
+      "category": "compose",
+      "rule": "generateResClass = always for multi-module + composite builds",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "BUILD-01",
+      "category": "build",
+      "rule": "Composite builds: includeBuild(\"../your-shared-libs\") with dependencySubstitution",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "BUILD-02",
+      "category": "build",
+      "rule": "Version catalog from the shared library project is canonical; consumer projects reference it via composite build",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "BUILD-03",
+      "category": "build",
+      "rule": "Convention plugins in build-logic/ for module boilerplate",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "BUILD-04",
+      "category": "build",
+      "rule": "Kover for coverage",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "TEAM-01",
+      "category": "team",
+      "rule": "Each teammate works on their OWN feature branch (never develop or main)",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "TEAM-02",
+      "category": "team",
+      "rule": "DO NOT merge into develop -- the lead handles all merges",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "TEAM-03",
+      "category": "team",
+      "rule": "DO NOT rebase onto develop -- the lead handles conflict resolution",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "TEAM-04",
+      "category": "team",
+      "rule": "Branch naming: feature/{milestone}-{module}",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "TEAM-05",
+      "category": "team",
+      "rule": "Worktree agents MUST stay in their worktree directory -- never cd to the main working tree",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "TEAM-06",
+      "category": "team",
+      "rule": "Teammates MUST NOT edit files owned by another teammate -- file ownership follows module boundaries",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "TEAM-07",
+      "category": "team",
+      "rule": "Shared files (build.gradle.kts, DI modules) require lead coordination",
+      "source": "~/.claude/CLAUDE.md",
+      "layer": "L0",
+      "overridable": true
+    },
+    {
+      "id": "TK-01",
+      "category": "toolkit",
+      "rule": "AndroidCommonDoc is the L0 pattern toolkit: L0 (generic) -> L1 (shared libs, ecosystem) -> L2 (apps, project-specific)",
+      "source": "AndroidCommonDoc/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TK-02",
+      "category": "toolkit",
+      "rule": "MCP server in mcp-server/ -- Node.js TypeScript, tested with Vitest, exposes pattern docs, skills registry, validation tools",
+      "source": "AndroidCommonDoc/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TK-03",
+      "category": "toolkit",
+      "rule": "Resources use docs:// URI scheme",
+      "source": "AndroidCommonDoc/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TK-04",
+      "category": "toolkit",
+      "rule": "Skills in skills/*/SKILL.md with frontmatter (allowed-tools, description); agents in skills/agents/*/AGENT.md",
+      "source": "AndroidCommonDoc/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TK-05",
+      "category": "toolkit",
+      "rule": "Registry: skills/registry.json catalogs all L0 skills, agents, commands",
+      "source": "AndroidCommonDoc/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TK-06",
+      "category": "toolkit",
+      "rule": "L1/L2 projects consume L0 via l0-manifest.json + /sync-l0 skill",
+      "source": "AndroidCommonDoc/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TK-07",
+      "category": "toolkit",
+      "rule": "Pattern docs in docs/ with domain-based subdirectories -- all docs have YAML frontmatter (scope, sources, targets, category, slug)",
+      "source": "AndroidCommonDoc/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TK-08",
+      "category": "toolkit",
+      "rule": "Hub docs <100 lines, sub-docs <300 lines, absolute max 500 lines",
+      "source": "AndroidCommonDoc/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TK-09",
+      "category": "toolkit",
+      "rule": "Cross-references use relative paths between subdirectories",
+      "source": "AndroidCommonDoc/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    },
+    {
+      "id": "TK-10",
+      "category": "toolkit",
+      "rule": "Vault sync: config at ~/.androidcommondoc/vault-config.json, files use lowercase-kebab-case naming",
+      "source": "AndroidCommonDoc/CLAUDE.md",
+      "layer": "L0",
+      "overridable": false
+    }
+  ],
+  "consistency": {
+    "version_checks": [],
+    "contradictions": [],
+    "duplicates": [],
+    "notes": [
+      "L0 global (42 rules) covers all shared KMP behavioral rules",
+      "L0 toolkit (10 rules) covers AndroidCommonDoc-specific toolkit identity",
+      "L1/L2 rules are defined in each project's own CLAUDE.md -- not stored here",
+      "Total: 52 L0 rules across 2 files, 12 categories",
+      "Zero contradictions found"
+    ]
+  }
+}

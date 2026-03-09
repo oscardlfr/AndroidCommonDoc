@@ -1,0 +1,68 @@
+name: Reusable — Lint String Resources
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AndroidCommonDoc L0 reusable workflow — string resource naming conventions
+#
+# Validates composeResources/values/strings.xml keys against:
+#   - snake_case (no camelCase, no uppercase, no invalid chars)
+#   - prefix convention: common_, error_, a11y_, or {feature}_
+#   - format: {category}_{entity}_{descriptor}
+#   - cross-module duplicates
+#
+# Usage from consumer project:
+#
+#   jobs:
+#     lint-resources:
+#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-lint-resources.yml@main
+#       with:
+#         androidcommondoc_path: "../AndroidCommonDoc"  # path to L0 toolkit
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+      androidcommondoc_path:
+        description: "Path to AndroidCommonDoc toolkit root (for the lint script)"
+        type: string
+        default: ""
+      strict:
+        description: "Fail on warnings in addition to errors"
+        type: boolean
+        default: true
+      module_path:
+        description: "Specific module to check (relative to project root, empty = all)"
+        type: string
+        default: ""
+
+jobs:
+  lint-resources:
+    name: "🌐 Lint String Resources"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Checkout AndroidCommonDoc (for lint script)
+        if: inputs.androidcommondoc_path == ''
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.repository_owner }}/AndroidCommonDoc
+          path: .androidcommondoc-toolkit
+          sparse-checkout: scripts/sh/lint-resources.sh
+
+      - name: Resolve script path
+        id: script
+        run: |
+          if [ -n "${{ inputs.androidcommondoc_path }}" ]; then
+            echo "path=${{ inputs.androidcommondoc_path }}/scripts/sh/lint-resources.sh" >> $GITHUB_OUTPUT
+          else
+            echo "path=.androidcommondoc-toolkit/scripts/sh/lint-resources.sh" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Lint string resource keys
+        run: |
+          ARGS="--project-root $(pwd) --output-format human"
+          [ "${{ inputs.strict }}" = "true" ] && ARGS="$ARGS --strict"
+          [ -n "${{ inputs.module_path }}" ] && ARGS="$ARGS --module-path ${{ inputs.module_path }}"
+          ARGS="$ARGS --show-details"
+
+          bash "${{ steps.script.outputs.path }}" $ARGS

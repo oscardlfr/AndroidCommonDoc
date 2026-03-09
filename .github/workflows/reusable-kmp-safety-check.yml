@@ -1,0 +1,138 @@
+name: Reusable — KMP Safety Check
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AndroidCommonDoc L0 reusable workflow — Kotlin/KMP code safety patterns
+#
+# Scans the PR diff for forbidden patterns:
+#   - GlobalScope (forbidden in all production code)
+#   - Thread.sleep() (forbidden: use coroutine delays)
+#   - Hardcoded Dispatchers.IO/Default outside DI modules (warning)
+#   - runBlocking in non-test code (warning)
+#
+# This is the generic version. Projects with domain-specific safety rules
+# (e.g. DAW audio thread safety) should add a separate project-level job.
+#
+# Usage from consumer project:
+#
+#   jobs:
+#     kmp-safety:
+#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-kmp-safety-check.yml@main
+#       with:
+#         fail_on_dispatchers_warning: false  # promote to error if your project requires it
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+      fail_on_dispatchers_warning:
+        description: "Treat hardcoded Dispatchers as ERROR (not WARNING)"
+        type: boolean
+        default: false
+      fail_on_run_blocking:
+        description: "Treat runBlocking in non-test code as ERROR"
+        type: boolean
+        default: false
+      di_path_pattern:
+        description: "Regex pattern for DI module paths (excluded from Dispatchers check)"
+        type: string
+        default: "di/|Di|Module|Injection|Hilt|Koin"
+
+jobs:
+  kmp-safety-check:
+    name: "🛡️ KMP Safety Check"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check KMP safety patterns in diff
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+
+          ERRORS=0
+          WARNINGS=0
+
+          echo "Scanning diff $BASE..$HEAD for KMP safety violations..."
+          echo ""
+
+          # ── HARD ERRORS ──────────────────────────────────────────────────
+
+          # GlobalScope — forbidden everywhere in production code
+          GLOBAL_SCOPE=$(git diff "$BASE..$HEAD" -- '*.kt' \
+            | grep '^\+' \
+            | grep -v '^\+\+\+' \
+            | grep -P 'GlobalScope\.' || true)
+
+          if [ -n "$GLOBAL_SCOPE" ]; then
+            echo "::error::GlobalScope detected — never use GlobalScope in production code."
+            echo "  Accept CoroutineScope as a constructor parameter instead."
+            echo "$GLOBAL_SCOPE" | while read -r line; do echo "  $line"; done
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          # Thread.sleep() — forbidden: blocks the thread, use coroutine delay
+          THREAD_SLEEP=$(git diff "$BASE..$HEAD" -- '*.kt' \
+            | grep '^\+' \
+            | grep -v '^\+\+\+' \
+            | grep -P 'Thread\.sleep\(' || true)
+
+          if [ -n "$THREAD_SLEEP" ]; then
+            echo "::error::Thread.sleep() detected — use kotlinx.coroutines.delay() instead."
+            echo "$THREAD_SLEEP" | while read -r line; do echo "  $line"; done
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          # ── CONFIGURABLE: Dispatchers hardcoded outside DI ───────────────
+
+          DI_PATTERN="${{ inputs.di_path_pattern }}"
+          DISPATCHERS=$(git diff "$BASE..$HEAD" -- '*.kt' \
+            | grep '^\+' \
+            | grep -v '^\+\+\+' \
+            | grep -P 'Dispatchers\.(IO|Default|Main)' \
+            | grep -v -P "$DI_PATTERN|Test|test" || true)
+
+          if [ -n "$DISPATCHERS" ]; then
+            if [ "${{ inputs.fail_on_dispatchers_warning }}" = "true" ]; then
+              echo "::error::Hardcoded Dispatchers detected outside DI modules."
+              ERRORS=$((ERRORS + 1))
+            else
+              echo "::warning::Hardcoded Dispatchers detected outside DI modules."
+              echo "  Inject CoroutineDispatcher via constructor for testability."
+              WARNINGS=$((WARNINGS + 1))
+            fi
+            echo "$DISPATCHERS" | while read -r line; do echo "  $line"; done
+          fi
+
+          # ── CONFIGURABLE: runBlocking in non-test code ───────────────────
+
+          RUN_BLOCKING=$(git diff "$BASE..$HEAD" -- '*.kt' \
+            | grep '^\+' \
+            | grep -v '^\+\+\+' \
+            | grep -P 'runBlocking\s*\{' \
+            | grep -v -P 'Test|test|Spec' || true)
+
+          if [ -n "$RUN_BLOCKING" ]; then
+            if [ "${{ inputs.fail_on_run_blocking }}" = "true" ]; then
+              echo "::error::runBlocking detected in non-test code — use suspend functions instead."
+              ERRORS=$((ERRORS + 1))
+            else
+              echo "::warning::runBlocking detected in non-test code."
+              echo "  Prefer suspend functions. runBlocking blocks the thread."
+              WARNINGS=$((WARNINGS + 1))
+            fi
+            echo "$RUN_BLOCKING" | while read -r line; do echo "  $line"; done
+          fi
+
+          # ── Summary ──────────────────────────────────────────────────────
+
+          echo ""
+          if [ $ERRORS -gt 0 ]; then
+            echo "❌ KMP safety check FAILED — $ERRORS error(s), $WARNINGS warning(s)"
+            exit 1
+          elif [ $WARNINGS -gt 0 ]; then
+            echo "⚠️  KMP safety check PASSED with $WARNINGS warning(s)"
+          else
+            echo "✅ KMP safety check PASSED"
+          fi

@@ -1,0 +1,15 @@
+# .gitattributes — AndroidCommonDoc
+
+# Audit log: use union merge to avoid conflicts when branches both append
+# entries on the same day (e.g. feature branch + develop both run CI)
+.androidcommondoc/audit-log.jsonl merge=union
+
+# Normalize line endings
+*.sh text eol=lf
+*.md text eol=lf
+*.ts text eol=lf
+*.kt text eol=lf
+*.kts text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

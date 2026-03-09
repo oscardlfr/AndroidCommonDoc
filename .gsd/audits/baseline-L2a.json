@@ -1,0 +1,26 @@
+{
+  "captured_at": "2026-03-16T23:42:49Z",
+  "layer": "L2a",
+  "target_root": "DawSync",
+  "hub_docs": {
+    "present": 7,
+    "total": 9,
+    "coverage_pct": 77.8,
+    "missing": ["archive", "images"]
+  },
+  "monitor_urls": {
+    "present": 0,
+    "total": 150,
+    "coverage_pct": 0.0
+  },
+  "detekt_rules": {
+    "present": 0,
+    "total": 150,
+    "coverage_pct": 0.0
+  },
+  "planning_ref_violations": 5,
+  "line_limit_violations": 0,
+  "total_docs_excl_archive": 150,
+  "total_chars": 877486,
+  "estimated_tokens": 219372
+}

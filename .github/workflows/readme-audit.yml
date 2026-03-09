@@ -1,0 +1,176 @@
+name: README Audit
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_call:
+    inputs:
+      readme_path:
+        description: "Path to the README file to audit"
+        type: string
+        default: "README.md"
+      # Skills
+      skills_dir:
+        description: "Directory containing skill subdirectories"
+        type: string
+        default: "skills/"
+      skills_exclude_pattern:
+        description: "grep -v pattern to exclude from skills count"
+        type: string
+        default: "registry|params|schema"
+      check_skills:
+        description: "Whether to check skills count"
+        type: boolean
+        default: true
+      # Registry
+      registry_path:
+        description: "Path to skills/registry.json"
+        type: string
+        default: "skills/registry.json"
+      check_registry:
+        description: "Whether to check registry entries count"
+        type: boolean
+        default: true
+      # Agents
+      agents_dir:
+        description: "Directory containing agent markdown files"
+        type: string
+        default: ".claude/agents/"
+      check_agents:
+        description: "Whether to check agents count"
+        type: boolean
+        default: true
+      # Detekt rules
+      detekt_rules_dir:
+        description: "Directory containing hand-written Detekt rule .kt files"
+        type: string
+        default: "detekt-rules/src/main/kotlin/com/androidcommondoc/detekt/rules/"
+      check_detekt_rules:
+        description: "Whether to check Detekt rules count"
+        type: boolean
+        default: true
+      # MCP tools
+      mcp_tools_dir:
+        description: "Directory containing MCP tool .ts files"
+        type: string
+        default: "mcp-server/src/tools/"
+      check_mcp_tools:
+        description: "Whether to check MCP tools count"
+        type: boolean
+        default: true
+      # Reusable workflows
+      reusable_wf_pattern:
+        description: "Glob pattern for reusable workflow files"
+        type: string
+        default: ".github/workflows/reusable-*.yml"
+      check_reusable_wf:
+        description: "Whether to check reusable workflows count"
+        type: boolean
+        default: true
+
+jobs:
+  readme-audit:
+    name: Verify README counts are current
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Gather actual counts
+        id: counts
+        run: |
+          # Skills
+          if [ "${{ inputs.check_skills || 'true' }}" = "true" ] && [ -d "${{ inputs.skills_dir || 'skills/' }}" ]; then
+            SKILLS=$(ls "${{ inputs.skills_dir || 'skills/' }}" \
+              | grep -vE "${{ inputs.skills_exclude_pattern || 'registry|params|schema' }}" \
+              | wc -l | tr -d ' ')
+          else
+            SKILLS="skip"
+          fi
+
+          # Registry
+          if [ "${{ inputs.check_registry || 'true' }}" = "true" ] && [ -f "${{ inputs.registry_path || 'skills/registry.json' }}" ]; then
+            REGISTRY=$(python3 -c "
+          import json
+          d = json.load(open('${{ inputs.registry_path || 'skills/registry.json' }}'))
+          entries = d.get('skills', d.get('entries', []))
+          print(len(entries))")
+          else
+            REGISTRY="skip"
+          fi
+
+          # Agents
+          if [ "${{ inputs.check_agents || 'true' }}" = "true" ] && [ -d "${{ inputs.agents_dir || '.claude/agents/' }}" ]; then
+            AGENTS=$(ls "${{ inputs.agents_dir || '.claude/agents/' }}" | wc -l | tr -d ' ')
+          else
+            AGENTS="skip"
+          fi
+
+          # Detekt rules
+          if [ "${{ inputs.check_detekt_rules || 'true' }}" = "true" ] && [ -d "${{ inputs.detekt_rules_dir || 'detekt-rules/src/main/kotlin/com/androidcommondoc/detekt/rules/' }}" ]; then
+            RULES=$(ls "${{ inputs.detekt_rules_dir || 'detekt-rules/src/main/kotlin/com/androidcommondoc/detekt/rules/' }}"*.kt 2>/dev/null \
+              | grep -v generated | wc -l | tr -d ' ')
+          else
+            RULES="skip"
+          fi
+
+          # MCP tools
+          if [ "${{ inputs.check_mcp_tools || 'true' }}" = "true" ] && [ -d "${{ inputs.mcp_tools_dir || 'mcp-server/src/tools/' }}" ]; then
+            MCP_TOOLS=$(ls "${{ inputs.mcp_tools_dir || 'mcp-server/src/tools/' }}"*.ts 2>/dev/null | wc -l | tr -d ' ')
+          else
+            MCP_TOOLS="skip"
+          fi
+
+          # Reusable workflows
+          if [ "${{ inputs.check_reusable_wf || 'true' }}" = "true" ]; then
+            REUSABLE_WF=$(ls ${{ inputs.reusable_wf_pattern || '.github/workflows/reusable-*.yml' }} 2>/dev/null | wc -l | tr -d ' ')
+          else
+            REUSABLE_WF="skip"
+          fi
+
+          echo "skills=$SKILLS"         >> $GITHUB_OUTPUT
+          echo "registry=$REGISTRY"     >> $GITHUB_OUTPUT
+          echo "agents=$AGENTS"         >> $GITHUB_OUTPUT
+          echo "rules=$RULES"           >> $GITHUB_OUTPUT
+          echo "mcp_tools=$MCP_TOOLS"   >> $GITHUB_OUTPUT
+          echo "reusable_wf=$REUSABLE_WF" >> $GITHUB_OUTPUT
+
+          echo "=== Actual counts ==="
+          [ "$SKILLS"      != "skip" ] && echo "Skills dirs:      $SKILLS"
+          [ "$REGISTRY"    != "skip" ] && echo "Registry entries: $REGISTRY"
+          [ "$AGENTS"      != "skip" ] && echo "Agents:           $AGENTS"
+          [ "$RULES"       != "skip" ] && echo "Detekt rules:     $RULES"
+          [ "$MCP_TOOLS"   != "skip" ] && echo "MCP tools:        $MCP_TOOLS"
+          [ "$REUSABLE_WF" != "skip" ] && echo "Reusable WFs:     $REUSABLE_WF"
+
+      - name: Check README mentions key counts
+        run: |
+          README="${{ inputs.readme_path || 'README.md' }}"
+          FAIL=0
+
+          check() {
+            local label=$1
+            local value=$2
+            [ "$value" = "skip" ] && echo "⏭  $label: skipped" && return
+            if grep -qE "\b${value}\b" "$README"; then
+              echo "✅  $label: $value found in $README"
+            else
+              echo "❌  $label: $value NOT found in $README"
+              FAIL=1
+            fi
+          }
+
+          check "Skills dirs"        "${{ steps.counts.outputs.skills }}"
+          check "Registry entries"   "${{ steps.counts.outputs.registry }}"
+          check "Agents"             "${{ steps.counts.outputs.agents }}"
+          check "Detekt rules"       "${{ steps.counts.outputs.rules }}"
+          check "MCP tools"          "${{ steps.counts.outputs.mcp_tools }}"
+          check "Reusable workflows" "${{ steps.counts.outputs.reusable_wf }}"
+
+          if [ $FAIL -ne 0 ]; then
+            echo ""
+            echo "README is stale. Run /readme-audit --fix in Claude Code to update."
+            exit 1
+          fi

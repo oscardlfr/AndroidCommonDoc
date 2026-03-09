@@ -1,0 +1,22 @@
+plugins {
+    kotlin("jvm") version "__KOTLIN_VERSION__"
+}
+
+group = "__ROOT_PACKAGE__"
+version = "1.0.0"
+
+// No repositories block -- inherits from consumer's settings.gradle.kts
+// (FAIL_ON_PROJECT_REPOS / PREFER_SETTINGS compatible)
+
+dependencies {
+    testImplementation("com.lemonappdev:konsist:0.17.3")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.assertj:assertj-core:3.27.3")
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
+    outputs.upToDateWhen { false } // Never UP-TO-DATE -- architecture checks must always run
+    maxParallelForks = 1 // Sequential execution (file locking on Windows)
+}

@@ -1,0 +1,54 @@
+package __ROOT_PACKAGE__.konsist.guard
+
+import com.lemonappdev.konsist.api.Konsist
+import com.lemonappdev.konsist.api.container.KoScope
+
+/**
+ * Centralized scope creation with canary assertions for guard tests.
+ *
+ * Uses [Konsist.scopeFromProduction] to scan the entire consumer project's
+ * production code. Every method asserts the returned scope is non-empty
+ * to prevent vacuous passes on misconfigured scopes.
+ *
+ * Generated from AndroidCommonDoc guard-templates.
+ * Root package: __ROOT_PACKAGE__
+ */
+object GuardScopeFactory {
+
+    private const val ROOT = "__ROOT_PACKAGE__"
+
+    /**
+     * Full production scope filtered to the consumer's root package.
+     * Excludes test code and external dependencies.
+     *
+     * @throws IllegalArgumentException if no production files are found under
+     *   the root package (canary assertion preventing vacuous passes).
+     */
+    fun projectScope(): KoScope {
+        val scope = Konsist.scopeFromProduction()
+        val count = scope.files.count {
+            it.packagee?.name?.startsWith(ROOT) == true
+        }
+        require(count > 0) {
+            "Canary: zero production files found under '$ROOT'. " +
+                "Verify that konsist-guard is included in settings.gradle.kts " +
+                "and the root package '$ROOT' matches your project structure. " +
+                "Working dir: ${System.getProperty("user.dir")}"
+        }
+        return scope
+    }
+
+    /**
+     * Checks if any production files exist under the given package prefix.
+     * Used to skip layer checks for layers that don't exist in this project.
+     *
+     * @param scope the production scope to check
+     * @param packagePrefix the package prefix to look for (e.g., "com.example.core.domain")
+     * @return true if at least one file has a package starting with [packagePrefix]
+     */
+    fun hasFilesInPackage(scope: KoScope, packagePrefix: String): Boolean {
+        return scope.files.any {
+            it.packagee?.name?.startsWith(packagePrefix) == true
+        }
+    }
+}

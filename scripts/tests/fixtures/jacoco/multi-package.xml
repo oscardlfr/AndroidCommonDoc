@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">
+<!--
+  Fixture: multi-package, multiple sourcefiles with Kotlin synthetic exclusions.
+  Verifies that $DefaultImpls, $Companion, $$serializer are NOT emitted as separate rows
+  (they are now irrelevant since we aggregate by sourcefile, but the fixture validates
+   that sourcefile-level aggregation correctly ignores class-level duplicates).
+-->
+<report name="core:domain">
+  <package name="com/example/domain">
+    <class name="com/example/domain/UserUseCase" sourcefilename="UserUseCase.kt">
+      <counter type="LINE" missed="2" covered="8"/>
+    </class>
+    <class name="com/example/domain/UserUseCase$DefaultImpls" sourcefilename="UserUseCase.kt">
+      <counter type="LINE" missed="0" covered="2"/>
+    </class>
+    <sourcefile name="UserUseCase.kt">
+      <line nr="10" mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="12" mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="15" mi="1" ci="0" mb="0" cb="0"/>
+      <line nr="18" mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="21" mi="1" ci="0" mb="0" cb="0"/>
+      <counter type="LINE" missed="2" covered="3"/>
+    </sourcefile>
+  </package>
+  <package name="com/example/domain/repo">
+    <class name="com/example/domain/repo/UserRepository" sourcefilename="UserRepository.kt">
+      <counter type="LINE" missed="0" covered="6"/>
+    </class>
+    <sourcefile name="UserRepository.kt">
+      <line nr="5"  mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="6"  mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="7"  mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="8"  mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="9"  mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="10" mi="0" ci="1" mb="0" cb="0"/>
+      <counter type="LINE" missed="0" covered="6"/>
+    </sourcefile>
+  </package>
+</report>

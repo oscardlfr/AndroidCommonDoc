@@ -1,0 +1,93 @@
+---
+scope: [testing, coroutines, quality]
+sources: [kotlinx-coroutines-test, junit5, kover, truth]
+targets: [android, desktop, ios, jvm]
+version: 3
+last_updated: "2026-03"
+assumes_read: testing-hub
+token_budget: 752
+description: "Hub doc: Standard patterns for testing in Kotlin Multiplatform projects"
+slug: testing-patterns
+status: active
+layer: L0
+category: testing
+
+monitor_urls:
+  - url: "https://github.com/Kotlin/kotlinx.coroutines/releases"
+    type: github-releases
+    tier: 1
+  - url: "https://github.com/Kotlin/kotlinx-kover/releases"
+    type: github-releases
+    tier: 1
+rules:
+  - id: no-default-dispatcher-in-tests
+    type: banned-usage
+    message: "Tests must inject TestDispatcher; never use Dispatchers.Default directly"
+    detect:
+      in_source_set: commonTest
+      banned_expression: "Dispatchers.Default"
+      prefer: "injected testDispatcher parameter"
+    hand_written: false
+  - id: no-mocks-in-common-tests
+    type: banned-import
+    message: "Use pure Kotlin fakes in commonTest, not Mockito or MockK"
+    detect:
+      in_source_set: commonTest
+      banned_import_prefixes:
+        - "io.mockk"
+        - "org.mockito"
+      prefer: "pure Kotlin fake class"
+    hand_written: false
+
+---
+
+# Testing Patterns for Kotlin Multiplatform
+
+---
+
+## Overview
+
+This document defines standard patterns for testing in Kotlin Multiplatform projects, with special focus on testing coroutines, schedulers, and background tasks. These patterns are aligned with Google's official approaches in nowinandroid and other reference projects.
+
+**Core Principle**: Tests should be deterministic, fast, and isolated. Use virtual time for coroutine tests to avoid flakiness.
+
+### Key Rules
+
+- Always use `runTest` for coroutine tests (never `runBlocking`)
+- Pure-Kotlin fakes over mocks (fakes work in commonTest across all KMP targets)
+- Subscribe to StateFlow in `backgroundScope` with `UnconfinedTestDispatcher` BEFORE actions
+- Test schedulers via `triggerNow()`, NEVER test infinite loops directly
+- Inject `testDispatcher` into UseCases (not `Dispatchers.Default`)
+- Always rethrow `CancellationException` in catch blocks
+
+---
+
+## Sub-documents
+
+This document is split into focused sub-docs for token-efficient loading:
+
+- **[testing-patterns-coroutines](testing-patterns-coroutines.md)**: Coroutine test patterns -- runTest, TestScope, virtual time, StateFlow collection, common pitfalls
+- **[testing-patterns-schedulers](testing-patterns-schedulers.md)**: Scheduler testing -- triggerNow pattern, lifecycle tests, backoff/retry, test configs, interruption scenarios
+- **[testing-patterns-fakes](testing-patterns-fakes.md)**: Fake and test double patterns -- FakeRepository, FakeClock, FakeLogger, why fakes over mocks
+- **[testing-patterns-coverage](testing-patterns-coverage.md)**: Coverage and CI patterns -- Kover config, coverage targets by layer, platform-specific tests, MainDispatcherRule
+
+---
+
+## Quick Reference
+
+- Use `runTest` + `UnconfinedTestDispatcher` for all coroutine tests
+- Subscribe to StateFlow in `backgroundScope` BEFORE triggering actions
+- See [testing-patterns-coroutines](testing-patterns-coroutines.md) for code examples
+- See [testing-patterns-fakes](testing-patterns-fakes.md) for fake implementations
+
+---
+
+## References
+
+- [nowinandroid testing](https://github.com/android/nowinandroid)
+- [kotlinx-coroutines-test guide](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-test/)
+- [Kover documentation](https://kotlin.github.io/kotlinx-kover/)
+
+---
+
+**Status**: Active | **Last Validated**: March 2026 with kotlinx-coroutines-test 1.10.x / Kover 0.9.x

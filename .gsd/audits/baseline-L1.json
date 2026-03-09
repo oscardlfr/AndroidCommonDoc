@@ -1,0 +1,26 @@
+{
+  "captured_at": "2026-03-16T23:42:49Z",
+  "layer": "L1",
+  "target_root": "shared-kmp-libs",
+  "hub_docs": {
+    "present": 0,
+    "total": 9,
+    "coverage_pct": 0.0,
+    "missing": ["security", "oauth", "storage", "domain", "firebase", "foundation", "io", "guides", "archive"]
+  },
+  "monitor_urls": {
+    "present": 0,
+    "total": 33,
+    "coverage_pct": 0.0
+  },
+  "detekt_rules": {
+    "present": 0,
+    "total": 33,
+    "coverage_pct": 0.0
+  },
+  "planning_ref_violations": 1,
+  "line_limit_violations": 0,
+  "total_docs_excl_archive": 33,
+  "total_chars": 159265,
+  "estimated_tokens": 39816
+}

@@ -1,0 +1,488 @@
+---
+name: setup
+description: "Interactive wizard to fully configure a new or existing project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Creates l0-manifest.json, syncs selected assets, and verifies the result. Bilingual output (EN + ES)."
+user-invocable: true
+allowed-tools: [Bash, Read, Write, Edit, Glob]
+l0_requires: ANDROID_COMMON_DOC
+category: guides
+---
+
+## Usage Examples / Ejemplos de uso
+
+```
+/setup                                          # full interactive wizard (recommended)
+/setup --project-root /path/to/my-project
+/setup --layer L1                               # shared-library manifest template
+/setup --mode warn                              # hook severity (default: warn)
+/setup --detekt all|custom|none|skip
+/setup --skills all|custom|none
+/setup --agents all|custom|none
+/setup --guards                                 # install Konsist guard tests
+/setup --ci                                     # copy CI template + PR template
+/setup --mcp                                    # print MCP server config snippet
+/setup --dry-run
+/setup --verify-only
+/setup --force
+```
+
+> **Bootstrap note:** `/setup` lives in AndroidCommonDoc. Run it **from the
+> AndroidCommonDoc directory** pointing at your project — no prior installation needed:
+>
+> ```bash
+> cd "$ANDROID_COMMON_DOC"
+> /setup --project-root /path/to/my-project
+> ```
+
+## Parameters / Parámetros
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--project-root PATH` | cwd | Target project root |
+| `--layer L1\|L2` | `L2` | Manifest template (L1 = shared lib, L2 = app) |
+| `--mode block\|warn` | `warn` | Claude Code hook severity |
+| `--detekt all\|custom\|none\|skip` | prompt | Detekt rules adoption |
+| `--skills all\|custom\|none` | prompt | Skill adoption mode |
+| `--agents all\|custom\|none` | prompt | Agent adoption mode |
+| `--guards` | prompt | Install Konsist structural guard tests |
+| `--ci` | prompt | Copy CI workflow template + PR template |
+| `--mcp` | prompt | Print MCP server config snippet for Claude Desktop |
+| `--skip-gradle` | false | Skip all Gradle modifications |
+| `--skip-hooks` | false | Skip Claude Code hooks |
+| `--skip-copilot` | false | Skip Copilot instructions |
+| `--dry-run` | false | Preview without writing files |
+| `--verify-only` | false | Verification checklist only |
+| `--force` | false | Overwrite existing manifest / detekt.yml |
+
+---
+
+## Behavior / Comportamiento
+
+### Step 0 — Validate, detect, run wizards, print plan
+
+1. Check `ANDROID_COMMON_DOC` is set. Detect project type and AGP version:
+
+```bash
+# Gradle project?
+IS_GRADLE=false
+{ [ -f "$PROJECT_ROOT/settings.gradle.kts" ] || \
+  [ -f "$PROJECT_ROOT/settings.gradle" ]; } && IS_GRADLE=true
+
+# KMP vs Android-only
+PROJECT_TYPE="unknown"
+grep -rq 'kotlin("multiplatform")\|id("org.jetbrains.kotlin.multiplatform")' \
+    "$PROJECT_ROOT" --include="*.gradle.kts" 2>/dev/null \
+  && PROJECT_TYPE="kmp"
+grep -rq 'com\.android\.library\|com\.android\.application' \
+    "$PROJECT_ROOT" --include="*.gradle.kts" 2>/dev/null \
+  && [ "$PROJECT_TYPE" = "unknown" ] && PROJECT_TYPE="android-only"
+
+# AGP version — prefer version catalog, fall back to build.gradle.kts
+AGP_VERSION=$(grep -E '^agp\s*=' "$PROJECT_ROOT/gradle/libs.versions.toml" 2>/dev/null \
+  | head -1 | sed 's/.*"\(.*\)"/\1/')
+# Fallback: scan root build.gradle.kts for AGP classpath version
+if [ -z "$AGP_VERSION" ]; then
+  AGP_VERSION=$(grep -rE 'com\.android\.tools\.build:gradle:([0-9]+\.[0-9]+\.[0-9]+)' \
+      "$PROJECT_ROOT" --include="*.gradle.kts" --include="*.gradle" 2>/dev/null \
+    | head -1 | sed 's/.*:\([0-9][0-9.]*\).*/\1/')
+fi
+[ -z "$AGP_VERSION" ] && AGP_VERSION="unknown"
+```
+
+Print detected context before any wizard:
+```
+Detected:  Android-only  |  AGP 8.9.1  |  Kotlin 2.3.0
+ℹ️  flat-module-names rule (AGP 9+ bug) does not apply to this project.
+ℹ️  Use AndroidLibraryConventionPlugin, not KmpLibraryConventionPlugin.
+ℹ️  See: docs/gradle/gradle-patterns-android-only.md
+```
+
+2. Run all wizards (W1–W8) for any component not specified via flag.
+3. Print full plan table before writing anything.
+
+```
+┌──────────────────────────────────────────────────────┐
+│  AndroidCommonDoc /setup                             │
+├──────────────────────────────────────────────────────┤
+│  L0 root:      /path/to/AndroidCommonDoc             │
+│  Project root: /path/to/my-project                   │
+│  Project type: Android-only  (AGP 8.9.1)            │
+│  Layer:        L2                                    │
+│  Hook mode:    warn                                  │
+│  Skills:       custom  (testing + build + guides)    │
+│  Agents:       custom  (test-specialist + ui-spec)   │
+│  Detekt:       custom  (9/13 rules active)           │
+│  Guards:       yes     (package: com.myapp)          │
+│  CI template:  yes                                   │
+│  MCP server:   show snippet                          │
+│  Model profile: balanced                             │
+│  Dry run:      false                                 │
+└──────────────────────────────────────────────────────┘
+Proceed? [Y/n]
+```
+
+---
+
+### Wizard W1 — Skill selection (if `--skills` not set)
+
+Show categories with their skills. Multi-select toggle (space = toggle, enter = confirm).
+
+```
+Which skill categories do you want to import?
+  [x] testing    — test, test-full, test-full-parallel, test-changed,
+                   auto-cover, coverage, coverage-full, android-test
+  [x] build      — lint-resources, run, verify-kmp
+  [x] guides     — pre-pr, git-flow, commit-lint, sync-l0, setup
+  [ ] security   — sbom, sbom-analyze, sbom-scan
+  [ ] ui         — accessibility, best-practices, core-web-vitals,
+                   performance, seo, web-quality-audit
+  [ ] docs       — readme-audit
+  [ ] domain     — extract-errors
+  [ ] validation — audit-l0
+```
+
+Offer fine-grained opt-out per skill after category selection.
+Translate into `exclude_skills` / `exclude_categories` in the manifest.
+
+> `--skills all` → include everything. `--skills none` → mode: explicit (add manually later).
+
+---
+
+### Wizard W2 — Agent selection (if `--agents` not set)
+
+Agents split into two groups. Show descriptions so user can choose:
+
+```
+User-facing agents (invoke directly in Claude Code):
+  [x] test-specialist         — Reviews test code for pattern compliance
+  [x] ui-specialist           — Reviews Compose UI for consistency
+  [x] beta-readiness-agent    — Deep audit before beta release
+  [x] release-guardian-agent  — Scans for debug flags / secrets before publish
+  [x] cross-platform-validator— Validates feature parity across platforms
+  [x] doc-alignment-agent     — Proactive doc / code alignment scanner
+
+Internal agents (invoked by quality-gate-orchestrator — install all or none):
+  [x] quality-gate-orchestrator   — Unified quality gate runner
+  [x] doc-code-drift-detector     — Pattern doc version drift detection
+  [x] script-parity-validator     — PS1 / SH script equivalence
+  [x] skill-script-alignment      — Skills reference correct scripts
+  [x] template-sync-validator     — Claude commands ↔ Copilot template parity
+```
+
+> Internal agents are best adopted as a group. If quality-gate-orchestrator
+> is selected, recommend selecting all internal agents.
+
+Translate deselected agents into `exclude_agents` in the manifest.
+
+> `--agents all` → keep everything. `--agents none` → exclude all agents.
+
+---
+
+### Wizard W3 — Detekt rules (if `--detekt` not set and IS_GRADLE=true)
+
+```
+Do you want to configure AndroidCommonDoc Detekt architecture rules? [y/N]
+→ [all] Activate all 13  [custom] Choose per rule  [none] Install, disable all
+```
+
+**custom** — per-rule prompt grouped by category, `?` shows pattern doc link:
+
+```
+State & Exposure
+  [y/?] SealedUiState             UiState must be sealed interface
+  [y/?] MutableStateFlowExposed   Must not expose MutableStateFlow publicly
+  [y/?] WhileSubscribedTimeout    stateIn() must use WhileSubscribed(5_000)
+ViewModel Boundaries
+  [y/?] NoPlatformDeps            No Context/Resources/UIKit in ViewModels
+  [y/?] NoHardcodedStringsInViewModel
+  [y/?] NoHardcodedDispatchers    Inject dispatchers, don't hardcode them
+Coroutine Safety
+  [y/?] CancellationExceptionRethrow
+  [y/?] NoRunCatchingInCoroutineScope
+  [y/?] NoSilentCatch
+  [y/?] NoLaunchInInit
+Architecture Guards
+  [y/?] NoChannelForUiEvents
+  [y/?] NoChannelForNavigation
+  [y/?] NoMagicNumbersInUseCase
+```
+
+Write `detekt.yml` with only disabled rules under `AndroidCommonDoc:`.
+
+---
+
+### Wizard W4 — Konsist guard tests (if `--guards` not set and IS_GRADLE=true)
+
+```
+Do you want to install Konsist structural guard tests? [y/N]
+
+Guards enforce architecture at test time (module boundaries, naming, layer
+isolation). They require a root package name.
+
+  Root package (e.g. com.mycompany.myapp): _
+```
+
+If confirmed, run:
+```bash
+bash "$L0_ROOT/setup/install-guard-tests.sh" \
+  --package "$ROOT_PACKAGE" \
+  --target "$PROJECT_ROOT" \
+  ${DRY_RUN:+--dry-run} \
+  ${FORCE:+--force}
+```
+
+Installs: `NamingGuardTest.kt`, `ArchitectureGuardTest.kt`,
+`ModuleIsolationGuardTest.kt`, `PackageGuardTest.kt`,
+`GuardScopeFactory.kt`, `konsist-guard/build.gradle.kts`.
+
+> Skip automatically if not a Gradle project or if `--skip-gradle` passed.
+
+---
+
+### Wizard W5 — CI workflow + PR template (if `--ci` not set)
+
+```
+Do you want to copy the CI workflow template and PR template? [y/N]
+
+  .github/workflows/ci.yml        ← reusable L0 workflows + project jobs
+  .github/pull_request_template.md ← standard PR checklist
+```
+
+If confirmed:
+- Copy `setup/github-workflows/ci-template.yml` → `$PROJECT_ROOT/.github/workflows/ci.yml`
+  (replace `<org>` placeholder with the detected GitHub remote org if available)
+- Copy `setup/github-workflows/pull_request_template.md` → `$PROJECT_ROOT/.github/pull_request_template.md`
+
+Detect GitHub remote org:
+```bash
+git -C "$PROJECT_ROOT" remote get-url origin 2>/dev/null \
+  | sed -E 's|.*github.com[:/]([^/]+)/.*|\1|'
+```
+
+> Skip if `.github/workflows/ci.yml` already exists and `--force` not passed.
+
+---
+
+### Wizard W6 — MCP server (if `--mcp` not set)
+
+```
+Do you want to connect the MCP server to Claude Desktop? [y/N]
+
+The MCP server exposes 17 tools (validate-all, monitor-sources,
+generate-detekt-rules, sync-vault, find-pattern, ...) over stdio.
+```
+
+If confirmed, detect OS and print the ready-to-paste snippet:
+
+**macOS/Linux:**
+```
+Add to: ~/Library/Application Support/Claude/claude_desktop_config.json
+        (macOS) or ~/.config/Claude/claude_desktop_config.json (Linux)
+
+{
+  "mcpServers": {
+    "androidcommondoc": {
+      "command": "npx",
+      "args": ["tsx", "<L0_ROOT>/mcp-server/src/index.ts"],
+      "env": { "ANDROID_COMMON_DOC": "<L0_ROOT>" }
+    }
+  }
+}
+
+Restart Claude Desktop after adding this entry.
+Full guide: docs/guides/getting-started/06-mcp-server.md
+```
+
+No files are written for this step — print only.
+
+---
+
+### Step 1 — Toolkit installation
+
+```bash
+bash "$L0_ROOT/setup/setup-toolkit.sh" \
+  --project-root "$PROJECT_ROOT" \
+  --mode "${MODE:-warn}" \
+  ${DRY_RUN:+--dry-run} \
+  ${SKIP_GRADLE:+--skip-gradle} \
+  ${SKIP_HOOKS:+--skip-hooks} \
+  ${SKIP_COPILOT:+--skip-copilot}
+```
+
+Pass `--skip-gradle` when `--detekt skip` and user did not request Gradle.
+
+---
+
+### Step 2 — Detekt setup (conditional)
+
+**2a** Compile JAR if missing.
+**2b** Write `detekt.yml` based on W3 mode (all / custom / none). Skip entirely if `skip`.
+
+---
+
+### Step 3 — Create `l0-manifest.json`
+
+Populate `selection` block from W1 + W2 choices. Do not overwrite without `--force`.
+
+---
+
+### Step 4 — Sync L0 skills and agents
+
+```
+Read skills/sync-l0/SKILL.md
+```
+
+Only selected skills and agents are materialised. Skip if `--dry-run`.
+
+---
+
+### Step 5 — Konsist guards (conditional on W4)
+
+Run `install-guard-tests.sh` with confirmed package name. Skip if declined or non-Gradle.
+
+---
+
+### Step 6 — CI + PR templates (conditional on W5)
+
+Copy templates. Replace `<org>` placeholder. Skip if declined or files exist without `--force`.
+
+---
+
+### Wizard W7 — GSD Integration (if `~/.gsd/` exists)
+
+> **Only shown if** GSD-2 is detected (`~/.gsd/` directory exists).
+> If GSD-2 is NOT detected, this step is silently skipped.
+
+```
+GSD-2 detected. Sync L0 + marketplace skills to GSD? [y/N]
+
+This makes all AndroidCommonDoc skills and agents discoverable by GSD-2.
+Skills are copied to ~/.gsd/agent/skills/ under prefixed subdirs.
+```
+
+If confirmed:
+```bash
+bash "$L0_ROOT/scripts/sh/sync-gsd-skills.sh" --source all \
+  ${DRY_RUN:+--dry-run} ${VERBOSE:+--verbose}
+```
+
+Then ask separately:
+```
+Enable auto-sync hook for future sessions? [y/N]
+
+This adds a SessionStart hook that syncs skills whenever you start Claude Code.
+You can disable it later with: /sync-gsd-skills --disable-hook
+```
+
+If auto-sync confirmed:
+```bash
+bash "$L0_ROOT/scripts/sh/sync-gsd-skills.sh" --enable-hook
+```
+
+> See: `skills/sync-gsd-skills/SKILL.md` for full details.
+
+---
+
+### Wizard W8 — Model Profile (always shown)
+
+```
+Which agent model profile do you want to use?
+
+  Profiles control which AI model each agent runs on:
+  [1] budget    — All haiku (cheapest, fastest)
+  [2] balanced  — Haiku for static checks, Sonnet for reasoning (default)
+  [3] advanced  — Opus for orchestration + deep analysis, Sonnet for rest
+  [4] quality   — All opus (maximum quality, highest cost)
+
+  Select [1-4] or press Enter for balanced: _
+```
+
+If confirmed:
+1. Copy `.claude/model-profiles.json` from L0 to the project (if not already present)
+2. Set `"current"` to the selected profile name
+3. Update all agent `.md` frontmatter `model:` lines to match the profile:
+   - For each agent: `model = overrides[agent] ?? default_model`
+4. Report changes:
+```
+Model profile: balanced
+  full-audit-orchestrator:  sonnet
+  quality-gate-orchestrator: sonnet
+  script-parity-validator:  haiku
+  ...
+  15 agents configured.
+```
+
+> The user can change profiles later with `/set-model-profile <profile>`.
+
+---
+
+### Step 7 — Verification checklist
+
+```bash
+# ANDROID_COMMON_DOC set
+# Skills count matches selection
+# Hooks installed
+# Manifest checksums populated
+# Detekt JAR + detekt.yml (if opted in)
+# Guard tests directory exists (if opted in)
+# .github/workflows/ci.yml exists (if opted in)
+```
+
+---
+
+### Step 8 — Final summary
+
+```
+╔════════════════════════════════════════════════════════╗
+║           /setup — AndroidCommonDoc                    ║
+╠════════════════════════════════════════════════════════╣
+║  Toolkit            ✅ hooks + Copilot + Gradle        ║
+║  l0-manifest.json   ✅ Created (layer: L2)             ║
+║  Skills synced      ✅ 18 skills (testing+build+guides)║
+║  Agents synced      ✅ 8 agents                        ║
+║  Detekt JAR         ✅ Ready                           ║  ← conditional
+║  detekt.yml         ✅ custom (9 active / 4 disabled)  ║  ← conditional
+║  Konsist guards     ✅ 5 guard files (com.myapp)       ║  ← conditional
+║  CI workflow        ✅ .github/workflows/ci.yml        ║  ← conditional
+║  PR template        ✅ .github/pull_request_template   ║  ← conditional
+║  MCP server         ℹ️  Snippet printed above          ║  ← conditional
+║  Model profile      ✅ balanced (8 sonnet, 7 haiku)   ║
+╠════════════════════════════════════════════════════════╣
+║  Overall:  ✅ READY — restart Claude Code              ║
+╚════════════════════════════════════════════════════════╝
+
+Next steps:
+  1. Restart Claude Code for hooks and skills to activate
+  2. MCP: add snippet to claude_desktop_config.json, restart Claude Desktop
+  3. CI: review .github/workflows/ci.yml — replace <org> if not auto-detected
+  4. [detekt=none] Enable rules in detekt.yml when your team is ready
+```
+
+Every row is conditional — only shown if that component was configured.
+
+---
+
+## Important Rules / Reglas importantes
+
+1. **Wizard before action** — never write files before the user confirms choices.
+2. **Every component is opt-in** — Detekt, guards, CI, MCP, agents: all have a y/N prompt.
+3. **Never overwrite existing files** without `--force` (manifest, detekt.yml, ci.yml, guards).
+4. **`l0_source` must be relative** — absolute paths break portability.
+5. **`--dry-run` shows exactly what would be written** — manifest diff, detekt.yml content, file list.
+6. **`--verify-only` is always read-only** — safe on any project at any time.
+7. **Internal agents are best adopted as a group** — warn if quality-gate-orchestrator selected without the internal validators.
+8. **MCP wizard prints only** — no files written; user pastes the snippet manually.
+9. **Report every step outcome** — no silent failures.
+
+---
+
+## Cross-References / Referencias cruzadas
+
+- Skill: `/sync-l0` — Step 4 delegates here
+- Skill: `/pre-pr` — run after setup to validate PR-readiness
+- Script: `setup/setup-toolkit.sh` — Steps 1 delegates here
+- Script: `setup/install-guard-tests.sh` — Step 5 delegates here
+- Doc: [`docs/guides/getting-started.md`](../docs/guides/getting-started.md)
+- Doc: [`docs/guides/getting-started/03-manifest.md`](../docs/guides/getting-started/03-manifest.md)
+- Doc: [`docs/guides/getting-started/05-detekt-layers.md`](../docs/guides/getting-started/05-detekt-layers.md)
+- Doc: [`docs/guides/getting-started/06-mcp-server.md`](../docs/guides/getting-started/06-mcp-server.md)
+- Doc: [`docs/guides/getting-started/07-ci-workflows.md`](../docs/guides/getting-started/07-ci-workflows.md)

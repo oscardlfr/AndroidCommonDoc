@@ -1,0 +1,66 @@
+name: Reusable — Architecture Guards
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AndroidCommonDoc L0 reusable workflow — Konsist architecture guard tests
+#
+# Runs a Gradle task that executes Konsist architectural constraint tests.
+# The task name is configurable to match each project's module structure.
+#
+# Usage from consumer project:
+#
+#   jobs:
+#     architecture-guards:
+#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-architecture-guards.yml@main
+#       with:
+#         gradle_task: ":konsist-guard:test"
+#         java_version: "17"
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+      gradle_task:
+        description: "Gradle task to run for architecture guards"
+        type: string
+        default: ":konsist-guard:test"
+      java_version:
+        description: "Java version for the Gradle build"
+        type: string
+        default: "17"
+      java_distribution:
+        description: "Java distribution (temurin, zulu, etc.)"
+        type: string
+        default: "temurin"
+      upload_reports:
+        description: "Upload test reports as artifacts"
+        type: boolean
+        default: true
+      reports_path:
+        description: "Path glob for test reports"
+        type: string
+        default: "konsist-guard/build/reports/tests/"
+
+jobs:
+  architecture-guards:
+    name: "🏛️ Architecture Guards"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          java-version: ${{ inputs.java_version }}
+          distribution: ${{ inputs.java_distribution }}
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Run architecture guards
+        run: ./gradlew ${{ inputs.gradle_task }} --no-daemon
+
+      - name: Upload guard results
+        uses: actions/upload-artifact@v5
+        if: ${{ inputs.upload_reports && always() }}
+        with:
+          name: architecture-guard-results
+          path: ${{ inputs.reports_path }}
+          retention-days: 7

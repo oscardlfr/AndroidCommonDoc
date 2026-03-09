@@ -1,0 +1,586 @@
+{
+  "$schema": "./params.schema.json",
+  "_comment": "GENERATED SOURCE OF TRUTH -- All script parameters are defined here. Adapters read this file to generate tool-specific parameter syntax.",
+  "parameters": {
+    "project-root": {
+      "type": "path",
+      "description": "Path to the project root directory",
+      "required": false,
+      "default": "$(pwd)",
+      "mapping": {
+        "ps1": "ProjectRoot",
+        "sh": "--project-root",
+        "copilot": "${input:projectRoot:Path to project root}",
+        "makefile": "--project-root"
+      }
+    },
+    "module": {
+      "type": "string",
+      "description": "Gradle module path (e.g., core:domain, feature:home). Use '-' for root project.",
+      "required": false,
+      "mapping": {
+        "ps1": "Module",
+        "sh": "--module",
+        "copilot": "${input:module:Gradle module path}",
+        "makefile": "--module"
+      }
+    },
+    "task": {
+      "type": "string",
+      "description": "Gradle task to execute (e.g., test, desktopTest, build)",
+      "required": false,
+      "mapping": {
+        "ps1": "Task",
+        "sh": "positional"
+      }
+    },
+    "test-type": {
+      "type": "enum",
+      "description": "Type of tests to run",
+      "required": false,
+      "default": "all",
+      "values": [
+        "all",
+        "common",
+        "androidUnit",
+        "androidInstrumented",
+        "desktop"
+      ],
+      "mapping": {
+        "ps1": "TestType",
+        "sh": "--test-type",
+        "copilot": "${input:testType:all|common|androidUnit|androidInstrumented|desktop}"
+      }
+    },
+    "platform": {
+      "type": "enum",
+      "description": "Target platform for detection and test selection",
+      "required": false,
+      "default": "auto",
+      "values": [
+        "auto",
+        "android",
+        "desktop"
+      ],
+      "mapping": {
+        "ps1": "Platform",
+        "sh": "--platform",
+        "copilot": "${input:platform:android|desktop|auto}"
+      }
+    },
+    "skip-coverage": {
+      "type": "boolean",
+      "description": "Skip coverage report generation after tests",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "SkipCoverage",
+        "sh": "--skip-coverage"
+      }
+    },
+    "coverage-tool": {
+      "type": "enum",
+      "description": "Coverage tool to use for report generation",
+      "required": false,
+      "default": "auto",
+      "values": [
+        "jacoco",
+        "kover",
+        "auto",
+        "none"
+      ],
+      "mapping": {
+        "ps1": "CoverageTool",
+        "sh": "--coverage-tool",
+        "copilot": "${input:coverageTool:jacoco|kover|auto|none}"
+      }
+    },
+    "skip-tests": {
+      "type": "boolean",
+      "description": "Skip test execution and only regenerate coverage report from existing data",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "SkipTests",
+        "sh": "--skip-tests"
+      }
+    },
+    "output-format": {
+      "type": "enum",
+      "description": "Output format for results",
+      "required": false,
+      "default": "human",
+      "values": [
+        "human",
+        "json",
+        "text",
+        "markdown"
+      ],
+      "mapping": {
+        "ps1": "OutputFormat",
+        "sh": "--output-format"
+      }
+    },
+    "include-shared": {
+      "type": "boolean",
+      "description": "Include shared library modules in execution",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "IncludeShared",
+        "sh": "--include-shared"
+      }
+    },
+    "module-filter": {
+      "type": "string",
+      "description": "Filter modules by pattern. Supports wildcards and comma-separated values.",
+      "required": false,
+      "default": "*",
+      "mapping": {
+        "ps1": "ModuleFilter",
+        "sh": "--module-filter"
+      }
+    },
+    "min-missed-lines": {
+      "type": "number",
+      "description": "Minimum missed lines to include a class in coverage gaps report",
+      "required": false,
+      "default": 0,
+      "mapping": {
+        "ps1": "MinMissedLines",
+        "sh": "--min-missed-lines"
+      }
+    },
+    "output-file": {
+      "type": "string",
+      "description": "Output filename for reports",
+      "required": false,
+      "default": "coverage-full-report.md",
+      "mapping": {
+        "ps1": "OutputFile",
+        "sh": "--output-file"
+      }
+    },
+    "java-home": {
+      "type": "path",
+      "description": "Override JAVA_HOME for Gradle execution",
+      "required": false,
+      "mapping": {
+        "ps1": "JavaHome",
+        "sh": "--java-home"
+      }
+    },
+    "max-workers": {
+      "type": "number",
+      "description": "Override Gradle worker count. 0 = auto (Gradle default based on CPU).",
+      "required": false,
+      "default": 0,
+      "mapping": {
+        "ps1": "MaxWorkers",
+        "sh": "--max-workers"
+      }
+    },
+    "fresh-daemon": {
+      "type": "boolean",
+      "description": "Stop existing Gradle daemons before starting",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "FreshDaemon",
+        "sh": "--fresh-daemon"
+      }
+    },
+    "coverage-only": {
+      "type": "boolean",
+      "description": "Only run modules specified in coverage-modules",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "CoverageOnly",
+        "sh": "--coverage-only"
+      }
+    },
+    "coverage-modules": {
+      "type": "string",
+      "description": "Comma-separated list of module patterns for coverage-only mode",
+      "required": false,
+      "default": "core:model,core:domain,core:data,core:audio",
+      "mapping": {
+        "ps1": "CoverageModules",
+        "sh": "--coverage-modules"
+      }
+    },
+    "timeout": {
+      "type": "number",
+      "description": "Timeout in seconds for Gradle execution",
+      "required": false,
+      "default": 300,
+      "mapping": {
+        "ps1": "Timeout",
+        "sh": "--timeout"
+      }
+    },
+    "search-pattern": {
+      "type": "string",
+      "description": "Regex pattern to search in error output for additional context",
+      "required": false,
+      "mapping": {
+        "ps1": "SearchPattern",
+        "sh": "--search-pattern"
+      }
+    },
+    "include-stacktrace": {
+      "type": "boolean",
+      "description": "Include full stack traces in test failure output",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "IncludeStackTrace",
+        "sh": "--include-stacktrace"
+      }
+    },
+    "json": {
+      "type": "boolean",
+      "description": "Output results as JSON for programmatic consumption",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "JsonOutput",
+        "sh": "--json"
+      }
+    },
+    "module-path": {
+      "type": "path",
+      "description": "Specific module path to check (relative to project root)",
+      "required": false,
+      "mapping": {
+        "ps1": "ModulePath",
+        "sh": "--module-path"
+      }
+    },
+    "show-details": {
+      "type": "boolean",
+      "description": "Show detailed output including matched lines",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "ShowDetails",
+        "sh": "--show-details"
+      }
+    },
+    "check-swift-sync": {
+      "type": "boolean",
+      "description": "Compare Compose resource keys against .xcstrings for cross-platform parity",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "CheckSwiftSync",
+        "sh": "--check-swift-sync"
+      }
+    },
+    "strict-mode": {
+      "type": "boolean",
+      "description": "Fail on warnings in addition to errors",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "StrictMode",
+        "sh": "--strict"
+      }
+    },
+    "target": {
+      "type": "enum",
+      "description": "Target platform for build-run: android, desktop, demo, prod",
+      "required": false,
+      "default": "auto",
+      "values": [
+        "auto",
+        "android",
+        "desktop",
+        "demo",
+        "prod"
+      ],
+      "mapping": {
+        "ps1": "Target",
+        "sh": "positional"
+      }
+    },
+    "filter": {
+      "type": "string",
+      "description": "Comma-separated log tags to filter during app log capture",
+      "required": false,
+      "default": "CLAUDE_DEBUG",
+      "mapping": {
+        "ps1": "Filter",
+        "sh": "--filter"
+      }
+    },
+    "device": {
+      "type": "string",
+      "description": "ADB device serial. Auto-selects if one device connected.",
+      "required": false,
+      "mapping": {
+        "ps1": "Device",
+        "sh": "--device"
+      }
+    },
+    "clean": {
+      "type": "boolean",
+      "description": "Force clean build before running",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "Clean",
+        "sh": "--clean"
+      }
+    },
+    "flavor": {
+      "type": "string",
+      "description": "Android build flavor",
+      "required": false,
+      "default": "demo",
+      "mapping": {
+        "ps1": "Flavor",
+        "sh": "--flavor"
+      }
+    },
+    "log-duration": {
+      "type": "number",
+      "description": "How long to capture logs in seconds",
+      "required": false,
+      "default": 30,
+      "mapping": {
+        "ps1": "LogDuration",
+        "sh": "--duration"
+      }
+    },
+    "source-of-truth": {
+      "type": "path",
+      "description": "Path to the project that defines canonical versions (default: ../your-shared-libs)",
+      "required": false,
+      "default": "../your-shared-libs",
+      "mapping": {
+        "ps1": "SourceOfTruth",
+        "sh": "--source-of-truth"
+      }
+    },
+    "projects": {
+      "type": "string",
+      "description": "Comma-separated list of project paths to compare against source of truth",
+      "required": false,
+      "mapping": {
+        "ps1": "Projects",
+        "sh": "--projects"
+      }
+    },
+    "ignore-extra": {
+      "type": "boolean",
+      "description": "Don't report dependencies that exist only in consumer projects",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "IgnoreExtra",
+        "sh": "--ignore-extra"
+      }
+    },
+    "all": {
+      "type": "boolean",
+      "description": "Explicitly process all detected modules",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "All",
+        "sh": "--all"
+      }
+    },
+    "severity": {
+      "type": "string",
+      "description": "Minimum severity level for vulnerability scanning (CRITICAL, HIGH, MEDIUM, LOW)",
+      "required": false,
+      "default": "HIGH,CRITICAL",
+      "mapping": {
+        "ps1": "Severity",
+        "sh": "--severity"
+      }
+    },
+    "sbom-path": {
+      "type": "path",
+      "description": "Direct path to a specific SBOM file (overrides module-based discovery)",
+      "required": false,
+      "mapping": {
+        "ps1": "SbomPath",
+        "sh": "--sbom-path"
+      }
+    },
+    "staged-only": {
+      "type": "boolean",
+      "description": "Only consider staged files (git add) when detecting changed modules",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "StagedOnly",
+        "sh": "--staged-only"
+      }
+    },
+    "show-modules-only": {
+      "type": "boolean",
+      "description": "Show detected modules without running tests (dry run)",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "ShowModulesOnly",
+        "sh": "--show-modules-only"
+      }
+    },
+    "max-failures": {
+      "type": "number",
+      "description": "Stop after N test failures. 0 = run all modules regardless of failures.",
+      "required": false,
+      "default": 0,
+      "mapping": {
+        "ps1": "MaxFailures",
+        "sh": "--max-failures"
+      }
+    },
+    "skip-app": {
+      "type": "boolean",
+      "description": "Skip app/androidApp modules during test execution",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "SkipApp",
+        "sh": "--skip-app"
+      }
+    },
+    "verbose": {
+      "type": "boolean",
+      "description": "Show detailed/verbose output including last lines of log on failure",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "Verbose",
+        "sh": "--verbose"
+      }
+    },
+    "auto-retry": {
+      "type": "boolean",
+      "description": "Automatically retry failed modules once",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "AutoRetry",
+        "sh": "--auto-retry"
+      }
+    },
+    "clear-data": {
+      "type": "boolean",
+      "description": "Clear app data before retrying failed modules",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "ClearData",
+        "sh": "--clear-data"
+      }
+    },
+    "list-only": {
+      "type": "boolean",
+      "description": "List discovered modules and exit without running tests",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "ListOnly",
+        "sh": "--list"
+      }
+    },
+    "commit-message": {
+      "type": "string",
+      "description": "A single commit message to validate against Conventional Commits",
+      "required": false,
+      "mapping": {
+        "ps1": "Message",
+        "sh": "--message",
+        "copilot": "${input:message:Single commit message to validate}"
+      }
+    },
+    "commit-range": {
+      "type": "string",
+      "description": "Git ref range to validate (e.g., HEAD~5..HEAD, main..HEAD)",
+      "required": false,
+      "default": "HEAD~1..HEAD",
+      "mapping": {
+        "ps1": "Range",
+        "sh": "--range",
+        "copilot": "${input:range:Git ref range e.g. HEAD~5..HEAD}"
+      }
+    },
+    "commit-fix": {
+      "type": "boolean",
+      "description": "Interactively rewrite non-conforming commit messages",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "ps1": "Fix",
+        "sh": "--fix"
+      }
+    },
+    "scope-enum": {
+      "type": "string",
+      "description": "Comma-separated list of allowed scopes for commit messages",
+      "required": false,
+      "mapping": {
+        "ps1": "ScopeEnum",
+        "sh": "--scope-enum",
+        "copilot": "${input:scopeEnum:Comma-separated allowed scopes}"
+      }
+    },
+    "type-enum": {
+      "type": "string",
+      "description": "Comma-separated list of allowed commit types",
+      "required": false,
+      "default": "feat,fix,docs,style,refactor,perf,test,build,ci,chore,revert",
+      "mapping": {
+        "ps1": "TypeEnum",
+        "sh": "--type-enum",
+        "copilot": "${input:typeEnum:Comma-separated allowed types}"
+      }
+    },
+    "pre-pr-base": {
+      "type": "string",
+      "description": "Base branch to diff against for pre-PR checks",
+      "required": false,
+      "default": "develop",
+      "mapping": {
+        "sh": "--base",
+        "copilot": "${input:base:Base branch (develop/main/master)}"
+      }
+    },
+    "pre-pr-fix": {
+      "type": "boolean",
+      "description": "Auto-fix fixable issues (commit messages)",
+      "required": false,
+      "default": false,
+      "mapping": {
+        "sh": "--fix",
+        "copilot": "${input:fix:Fix mode? yes/no}"
+      }
+    },
+    "git-flow-command": {
+      "type": "string",
+      "description": "Git Flow command: start, merge, release, hotfix, status",
+      "required": true,
+      "mapping": {
+        "sh": "positional-1",
+        "copilot": "${input:command:start/merge/release/hotfix/status}"
+      }
+    },
+    "git-flow-target": {
+      "type": "string",
+      "description": "Branch name, version, or hotfix name for the git-flow command",
+      "required": false,
+      "mapping": {
+        "sh": "positional-2",
+        "copilot": "${input:target:Branch name or version}"
+      }
+    }
+  }
+}

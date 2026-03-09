@@ -1,0 +1,97 @@
+{
+  "profiles": {
+    "quick": {
+      "description": "Fast static analysis only, no Gradle",
+      "waves": [1, 2],
+      "gradle": false,
+      "include_beta_readiness": false,
+      "timeout_minutes": 5
+    },
+    "standard": {
+      "description": "Standard audit with coverage checks",
+      "waves": [1, 2, 3],
+      "gradle": true,
+      "include_beta_readiness": false,
+      "timeout_minutes": 15
+    },
+    "deep": {
+      "description": "Full audit including beta readiness and compliance",
+      "waves": [1, 2, 3, 4],
+      "gradle": true,
+      "include_beta_readiness": true,
+      "timeout_minutes": 45
+    }
+  },
+  "waves": {
+    "1": {
+      "name": "Fast Static",
+      "description": "No Gradle, parallel script checks",
+      "parallel": true,
+      "checks": [
+        {"type": "skill", "name": "commit-lint", "category": "code-quality"},
+        {"type": "skill", "name": "lint-resources", "category": "code-quality"},
+        {"type": "skill", "name": "verify-kmp", "category": "architecture"},
+        {"type": "script", "name": "pattern-lint", "category": "code-quality"},
+        {"type": "skill", "name": "readme-audit", "category": "documentation", "condition": "l0_only"},
+        {"type": "mcp-tool", "name": "module-health", "category": "code-quality"},
+        {"type": "mcp-tool", "name": "dependency-graph", "category": "architecture"},
+        {"type": "mcp-tool", "name": "unused-resources", "category": "code-quality"},
+        {"type": "mcp-tool", "name": "gradle-config-lint", "category": "code-quality"},
+        {"type": "mcp-tool", "name": "string-completeness", "category": "code-quality"}
+      ]
+    },
+    "2": {
+      "name": "Architecture & Code Quality",
+      "description": "Agent-based analysis, parallel subagents",
+      "parallel": true,
+      "checks": [
+        {"type": "skill", "name": "validate-patterns", "category": "code-quality"},
+        {"type": "agent", "name": "release-guardian-agent", "category": "release-readiness"},
+        {"type": "agent", "name": "quality-gate-orchestrator", "category": "code-quality"},
+        {"type": "agent", "name": "cross-platform-validator", "category": "platform-parity"},
+        {"type": "agent", "name": "ui-specialist", "category": "ui-accessibility"},
+        {"type": "agent", "name": "l0-coherence-auditor", "category": "documentation", "condition": "l0_only"},
+        {"type": "agent", "name": "doc-alignment-agent", "category": "documentation"},
+        {"type": "command", "name": "feature-audit", "category": "code-quality"},
+        {"type": "mcp-tool", "name": "pattern-coverage", "category": "code-quality", "condition": "l0_only"},
+        {"type": "mcp-tool", "name": "l0-diff", "category": "architecture"},
+        {"type": "mcp-tool", "name": "api-surface-diff", "category": "code-quality"},
+        {"type": "mcp-tool", "name": "migration-validator", "category": "code-quality"},
+        {"type": "mcp-tool", "name": "compose-preview-audit", "category": "ui-accessibility"},
+        {"type": "mcp-tool", "name": "proguard-validator", "category": "release-readiness"}
+      ]
+    },
+    "3": {
+      "name": "Testing & Security",
+      "description": "May require Gradle builds",
+      "parallel": true,
+      "checks": [
+        {"type": "skill", "name": "coverage", "category": "testing"},
+        {"type": "agent", "name": "test-specialist", "category": "testing"},
+        {"type": "skill", "name": "sbom", "category": "security"},
+        {"type": "skill", "name": "sbom-scan", "category": "security"},
+        {"type": "skill", "name": "sync-versions", "category": "architecture"},
+        {"type": "command", "name": "metrics", "category": "code-quality"},
+        {"type": "mcp-tool", "name": "code-metrics", "category": "code-quality"}
+      ]
+    },
+    "4": {
+      "name": "Deep Analysis",
+      "description": "Extended checks, compliance, beta readiness",
+      "parallel": true,
+      "checks": [
+        {"type": "agent", "name": "beta-readiness-agent", "category": "release-readiness"},
+        {"type": "skill", "name": "test-full", "category": "testing"},
+        {"type": "agent", "name": "privacy-auditor", "category": "compliance"},
+        {"type": "agent", "name": "api-rate-limit-auditor", "category": "performance"}
+      ]
+    }
+  },
+  "l0_manifest_extension": {
+    "full_audit": {
+      "extra_agents": [],
+      "custom_profiles": {},
+      "skip_checks": []
+    }
+  }
+}

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">
+<!--
+  Fixture: 100% coverage — all lines covered, no gaps.
+-->
+<report name="core:model">
+  <package name="com/example/model">
+    <class name="com/example/model/User" sourcefilename="User.kt">
+      <counter type="LINE" missed="0" covered="4"/>
+    </class>
+    <sourcefile name="User.kt">
+      <line nr="5"  mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="6"  mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="7"  mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="8"  mi="0" ci="1" mb="0" cb="0"/>
+      <counter type="LINE" missed="0" covered="4"/>
+    </sourcefile>
+  </package>
+</report>

@@ -1,0 +1,847 @@
+{
+  "project": "shared-kmp-libs",
+  "path": "C:/Users/34645/AndroidStudioProjects/shared-kmp-libs",
+  "layer": "L1",
+  "audit_mode": "full",
+  "generated": "2026-03-14T17:45:00Z",
+  "file_count": 17,
+  "files": [
+    {
+      "path": "CLAUDE.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "line_count": 57,
+      "notes": "Compact and actionable. Missing YAML frontmatter. Covers module catalog, build commands, critical rules. Does not cover all 52 modules (lists categories but omits Domain-specific, Firebase, Others). Missing L0 cross-references. Phase 15 rewrite candidate."
+    },
+    {
+      "path": "README.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "line_count": 316,
+      "notes": "Comprehensive but long (316 lines). Module details section is redundant with individual READMEs. Coverage data may drift from coverage-full-report.md. No YAML frontmatter."
+    },
+    {
+      "path": "coverage-full-report.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 2,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "line_count": 1249,
+      "notes": "Generated coverage report (1249 lines). Too long for token-efficient agent consumption. Should be auto-generated, not manually maintained. Data may be stale (generated 2026-03-13)."
+    },
+    {
+      "path": "docs/ERROR_HANDLING_PATTERN.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "line_count": 341,
+      "notes": "Well-structured with checklists, examples, and tables. Contains shared-kmp-libs-specific patterns (module exception hierarchy, ExceptionMapper). Too long at 341 lines. Written in Spanish. NOT an L0 candidate -- tightly coupled to shared-kmp-libs module structure (ExceptionMapper, CompositeExceptionMapper, DomainException). L0 error-handling-patterns.md covers generic patterns already."
+    },
+    {
+      "path": "docs/TESTING_STRATEGY.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": false,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "line_count": 694,
+      "notes": "Coverage strategy specific to shared-kmp-libs modules. References Kover 0.9.4 which conflicts with versions-manifest.json (0.9.1) -- manifest likely stale. Very long at 694 lines. NOT an L0 candidate -- contains per-module coverage data specific to shared-kmp-libs. Generic testing patterns already in L0 testing-patterns.md.",
+      "versionRefs": [
+        { "tech": "kover", "found": "0.9.4", "current": "0.9.1", "stale": false },
+        { "tech": "kotlin", "found": "2.3.10", "current": "2.3.10", "stale": false }
+      ]
+    },
+    {
+      "path": "docs/API_EXPOSURE_PATTERN.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "line_count": 320,
+      "notes": "Explains api() vs implementation() for transitive deps. Written in mixed English/Spanish. Could partially promote to L0 (the api()/implementation() rule is generic Gradle) but the specific module examples are L1. Too long at 320 lines."
+    },
+    {
+      "path": "docs/CONVENTION_PLUGINS.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "line_count": 501,
+      "notes": "Detailed convention plugin documentation. Very long at 501 lines. Specific to shared-kmp-libs build-logic. NOT an L0 candidate -- references specific plugin IDs (com.grinx.shared.kmp.library) and project structure. L0 gradle-patterns.md covers generic convention plugin patterns."
+    },
+    {
+      "path": "docs/GRADLE_SETUP.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "line_count": 647,
+      "notes": "Complete Gradle setup guide with composite build, settings.gradle.kts examples. Very long at 647 lines. Contains version catalog sharing pattern that could be L0. Specific DawSync/WakeTheCave examples are L1. NOT an L0 candidate overall -- too tied to project-specific paths and module names."
+    },
+    {
+      "path": ".claude/agents/api-contract-guardian.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "line_count": 22,
+      "notes": "Agent for guarding API module contracts. Compact at 22 lines. Has YAML frontmatter. Could be partially L0 (generic API/impl separation pattern) but references shared-kmp-libs flat naming convention."
+    },
+    {
+      "path": ".claude/commands/auto-cover.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 2,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "line_count": 84,
+      "notes": "Claude command for auto-covering modules. Project-specific automation."
+    },
+    {
+      "path": ".claude/commands/coverage-full.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 2,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "line_count": 85,
+      "notes": "Claude command for full coverage run. Project-specific automation."
+    },
+    {
+      "path": ".claude/commands/coverage.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 2,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "line_count": 62,
+      "notes": "Claude command for coverage check. Project-specific automation."
+    },
+    {
+      "path": ".claude/commands/extract-errors.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 2,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "line_count": 70,
+      "notes": "Claude command for extracting error definitions. Project-specific automation."
+    },
+    {
+      "path": ".claude/commands/sync-versions.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 2,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "line_count": 72,
+      "notes": "Claude command for syncing versions. Project-specific automation."
+    },
+    {
+      "path": ".claude/commands/test-changed.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 2,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "line_count": 96,
+      "notes": "Claude command for testing changed modules. Project-specific automation."
+    },
+    {
+      "path": ".claude/commands/test-full.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 2,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "line_count": 108,
+      "notes": "Claude command for full test run. Project-specific automation."
+    },
+    {
+      "path": ".claude/commands/test.md",
+      "current_layer": "L1",
+      "recommended_layer": "L1",
+      "ai_readiness_score": 2,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "line_count": 72,
+      "notes": "Claude command for quick test. Project-specific automation."
+    }
+  ],
+  "module_gaps": {
+    "total_modules": 52,
+    "modules_with_readme": 14,
+    "modules_without_readme": 38,
+    "by_category": {
+      "Foundation": [
+        {
+          "module": "core-result",
+          "category": "Foundation",
+          "has_readme": true,
+          "readme_lines": 164,
+          "readme_quality": "good -- covers Result sealed interface, extensions, ExecutionResult with examples",
+          "doc_plan": "Add enforced convention table; add UiState integration examples",
+          "priority": "high"
+        },
+        {
+          "module": "core-error",
+          "category": "Foundation",
+          "has_readme": true,
+          "readme_lines": 192,
+          "readme_quality": "good -- covers DomainException hierarchy, ExceptionMapper, CompositeExceptionMapper",
+          "doc_plan": "Add enforced convention table; document relationship with core-error-* mapper modules",
+          "priority": "high"
+        },
+        {
+          "module": "core-common",
+          "category": "Foundation",
+          "has_readme": true,
+          "readme_lines": 170,
+          "readme_quality": "good -- covers IdGenerator, Base64Converter, DateTimeUtils",
+          "doc_plan": "Add platform-specific implementation notes for appleMain vs jvmMain",
+          "priority": "high"
+        },
+        {
+          "module": "core-domain",
+          "category": "Foundation",
+          "has_readme": true,
+          "readme_lines": 175,
+          "readme_quality": "good -- covers UseCase base classes, CoroutineDispatcher injection",
+          "doc_plan": "Add scheduler/runner patterns, relationship to ViewModel layer",
+          "priority": "high"
+        },
+        {
+          "module": "core-logging",
+          "category": "Foundation",
+          "has_readme": true,
+          "readme_lines": 191,
+          "readme_quality": "good -- covers structured event logging",
+          "doc_plan": "Minor: add enforced convention table",
+          "priority": "high"
+        }
+      ],
+      "IO_Network": [
+        {
+          "module": "core-io-api",
+          "category": "IO_Network",
+          "has_readme": true,
+          "readme_lines": 195,
+          "readme_quality": "good -- covers FileSystemProvider, PathProvider interfaces",
+          "doc_plan": "Add usage examples with Okio impl, platform path resolution details",
+          "priority": "high"
+        },
+        {
+          "module": "core-io-okio",
+          "category": "IO_Network",
+          "has_readme": true,
+          "readme_lines": 141,
+          "readme_quality": "partial -- covers OkioFileSystemProvider but missing testing patterns with FakeFileSystem",
+          "doc_plan": "Add FakeFileSystem testing examples; document watcher integration",
+          "priority": "medium"
+        },
+        {
+          "module": "core-io-kotlinxio",
+          "category": "IO_Network",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document kotlinx-io implementation: what it wraps, when to use vs Okio, platform specifics. 15 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-io-watcher",
+          "category": "IO_Network",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document file watcher: event types, platform implementations, usage with core-io-api. 16 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-json-api",
+          "category": "IO_Network",
+          "has_readme": true,
+          "readme_lines": 96,
+          "readme_quality": "good -- covers JsonConverter interface and extensions",
+          "doc_plan": "Minor: add enforced convention table",
+          "priority": "high"
+        },
+        {
+          "module": "core-json-kotlinx",
+          "category": "IO_Network",
+          "has_readme": true,
+          "readme_lines": 126,
+          "readme_quality": "good -- covers KotlinxJsonConverter",
+          "doc_plan": "Minor: add custom serializer patterns",
+          "priority": "medium"
+        },
+        {
+          "module": "core-network-api",
+          "category": "IO_Network",
+          "has_readme": true,
+          "readme_lines": 270,
+          "readme_quality": "good -- covers NetworkExecutor, request/response models, retry/timeout config",
+          "doc_plan": "Add enforced convention table; document interceptor patterns",
+          "priority": "high"
+        },
+        {
+          "module": "core-network-ktor",
+          "category": "IO_Network",
+          "has_readme": true,
+          "readme_lines": 170,
+          "readme_quality": "good -- covers Ktor implementation details",
+          "doc_plan": "Add Ktor engine platform selection; document content negotiation setup",
+          "priority": "medium"
+        },
+        {
+          "module": "core-network-retrofit",
+          "category": "IO_Network",
+          "has_readme": true,
+          "readme_lines": 168,
+          "readme_quality": "partial -- describes unused implementation (0% coverage)",
+          "doc_plan": "Mark as deprecated/unused; add note about Ktor being the active implementation",
+          "priority": "low"
+        }
+      ],
+      "Storage": [
+        {
+          "module": "core-storage-api",
+          "category": "Storage",
+          "has_readme": true,
+          "readme_lines": 356,
+          "readme_quality": "good -- comprehensive storage abstraction with multiple interfaces",
+          "doc_plan": "Add enforced convention table; document which implementations back which use cases",
+          "priority": "high"
+        },
+        {
+          "module": "core-storage-cache",
+          "category": "Storage",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document in-memory cache: API surface, eviction strategy, thread safety. 3 kt files -- simple module, group-level template applies.",
+          "priority": "low"
+        },
+        {
+          "module": "core-storage-credential",
+          "category": "Storage",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document credential storage: what credentials are stored, platform-specific backends. 0 kt files -- may be a stub module.",
+          "priority": "low"
+        },
+        {
+          "module": "core-storage-datastore",
+          "category": "Storage",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document DataStore implementation: serialization, migration, when to use vs Settings. 10 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-storage-encryption",
+          "category": "Storage",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document encryption decorator for storage: what it wraps, key management integration. 2 kt files -- thin decorator, group-level template applies.",
+          "priority": "low"
+        },
+        {
+          "module": "core-storage-mmkv",
+          "category": "Storage",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document MMKV storage: when to use vs DataStore, performance characteristics, platform support. 9 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-storage-secure",
+          "category": "Storage",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document secure storage wrapper: what security guarantees, platform backends (Keychain, EncryptedSharedPreferences). 10 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-storage-settings",
+          "category": "Storage",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document Settings implementation: multiplatform-settings wrapper, type-safe accessors. 2 kt files -- simple module, group-level template applies.",
+          "priority": "low"
+        },
+        {
+          "module": "core-storage-sql",
+          "category": "Storage",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document SQL storage: SQLDelight integration, schema management, migration patterns. 6 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-storage-sql-cipher",
+          "category": "Storage",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document SQLCipher variant: encrypted SQL storage, when to use vs regular SQL. 6 kt files.",
+          "priority": "medium"
+        }
+      ],
+      "Security_Auth": [
+        {
+          "module": "core-security-keys",
+          "category": "Security_Auth",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document key management: key generation, platform key stores, key rotation. 8 kt files. CRITICAL -- security module needs documentation.",
+          "priority": "high"
+        },
+        {
+          "module": "core-encryption",
+          "category": "Security_Auth",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document encryption service: algorithms used, key derivation, platform-specific crypto providers. 27 kt files. CRITICAL -- largest undocumented module, security-critical.",
+          "priority": "high"
+        },
+        {
+          "module": "core-auth-biometric",
+          "category": "Security_Auth",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document biometric auth: supported modalities, platform APIs wrapped, fallback strategies. 13 kt files.",
+          "priority": "high"
+        },
+        {
+          "module": "core-oauth-api",
+          "category": "Security_Auth",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document OAuth abstraction: token management, refresh flow, provider configuration. 20 kt files. Primary auth interface.",
+          "priority": "high"
+        },
+        {
+          "module": "core-oauth-browser",
+          "category": "Security_Auth",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document browser-based OAuth: redirect handling, PKCE support, custom tabs. 17 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-oauth-native",
+          "category": "Security_Auth",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document native OAuth: platform-specific sign-in (Google Sign-In, Sign in with Apple). 14 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-oauth-1a",
+          "category": "Security_Auth",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document OAuth 1.0a: legacy provider support, signature generation. 8 kt files.",
+          "priority": "low"
+        }
+      ],
+      "Error_Mappers": [
+        {
+          "module": "core-error-audit",
+          "category": "Error_Mappers",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Group template: maps AuditException -> DomainException. Follow core-error ERROR_HANDLING_PATTERN.md mapper pattern.",
+          "priority": "low"
+        },
+        {
+          "module": "core-error-backend",
+          "category": "Error_Mappers",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Group template: maps BackendException -> DomainException. Follow core-error ERROR_HANDLING_PATTERN.md mapper pattern.",
+          "priority": "low"
+        },
+        {
+          "module": "core-error-billing",
+          "category": "Error_Mappers",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Group template: maps BillingException -> DomainException. Follow core-error ERROR_HANDLING_PATTERN.md mapper pattern.",
+          "priority": "low"
+        },
+        {
+          "module": "core-error-encryption",
+          "category": "Error_Mappers",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Group template: maps EncryptionException -> DomainException. Follow core-error ERROR_HANDLING_PATTERN.md mapper pattern.",
+          "priority": "low"
+        },
+        {
+          "module": "core-error-gdpr",
+          "category": "Error_Mappers",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Group template: maps GdprException -> DomainException. Follow core-error ERROR_HANDLING_PATTERN.md mapper pattern.",
+          "priority": "low"
+        },
+        {
+          "module": "core-error-io",
+          "category": "Error_Mappers",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Group template: maps IoException -> DomainException. Follow core-error ERROR_HANDLING_PATTERN.md mapper pattern.",
+          "priority": "low"
+        },
+        {
+          "module": "core-error-json",
+          "category": "Error_Mappers",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Group template: maps JsonException -> DomainException. Follow core-error ERROR_HANDLING_PATTERN.md mapper pattern.",
+          "priority": "low"
+        },
+        {
+          "module": "core-error-network",
+          "category": "Error_Mappers",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Group template: maps NetworkException -> DomainException. Follow core-error ERROR_HANDLING_PATTERN.md mapper pattern.",
+          "priority": "low"
+        },
+        {
+          "module": "core-error-oauth",
+          "category": "Error_Mappers",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Group template: maps OAuthException -> DomainException. Follow core-error ERROR_HANDLING_PATTERN.md mapper pattern.",
+          "priority": "low"
+        }
+      ],
+      "Domain_Specific": [
+        {
+          "module": "core-audit",
+          "category": "Domain_Specific",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document audit module: AuditException sealed class, audit logging interfaces, compliance tracking. 8 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-backend-api",
+          "category": "Domain_Specific",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document backend API: BackendException sealed class, backend service interfaces. 4 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-billing-api",
+          "category": "Domain_Specific",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document billing API: BillingException, product/purchase models, billing client interface. 21 kt files -- substantial API surface.",
+          "priority": "high"
+        },
+        {
+          "module": "core-subscription",
+          "category": "Domain_Specific",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document subscription module: subscription state machine, plan models, renewal handling. Uses BillingException. 7 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-gdpr",
+          "category": "Domain_Specific",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document GDPR module: consent management, data deletion, privacy compliance. 14 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-firebase-api",
+          "category": "Domain_Specific",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document Firebase abstraction: Firestore + Auth interfaces, platform strategy. 4 kt files.",
+          "priority": "medium"
+        },
+        {
+          "module": "core-firebase-native",
+          "category": "Domain_Specific",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document native Firebase: Android/iOS SDK wrapper (unused, 0% coverage). Mark as inactive.",
+          "priority": "low"
+        },
+        {
+          "module": "core-firebase-rest",
+          "category": "Domain_Specific",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document REST Firebase: Firestore/Auth via REST API (fallback implementation). 6 kt files.",
+          "priority": "low"
+        }
+      ],
+      "Others": [
+        {
+          "module": "core-designsystem-foundation",
+          "category": "Others",
+          "has_readme": true,
+          "readme_lines": 233,
+          "readme_quality": "good -- covers shared UI foundations, theme, color, typography",
+          "doc_plan": "Add Compose Multiplatform resource integration notes; document platform-specific UI patterns",
+          "priority": "medium"
+        },
+        {
+          "module": "core-system",
+          "category": "Others",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document system module: platform info, device capabilities, system services. 5 kt files.",
+          "priority": "low"
+        },
+        {
+          "module": "core-system-api",
+          "category": "Others",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document system API: system information interface. 1 kt file -- minimal API surface.",
+          "priority": "low"
+        },
+        {
+          "module": "core-version",
+          "category": "Others",
+          "has_readme": false,
+          "readme_lines": 0,
+          "readme_quality": "missing",
+          "doc_plan": "Document version module: version comparison, semver parsing. 6 kt files.",
+          "priority": "low"
+        }
+      ]
+    },
+    "group_documentation_templates": {
+      "Error_Mappers": {
+        "description": "All 9 error mapper modules follow the identical ExceptionMapper pattern from core-error. A single group-level template can document the pattern, with per-module entries listing the source exception class and mapping rules.",
+        "template_sections": ["Overview", "Source Exception", "Mapping Table", "Usage in DI", "Tests"],
+        "estimated_doc_effort": "1 template + 9 instantiations"
+      },
+      "Storage": {
+        "description": "The 10 storage modules share core-storage-api interfaces. Documentation should explain which implementation backs which use case, with a decision tree for choosing the right storage variant.",
+        "template_sections": ["Overview", "When to Use", "API Surface", "Platform Behavior", "Tests"],
+        "estimated_doc_effort": "1 decision guide + individual module docs"
+      }
+    }
+  },
+  "l0_promotion_candidates": [
+    {
+      "path": "docs/API_EXPOSURE_PATTERN.md",
+      "rationale": "The api() vs implementation() rule is a generic Gradle/KMP pattern applicable to any multi-module project. However, the doc contains too many shared-kmp-libs specific examples (module names, DawSync integration). PARTIAL candidate: extract the generic rule into L0 gradle-patterns.md, keep specific examples in L1.",
+      "recommendation": "extract-partial",
+      "priority": "medium"
+    }
+  ],
+  "l0_promotion_rejected": [
+    {
+      "path": "docs/ERROR_HANDLING_PATTERN.md",
+      "rationale": "Tightly coupled to shared-kmp-libs module structure (ExceptionMapper, CompositeExceptionMapper, DomainException, core-error-* mapper modules). L0 already has error-handling-patterns.md covering generic Result<T> and CancellationException patterns."
+    },
+    {
+      "path": "docs/TESTING_STRATEGY.md",
+      "rationale": "Contains per-module coverage data specific to shared-kmp-libs (19/28 modules at 100%, core-logging 99.1%, etc.). L0 already has testing-patterns.md and sub-docs covering generic KMP testing patterns."
+    },
+    {
+      "path": "docs/CONVENTION_PLUGINS.md",
+      "rationale": "References specific plugin IDs (com.grinx.shared.kmp.library, com.grinx.shared.kmp.compose) and internal project structure. L0 gradle-patterns.md covers convention plugin concepts generically."
+    },
+    {
+      "path": "docs/GRADLE_SETUP.md",
+      "rationale": "Contains project-specific paths, module names, and composite build examples with DawSync/WakeTheCave. L0 gradle-patterns.md covers composite builds generically."
+    }
+  ],
+  "claude_md_assessment": {
+    "line_count": 57,
+    "ai_readiness_score": 4,
+    "strengths": [
+      "Compact and token-efficient (57 lines, well under 150-line target)",
+      "Clear module catalog organized by category",
+      "Actionable content: build commands, critical rules, how-to-add-module checklist",
+      "Proper table formatting for AI consumption",
+      "Coverage target clearly stated"
+    ],
+    "gaps": [
+      "Missing YAML frontmatter -- no scope/sources/targets metadata for registry/vault integration",
+      "Module catalog incomplete: lists Foundation, I/O & Network, Storage, Security & Auth, Error Mappers -- but omits Domain-specific (billing, subscription, gdpr, audit, backend, firebase) and Others (system, version, designsystem-foundation)",
+      "No L0 cross-references -- should reference AndroidCommonDoc patterns that agents should load for generic KMP rules (testing-patterns, error-handling-patterns, kmp-architecture)",
+      "No mention of .claude/agents or .claude/commands tooling available to agents",
+      "Test coverage section (100% for foundation + API modules) does not match current reality (core-logging at 99.1%, core-network-api at 98.9%)",
+      "No OAuth, Firebase, GDPR, Billing, or Subscription module documentation references",
+      "Missing: version catalog location, platform support matrix, Compose Multiplatform version"
+    ],
+    "phase_15_notes": "CLAUDE.md rewrite should: (1) add YAML frontmatter with scope/layer metadata, (2) complete module catalog covering all 52 modules, (3) add L0 @import references for generic patterns (testing, error handling, KMP architecture), (4) add .claude/agents and .claude/commands inventory, (5) fix coverage claims to match actual state, (6) add version catalog reference (libs.versions.toml), (7) keep under 150 lines -- use category grouping with doc_plan links for full documentation, (8) add context delegation: 'For generic KMP patterns, see AndroidCommonDoc L0 patterns'"
+  },
+  "summary": {
+    "total_files": 17,
+    "by_classification": {
+      "ACTIVE": 17,
+      "SUPERSEDED": 0,
+      "UNIQUE": 0
+    },
+    "ai_readiness_avg": 2.6,
+    "doc_coverage_percent": 26.9,
+    "high_priority_gaps": 12,
+    "medium_priority_gaps": 14,
+    "low_priority_gaps": 16
+  }
+}

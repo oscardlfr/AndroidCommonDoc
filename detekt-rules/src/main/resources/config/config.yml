@@ -1,0 +1,57 @@
+# Project-level Detekt configuration — L1/L2 override layer
+#
+# This file EXTENDS detekt-l0-base.yml. Only include rules you need to change.
+# Rules not listed here inherit their value from the baseline (all active: true).
+#
+# Usage in build.gradle.kts:
+#   detekt {
+#     config.from(
+#       resources.text.fromFile("detekt-l0-base.yml"),  // L0 baseline (all rules active)
+#       file("detekt.yml")                               // this file (project overrides)
+#     )
+#   }
+#
+# Example overrides:
+#   AndroidCommonDoc:
+#     NoMocksInCommonTests:
+#       active: false         # "this project uses MockK intentionally"
+#     NoMagicNumbersInUseCase:
+#       active: false         # "constants are defined inline here by convention"
+#
+# If you need to disable the entire ruleset:
+#   AndroidCommonDoc:
+#     active: false
+#
+# See detekt-l0-base.yml for the full list of available rules.
+
+# ktlint rules via detekt-rules-ktlint-wrapper.
+#
+# ⚠️  LEGACY PROJECTS WARNING:
+# Enabling ktlint formatting rules in a legacy codebase typically generates
+# 200–400 issues (trailing commas, newlines, import ordering) that have nothing
+# to do with architecture. These bury the 13 AndroidCommonDoc architecture rules.
+#
+# ktlint is DISABLED by default (formattingRules.convention(false) in the plugin).
+# To enable it, add this to your module build.gradle.kts:
+#   androidCommonDoc { formattingRules.set(true) }
+#
+# Recommended approach for legacy projects:
+#   1. Keep formattingRules disabled until architecture violations are resolved
+#   2. Run ./gradlew detektBaseline to suppress existing issues
+#   3. Enable formattingRules in new modules only, or once legacy code is clean
+#
+# Only override defaults that need project-specific tuning.
+KtlintWrapper:
+  KtlintStandardTrailingCommaOnCallSite:
+    active: true
+  KtlintStandardTrailingCommaOnDeclarationSite:
+    active: true
+  KtlintStandardFunctionNaming:
+    active: true
+    # Compose @Composable functions use PascalCase -- ktlint default allows this
+    # via FunctionNamingRule ignoring @Composable. No override needed.
+  KtlintStandardNoWildcardImports:
+    active: true
+  KtlintStandardMaxLineLength:
+    active: true
+    maxLineLength: 120

@@ -1,0 +1,62 @@
+{
+  "timestamp": "2026-03-14T17:54:51.383Z",
+  "tier_filter": "all",
+  "total_sources": 8,
+  "checked": 8,
+  "errors": 2,
+  "findings": {
+    "total": 5,
+    "new": 5,
+    "high": 0,
+    "medium": 5,
+    "low": 0
+  },
+  "details": [
+    {
+      "slug": "error-handling-patterns",
+      "source_url": "https://github.com/Kotlin/kotlinx.coroutines/releases",
+      "severity": "MEDIUM",
+      "category": "version-drift",
+      "summary": "Version drift: kotlin 2.3.10 -> 1.10.2",
+      "details": "Upstream version 1.10.2 differs from manifest version 2.3.10 for kotlin",
+      "finding_hash": "0e1edf268918614e39f656c5aebbb1efe9112767231cde7cb0f3b6bde6f73937"
+    },
+    {
+      "slug": "testing-patterns",
+      "source_url": "https://github.com/Kotlin/kotlinx.coroutines/releases",
+      "severity": "MEDIUM",
+      "category": "version-drift",
+      "summary": "Version drift: kotlin 2.3.10 -> 1.10.2",
+      "details": "Upstream version 1.10.2 differs from manifest version 2.3.10 for kotlin",
+      "finding_hash": "7b2d1687092da4971302f553b9d39327d57e898dfd848c631182880465ba35a0"
+    },
+    {
+      "slug": "testing-patterns",
+      "source_url": "https://github.com/Kotlin/kotlinx-kover/releases",
+      "severity": "MEDIUM",
+      "category": "version-drift",
+      "summary": "Version drift: kotlin 2.3.10 -> 0.9.7",
+      "details": "Upstream version 0.9.7 differs from manifest version 2.3.10 for kotlin",
+      "finding_hash": "ad20174bfc55b3cea2dbc53d0cf3ba699dfc3d3f5191a7dfaac9cfeec0373b30"
+    },
+    {
+      "slug": "testing-patterns",
+      "source_url": "https://github.com/Kotlin/kotlinx-kover/releases",
+      "severity": "MEDIUM",
+      "category": "version-drift",
+      "summary": "Version drift: kover 0.9.1 -> 0.9.7",
+      "details": "Upstream version 0.9.7 differs from manifest version 0.9.1 for kover",
+      "finding_hash": "b83060ac1e8955b08c988a0bb5b3b9d86896eb9d0025a9df11b85fd53c6e2929"
+    },
+    {
+      "slug": "viewmodel-state-patterns",
+      "source_url": "https://github.com/Kotlin/kotlinx.coroutines/releases",
+      "severity": "MEDIUM",
+      "category": "version-drift",
+      "summary": "Version drift: kotlin 2.3.10 -> 1.10.2",
+      "details": "Upstream version 1.10.2 differs from manifest version 2.3.10 for kotlin",
+      "finding_hash": "3b1e067da32f9c269f017f5fb2ae57a7f59e3999bb79bcb007afddd873a9cc90"
+    }
+  ],
+  "stale_deferrals": []
+}

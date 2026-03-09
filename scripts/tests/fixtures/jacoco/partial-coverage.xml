@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">
+<!--
+  Fixture: partial coverage — StorageRepository has 3 missed lines, RestrictedApi 0%.
+  Used to validate gaps detection and missed-line aggregation.
+-->
+<report name="storage:api">
+  <package name="com/example/storage">
+    <class name="com/example/storage/StorageRepository" sourcefilename="StorageRepository.kt">
+      <counter type="LINE" missed="3" covered="5"/>
+    </class>
+    <class name="com/example/storage/StorageRepository$Companion" sourcefilename="StorageRepository.kt">
+      <counter type="LINE" missed="0" covered="2"/>
+    </class>
+    <sourcefile name="StorageRepository.kt">
+      <line nr="12" mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="15" mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="18" mi="1" ci="0" mb="0" cb="0"/>
+      <line nr="21" mi="1" ci="0" mb="0" cb="0"/>
+      <line nr="24" mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="27" mi="1" ci="0" mb="0" cb="0"/>
+      <line nr="30" mi="0" ci="1" mb="0" cb="0"/>
+      <counter type="LINE" missed="3" covered="4"/>
+    </sourcefile>
+    <class name="com/example/storage/RestrictedApi" sourcefilename="RestrictedApi.kt">
+      <counter type="LINE" missed="9" covered="0"/>
+    </class>
+    <sourcefile name="RestrictedApi.kt">
+      <line nr="14" mi="1" ci="0" mb="0" cb="0"/>
+      <line nr="19" mi="1" ci="0" mb="0" cb="0"/>
+      <line nr="25" mi="1" ci="0" mb="0" cb="0"/>
+      <line nr="30" mi="1" ci="0" mb="0" cb="0"/>
+      <line nr="35" mi="1" ci="0" mb="0" cb="0"/>
+      <line nr="40" mi="1" ci="0" mb="0" cb="0"/>
+      <line nr="46" mi="1" ci="0" mb="0" cb="0"/>
+      <line nr="52" mi="1" ci="0" mb="0" cb="0"/>
+      <line nr="58" mi="1" ci="0" mb="0" cb="0"/>
+      <counter type="LINE" missed="9" covered="0"/>
+    </sourcefile>
+  </package>
+</report>

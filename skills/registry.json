@@ -1,0 +1,1250 @@
+{
+  "version": 1,
+  "generated": "2026-03-19T21:50:00.000Z",
+  "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
+  "entries": [
+    {
+      "name": "accessibility",
+      "type": "skill",
+      "path": "skills/accessibility/SKILL.md",
+      "description": "Audit web accessibility against WCAG 2.1. Use when asked about a11y, WCAG compliance, or screen reader support.",
+      "category": "ui",
+      "tier": "web",
+      "hash": "sha256:b794d38a5edf81e4a8dc45be74d2372895fc3f47d26947ebef643575f34ba9c0",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "accessibility",
+        "description": "Audit web accessibility against WCAG 2.1. Use when asked about a11y, WCAG compliance, or screen reader support.",
+        "allowed-tools": [
+          "Read",
+          "Grep",
+          "Glob",
+          "Bash"
+        ]
+      }
+    },
+    {
+      "name": "android-test",
+      "type": "skill",
+      "path": "skills/android-test/SKILL.md",
+      "description": "Run Android instrumented tests with logcat capture. Use when asked to run device/emulator tests or connectedAndroidTest.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:e741cc08e79b174b78ab442c57d5dcd94c6cd179f42351ab26b15ca5443f6b3b",
+      "dependencies": [
+        "scripts/sh/run-android-tests.sh",
+        "scripts/ps1/run-android-tests.ps1"
+      ],
+      "frontmatter": {
+        "name": "android-test",
+        "description": "Run Android instrumented tests with logcat capture. Use when asked to run device/emulator tests or connectedAndroidTest.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "auto-cover",
+      "type": "skill",
+      "path": "skills/auto-cover/SKILL.md",
+      "description": "Generate tests for uncovered code paths. Use when asked to increase coverage or auto-generate tests for a module.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:2c8ca0550ceafcd2f7150db3bd10ff18474741c52d0d5000da9851c883c94199",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "auto-cover",
+        "description": "Generate tests for uncovered code paths. Use when asked to increase coverage or auto-generate tests for a module.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Write",
+          "Edit",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "best-practices",
+      "type": "skill",
+      "path": "skills/best-practices/SKILL.md",
+      "description": "Web security, compatibility, and code quality patterns. Background knowledge for CSP, HTTPS, deprecated APIs, and modern standards.",
+      "category": "ui",
+      "tier": "web",
+      "hash": "sha256:105e368efab083701d45316cef4afc0170815ee1cce1ca0c3e8d627d087954fd",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "best-practices",
+        "description": "Web security, compatibility, and code quality patterns. Background knowledge for CSP, HTTPS, deprecated APIs, and modern standards.",
+        "allowed-tools": [
+          "Read",
+          "Grep",
+          "Glob",
+          "Bash"
+        ],
+        "user-invocable": false
+      }
+    },
+    {
+      "name": "core-web-vitals",
+      "type": "skill",
+      "path": "skills/core-web-vitals/SKILL.md",
+      "description": "LCP, INP, and CLS optimization reference. Background knowledge for Core Web Vitals thresholds and fixes.",
+      "category": "ui",
+      "tier": "web",
+      "hash": "sha256:07dbfb16b98d2376b1ef8789434d470c5d4b2391d68e5a60e227506a9157f198",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "core-web-vitals",
+        "description": "LCP, INP, and CLS optimization reference. Background knowledge for Core Web Vitals thresholds and fixes.",
+        "allowed-tools": [
+          "Read",
+          "Grep",
+          "Glob",
+          "Bash"
+        ],
+        "user-invocable": false
+      }
+    },
+    {
+      "name": "commit-lint",
+      "type": "skill",
+      "path": "skills/commit-lint/SKILL.md",
+      "description": "Validate and fix commit messages against Conventional Commits v1.0.0. Use when writing commits, reviewing commit history, or enforcing commit conventions.",
+      "category": "guides",
+      "tier": "core",
+      "hash": "sha256:5977bd980abbea5aac17391f791c237a74650036c786ae4260bacc3be960e1a5",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "commit-lint",
+        "description": "Validate and fix commit messages against Conventional Commits v1.0.0. Use when writing commits, reviewing commit history, or enforcing commit conventions.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob",
+          "Edit"
+        ]
+      }
+    },
+    {
+      "name": "lint-resources",
+      "type": "skill",
+      "path": "skills/lint-resources/SKILL.md",
+      "description": "Validate string resource naming conventions (snake_case, prefixes, duplicates, Swift sync). Use when checking resource files or before merging UI changes.",
+      "category": "build",
+      "tier": "core",
+      "hash": "sha256:pending",
+      "dependencies": [
+        "scripts/sh/lint-resources.sh",
+        "scripts/ps1/lint-resources.ps1"
+      ],
+      "frontmatter": {
+        "name": "lint-resources",
+        "description": "Validate string resource naming conventions (snake_case, prefixes, duplicates, Swift sync). Use when checking resource files or before merging UI changes.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "coverage",
+      "type": "skill",
+      "path": "skills/coverage/SKILL.md",
+      "description": "Analyze test coverage gaps from existing data without running tests. Use when asked to check coverage or find untested code.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:1095a20c6d2a9809c9c31765a8f02b8ab4cb68ed13d902886634cb3a22ad477f",
+      "dependencies": [
+        "scripts/sh/run-parallel-coverage-suite.sh",
+        "scripts/ps1/run-parallel-coverage-suite.ps1"
+      ],
+      "frontmatter": {
+        "name": "coverage",
+        "description": "Analyze test coverage gaps from existing data without running tests. Use when asked to check coverage or find untested code.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "coverage-full",
+      "type": "skill",
+      "path": "skills/coverage-full/SKILL.md",
+      "description": "Generate comprehensive coverage report across all modules. Use when asked for full project coverage overview or metrics.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:12b38864bf8b5043e0f4458c63aaf406ef1b07103ce513d576d3ddefdd39cc3b",
+      "dependencies": [
+        "scripts/sh/run-parallel-coverage-suite.sh",
+        "scripts/ps1/run-parallel-coverage-suite.ps1"
+      ],
+      "frontmatter": {
+        "name": "coverage-full",
+        "description": "Generate comprehensive coverage report across all modules. Use when asked for full project coverage overview or metrics.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "doc-reorganize",
+      "type": "skill",
+      "path": "skills/doc-reorganize/SKILL.md",
+      "description": "Reorganize docs/ into category subdirectories using frontmatter. Use when asked to restructure or reorganize documentation.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:603244658f00b0838da7f3a8cbcfdc7a754530e3895ba8ebaf070fac5f545114",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "doc-reorganize",
+        "description": "Reorganize docs/ into category subdirectories using frontmatter. Use when asked to restructure or reorganize documentation.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Write",
+          "Edit",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true
+      }
+    },
+    {
+      "name": "extract-errors",
+      "type": "skill",
+      "path": "skills/extract-errors/SKILL.md",
+      "description": "Extract structured build and test errors from Gradle output. Use when a build or test fails and you need actionable error details.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:9c86ba5edc019981354bfcb51c6b20d135c2ce3a21e5ba7ff37b374c5387dcd1",
+      "dependencies": [
+        "scripts/sh/ai-error-extractor.sh",
+        "scripts/ps1/ai-error-extractor.ps1"
+      ],
+      "frontmatter": {
+        "name": "extract-errors",
+        "description": "Extract structured build and test errors from Gradle output. Use when a build or test fails and you need actionable error details.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "full-audit",
+      "type": "skill",
+      "path": "skills/full-audit/SKILL.md",
+      "description": "Run unified audit across all quality dimensions -- architecture, code quality, testing, security, docs, and release readiness. Consolidates findings from multiple agents and scripts into a single deduplicated report.",
+      "category": "validation",
+      "tier": "core",
+      "hash": "sha256:pending",
+      "dependencies": [
+        "skills/full-audit/profiles.json"
+      ],
+      "frontmatter": {
+        "name": "full-audit",
+        "description": "Run unified audit across all quality dimensions with findings dedup and consolidated report.",
+        "allowed-tools": ["Bash", "Read", "Grep", "Glob", "Agent", "Write"]
+      }
+    },
+    {
+      "name": "generate-rules",
+      "type": "skill",
+      "path": "skills/generate-rules/SKILL.md",
+      "description": "Generate Detekt custom rules from pattern doc frontmatter. Use when asked to create or update lint rules from documentation.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:ec590fa6b963340d538da341951fb54d7f8b085443918ea7a28e280068d52d7c",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "generate-rules",
+        "description": "Generate Detekt custom rules from pattern doc frontmatter. Use when asked to create or update lint rules from documentation.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Write",
+          "Edit",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true
+      }
+    },
+    {
+      "name": "ingest-content",
+      "type": "skill",
+      "path": "skills/ingest-content/SKILL.md",
+      "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:c7cf970a0677e98b08eafd619b3d27655a4bdd23eff7d15b94fa5bbd7ac0e560",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "ingest-content",
+        "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Write",
+          "Edit",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true
+      }
+    },
+    {
+      "name": "monitor-docs",
+      "type": "skill",
+      "path": "skills/monitor-docs/SKILL.md",
+      "description": "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdated dependencies or doc freshness.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:6b3b63c497c801627ffeb3644fd41cb64f61cb9c1adcb29adfa211cb39c62744",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "monitor-docs",
+        "description": "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdated dependencies or doc freshness.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Write",
+          "Edit",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true
+      }
+    },
+    {
+      "name": "performance",
+      "type": "skill",
+      "path": "skills/performance/SKILL.md",
+      "description": "Web performance optimization patterns (loading, caching, images, fonts). Background knowledge for page speed improvements.",
+      "category": "ui",
+      "tier": "web",
+      "hash": "sha256:660338f8e479a4d150ac1aa49ee2ed643df024fddfe90c8da5cb8b6ce30703ba",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "performance",
+        "description": "Web performance optimization patterns (loading, caching, images, fonts). Background knowledge for page speed improvements.",
+        "allowed-tools": [
+          "Read",
+          "Grep",
+          "Glob",
+          "Bash"
+        ],
+        "user-invocable": false
+      }
+    },
+    {
+      "name": "run",
+      "type": "skill",
+      "path": "skills/run/SKILL.md",
+      "description": "Build, install, and run app with debug logging. Use when asked to launch, run, or deploy the app on a device or desktop.",
+      "category": "build",
+      "tier": "core",
+      "hash": "sha256:cb793500e9c99891ed86c30b78886abbce9b66bae6fb87cc98fb0490ff8ebbea",
+      "dependencies": [
+        "scripts/sh/build-run-app.sh",
+        "scripts/ps1/build-run-app.ps1"
+      ],
+      "frontmatter": {
+        "name": "run",
+        "description": "Build, install, and run app with debug logging. Use when asked to launch, run, or deploy the app on a device or desktop.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "sbom",
+      "type": "skill",
+      "path": "skills/sbom/SKILL.md",
+      "description": "Generate CycloneDX SBOM for project modules. Use when asked to produce a software bill of materials.",
+      "category": "security",
+      "tier": "core",
+      "hash": "sha256:56d7459bc9d20f9f6f739dfca83fc9b15398862d81f7c6031fccbb611e298cb9",
+      "dependencies": [
+        "scripts/sh/generate-sbom.sh",
+        "scripts/ps1/generate-sbom.ps1"
+      ],
+      "frontmatter": {
+        "name": "sbom",
+        "description": "Generate CycloneDX SBOM for project modules. Use when asked to produce a software bill of materials.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true
+      }
+    },
+    {
+      "name": "sbom-analyze",
+      "type": "skill",
+      "path": "skills/sbom-analyze/SKILL.md",
+      "description": "Analyze SBOM for dependency statistics, licenses, and concerns. Use when asked to review dependency licenses or SBOM contents.",
+      "category": "security",
+      "tier": "core",
+      "hash": "sha256:49be947e7c72a71778115c0a59076b8f09aaa92726b38e85de39507d3e382e23",
+      "dependencies": [
+        "scripts/sh/analyze-sbom.sh",
+        "scripts/ps1/analyze-sbom.ps1"
+      ],
+      "frontmatter": {
+        "name": "sbom-analyze",
+        "description": "Analyze SBOM for dependency statistics, licenses, and concerns. Use when asked to review dependency licenses or SBOM contents.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true
+      }
+    },
+    {
+      "name": "sbom-scan",
+      "type": "skill",
+      "path": "skills/sbom-scan/SKILL.md",
+      "description": "Scan SBOM for known CVE vulnerabilities using Trivy. Use when asked to check for security vulnerabilities in dependencies.",
+      "category": "security",
+      "tier": "core",
+      "hash": "sha256:8235b01c9fe363d204bc456fb06cfaf70852fa705073fe055e09f376f622d0b2",
+      "dependencies": [
+        "scripts/sh/scan-sbom.sh",
+        "scripts/ps1/scan-sbom.ps1"
+      ],
+      "frontmatter": {
+        "name": "sbom-scan",
+        "description": "Scan SBOM for known CVE vulnerabilities using Trivy. Use when asked to check for security vulnerabilities in dependencies.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true
+      }
+    },
+    {
+      "name": "seo",
+      "type": "skill",
+      "path": "skills/seo/SKILL.md",
+      "description": "SEO optimization patterns (meta tags, structured data, crawlability). Background knowledge for search engine visibility.",
+      "category": "ui",
+      "tier": "web",
+      "hash": "sha256:6298cf92a39ee453413ea2185688e3aee83c81d165d98592a8e5ef4dfa86dc83",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "seo",
+        "description": "SEO optimization patterns (meta tags, structured data, crawlability). Background knowledge for search engine visibility.",
+        "allowed-tools": [
+          "Read",
+          "Grep",
+          "Glob",
+          "Bash"
+        ],
+        "user-invocable": false
+      }
+    },
+    {
+      "name": "setup",
+      "type": "skill",
+      "path": "skills/setup/SKILL.md",
+      "description": "Interactive wizard to fully configure a project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Bilingual (EN + ES).",
+      "category": "guides",
+      "user-invocable": true,
+      "hash": "sha256:8c3dae4f12b322c6573c78372aa999a0c8c8d2f7cea393dc0b8cd8877dcc9ad4",
+      "allowed-tools": [
+        "Bash",
+        "Read",
+        "Write",
+        "Edit",
+        "Glob"
+      ]
+    },
+    {
+      "name": "set-model-profile",
+      "type": "skill",
+      "path": "skills/set-model-profile/SKILL.md",
+      "description": "Switch the model tier used by all agents. Profiles: budget (haiku), balanced (haiku+sonnet), quality (opus). Edits agent frontmatter based on .claude/model-profiles.json.",
+      "category": "configuration",
+      "user-invocable": true,
+      "hash": "sha256:f8d358d6eb84b5be76bec45490fed0b0a5eae7c1221757186e2998a42ecb2db2",
+      "allowed-tools": [
+        "Read",
+        "Edit",
+        "Glob"
+      ]
+    },
+    {
+      "name": "sync-l0",
+      "type": "skill",
+      "path": "skills/sync-l0/SKILL.md",
+      "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:bf09f5a157d4973e207e2d8e71bd88233f9aeef8bd2665cc4d2521e63d076541",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "sync-l0",
+        "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Write",
+          "Glob",
+          "Grep"
+        ]
+      }
+    },
+    {
+      "name": "sync-vault",
+      "type": "skill",
+      "path": "skills/sync-vault/SKILL.md",
+      "description": "Sync documentation into Obsidian vault with L0/L1/L2 hierarchy. Use when asked to update, initialize, or clean the knowledge vault.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:3a524e224dc567a939575b1b595a55c4af295895d6accf03f3bd075b4052a2e1",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "sync-vault",
+        "description": "Sync documentation into Obsidian vault with L0/L1/L2 hierarchy. Use when asked to update, initialize, or clean the knowledge vault.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true
+      }
+    },
+    {
+      "name": "sync-versions",
+      "type": "skill",
+      "path": "skills/sync-versions/SKILL.md",
+      "description": "Check version catalog alignment between KMP projects. Use when asked to verify dependency versions match the source of truth.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:3db31848f5ca9de0fadf409735204dc852437eb52197523a87526b4fa49eb2c8",
+      "dependencies": [
+        "scripts/sh/check-version-sync.sh",
+        "scripts/ps1/check-version-sync.ps1"
+      ],
+      "frontmatter": {
+        "name": "sync-versions",
+        "description": "Check version catalog alignment between KMP projects. Use when asked to verify dependency versions match the source of truth.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "test",
+      "type": "skill",
+      "path": "skills/test/SKILL.md",
+      "description": "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:d7df1388878ba2a54092a6ce4e844494db0c5462312f8959ef76a3a32feab2b6",
+      "dependencies": [
+        "scripts/sh/gradle-run.sh",
+        "scripts/sh/ai-error-extractor.sh",
+        "scripts/ps1/gradle-run.ps1",
+        "scripts/ps1/ai-error-extractor.ps1"
+      ],
+      "frontmatter": {
+        "name": "test",
+        "description": "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "test-changed",
+      "type": "skill",
+      "path": "skills/test-changed/SKILL.md",
+      "description": "Run tests only on modules with uncommitted changes. Use when asked to test changed files or run a quick pre-commit check.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:8779e47ccd3e2e2fd66fac9923632ed827100cab91db95a730af3a842da9143b",
+      "dependencies": [
+        "scripts/sh/run-changed-modules-tests.sh",
+        "scripts/ps1/run-changed-modules-tests.ps1"
+      ],
+      "frontmatter": {
+        "name": "test-changed",
+        "description": "Run tests only on modules with uncommitted changes. Use when asked to test changed files or run a quick pre-commit check.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "test-full",
+      "type": "skill",
+      "path": "skills/test-full/SKILL.md",
+      "description": "Run all tests sequentially with full coverage report. Use when asked to run the complete test suite or generate a full coverage report.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:10e7f887e4faa89e603b45781b63a0732f784ec4aca571561c445f35c178c545",
+      "dependencies": [
+        "scripts/sh/run-parallel-coverage-suite.sh",
+        "scripts/ps1/run-parallel-coverage-suite.ps1"
+      ],
+      "frontmatter": {
+        "name": "test-full",
+        "description": "Run all tests sequentially with full coverage report. Use when asked to run the complete test suite or generate a full coverage report.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "test-full-parallel",
+      "type": "skill",
+      "path": "skills/test-full-parallel/SKILL.md",
+      "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:151c7bd4ce18abb31c2bb3ea52025c0ece18316207e6153e8e7ec6ddd885bf38",
+      "dependencies": [
+        "scripts/sh/run-parallel-coverage-suite.sh",
+        "scripts/ps1/run-parallel-coverage-suite.ps1"
+      ],
+      "frontmatter": {
+        "name": "test-full-parallel",
+        "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "validate-patterns",
+      "type": "skill",
+      "path": "skills/validate-patterns/SKILL.md",
+      "description": "Validate code against pattern standards (ViewModel, UI, coroutines). Use when asked to check code quality or pattern compliance.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:ff6b9f56dfb45adeeebf497f2c959ef3c6a3319a5fd3bddf886673c6cb616db3",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "validate-patterns",
+        "description": "Validate code against pattern standards (ViewModel, UI, coroutines). Use when asked to check code quality or pattern compliance.",
+        "allowed-tools": [
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "verify-kmp",
+      "type": "skill",
+      "path": "skills/verify-kmp/SKILL.md",
+      "description": "Validate KMP source set organization and forbidden imports. Use when asked to check architecture or source set correctness.",
+      "category": "build",
+      "tier": "core",
+      "hash": "sha256:e7285b463cc5efec9a166926cda802377c0ee773a23f92463aa6c4278a0d979f",
+      "dependencies": [
+        "scripts/sh/verify-kmp-packages.sh",
+        "scripts/ps1/verify-kmp-packages.ps1"
+      ],
+      "frontmatter": {
+        "name": "verify-kmp",
+        "description": "Validate KMP source set organization and forbidden imports. Use when asked to check architecture or source set correctness.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "web-quality-audit",
+      "type": "skill",
+      "path": "skills/web-quality-audit/SKILL.md",
+      "description": "Run comprehensive web quality audit (performance, a11y, SEO, best practices). Use when asked to audit a website or run Lighthouse.",
+      "category": "ui",
+      "tier": "web",
+      "hash": "sha256:7ae1e80d8e1ebd75f36e094bee8ef034260cdbf95a00df76195bb1c91f34d032",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "web-quality-audit",
+        "description": "Run comprehensive web quality audit (performance, a11y, SEO, best practices). Use when asked to audit a website or run Lighthouse.",
+        "allowed-tools": [
+          "Read",
+          "Grep",
+          "Glob",
+          "Bash"
+        ]
+      }
+    },
+    {
+      "name": "api-rate-limit-auditor",
+      "type": "agent",
+      "path": ".claude/agents/api-rate-limit-auditor.md",
+      "description": "Scans HTTP clients for rate limit handling, retry-after headers, exponential backoff, and timeout configuration. Use when auditing API integration robustness.",
+      "category": "performance",
+      "tier": "extended",
+      "hash": "sha256:pending",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "api-rate-limit-auditor",
+        "description": "Scans HTTP clients for rate limit handling, retry-after headers, exponential backoff, and timeout configuration.",
+        "tools": "Read, Grep, Glob",
+        "model": "haiku",
+        "memory": "project"
+      }
+    },
+    {
+      "name": "beta-readiness-agent",
+      "type": "agent",
+      "path": ".claude/agents/beta-readiness-agent.md",
+      "description": "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.",
+      "category": "architecture",
+      "tier": "extended",
+      "hash": "sha256:18d9c32ed4715ee207ae4b2995823d650343d63790ac9b1c18740a73c117b0ba",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "beta-readiness-agent",
+        "description": "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.",
+        "tools": "Read, Grep, Glob",
+        "model": "sonnet",
+        "memory": "project"
+      }
+    },
+    {
+      "name": "cross-platform-validator",
+      "type": "agent",
+      "path": ".claude/agents/cross-platform-validator.md",
+      "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
+      "category": "architecture",
+      "tier": "extended",
+      "hash": "sha256:fc7848f5b5e6c48feaf2e12054d1aa4de5cc9e5c8fc20de58111eaa60a112b63",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "cross-platform-validator",
+        "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
+        "tools": "Read, Grep, Glob",
+        "model": "sonnet",
+        "memory": "project"
+      }
+    },
+    {
+      "name": "doc-alignment-agent",
+      "type": "agent",
+      "path": ".claude/agents/doc-alignment-agent.md",
+      "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:cf9c0a5d4d4ade0c83fb35542264c0bcd817884b97112633e15fa842a0496669",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "doc-alignment-agent",
+        "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
+        "tools": "Read, Grep, Glob",
+        "model": "sonnet",
+        "memory": "project",
+        "skills": [
+          "validate-patterns",
+          "doc-reorganize"
+        ]
+      }
+    },
+    {
+      "name": "doc-code-drift-detector",
+      "type": "agent",
+      "path": ".claude/agents/doc-code-drift-detector.md",
+      "description": "Internal validator -- invoked by quality-gate-orchestrator. Detects drift between docs/*.md pattern documentation and what scripts/skills actually implement. Flags outdated patterns, missing validations, and version mismatches.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:f9a595db8735e86677a5694e4b1458a507863af951c644ee311a56306f96c91c",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "doc-code-drift-detector",
+        "description": "Internal validator -- invoked by quality-gate-orchestrator. Detects drift between docs/*.md pattern documentation and what scripts/skills actually implement. Flags outdated patterns, missing validations, and version mismatches.",
+        "tools": "Read, Grep, Glob",
+        "model": "sonnet",
+        "memory": "project"
+      }
+    },
+    {
+      "name": "full-audit-orchestrator",
+      "type": "agent",
+      "path": ".claude/agents/full-audit-orchestrator.md",
+      "description": "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings, runs 3-pass deduplication, and produces consolidated report.",
+      "category": "architecture",
+      "tier": "core",
+      "hash": "sha256:pending",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "full-audit-orchestrator",
+        "description": "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings, runs 3-pass deduplication, and produces consolidated report.",
+        "tools": "Read, Grep, Glob, Bash, Agent, Write",
+        "model": "sonnet",
+        "memory": "project"
+      }
+    },
+    {
+      "name": "privacy-auditor",
+      "type": "agent",
+      "path": ".claude/agents/privacy-auditor.md",
+      "description": "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits.",
+      "category": "compliance",
+      "tier": "extended",
+      "hash": "sha256:pending",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "privacy-auditor",
+        "description": "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention.",
+        "tools": "Read, Grep, Glob",
+        "model": "sonnet",
+        "memory": "project"
+      }
+    },
+    {
+      "name": "quality-gate-orchestrator",
+      "type": "agent",
+      "path": ".claude/agents/quality-gate-orchestrator.md",
+      "description": "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement.",
+      "category": "architecture",
+      "tier": "extended",
+      "hash": "sha256:7fc2d0267b8033eb03dd429514274f9cc85539daa27b1e28d8adb92640fd01f6",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "quality-gate-orchestrator",
+        "description": "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement.",
+        "tools": "Read, Grep, Glob, Bash",
+        "model": "sonnet",
+        "memory": "project"
+      }
+    },
+    {
+      "name": "release-guardian-agent",
+      "type": "agent",
+      "path": ".claude/agents/release-guardian-agent.md",
+      "description": "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.",
+      "category": "architecture",
+      "tier": "extended",
+      "hash": "sha256:75fdebd214feb2874e79d51b1ba818c12566044673a01576d4eb573e16cabf5c",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "release-guardian-agent",
+        "description": "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.",
+        "tools": "Read, Grep, Glob",
+        "model": "haiku",
+        "memory": "project",
+        "skills": [
+          "sbom",
+          "verify-kmp"
+        ]
+      }
+    },
+    {
+      "name": "script-parity-validator",
+      "type": "agent",
+      "path": ".claude/agents/script-parity-validator.md",
+      "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that PowerShell and Bash script pairs are functionally equivalent. Checks flags, output format, and exit codes between scripts/ps1/ and scripts/sh/.",
+      "category": "architecture",
+      "tier": "extended",
+      "hash": "sha256:0e9e70cf76ba8223e356053c3a53ed407834c7948bcea4e6e8ce55b59687a7dd",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "script-parity-validator",
+        "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that PowerShell and Bash script pairs are functionally equivalent. Checks flags, output format, and exit codes between scripts/ps1/ and scripts/sh/.",
+        "tools": "Read, Grep, Glob",
+        "model": "sonnet",
+        "memory": "project"
+      }
+    },
+    {
+      "name": "skill-script-alignment",
+      "type": "agent",
+      "path": ".claude/agents/skill-script-alignment.md",
+      "description": "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters.",
+      "category": "architecture",
+      "tier": "extended",
+      "hash": "sha256:4f43c3ccf5b21a9fff487f43c064d976147d04987d0b5620a0ab360b49e12e8a",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "skill-script-alignment",
+        "description": "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters.",
+        "tools": "Read, Grep, Glob",
+        "model": "sonnet",
+        "memory": "project"
+      }
+    },
+    {
+      "name": "template-sync-validator",
+      "type": "agent",
+      "path": ".claude/agents/template-sync-validator.md",
+      "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Checks every command has a wrapper template and a Copilot prompt.",
+      "category": "architecture",
+      "tier": "extended",
+      "hash": "sha256:21553e9439416af41c16827cd6223e879a22837fe10d7f9207ef89c5fe23c598",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "template-sync-validator",
+        "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Checks every command has a wrapper template and a Copilot prompt.",
+        "tools": "Read, Grep, Glob",
+        "model": "sonnet",
+        "memory": "project"
+      }
+    },
+    {
+      "name": "test-specialist",
+      "type": "agent",
+      "path": ".claude/agents/test-specialist.md",
+      "description": "Reviews test code for pattern compliance and identifies coverage gaps. Use when adding tests, reviewing test quality, or checking coverage metrics.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:80c04054603ccc85c7a987fbd03220d8cd331ea4e8efd10f3e9ff4e355f5374e",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "test-specialist",
+        "description": "Reviews test code for pattern compliance and identifies coverage gaps. Use when adding tests, reviewing test quality, or checking coverage metrics.",
+        "tools": "Read, Grep, Glob, Bash",
+        "model": "sonnet",
+        "memory": "project",
+        "skills": [
+          "test",
+          "coverage"
+        ]
+      }
+    },
+    {
+      "name": "ui-specialist",
+      "type": "agent",
+      "path": ".claude/agents/ui-specialist.md",
+      "description": "Reviews Compose UI code for consistency, accessibility, Material3 compliance, and design system usage. Use when modifying Compose screens or components.",
+      "category": "ui",
+      "tier": "extended",
+      "hash": "sha256:ba4e9b4eb439a884f91f0de53e56bf3d973948e955f03c233bf01f6d8be3d4e9",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "ui-specialist",
+        "description": "Reviews Compose UI code for consistency, accessibility, Material3 compliance, and design system usage. Use when modifying Compose screens or components.",
+        "tools": "Read, Grep, Glob",
+        "model": "sonnet",
+        "memory": "project",
+        "skills": [
+          "accessibility",
+          "web-quality-audit"
+        ]
+      }
+    },
+    {
+      "name": "brainstorm",
+      "type": "command",
+      "path": ".claude/commands/brainstorm.md",
+      "description": "Parse, Classify, and Route Ideas to Docs",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:2713a4f0ae0912770bf6920b2ccf0f0820b841d9befa47666a6ee99ee5b1e731",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "bump-version",
+      "type": "command",
+      "path": ".claude/commands/bump-version.md",
+      "description": "Bump Application Version",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:e8a2e4a83a435a1cafede5011a1b4b6e4326efdf155d905b131c65da3e7fd85d",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "changelog",
+      "type": "command",
+      "path": ".claude/commands/changelog.md",
+      "description": "Generate Changelog from Git History",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:858e5b0b00f41b089cf2b31f1747051bd602a3ad209d32e2a341ff2fe905bfd5",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "doc-check",
+      "type": "command",
+      "path": ".claude/commands/doc-check.md",
+      "description": "Validate Documentation Against Code",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:1a7cd280f471084a88c04150889bc8ad6bee34e3a9e9bbf2e7478d12d0b088a1",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "doc-update",
+      "type": "command",
+      "path": ".claude/commands/doc-update.md",
+      "description": "Update Documentation from Code Changes",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:7c90d06b8fe59c6613d2fd3f90e0aad812757f61630799539f9a8354df237579",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "feature-audit",
+      "type": "command",
+      "path": ".claude/commands/feature-audit.md",
+      "description": "Audit Incomplete Features Visible in UI",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:b6c5c5eb26149dd757aa9846cce0212665607b13515a38224c93f78bb4f8969f",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "full-audit",
+      "type": "command",
+      "path": ".claude/commands/full-audit.md",
+      "hash": "sha256:pending",
+      "description": "Run unified audit across all quality dimensions with findings dedup and consolidated report."
+    },
+    {
+      "name": "merge-track",
+      "type": "command",
+      "path": ".claude/commands/merge-track.md",
+      "description": "Squash-Merge a Completed Track into Main Branch",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:a4163107129401e312677bf1560537329fffb7b8dc2c26002afa7f9cc6266a45",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "metrics",
+      "type": "command",
+      "path": ".claude/commands/metrics.md",
+      "description": "Project Health Dashboard",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:d7c5335bf83858a6f06c445a43a261445948c1c3aaf764ac946fc5513f084569",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "package",
+      "type": "command",
+      "path": ".claude/commands/package.md",
+      "description": "Build Distribution Package",
+      "category": "build",
+      "tier": "core",
+      "hash": "sha256:1e1f80771f4a4ed90039aa914c5eba9a2924e7fb3fbd2d990efb8881d0e37505",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "pre-release",
+      "type": "command",
+      "path": ".claude/commands/pre-release.md",
+      "description": "Pre-Release Validation Checklist",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:fad3ba74616574b0b042034220e0adcf9ecb7156050c13d7d6b40ef26397612f",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "prioritize",
+      "type": "command",
+      "path": ".claude/commands/prioritize.md",
+      "description": "Route Brainstorm Ideas to Roadmap",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:83091857fb89396e55efde2d474075eec131fe68ee636f524b2d6ad463dd03a5",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "start-track",
+      "type": "command",
+      "path": ".claude/commands/start-track.md",
+      "description": "Set Up Worktree for a Parallel Track",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:adfee0bb609fe6aea638a16420c2c93155a8ceb8b94ffae75d6d1d1def8abad0",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "sync-roadmap",
+      "type": "command",
+      "path": ".claude/commands/sync-roadmap.md",
+      "description": "Synchronize Roadmap Phases to GSD Directories",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:0bb1df570d47368a96bcc639333197bca4a201ba8af7df7016c0001dc768c2bd",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "sync-tech-versions",
+      "type": "command",
+      "path": ".claude/commands/sync-tech-versions.md",
+      "description": "Sync Documentation Versions with Version Catalog",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:0b7a82de195ddcea2a9006ee520b9104193b61bbcb45b1a870aa2ba5c009b42b",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "unlock-tests",
+      "type": "command",
+      "path": ".claude/commands/unlock-tests.md",
+      "description": "Kill Stuck Gradle Workers and Release File Locks",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:208581c034f6455cf8e0616225056e3ffe9aced2c7b1d7a431020e58fd84565d",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "verify-migrations",
+      "type": "command",
+      "path": ".claude/commands/verify-migrations.md",
+      "description": "Validate Database Schema Integrity",
+      "category": "build",
+      "tier": "core",
+      "hash": "sha256:c4c6e732a5a057011fecf6162ebb3ae3ba9e89ac004be83938daa99dbad059e8",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "pre-pr",
+      "type": "skill",
+      "path": "skills/pre-pr/SKILL.md",
+      "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns.",
+      "category": "guides",
+      "tier": "core",
+      "hash": "sha256:pending",
+      "dependencies": [
+        "skills/commit-lint/SKILL.md",
+        "skills/lint-resources/SKILL.md"
+      ],
+      "frontmatter": {
+        "name": "pre-pr",
+        "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "name": "git-flow",
+      "type": "skill",
+      "path": "skills/git-flow/SKILL.md",
+      "description": "Git Flow branch management \u2014 start feature/release/hotfix branches, merge completed work, and create releases. Generic Git Flow model.",
+      "category": "guides",
+      "tier": "core",
+      "hash": "sha256:pending",
+      "dependencies": [
+        "skills/pre-pr/SKILL.md"
+      ],
+      "frontmatter": {
+        "name": "git-flow",
+        "description": "Git Flow branch management \u2014 start feature/release/hotfix branches, merge completed work, and create releases. Generic Git Flow model.",
+        "allowed-tools": [
+          "Bash",
+          "Read"
+        ]
+      }
+    },
+    {
+      "name": "readme-audit",
+      "description": "Audit README.md against repo state \u2014 surfaces stale counts and missing sections",
+      "skill_path": "skills/readme-audit/SKILL.md",
+      "command_path": ".claude/commands/readme-audit.md",
+      "sha256": "16b674aed25a752c07362db8aafee91f649e7758df2613d7a1ce09df2cc4b976",
+      "type": "skill",
+      "category": "docs",
+      "tier": "core"
+    },
+    {
+      "name": "audit-l0",
+      "type": "skill",
+      "path": "skills/audit-l0/SKILL.md",
+      "description": "Run coherence audit on any L0/L1/L2 layer root. Checks hub docs, frontmatter, monitor_urls, detekt_rules coverage.",
+      "category": "validation",
+      "tier": "core",
+      "hash": "sha256:64b0510c8aaa1530b97d45e30d8baacc64fc2c5a87b81259868cf8840d9e2f0d",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "audit-l0",
+        "description": "Run coherence audit on any L0/L1/L2 layer root.",
+        "allowed-tools": [
+          "Read",
+          "Grep",
+          "Glob",
+          "Write",
+          "Bash"
+        ]
+      }
+    },
+    {
+      "name": "audit",
+      "type": "skill",
+      "path": "skills/audit/SKILL.md",
+      "hash": "sha256:4011211f2629df023a9404a799302d23423f50685859121008f94a2fc36860f6",
+      "description": "Generate a quality audit report with trend data \u2014 coverage, Detekt, tests, CVEs. Reads from .androidcommondoc/audit-log.jsonl, never re-runs tests.",
+      "command": ".claude/commands/audit.md"
+    },
+    {
+      "name": "audit",
+      "type": "command",
+      "path": ".claude/commands/audit.md",
+      "hash": "sha256:6685a6dda9c017f35146aa5c8523fb1124f569922a219f81d269bc253f82f17b",
+      "description": "Generate a quality audit report with trend data."
+    }
+  ]
+}

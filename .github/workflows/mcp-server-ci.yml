@@ -1,0 +1,50 @@
+name: MCP Server CI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "mcp-server/**"
+      - ".github/workflows/mcp-server-ci.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "mcp-server/**"
+      - ".github/workflows/mcp-server-ci.yml"
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+      fail-fast: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mcp-server
+        run: npm ci
+
+      - name: Build TypeScript
+        working-directory: mcp-server
+        run: npm run build
+
+      - name: Run tests
+        working-directory: mcp-server
+        run: npm test
+        env:
+          ANDROID_COMMON_DOC: ${{ github.workspace }}
+
+      - name: Lint
+        working-directory: mcp-server
+        run: npm run lint

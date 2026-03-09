@@ -1,0 +1,115 @@
+package __ROOT_PACKAGE__.konsist.guard
+
+import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Test
+
+/**
+ * Architecture guard tests enforcing layer dependency rules via import analysis.
+ *
+ * Layers:
+ *   Feature (UI + ViewModel) -> Domain, Data, Model (allowed)
+ *   Data -> Domain, Model (allowed)
+ *   Domain -> Model only (must not depend on Data or Feature)
+ *   Model -> nothing (must not depend on any other layer)
+ *
+ * Layers that don't exist in this project are skipped gracefully
+ * via [assumeTrue]. Uses import-based checks (not Konsist assertArchitecture
+ * with Layer objects) to avoid KoPreconditionFailedException when layers
+ * have no files.
+ *
+ * Generated from AndroidCommonDoc guard-templates.
+ * Root package: __ROOT_PACKAGE__
+ */
+class ArchitectureGuardTest {
+
+    private val scope = GuardScopeFactory.projectScope()
+    private val root = "__ROOT_PACKAGE__"
+
+    @Test
+    fun `model layer does not depend on other layers`() {
+        val modelPkg = "$root.core.model"
+        assumeTrue(
+            GuardScopeFactory.hasFilesInPackage(scope, modelPkg),
+            "No files in $modelPkg -- skipping model isolation check"
+        )
+
+        val modelFiles = scope.files.filter {
+            it.packagee?.name?.startsWith(modelPkg) == true
+        }.toList()
+
+        modelFiles.forEach { file ->
+            val violations = file.imports.filter { imp ->
+                imp.name.startsWith("$root.core.domain") ||
+                    imp.name.startsWith("$root.core.data") ||
+                    imp.name.startsWith("$root.feature")
+            }.toList()
+
+            assertThat(violations)
+                .withFailMessage {
+                    "Model file '${file.name}' imports non-model packages: " +
+                        "${violations.map { it.name }}. " +
+                        "Model layer must have zero dependencies on Domain, Data, or Feature. " +
+                        "Move shared types to core.model or create a separate contract."
+                }
+                .isEmpty()
+        }
+    }
+
+    @Test
+    fun `domain layer does not depend on data or feature layers`() {
+        val domainPkg = "$root.core.domain"
+        assumeTrue(
+            GuardScopeFactory.hasFilesInPackage(scope, domainPkg),
+            "No files in $domainPkg -- skipping domain dependency check"
+        )
+
+        val domainFiles = scope.files.filter {
+            it.packagee?.name?.startsWith(domainPkg) == true
+        }.toList()
+
+        domainFiles.forEach { file ->
+            val violations = file.imports.filter { imp ->
+                imp.name.startsWith("$root.core.data") ||
+                    imp.name.startsWith("$root.feature")
+            }.toList()
+
+            assertThat(violations)
+                .withFailMessage {
+                    "Domain file '${file.name}' imports data/feature packages: " +
+                        "${violations.map { it.name }}. " +
+                        "Domain must not depend on Data or Feature layers. " +
+                        "Use interfaces in Domain, implementations in Data."
+                }
+                .isEmpty()
+        }
+    }
+
+    @Test
+    fun `data layer does not depend on feature layer`() {
+        val dataPkg = "$root.core.data"
+        assumeTrue(
+            GuardScopeFactory.hasFilesInPackage(scope, dataPkg),
+            "No files in $dataPkg -- skipping data dependency check"
+        )
+
+        val dataFiles = scope.files.filter {
+            it.packagee?.name?.startsWith(dataPkg) == true
+        }.toList()
+
+        dataFiles.forEach { file ->
+            val violations = file.imports.filter { imp ->
+                imp.name.startsWith("$root.feature")
+            }.toList()
+
+            assertThat(violations)
+                .withFailMessage {
+                    "Data file '${file.name}' imports feature packages: " +
+                        "${violations.map { it.name }}. " +
+                        "Data must not depend on Feature layer. " +
+                        "Use Domain interfaces for cross-layer communication."
+                }
+                .isEmpty()
+        }
+    }
+}

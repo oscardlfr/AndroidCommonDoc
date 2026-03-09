@@ -1,0 +1,5273 @@
+{
+  "project": "DawSync",
+  "path": "C:/Users/34645/AndroidStudioProjects/DawSync",
+  "layer": "L2",
+  "audit_mode": "full",
+  "generated": "2026-03-14T17:49:48.022Z",
+  "file_count": 223,
+  "files": [
+    {
+      "path": ".agents/skills/accessibility/SKILL.md",
+      "directory": ".agents/skills",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+    },
+    {
+      "path": ".agents/skills/accessibility/references/WCAG.md",
+      "directory": ".agents/skills",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+    },
+    {
+      "path": ".agents/skills/best-practices/SKILL.md",
+      "directory": ".agents/skills",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+    },
+    {
+      "path": ".agents/skills/core-web-vitals/SKILL.md",
+      "directory": ".agents/skills",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+    },
+    {
+      "path": ".agents/skills/core-web-vitals/references/LCP.md",
+      "directory": ".agents/skills",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+    },
+    {
+      "path": ".agents/skills/performance/SKILL.md",
+      "directory": ".agents/skills",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+    },
+    {
+      "path": ".agents/skills/seo/SKILL.md",
+      "directory": ".agents/skills",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+    },
+    {
+      "path": ".agents/skills/web-quality-audit/SKILL.md",
+      "directory": ".agents/skills",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+    },
+    {
+      "path": ".androidcommondoc/README.md",
+      "directory": ".androidcommondoc",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "AndroidCommonDoc integration configuration. Properly placed."
+    },
+    {
+      "path": ".androidcommondoc/docs/dawsync-domain-patterns.md",
+      "directory": ".androidcommondoc",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": true,
+      "l2_override_target": "general domain patterns",
+      "overlaps_with": [
+        "L0:error-handling-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "L1 override doc for DawSync-specific domain patterns (producer/consumer, DAW guardian, freemium). Properly placed as L1 project override."
+    },
+    {
+      "path": ".claude/agent-memory/daw-guardian/MEMORY.md",
+      "directory": ".claude/agent-memory",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Agent memory file. Runtime state for AI agents. DawSync-specific context."
+    },
+    {
+      "path": ".claude/agent-memory/daw-guardian/daw-guardian-report-2026-02-27.md",
+      "directory": ".claude/agent-memory",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Agent memory file. Runtime state for AI agents. DawSync-specific context."
+    },
+    {
+      "path": ".claude/agent-memory/producer-consumer-validator/MEMORY.md",
+      "directory": ".claude/agent-memory",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Agent memory file. Runtime state for AI agents. DawSync-specific context."
+    },
+    {
+      "path": ".claude/agents/beta-readiness-agent.md",
+      "directory": ".claude/agents",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Generic beta readiness agent. Pre-release validation is universal."
+    },
+    {
+      "path": ".claude/agents/cross-platform-validator.md",
+      "directory": ".claude/agents",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:kmp-architecture"
+      ],
+      "versionRefs": [],
+      "notes": "Generic cross-platform validation agent. KMP platform parity checks are universal."
+    },
+    {
+      "path": ".claude/agents/data-layer-specialist.md",
+      "directory": ".claude/agents",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync-specific agent. Contains irreplaceable domain knowledge (data layer specialist). Must stay L2."
+    },
+    {
+      "path": ".claude/agents/daw-guardian.md",
+      "directory": ".claude/agents",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync-specific agent. Contains irreplaceable domain knowledge (daw guardian). Must stay L2."
+    },
+    {
+      "path": ".claude/agents/doc-alignment-agent.md",
+      "directory": ".claude/agents",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic doc drift detection agent. DawSync-specific file refs could be parameterized."
+    },
+    {
+      "path": ".claude/agents/domain-model-specialist.md",
+      "directory": ".claude/agents",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync-specific agent. Contains irreplaceable domain knowledge (domain model specialist). Must stay L2."
+    },
+    {
+      "path": ".claude/agents/freemium-gate-checker.md",
+      "directory": ".claude/agents",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync-specific agent. Contains irreplaceable domain knowledge (freemium gate checker). Must stay L2."
+    },
+    {
+      "path": ".claude/agents/producer-consumer-validator.md",
+      "directory": ".claude/agents",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync-specific agent. Contains irreplaceable domain knowledge (producer consumer validator). Must stay L2."
+    },
+    {
+      "path": ".claude/agents/release-guardian-agent.md",
+      "directory": ".claude/agents",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:kmp-architecture"
+      ],
+      "versionRefs": [],
+      "notes": "Generic release readiness scanner. Debug flags, dev URLs, placeholder text checks are universal."
+    },
+    {
+      "path": ".claude/agents/test-specialist.md",
+      "directory": ".claude/agents",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic test review agent. Testing patterns (runTest, fakes over mocks) are universal. DawSync-specific refs can be parameterized."
+    },
+    {
+      "path": ".claude/agents/ui-specialist.md",
+      "directory": ".claude/agents",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic UI review agent. Compose/SwiftUI patterns are universal."
+    },
+    {
+      "path": ".claude/commands/android-test.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/auto-cover.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/brainstorm.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/bump-version.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/changelog.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/coverage-full.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/coverage.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/deploy-web.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync-specific command (deploy-web). Contains domain-specific logic."
+    },
+    {
+      "path": ".claude/commands/doc-check.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/doc-update.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/extract-errors.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/feature-audit.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/lint-web.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync-specific command (lint-web). Contains domain-specific logic."
+    },
+    {
+      "path": ".claude/commands/merge-track.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync-specific command (merge-track). Contains domain-specific logic."
+    },
+    {
+      "path": ".claude/commands/metrics.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/nuke-builds.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/package.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/pre-release.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/prioritize.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/roadmap.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/run-clean.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/run.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/sbom-analyze.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/sbom-scan.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/sbom.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/start-track.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync-specific command (start-track). Contains domain-specific logic."
+    },
+    {
+      "path": ".claude/commands/sync-roadmap.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync-specific command (sync-roadmap). Contains domain-specific logic."
+    },
+    {
+      "path": ".claude/commands/sync-tech-versions.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/sync-versions.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/test-changed.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/test-full-parallel.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/test-full.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/test-m4l.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync-specific command (test-m4l). Contains domain-specific logic."
+    },
+    {
+      "path": ".claude/commands/test.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/unlock-tests.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/validate-patterns.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/validate-strings.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync-specific command (validate-strings). Contains domain-specific logic."
+    },
+    {
+      "path": ".claude/commands/verify-kmp.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": ".claude/commands/verify-migrations.md",
+      "directory": ".claude/commands",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+    },
+    {
+      "path": "APPLE_SETUP.md",
+      "directory": "root",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": false,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [
+        {
+          "tech": "kotlin",
+          "found": "2.3.0",
+          "current": "2.3.10",
+          "stale": true
+        }
+      ],
+      "notes": "Apple platform setup guide (234 lines). DawSync-specific XCFramework and SwiftUI integration."
+    },
+    {
+      "path": "CLAUDE.md",
+      "directory": "root",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": false,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:error-handling-patterns",
+        "L0:gradle-patterns",
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [
+        {
+          "tech": "kotlin",
+          "found": "2.3.10",
+          "current": "2.3.10",
+          "stale": false
+        },
+        {
+          "tech": "kotlin",
+          "found": "2.3.0",
+          "current": "2.3.10",
+          "stale": true
+        },
+        {
+          "tech": "agp",
+          "found": "9.0.0",
+          "current": "9.0.0",
+          "stale": false
+        },
+        {
+          "tech": "compose-multiplatform",
+          "found": "1.10.0",
+          "current": "1.7.x",
+          "stale": true
+        },
+        {
+          "tech": "koin",
+          "found": "4.1.1",
+          "current": "4.1.1",
+          "stale": false
+        },
+        {
+          "tech": "kotlinx-coroutines",
+          "found": "1.10.2",
+          "current": "1.10.2",
+          "stale": false
+        },
+        {
+          "tech": "kover",
+          "found": "0.9.4",
+          "current": "0.9.1",
+          "stale": true
+        },
+        {
+          "tech": "mockk",
+          "found": "1.14.7",
+          "current": "1.14.7",
+          "stale": false
+        }
+      ],
+      "notes": "DawSync CLAUDE.md (232 lines). Contains project-specific conventions + generic KMP patterns. Key file for Phase 15 rewrite. Version refs present."
+    },
+    {
+      "path": "MARKETING_EN.md",
+      "directory": "root",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Marketing content (English). DawSync-specific user-facing marketing material."
+    },
+    {
+      "path": "MARKETING_ES.md",
+      "directory": "root",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Marketing content (Spanish). DawSync-specific user-facing marketing material."
+    },
+    {
+      "path": "README.md",
+      "directory": "root",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": false,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:gradle-patterns",
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [
+        {
+          "tech": "kotlin",
+          "found": "2.3.0",
+          "current": "2.3.10",
+          "stale": true
+        }
+      ],
+      "notes": "Project README. Mix of generic project structure and DawSync-specific feature descriptions."
+    },
+    {
+      "path": "SessionRecorder-VST3/CHANGELOG.md",
+      "directory": "SessionRecorder-VST3",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3 plugin changelog. Sub-project version history."
+    },
+    {
+      "path": "SessionRecorder-VST3/EULA.md",
+      "directory": "SessionRecorder-VST3",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3 plugin End User License Agreement. Legal document."
+    },
+    {
+      "path": "SessionRecorder-VST3/MACOS_BUILD_INSTRUCTIONS.md",
+      "directory": "SessionRecorder-VST3",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3 macOS build instructions. Domain-specific build documentation."
+    },
+    {
+      "path": "SessionRecorder-VST3/README.md",
+      "directory": "SessionRecorder-VST3",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "SessionRecorder VST3 sub-project documentation. Irreplaceable domain-specific audio plugin content."
+    },
+    {
+      "path": "SessionRecorder-VST3/TESTING.md",
+      "directory": "SessionRecorder-VST3",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3 plugin testing guide. Domain-specific audio plugin testing."
+    },
+    {
+      "path": "SessionRecorder-VST3/installer/macos/README.md",
+      "directory": "SessionRecorder-VST3",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3 installer documentation. Platform-specific installation guide."
+    },
+    {
+      "path": "SessionRecorder-VST3/installer/windows/README.md",
+      "directory": "SessionRecorder-VST3",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3 installer documentation. Platform-specific installation guide."
+    },
+    {
+      "path": "SessionRecorder-VST3/src/README.md",
+      "directory": "SessionRecorder-VST3",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3 source code documentation. C++ audio plugin implementation notes."
+    },
+    {
+      "path": "SnapshotProducer/DISCLAIMER.md",
+      "directory": "SnapshotProducer",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "SnapshotProducer disclaimer. Legal document."
+    },
+    {
+      "path": "SnapshotProducer/INSTALL.md",
+      "directory": "SnapshotProducer",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "M4L device installation guide. Domain-specific setup instructions."
+    },
+    {
+      "path": "SnapshotProducer/LICENSE.md",
+      "directory": "SnapshotProducer",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "SnapshotProducer license. Legal document."
+    },
+    {
+      "path": "SnapshotProducer/PRIVACY.md",
+      "directory": "SnapshotProducer",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "SnapshotProducer privacy policy. Legal document."
+    },
+    {
+      "path": "SnapshotProducer/docs/setup.md",
+      "directory": "SnapshotProducer",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "SnapshotProducer setup documentation. Domain-specific configuration."
+    },
+    {
+      "path": "THIRD_PARTY_LICENSES.md",
+      "directory": "root",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Third-party licenses. Standard legal compliance document."
+    },
+    {
+      "path": "appleShared/README.md",
+      "directory": "appleShared",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Platform-specific README for appleShared. DawSync-specific platform configuration and setup."
+    },
+    {
+      "path": "coverage-full-report.md",
+      "directory": "root",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:offline-first-architecture",
+        "L0:offline-first-caching",
+        "L0:offline-first-patterns",
+        "L0:offline-first-sync",
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Root-level project file."
+    },
+    {
+      "path": "coverage-gap-report.md",
+      "directory": "root",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Root-level project file."
+    },
+    {
+      "path": "docs/BUSINESS_STRATEGY.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Business strategy document. DawSync-specific pricing, costs, competitive positioning."
+    },
+    {
+      "path": "docs/CLAUDE_CODE_WORKFLOW.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "promote_L0",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Claude Code workflow documentation. Mix of generic AI workflow patterns and DawSync-specific skill references. The workflow pattern itself is L0-promotable."
+    },
+    {
+      "path": "docs/CODEX_AUDITY/01_business_roadmap_audit.md",
+      "directory": "docs/CODEX_AUDITY",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Codex audit document. Contains unique domain-specific audit findings and recommendations."
+    },
+    {
+      "path": "docs/CODEX_AUDITY/02_security_compliance_audit.md",
+      "directory": "docs/CODEX_AUDITY",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Codex audit document. Contains unique domain-specific audit findings and recommendations."
+    },
+    {
+      "path": "docs/CODEX_AUDITY/03_architecture_db_performance_audit.md",
+      "directory": "docs/CODEX_AUDITY",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Codex audit document. Contains unique domain-specific audit findings and recommendations."
+    },
+    {
+      "path": "docs/CODEX_AUDITY/04_vst3_m4l_realtime_memory_audit.md",
+      "directory": "docs/CODEX_AUDITY",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Codex audit document. Contains unique domain-specific audit findings and recommendations."
+    },
+    {
+      "path": "docs/CODEX_AUDITY/05_master_closure_plan.md",
+      "directory": "docs/CODEX_AUDITY",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Codex audit document. Contains unique domain-specific audit findings and recommendations."
+    },
+    {
+      "path": "docs/DAWSYNC_PARA_ARTISTAS.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Marketing/user guide in Spanish for artists. DawSync-specific user-facing content."
+    },
+    {
+      "path": "docs/FEATURE_INVENTORY.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Feature status matrix. DawSync-specific feature tracking document."
+    },
+    {
+      "path": "docs/PRODUCT_SPEC.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:error-handling-patterns",
+        "L0:offline-first-architecture",
+        "L0:offline-first-caching",
+        "L0:offline-first-patterns",
+        "L0:offline-first-sync"
+      ],
+      "versionRefs": [],
+      "notes": "DawSync product specification (1664 lines). Canonical product spec with 134 classified features. Irreplaceable."
+    },
+    {
+      "path": "docs/RISKS_RULES.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Risks and rules document. DawSync-specific anti-feature rules and compliance requirements."
+    },
+    {
+      "path": "docs/SBOM.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Software Bill of Materials. DawSync-specific dependency inventory."
+    },
+    {
+      "path": "docs/SCALING_PLAN.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Scaling plan. Brief DawSync-specific scaling strategy."
+    },
+    {
+      "path": "docs/TECHNOLOGY_CHEATSHEET.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 2,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": false,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:compose-resources-configuration",
+        "L0:compose-resources-patterns",
+        "L0:compose-resources-troubleshooting",
+        "L0:compose-resources-usage",
+        "L0:error-handling-patterns",
+        "L0:gradle-patterns",
+        "L0:testing-patterns-coroutines",
+        "L0:testing-patterns-coverage",
+        "L0:testing-patterns-fakes",
+        "L0:testing-patterns",
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [
+        {
+          "tech": "kotlin",
+          "found": "2.3.0",
+          "current": "2.3.10",
+          "stale": true
+        }
+      ],
+      "notes": "Technology cheatsheet. Mix of generic version refs and DawSync-specific stack decisions."
+    },
+    {
+      "path": "docs/VIABILITY_AUDIT.md",
+      "directory": "docs",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Viability audit. DawSync-specific business viability analysis."
+    },
+    {
+      "path": "docs/architecture/PATTERNS.md",
+      "directory": "docs/architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "flag_l2_override",
+      "l2_override": true,
+      "l2_override_target": "offline-first-patterns",
+      "overlaps_with": [
+        "L0:offline-first-architecture",
+        "L0:offline-first-caching",
+        "L0:offline-first-patterns",
+        "L0:offline-first-sync",
+        "L0:testing-patterns-coroutines",
+        "L0:testing-patterns-coverage",
+        "L0:testing-patterns-fakes",
+        "L0:testing-patterns",
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "DawSync architecture patterns (offline-first, processing modes, backoff). Contains L2-specific offline-first patterns that override generic L0. Flag as L2>L1 override."
+    },
+    {
+      "path": "docs/architecture/PRODUCER_CONSUMER.md",
+      "directory": "docs/architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:gradle-patterns",
+        "L0:kmp-architecture",
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Producer/Consumer pattern documentation. Unique DawSync architecture for platform-specific data sources."
+    },
+    {
+      "path": "docs/architecture/SYSTEM_ARCHITECTURE.md",
+      "directory": "docs/architecture",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:gradle-patterns",
+        "L0:offline-first-architecture",
+        "L0:offline-first-caching",
+        "L0:offline-first-patterns",
+        "L0:offline-first-sync",
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "System architecture overview. Comprehensive DawSync-specific architecture documentation."
+    },
+    {
+      "path": "docs/architecture/diagrams/A-system-global/A01-system-overview.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:kmp-architecture"
+      ],
+      "versionRefs": [],
+      "notes": "System-level architecture diagram. DawSync-specific global system design."
+    },
+    {
+      "path": "docs/architecture/diagrams/A-system-global/A02-vst3-daw-capture-flow.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "System-level architecture diagram. DawSync-specific global system design."
+    },
+    {
+      "path": "docs/architecture/diagrams/A-system-global/A03-data-persistence-map.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "System-level architecture diagram. DawSync-specific global system design."
+    },
+    {
+      "path": "docs/architecture/diagrams/B-vst3-m4l/B01-vst3-plugin-flow.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3/M4L-specific architecture diagram. Irreplaceable audio plugin domain knowledge."
+    },
+    {
+      "path": "docs/architecture/diagrams/B-vst3-m4l/B02-audio-buffer-pipeline.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3/M4L-specific architecture diagram. Irreplaceable audio plugin domain knowledge."
+    },
+    {
+      "path": "docs/architecture/diagrams/B-vst3-m4l/B03-config-reader-fallback.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3/M4L-specific architecture diagram. Irreplaceable audio plugin domain knowledge."
+    },
+    {
+      "path": "docs/architecture/diagrams/B-vst3-m4l/B04-metadata-json-format.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3/M4L-specific architecture diagram. Irreplaceable audio plugin domain knowledge."
+    },
+    {
+      "path": "docs/architecture/diagrams/B-vst3-m4l/B05-m4l-capture-flow.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3/M4L-specific architecture diagram. Irreplaceable audio plugin domain knowledge."
+    },
+    {
+      "path": "docs/architecture/diagrams/B-vst3-m4l/B06-shared-config-contract.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "VST3/M4L-specific architecture diagram. Irreplaceable audio plugin domain knowledge."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C01-repository-overview.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:offline-first-architecture",
+        "L0:offline-first-caching",
+        "L0:offline-first-patterns",
+        "L0:offline-first-sync"
+      ],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C02-project-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:offline-first-architecture",
+        "L0:offline-first-caching",
+        "L0:offline-first-patterns",
+        "L0:offline-first-sync"
+      ],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C03-snapshot-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C04-workspace-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C05-trash-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C06-session-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C07-dlq-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C08-subscription-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C09-daw-project-file-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:offline-first-architecture",
+        "L0:offline-first-caching",
+        "L0:offline-first-patterns",
+        "L0:offline-first-sync"
+      ],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C10-archive-policy-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C11-archived-snapshot-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C12-layout-config-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C13-queue-config-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C14-snapshot-pin-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/C-domain-repositories/C15-alignment-consent-repository.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Repository architecture diagram. DawSync domain-specific data layer design."
+    },
+    {
+      "path": "docs/architecture/diagrams/D-domain-usecases/D01-delete-snapshot.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Use case architecture diagram. DawSync domain-specific business logic design."
+    },
+    {
+      "path": "docs/architecture/diagrams/D-domain-usecases/D02-bulk-operations.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Use case architecture diagram. DawSync domain-specific business logic design."
+    },
+    {
+      "path": "docs/architecture/diagrams/D-domain-usecases/D03-restore-from-trash.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Use case architecture diagram. DawSync domain-specific business logic design."
+    },
+    {
+      "path": "docs/architecture/diagrams/D-domain-usecases/D04-daw-file-linking.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Use case architecture diagram. DawSync domain-specific business logic design."
+    },
+    {
+      "path": "docs/architecture/diagrams/D-domain-usecases/D05-import-workspace-projects.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Use case architecture diagram. DawSync domain-specific business logic design."
+    },
+    {
+      "path": "docs/architecture/diagrams/D-domain-usecases/D06-detect-false-positive.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Use case architecture diagram. DawSync domain-specific business logic design."
+    },
+    {
+      "path": "docs/architecture/diagrams/D-domain-usecases/D07-retention-mode.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Use case architecture diagram. DawSync domain-specific business logic design."
+    },
+    {
+      "path": "docs/architecture/diagrams/D-domain-usecases/D08-get-project-by-id.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Use case architecture diagram. DawSync domain-specific business logic design."
+    },
+    {
+      "path": "docs/architecture/diagrams/D-domain-usecases/D09-reassign-snapshot-project.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Use case architecture diagram. DawSync domain-specific business logic design."
+    },
+    {
+      "path": "docs/architecture/diagrams/D-domain-usecases/D10-alignment-suggestions.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Use case architecture diagram. DawSync domain-specific business logic design."
+    },
+    {
+      "path": "docs/architecture/diagrams/E-data-datasources/E01-datasource-overview.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DataSource architecture diagram. DawSync-specific data source design."
+    },
+    {
+      "path": "docs/architecture/diagrams/E-data-datasources/E02-filesystem-snapshot-datasource.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DataSource architecture diagram. DawSync-specific data source design."
+    },
+    {
+      "path": "docs/architecture/diagrams/E-data-datasources/E03-filesystem-waveform-datasource.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DataSource architecture diagram. DawSync-specific data source design."
+    },
+    {
+      "path": "docs/architecture/diagrams/E-data-datasources/E04-filesystem-audio-datasource.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DataSource architecture diagram. DawSync-specific data source design."
+    },
+    {
+      "path": "docs/architecture/diagrams/E-data-datasources/E05-filesystem-session-datasource.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DataSource architecture diagram. DawSync-specific data source design."
+    },
+    {
+      "path": "docs/architecture/diagrams/E-data-datasources/E06-unified-snapshot-datasource.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DataSource architecture diagram. DawSync-specific data source design."
+    },
+    {
+      "path": "docs/architecture/diagrams/E-data-datasources/E07-daw-project-file-datasource.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:offline-first-architecture",
+        "L0:offline-first-caching",
+        "L0:offline-first-patterns",
+        "L0:offline-first-sync"
+      ],
+      "versionRefs": [],
+      "notes": "DataSource architecture diagram. DawSync-specific data source design."
+    },
+    {
+      "path": "docs/architecture/diagrams/E-data-datasources/E08-config-datasources.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DataSource architecture diagram. DawSync-specific data source design."
+    },
+    {
+      "path": "docs/architecture/diagrams/F-engines/F01-processing-mode-coordinator.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Engine architecture diagram. DawSync-specific background processing design."
+    },
+    {
+      "path": "docs/architecture/diagrams/F-engines/F02-desktop-idle-detector.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Engine architecture diagram. DawSync-specific background processing design."
+    },
+    {
+      "path": "docs/architecture/diagrams/F-engines/F03-desktop-daw-monitor.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Engine architecture diagram. DawSync-specific background processing design."
+    },
+    {
+      "path": "docs/architecture/diagrams/F-engines/F04-background-sync-scheduler.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Engine architecture diagram. DawSync-specific background processing design."
+    },
+    {
+      "path": "docs/architecture/diagrams/F-engines/F05-outbox-processor.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Engine architecture diagram. DawSync-specific background processing design."
+    },
+    {
+      "path": "docs/architecture/diagrams/F-engines/F06-phantom-project-reconciler.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Engine architecture diagram. DawSync-specific background processing design."
+    },
+    {
+      "path": "docs/architecture/diagrams/F-engines/F07-directory-scanner-services.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Engine architecture diagram. DawSync-specific background processing design."
+    },
+    {
+      "path": "docs/architecture/diagrams/F-engines/F08-capture-watcher-config.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Engine architecture diagram. DawSync-specific background processing design."
+    },
+    {
+      "path": "docs/architecture/diagrams/F-engines/F09-smart-cleanup-engine.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Engine architecture diagram. DawSync-specific background processing design."
+    },
+    {
+      "path": "docs/architecture/diagrams/F-engines/F10-analytics-engines.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Engine architecture diagram. DawSync-specific background processing design."
+    },
+    {
+      "path": "docs/architecture/diagrams/F-engines/F11-action-queue-detail.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Engine architecture diagram. DawSync-specific background processing design."
+    },
+    {
+      "path": "docs/architecture/diagrams/G-engines-combined/G01-full-orchestration.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Combined engine orchestration diagram. DawSync-specific system design."
+    },
+    {
+      "path": "docs/architecture/diagrams/H-business-flows/H01-session-lifecycle.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Business flow diagram. DawSync domain-specific workflow design."
+    },
+    {
+      "path": "docs/architecture/diagrams/H-business-flows/H02-project-versioning.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Business flow diagram. DawSync domain-specific workflow design."
+    },
+    {
+      "path": "docs/architecture/diagrams/H-business-flows/H03-edge-use-cases.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Business flow diagram. DawSync domain-specific workflow design."
+    },
+    {
+      "path": "docs/architecture/diagrams/H-business-flows/H04-subscription-feature-gates.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Business flow diagram. DawSync domain-specific workflow design."
+    },
+    {
+      "path": "docs/architecture/diagrams/H-business-flows/H05-action-queue-flow.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Business flow diagram. DawSync domain-specific workflow design."
+    },
+    {
+      "path": "docs/architecture/diagrams/H-business-flows/H06-onboarding-flow.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Business flow diagram. DawSync domain-specific workflow design."
+    },
+    {
+      "path": "docs/architecture/diagrams/LEGEND.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Architecture diagrams index/legend. DawSync-specific reference."
+    },
+    {
+      "path": "docs/architecture/diagrams/README.md",
+      "directory": "docs/architecture/diagrams",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Architecture diagrams index/legend. DawSync-specific reference."
+    },
+    {
+      "path": "docs/archive/01-architecture/patterns/offline-first-patterns.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "action": "archive",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:offline-first-architecture",
+        "L0:offline-first-caching",
+        "L0:offline-first-patterns",
+        "L0:offline-first-sync"
+      ],
+      "versionRefs": [],
+      "notes": "Superseded by AndroidCommonDoc L0 offline-first-patterns. Generic KMP content promoted to L0."
+    },
+    {
+      "path": "docs/archive/01-architecture/patterns/ui-patterns.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "action": "archive",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Superseded by AndroidCommonDoc L0 ui-screen-patterns. Generic Compose UI patterns."
+    },
+    {
+      "path": "docs/archive/01-architecture/patterns/viewmodel-patterns.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "action": "archive",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Superseded by AndroidCommonDoc L0 viewmodel-state-patterns. Already deprecated with pointer to canonical source."
+    },
+    {
+      "path": "docs/archive/ANALYTICS_STRATEGY.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "action": "archive",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Superseded. Brief analytics strategy outline."
+    },
+    {
+      "path": "docs/archive/API_DEPENDENCY_CLEANUP.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "action": "archive",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:error-handling-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Superseded by current module structure. Cleanup tracking doc."
+    },
+    {
+      "path": "docs/archive/ARCHITECTURE.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "action": "archive",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:offline-first-architecture",
+        "L0:offline-first-caching",
+        "L0:offline-first-patterns",
+        "L0:offline-first-sync",
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Superseded by docs/architecture/SYSTEM_ARCHITECTURE.md (current version). Historical architecture."
+    },
+    {
+      "path": "docs/archive/ARCHITECTURE_PLAN.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Massive (3166 lines) original architecture plan. Unique historical context for DawSync evolution."
+    },
+    {
+      "path": "docs/archive/COST_MODEL.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique cost modeling and financial analysis."
+    },
+    {
+      "path": "docs/archive/CURRENT_STATUS.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "action": "archive",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:offline-first-architecture",
+        "L0:offline-first-caching",
+        "L0:offline-first-patterns",
+        "L0:offline-first-sync"
+      ],
+      "versionRefs": [],
+      "notes": "Superseded by FEATURE_INVENTORY.md. Point-in-time status snapshot."
+    },
+    {
+      "path": "docs/archive/DATA_LAYER_DESIGN.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:offline-first-architecture",
+        "L0:offline-first-caching",
+        "L0:offline-first-patterns",
+        "L0:offline-first-sync"
+      ],
+      "versionRefs": [],
+      "notes": "Contains unique data layer design decisions for producer/consumer pattern."
+    },
+    {
+      "path": "docs/archive/FOUNDER_STRATEGY.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique founder/business strategy context."
+    },
+    {
+      "path": "docs/archive/FREEMIUM_PREMIUM.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique business model decisions for DawSync freemium structure."
+    },
+    {
+      "path": "docs/archive/FUTURE_CONSIDERATIONS.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique future considerations and feature evaluation."
+    },
+    {
+      "path": "docs/archive/FUTURE_EXPANSION.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique expansion planning context."
+    },
+    {
+      "path": "docs/archive/GRADLE_PATTERNS.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "action": "archive",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:compose-resources-configuration",
+        "L0:compose-resources-patterns",
+        "L0:compose-resources-troubleshooting",
+        "L0:compose-resources-usage",
+        "L0:gradle-patterns",
+        "L0:kmp-architecture",
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Superseded by docs/architecture/PRODUCER_CONSUMER.md. Also overlaps with L0 gradle-patterns."
+    },
+    {
+      "path": "docs/archive/IMPLEMENTATION_PLAN.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Historical implementation plan with unique project planning context."
+    },
+    {
+      "path": "docs/archive/IMPLEMENTATION_ROADMAP.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Historical implementation roadmap with unique project timeline and decision context."
+    },
+    {
+      "path": "docs/archive/LOCAL_PROCESSING_PLAN.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique local processing architecture decisions."
+    },
+    {
+      "path": "docs/archive/MODULARIZATION_PLAN.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Contains unique modularization decisions specific to DawSync architecture evolution."
+    },
+    {
+      "path": "docs/archive/OPTIMIZATION_STRATEGY.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique performance optimization strategies specific to DAW integration."
+    },
+    {
+      "path": "docs/archive/PRICING_MODEL.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique pricing model analysis."
+    },
+    {
+      "path": "docs/archive/PRODUCT_BRAINSTORMING.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:error-handling-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "Contains unique brainstorming notes with irreplaceable creative context."
+    },
+    {
+      "path": "docs/archive/PRODUCT_MASTERPLAN.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique product masterplan with vision and strategy context."
+    },
+    {
+      "path": "docs/archive/PRODUCT_MOAT.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique competitive moat analysis."
+    },
+    {
+      "path": "docs/archive/PRODUCT_VISION.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique product vision context."
+    },
+    {
+      "path": "docs/archive/PROJECT_ORGANIZATION_ANALYSIS.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "action": "archive",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Superseded by current module structure."
+    },
+    {
+      "path": "docs/archive/PROJECT_UI_GUIDE.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "action": "archive",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Superseded by current design system and accessibility guide."
+    },
+    {
+      "path": "docs/archive/SNAPSHOT_CLEANUP_STRATEGY.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique cleanup strategy for snapshot management."
+    },
+    {
+      "path": "docs/archive/STORAGE_STRATEGY.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "SUPERSEDED",
+      "action": "archive",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Brief storage strategy. Superseded by current architecture docs."
+    },
+    {
+      "path": "docs/archive/STRATEGIC_ALIGNMENT_2026.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique 2026 strategic alignment and wishlist context."
+    },
+    {
+      "path": "docs/archive/SYNC_STRATEGY.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains sync strategy decisions relevant to upcoming cloud phases."
+    },
+    {
+      "path": "docs/archive/TAGGING_SYSTEM.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "SUPERSEDED",
+      "action": "archive",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Brief tagging system concept. Superseded by current metadata model."
+    },
+    {
+      "path": "docs/archive/snapshotproducer-multi-daw.md",
+      "directory": "docs/archive",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Contains unique multi-DAW SnapshotProducer expansion plans."
+    },
+    {
+      "path": "docs/guides/ACCESSIBILITY.md",
+      "directory": "docs/guides",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync accessibility guide. Contains generic WCAG patterns with DawSync-specific JAB integration."
+    },
+    {
+      "path": "docs/guides/CAPTURE_SYSTEM.md",
+      "directory": "docs/guides",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:testing-patterns-coroutines",
+        "L0:testing-patterns-coverage",
+        "L0:testing-patterns-fakes",
+        "L0:testing-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "DawSync capture system guide. Irreplaceable domain knowledge about DAW audio capture flow."
+    },
+    {
+      "path": "docs/guides/KMP_RESOURCES.md",
+      "directory": "docs/guides",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:compose-resources-configuration",
+        "L0:compose-resources-patterns",
+        "L0:compose-resources-troubleshooting",
+        "L0:compose-resources-usage"
+      ],
+      "versionRefs": [],
+      "notes": "Compose Resources convention for DawSync. Contains generic patterns mixed with DawSync-specific dual-system approach."
+    },
+    {
+      "path": "docs/guides/MEDIA_SESSION.md",
+      "directory": "docs/guides",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "DawSync media session guide. Domain-specific media controls for audio playback management."
+    },
+    {
+      "path": "docs/guides/NAVIGATION.md",
+      "directory": "docs/guides",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [
+        "L0:viewmodel-navigation"
+      ],
+      "versionRefs": [],
+      "notes": "DawSync Navigation3 guide. Contains generic Navigation3 patterns mixed with DawSync-specific routes."
+    },
+    {
+      "path": "docs/guides/TESTING.md",
+      "directory": "docs/guides",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "flag_l2_override",
+      "l2_override": true,
+      "l2_override_target": "testing-patterns",
+      "overlaps_with": [
+        "L0:error-handling-patterns",
+        "L0:testing-patterns-coroutines",
+        "L0:testing-patterns-coverage",
+        "L0:testing-patterns-fakes",
+        "L0:testing-patterns",
+        "L0:viewmodel-events",
+        "L0:viewmodel-navigation",
+        "L0:viewmodel-state-management",
+        "L0:viewmodel-state-patterns"
+      ],
+      "versionRefs": [],
+      "notes": "DawSync testing guide. Contains DawSync-specific testing conventions that override L0 testing-patterns. Flag as L2>L1 override."
+    },
+    {
+      "path": "docs/legal/BUSINESS_PLAN_ADDENDUM.md",
+      "directory": "docs/legal",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Legal document. DawSync-specific legal/compliance content (GDPR, privacy, terms)."
+    },
+    {
+      "path": "docs/legal/CONSULTA_GESTORIA.md",
+      "directory": "docs/legal",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Legal document. DawSync-specific legal/compliance content (GDPR, privacy, terms)."
+    },
+    {
+      "path": "docs/legal/COOKIE_POLICY.md",
+      "directory": "docs/legal",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Legal document. DawSync-specific legal/compliance content (GDPR, privacy, terms)."
+    },
+    {
+      "path": "docs/legal/COOKIE_POLICY_ES.md",
+      "directory": "docs/legal",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Legal document. DawSync-specific legal/compliance content (GDPR, privacy, terms)."
+    },
+    {
+      "path": "docs/legal/PLAN_LEGAL_ESPANA_UE.md",
+      "directory": "docs/legal",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Legal document. DawSync-specific legal/compliance content (GDPR, privacy, terms)."
+    },
+    {
+      "path": "docs/legal/PRIVACY_POLICY.md",
+      "directory": "docs/legal",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Legal document. DawSync-specific legal/compliance content (GDPR, privacy, terms)."
+    },
+    {
+      "path": "docs/legal/PRIVACY_POLICY_ES.md",
+      "directory": "docs/legal",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Legal document. DawSync-specific legal/compliance content (GDPR, privacy, terms)."
+    },
+    {
+      "path": "docs/legal/README.md",
+      "directory": "docs/legal",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Legal document. DawSync-specific legal/compliance content (GDPR, privacy, terms)."
+    },
+    {
+      "path": "docs/legal/RESUMEN_ASESORAMIENTO.md",
+      "directory": "docs/legal",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Legal document. DawSync-specific legal/compliance content (GDPR, privacy, terms)."
+    },
+    {
+      "path": "docs/legal/TERMS_OF_SERVICE.md",
+      "directory": "docs/legal",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Legal document. DawSync-specific legal/compliance content (GDPR, privacy, terms)."
+    },
+    {
+      "path": "docs/legal/TERMS_OF_SERVICE_ES.md",
+      "directory": "docs/legal",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Legal document. DawSync-specific legal/compliance content (GDPR, privacy, terms)."
+    },
+    {
+      "path": "docs/references/ABLETON_TEST_DATA.md",
+      "directory": "docs/references",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "UNIQUE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Ableton test data reference (1616 lines). Unique domain-specific test fixtures for DAW integration testing."
+    },
+    {
+      "path": "docs/references/ANDROID_2026.md",
+      "directory": "docs/references",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 2,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": false,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [
+        {
+          "tech": "kotlin",
+          "found": "1.7.20",
+          "current": "2.3.10",
+          "stale": true
+        },
+        {
+          "tech": "kotlin",
+          "found": "2.3.0",
+          "current": "2.3.10",
+          "stale": true
+        }
+      ],
+      "notes": "Android 2026 reference. Contains Android platform alignment notes."
+    },
+    {
+      "path": "iosApp/README.md",
+      "directory": "iosApp",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Platform-specific README for iosApp. DawSync-specific platform configuration and setup."
+    },
+    {
+      "path": "iosApp/iosAppTests/README_SWIFTUI_TESTING.md",
+      "directory": "iosApp",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "SwiftUI testing guide for iOS. Contains iOS-specific testing patterns."
+    },
+    {
+      "path": "macosApp/README.md",
+      "directory": "macosApp",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Platform-specific README for macosApp. DawSync-specific platform configuration and setup."
+    },
+    {
+      "path": "reports/web-deployments.md",
+      "directory": "reports",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generated report. DawSync-specific operational data."
+    },
+    {
+      "path": "reports/web-subscribers.md",
+      "directory": "reports",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Generated report. DawSync-specific operational data."
+    },
+    {
+      "path": "web/README.md",
+      "directory": "web",
+      "current_layer": "L2",
+      "recommended_layer": "L2",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": false,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "action": "keep",
+      "l2_override": false,
+      "l2_override_target": null,
+      "overlaps_with": [],
+      "versionRefs": [],
+      "notes": "Platform-specific README for web. DawSync-specific platform configuration and setup."
+    }
+  ],
+  "summary": {
+    "total_files": 223,
+    "by_directory": {
+      ".agents/skills": 8,
+      ".androidcommondoc": 2,
+      ".claude/agent-memory": 3,
+      ".claude/agents": 11,
+      ".claude/commands": 39,
+      "root": 8,
+      "SessionRecorder-VST3": 8,
+      "SnapshotProducer": 5,
+      "appleShared": 1,
+      "docs": 10,
+      "docs/CODEX_AUDITY": 5,
+      "docs/architecture": 3,
+      "docs/architecture/diagrams": 62,
+      "docs/archive": 33,
+      "docs/guides": 6,
+      "docs/legal": 11,
+      "docs/references": 2,
+      "iosApp": 2,
+      "macosApp": 1,
+      "reports": 2,
+      "web": 1
+    },
+    "by_classification": {
+      "ACTIVE": 97,
+      "SUPERSEDED": 12,
+      "UNIQUE": 114
+    },
+    "by_recommended_layer": {
+      "L0": 47,
+      "L1": 0,
+      "L2": 176
+    },
+    "by_action": {
+      "keep": 162,
+      "promote_L0": 47,
+      "promote_L1": 0,
+      "consolidate": 0,
+      "archive": 12,
+      "flag_l2_override": 2
+    },
+    "ai_readiness_avg": 3.93,
+    "l0_promotion_candidates": [
+      {
+        "path": ".agents/skills/accessibility/SKILL.md",
+        "rationale": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+      },
+      {
+        "path": ".agents/skills/accessibility/references/WCAG.md",
+        "rationale": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+      },
+      {
+        "path": ".agents/skills/best-practices/SKILL.md",
+        "rationale": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+      },
+      {
+        "path": ".agents/skills/core-web-vitals/SKILL.md",
+        "rationale": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+      },
+      {
+        "path": ".agents/skills/core-web-vitals/references/LCP.md",
+        "rationale": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+      },
+      {
+        "path": ".agents/skills/performance/SKILL.md",
+        "rationale": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+      },
+      {
+        "path": ".agents/skills/seo/SKILL.md",
+        "rationale": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+      },
+      {
+        "path": ".agents/skills/web-quality-audit/SKILL.md",
+        "rationale": "Generic web quality audit skill (Lighthouse-based). Not DawSync-specific. Candidate for L0 promotion as reusable web quality pattern."
+      },
+      {
+        "path": ".claude/agents/beta-readiness-agent.md",
+        "rationale": "Generic beta readiness agent. Pre-release validation is universal."
+      },
+      {
+        "path": ".claude/agents/cross-platform-validator.md",
+        "rationale": "Generic cross-platform validation agent. KMP platform parity checks are universal."
+      },
+      {
+        "path": ".claude/agents/doc-alignment-agent.md",
+        "rationale": "Generic doc drift detection agent. DawSync-specific file refs could be parameterized."
+      },
+      {
+        "path": ".claude/agents/release-guardian-agent.md",
+        "rationale": "Generic release readiness scanner. Debug flags, dev URLs, placeholder text checks are universal."
+      },
+      {
+        "path": ".claude/agents/test-specialist.md",
+        "rationale": "Generic test review agent. Testing patterns (runTest, fakes over mocks) are universal. DawSync-specific refs can be parameterized."
+      },
+      {
+        "path": ".claude/agents/ui-specialist.md",
+        "rationale": "Generic UI review agent. Compose/SwiftUI patterns are universal."
+      },
+      {
+        "path": ".claude/commands/android-test.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/auto-cover.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/brainstorm.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/bump-version.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/changelog.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/coverage-full.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/coverage.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/doc-check.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/doc-update.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/extract-errors.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/feature-audit.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/metrics.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/nuke-builds.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/package.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/pre-release.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/prioritize.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/roadmap.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/run-clean.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/run.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/sbom-analyze.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/sbom-scan.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/sbom.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/sync-tech-versions.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/sync-versions.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/test-changed.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/test-full-parallel.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/test-full.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/test.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/unlock-tests.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/validate-patterns.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/verify-kmp.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": ".claude/commands/verify-migrations.md",
+        "rationale": "Generic command pattern applicable to any KMP project. Could be templated for L0 with parameterization."
+      },
+      {
+        "path": "docs/CLAUDE_CODE_WORKFLOW.md",
+        "rationale": "Claude Code workflow documentation. Mix of generic AI workflow patterns and DawSync-specific skill references. The workflow pattern itself is L0-promotable."
+      }
+    ],
+    "l1_promotion_candidates": [],
+    "l2_override_candidates": [
+      {
+        "path": ".androidcommondoc/docs/dawsync-domain-patterns.md",
+        "target": "general domain patterns",
+        "rationale": "L1 override doc for DawSync-specific domain patterns (producer/consumer, DAW guardian, freemium). Properly placed as L1 project override."
+      },
+      {
+        "path": "docs/architecture/PATTERNS.md",
+        "target": "offline-first-patterns",
+        "rationale": "DawSync architecture patterns (offline-first, processing modes, backoff). Contains L2-specific offline-first patterns that override generic L0. Flag as L2>L1 override."
+      },
+      {
+        "path": "docs/guides/TESTING.md",
+        "target": "testing-patterns",
+        "rationale": "DawSync testing guide. Contains DawSync-specific testing conventions that override L0 testing-patterns. Flag as L2>L1 override."
+      }
+    ],
+    "claude_md_assessment": {
+      "line_count": 233,
+      "ai_readiness_score": 3,
+      "gaps": [
+        "No YAML frontmatter (missing scope, sources, targets metadata for registry)",
+        "Coverage table data appears to be from 2026-02-27 -- may be stale",
+        "References Compose Multiplatform 1.10.0 vs versions-manifest compose-multiplatform 1.7.x (manifest may need updating or doc references compose-gradle-plugin)",
+        "Wave 1 parallel tracks section may be outdated if tracks have been merged",
+        "No explicit L0/L1 delegation references (Phase 15 will add @import directives)",
+        "Module structure section duplicates README content -- consolidation opportunity",
+        "Missing shared-kmp-libs module version info (which modules and versions consumed)",
+        "No mention of .agents/skills or .claude/commands inventory"
+      ],
+      "phase_15_notes": "DawSync CLAUDE.md is the largest (232 lines, exceeds 150-line target). Phase 15 rewrite should: (1) add frontmatter, (2) extract wave/track info to separate doc, (3) add L0/L1 delegation via @import, (4) consolidate module structure with README, (5) add skills/commands reference. Target: <150 lines with delegation."
+    },
+    "consolidation_recommendations": [
+      "docs/archive/ has 12 superseded files ready for cleanup and 21 files with unique content to preserve",
+      "47 files identified as L0 promotion candidates (generic patterns applicable to any KMP project)",
+      "38 active docs overlap with AndroidCommonDoc L0 patterns -- review for consolidation",
+      "3 L2>L1 override candidates identified where DawSync patterns should take precedence",
+      ".agents/skills/ contains 8 web-quality skills that are fully generic -- strong L0 promotion candidates",
+      "CLAUDE.md exceeds 150-line context budget (232 lines) -- needs restructuring in Phase 15",
+      "6 .claude/agents could be templated as generic L0 agent patterns with parameterization",
+      "32 .claude/commands are generic enough for L0 templating",
+      "docs/guides/TESTING.md contains DawSync-specific overrides that should be flagged as L2>L1 for testing-patterns",
+      "Version discrepancy: DawSync CLAUDE.md references Kotlin 2.3.10, but TECHNOLOGY_CHEATSHEET says 2.3.0 -- internal inconsistency to resolve"
+    ]
+  }
+}

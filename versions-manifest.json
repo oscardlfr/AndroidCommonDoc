@@ -1,0 +1,88 @@
+{
+  "description": "Canonical version manifest for freshness tracking. Single source of truth for dependency versions across L0/L1/L2. monitor_urls here are checked by /monitor-docs independently of doc frontmatters.",
+  "updated": "2026-03-18",
+  "monitor_urls": [
+    {
+      "url": "https://github.com/JetBrains/kotlin/releases",
+      "type": "github-releases",
+      "manifest_key": "kotlin",
+      "tier": 1
+    },
+    {
+      "url": "https://github.com/google/ksp/releases",
+      "type": "github-releases",
+      "manifest_key": "ksp",
+      "tier": 1
+    },
+    {
+      "url": "https://github.com/JetBrains/compose-multiplatform/releases",
+      "type": "github-releases",
+      "manifest_key": "compose-multiplatform",
+      "tier": 1
+    },
+    {
+      "url": "https://github.com/Kotlin/kotlinx.coroutines/releases",
+      "type": "github-releases",
+      "manifest_key": "kotlinx-coroutines",
+      "tier": 1
+    },
+    {
+      "url": "https://github.com/Kotlin/kotlinx-kover/releases",
+      "type": "github-releases",
+      "manifest_key": "kover",
+      "tier": 2
+    },
+    {
+      "url": "https://mvnrepository.com/artifact/com.android.tools.build/gradle",
+      "type": "maven-central",
+      "manifest_key": "agp",
+      "tier": 1
+    }
+  ],
+  "coupled_versions": {
+    "ksp": ["kotlin"]
+  },
+  "profiles": {
+    "kmp": {
+      "description": "Kotlin Multiplatform projects (Android + Desktop + iOS + macOS). Requires AGP 9.0+.",
+      "agp": "9.0.0",
+      "kotlin": "2.3.20",
+      "compose-multiplatform": "1.10.0",
+      "compose-gradle-plugin": "1.10.0"
+    },
+    "android-only": {
+      "description": "Android-only projects using com.android.library. Compatible with AGP 8.x — no migration required.",
+      "agp": "8.9.1",
+      "kotlin": "2.3.20",
+      "agp_note": "AGP 8.x uses com.android.library plugin and android {} DSL block. flat-module-names rule does NOT apply (AGP 9+ bug only)."
+    }
+  },
+  "versions": {
+    "kotlin": "2.3.20",
+    "agp": "9.0.0",
+    "agp-android-only": "8.9.1",
+    "ksp": "2.3.20-2.0.1",
+    "compose-multiplatform": "1.10.0",
+    "koin": "4.1.1",
+    "kotlinx-coroutines": "1.10.2",
+    "turbine": "1.2.1",
+    "kover": "0.9.4",
+    "mockk": "1.14.7",
+    "junit5": "6.0.3",
+    "kotlinx-serialization": "1.10.0",
+    "compose-gradle-plugin": "1.10.0",
+    "detekt": "2.0.0-alpha.2",
+    "compose-rules": "0.5.6"
+  },
+  "version_notes": {
+    "agp": "KMP projects only. Android-only projects use agp-android-only (8.x) — do not force migration to 9.0.",
+    "agp-android-only": "com.android.library projects on AGP 8.x. Compatible with KMP L0 patterns except flat-module-names and KmpLibraryConventionPlugin — use AndroidLibraryConventionPlugin instead.",
+    "ksp": "Kotlin Symbol Processing. Version format: <kotlin-version>-<ksp-release>. Must match kotlin version exactly — always update together. Listed in coupled_versions.",
+    "compose-multiplatform": "JetBrains Compose Multiplatform plugin (org.jetbrains.compose). KMP only.",
+    "compose-gradle-plugin": "Google Compose Compiler Gradle plugin (org.jetbrains.kotlin.plugin.compose). In KMP, the Kotlin plugin version drives the compiler; this entry tracks the Compose compiler integration plugin version.",
+    "turbine": "Testing library for Kotlin Flows (app.cash.turbine). Not in KMP convention plugin — add to test dependencies manually.",
+    "junit5": "JUnit Jupiter (org.junit.jupiter). Requires useJUnitPlatform() in test config — add to AndroidLibraryConventionPlugin for consistency.",
+    "kotlinx-serialization": "kotlinx-serialization-json (org.jetbrains.kotlinx:kotlinx-serialization-json). Pair with org.jetbrains.kotlin.plugin.serialization Gradle plugin."
+  },
+  "wildcard_note": "Entries with 'x' (e.g., 1.7.x) match any patch version. Compare major.minor only for wildcard entries."
+}

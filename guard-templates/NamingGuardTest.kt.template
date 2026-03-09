@@ -1,0 +1,115 @@
+package __ROOT_PACKAGE__.konsist.guard
+
+import com.lemonappdev.konsist.api.ext.list.withNameEndingWith
+import com.lemonappdev.konsist.api.ext.list.withPackage
+import com.lemonappdev.konsist.api.verify.assertTrue
+import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Test
+
+/**
+ * Naming convention guard tests for ViewModel, UseCase, and Repository suffixes.
+ *
+ * Enforces that classes follow consistent naming patterns across the project:
+ * - Classes in usecase packages must end with "UseCase"
+ * - Classes ending with "ViewModel" must reside in feature or app-module packages
+ * - Classes ending with "Repository" must reside in data, domain, or app-module packages
+ *
+ * App modules (androidApp, desktopApp, etc.) have their own package hierarchies
+ * (e.g., root.desktop.ui, root.android.ui) which are valid locations for
+ * platform-specific ViewModels and Repositories.
+ *
+ * Generated from AndroidCommonDoc guard-templates.
+ * Root package: __ROOT_PACKAGE__
+ */
+class NamingGuardTest {
+
+    private val scope = GuardScopeFactory.projectScope()
+    private val root = "__ROOT_PACKAGE__"
+
+    /**
+     * App module package prefixes where platform-specific ViewModels and
+     * Repositories are allowed (e.g., desktopApp, androidApp).
+     * Add entries here for each app module in your project.
+     */
+    private val appModulePackages = listOf(
+        "$root.desktop",
+        "$root.android",
+    )
+
+    @Test
+    fun `classes in domain usecase package end with UseCase`() {
+        val usecaseClasses = scope
+            .classes()
+            .withPackage("$root..usecase..")
+            .toList()
+
+        assumeTrue(usecaseClasses.isNotEmpty()) {
+            "No classes found in usecase packages -- skipping"
+        }
+
+        scope.classes()
+            .withPackage("$root..usecase..")
+            .assertTrue(
+                additionalMessage = "Classes in a 'usecase' package must end with 'UseCase'. " +
+                    "Rename the class or move it to the correct package."
+            ) { it.name.endsWith("UseCase") }
+    }
+
+    @Test
+    fun `classes ending with ViewModel reside in feature or app-module package`() {
+        val viewModels = scope
+            .classes()
+            .withNameEndingWith("ViewModel")
+            .toList()
+
+        assumeTrue(viewModels.isNotEmpty()) {
+            "No ViewModel classes found -- skipping"
+        }
+
+        viewModels.forEach { vm ->
+            val inFeature = vm.resideInPackage("$root.feature..")
+            val inAppModule = appModulePackages.any { pkg ->
+                vm.resideInPackage("$pkg..")
+            }
+
+            assertThat(inFeature || inAppModule)
+                .withFailMessage(
+                    "ViewModel '${vm.name}' resides in '${vm.packagee?.name}' " +
+                        "but should be in a '$root.feature..' or app-module package " +
+                        "(${appModulePackages.joinToString()}). " +
+                        "ViewModels belong in feature modules or platform-specific app modules."
+                )
+                .isTrue()
+        }
+    }
+
+    @Test
+    fun `classes ending with Repository reside in data, domain, or app-module package`() {
+        val repositories = scope
+            .classes()
+            .withNameEndingWith("Repository")
+            .toList()
+
+        assumeTrue(repositories.isNotEmpty()) {
+            "No Repository classes found -- skipping"
+        }
+
+        repositories.forEach { repo ->
+            val inData = repo.resideInPackage("$root.core.data..")
+            val inDomain = repo.resideInPackage("$root.core.domain..")
+            val inAppModule = appModulePackages.any { pkg ->
+                repo.resideInPackage("$pkg..")
+            }
+
+            assertThat(inData || inDomain || inAppModule)
+                .withFailMessage(
+                    "Repository '${repo.name}' resides in '${repo.packagee?.name}' " +
+                        "but should be in '$root.core.data..', '$root.core.domain..', " +
+                        "or an app-module package (${appModulePackages.joinToString()}). " +
+                        "Repository interfaces belong in Domain, implementations in Data or app modules."
+                )
+                .isTrue()
+        }
+    }
+}

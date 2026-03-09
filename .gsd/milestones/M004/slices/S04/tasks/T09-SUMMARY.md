@@ -1,0 +1,167 @@
+---
+id: T09
+parent: S04
+milestone: M004
+provides: []
+requires: []
+affects: []
+key_files: []
+key_decisions: []
+patterns_established: []
+observability_surfaces: []
+drill_down_paths: []
+duration: 
+verification_result: passed
+completed_at: 
+blocker_discovered: false
+---
+# T09: 14.2-docs-content-quality 09
+
+**# Phase 14.2 Plan 09: Quality Gate Summary**
+
+## What Happened
+
+# Phase 14.2 Plan 09: Quality Gate Summary
+
+**Cross-project validation (416/416 tests, 0 errors), vault re-synced (317 files, 0 orphans), wikilink injection fixed, human-approved Obsidian navigation with layer graph coloring**
+
+## Performance
+
+- **Duration:** ~22 min execution (split across checkpoint: Task 1 ~7min auto, Task 2 ~15min checkpoint fixes)
+- **Started:** 2026-03-15T12:07:49Z
+- **Completed:** 2026-03-15
+- **Tasks:** 2 (1 auto + 1 human-verify checkpoint)
+- **Files modified:** 11 in AndroidCommonDoc + cross-repo fixes in shared-kmp-libs, DawSync, DawSyncWeb
+
+## Accomplishments
+
+- Extended doc-structure integration tests with 9 new Phase 14.2 quality checks covering L0/L1/L2 size limits, l0_refs resolution, and frontmatter completeness (28 total tests)
+- Trimmed 5 L0 hub docs to under 100 lines: viewmodel-state-patterns (175->94), testing-patterns (108->71), offline-first-sync (114->80), compose-resources-patterns (102->65), offline-first-patterns (101->88)
+- Fixed wikilink injection bugs: markdown links now protected as safe zones; hyphenated slug boundary matching prevents partial matches
+- Reduced MOC pages from 7 to 4 (removed noisy By Project, By Layer, By Target Platform)
+- Fixed L0 Reference blocks in L1/L2 docs to use [[wikilinks]] instead of broken relative path links (5 shared-kmp-libs + 8 DawSync docs)
+- Added complete frontmatter and Parent Project Reference blocks to 16 DawSyncWeb docs
+- Vault re-synced: 328 sources, 317 files, 0 orphans, 0 errors (L0: 130, L1: 29, L2: 158)
+- Full MCP test suite: 416/416 passing (up from 407 before this plan)
+- Human approved Obsidian vault with layer-based graph coloring and category navigation
+
+## Task Commits
+
+Each task was committed atomically:
+
+1. **Task 1: Cross-project validation + hub doc fixes + vault re-sync** - `b7fe298` (feat)
+2. **Task 2 (checkpoint fixes during human verification):**
+   - `720f54b` (fix) - Protect markdown links from wikilink injection, remove noisy MOCs
+   - `da6a237` (fix) - Fix wikilink boundary matching for hyphenated slugs
+
+**Cross-repo commits during checkpoint:**
+   - shared-kmp-libs `f8b8f95` (fix) - Fix L0 reference blocks to use wikilinks
+   - DawSync `e20d57b2` (fix) - Correct l0_refs slug, fix L0 reference blocks
+   - DawSync `90c4231e` (fix) - Fix L0 reference blocks in 8 docs
+   - DawSyncWeb `61376a3` (feat) - Add frontmatter and references to 16 docs
+
+## Files Created/Modified
+
+- `mcp-server/tests/integration/doc-structure.test.ts` - 9 new Phase 14.2 quality check tests (28 total)
+- `mcp-server/src/vault/wikilink-generator.ts` - Markdown link safe zone protection + slug boundary matching
+- `mcp-server/src/vault/moc-generator.ts` - Reduced from 7 to 4 MOC pages
+- `mcp-server/tests/integration/vault-sync.test.ts` - Updated MOC count assertions
+- `mcp-server/tests/unit/vault/moc-generator.test.ts` - Updated MOC generation test expectations
+- `docs/compose/compose-resources-patterns.md` - Trimmed hub from 102 to 65 lines
+- `docs/offline-first/offline-first-patterns.md` - Trimmed hub from 101 to 88 lines
+- `docs/offline-first/offline-first-sync.md` - Trimmed hub from 114 to 80 lines (conflict code moved to sub-doc)
+- `docs/offline-first/offline-first-architecture-conflict.md` - Received conflict resolution code from sync hub
+- `docs/testing/testing-patterns.md` - Trimmed hub from 108 to 71 lines
+- `docs/ui/viewmodel-state-patterns.md` - Trimmed hub from 175 to 94 lines
+
+## Decisions Made
+
+- Hub doc trim strategy: moved redundant code examples to existing sub-docs (zero content loss) rather than creating new sub-docs
+- Markdown links in docs protected from wikilink injection using safe zone pattern (prevents `[text](url)` from getting `[[wikilinked]]`)
+- Hyphenated slug boundary matching uses word-boundary regex to prevent `gradle-patterns` from matching inside `gradle-patterns-dependencies`
+- Noisy MOCs (By Project, By Layer, By Target Platform) removed -- 4 MOCs remain (Home, All Patterns, All Skills, All Decisions)
+- L0 Reference blocks in L1/L2 docs converted to [[wikilinks]] for proper Obsidian graph connectivity
+
+## Deviations from Plan
+
+### Auto-fixed Issues
+
+**1. [Rule 1 - Bug] 5 L0 hub docs exceeded 100-line limit**
+- **Found during:** Task 1 (integration test for hub size)
+- **Issue:** viewmodel-state-patterns (175), testing-patterns (108), offline-first-sync (114), compose-resources-patterns (102), offline-first-patterns (101) all exceeded the 100-line hub limit
+- **Fix:** Trimmed all 5 to under 100 lines by moving redundant quick-reference code to existing sub-docs
+- **Files modified:** 5 L0 hub docs + offline-first-architecture-conflict.md (received code)
+- **Committed in:** `b7fe298`
+
+**2. [Rule 1 - Bug] DawSync NAVIGATION.md had invalid l0_ref**
+- **Found during:** Task 1 (l0_refs resolution test)
+- **Issue:** l0_refs referenced `navigation-patterns` but the actual L0 slug is `navigation3-patterns`
+- **Fix:** Corrected frontmatter and inline reference
+- **Files modified:** DawSync/docs/guides/NAVIGATION.md
+- **Committed in:** DawSync `e20d57b2`
+
+**3. [Rule 1 - Bug] Wikilink injection corrupted markdown links**
+- **Found during:** Task 2 (human verification)
+- **Issue:** Wikilink injector was replacing text inside existing markdown `[text](url)` links, creating broken `[[wikilink]]` inside link text
+- **Fix:** Added safe zone detection to skip markdown links, code blocks, and frontmatter during injection
+- **Files modified:** mcp-server/src/vault/wikilink-generator.ts
+- **Committed in:** `720f54b`
+
+**4. [Rule 1 - Bug] Hyphenated slug boundary matching allowed partial matches**
+- **Found during:** Task 2 (human verification)
+- **Issue:** Slug `gradle-patterns` was matching inside `gradle-patterns-dependencies`, creating nested wikilinks
+- **Fix:** Added word-boundary regex matching for hyphenated slugs
+- **Files modified:** mcp-server/src/vault/wikilink-generator.ts
+- **Committed in:** `da6a237`
+
+**5. [Rule 2 - Missing Critical] L0 Reference blocks used broken relative paths**
+- **Found during:** Task 2 (human verification)
+- **Issue:** L1/L2 docs had L0 Reference blocks with relative markdown path links that don't work in Obsidian vault context
+- **Fix:** Converted to [[wikilinks]] which work correctly in Obsidian
+- **Files modified:** 5 shared-kmp-libs docs, 8 DawSync docs
+- **Committed in:** shared-kmp-libs `f8b8f95`, DawSync `90c4231e`
+
+**6. [Rule 2 - Missing Critical] MOC pages too noisy**
+- **Found during:** Task 2 (human verification)
+- **Issue:** 7 MOC pages created clutter; By Project, By Layer, By Target Platform added little navigation value
+- **Fix:** Reduced to 4 MOCs (Home, All Patterns, All Skills, All Decisions)
+- **Files modified:** moc-generator.ts, related tests
+- **Committed in:** `720f54b`
+
+---
+
+**Total deviations:** 6 auto-fixed (4 bugs, 2 missing critical)
+**Impact on plan:** All fixes necessary for vault correctness and Obsidian usability. No scope creep.
+
+## Issues Encountered
+
+- tsx runner silently produces no output on Windows for vault sync -- used temp script file with npx tsx
+- Multiple frontmatter blocks in STATE.md from concurrent plan executions (plans 06/07/08 ran in parallel waves)
+- 18 pre-existing WakeTheCave hybrid wikilink patterns found during audit but out of scope (WakeTheCave is read-only)
+
+## User Setup Required
+
+None - no external service configuration required.
+
+## Next Phase Readiness
+
+- Phase 14.2 fully complete -- all 9 plans executed, QUAL-08 quality gate passed
+- 416/416 tests passing across the entire MCP test suite
+- Obsidian vault re-synced with corrected wikilinks, layer coloring, and clean 4-MOC navigation
+- Documentation across all 3 projects validated: 0 errors, all size limits met, all l0_refs resolve
+- Ready for Phase 15 (CLAUDE.md Ecosystem Alignment)
+- Known remaining items:
+  - verify-kmp-packages script times out on DawSync (pre-existing, tracked)
+  - 18 WakeTheCave hybrid wikilink patterns (out of scope, read-only project)
+
+## Self-Check: PASSED
+
+- All 11 key files: FOUND
+- Commit b7fe298 (Task 1): FOUND
+- Commit 720f54b (checkpoint fix 1): FOUND
+- Commit da6a237 (checkpoint fix 2): FOUND
+- Test suite: 416/416 passed (0 failures)
+
+---
+*Phase: 14.2-docs-content-quality*
+*Completed: 2026-03-15*

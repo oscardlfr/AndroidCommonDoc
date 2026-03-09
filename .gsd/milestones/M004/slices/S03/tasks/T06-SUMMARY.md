@@ -1,0 +1,167 @@
+---
+id: T06
+parent: S03
+milestone: M004
+provides: []
+requires: []
+affects: []
+key_files: []
+key_decisions: []
+patterns_established: []
+observability_surfaces: []
+drill_down_paths: []
+duration: 
+verification_result: passed
+completed_at: 
+blocker_discovered: false
+---
+# T06: 14.1-docs-subdirectory-reorganization 06
+
+**# Phase 14.1 Plan 06: Cross-Layer Validation Summary**
+
+## What Happened
+
+# Phase 14.1 Plan 06: Cross-Layer Validation Summary
+
+**15 integration tests, 387/387 test suite green, vault re-synced with 255 files and 0 orphans, human-approved Obsidian navigation with category coloring**
+
+## Performance
+
+- **Duration:** ~8 min (split across checkpoint: Task 1 automated, Task 2 human verification)
+- **Started:** 2026-03-14T23:38:55Z
+- **Completed:** 2026-03-15
+- **Tasks:** 2 (1 auto + 1 human-verify checkpoint)
+- **Files modified:** 10
+
+## Accomplishments
+
+- Created 15 doc-structure integration tests covering: L0 scanner discovery (3), category filter (3), cross-project discovery (3), validate-doc-structure across all 3 projects (4), scanner backward compatibility (2)
+- Fixed 3 enterprise-integration test failures caused by Plan 02's archive move
+- Fixed DawSync docs/README.md spurious category frontmatter causing validation error
+- Vault re-synced with init mode: 255 files written, 0 errors, 0 orphans
+- vault-status healthy: L0=120, L1=26, L2=107, configured=true
+- Fixed 4 pre-existing test failures in sync-vault.test.ts and vault-status.test.ts during human verification
+- Added Obsidian graph coloring by category with correct RGB integer format
+- Added deriveCategory() path inference for docs without explicit category frontmatter
+- Protected vault-config.json from integration test corruption
+- Full MCP test suite: 387/387 passing (0 failures)
+- Human approved Obsidian vault navigation, category grouping, and graph view
+
+## Task Commits
+
+Each task was committed atomically:
+
+1. **Task 1: Cross-project validation + vault re-sync + integration tests** - `8f9f202` (feat)
+2. **Task 2 (checkpoint fixes during human verification):**
+   - `317b85c` (fix) - Category tags for Obsidian graph coloring and orphan cleanup
+   - `ec2a4fe` (fix) - 4 pre-existing test failures in sync-vault and vault-status
+   - `3a21b9e` (fix) - Merge colorGroups into existing Obsidian graph.json settings
+   - `6d1254b` (fix) - Obsidian rgb integer format for graph colorGroups
+   - `e6b4f56` (fix) - Infer category from path, protect vault-config from test corruption
+
+## Files Created/Modified
+
+- `mcp-server/tests/integration/doc-structure.test.ts` - 15 new integration tests for doc structure validation
+- `mcp-server/tests/integration/registry-integration.test.ts` - Fixed enterprise-integration tests (archived)
+- `mcp-server/tests/unit/resources/docs.test.ts` - Fixed enterprise-integration resource test (archived)
+- `mcp-server/src/vault/vault-writer.ts` - Obsidian graph.json merge, RGB integer format for colorGroups
+- `mcp-server/src/vault/sync-engine.ts` - Skip saveVaultConfig when configOverride present
+- `mcp-server/src/vault/moc-generator.ts` - deriveCategory() path inference for uncategorized docs
+- `mcp-server/src/vault/tag-generator.ts` - Category-based tag generation for graph coloring
+- `mcp-server/src/vault/transformer.ts` - Category field passthrough updates
+- `mcp-server/tests/unit/tools/sync-vault.test.ts` - Fixed mock structure and snake_case keys
+- `mcp-server/tests/unit/tools/vault-status.test.ts` - Fixed getVaultStatus mock assertions
+
+## Decisions Made
+
+- Integration tests use direct sibling path resolution (via `getToolkitRoot()` parent) rather than `discoverProjects()` for L1/L2 -- discoverProjects only finds projects that reference AndroidCommonDoc via includeBuild
+- DawSync L2 docs validated via validate-doc-structure (category alignment) rather than scanner (which requires scope/sources/targets frontmatter that L2 domain docs don't have)
+- Content quality issues (sub-doc pattern not applied everywhere, L1/L2 content duplication, missing standard YAML frontmatter) deferred to Phase 14.2 rather than addressed in this quality gate
+- Graph colorGroups use Obsidian's native integer RGB format and merge into existing settings rather than overwriting
+
+## Deviations from Plan
+
+### Auto-fixed Issues
+
+**1. [Rule 1 - Bug] DawSync docs/README.md spurious category frontmatter**
+- **Found during:** Task 1 (validate-doc-structure cross-project validation)
+- **Issue:** DawSync README.md at docs root had `category: guides` frontmatter, causing validator to report error (root-level file with category should be in subdirectory)
+- **Fix:** Removed category frontmatter from root README.md
+- **Files modified:** DawSync/docs/README.md
+- **Committed in:** DawSync repo `2e0da900`, AndroidCommonDoc `8f9f202`
+
+**2. [Rule 1 - Bug] Enterprise-integration tests failing after archive move**
+- **Found during:** Task 1 (test suite verification)
+- **Issue:** 3 tests referenced enterprise-integration-proposal which was moved to archive/ in Plan 02 -- scanner skips archive/ so resource no longer registered
+- **Fix:** Updated tests to expect archival behavior (resource not found)
+- **Files modified:** registry-integration.test.ts, docs.test.ts
+- **Committed in:** `8f9f202`
+
+**3. [Rule 3 - Blocking] vault-config.json corrupted by integration tests**
+- **Found during:** Task 1 (vault re-sync)
+- **Issue:** vault-config.json pointed to temp test directories, not real vault
+- **Fix:** Restored config with correct paths; later protected via sync-engine fix to skip save on configOverride
+- **Files modified:** ~/.androidcommondoc/vault-config.json, sync-engine.ts
+- **Committed in:** `8f9f202` (config), `e6b4f56` (protection)
+
+**4. [Rule 1 - Bug] 4 pre-existing test failures in sync-vault and vault-status**
+- **Found during:** Task 2 checkpoint (human verification)
+- **Issue:** sync-vault tests expected camelCase keys but tool returned snake_case; vault-status mock assertions didn't match actual getVaultStatus signature
+- **Fix:** Updated test mocks and assertions to match actual tool response format
+- **Files modified:** sync-vault.test.ts, vault-status.test.ts
+- **Committed in:** `ec2a4fe`
+
+**5. [Rule 1 - Bug] Obsidian graph colorGroups format incorrect**
+- **Found during:** Task 2 checkpoint (human verification)
+- **Issue:** graph.json used {r,g,b} object format but Obsidian expects {rgb: integer}; also overwrote user's existing graph settings
+- **Fix:** Used integer RGB encoding; merged colorGroups into existing graph.json instead of overwriting
+- **Files modified:** vault-writer.ts
+- **Committed in:** `6d1254b`, `3a21b9e`
+
+**6. [Rule 2 - Missing Critical] deriveCategory for uncategorized vault entries**
+- **Found during:** Task 2 checkpoint (human verification)
+- **Issue:** Many vault entries lacked category in frontmatter, creating large "Uncategorized" sections in MOCs
+- **Fix:** Added deriveCategory() that infers category from file path subdirectory name as fallback
+- **Files modified:** moc-generator.ts
+- **Committed in:** `e6b4f56`
+
+---
+
+**Total deviations:** 6 auto-fixed (4 bugs, 1 blocking, 1 missing critical)
+**Impact on plan:** All fixes necessary for correctness. Fixes 4-6 discovered during human verification checkpoint and resolved before approval. Content quality improvements deferred to Phase 14.2.
+
+## Issues Encountered
+
+- tsx runner silently produces no output on Windows -- used vitest for validation and temp script files for vault operations
+- shared-kmp-libs only has 17 scanner entries (not 27) because not all docs have full scope/sources/targets metadata
+- DawSync docs have category-only frontmatter (no scope/sources/targets), so scanner returns 0 entries but validate-doc-structure works correctly
+
+## User Setup Required
+
+None - no external service configuration required.
+
+## Next Phase Readiness
+
+- Phase 14.1 fully complete -- all 6 plans executed, all REORG requirements validated
+- 387/387 tests passing across the entire MCP test suite
+- Obsidian vault re-synced with category structure, graph coloring, and clean MOCs
+- Content quality improvements identified and deferred to Phase 14.2:
+  - Sub-document pattern not applied to all hub docs
+  - L1/L2 docs duplicate L0 content instead of referencing
+  - Many docs missing standard YAML frontmatter
+- Ready for Phase 15 (CLAUDE.md Ecosystem Alignment)
+
+## Self-Check: PASSED
+
+- All 10 key files: FOUND
+- Commit 8f9f202 (Task 1): FOUND
+- Commit 317b85c (checkpoint fix 1): FOUND
+- Commit ec2a4fe (checkpoint fix 2): FOUND
+- Commit 3a21b9e (checkpoint fix 3): FOUND
+- Commit 6d1254b (checkpoint fix 4): FOUND
+- Commit e6b4f56 (checkpoint fix 5): FOUND
+- Test suite: 387/387 passed (0 failures)
+
+---
+*Phase: 14.1-docs-subdirectory-reorganization*
+*Completed: 2026-03-15*

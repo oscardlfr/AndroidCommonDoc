@@ -1,0 +1,913 @@
+{
+  "project": "AndroidCommonDoc",
+  "path": "C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc",
+  "layer": "L0",
+  "audit_mode": "full",
+  "generated": "2026-03-14T17:55:00Z",
+  "file_count": 23,
+  "files": [
+    {
+      "path": "docs/compose-resources-patterns.md",
+      "slug": "compose-resources-patterns",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://github.com/JetBrains/compose-multiplatform/releases"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "Hub doc linking to 3 sub-docs (configuration, usage, troubleshooting). Well-structured with core principles and sub-document index. 95 lines -- compact and effective."
+    },
+    {
+      "path": "docs/compose-resources-configuration.md",
+      "slug": "compose-resources-configuration",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://github.com/JetBrains/compose-multiplatform/releases"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "276 lines -- approaches section size limit. Covers generateResClass, multi-module setup, critical path rules."
+    },
+    {
+      "path": "docs/compose-resources-troubleshooting.md",
+      "slug": "compose-resources-troubleshooting",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://github.com/JetBrains/compose-multiplatform/releases"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "204 lines. Anti-patterns, common issues, and fixes with root cause analysis. Actionable troubleshooting guide."
+    },
+    {
+      "path": "docs/compose-resources-usage.md",
+      "slug": "compose-resources-usage",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://github.com/JetBrains/compose-multiplatform/releases"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "208 lines. Covers string resources, image loading, font loading, dual resource system, UiText pattern. Comprehensive."
+    },
+    {
+      "path": "docs/enterprise-integration-proposal.md",
+      "slug": "enterprise-integration",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [
+        "Proposal document rather than pattern doc -- not actionable for code generation",
+        "Duplicate content with propuesta-integracion-enterprise.md (Spanish version)"
+      ],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "337 lines. Business proposal, not a coding pattern. Low AI-readiness for code generation agents. Has a Spanish duplicate."
+    },
+    {
+      "path": "docs/propuesta-integracion-enterprise.md",
+      "slug": "propuesta-integracion-enterprise",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": false
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [
+        "Spanish duplicate of enterprise-integration-proposal.md",
+        "Should be consolidated -- keep one language version, remove or archive the other"
+      ],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "341 lines. Spanish version of enterprise proposal. Consolidation candidate -- one language version sufficient."
+    },
+    {
+      "path": "docs/error-handling-patterns.md",
+      "slug": "error-handling-patterns",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": true,
+      "suggested_monitor_urls": [],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": true,
+        "has_rules": true,
+        "missing_fields": []
+      },
+      "completeness_gaps": [
+        "441 lines -- exceeds 150-line section limit; candidate for splitting into sub-docs"
+      ],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "Comprehensive error handling patterns with Result<T>, DomainException, CancellationException. Has monitor_urls and rules. 441 lines -- too long, should be split like testing-patterns and viewmodel-state-patterns."
+    },
+    {
+      "path": "docs/gradle-patterns.md",
+      "slug": "gradle-patterns",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": true,
+      "suggested_monitor_urls": [],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": true,
+        "missing_fields": []
+      },
+      "completeness_gaps": [
+        "398 lines -- exceeds 150-line section limit; candidate for splitting"
+      ],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "Covers version catalog, convention plugins, composite builds, flat module naming. Has monitor_urls. 398 lines -- candidate for splitting."
+    },
+    {
+      "path": "docs/kmp-architecture.md",
+      "slug": "kmp-architecture",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": true,
+      "suggested_monitor_urls": [],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": true,
+        "has_rules": true,
+        "missing_fields": []
+      },
+      "completeness_gaps": [
+        "341 lines -- exceeds 150-line section limit; candidate for splitting"
+      ],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "Source set hierarchy, architecture layers, platform-specific patterns. Has monitor_urls and rules. Core L0 doc."
+    },
+    {
+      "path": "docs/offline-first-patterns.md",
+      "slug": "offline-first-patterns",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://developer.android.com/topic/architecture/data-layer/offline-first"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "Hub doc with 3 sub-docs (architecture, sync, caching). 94 lines -- excellent token efficiency. Well-organized."
+    },
+    {
+      "path": "docs/offline-first-architecture.md",
+      "slug": "offline-first-architecture",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://developer.android.com/topic/architecture/data-layer/offline-first"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [
+        "Missing KMP-specific database solution patterns (SQLDelight instead of Room for multiplatform)"
+      ],
+      "accuracy_issues": [
+        "References Room in sources but Room is Android-only; KMP projects need SQLDelight or other multiplatform DB"
+      ],
+      "versionRefs": [],
+      "notes": "330 lines. Covers data layer design, repository pattern, outbox pattern. Room reference in sources may be misleading for KMP context."
+    },
+    {
+      "path": "docs/offline-first-sync.md",
+      "slug": "offline-first-sync",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://developer.android.com/topic/architecture/data-layer/offline-first"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "286 lines. Conflict resolution, sync strategies, background sync. Covers WorkManager (Android) and BGTaskScheduler (iOS)."
+    },
+    {
+      "path": "docs/offline-first-caching.md",
+      "slug": "offline-first-caching",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://developer.android.com/topic/architecture/data-layer/offline-first"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "170 lines. Testing strategies and UI patterns for offline state. Compact and focused."
+    },
+    {
+      "path": "docs/resource-management-patterns.md",
+      "slug": "resource-management-patterns",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://developer.android.com/topic/performance/memory"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [
+        "462 lines -- significantly exceeds 150-line section limit; should be split",
+        "Focus-based resource management is niche (Compose Desktop + external heavyweight apps) -- may be too specialized for L0"
+      ],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "462 lines. Focus-based resource management for Desktop apps coexisting with heavyweight external processes. Somewhat niche for generic L0 -- could be reframed as general lifecycle/memory management."
+    },
+    {
+      "path": "docs/testing-patterns.md",
+      "slug": "testing-patterns",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": true,
+      "suggested_monitor_urls": [],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": true,
+        "missing_fields": []
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [
+        { "tech": "kotlinx-coroutines", "found": "1.10.2", "current": "1.10.2", "stale": false }
+      ],
+      "notes": "Hub doc with 3 sub-docs (coroutines, fakes, coverage). 105 lines -- excellent. Has monitor_urls. Model doc structure."
+    },
+    {
+      "path": "docs/testing-patterns-coroutines.md",
+      "slug": "testing-patterns-coroutines",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://github.com/Kotlin/kotlinx.coroutines/releases"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [
+        "497 lines -- significantly exceeds limit; could split scheduler testing into its own sub-doc"
+      ],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "497 lines. runTest, TestScope, StateFlow collection, scheduler testing, common pitfalls. Very comprehensive but too long."
+    },
+    {
+      "path": "docs/testing-patterns-fakes.md",
+      "slug": "testing-patterns-fakes",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://github.com/mockk/mockk/releases"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "145 lines. Fake patterns: FakeRepository, FakeClock, why fakes over mocks. Compact, actionable."
+    },
+    {
+      "path": "docs/testing-patterns-coverage.md",
+      "slug": "testing-patterns-coverage",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://github.com/Kotlin/kotlinx-kover/releases"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "127 lines. Coverage targets by layer, platform-specific tests, Kover config. Compact and effective."
+    },
+    {
+      "path": "docs/ui-screen-patterns.md",
+      "slug": "ui-screen-patterns",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 3,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://github.com/JetBrains/compose-multiplatform/releases",
+        "https://developer.android.com/develop/ui/compose"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [
+        "651 lines -- extremely long; needs splitting into sub-docs (screen structure, navigation integration, component patterns)",
+        "Missing Navigation3 route serialization patterns that WakeTheCave uses extensively"
+      ],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "651 lines -- longest doc in the collection. Screen composition, navigation, component patterns. Needs urgent splitting."
+    },
+    {
+      "path": "docs/viewmodel-state-patterns.md",
+      "slug": "viewmodel-state-patterns",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": true,
+      "suggested_monitor_urls": [],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": true,
+        "has_rules": true,
+        "missing_fields": []
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "Hub doc with 3 sub-docs (state-management, events, navigation). Has monitor_urls and rules. 162 lines. Model hub doc."
+    },
+    {
+      "path": "docs/viewmodel-state-management.md",
+      "slug": "viewmodel-state-management",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": false,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://github.com/androidx/androidx/releases"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "273 lines. Sealed interface UiState, StateFlow, stateIn, error handling, UiText. Comprehensive sub-doc."
+    },
+    {
+      "path": "docs/viewmodel-events.md",
+      "slug": "viewmodel-events",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 5,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://github.com/Kotlin/kotlinx.coroutines/releases"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "166 lines. MutableSharedFlow for ephemeral events, why not Channel. Compact and decisive."
+    },
+    {
+      "path": "docs/viewmodel-navigation.md",
+      "slug": "viewmodel-navigation",
+      "current_layer": "L0",
+      "recommended_layer": "L0",
+      "ai_readiness_score": 4,
+      "ai_readiness_breakdown": {
+        "has_frontmatter": true,
+        "section_size_ok": true,
+        "proper_subdivision": true,
+        "no_stale_refs": true,
+        "actionable_content": true
+      },
+      "classification": "ACTIVE",
+      "has_monitor_urls": false,
+      "suggested_monitor_urls": [
+        "https://developer.android.com/guide/navigation",
+        "https://github.com/androidx/androidx/releases"
+      ],
+      "frontmatter_completeness": {
+        "has_scope": true,
+        "has_sources": true,
+        "has_targets": true,
+        "has_version": true,
+        "has_last_updated": true,
+        "has_description": true,
+        "has_slug": true,
+        "has_status": true,
+        "has_monitor_urls": false,
+        "missing_fields": ["monitor_urls"]
+      },
+      "completeness_gaps": [
+        "Missing Navigation3 @Serializable route patterns (referenced in CLAUDE.md as primary navigation approach)",
+        "Missing SwiftUI NavigationStack patterns for iOS/macOS",
+        "Only 89 lines -- could be more comprehensive on KMP-specific navigation strategies"
+      ],
+      "accuracy_issues": [],
+      "versionRefs": [],
+      "notes": "89 lines. State-driven navigation, why not Channel. Short -- Navigation3 patterns are a significant gap given CLAUDE.md references them."
+    }
+  ],
+  "summary": {
+    "total_files": 23,
+    "ai_readiness_avg": 4.3,
+    "docs_with_monitor_urls": 5,
+    "docs_without_monitor_urls": 18,
+    "completeness_gaps_count": 13,
+    "accuracy_issues_count": 2,
+    "frontmatter_quality": {
+      "all_have_scope": true,
+      "all_have_sources": true,
+      "all_have_targets": true,
+      "all_have_version": true,
+      "all_have_last_updated": true,
+      "all_have_description": true,
+      "all_have_slug": true,
+      "all_have_status": true,
+      "docs_with_rules": 3,
+      "docs_needing_monitor_urls": 18
+    },
+    "size_analysis": {
+      "docs_under_150_lines": 8,
+      "docs_150_to_300_lines": 8,
+      "docs_300_to_500_lines": 5,
+      "docs_over_500_lines": 2,
+      "longest_doc": { "path": "docs/ui-screen-patterns.md", "lines": 651 },
+      "shortest_doc": { "path": "docs/viewmodel-navigation.md", "lines": 89 }
+    },
+    "hub_doc_structure": {
+      "description": "3 topic groups use hub+sub-doc pattern: testing-patterns (3 sub-docs), viewmodel-state-patterns (3 sub-docs), offline-first-patterns (3 sub-docs), compose-resources-patterns (3 sub-docs). Total: 4 hubs, 12 sub-docs. Remaining 7 docs are standalone.",
+      "standalone_docs": [
+        "error-handling-patterns.md (441 lines -- should become hub)",
+        "gradle-patterns.md (398 lines -- should become hub)",
+        "kmp-architecture.md (341 lines -- should become hub)",
+        "resource-management-patterns.md (462 lines -- should become hub or split)",
+        "ui-screen-patterns.md (651 lines -- urgently needs hub+sub-doc split)",
+        "enterprise-integration-proposal.md (337 lines -- proposal, not pattern)",
+        "propuesta-integracion-enterprise.md (341 lines -- duplicate, consolidation needed)"
+      ]
+    },
+    "coverage_gap_candidates": [
+      {
+        "topic": "Navigation3 patterns (androidx.navigation3)",
+        "evidence": "CLAUDE.md references Navigation3 with @Serializable routes as primary navigation. WakeTheCave has extensive navigation docs. viewmodel-navigation.md is only 89 lines and missing Navigation3 specifics.",
+        "priority": "high"
+      },
+      {
+        "topic": "Dependency injection patterns (Koin 4.1.1)",
+        "evidence": "CLAUDE.md mandates Koin with koinViewModel(), module declarations in di/ package. No dedicated L0 doc covers DI patterns, module organization, or testing with Koin.",
+        "priority": "high"
+      },
+      {
+        "topic": "Security patterns (encryption, key management, biometric)",
+        "evidence": "shared-kmp-libs has 7 security/auth modules (encryption, security-keys, auth-biometric, oauth-*). No L0 pattern doc covers security architecture, key storage best practices, or biometric patterns.",
+        "priority": "medium"
+      },
+      {
+        "topic": "Data layer patterns (Repository, DataSource, DAO)",
+        "evidence": "CLAUDE.md defines Repository impls and DataSources in Data layer. DawSync has extensive repository patterns. No dedicated L0 doc beyond offline-first (which is a specific variant). Missing: general repository pattern, data mapping, DAO patterns.",
+        "priority": "medium"
+      },
+      {
+        "topic": "Build configuration for consuming projects",
+        "evidence": "Composite build setup, dependencySubstitution, version catalog sharing are key patterns used by DawSync and WakeTheCave. gradle-patterns.md covers this but from the library perspective, not the consumer perspective.",
+        "priority": "medium"
+      },
+      {
+        "topic": "Firebase/backend integration patterns",
+        "evidence": "shared-kmp-libs has firebase-api, firebase-rest, firebase-native modules plus backend-api. No L0 doc covers KMP Firebase integration patterns or backend API design.",
+        "priority": "low"
+      },
+      {
+        "topic": "Billing and subscription patterns",
+        "evidence": "shared-kmp-libs has billing-api and subscription modules with 28 kt files total. No L0 doc covers in-app purchase patterns or subscription state management.",
+        "priority": "low"
+      }
+    ]
+  }
+}

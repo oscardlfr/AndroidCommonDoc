@@ -1,0 +1,114 @@
+name: Reusable — Commit Lint
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AndroidCommonDoc L0 reusable workflow — Conventional Commits v1.0.0
+#
+# Validates all commits in a PR range conform to:
+#   <type>[scope][!]: <description>
+#
+# Usage from consumer project:
+#
+#   jobs:
+#     commit-lint:
+#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-commit-lint.yml@main
+#       with:
+#         valid_scopes: "core,data,ui,feature,ci,deps,release"
+#         # valid_types: override only if your project uses non-standard types
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+      valid_types:
+        description: "Comma-separated list of valid commit types"
+        type: string
+        default: "feat,fix,docs,style,refactor,perf,test,build,ci,chore,revert"
+      valid_scopes:
+        description: "Comma-separated list of valid scopes (empty = any scope accepted)"
+        type: string
+        default: ""
+      max_subject_length:
+        description: "Maximum subject line length"
+        type: number
+        default: 100
+
+jobs:
+  commit-lint:
+    name: "🔤 Commit Lint"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # full history needed for range checks
+
+      - name: Validate commit messages
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          RANGE="$BASE..$HEAD"
+
+          echo "Validating commits in range: $RANGE"
+
+          VALID_TYPES="${{ inputs.valid_types }}"
+          VALID_SCOPES="${{ inputs.valid_scopes }}"
+          MAX_LEN="${{ inputs.max_subject_length }}"
+
+          # Build type pattern
+          TYPE_PATTERN=$(echo "$VALID_TYPES" | tr ',' '|')
+
+          # Build scope pattern
+          if [ -n "$VALID_SCOPES" ]; then
+            SCOPE_LIST=$(echo "$VALID_SCOPES" | tr ',' '|')
+            SCOPE_PATTERN="(\(($SCOPE_LIST)\))?"
+          else
+            SCOPE_PATTERN="(\([a-z0-9/_-]+\))?"
+          fi
+
+          FULL_PATTERN="^(${TYPE_PATTERN})${SCOPE_PATTERN}!?: .+"
+
+          ERRORS=0
+          COMMIT_COUNT=0
+
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            COMMIT_COUNT=$((COMMIT_COUNT + 1))
+            HASH=$(echo "$line" | cut -d' ' -f1)
+            MSG=$(echo "$line" | cut -d' ' -f2-)
+
+            # Type + format
+            if ! echo "$MSG" | grep -qP "$FULL_PATTERN"; then
+              echo "::error::[$HASH] Invalid format: '$MSG'"
+              echo "  Expected: <type>[scope][!]: <description>"
+              echo "  Valid types: $VALID_TYPES"
+              [ -n "$VALID_SCOPES" ] && echo "  Valid scopes: $VALID_SCOPES"
+              ERRORS=$((ERRORS + 1))
+            fi
+
+            # Description must start lowercase
+            DESC=$(echo "$MSG" | sed 's/^[^:]*: //')
+            if echo "$DESC" | grep -qP '^[A-Z]'; then
+              echo "::error::[$HASH] Description starts with uppercase: '$DESC'"
+              ERRORS=$((ERRORS + 1))
+            fi
+
+            # No trailing period
+            if echo "$DESC" | grep -qP '\.$'; then
+              echo "::error::[$HASH] Description ends with period: '$DESC'"
+              ERRORS=$((ERRORS + 1))
+            fi
+
+            # Subject length
+            if [ ${#MSG} -gt "$MAX_LEN" ]; then
+              echo "::warning::[$HASH] Subject exceeds $MAX_LEN chars (${#MSG}): '$MSG'"
+            fi
+
+          done < <(git log "$RANGE" --pretty=format:"%h %s")
+
+          echo ""
+          echo "Validated $COMMIT_COUNT commit(s)"
+
+          if [ $ERRORS -gt 0 ]; then
+            echo "❌ $ERRORS error(s). Fix with: /commit-lint --fix --range $RANGE"
+            exit 1
+          fi
+          echo "✅ All commits conform to Conventional Commits v1.0.0"

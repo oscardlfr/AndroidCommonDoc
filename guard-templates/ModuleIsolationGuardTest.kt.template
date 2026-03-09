@@ -1,0 +1,71 @@
+package __ROOT_PACKAGE__.konsist.guard
+
+import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Test
+
+/**
+ * Module isolation guard tests enforcing feature module boundaries.
+ *
+ * Ensures that feature modules do not import from other feature modules,
+ * maintaining clean separation between feature boundaries. Cross-feature
+ * communication should go through Domain layer interfaces.
+ *
+ * Generated from AndroidCommonDoc guard-templates.
+ * Root package: __ROOT_PACKAGE__
+ */
+class ModuleIsolationGuardTest {
+
+    private val scope = GuardScopeFactory.projectScope()
+    private val root = "__ROOT_PACKAGE__"
+
+    @Test
+    fun `feature modules do not import other feature modules`() {
+        val featurePkg = "$root.feature"
+        assumeTrue(
+            GuardScopeFactory.hasFilesInPackage(scope, featurePkg),
+            "No files in $featurePkg -- skipping feature isolation check"
+        )
+
+        // Discover distinct feature sub-packages (e.g., feature.auth, feature.home)
+        val featureFiles = scope.files.filter {
+            it.packagee?.name?.startsWith(featurePkg) == true
+        }.toList()
+
+        val featureSubPackages = featureFiles
+            .mapNotNull { it.packagee?.name }
+            .map { pkg ->
+                // Extract the feature name: "com.example.feature.auth.ui" -> "auth"
+                val afterFeature = pkg.removePrefix("$featurePkg.")
+                afterFeature.substringBefore(".")
+            }
+            .distinct()
+
+        assumeTrue(featureSubPackages.size >= 2) {
+            "Fewer than 2 feature sub-packages found (${featureSubPackages}) -- " +
+                "skipping cross-feature isolation check"
+        }
+
+        featureFiles.forEach { file ->
+            val filePackage = file.packagee?.name ?: return@forEach
+            val afterFeature = filePackage.removePrefix("$featurePkg.")
+            val fileFeatureName = afterFeature.substringBefore(".")
+
+            val crossFeatureImports = file.imports.filter { imp ->
+                // Import is from another feature sub-package
+                imp.name.startsWith("$featurePkg.") &&
+                    !imp.name.startsWith("$featurePkg.$fileFeatureName")
+            }.toList()
+
+            assertThat(crossFeatureImports)
+                .withFailMessage {
+                    "Feature file '${file.name}' in '$featurePkg.$fileFeatureName' " +
+                        "imports from other feature modules: " +
+                        "${crossFeatureImports.map { it.name }}. " +
+                        "Feature modules must be isolated from each other. " +
+                        "Use Domain layer interfaces for cross-feature communication."
+                }
+                .isEmpty()
+        }
+    }
+}

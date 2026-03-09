@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">
+<!--
+  Fixture: sealed class AesAlgorithm with inner enum variants.
+  JaCoCo emits one <class> per JVM class — all pointing to AesAlgorithm.kt.
+  The parser must aggregate at sourcefile level, not class level.
+-->
+<report name="security:api">
+  <package name="com/example/security">
+    <class name="com/example/security/AesAlgorithm" sourcefilename="AesAlgorithm.kt">
+      <counter type="LINE" missed="0" covered="6"/>
+    </class>
+    <class name="com/example/security/AesAlgorithm$Cbc" sourcefilename="AesAlgorithm.kt">
+      <counter type="LINE" missed="0" covered="6"/>
+    </class>
+    <class name="com/example/security/AesAlgorithm$Cbc$NoPadding" sourcefilename="AesAlgorithm.kt">
+      <counter type="LINE" missed="0" covered="6"/>
+    </class>
+    <class name="com/example/security/AesAlgorithm$Cbc$PKCS5Padding" sourcefilename="AesAlgorithm.kt">
+      <counter type="LINE" missed="0" covered="6"/>
+    </class>
+    <class name="com/example/security/AesAlgorithm$Ecb" sourcefilename="AesAlgorithm.kt">
+      <counter type="LINE" missed="0" covered="6"/>
+    </class>
+    <class name="com/example/security/AesAlgorithm$Gcm" sourcefilename="AesAlgorithm.kt">
+      <counter type="LINE" missed="0" covered="6"/>
+    </class>
+    <sourcefile name="AesAlgorithm.kt">
+      <line nr="10" mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="15" mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="20" mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="25" mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="30" mi="0" ci="1" mb="0" cb="0"/>
+      <line nr="35" mi="0" ci="1" mb="0" cb="0"/>
+      <counter type="LINE" missed="0" covered="6"/>
+    </sourcefile>
+  </package>
+</report>

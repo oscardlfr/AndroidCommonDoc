@@ -1,0 +1,122 @@
+name: CI  # rename to match your project
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AndroidCommonDoc — CI template for KMP consumer projects
+#
+# SETUP:
+#   1. Copy this file to .github/workflows/ci.yml in your project
+#   2. Replace <org> with your GitHub org or user
+#   3. Customize `valid_scopes`, Gradle tasks, and platform matrix for your project
+#   4. Delete sections (build-ios, etc.) that don't apply
+#   5. Add project-specific jobs after the L0 reusable jobs
+#
+# GIT FLOW assumed:
+#   master   — production, protected, no direct push
+#   develop  — integration, all feature PRs target here
+#   feature/* → develop (PR)
+#   release/* → master (PR)
+#   hotfix/*  → master + develop (PR)
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+  pull_request:
+    branches:
+      - master
+      - develop
+
+env:
+  JAVA_VERSION: '17'
+  JAVA_DISTRIBUTION: 'temurin'
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PR-ONLY CHECKS — reusable L0 workflows from AndroidCommonDoc
+# ══════════════════════════════════════════════════════════════════════════════
+
+jobs:
+
+  commit-lint:
+    name: "🔤 Commit Lint"
+    if: github.event_name == 'pull_request'
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-commit-lint.yml@main
+    with:
+      # Customize scopes for your project's domain:
+      valid_scopes: "core,data,ui,feature,ci,deps,release"
+
+  lint-resources:
+    name: "🌐 Lint String Resources"
+    if: github.event_name == 'pull_request'
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-lint-resources.yml@main
+    with:
+      strict: true
+
+  architecture-guards:
+    name: "🏛️ Architecture Guards"
+    if: github.event_name == 'pull_request'
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-architecture-guards.yml@main
+    with:
+      gradle_task: ":konsist-guard:test"
+      java_version: "17"
+
+  kmp-safety:
+    name: "🛡️ KMP Safety"
+    if: github.event_name == 'pull_request'
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-kmp-safety-check.yml@main
+    with:
+      fail_on_dispatchers_warning: false   # set true to enforce injected dispatchers
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BUILD & TEST — customize modules for your project
+# ══════════════════════════════════════════════════════════════════════════════
+
+  build:
+    name: "📦 Build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+      - uses: gradle/actions/setup-gradle@v3
+      - name: Build
+        run: ./gradlew build --no-daemon  # customize: add module name if needed
+
+  test:
+    name: "🧪 Tests"
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+      - uses: gradle/actions/setup-gradle@v3
+      - name: Run tests
+        run: ./gradlew check --no-daemon
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: "**/build/reports/tests/"
+          retention-days: 7
+
+  # ── Optional: iOS/macOS XCFramework ─────────────────────────────────────
+  # build-ios:
+  #   name: "🍎 XCFramework"
+  #   runs-on: macos-latest
+  #   needs: [build]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-java@v4
+  #       with:
+  #         java-version: ${{ env.JAVA_VERSION }}
+  #         distribution: ${{ env.JAVA_DISTRIBUTION }}
+  #     - uses: gradle/actions/setup-gradle@v3
+  #     - name: Build XCFramework
+  #       run: ./gradlew :<your-ios-module>:assembleXCFramework --no-daemon
