@@ -518,18 +518,30 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
     }
     Write-Host ""
 
-    # Run Gradle as background process with timeout watchdog
+    # Run Gradle with output streaming (pipe-safe — no Start-Process hang)
+    # Using System.Diagnostics.Process for reliable stdout/stderr capture
+    # that works both in native PowerShell and when piped from bash.
     $tempLog = Join-Path $env:TEMP "gradle-parallel-tests-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
     $gradleExe = Join-Path $ProjectRoot "gradlew.bat"
     $argString = ($gradleArgs -join " ")
 
-    $proc = Start-Process -FilePath $gradleExe -ArgumentList $argString `
-        -WorkingDirectory $ProjectRoot -NoNewWindow -PassThru `
-        -RedirectStandardOutput $tempLog -RedirectStandardError "$tempLog.err"
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $gradleExe
+    $psi.Arguments = $argString
+    $psi.WorkingDirectory = $ProjectRoot
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+
+    $proc = [System.Diagnostics.Process]::Start($psi)
+
+    # Async read stdout/stderr to avoid deadlocks
+    $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+    $stderrTask = $proc.StandardError.ReadToEndAsync()
 
     $elapsed = 0
     $interval = 15  # Check every 15 seconds
-    $lastLineCount = 0
 
     Write-Host ""
     while (-not $proc.HasExited) {
@@ -537,11 +549,6 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
         $elapsed += $interval
 
         # Progress heartbeat
-        $currentLines = if (Test-Path $tempLog) { (Get-Content $tempLog -ErrorAction SilentlyContinue).Count } else { 0 }
-        $newLines = $currentLines - $lastLineCount
-        $lastLineCount = $currentLines
-
-        # Detect which module is currently running
         $workers = Get-CimInstance Win32_Process -Filter "Name='java.exe'" -ErrorAction SilentlyContinue |
             Where-Object { $_.CommandLine -match "GradleWorkerMain" }
         $activeModule = "unknown"
@@ -554,7 +561,7 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
 
         $mins = [math]::Floor($elapsed / 60)
         $secs = $elapsed % 60
-        Write-Host "  [${mins}m${secs}s] Running... active: $activeModule | log lines: $currentLines (+$newLines)" -ForegroundColor DarkGray
+        Write-Host "  [${mins}m${secs}s] Running... active: $activeModule" -ForegroundColor DarkGray
 
         # Timeout check
         if ($elapsed -ge $Timeout) {
@@ -591,12 +598,17 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
         $proc.WaitForExit()
     }
 
+    # Collect output from async readers
     $testExitCode = $proc.ExitCode
-    $testOutput = if (Test-Path $tempLog) { Get-Content $tempLog } else { @() }
+    $stdoutContent = if ($stdoutTask.IsCompleted) { $stdoutTask.Result } else { $stdoutTask.GetAwaiter().GetResult() }
+    $stderrContent = if ($stderrTask.IsCompleted) { $stderrTask.Result } else { $stderrTask.GetAwaiter().GetResult() }
+    $proc.Dispose()
 
-    # Clean up temp files
-    Remove-Item $tempLog -Force -ErrorAction SilentlyContinue
-    Remove-Item "$tempLog.err" -Force -ErrorAction SilentlyContinue
+    # Write to temp log for any downstream consumers, then parse
+    if ($stdoutContent) {
+        Set-Content -Path $tempLog -Value $stdoutContent -Encoding UTF8 -ErrorAction SilentlyContinue
+    }
+    $testOutput = if ($stdoutContent) { $stdoutContent -split "`n" } else { @() }
 
     # Report timeout as failure
     if ($elapsed -ge $Timeout) {
@@ -607,6 +619,9 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
 
     # Parse output to determine per-module results
     $testOutputStr = $testOutput -join "`n"
+
+    # Clean up temp log
+    Remove-Item $tempLog -Force -ErrorAction SilentlyContinue
 
     foreach ($module in $testableModules) {
         $isShared = $module.Name.StartsWith("shared-libs:")
