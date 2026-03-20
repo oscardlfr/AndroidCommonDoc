@@ -157,8 +157,9 @@ The wizard covers everything in order:
 - **W4 Konsist guards** -- structural guard tests with your root package (Gradle only)
 - **W5 CI + PR template** -- copies `ci.yml` + `pull_request_template.md` to `.github/`
 - **W6 MCP server** -- prints the ready-to-paste `claude_desktop_config.json` snippet
-- **W7 GSD Integration** -- sync skills to GSD-2 (only shown if `~/.gsd/` exists)
+- **W7 GSD Integration** -- sync skills + agents to GSD-2 as invocable subagents (if `~/.gsd/` exists)
 - **W8 Model Profile** -- choose agent model tier: budget / balanced / advanced / quality
+- **Step 9 Health Check** -- verifies MCP, Detekt JAR, GSD parity, registry hashes; suggests next actions
 - **Hook severity** -- `warn` (review violations) or `block` (enforce immediately)
 
 It creates `l0-manifest.json` for your layer (L1 or L2), syncs selected
