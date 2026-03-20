@@ -683,8 +683,10 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
     info "[>] Generating coverage reports..."
 
     # Run main project coverage tasks
+    # --rerun-tasks forces Kover to regenerate XML even when tests are UP-TO-DATE
+    # Without this, cached test results produce stale coverage reports
     if [[ "${#COV_TASKS[@]}" -gt 0 ]]; then
-        COV_ARGS=("${COV_TASKS[@]}" "--parallel" "--continue")
+        COV_ARGS=("${COV_TASKS[@]}" "--parallel" "--continue" "--rerun-tasks")
         if [[ "$MAX_WORKERS" -gt 0 ]]; then COV_ARGS+=("--max-workers=$MAX_WORKERS"); fi
 
         COV_EXIT=0
@@ -738,7 +740,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
             fi
         done
         if [[ -n "$SHARED_LIBS_PATH" && -d "$SHARED_LIBS_PATH" ]]; then
-            COV_ARGS_SHARED=("${COV_TASKS_SHARED[@]}" "--parallel" "--continue")
+            COV_ARGS_SHARED=("${COV_TASKS_SHARED[@]}" "--parallel" "--continue" "--rerun-tasks")
             if [[ "$MAX_WORKERS" -gt 0 ]]; then COV_ARGS_SHARED+=("--max-workers=$MAX_WORKERS"); fi
 
             info "  [>] Generating shared-libs coverage (${#COV_TASKS_SHARED[@]} modules)..."

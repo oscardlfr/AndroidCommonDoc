@@ -245,6 +245,28 @@ _setup_git_repo() {
     grep -q 'TMPDIR' "$COVERAGE_SCRIPT"
 }
 
+@test "run-parallel-coverage-suite.sh: coverage phase uses --rerun-tasks" {
+    # Without --rerun-tasks, Kover doesn't regenerate XML when tests are cached UP-TO-DATE
+    count=$(grep -c '\-\-rerun-tasks' "$COVERAGE_SCRIPT" || true)
+    # Should appear at least twice: main project + shared-libs
+    [ "$count" -ge 2 ]
+}
+
+@test "run-parallel-coverage-suite.sh: test phase does NOT use --rerun-tasks" {
+    # Tests benefit from caching — only coverage needs forced rerun
+    # The test phase is the GRADLE_ARGS section (before coverage)
+    # Check that --rerun-tasks only appears in coverage context (COV_ARGS)
+    test_phase_rerun=$(sed -n '/GRADLE_ARGS/,/coverage/p' "$COVERAGE_SCRIPT" | grep -c '\-\-rerun-tasks' || true)
+    [ "$test_phase_rerun" -eq 0 ]
+}
+
+@test "run-parallel-coverage-suite.ps1: coverage phase uses --rerun-tasks" {
+    PS1_SCRIPT="$BATS_TEST_DIRNAME/../ps1/run-parallel-coverage-suite.ps1"
+    [ -f "$PS1_SCRIPT" ] || skip "PS1 script not found"
+    count=$(grep -c '\-\-rerun-tasks' "$PS1_SCRIPT" || true)
+    [ "$count" -ge 2 ]
+}
+
 # ---------------------------------------------------------------------------
 # Regression: --show-modules-only flag in run-changed-modules-tests.sh
 # ---------------------------------------------------------------------------

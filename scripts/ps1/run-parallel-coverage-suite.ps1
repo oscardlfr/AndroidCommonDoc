@@ -666,11 +666,13 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
     Write-Host "[>] Generating coverage reports..." -ForegroundColor Cyan
 
     # Run main project coverage tasks from ProjectRoot
+    # --rerun-tasks forces Kover to regenerate XML even when tests are UP-TO-DATE
     if ($covTasks.Count -gt 0) {
         $covArgs = @()
         $covArgs += $covTasks
         $covArgs += "--parallel"
         $covArgs += "--continue"
+        $covArgs += "--rerun-tasks"
         if ($MaxWorkers -gt 0) { $covArgs += "--max-workers=$MaxWorkers" }
 
         Push-Location $ProjectRoot
@@ -725,6 +727,7 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
             $covArgsShared += $covTasksShared
             $covArgsShared += "--parallel"
             $covArgsShared += "--continue"
+            $covArgsShared += "--rerun-tasks"
             if ($MaxWorkers -gt 0) { $covArgsShared += "--max-workers=$MaxWorkers" }
 
             Write-Host "  [>] Generating shared-libs coverage ($($covTasksShared.Count) modules)..." -ForegroundColor Cyan
