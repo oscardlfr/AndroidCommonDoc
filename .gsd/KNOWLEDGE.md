@@ -95,3 +95,13 @@ Three pre-commit hooks fire on every `git commit`:
 **Never commit without updating README counts.** The hook will deny the commit with a message listing which counts are wrong. Run `/readme-audit --fix` to repair.
 
 This exists because README count drift was a recurring issue — CI caught it too late.
+
+---
+
+## README Test Counts — Informational Only
+
+Bats and MCP test counts in README are approximate and NOT validated by CI. They vary by platform (Windows CRLF, Linux LF, test skips, timeouts). CI on Ubuntu may get different counts than local Windows.
+
+Only **static filesystem counts** are CI-validated: skills, agents, rules, MCP tools, workflows, registry entries, commands.
+
+When updating README test counts, use the local count as the canonical value. Don't chase CI count differences — they're environmental.
