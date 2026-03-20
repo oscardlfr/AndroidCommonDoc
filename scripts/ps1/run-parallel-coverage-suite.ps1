@@ -295,7 +295,17 @@ if ($FreshDaemon) {
     Push-Location $ProjectRoot
     & ./gradlew --stop 2>&1 | Out-Null
     Pop-Location
-    Write-Host "  [OK] Daemons stopped" -ForegroundColor Green
+
+    # Clean cached coverage reports so Kover regenerates from scratch
+    Write-Host "  [>] Cleaning cached coverage reports..." -ForegroundColor Cyan
+    Get-ChildItem -Path $ProjectRoot -Recurse -Directory -Filter "kover" -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match "build[\\/]reports[\\/]kover" } |
+        ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+    Get-ChildItem -Path $ProjectRoot -Recurse -Directory -Filter "jacoco" -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match "build[\\/]reports[\\/]jacoco" } |
+        ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+
+    Write-Host "  [OK] Daemons stopped + coverage cache cleaned" -ForegroundColor Green
     Write-Host ""
 } else {
     # Check daemon status

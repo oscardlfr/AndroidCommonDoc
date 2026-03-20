@@ -306,7 +306,13 @@ esac
 if $FRESH_DAEMON; then
     warn "[>] Stopping existing Gradle daemons..."
     (cd "$PROJECT_ROOT" && ./gradlew --stop 2>&1 >/dev/null) || true
-    ok "  [OK] Daemons stopped"
+
+    # Clean cached coverage reports so Kover regenerates from scratch
+    info "  [>] Cleaning cached coverage reports..."
+    find "$PROJECT_ROOT" -path "*/build/reports/kover" -type d -exec rm -rf {} + 2>/dev/null || true
+    find "$PROJECT_ROOT" -path "*/build/reports/jacoco" -type d -exec rm -rf {} + 2>/dev/null || true
+
+    ok "  [OK] Daemons stopped + coverage cache cleaned"
     echo ""
 else
     # Check daemon status

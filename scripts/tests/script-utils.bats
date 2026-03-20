@@ -245,6 +245,19 @@ _setup_git_repo() {
     grep -q 'TMPDIR' "$COVERAGE_SCRIPT"
 }
 
+@test "run-parallel-coverage-suite.sh: --fresh-daemon cleans coverage cache" {
+    # --fresh-daemon should remove kover/jacoco report dirs, not just stop daemons
+    grep -q "kover" "$COVERAGE_SCRIPT"
+    grep -q "jacoco" "$COVERAGE_SCRIPT"
+    grep -A5 "FRESH_DAEMON" "$COVERAGE_SCRIPT" | grep -q "rm -rf\|Clean"
+}
+
+@test "run-parallel-coverage-suite.ps1: -FreshDaemon cleans coverage cache" {
+    PS1_SCRIPT="$BATS_TEST_DIRNAME/../ps1/run-parallel-coverage-suite.ps1"
+    [ -f "$PS1_SCRIPT" ] || skip "PS1 script not found"
+    grep -A10 "FreshDaemon" "$PS1_SCRIPT" | grep -q "kover\|Remove-Item"
+}
+
 @test "run-parallel-coverage-suite.sh: coverage phase uses --rerun-tasks" {
     # Without --rerun-tasks, Kover doesn't regenerate XML when tests are cached UP-TO-DATE
     count=$(grep -c '\-\-rerun-tasks' "$COVERAGE_SCRIPT" || true)
