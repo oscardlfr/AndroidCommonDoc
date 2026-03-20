@@ -68,6 +68,37 @@ AndroidCommonDoc is designed as an **L0 (generic layer)** in a multi-tier ecosys
 - **L2 extends** with domain-specific skills and agents not present in L0
 - **Absence = opt-out**: Exclude entries in `l0-manifest.json` to skip specific skills
 
+### Topology: flat vs chain
+
+Projects choose how they consume layers via `l0-manifest.json` (manifest v2):
+
+| Topology | Flow | Use case |
+|----------|------|----------|
+| **flat** | L0 → L2 directly | Enterprise, standalone apps, no shared-libs layer |
+| **chain** | L0 → L1 → L2 | Solo devs / small teams with shared libraries |
+
+**Flat** (default): each project consumes L0 independently.
+```json
+{ "version": 2, "topology": "flat",
+  "sources": [{ "layer": "L0", "path": "../AndroidCommonDoc" }] }
+```
+
+**Chain**: L2 inherits everything from L1, which inherits from L0. Skills, agents, Detekt rules, docs, and conventions cascade through the chain.
+```json
+{ "version": 2, "topology": "chain",
+  "sources": [
+    { "layer": "L0", "path": "../../AndroidCommonDoc", "role": "tooling" },
+    { "layer": "L1", "path": "../../shared-kmp-libs", "role": "ecosystem" }
+  ] }
+```
+
+In chain mode, an AI agent working on L2 (your app) sees:
+1. **L0 patterns**: "UiState must be sealed interface"
+2. **L1 conventions**: "Repositories return Flow, use SqlDelight not Room"
+3. **L2 rules**: "Producer/consumer architecture, feature gates per tier"
+
+Choose topology in `/setup` wizard or edit `l0-manifest.json` directly. Manifest v1 (`l0_source` field) is auto-migrated to v2 on read.
+
 ### Materialization model
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
