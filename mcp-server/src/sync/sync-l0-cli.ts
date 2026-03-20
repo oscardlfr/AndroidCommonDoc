@@ -145,6 +145,18 @@ async function main(): Promise<void> {
   }
   console.log("");
 
+  // List newly added files (helps discover what's new from L0)
+  if (report.added > 0) {
+    const addedEntries = report.actions
+      .filter((a) => a.action === "add")
+      .map((a) => a.registryEntry);
+    console.log("New from L0:");
+    for (const entry of addedEntries) {
+      console.log(`  + [${entry.type}] ${entry.name}`);
+    }
+    console.log("");
+  }
+
   // List removed files (Fix #7: verbose remove listing)
   if (report.removedPaths.length > 0) {
     console.log("Removed files:");
