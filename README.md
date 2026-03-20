@@ -452,47 +452,47 @@ Real-time pattern enforcement during AI-assisted development:
 
 ### Unified Audit
 
-| Agent | Model | What It Does |
-|-------|-------|-------------|
-| `full-audit-orchestrator` | sonnet | Orchestrates `/full-audit` -- wave execution, finding collection, 3-pass dedup, consolidated report |
+| Agent | What It Does |
+|-------|-------------|
+| `full-audit-orchestrator` | Orchestrates `/full-audit` -- wave execution, finding collection, 3-pass dedup, consolidated report |
 
 ### Toolkit Quality Gates (internal -- invoked by quality-gate-orchestrator)
 
-| Agent | Model | What It Verifies |
-|-------|-------|-----------------|
-| `doc-code-drift-detector` | haiku | Pattern doc version references match `versions-manifest.json` |
-| `l0-coherence-auditor` | haiku | Full L0/L1/L2 coherence audit (9 checks incl. Context7 + Jina) |
-| `quality-gate-orchestrator` | sonnet | Unified pass/fail report across all gates with token cost |
-| `script-parity-validator` | haiku | PS1 and SH scripts produce equivalent behavior |
-| `skill-script-alignment` | haiku | Skills reference correct scripts and parameters |
-| `template-sync-validator` | haiku | Claude commands and Copilot prompts are semantically equivalent |
+| Agent | What It Verifies |
+|-------|-----------------|
+| `doc-code-drift-detector` | Pattern doc version references match `versions-manifest.json` |
+| `l0-coherence-auditor` | Full L0/L1/L2 coherence audit (9 checks incl. Context7 + Jina) |
+| `quality-gate-orchestrator` | Unified pass/fail report across all gates with token cost |
+| `script-parity-validator` | PS1 and SH scripts produce equivalent behavior |
+| `skill-script-alignment` | Skills reference correct scripts and parameters |
+| `template-sync-validator` | Claude commands and Copilot prompts are semantically equivalent |
 
 ### Release & Readiness
 
-| Agent | Model | What It Does |
-|-------|-------|-------------|
-| `beta-readiness-agent` | sonnet | Feature completeness, stability, and beta criteria |
-| `release-guardian-agent` | haiku | Release checklist -- debug flags, secrets, build config, hardcoded URLs, ProGuard |
+| Agent | What It Does |
+|-------|-------------|
+| `beta-readiness-agent` | Feature completeness, stability, and beta criteria |
+| `release-guardian-agent` | Release checklist -- debug flags, secrets, build config, hardcoded URLs, ProGuard |
 
 ### Cross-Cutting Validation
 
-| Agent | Model | What It Does |
-|-------|-------|-------------|
-| `cross-platform-validator` | sonnet | Platform parity across Android, iOS, and Desktop targets |
-| `doc-alignment-agent` | sonnet | Documentation accuracy against actual implementation |
+| Agent | What It Does |
+|-------|-------------|
+| `cross-platform-validator` | Platform parity across Android, iOS, and Desktop targets |
+| `doc-alignment-agent` | Documentation accuracy against actual implementation |
 
 ### Domain Specialists
 
-| Agent | Model | What It Does |
-|-------|-------|-------------|
-| `api-rate-limit-auditor` | haiku | HTTP client rate limiting, retry backoff, timeouts, concurrency |
-| `privacy-auditor` | sonnet | PII in logs, analytics consent, encrypted storage, data retention |
-| `test-specialist` | sonnet | Test pattern compliance and coverage gap analysis |
-| `ui-specialist` | sonnet | Compose UI accessibility, Material3, and design system review |
+| Agent | What It Does |
+|-------|-------------|
+| `api-rate-limit-auditor` | HTTP client rate limiting, retry backoff, timeouts, concurrency |
+| `privacy-auditor` | PII in logs, analytics consent, encrypted storage, data retention |
+| `test-specialist` | Test pattern compliance and coverage gap analysis |
+| `ui-specialist` | Compose UI accessibility, Material3, and design system review |
 
 ### Model Tier Strategy
 
-Agents use the cheapest model that delivers reliable results. Switch profiles with `/set-model-profile`:
+Agents don't have hardcoded models -- the active profile determines which model each agent uses. Switch profiles with `/set-model-profile`:
 
 | Profile | Default | Strategy | Use Case |
 |---------|---------|----------|----------|
