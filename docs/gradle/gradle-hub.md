@@ -49,7 +49,7 @@ KMP and Android-only Gradle build configuration, convention plugins, and depende
 | Document | Description |
 |----------|-------------|
 | [gradle-patterns](gradle-patterns.md) | Hub: version catalog, build config, platform detection |
-| [gradle-patterns-conventions](gradle-patterns-conventions.md) | Convention plugins — KMP (AGP 9.0) and Android-only (AGP 8.x) |
+| [gradle-patterns-conventions](gradle-patterns-conventions.md) | Convention plugins — KMP (AGP 9.0), Android-only (AGP 8.x), L0 toolkit distribution |
 | [gradle-patterns-android-only](gradle-patterns-android-only.md) | AndroidLibraryConventionPlugin for AGP 8.x Android-only projects |
 | [gradle-patterns-dependencies](gradle-patterns-dependencies.md) | Dependency management — version catalog, BOMs, transitive |
 | [gradle-patterns-publishing](gradle-patterns-publishing.md) | Maven publishing — composite build, coordinates, signing |

@@ -115,5 +115,86 @@ kotlin {
 
 ---
 
+## 4. L0 Toolkit Plugin Distribution
+
+The `androidcommondoc.toolkit` plugin applies Detekt rules, Compose rules, and test configuration. Every module that should be checked by Detekt needs this plugin — it's not inherited from the root project.
+
+### Option A: Convention plugin (recommended — enterprise/clean)
+
+Embed the toolkit in your project's convention plugin. Each module type gets the right config:
+
+```kotlin
+// build-logic/src/main/kotlin/KmpLibraryConventionPlugin.kt
+class KmpLibraryConventionPlugin : Plugin<Project> {
+    override fun apply(target: Project) {
+        with(target) {
+            pluginManager.apply("org.jetbrains.kotlin.multiplatform")
+            pluginManager.apply("androidcommondoc.toolkit")  // ← Detekt for all KMP modules
+            // ... rest of KMP config
+        }
+    }
+}
+```
+
+```kotlin
+// Each module just declares its convention plugin
+// core/domain/build.gradle.kts
+plugins {
+    id("your-project.kmp-library")  // inherits toolkit automatically
+}
+```
+
+**Benefits:**
+- Granular: KMP modules get KMP config, Android-only get Android config
+- No Detekt applied to modules without Kotlin sources (no warnings)
+- Each convention plugin can customize `androidCommonDoc { }` DSL differently
+- Standard enterprise pattern — passes code review
+
+**Per-module customization:**
+```kotlin
+// Modules can override toolkit settings
+androidCommonDoc {
+    detektRules.set(true)        // default: true
+    composeRules.set(true)       // default: true
+    formattingRules.set(false)   // default: false (opt-in ktlint)
+    testConfig.set(true)         // default: true
+}
+```
+
+### Option B: subprojects (quick — dev/prototype)
+
+Apply to all modules from root:
+
+```kotlin
+// root build.gradle.kts
+subprojects {
+    apply(plugin = "androidcommondoc.toolkit")
+}
+```
+
+**Trade-offs:**
+- Applies to EVERY subproject — including those without Kotlin sources
+- No per-module customization
+- May produce warnings on non-Kotlin modules
+- Works immediately, no build-logic changes needed
+
+**When to use:** prototyping, small projects (<10 modules), or as a quick fix before migrating to convention plugins.
+
+### Migration path: subprojects → convention plugin
+
+1. Create convention plugins in `build-logic/` for each module type
+2. Add `pluginManager.apply("androidcommondoc.toolkit")` to each
+3. Apply convention plugins to individual modules
+4. Remove `subprojects { apply(...) }` from root
+5. Verify with: `bash $ANDROID_COMMON_DOC/scripts/sh/check-detekt-coverage.sh --project-root .`
+
+### Common mistake
+
+Applying the toolkit only to the root project or only to JVM modules. Detekt 2.0 creates per-source-set tasks (`detektCommonMainSourceSet`, `detektDesktopMainSourceSet`, etc.) **per module**. A module without the plugin gets zero Detekt tasks.
+
+Diagnostic: `bash $ANDROID_COMMON_DOC/scripts/sh/check-detekt-coverage.sh --project-root .`
+
+---
+
 **Parent doc**: [gradle-patterns.md](gradle-patterns.md)  
 **Android-only / AGP 8.x**: [gradle-patterns-android-only.md](gradle-patterns-android-only.md)
