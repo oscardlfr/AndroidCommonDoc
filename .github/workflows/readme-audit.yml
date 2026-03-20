@@ -137,6 +137,32 @@ jobs:
           echo "mcp_tools=$MCP_TOOLS"   >> $GITHUB_OUTPUT
           echo "reusable_wf=$REUSABLE_WF" >> $GITHUB_OUTPUT
 
+          # Bats test count (run bats --count)
+          if command -v npx &>/dev/null && [ -d "scripts/tests" ]; then
+            BATS_TESTS=$(npx bats --count scripts/tests/*.bats 2>/dev/null | tail -1 || echo "skip")
+          else
+            BATS_TESTS="skip"
+          fi
+          echo "bats_tests=$BATS_TESTS" >> $GITHUB_OUTPUT
+
+          # MCP test count (from vitest --reporter=json)
+          if [ -d "mcp-server" ] && [ -f "mcp-server/package.json" ]; then
+            cd mcp-server && npm ci --silent 2>/dev/null && npm run build --silent 2>/dev/null
+            MCP_TESTS=$(npx vitest run --reporter=json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('numPassedTests',0))" 2>/dev/null || echo "skip")
+            cd ..
+          else
+            MCP_TESTS="skip"
+          fi
+          echo "mcp_tests=$MCP_TESTS" >> $GITHUB_OUTPUT
+
+          # Commands count
+          if [ -d ".claude/commands/" ]; then
+            COMMANDS=$(ls .claude/commands/ | wc -l | tr -d ' ')
+          else
+            COMMANDS="skip"
+          fi
+          echo "commands=$COMMANDS" >> $GITHUB_OUTPUT
+
           echo "=== Actual counts ==="
           [ "$SKILLS"      != "skip" ] && echo "Skills dirs:      $SKILLS"
           [ "$REGISTRY"    != "skip" ] && echo "Registry entries: $REGISTRY"
@@ -144,6 +170,9 @@ jobs:
           [ "$RULES"       != "skip" ] && echo "Detekt rules:     $RULES"
           [ "$MCP_TOOLS"   != "skip" ] && echo "MCP tools:        $MCP_TOOLS"
           [ "$REUSABLE_WF" != "skip" ] && echo "Reusable WFs:     $REUSABLE_WF"
+          [ "$BATS_TESTS"  != "skip" ] && echo "Bats tests:       $BATS_TESTS"
+          [ "$MCP_TESTS"   != "skip" ] && echo "MCP tests:        $MCP_TESTS"
+          [ "$COMMANDS"    != "skip" ] && echo "Commands:         $COMMANDS"
 
       - name: Check README mentions key counts
         run: |
@@ -168,6 +197,9 @@ jobs:
           check "Detekt rules"       "${{ steps.counts.outputs.rules }}"
           check "MCP tools"          "${{ steps.counts.outputs.mcp_tools }}"
           check "Reusable workflows" "${{ steps.counts.outputs.reusable_wf }}"
+          check "Bats tests"         "${{ steps.counts.outputs.bats_tests }}"
+          check "MCP tests"          "${{ steps.counts.outputs.mcp_tests }}"
+          check "Commands"           "${{ steps.counts.outputs.commands }}"
 
           if [ $FAIL -ne 0 ]; then
             echo ""

@@ -82,3 +82,16 @@ The `androidcommondoc.toolkit` plugin must be applied to **each module individua
 **Fix**: Apply via a project-level convention plugin or `subprojects { apply(plugin = "androidcommondoc.toolkit") }`.
 
 **Not a Detekt 2.0 bug** — the per-source-set integration works correctly when the plugin is present. The `afterEvaluate + tasks.withType(Detekt).configureEach` pattern in the toolkit plugin handles config propagation to all KMP source-set tasks.
+
+---
+
+## README Counts — Always Verified by Hook
+
+Three pre-commit hooks fire on every `git commit`:
+1. `detekt-pre-commit.sh` — Detekt pattern violations on staged .kt files
+2. `registry-pre-commit.sh` — Rehashes registry.json if skills/agents/commands changed
+3. `readme-pre-commit.sh` — **Blocks commit if README counts are stale** (skills, agents, rules, MCP tools, workflows, registry, commands)
+
+**Never commit without updating README counts.** The hook will deny the commit with a message listing which counts are wrong. Run `/readme-audit --fix` to repair.
+
+This exists because README count drift was a recurring issue — CI caught it too late.
