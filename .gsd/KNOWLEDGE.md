@@ -68,3 +68,17 @@ Enforced by `doc-structure.test.ts`. Check with `npm test tests/integration/doc-
 - **`coupled_versions`**: expresa dependencias entre versiones. `{ "ksp": ["kotlin"] }` significa que cuando Kotlin bumpa, KSP debe revisarse. `resolveCoupledVersions(key, manifest)` devuelve los keys acoplados. Siempre actualizar `ksp` cuando se actualiza `kotlin`.
 - **`check-version-sync --from-manifest`**: modo para comparar `libs.versions.toml` de cualquier proyecto L1/L2 contra `versions-manifest.json` directamente. No requiere otro proyecto como fuente de verdad.
 - **Hub docs con `monitor_urls` largos**: si añadir `monitor_urls` a un hub doc lo lleva por encima de 100 líneas, mover las URLs de versiones al `versions-manifest.json` (que tiene sus propios `monitor_urls`) y dejar solo las `doc-page` en el frontmatter del doc.
+
+---
+
+## Detekt 2.0 + KMP — Per-Module Plugin Requirement
+
+The `androidcommondoc.toolkit` plugin must be applied to **each module individually**, not just the root project. Detekt 2.0 creates per-source-set tasks (`detektCommonMainSourceSet`, `detektDesktopMainSourceSet`, etc.) only in modules where the plugin is applied.
+
+**Symptom**: Only pure-JVM modules (e.g. `core-error-audit`, `core-result`) show Detekt tasks. KMP modules report `NO-SOURCE` or have zero Detekt tasks.
+
+**Root cause**: The plugin is only applied to modules that declare `id("androidcommondoc.toolkit")` in their `build.gradle.kts`. KMP modules without this declaration get no Detekt integration.
+
+**Fix**: Apply via a project-level convention plugin or `subprojects { apply(plugin = "androidcommondoc.toolkit") }`.
+
+**Not a Detekt 2.0 bug** — the per-source-set integration works correctly when the plugin is present. The `afterEvaluate + tasks.withType(Detekt).configureEach` pattern in the toolkit plugin handles config propagation to all KMP source-set tasks.

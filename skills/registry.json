@@ -483,7 +483,7 @@
       "description": "Interactive wizard to fully configure a project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Bilingual (EN + ES).",
       "category": "guides",
       "user-invocable": true,
-      "hash": "sha256:8160df9df76a1753a9a616dbe842d58815fdeb2356543af5618a5d6f470a712a",
+      "hash": "sha256:811e55eec6fd3a1321f43755e81c4343d5d9a4ba348cce51ff97d640211c9b72",
       "allowed-tools": [
         "Bash",
         "Read",

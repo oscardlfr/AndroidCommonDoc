@@ -329,6 +329,33 @@ Pass `--skip-gradle` when `--detekt skip` and user did not request Gradle.
 
 **2a** Compile JAR if missing.
 **2b** Write `detekt.yml` based on W3 mode (all / custom / none). Skip entirely if `skip`.
+**2c** Verify plugin adoption scope — the `androidcommondoc.toolkit` plugin must be applied
+to **every module** that should run Detekt, not just the root project.
+
+For KMP projects, recommend one of these patterns:
+
+**Convention plugin (recommended):**
+```kotlin
+// build-logic/src/main/kotlin/your-kmp-library.gradle.kts
+plugins {
+    id("androidcommondoc.toolkit")
+}
+```
+Then apply `your-kmp-library` to each module's `build.gradle.kts`.
+
+**Subprojects block (quick but less targeted):**
+```kotlin
+// root build.gradle.kts
+subprojects {
+    apply(plugin = "androidcommondoc.toolkit")
+}
+```
+
+> ⚠ **Common mistake**: applying the toolkit plugin only to the root project or only to
+> pure-JVM modules. Detekt 2.0 creates per-source-set tasks (`detektCommonMainSourceSet`,
+> `detektDesktopMainSourceSet`, etc.) **per module** — a module without the plugin gets
+> zero Detekt tasks. If only 4 out of 20 modules show Detekt tasks, the plugin is
+> missing from the other 16.
 
 ---
 
