@@ -197,9 +197,10 @@ jobs:
           check "Detekt rules"       "${{ steps.counts.outputs.rules }}"
           check "MCP tools"          "${{ steps.counts.outputs.mcp_tools }}"
           check "Reusable workflows" "${{ steps.counts.outputs.reusable_wf }}"
-          check "Bats tests"         "${{ steps.counts.outputs.bats_tests }}"
-          check "MCP tests"          "${{ steps.counts.outputs.mcp_tests }}"
           check "Commands"           "${{ steps.counts.outputs.commands }}"
+          # Note: bats_tests and mcp_tests are NOT checked against README
+          # because test counts vary by platform (Windows vs Linux, skips, timeouts).
+          # They're gathered for informational logging only.
 
           if [ $FAIL -ne 0 ]; then
             echo ""
