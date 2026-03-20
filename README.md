@@ -516,72 +516,40 @@ Agents don't have hardcoded models -- the active profile determines which model 
 
 32 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
-### Validation & Quality
-
 | Tool | Category | What It Does |
 |------|----------|-------------|
-| `check-version-sync` | Validation | Check version alignment between projects |
+| `code-metrics` | Analysis | Code complexity metrics: LOC, nesting depth, function count per module |
+| `dependency-graph` | Analysis | Build module dependency graph with DFS cycle detection + Mermaid output |
+| `module-health` | Analysis | Per-module health dashboard: LOC, test count, deps, coverage |
+| `string-completeness` | Analysis | Compare base strings.xml vs locale variants, report missing translations |
+| `unused-resources` | Analysis | Detect orphan strings/drawables not referenced in source code |
+| `skill-usage-analytics` | Analytics | Toolkit usage stats: run counts, common findings, per-skill trends |
+| `api-surface-diff` | API | Detect breaking public API changes between git branches |
+| `audit-report` | Audit | Read `audit-log.jsonl` and return aggregated quality trend data |
+| `findings-report` | Audit | Read `findings-log.jsonl` with dedup, severity filter, resolution tracking |
+| `pattern-coverage` | Coverage | Map pattern doc enforcement: Detekt rules, scripts, agents per doc |
 | `find-pattern` | Discovery | Search pattern registry by query terms |
+| `generate-detekt-rules` | Generation | Generate Kotlin Detekt rules from pattern doc frontmatter |
+| `ingest-content` | Ingestion | Fetch and analyze external content against pattern metadata |
+| `gradle-config-lint` | Linting | Check convention plugin usage, hardcoded versions, version catalog compliance |
+| `check-doc-freshness` | Monitoring | Alias for monitor-sources (backward compatible) |
+| `monitor-sources` | Monitoring | Check upstream sources for version changes and deprecations |
+| `compose-preview-audit` | Quality | Audit @Preview quality: dark mode, screen sizes, PreviewParameter usage |
 | `script-parity` | Quality | Compare PS1 and SH script behavior |
 | `setup-check` | Setup | Verify toolkit installation in a project |
+| `l0-diff` | Sync | Compare L0 registry vs downstream manifest to preview sync delta |
+| `rate-limit-status` | Utility | Check current rate limit status |
+| `check-version-sync` | Validation | Check version alignment between projects |
+| `migration-validator` | Validation | Validate Room/SQLDelight migration sequences and flag destructive ops |
+| `proguard-validator` | Validation | Validate ProGuard references exist and recommend keep rules by library |
 | `validate-all` | Validation | Run all validation scripts with structured output |
 | `validate-claude-md` | Validation | Validate CLAUDE.md ecosystem: template structure, canonical coverage |
 | `validate-doc-structure` | Validation | Validate documentation structure and frontmatter completeness |
 | `validate-skills` | Validation | Validate skills registry, frontmatter, and downstream sync |
 | `validate-vault` | Validation | Validate vault content and wikilink integrity |
 | `verify-kmp` | Validation | Validate KMP source sets and imports |
-
-### Module & Dependency Analysis
-
-| Tool | Category | What It Does |
-|------|----------|-------------|
-| `module-health` | Analysis | Per-module health dashboard: LOC, test count, deps, coverage |
-| `dependency-graph` | Analysis | Build module dependency graph with DFS cycle detection + Mermaid output |
-| `code-metrics` | Metrics | Code complexity metrics: LOC, nesting depth, function count per module |
-| `gradle-config-lint` | Linting | Check convention plugin usage, hardcoded versions, version catalog compliance |
-| `proguard-validator` | Validation | Validate ProGuard references exist and recommend keep rules by library |
-
-### Resource & API Analysis
-
-| Tool | Category | What It Does |
-|------|----------|-------------|
-| `unused-resources` | Analysis | Detect orphan strings/drawables not referenced in source code |
-| `string-completeness` | Analysis | Compare base strings.xml vs locale variants, report missing translations |
-| `api-surface-diff` | Analysis | Detect breaking public API changes between git branches |
-| `migration-validator` | Validation | Validate Room/SQLDelight migration sequences and flag destructive ops |
-| `compose-preview-audit` | Quality | Audit @Preview quality: dark mode, screen sizes, PreviewParameter usage |
-
-### Audit & Reporting
-
-| Tool | Category | What It Does |
-|------|----------|-------------|
-| `audit-report` | Audit | Read `audit-log.jsonl` and return aggregated quality trend data |
-| `findings-report` | Audit | Read `findings-log.jsonl` with dedup, severity filter, resolution tracking |
-| `skill-usage-analytics` | Analytics | Toolkit usage stats: run counts, common findings, per-skill trends |
-
-### L0 Sync & Distribution
-
-| Tool | Category | What It Does |
-|------|----------|-------------|
-| `l0-diff` | Sync | Compare L0 registry vs downstream manifest to preview sync delta |
-| `pattern-coverage` | Coverage | Map pattern doc enforcement: Detekt rules, scripts, agents per doc |
-
-### Monitoring & Vault
-
-| Tool | Category | What It Does |
-|------|----------|-------------|
-| `check-doc-freshness` | Monitoring | Alias for monitor-sources (backward compatible) |
-| `monitor-sources` | Monitoring | Check upstream sources for version changes and deprecations |
 | `sync-vault` | Vault | Sync documentation into unified Obsidian vault |
 | `vault-status` | Vault | Check vault sync status and statistics |
-
-### Generation & Utility
-
-| Tool | Category | What It Does |
-|------|----------|-------------|
-| `generate-detekt-rules` | Generation | Generate Kotlin Detekt rules from pattern doc frontmatter |
-| `ingest-content` | Ingestion | Fetch and analyze external content against pattern metadata |
-| `rate-limit-status` | Utility | Check current rate limit status |
 
 ---
 
@@ -801,21 +769,58 @@ AndroidCommonDoc/
 
 ## Coverage Workflow
 
+`/test-full-parallel` orchestrates a complete test + coverage cycle via `run-parallel-coverage-suite.sh` — a single script that handles everything from daemon management to gap analysis:
+
 ```
-/test-full  ->  gradlew test + coverage  ->  build/reports/{jacoco,kover}/*.xml
-                                                        |
-/coverage   ->  run-parallel-coverage-suite  <----------+
-               (parse XMLs, no test execution)
-                        |
-                        v
-               coverage-full-report.md
-               (per-module %, missed lines, gaps)
-                        |
-/auto-cover <-----------+
-               (generate tests for uncovered lines)
+┌─────────────────────────────────────────────────────────────────────┐
+│  /test-full-parallel                                                │
+│  run-parallel-coverage-suite.sh --project-root . --coverage-tool auto│
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. DAEMON MANAGEMENT                                               │
+│     --fresh-daemon → stop daemons + wipe build/reports/kover|jacoco │
+│                                                                     │
+│  2. DISCOVER MODULES                                                │
+│     Scan settings.gradle.kts → detect KMP vs Android → filter       │
+│     --module-filter "core:*"  --coverage-only  --include-shared     │
+│                                                                     │
+│  3. BUILD TASK LISTS                                                │
+│     Auto-detect test type (common|androidUnit|desktop) per module   │
+│     --test-type all  → run every variant                            │
+│                                                                     │
+│  4. RUN TESTS (single Gradle invocation)                            │
+│     gradlew :mod:test :mod:koverXmlReport --parallel --continue     │
+│     --rerun-tasks (coverage phase only — avoids stale XMLs)         │
+│     --max-workers N  --timeout 600                                  │
+│                                                                     │
+│  5. PARSE COVERAGE (lib/coverage-detect.sh)                         │
+│     Auto-detect JaCoCo vs Kover → parse XML → per-module metrics    │
+│     --coverage-tool jacoco|kover|auto|none                          │
+│                                                                     │
+│  6. GENERATE REPORT → coverage-full-report.md                       │
+│     Per-module: instruction%, branch%, missed lines, uncovered fns  │
+│     --min-missed-lines 5  --output-file custom-report.md            │
+│                                                                     │
+│  7. COVERAGE GAPS                                                   │
+│     Files with lowest coverage → input for /auto-cover              │
+│                                                                     │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │
+                           v
+         coverage-full-report.md  →  /auto-cover
+         (per-module %, missed lines)    (generate tests for gaps)
 ```
 
-All test and coverage skills accept `--coverage-tool jacoco|kover|auto|none`.
+The same script powers all coverage skills:
+
+| Skill | What It Runs | Gradle Invocations |
+|-------|-------------|-------------------|
+| `/test-full-parallel` | Full flow: tests + coverage + report | 1 (parallel) |
+| `/test-full` | Same flow, sequential execution | 1 per module |
+| `/coverage` | Steps 5-7 only (parse existing XMLs) | 0 |
+| `/auto-cover` | Reads report → generates tests for gaps | 0 + 1 per new test |
+
+All skills accept `--coverage-tool jacoco|kover|auto|none`.
 
 ---
 
