@@ -1,0 +1,38 @@
+name: Agent Parity Check
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        description: 'GSD agent target: user or project'
+        required: false
+        default: 'project'
+        type: string
+
+jobs:
+  agent-parity:
+    name: Check .claude/agents ↔ GSD parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup GSD agents directory
+        run: |
+          if [ "${{ inputs.target }}" = "user" ]; then
+            mkdir -p ~/.gsd/agent/agents
+          else
+            mkdir -p .gsd/agents
+          fi
+
+      - name: Sync GSD agents
+        run: |
+          bash scripts/sh/sync-gsd-agents.sh \
+            --target "${{ inputs.target }}" \
+            --project-root "$(pwd)" \
+            --verbose
+
+      - name: Check agent parity
+        run: |
+          bash scripts/sh/check-agent-parity.sh \
+            --target "${{ inputs.target }}" \
+            --project-root "$(pwd)"

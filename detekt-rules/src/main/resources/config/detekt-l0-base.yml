@@ -93,3 +93,21 @@ AndroidCommonDoc:
   # Navigation must be state-driven — Channel must not be used for navigation events
   NoChannelForNavigationRule:
     active: true
+
+  # ── KMP / time safety ──────────────────────────────────────────────────
+  # Use kotlin.time.Clock.System instead of kotlinx.datetime.Clock.System
+  PreferKotlinTimeClockRule:
+    active: true
+
+  # System.currentTimeMillis() is JVM-only — use Clock.System.now().toEpochMilliseconds()
+  NoSystemCurrentTimeMillisRule:
+    active: true
+
+  # java.time/java.security/java.text are JVM-only — forbidden in commonMain
+  NoJavaTimeInCommonMainRule:
+    active: true
+
+  # ── Testing patterns ───────────────────────────────────────────────────
+  # Turbine is forbidden — use backgroundScope.launch + flow.toList()
+  NoTurbineRule:
+    active: true

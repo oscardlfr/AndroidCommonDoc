@@ -6,11 +6,15 @@ import com.androidcommondoc.detekt.rules.NoChannelForUiEventsRule
 import com.androidcommondoc.detekt.rules.NoChannelForNavigationRule
 import com.androidcommondoc.detekt.rules.NoHardcodedDispatchersRule
 import com.androidcommondoc.detekt.rules.NoHardcodedStringsInViewModelRule
+import com.androidcommondoc.detekt.rules.NoJavaTimeInCommonMainRule
 import com.androidcommondoc.detekt.rules.NoLaunchInInitRule
 import com.androidcommondoc.detekt.rules.NoMagicNumbersInUseCaseRule
 import com.androidcommondoc.detekt.rules.NoPlatformDepsInViewModelRule
 import com.androidcommondoc.detekt.rules.NoRunCatchingInCoroutineScopeRule
 import com.androidcommondoc.detekt.rules.NoSilentCatchRule
+import com.androidcommondoc.detekt.rules.NoSystemCurrentTimeMillisRule
+import com.androidcommondoc.detekt.rules.NoTurbineRule
+import com.androidcommondoc.detekt.rules.PreferKotlinTimeClockRule
 import com.androidcommondoc.detekt.rules.SealedUiStateRule
 import com.androidcommondoc.detekt.rules.WhileSubscribedTimeoutRule
 import dev.detekt.api.RuleSet
@@ -41,6 +45,12 @@ class AndroidCommonDocRuleSetProvider : RuleSetProvider {
             ::NoChannelForNavigationRule,
             // ── Business logic ───────────────────────────────────────────────
             ::NoMagicNumbersInUseCaseRule,
+            // ── KMP / time safety ───────────────────────────────────────────────
+            ::PreferKotlinTimeClockRule,
+            ::NoSystemCurrentTimeMillisRule,
+            ::NoJavaTimeInCommonMainRule,
+            // ── Testing patterns ────────────────────────────────────────────────
+            ::NoTurbineRule,
         )
     )
 }

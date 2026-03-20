@@ -45,7 +45,7 @@ node mcp-server/build/cli/monitor-sources.js --tier all --output reports/monitor
 7. **Navigation:** State-driven -- never Channel-based.
 8. **No platform deps in ViewModels:** No `Context`, `Resources`, `UIKit` imports.
 
-## Available Skills (30)
+## Available Skills (31)
 
 Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-specific files.
 
@@ -90,6 +90,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | Skill | Description |
 |-------|-------------|
 | `sync-l0` | Synchronize L0 skills, agents, and commands to a consumer project |
+| `sync-gsd-agents` | Sync .claude/agents/ to GSD subagent system and verify parity |
 | `sync-vault` | Sync documentation into unified Obsidian vault |
 
 ### Web Development

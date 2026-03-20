@@ -6,11 +6,14 @@
  * registry to a downstream project based on its l0-manifest.json.
  *
  * Usage:
- *   npx tsx src/sync/sync-l0-cli.ts [--project-root <path>] [--l0-root <path>]
+ *   node build/sync/sync-l0-cli.js [--project-root <path>] [--l0-root <path>] [--prune] [--force] [--dry-run]
  *
  * Options:
  *   --project-root  Path to the downstream project (default: cwd)
  *   --l0-root       Path to AndroidCommonDoc (default: resolved from manifest l0_source)
+ *   --prune         Remove orphaned files (default: additive only)
+ *   --force         Allow removing >5 files (requires --prune)
+ *   --dry-run       Preview changes without writing
  *
  * Exit codes:
  *   0 - Success
@@ -19,16 +22,27 @@
 
 import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import { syncL0 } from "./sync-engine.js";
+import { syncL0, resolveL0Source, type SyncOptions } from "./sync-engine.js";
 import { createDefaultManifest } from "./manifest-schema.js";
 
 // ---------------------------------------------------------------------------
 // Argument parsing
 // ---------------------------------------------------------------------------
 
-function parseArgs(argv: string[]): { projectRoot: string; l0Root?: string } {
+interface CliArgs {
+  projectRoot: string;
+  l0Root?: string;
+  prune: boolean;
+  force: boolean;
+  dryRun: boolean;
+}
+
+function parseArgs(argv: string[]): CliArgs {
   let projectRoot = process.cwd();
   let l0Root: string | undefined;
+  let prune = false;
+  let force = false;
+  let dryRun = false;
 
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--project-root" && argv[i + 1]) {
@@ -37,10 +51,16 @@ function parseArgs(argv: string[]): { projectRoot: string; l0Root?: string } {
     } else if (argv[i] === "--l0-root" && argv[i + 1]) {
       l0Root = path.resolve(argv[i + 1]);
       i++;
+    } else if (argv[i] === "--prune") {
+      prune = true;
+    } else if (argv[i] === "--force") {
+      force = true;
+    } else if (argv[i] === "--dry-run") {
+      dryRun = true;
     }
   }
 
-  return { projectRoot, l0Root };
+  return { projectRoot, l0Root, prune, force, dryRun };
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +69,7 @@ function parseArgs(argv: string[]): { projectRoot: string; l0Root?: string } {
 
 /**
  * Ensure l0-manifest.json exists. If not, create a default one.
- * Returns the l0Root resolved from the manifest or the provided override.
+ * Returns the l0Root resolved robustly (git toplevel + env fallback).
  */
 async function ensureManifest(
   projectRoot: string,
@@ -77,17 +97,18 @@ async function ensureManifest(
     console.log(`Created default l0-manifest.json (l0_source: ${relativePath})`);
   }
 
-  // If l0Root was provided, use it; otherwise resolve from manifest
+  // If l0Root was provided explicitly, use it directly
   if (l0RootOverride) {
     return l0RootOverride;
   }
 
-  // Read the manifest to get l0_source
+  // Read the manifest to get l0_source and resolve it robustly
   const content = await readFile(manifestPath, "utf-8");
   const data = JSON.parse(content);
   const l0Source: string = data.l0_source;
 
-  return path.resolve(projectRoot, l0Source);
+  // Fix #2: Use resolveL0Source (git toplevel + env fallback + registry validation)
+  return resolveL0Source(l0Source, projectRoot);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,23 +116,49 @@ async function ensureManifest(
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const { projectRoot, l0Root: l0RootArg } = parseArgs(process.argv);
+  const { projectRoot, l0Root: l0RootArg, prune, force, dryRun } = parseArgs(process.argv);
 
   console.log(`Sync L0 -> ${projectRoot}`);
+  if (dryRun) console.log("  (dry-run mode — no files will be modified)");
 
   const l0Root = await ensureManifest(projectRoot, l0RootArg);
 
   console.log(`L0 source: ${l0Root}`);
+  console.log(`Mode: ${prune ? "prune (with removes)" : "additive (no removes)"}`);
   console.log("");
 
-  const report = await syncL0(projectRoot, l0Root);
+  const options: SyncOptions = { prune, force, dryRun };
+  const report = await syncL0(projectRoot, l0Root, options);
 
   // Print summary
   console.log(`  Added:     ${report.added}`);
   console.log(`  Updated:   ${report.updated}`);
-  console.log(`  Removed:   ${report.removed}`);
+  if (prune) {
+    console.log(`  Removed:   ${report.removed}`);
+  }
+  if (report.skippedRemoves > 0) {
+    console.log(`  Skipped removes: ${report.skippedRemoves}`);
+  }
   console.log(`  Unchanged: ${report.unchanged}`);
+  if (report.l0Commit) {
+    console.log(`  L0 commit: ${report.l0Commit}`);
+  }
   console.log("");
+
+  // List removed files (Fix #7: verbose remove listing)
+  if (report.removedPaths.length > 0) {
+    console.log("Removed files:");
+    for (const p of report.removedPaths) {
+      console.log(`  ✗ ${p}`);
+    }
+    console.log("");
+  }
+
+  // Print warnings
+  for (const w of report.warnings) {
+    console.warn(`⚠ ${w}`);
+  }
+  if (report.warnings.length > 0) console.log("");
 
   if (report.missing.length > 0) {
     console.error(`Post-sync verification FAILED — ${report.missing.length} file(s) missing from disk:`);
@@ -144,6 +191,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error("Sync failed:", err);
+  console.error("Sync failed:", err instanceof Error ? err.message : err);
   process.exit(1);
 });

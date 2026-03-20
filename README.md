@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 13 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 32 tools for programmatic access, a unified audit system with finding deduplication, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 17 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 32 tools for programmatic access, a unified audit system with finding deduplication, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Platform support:** All skills, agents, and Detekt rules work on both **Android-only (AGP 8.x)** and **KMP (AGP 9.0+)** projects. A small subset is KMP-only (noted below).
 
@@ -17,9 +17,9 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 13 custo
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
 - **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 22 cross-platform pairs
-- **AI agent skills** for Claude Code and GitHub Copilot -- 39 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
+- **AI agent skills** for Claude Code and GitHub Copilot -- 40 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
-- **Detekt rules** that enforce architecture patterns at build time -- 13 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, and navigation contracts
+- **Detekt rules** that enforce architecture patterns at build time -- 17 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with configurable engine (JaCoCo or Kover), parallel execution, and gap analysis
@@ -72,13 +72,19 @@ AndroidCommonDoc is designed as an **L0 (generic layer)** in a multi-tier ecosys
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 70 L0 entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 82 L0 entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync and tracks checksums
-3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection
+3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety.
 
 ```bash
-# In your project: sync all L0 skills
+# In your project: sync all L0 skills (additive — safe)
 /sync-l0
+
+# Remove orphaned files that no longer exist in L0
+/sync-l0 --prune
+
+# Preview what would change without writing
+/sync-l0 --dry-run
 ```
 
 ---
@@ -209,7 +215,7 @@ Findings are persisted to `.androidcommondoc/findings-log.jsonl` with resolution
 
 ## Detekt Architecture Rules
 
-13 hand-written AST-only rules (no type resolution, no bindingContext) that enforce the most impactful architecture patterns at build time. Organized by category:
+17 hand-written AST-only rules (no type resolution, no bindingContext) that enforce the most impactful architecture patterns at build time. Organized by category:
 
 ### State & Exposure
 
@@ -244,9 +250,23 @@ Findings are persisted to `.androidcommondoc/findings-log.jsonl` with resolution
 | `NoChannelForNavigationRule` | `Channel` for navigation events in ViewModel |
 | `NoMagicNumbersInUseCaseRule` | Numeric literals in UseCase body -- extract as named constants |
 
+### KMP / Time Safety
+
+| Rule | What It Catches |
+|------|----------------|
+| `PreferKotlinTimeClockRule` | `kotlinx.datetime.Clock` -- use `kotlin.time.Clock.System` instead |
+| `NoSystemCurrentTimeMillisRule` | `System.currentTimeMillis()` -- use `Clock.System.now().toEpochMilliseconds()` |
+| `NoJavaTimeInCommonMainRule` | `java.time.*`, `java.security.*`, `java.text.*` in commonMain source sets |
+
+### Testing Patterns
+
+| Rule | What It Catches |
+|------|----------------|
+| `NoTurbineRule` | `app.cash.turbine` imports -- use `backgroundScope.launch` + `flow.toList()` |
+
 ### L0/L1 Config Hierarchy
 
-L0 ships `detekt-l0-base.yml` with all 13 rules `active: true`. The convention plugin loads both files automatically -- `detekt-l0-base.yml` as base, `config.yml` as L1 override (last file wins per key):
+L0 ships `detekt-l0-base.yml` with all 17 rules `active: true`. The convention plugin loads both files automatically -- `detekt-l0-base.yml` as base, `config.yml` as L1 override (last file wins per key):
 
 ```bash
 # Manual equivalent of what the plugin does:
@@ -272,7 +292,7 @@ plugins {
 }
 
 androidCommonDoc {
-    detektRules.set(true)       // default: true  -- 13 architecture rules
+    detektRules.set(true)       // default: true  -- 17 architecture rules
     composeRules.set(true)      // default: true  -- Compose best practices
     testConfig.set(true)        // default: true  -- useJUnitPlatform, maxParallelForks=1
     formattingRules.set(false)  // default: false -- ktlint formatting (opt-in)
@@ -306,7 +326,7 @@ Real-time pattern enforcement during AI-assisted development:
 
 ## Skills Reference
 
-39 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat.
+40 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
@@ -349,7 +369,7 @@ Real-time pattern enforcement during AI-assisted development:
 | `/sbom` | Generate CycloneDX Software Bill of Materials | Android + KMP |
 | `/sbom-analyze` | Analyze SBOM dependencies, licenses, and transitive tree | Android + KMP |
 | `/sbom-scan` | Scan SBOM for known CVEs using Trivy | Android + KMP |
-| `/set-model-profile` | Switch agent model tier: budget / balanced / advanced / quality | Android + KMP |
+| `/set-model-profile` | Switch agent model tier: budget / balanced / advanced / quality (auto-bootstraps from L0) | Android + KMP |
 | `/setup` | Interactive wizard -- configure any project to consume AndroidCommonDoc | Android + KMP |
 | `/sync-versions` | Check version alignment between projects and shared catalog | KMP / multi-project |
 | `/validate-patterns` | Validate code against documented architecture patterns | Android + KMP |
@@ -377,7 +397,8 @@ Real-time pattern enforcement during AI-assisted development:
 | Skill | What it does |
 |-------|-------------|
 | `/sync-gsd-skills` | Sync skills from all sources (marketplace, L0, L0 agents) to GSD-2 |
-| `/sync-l0` | Synchronize L0 skills, agents, and commands to current project via registry |
+| `/sync-gsd-agents` | Sync .claude/agents/ to GSD subagent system and verify parity |
+| `/sync-l0` | Synchronize L0 skills, agents, and commands to current project (additive default, `--prune` for removes) |
 | `/sync-vault` | Sync documentation into unified Obsidian vault |
 
 ### Web Development
@@ -534,7 +555,7 @@ Agents use the cheapest model that delivers reliable results. Switch profiles wi
 
 ## Reusable CI Workflows
 
-Six `workflow_call` workflows any Android or KMP project can reference:
+7 `workflow_call` workflows any Android or KMP project can reference:
 
 ```yaml
 jobs:
@@ -566,6 +587,9 @@ jobs:
 
   shell-tests:
     uses: <org>/AndroidCommonDoc/.github/workflows/reusable-shell-tests.yml@main
+
+  agent-parity:
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-agent-parity.yml@main
 ```
 
 See `setup/github-workflows/ci-template.yml` for a full consumer project template.
@@ -607,6 +631,8 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `code-metrics` | Code complexity metrics: LOC, file count, public functions per module |
 | `gradle-config-check` | Gradle configuration linter (convention plugins, hardcoded versions) |
 | `sync-gsd-skills` | GSD-2 skill sync from marketplace + L0 + L0 agents (opt-in) |
+| `sync-gsd-agents` | Generate GSD subagent wrappers from .claude/agents/ |
+| `check-agent-parity` | Verify parity between .claude/agents/ and GSD subagents |
 
 ### Shared Libraries
 
@@ -650,7 +676,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (69 entries,     |   |
+                   |  | SKILL.md |    | (82 entries,     |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -665,7 +691,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 |.json     |       |  +--------------+    +---------------+  |
 +----------+       |  | detekt-      |    | build-logic/  |  |
                    |  | rules/       |--->| convention    |  |
-                   |  | (13 rules)   |    | plugin        |  |
+                   |  | (17 rules)   |    | plugin        |  |
                    |  +--------------+    +---------------+  |
                    +-----------------------------------------+
 ```
@@ -677,13 +703,13 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 26 Claude Code slash commands
+|   +-- commands/           # 27 Claude Code slash commands
 |   +-- agents/             # 15 specialized agents
 |   +-- hooks/              # Real-time Detekt enforcement hooks
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
-|   +-- */SKILL.md          # 39 canonical skill definitions
-|   +-- registry.json       # L0 registry (69 entries, SHA-256 hashes)
+|   +-- */SKILL.md          # 40 canonical skill definitions
+|   +-- registry.json       # L0 registry (82 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
@@ -703,7 +729,7 @@ AndroidCommonDoc/
 |   |   +-- cli/            # CLI entrypoint for CI monitoring
 |   +-- tests/              # 76 test files -- vitest unit + integration (949 tests)
 +-- detekt-rules/
-|   +-- src/main/kotlin/    # 13 hand-written AST-only Detekt rules
+|   +-- src/main/kotlin/    # 17 hand-written AST-only Detekt rules
 |   +-- src/main/resources/
 |       +-- config/
 |           +-- detekt-l0-base.yml  # Distributable baseline (all rules active)
@@ -713,14 +739,17 @@ AndroidCommonDoc/
 +-- konsist-tests/          # Konsist architecture verification tests
 +-- setup/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
-|   +-- copilot-templates/  # 39 Copilot prompt templates
+|   +-- copilot-templates/  # 40 Copilot prompt templates
 |   +-- github-workflows/   # CI template + PR template for consumer projects
 +-- .github/workflows/
-|   +-- mcp-server-ci.yml                    # MCP server test CI
+|   +-- l0-ci.yml                            # L0 unified CI (all checks on push/PR)
+|   +-- mcp-server-ci.yml                    # MCP server test CI (path-filtered)
 |   +-- doc-monitor.yml                      # Upstream doc monitoring cron
+|   +-- readme-audit.yml                     # README count verification
 |   +-- reusable-commit-lint.yml             # workflow_call: Conventional Commits
 |   +-- reusable-lint-resources.yml          # workflow_call: resource naming
 |   +-- reusable-kmp-safety-check.yml        # workflow_call: GlobalScope/Dispatchers scan
+|   +-- reusable-agent-parity.yml            # workflow_call: .claude ↔ GSD agent sync check
 |   +-- reusable-architecture-guards.yml     # workflow_call: Konsist guards
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests

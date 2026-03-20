@@ -1,0 +1,177 @@
+name: L0 CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Wave 1: Fast checks (no deps, <30s) ────────────────────────────────
+
+  commit-lint:
+    name: Commit Lint
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/reusable-commit-lint.yml
+    with:
+      valid_scopes: "core,data,ui,feature,ci,deps,release,docs,detekt,mcp,skills,scripts,agents"
+
+  readme-audit:
+    name: README Audit
+    uses: ./.github/workflows/readme-audit.yml
+
+  agent-parity:
+    name: Agent Parity
+    uses: ./.github/workflows/reusable-agent-parity.yml
+    with:
+      target: project
+
+  # ── Wave 2: Test suites (parallel) ─────────────────────────────────────
+
+  shell-tests:
+    name: Shell Tests (bats)
+    uses: ./.github/workflows/reusable-shell-tests.yml
+
+  detekt-rules:
+    name: Detekt Rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build rules JAR
+        working-directory: detekt-rules
+        run: chmod +x ./gradlew && ./gradlew jar
+
+      - name: Run rule tests
+        working-directory: detekt-rules
+        run: ./gradlew test
+
+      - name: Upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: detekt-test-report
+          path: detekt-rules/build/reports/tests/
+          retention-days: 7
+
+  mcp-server:
+    name: MCP Server
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mcp-server
+        run: npm ci
+
+      - name: Build TypeScript
+        working-directory: mcp-server
+        run: npm run build
+
+      - name: Run tests
+        working-directory: mcp-server
+        run: npm test
+        env:
+          ANDROID_COMMON_DOC: ${{ github.workspace }}
+
+      - name: Lint
+        working-directory: mcp-server
+        run: npm run lint
+
+  # ── Wave 3: Cross-cutting validation ───────────────────────────────────
+
+  skill-registry:
+    name: Skill Registry Integrity
+    runs-on: ubuntu-latest
+    needs: [mcp-server]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mcp-server
+        run: npm ci
+
+      - name: Build
+        working-directory: mcp-server
+        run: npm run build
+
+      - name: Validate registry matches filesystem
+        run: |
+          # Count actual assets
+          SKILLS=$(ls skills/ | grep -vE "registry|params|schema" | wc -l | tr -d ' ')
+          AGENTS=$(ls .claude/agents/ | wc -l | tr -d ' ')
+          COMMANDS=$(ls .claude/commands/ | wc -l | tr -d ' ')
+          REGISTRY=$(python3 -c "
+          import json
+          d = json.load(open('skills/registry.json'))
+          entries = d.get('skills', d.get('entries', []))
+          skills = sum(1 for e in entries if e.get('type') == 'skill')
+          agents = sum(1 for e in entries if e.get('type') == 'agent')
+          commands = sum(1 for e in entries if e.get('type') == 'command')
+          print(f'{skills} {agents} {commands} {len(entries)}')
+          ")
+          read REG_SKILLS REG_AGENTS REG_COMMANDS REG_TOTAL <<< "$REGISTRY"
+
+          echo "Filesystem: $SKILLS skills, $AGENTS agents, $COMMANDS commands"
+          echo "Registry:   $REG_SKILLS skills, $REG_AGENTS agents, $REG_COMMANDS commands ($REG_TOTAL total)"
+
+          FAIL=0
+          if [ "$SKILLS" != "$REG_SKILLS" ]; then
+            echo "❌ Skills mismatch: filesystem=$SKILLS registry=$REG_SKILLS"
+            FAIL=1
+          fi
+          if [ "$AGENTS" != "$REG_AGENTS" ]; then
+            echo "❌ Agents mismatch: filesystem=$AGENTS registry=$REG_AGENTS"
+            FAIL=1
+          fi
+          if [ "$COMMANDS" != "$REG_COMMANDS" ]; then
+            echo "❌ Commands mismatch: filesystem=$COMMANDS registry=$REG_COMMANDS"
+            FAIL=1
+          fi
+          [ $FAIL -eq 0 ] && echo "✅ Registry in sync" || exit 1
+
+      - name: Validate all skills have SKILL.md
+        run: |
+          FAIL=0
+          for dir in skills/*/; do
+            name=$(basename "$dir")
+            [[ "$name" =~ ^(registry|params|schema)$ ]] && continue
+            if [ ! -f "$dir/SKILL.md" ]; then
+              echo "❌ $dir missing SKILL.md"
+              FAIL=1
+            fi
+          done
+          [ $FAIL -eq 0 ] && echo "✅ All skill dirs have SKILL.md" || exit 1
+
+      - name: Validate all registry hashes are current
+        run: |
+          bash scripts/sh/rehash-registry.sh --project-root . --check --verbose

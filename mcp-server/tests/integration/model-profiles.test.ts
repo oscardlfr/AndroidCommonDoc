@@ -326,3 +326,99 @@ describe("model-profiles.json", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bootstrap and L0 sync contract tests (Fix #6)
+// ---------------------------------------------------------------------------
+
+describe("model-profiles.json L0 sync contract", () => {
+  let l0Config: ModelProfiles;
+
+  beforeAll(async () => {
+    const raw = await readFile(PROFILES_PATH, "utf-8");
+    l0Config = JSON.parse(raw);
+  });
+
+  it("L0 profiles.json is the canonical source (file exists at L0 root)", async () => {
+    const content = await readFile(PROFILES_PATH, "utf-8");
+    expect(content).toBeTruthy();
+    const data = JSON.parse(content);
+    expect(data.profiles).toBeDefined();
+    expect(Object.keys(data.profiles).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("L0 profiles contain all four canonical tiers", () => {
+    const tiers = Object.keys(l0Config.profiles);
+    expect(tiers).toContain("budget");
+    expect(tiers).toContain("balanced");
+    expect(tiers).toContain("advanced");
+    expect(tiers).toContain("quality");
+  });
+
+  it("each L0 profile override agent maps to an existing .claude/agents file", async () => {
+    const agentFiles = await readdir(AGENTS_DIR);
+    const agentNames = agentFiles
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => f.replace(".md", ""));
+
+    for (const [profileName, profile] of Object.entries(l0Config.profiles)) {
+      for (const overrideAgent of Object.keys(profile.overrides)) {
+        expect(
+          agentNames,
+          `${profileName}.overrides references "${overrideAgent}" which doesn't exist in .claude/agents/`,
+        ).toContain(overrideAgent);
+      }
+    }
+  });
+
+  it("balanced profile overrides are a subset of all agents (not all agents)", async () => {
+    const agentFiles = await readdir(AGENTS_DIR);
+    const allAgentNames = agentFiles
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => f.replace(".md", ""));
+    const overrideCount = Object.keys(l0Config.profiles.balanced.overrides).length;
+    const agentCount = allAgentNames.length;
+    // Balanced should have SOME overrides but not ALL agents
+    expect(overrideCount).toBeGreaterThan(0);
+    expect(overrideCount).toBeLessThan(agentCount);
+  });
+
+  it("sync-l0 does NOT include model-profiles.json in registry (managed by skill)", async () => {
+    const registryRaw = await readFile(
+      path.join(ROOT, "skills", "registry.json"),
+      "utf-8",
+    );
+    const registry = JSON.parse(registryRaw);
+    const entries = registry.skills ?? registry.entries ?? [];
+    const profileEntry = entries.find(
+      (e: { path?: string; name?: string }) =>
+        (e.path && e.path.includes("model-profiles")) ||
+        (e.name && e.name === "model-profiles"),
+    );
+    expect(
+      profileEntry,
+      "model-profiles.json should NOT be in the sync registry — it's managed by /set-model-profile",
+    ).toBeUndefined();
+  });
+
+  it("set-model-profile skill documents bootstrap behavior", async () => {
+    const skillContent = await readFile(
+      path.join(ROOT, "skills", "set-model-profile", "SKILL.md"),
+      "utf-8",
+    );
+    expect(skillContent).toContain("Bootstrap");
+    expect(skillContent).toContain("l0-manifest.json");
+    expect(skillContent).toContain("ANDROID_COMMON_DOC");
+    expect(skillContent).toContain("--update");
+  });
+
+  it("set-model-profile skill documents --update for refreshing L0 definitions", async () => {
+    const skillContent = await readFile(
+      path.join(ROOT, "skills", "set-model-profile", "SKILL.md"),
+      "utf-8",
+    );
+    expect(skillContent).toContain("--update");
+    expect(skillContent).toContain("Re-import profile definitions from L0");
+    expect(skillContent).toContain("current");
+  });
+});

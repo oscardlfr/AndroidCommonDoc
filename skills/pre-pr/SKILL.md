@@ -78,7 +78,21 @@ git diff "$MERGE_BASE..HEAD" -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
 Any GlobalScope or Thread.sleep match → ERROR (blocks).
 Dispatchers match → WARNING (reports but doesn't block).
 
-### Step 6 — Build + Test (skip if `--skip-build`)
+### Step 6 — Registry hash freshness
+
+```bash
+bash scripts/sh/rehash-registry.sh --project-root "$(pwd)" --check
+```
+
+If stale hashes found and `--fix` was passed:
+```bash
+bash scripts/sh/rehash-registry.sh --project-root "$(pwd)"
+git add skills/registry.json
+```
+
+Reports the count of stale entries. Blocks the PR if any hashes are out of date (unless `--fix` auto-repairs them).
+
+### Step 7 — Build + Test (skip if `--skip-build`)
 
 ```bash
 ./gradlew check --no-daemon 2>&1
@@ -86,7 +100,7 @@ Dispatchers match → WARNING (reports but doesn't block).
 
 Report per-module pass/fail. Show failing test names on failure.
 
-### Step 7 — Print summary table
+### Step 8 — Print summary table
 
 ```
 ╔══════════════════════════════════════════╗
@@ -96,6 +110,7 @@ Report per-module pass/fail. Show failing test names on failure.
 ║ Lint resources       ✅ PASS / ❌ FAIL  ║
 ║ Architecture guards  ✅ PASS / ❌ FAIL  ║
 ║ KMP safety           ✅ PASS / ❌ FAIL  ║
+║ Registry hashes      ✅ PASS / ❌ FAIL  ║
 ║ Build + Tests        ✅ PASS / ❌ FAIL  ║
 ╠══════════════════════════════════════════╣
 ║ Overall:         ✅ READY / ❌ BLOCKED  ║

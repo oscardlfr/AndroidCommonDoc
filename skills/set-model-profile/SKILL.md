@@ -11,6 +11,7 @@
 /set-model-profile advanced     # Opus for orchestrators + deep analysis, Sonnet for rest
 /set-model-profile quality      # All agents → opus
 /set-model-profile --show       # Show which model each agent currently uses
+/set-model-profile --update     # Re-import profile definitions from L0 (keeps current selection)
 ```
 
 ## Profiles
@@ -24,19 +25,41 @@
 
 ## Execution
 
-### Step 1: Read Configuration
+### Step 1: Read or Bootstrap Configuration
 
-Read `.claude/model-profiles.json` from the project root. This file contains:
-- `current`: the active profile name
-- `profiles`: map of profile name → `{ description, default_model, overrides }`
+Read `.claude/model-profiles.json` from the project root.
+
+**If the file does not exist** (new project, worktree, missing from sync):
+1. Resolve L0 root: check `l0-manifest.json` → `l0_source`, then `ANDROID_COMMON_DOC` env var, then `../AndroidCommonDoc`
+2. Read `.claude/model-profiles.json` from the L0 root
+3. Copy it to the project root at `.claude/model-profiles.json`
+4. Set `"current": "balanced"` (safe default for new projects)
+5. Print: `Bootstrapped model-profiles.json from L0 (current: balanced)`
+
+This ensures the file is always available — no manual copy needed, even in worktrees.
+
+The file contains:
+- `current`: the active profile name (project-local, never overwritten by L0)
+- `profiles`: map of profile name → `{ description, default_model, overrides }` (definitions from L0)
 
 The `overrides` map allows specific agents to use a different model than the profile's `default_model`. For example, in `balanced`, static-check agents use `haiku` while the default is `sonnet`.
 
 ### Step 2: Parse Arguments
 
 - **No arguments or `--show`**: Show current profile, then list all agents with their current `model:` frontmatter value. Format as a table. Stop here.
-- **Profile name argument** (`budget`, `balanced`, `quality`): Proceed to Step 3.
+- **`--update`**: Re-import profile definitions from L0 while preserving the local `current` selection. Proceed to Step 2a.
+- **Profile name argument** (`budget`, `balanced`, `advanced`, `quality`): Proceed to Step 3.
 - **Invalid argument**: Show error with available profiles. Stop here.
+
+### Step 2a: Update Profiles from L0
+
+1. Resolve L0 root (same logic as bootstrap)
+2. Read L0's `.claude/model-profiles.json`
+3. Replace local `profiles` with L0's `profiles` (new definitions, new overrides)
+4. Keep local `current` unchanged
+5. If local `current` is not a key in the new profiles, warn and reset to `"balanced"`
+6. Write updated file
+7. Report: `Updated profile definitions from L0 (current: {current} preserved)`
 
 ### Step 3: Discover Agents
 
@@ -94,6 +117,13 @@ Users can edit `.claude/model-profiles.json` directly to:
 
 After manual edits, run `/set-model-profile {name}` to apply.
 
-## L0 Sync
+## L0 Sync Model
 
-This skill and its config are synced to downstream projects via L0 sync. Each project can maintain its own `current` profile selection independently — the profile definitions come from L0 but the active selection is project-local.
+Profile **definitions** (budget, balanced, advanced, quality + their overrides) come from L0.
+Profile **selection** (`current`) is project-local and never overwritten.
+
+The flow:
+1. L0 defines canonical profiles in `.claude/model-profiles.json`
+2. `/set-model-profile` bootstraps the file on first use (or `--update` refreshes definitions)
+3. `/sync-l0` does NOT sync this file — it's managed by the skill to preserve `current`
+4. Each project can add custom profiles without conflict

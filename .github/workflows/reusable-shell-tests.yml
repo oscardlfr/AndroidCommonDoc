@@ -12,11 +12,11 @@ jobs:
 
       - name: Install bats
         run: |
-          npm install -g bats
-          bats --version
+          npm install bats
+          npx bats --version
 
       - name: Run shell tests
-        run: bats scripts/tests/*.bats
+        run: npx bats scripts/tests/*.bats
 
       - name: Upload test results on failure
         if: failure()

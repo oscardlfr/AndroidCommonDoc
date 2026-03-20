@@ -29,6 +29,11 @@
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/detekt-pre-commit.sh",
             "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/registry-pre-commit.sh",
+            "timeout": 30
           }
         ]
       }

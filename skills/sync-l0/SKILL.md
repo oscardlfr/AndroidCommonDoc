@@ -44,23 +44,46 @@ cd mcp-server && npx tsx src/sync/sync-l0-cli.ts --project-root <path>
 
 ## Implementation
 
-Run the sync CLI from the AndroidCommonDoc mcp-server directory:
+The sync CLI can be invoked two ways:
 
+**Compiled (recommended — no extra deps):**
+```bash
+cd <androidcommondoc>/mcp-server && npm run build
+node build/sync/sync-l0-cli.js --project-root <target-project>
+```
+
+**TypeScript source (requires tsx):**
 ```bash
 cd <androidcommondoc>/mcp-server && npx tsx src/sync/sync-l0-cli.ts --project-root <target-project>
+```
+
+**Via npm script:**
+```bash
+cd <androidcommondoc>/mcp-server && npm run sync-l0 -- --project-root <target-project>
 ```
 
 ## Expected Output
 
 ```
 Sync L0 -> /path/to/project
-  Adding: 27 skills, 11 agents, 32 commands
-  Updating: 0
-  Removing: 0
-  Unchanged: 0
+L0 source: /path/to/AndroidCommonDoc
+Mode: additive (no removes)
 
-Sync complete: 70 added, 0 updated, 0 removed, 0 unchanged
+  Added:     70
+  Updated:   0
+  Unchanged: 0
+  L0 commit: 616ca21
+
+Sync complete: 70 added, 0 updated, 0 removed, 0 unchanged (70 total)
 Manifest updated: l0-manifest.json
+```
+
+With `--prune`:
+```
+  Removed:   3
+  Removed files:
+    ✗ .claude/skills/old-skill/SKILL.md
+    ✗ .claude/commands/deprecated-cmd.md
 ```
 
 ## Selection Configuration
