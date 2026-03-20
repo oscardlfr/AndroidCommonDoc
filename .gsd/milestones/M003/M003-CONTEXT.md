@@ -107,9 +107,41 @@ Layer topology:
 - Chain depth max 3 (L0 → L1 → L2) — no arbitrary nesting
 - Each layer works standalone if parents are offline (cached copies)
 
+## Documentation Cascade
+
+The doc system already has per-layer conventions (enforced by `l0-coherence-auditor` and `doc-structure.test.ts`), but they're implicit in code. The chain model makes them explicit and cascading.
+
+### Current doc standard per layer
+
+| Aspect | L0 | L1 | L2 |
+|---|---|---|---|
+| **Frontmatter** | 10 fields required | 10/10 completeness | category-only minimum |
+| **Hub docs** | ≤100 lines, one per subdir | ≤100 lines | Optional |
+| **Sub-docs** | ≤300 lines (500 max) | ≤500 lines | ≤500 lines |
+| **monitor_urls** | Required for upstream tracking | Optional | Not expected |
+| **l0_refs** | Within L0 | To L0 slugs (validated) | To L0 slugs |
+| **category** | 9 approved categories | Same vocab | Same vocab |
+| **Validated by** | `l0-coherence-auditor` + `doc-structure.test.ts` | `doc-structure.test.ts` L1 section | `doc-structure.test.ts` L2 section |
+
+### What chain adds for docs
+
+1. **L2 agent discovers L1 docs**: DawSync agent finds shared-kmp-libs patterns, not just L0 generic ones
+2. **l1_refs**: L2 docs reference L1 slugs — validated cross-layer
+3. **find-pattern searches all layers**: L0 + L1 + L2, ranked by proximity (L2 > L1 > L0)
+4. **Convention inheritance**: L1 inherits L0 doc standards, L2 inherits L1's
+5. **Vault integration**: `sync-vault` already handles multi-project — chain formalizes discovery order
+
+### Missing deliverables
+
+- `docs/guides/doc-standards.md`: Explicit per-layer standards (currently only in test assertions)
+- Manifest v2 `sources[]` used by `find-pattern` for multi-layer search
+- `CLAUDE.md` template: "## Cross-Layer Documentation" section pointing to parent docs
+
 ## Open Questions
 
 1. Should L1 have its own registry.json or reuse L0's format?
 2. How does L1 declare "my rules" vs "L0 rules I'm passing through"?
 3. Should KNOWLEDGE.md be merged automatically or require explicit imports?
 4. How do version conflicts resolve? (L0 says Kotlin 2.3.20, L1 says 2.3.10)
+5. Should the doc standard per layer be a static doc or generated from test assertions?
+6. Should `find-pattern` auto-discover parent layer docs or require explicit manifest config?
