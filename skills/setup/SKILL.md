@@ -362,15 +362,22 @@ Copy templates. Replace `<org>` placeholder. Skip if declined or files exist wit
 > If GSD-2 is NOT detected, this step is silently skipped.
 
 ```
-GSD-2 detected. Sync L0 + marketplace skills to GSD? [y/N]
+GSD-2 detected. Sync L0 skills + agents to GSD? [y/N]
 
-This makes all AndroidCommonDoc skills and agents discoverable by GSD-2.
-Skills are copied to ~/.gsd/agent/skills/ under prefixed subdirs.
+This makes all AndroidCommonDoc skills and agents discoverable by GSD-2:
+- Skills → ~/.gsd/agent/skills/l0/
+- Agents → ~/.gsd/agent/agents/ (as invocable subagents)
 ```
 
 If confirmed:
 ```bash
+# Sync skills to GSD
 bash "$L0_ROOT/scripts/sh/sync-gsd-skills.sh" --source all \
+  ${DRY_RUN:+--dry-run} ${VERBOSE:+--verbose}
+
+# Sync agents to GSD (so subagent can invoke them)
+bash "$L0_ROOT/scripts/sh/sync-gsd-agents.sh" --target user \
+  --project-root "$L0_ROOT" \
   ${DRY_RUN:+--dry-run} ${VERBOSE:+--verbose}
 ```
 
@@ -387,7 +394,7 @@ If auto-sync confirmed:
 bash "$L0_ROOT/scripts/sh/sync-gsd-skills.sh" --enable-hook
 ```
 
-> See: `skills/sync-gsd-skills/SKILL.md` for full details.
+> See: `skills/sync-gsd-skills/SKILL.md` and `skills/sync-gsd-agents/SKILL.md` for full details.
 
 ---
 
@@ -427,13 +434,24 @@ Model profile: balanced
 ### Step 7 — Verification checklist
 
 ```bash
-# ANDROID_COMMON_DOC set
-# Skills count matches selection
-# Hooks installed
-# Manifest checksums populated
-# Detekt JAR + detekt.yml (if opted in)
-# Guard tests directory exists (if opted in)
-# .github/workflows/ci.yml exists (if opted in)
+# Core
+ANDROID_COMMON_DOC is set and points to valid L0 root
+l0-manifest.json exists and has checksums
+Skills count matches selection (ls .claude/skills/ vs manifest)
+Agents synced (.claude/agents/ count matches manifest)
+Hooks installed (.claude/hooks/ has detekt-pre-commit.sh + detekt-post-write.sh)
+
+# Conditional (only if opted in)
+Detekt JAR exists at $L0_ROOT/detekt-rules/build/libs/detekt-rules-1.0.0.jar
+detekt.yml exists in project root
+Guard tests directory exists (konsist-guard/ or equivalent)
+.github/workflows/ci.yml exists
+Model-profiles.json exists in .claude/
+
+# GSD (only if W7 confirmed)
+GSD skills synced (ls ~/.gsd/agent/skills/l0/ | wc -l > 0)
+GSD agents synced (ls ~/.gsd/agent/agents/ has L0 agents)
+GSD agent parity (bash $L0_ROOT/scripts/sh/check-agent-parity.sh)
 ```
 
 ---
@@ -454,19 +472,89 @@ Model profile: balanced
 ║  CI workflow        ✅ .github/workflows/ci.yml        ║  ← conditional
 ║  PR template        ✅ .github/pull_request_template   ║  ← conditional
 ║  MCP server         ℹ️  Snippet printed above          ║  ← conditional
+║  GSD skills         ✅ 40 skills synced                ║  ← conditional
+║  GSD agents         ✅ 15 agents synced as subagents   ║  ← conditional
 ║  Model profile      ✅ balanced (8 sonnet, 7 haiku)   ║
 ╠════════════════════════════════════════════════════════╣
 ║  Overall:  ✅ READY — restart Claude Code              ║
 ╚════════════════════════════════════════════════════════╝
+```
 
+Every row is conditional — only shown if that component was configured.
+
+---
+
+### Step 9 — Post-setup health check and next actions
+
+After setup completes, offer to run a health check and suggest next actions based on what was installed.
+
+```
+Setup complete. Run post-setup health check? [Y/n]
+```
+
+If confirmed, execute these checks and report:
+
+**1. MCP connectivity (if W6 confirmed):**
+```bash
+# Test if MCP server starts and responds
+cd "$L0_ROOT/mcp-server" && timeout 10 node build/index.js < /dev/null 2>&1 | head -5
+```
+If the server binary doesn't exist: `⚠ MCP server not built. Run: cd $L0_ROOT/mcp-server && npm ci && npm run build`
+
+**2. Detekt rules (if W3 confirmed):**
+```bash
+# Verify JAR is built and rules load
+java -jar "$L0_ROOT/detekt-rules/build/libs/detekt-rules-1.0.0.jar" 2>&1 || true
+ls "$L0_ROOT/detekt-rules/build/libs/detekt-rules-1.0.0.jar" 2>/dev/null
+```
+If JAR missing: `⚠ Detekt rules JAR not built. Run: cd $L0_ROOT/detekt-rules && ./gradlew jar`
+
+**3. GSD agent parity (if W7 confirmed):**
+```bash
+bash "$L0_ROOT/scripts/sh/check-agent-parity.sh" --project-root "$L0_ROOT" --target user
+```
+
+**4. Registry hash freshness:**
+```bash
+bash "$L0_ROOT/scripts/sh/rehash-registry.sh" --project-root "$L0_ROOT" --check
+```
+
+**5. Suggest next actions based on context:**
+
+```
+╔════════════════════════════════════════════════════════╗
+║  Recommended Next Actions                              ║
+╠════════════════════════════════════════════════════════╣
+║  /pre-pr              Validate everything before PR    ║
+║  /test core:domain    Test a specific module           ║
+║  /validate-patterns   Check code against L0 patterns   ║
+║  /verify-kmp          Validate KMP source sets         ║
+║  /set-model-profile   Change agent model tier          ║
+╠════════════════════════════════════════════════════════╣
+║  MCP (if snippet not installed yet):                   ║
+║  Add the snippet above to claude_desktop_config.json   ║
+║  then restart Claude Desktop.                          ║
+╚════════════════════════════════════════════════════════╝
+```
+
+For AI agents executing this wizard: **offer to run the top recommended action** instead of just printing the table. Example:
+
+```
+Setup complete. Would you like me to run /pre-pr to validate the installation?
+```
+
+---
+
+### Next steps (printed at the very end)
+
+```
 Next steps:
   1. Restart Claude Code for hooks and skills to activate
   2. MCP: add snippet to claude_desktop_config.json, restart Claude Desktop
   3. CI: review .github/workflows/ci.yml — replace <org> if not auto-detected
-  4. [detekt=none] Enable rules in detekt.yml when your team is ready
+  4. Run /pre-pr to validate the full installation
+  5. Run /test <module> to verify your test setup works
 ```
-
-Every row is conditional — only shown if that component was configured.
 
 ---
 
