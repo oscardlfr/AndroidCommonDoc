@@ -68,12 +68,15 @@ IS_GRADLE=false
   [ -f "$PROJECT_ROOT/settings.gradle" ]; } && IS_GRADLE=true
 
 # KMP vs Android-only
+# Detects: kotlin("multiplatform"), id("org.jetbrains.kotlin.multiplatform"),
+# alias(libs.plugins.kotlin.multiplatform), alias(libs.plugins.kotlinMultiplatform),
+# Groovy: id 'org.jetbrains.kotlin.multiplatform'
 PROJECT_TYPE="unknown"
-grep -rq 'kotlin("multiplatform")\|id("org.jetbrains.kotlin.multiplatform")' \
-    "$PROJECT_ROOT" --include="*.gradle.kts" 2>/dev/null \
+grep -rqE 'kotlin\("multiplatform"\)|org\.jetbrains\.kotlin\.multiplatform|libs\.plugins\.kotlin[Mm]ultiplatform|libs\.plugins\.kotlin\.multiplatform' \
+    "$PROJECT_ROOT" --include="*.gradle.kts" --include="*.gradle" 2>/dev/null \
   && PROJECT_TYPE="kmp"
-grep -rq 'com\.android\.library\|com\.android\.application' \
-    "$PROJECT_ROOT" --include="*.gradle.kts" 2>/dev/null \
+grep -rqE 'com\.android\.library|com\.android\.application' \
+    "$PROJECT_ROOT" --include="*.gradle.kts" --include="*.gradle" 2>/dev/null \
   && [ "$PROJECT_TYPE" = "unknown" ] && PROJECT_TYPE="android-only"
 
 # AGP version — prefer version catalog, fall back to build.gradle.kts
@@ -110,7 +113,7 @@ Detected:  Android-only  |  AGP 8.9.1  |  Kotlin 2.3.0
 │  Hook mode:    warn                                  │
 │  Skills:       custom  (testing + build + guides)    │
 │  Agents:       custom  (test-specialist + ui-spec)   │
-│  Detekt:       custom  (9/13 rules active)           │
+│  Detekt:       custom  (9/17 rules active)           │
 │  Guards:       yes     (package: com.myapp)          │
 │  CI template:  yes                                   │
 │  MCP server:   show snippet                          │
@@ -181,7 +184,7 @@ Translate deselected agents into `exclude_agents` in the manifest.
 
 ```
 Do you want to configure AndroidCommonDoc Detekt architecture rules? [y/N]
-→ [all] Activate all 13  [custom] Choose per rule  [none] Install, disable all
+→ [all] Activate all 17  [custom] Choose per rule  [none] Install, disable all
 ```
 
 **custom** — per-rule prompt grouped by category, `?` shows pattern doc link:
@@ -204,6 +207,12 @@ Architecture Guards
   [y/?] NoChannelForUiEvents
   [y/?] NoChannelForNavigation
   [y/?] NoMagicNumbersInUseCase
+KMP / Time Safety
+  [y/?] PreferKotlinTimeClock     Use kotlin.time.Clock.System, not kotlinx.datetime.Clock
+  [y/?] NoSystemCurrentTimeMillis Use Clock.System instead of System.currentTimeMillis()
+  [y/?] NoJavaTimeInCommonMain    java.time/security/text forbidden in commonMain
+Testing Patterns
+  [y/?] NoTurbine                 Use backgroundScope + flow.toList(), not Turbine
 ```
 
 Write `detekt.yml` with only disabled rules under `AndroidCommonDoc:`.
