@@ -23,7 +23,7 @@
 import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { syncL0, resolveL0Source, type SyncOptions } from "./sync-engine.js";
-import { createDefaultManifest } from "./manifest-schema.js";
+import { createDefaultManifest, getL0Source } from "./manifest-schema.js";
 
 // ---------------------------------------------------------------------------
 // Argument parsing
@@ -104,8 +104,20 @@ async function ensureManifest(
 
   // Read the manifest to get l0_source and resolve it robustly
   const content = await readFile(manifestPath, "utf-8");
-  const data = JSON.parse(content);
-  const l0Source: string = data.l0_source;
+  const manifest = JSON.parse(content);
+
+  // Handle both v1 (l0_source) and v2 (sources[]) format
+  let l0Source: string;
+  if (manifest.sources && Array.isArray(manifest.sources)) {
+    const l0 = manifest.sources.find((s: { layer: string }) => s.layer === "L0");
+    l0Source = l0?.path ?? manifest.sources[0]?.path;
+  } else {
+    l0Source = manifest.l0_source;
+  }
+
+  if (!l0Source) {
+    throw new Error("Manifest has no L0 source path. Check l0-manifest.json.");
+  }
 
   // Fix #2: Use resolveL0Source (git toplevel + env fallback + registry validation)
   return resolveL0Source(l0Source, projectRoot);

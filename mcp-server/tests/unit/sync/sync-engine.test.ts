@@ -52,8 +52,9 @@ function makeRegistry(entries: SkillRegistryEntry[]): SkillRegistry {
 
 function makeManifest(overrides?: Partial<Manifest>): Manifest {
   return {
-    version: 1,
-    l0_source: "../AndroidCommonDoc",
+    version: 2,
+    sources: [{ layer: "L0", path: "../AndroidCommonDoc", role: "tooling" as const }],
+    topology: "flat",
     last_synced: "2026-03-15T12:00:00Z",
     selection: {
       mode: "include-all",
@@ -413,7 +414,7 @@ Run instructions
 
   it("creates directories if missing (skills/name/, .claude/agents/, .claude/commands/)", async () => {
     // Write manifest
-    const manifest = makeManifest({ l0_source: l0Root });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -442,7 +443,7 @@ Run instructions
   });
 
   it("writes materialized files to correct destination paths", async () => {
-    const manifest = makeManifest({ l0_source: l0Root });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -475,7 +476,7 @@ Run instructions
   });
 
   it("updates manifest checksums after successful sync", async () => {
-    const manifest = makeManifest({ l0_source: l0Root });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -499,7 +500,7 @@ Run instructions
 
   it("updates manifest last_synced timestamp", async () => {
     const manifest = makeManifest({
-      l0_source: l0Root,
+      sources: [{ layer: "L0", path: l0Root, role: "tooling" }],
       last_synced: "2020-01-01T00:00:00Z",
     });
     await writeFile(
@@ -530,7 +531,7 @@ Run instructions
     );
 
     const manifest = makeManifest({
-      l0_source: l0Root,
+      sources: [{ layer: "L0", path: l0Root, role: "tooling" }],
       l2_specific: {
         commands: ["run"],
         agents: [],
@@ -554,7 +555,7 @@ Run instructions
   });
 
   it("returns SyncReport with counts (added, updated, removed, unchanged)", async () => {
-    const manifest = makeManifest({ l0_source: l0Root });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -575,7 +576,7 @@ Run instructions
   });
 
   it("post-sync verification: missing array is empty when all files written successfully", async () => {
-    const manifest = makeManifest({ l0_source: l0Root });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -617,7 +618,7 @@ describe("syncL0 safety guardrails", () => {
     // Create empty L0 (no skills, no agents, no commands)
     const emptyL0 = await mkdtemp(join(tmpdir(), "sync-empty-l0-"));
 
-    const manifest = makeManifest({ l0_source: emptyL0 });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: emptyL0, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -632,7 +633,7 @@ describe("syncL0 safety guardrails", () => {
 
   it("Fix #5: additive mode (default) skips removes and warns", async () => {
     // First sync to create files
-    const manifest = makeManifest({ l0_source: l0Root });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -675,7 +676,7 @@ describe("syncL0 safety guardrails", () => {
 
   it("Fix #5: prune mode removes orphans", async () => {
     // First sync
-    const manifest = makeManifest({ l0_source: l0Root });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -713,7 +714,7 @@ describe("syncL0 safety guardrails", () => {
 
   it("Fix #1: prune blocks >5 removes without --force", async () => {
     // Setup: create manifest with 7 orphans
-    const manifest = makeManifest({ l0_source: l0Root });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -755,7 +756,7 @@ describe("syncL0 safety guardrails", () => {
   });
 
   it("Fix #1: prune + force allows >5 removes", async () => {
-    const manifest = makeManifest({ l0_source: l0Root });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -789,7 +790,7 @@ describe("syncL0 safety guardrails", () => {
   });
 
   it("dryRun mode does not write files", async () => {
-    const manifest = makeManifest({ l0_source: l0Root });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -826,7 +827,7 @@ describe("syncL0 safety guardrails", () => {
     // add a config file. Test the warning with a mock approach instead.
 
     // Just verify the report structure works with basic sync
-    const manifest = makeManifest({ l0_source: l0Root });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -838,7 +839,7 @@ describe("syncL0 safety guardrails", () => {
   });
 
   it("report includes l0Commit when L0 is a git repo", async () => {
-    const manifest = makeManifest({ l0_source: l0Root });
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
     await writeFile(
       join(projectRoot, "l0-manifest.json"),
       JSON.stringify(manifest, null, 2),
