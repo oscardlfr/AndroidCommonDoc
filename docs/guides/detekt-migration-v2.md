@@ -18,6 +18,55 @@ Migration reference for projects upgrading from Detekt 1.x to 2.0. Covers plugin
 
 ---
 
+## Coordinates — what changed in 2.0
+
+**The group ID and plugin ID both changed.** Using the old coordinates will fail.
+
+| | Detekt 1.x | Detekt 2.0 |
+|---|---|---|
+| **Plugin ID** | `io.gitlab.arturbosch.detekt` | `dev.detekt` |
+| **Group ID** | `io.gitlab.arturbosch.detekt` | `dev.detekt` |
+| **Version (L0)** | — | `2.0.0-alpha.2` |
+| **Gradle plugin** | `io.gitlab.arturbosch.detekt:detekt-gradle-plugin:1.x` | `dev.detekt:detekt-gradle-plugin:2.0.0-alpha.2` |
+| **API** | `io.gitlab.arturbosch.detekt:detekt-api:1.x` | `dev.detekt:detekt-api:2.0.0-alpha.2` |
+| **CLI** | `io.gitlab.arturbosch.detekt:detekt-cli:1.x` | `dev.detekt:detekt-cli:2.0.0-alpha.2` |
+
+### How to declare the plugin in downstream projects
+
+**Version catalog (`libs.versions.toml`)**:
+```toml
+[versions]
+detekt = "2.0.0-alpha.2"
+
+[plugins]
+detekt = { id = "dev.detekt", version.ref = "detekt" }
+```
+
+```kotlin
+// build.gradle.kts
+plugins {
+    alias(libs.plugins.detekt)
+}
+```
+
+**Direct declaration** (without version catalog):
+```kotlin
+plugins {
+    id("dev.detekt") version "2.0.0-alpha.2"
+}
+```
+
+**With AndroidCommonDoc convention plugin** (recommended — handles everything):
+```kotlin
+plugins {
+    id("androidcommondoc.toolkit")
+}
+```
+
+> ⚠ **Common mistake**: `io.gitlab.arturbosch.detekt:detekt-gradle-plugin:2.1.0` does NOT exist. Detekt 2.x uses the `dev.detekt` group. The latest 1.x stable is `1.23.8` under the old group.
+
+---
+
 ## Formatting plugin rename
 
 | Version | Dependency | YAML section |

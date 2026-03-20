@@ -217,6 +217,10 @@ Testing Patterns
 
 Write `detekt.yml` with only disabled rules under `AndroidCommonDoc:`.
 
+> **Detekt 2.0 coordinates**: Plugin ID is `dev.detekt` (NOT `io.gitlab.arturbosch.detekt`).
+> Group ID is `dev.detekt`. Version: `2.0.0-alpha.2`. See `docs/guides/detekt-migration-v2.md`.
+> If using the `androidcommondoc.toolkit` convention plugin, this is handled automatically.
+
 ---
 
 ### Wizard W4 — Konsist guard tests (if `--guards` not set and IS_GRADLE=true)
