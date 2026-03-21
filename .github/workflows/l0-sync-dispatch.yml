@@ -1,0 +1,75 @@
+# =============================================================================
+# L0 Auto-Sync Dispatch
+#
+# Runs on every push to master. Sends repository_dispatch events to all
+# downstream repos listed in .github/downstream-repos.json so they auto-sync
+# skills, agents, commands, and docs from L0.
+#
+# Works for both flat and chain topologies:
+# - Flat: L0 → L1, L0 → L2 (each gets dispatched directly)
+# - Chain: L0 → L1 (L1's own dispatch workflow then cascades to L2)
+#
+# Requires: DOWNSTREAM_SYNC_TOKEN secret (PAT or GitHub App token with
+# `repo` scope on downstream repos)
+# =============================================================================
+name: L0 Sync Dispatch
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'skills/**'
+      - 'agents/**'
+      - '.claude/commands/**'
+      - 'detekt-rules/**'
+      - 'docs/**'
+      - 'scripts/**'
+      - 'mcp-server/src/**'
+      - 'versions-manifest.json'
+
+concurrency:
+  group: l0-dispatch
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    name: Notify downstream repos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read downstream repos
+        id: repos
+        run: |
+          REPOS_FILE=".github/downstream-repos.json"
+          if [ ! -f "$REPOS_FILE" ]; then
+            echo "repos=[]" >> "$GITHUB_OUTPUT"
+            echo "No downstream-repos.json found — skipping dispatch"
+            exit 0
+          fi
+          REPOS=$(cat "$REPOS_FILE" | jq -c '.')
+          echo "repos=$REPOS" >> "$GITHUB_OUTPUT"
+          echo "Dispatching to: $REPOS"
+
+      - name: Dispatch to each repo
+        if: steps.repos.outputs.repos != '[]'
+        env:
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_SYNC_TOKEN }}
+        run: |
+          COMMIT="${{ github.sha }}"
+          SHORT_COMMIT="${COMMIT:0:7}"
+          REPOS='${{ steps.repos.outputs.repos }}'
+
+          echo "$REPOS" | jq -r '.[]' | while read -r REPO; do
+            echo "→ Dispatching to $REPO (L0 commit: $SHORT_COMMIT)..."
+            gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/$REPO/dispatches" \
+              -f "event_type=l0-sync" \
+              -f "client_payload[l0_commit]=$SHORT_COMMIT" \
+              -f "client_payload[l0_repo]=${{ github.repository }}" \
+              -f "client_payload[source_layer]=L0" \
+              && echo "  ✓ $REPO dispatched" \
+              || echo "  ✗ $REPO dispatch failed (check token permissions)"
+          done

@@ -758,8 +758,12 @@ AndroidCommonDoc/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
 |   +-- copilot-templates/  # 40 Copilot prompt templates
 |   +-- github-workflows/   # CI template + PR template for consumer projects
+|   +-- templates/
+|   |   +-- workflows/
+|   |       +-- l0-auto-sync.yml  # Downstream auto-sync workflow template
 +-- .github/workflows/
 |   +-- l0-ci.yml                            # L0 unified CI (all checks on push/PR)
+|   +-- l0-sync-dispatch.yml                # Dispatch l0-sync events to downstream repos on push
 |   +-- mcp-server-ci.yml                    # MCP server test CI (path-filtered)
 |   +-- doc-monitor.yml                      # Upstream doc monitoring cron
 |   +-- readme-audit.yml                     # README count verification
@@ -866,9 +870,32 @@ All skills accept `--coverage-tool jacoco|kover|auto|none` and `--exclude-covera
 
 ## Updating
 
-1. `git pull` in AndroidCommonDoc -- script changes apply immediately
-2. Run `/sync-l0` in each downstream project to pull updated skills, agents, and commands
-3. The sync engine compares SHA-256 hashes and only updates changed files
+Downstream projects sync automatically — no manual steps needed.
+
+### Automatic (recommended)
+
+When L0 pushes to master, a dispatch workflow notifies all downstream repos. Each runs `sync-l0`, creates a PR with the changes, and cascades to its own downstreams:
+
+```
+L0 push → dispatch → L1 auto-sync PR → dispatch → L2 auto-sync PR
+```
+
+A daily cron job (06:00 UTC) acts as safety net — compares upstream HEAD against `l0Commit` in the manifest and syncs if they diverge.
+
+**Setup**: Copy `setup/templates/workflows/l0-auto-sync.yml` to downstream `.github/workflows/`. The `/setup` wizard does this automatically.
+
+### Manual
+
+```bash
+# In the downstream project:
+/sync-l0              # additive sync (pulls new/updated, never removes)
+/sync-l0 --prune      # also removes orphaned files
+/sync-l0 --dry-run    # preview changes without writing
+```
+
+The sync engine compares SHA-256 hashes and only updates changed files. Works identically for flat and chain topologies — chain mode syncs from all sources in manifest order (L0 → L1).
+
+See [layer-topology.md](docs/architecture/layer-topology.md) for auto-sync setup details.
 
 ---
 

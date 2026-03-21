@@ -1,0 +1,278 @@
+# =============================================================================
+# L0 Auto-Sync (Downstream Workflow)
+#
+# Triggered by:
+#   1. repository_dispatch from upstream (L0 or L1 push → instant sync)
+#   2. Scheduled cron (daily safety net — catches missed dispatches)
+#   3. Manual workflow_dispatch
+#
+# What it does:
+#   1. Checks if upstream has new commits since last sync (via l0-manifest.json l0Commit)
+#   2. Runs sync-l0 CLI to pull updated skills, agents, commands, docs
+#   3. Creates a PR with the changes (or updates an existing one)
+#
+# Works for both flat and chain topologies:
+#   - Flat: syncs from L0 directly
+#   - Chain: syncs from all sources in manifest order (L0 → L1)
+#
+# Requires:
+#   - l0-manifest.json in project root
+#   - Source repos accessible (same org, or UPSTREAM_ACCESS_TOKEN secret)
+#   - Node.js 20+ (for sync-l0 CLI)
+# =============================================================================
+name: L0 Auto-Sync
+
+on:
+  repository_dispatch:
+    types: [l0-sync, l1-sync]
+
+  schedule:
+    # Daily at 06:00 UTC — safety net for missed dispatches
+    - cron: '0 6 * * *'
+
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force sync even if no upstream changes detected'
+        type: boolean
+        default: false
+
+concurrency:
+  group: auto-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Sync from upstream
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read manifest
+        id: manifest
+        run: |
+          if [ ! -f "l0-manifest.json" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No l0-manifest.json found — skipping"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+          # Extract topology and sources
+          TOPOLOGY=$(jq -r '.topology // "flat"' l0-manifest.json)
+          LAST_COMMIT=$(jq -r '.checksums["__l0_commit"] // ""' l0-manifest.json 2>/dev/null || echo "")
+          # Also check top-level l0Commit from sync report
+          if [ -z "$LAST_COMMIT" ]; then
+            LAST_COMMIT=$(jq -r '.l0Commit // ""' l0-manifest.json 2>/dev/null || echo "")
+          fi
+          echo "topology=$TOPOLOGY" >> "$GITHUB_OUTPUT"
+          echo "last_commit=$LAST_COMMIT" >> "$GITHUB_OUTPUT"
+
+          # Extract source paths
+          SOURCES=$(jq -c '[.sources[]?.path // empty]' l0-manifest.json 2>/dev/null || echo '[]')
+          if [ "$SOURCES" = "[]" ]; then
+            # v1 fallback
+            SOURCES=$(jq -c '[.l0_source]' l0-manifest.json 2>/dev/null || echo '[]')
+          fi
+          echo "sources=$SOURCES" >> "$GITHUB_OUTPUT"
+          echo "Topology: $TOPOLOGY | Last commit: $LAST_COMMIT | Sources: $SOURCES"
+
+      - name: Checkout upstream sources
+        if: steps.manifest.outputs.skip != 'true'
+        run: |
+          SOURCES='${{ steps.manifest.outputs.sources }}'
+          echo "$SOURCES" | jq -r '.[]' | while read -r REL_PATH; do
+            # Resolve the repo name from the relative path
+            # Convention: ../RepoName or ../../RepoName → same org
+            REPO_NAME=$(basename "$REL_PATH")
+            OWNER="${{ github.repository_owner }}"
+            TARGET_DIR="$REL_PATH"
+
+            echo "Cloning $OWNER/$REPO_NAME into $TARGET_DIR..."
+            mkdir -p "$(dirname "$TARGET_DIR")"
+            git clone --depth=1 \
+              "https://x-access-token:${{ secrets.UPSTREAM_ACCESS_TOKEN || github.token }}@github.com/$OWNER/$REPO_NAME.git" \
+              "$TARGET_DIR" 2>/dev/null \
+            || git clone --depth=1 \
+              "https://github.com/$OWNER/$REPO_NAME.git" \
+              "$TARGET_DIR"
+
+            UPSTREAM_HEAD=$(git -C "$TARGET_DIR" rev-parse --short HEAD)
+            echo "  $REPO_NAME HEAD: $UPSTREAM_HEAD"
+          done
+
+      - name: Check if sync needed
+        id: check
+        if: steps.manifest.outputs.skip != 'true'
+        run: |
+          LAST='${{ steps.manifest.outputs.last_commit }}'
+          FORCE='${{ github.event.inputs.force || false }}'
+          EVENT='${{ github.event_name }}'
+
+          # repository_dispatch always syncs (upstream told us something changed)
+          if [ "$EVENT" = "repository_dispatch" ]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "Dispatch event — sync required"
+            exit 0
+          fi
+
+          # Manual with force
+          if [ "$FORCE" = "true" ]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "Force flag — sync required"
+            exit 0
+          fi
+
+          # Scheduled: compare commits
+          SOURCES='${{ steps.manifest.outputs.sources }}'
+          FIRST_SOURCE=$(echo "$SOURCES" | jq -r '.[0]')
+          if [ -d "$FIRST_SOURCE" ]; then
+            UPSTREAM_HEAD=$(git -C "$FIRST_SOURCE" rev-parse --short HEAD)
+            if [ "$UPSTREAM_HEAD" != "$LAST" ]; then
+              echo "needed=true" >> "$GITHUB_OUTPUT"
+              echo "Upstream moved: $LAST → $UPSTREAM_HEAD"
+            else
+              echo "needed=false" >> "$GITHUB_OUTPUT"
+              echo "Upstream unchanged ($UPSTREAM_HEAD) — skipping"
+            fi
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "Cannot verify upstream — syncing as precaution"
+          fi
+
+      - name: Setup Node.js
+        if: steps.check.outputs.needed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build sync CLI
+        if: steps.check.outputs.needed == 'true'
+        run: |
+          # The sync-l0 CLI lives in the L0 source
+          SOURCES='${{ steps.manifest.outputs.sources }}'
+          L0_PATH=$(echo "$SOURCES" | jq -r '.[0]')
+          cd "$L0_PATH/mcp-server"
+          npm ci --ignore-scripts
+          npm run build
+          echo "L0_PATH=$L0_PATH" >> "$GITHUB_ENV"
+
+      - name: Run sync-l0
+        if: steps.check.outputs.needed == 'true'
+        id: sync
+        run: |
+          node "$L0_PATH/mcp-server/build/sync/sync-l0-cli.js" \
+            --project-root "$(pwd)" \
+            --l0-root "$L0_PATH" \
+            | tee /tmp/sync-output.txt
+
+          # Extract counts from output
+          ADDED=$(grep -oP 'Added:\s+\K\d+' /tmp/sync-output.txt || echo "0")
+          UPDATED=$(grep -oP 'Updated:\s+\K\d+' /tmp/sync-output.txt || echo "0")
+          TOTAL=$((ADDED + UPDATED))
+          echo "changes=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "added=$ADDED" >> "$GITHUB_OUTPUT"
+          echo "updated=$UPDATED" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update PR
+        if: steps.check.outputs.needed == 'true' && steps.sync.outputs.changes != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH="auto-sync/l0-update"
+          ADDED='${{ steps.sync.outputs.added }}'
+          UPDATED='${{ steps.sync.outputs.updated }}'
+          SOURCE_LAYER='${{ github.event.client_payload.source_layer || "L0" }}'
+          SOURCE_COMMIT='${{ github.event.client_payload.l0_commit || "scheduled" }}'
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create or switch to sync branch
+          git checkout -B "$BRANCH"
+          git add -A
+          git commit -m "chore(sync): auto-sync from ${SOURCE_LAYER} (${SOURCE_COMMIT})
+
+          $ADDED added, $UPDATED updated via sync-l0 CLI.
+          Triggered by: ${{ github.event_name }}" || exit 0
+
+          git push --force origin "$BRANCH"
+
+          # Create or update PR
+          EXISTING_PR=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' || echo "")
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Updated existing PR #$EXISTING_PR"
+          else
+            gh pr create \
+              --title "chore(sync): auto-sync from ${SOURCE_LAYER}" \
+              --body "## Auto-sync from ${SOURCE_LAYER}
+
+          | Metric | Count |
+          |--------|-------|
+          | Added | $ADDED |
+          | Updated | $UPDATED |
+          | Source commit | \`$SOURCE_COMMIT\` |
+          | Trigger | \`${{ github.event_name }}\` |
+
+          Review the changes, then merge to apply the sync.
+
+          ---
+          *Created automatically by [l0-auto-sync](.github/workflows/l0-auto-sync.yml)*" \
+              --label "sync"
+          fi
+
+      - name: Cascade dispatch (chain topology)
+        # In chain topology (L0→L1→L2), L1 notifies L2 after syncing.
+        # L2 clones L1's master — if L1's sync PR isn't merged yet, L2 won't
+        # see L1's changes. The daily cron catches this. For instant cascade,
+        # enable auto-merge on sync PRs or use flat topology.
+        if: steps.check.outputs.needed == 'true' && steps.sync.outputs.changes != '0'
+        env:
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_SYNC_TOKEN || github.token }}
+        run: |
+          # If this repo ALSO has downstream-repos.json, cascade the dispatch
+          if [ -f ".github/downstream-repos.json" ]; then
+            COMMIT=$(git rev-parse --short HEAD)
+            # Determine our layer from manifest
+            SOURCES='${{ steps.manifest.outputs.sources }}'
+            OUR_LAYER=$(jq -r '.sources[-1].layer // "L0"' l0-manifest.json 2>/dev/null || echo "L0")
+
+            jq -r '.[]' .github/downstream-repos.json | while read -r REPO; do
+              echo "→ Cascading to $REPO (from $OUR_LAYER, commit $COMMIT)..."
+              gh api \
+                --method POST \
+                "/repos/$REPO/dispatches" \
+                -f "event_type=${OUR_LAYER,,}-sync" \
+                -f "client_payload[l0_commit]=$COMMIT" \
+                -f "client_payload[l0_repo]=${{ github.repository }}" \
+                -f "client_payload[source_layer]=$OUR_LAYER" \
+                && echo "  ✓ $REPO" \
+                || echo "  ✗ $REPO (check permissions)"
+            done
+          fi
+
+      - name: Summary
+        if: always() && steps.manifest.outputs.skip != 'true'
+        run: |
+          NEEDED='${{ steps.check.outputs.needed }}'
+          CHANGES='${{ steps.sync.outputs.changes || 0 }}'
+
+          if [ "$NEEDED" != "true" ]; then
+            echo "### ⏭️ Auto-sync skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "Upstream unchanged since last sync." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$CHANGES" = "0" ]; then
+            echo "### ✅ Auto-sync: no changes" >> "$GITHUB_STEP_SUMMARY"
+            echo "Upstream has new commits but no file differences." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### 🔄 Auto-sync: PR created/updated" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Added: ${{ steps.sync.outputs.added }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Updated: ${{ steps.sync.outputs.updated }}" >> "$GITHUB_STEP_SUMMARY"
+          fi

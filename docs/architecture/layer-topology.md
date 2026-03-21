@@ -144,9 +144,40 @@ Or set `topology` in `l0-manifest.json` directly.
 - v1 manifests continue to work (auto-migrated, treated as flat)
 - Enterprise flat mode requires no parent beyond L0
 
+## Auto-Sync
+
+Downstream projects sync automatically via two complementary mechanisms:
+
+### 1. Dispatch (instant)
+
+When L0 pushes to master, `l0-sync-dispatch.yml` sends a `repository_dispatch` to every repo in `.github/downstream-repos.json`. The downstream `l0-auto-sync.yml` workflow receives the event, runs `sync-l0`, and creates a PR with the changes.
+
+```
+L0 push → dispatch → L1 sync → dispatch → L2 sync
+```
+
+For chain topology, L1 cascades the dispatch to L2 automatically after its own sync completes.
+
+### 2. Scheduled (safety net)
+
+`l0-auto-sync.yml` also runs daily at 06:00 UTC via cron. It compares the upstream HEAD against the `l0Commit` stored in `l0-manifest.json` — if they differ, it syncs. This catches missed dispatches (token expiry, downtime, new repos).
+
+### Setup
+
+**L0 (source):**
+- Add downstream repos to `.github/downstream-repos.json`
+- Set `DOWNSTREAM_SYNC_TOKEN` secret (PAT with `repo` scope)
+
+**L1/L2 (downstream):**
+- Copy `setup/templates/workflows/l0-auto-sync.yml` to `.github/workflows/`
+- Ensure `l0-manifest.json` exists (created by `/setup` wizard)
+- For chain: add L2 repos to L1's `.github/downstream-repos.json`
+
 ## Cross-references
 
 - Manifest schema: `mcp-server/src/sync/manifest-schema.ts`
 - Sync engine: `mcp-server/src/sync/sync-engine.ts`
 - Setup wizard: `skills/setup/SKILL.md` (Step 0 topology choice)
+- Auto-sync dispatch: `.github/workflows/l0-sync-dispatch.yml`
+- Auto-sync downstream: `setup/templates/workflows/l0-auto-sync.yml`
 - M003 spec: `.gsd/milestones/M003/M003-CONTEXT.md`
