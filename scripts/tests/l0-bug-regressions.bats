@@ -113,3 +113,19 @@ LIB_DIR="$SH_DIR/lib"
     # The cancellation-rethrow check should also have its own KDoc filter
     grep -A10 "cancellation-rethrow" "$SH_DIR/pattern-lint.sh" | grep -q 'grep -vE'
 }
+
+# ---------------------------------------------------------------------------
+# Bug 18: coverage batch partial → per-module retry with kover fallbacks
+# ---------------------------------------------------------------------------
+
+@test "regression: coverage suite retries missing modules after partial batch" {
+    grep -q "retrying.*per-module\|recovered via\|Batch partial" scripts/sh/run-parallel-coverage-suite.sh
+}
+
+@test "regression: coverage suite uses get_kover_task_fallbacks for recovery" {
+    grep -q "get_kover_task_fallbacks" scripts/sh/run-parallel-coverage-suite.sh
+}
+
+@test "regression: per-module kover retry tries multiple task variants" {
+    grep -q "fb_task" scripts/sh/run-parallel-coverage-suite.sh
+}

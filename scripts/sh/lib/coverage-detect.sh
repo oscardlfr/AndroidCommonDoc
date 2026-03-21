@@ -89,6 +89,11 @@ get_coverage_gradle_task() {
 
     case "$tool" in
         kover)
+            # Kover task names vary by project configuration:
+            # - KMP projects: koverXmlReportDesktop, koverXmlReportDebug
+            # - Android-only: koverXmlReportDebug, koverXmlReportRelease
+            # - Root merged: koverXmlReport
+            # The caller should verify the task exists before running.
             case "$test_type" in
                 common|desktop|all)
                     echo "koverXmlReportDesktop" ;;
@@ -118,6 +123,18 @@ get_coverage_gradle_task() {
             echo ""
             ;;
     esac
+}
+
+# get_kover_task_fallbacks <is_desktop>
+#   Returns an ordered list of kover task names to try.
+#   Use when the primary task doesn't exist on a module.
+get_kover_task_fallbacks() {
+    local is_desktop="$1"
+    if [[ "$is_desktop" == "true" ]]; then
+        echo "koverXmlReportDesktop koverXmlReport koverXmlReportDebug"
+    else
+        echo "koverXmlReportDebug koverXmlReport koverXmlReportDesktop"
+    fi
 }
 
 # get_coverage_xml_path <tool> <module_path> <is_desktop>

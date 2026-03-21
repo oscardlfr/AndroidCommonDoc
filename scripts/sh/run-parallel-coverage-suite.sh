@@ -711,7 +711,52 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
 
             if [[ "$COV_XML_COUNT" -gt 0 ]]; then
                 # --continue worked: some tasks succeeded, some failed — reports exist
-                warn "  [!] Main coverage had errors (exit $COV_EXIT) but $COV_XML_COUNT reports generated (--continue saved partial results)"
+                # But some modules may be missing — retry those individually
+                MISSING_COV=0
+                RECOVERED_COV=0
+                for idx in "${TESTABLE_INDICES[@]}"; do
+                    [[ "${MOD_PROJ[$idx]}" != "$PROJECT_ROOT" ]] && continue
+                    mod_tool="${MOD_COV_TOOL[$idx]:-}"
+                    [[ -z "$mod_tool" || "$mod_tool" == "none" ]] && continue
+                    xml_check="$(get_coverage_xml_path "$mod_tool" "${MOD_PATHS[$idx]}" "$IS_DESKTOP" 2>/dev/null)" || true
+                    if [[ -z "$xml_check" ]]; then
+                        MISSING_COV=$((MISSING_COV + 1))
+                        # Try to recover this module individually
+                        local short_mod="${MOD_NAMES[$idx]}"
+                        short_mod="${short_mod#:}"
+                        local gpath=":${short_mod}"
+                        local recovered=false
+                        if [[ "$mod_tool" == "kover" ]]; then
+                            # Try all kover task variants
+                            local fallbacks
+                            fallbacks="$(get_kover_task_fallbacks "$IS_DESKTOP")"
+                            for fb_task in $fallbacks; do
+                                if (cd "$PROJECT_ROOT" && ./gradlew "${gpath}:${fb_task}" --rerun-tasks 2>&1) >/dev/null; then
+                                    gray "    [OK] ${MOD_NAMES[$idx]}: recovered via ${fb_task}"
+                                    RECOVERED_COV=$((RECOVERED_COV + 1))
+                                    recovered=true
+                                    break
+                                fi
+                            done
+                        else
+                            # jacoco — single task name
+                            local cov_task_name
+                            cov_task_name="$(get_coverage_gradle_task "$mod_tool" "$TEST_TYPE" "$IS_DESKTOP")"
+                            if (cd "$PROJECT_ROOT" && ./gradlew "${gpath}:${cov_task_name}" --rerun-tasks 2>&1) >/dev/null; then
+                                RECOVERED_COV=$((RECOVERED_COV + 1))
+                                recovered=true
+                            fi
+                        fi
+                        if ! $recovered; then
+                            gray "    [!] ${MOD_NAMES[$idx]}: no kover task worked"
+                        fi
+                    fi
+                done
+                if [[ "$MISSING_COV" -gt 0 ]]; then
+                    warn "  [!] Batch partial: $COV_XML_COUNT ok, $MISSING_COV missing → recovered $RECOVERED_COV via per-module retry"
+                else
+                    ok "  [OK] Main project coverage reports generated ($COV_XML_COUNT modules)"
+                fi
             else
                 # Configuration failure: no XMLs at all — fallback to per-module
                 warn "  [!] Batch coverage failed (exit $COV_EXIT), 0 reports — retrying per-module..."
@@ -721,8 +766,30 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                     if (cd "$PROJECT_ROOT" && ./gradlew "$cov_task" 2>&1) >/dev/null; then
                         COV_OK=$((COV_OK + 1))
                     else
-                        COV_FAIL=$((COV_FAIL + 1))
-                        warn "  [!] $cov_task failed (skipped)"
+                        # For kover tasks: try fallback task names
+                        if [[ "$cov_task" == *"kover"* ]]; then
+                            local gradle_path="${cov_task%:*}"  # :core:domain
+                            local fallbacks
+                            fallbacks="$(get_kover_task_fallbacks "$IS_DESKTOP")"
+                            local fallback_ok=false
+                            for fb_task in $fallbacks; do
+                                local full_fb="${gradle_path}:${fb_task}"
+                                [[ "$full_fb" == "$cov_task" ]] && continue  # skip the one that already failed
+                                if (cd "$PROJECT_ROOT" && ./gradlew "$full_fb" 2>&1) >/dev/null; then
+                                    gray "    [OK] $cov_task failed → $full_fb succeeded"
+                                    COV_OK=$((COV_OK + 1))
+                                    fallback_ok=true
+                                    break
+                                fi
+                            done
+                            if ! $fallback_ok; then
+                                COV_FAIL=$((COV_FAIL + 1))
+                                warn "  [!] $cov_task failed (no fallback worked)"
+                            fi
+                        else
+                            COV_FAIL=$((COV_FAIL + 1))
+                            warn "  [!] $cov_task failed (skipped)"
+                        fi
                     fi
                 done
                 if [[ "$COV_OK" -gt 0 ]]; then

@@ -158,6 +158,33 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------
+# get_kover_task_fallbacks
+# ---------------------------------------------------------------------------
+
+@test "get_kover_task_fallbacks: desktop starts with koverXmlReportDesktop" {
+    result=$(get_kover_task_fallbacks "true")
+    first=$(echo "$result" | awk '{print $1}')
+    [ "$first" = "koverXmlReportDesktop" ]
+}
+
+@test "get_kover_task_fallbacks: non-desktop starts with koverXmlReportDebug" {
+    result=$(get_kover_task_fallbacks "false")
+    first=$(echo "$result" | awk '{print $1}')
+    [ "$first" = "koverXmlReportDebug" ]
+}
+
+@test "get_kover_task_fallbacks: includes koverXmlReport as fallback" {
+    result=$(get_kover_task_fallbacks "true")
+    echo "$result" | grep -q "koverXmlReport "
+}
+
+@test "get_kover_task_fallbacks: returns 3 task names" {
+    result=$(get_kover_task_fallbacks "true")
+    count=$(echo "$result" | wc -w | tr -d ' \r')
+    [ "$count" -eq 3 ]
+}
+
+# ---------------------------------------------------------------------------
 # get_coverage_display_name
 # ---------------------------------------------------------------------------
 
