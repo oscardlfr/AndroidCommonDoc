@@ -9,6 +9,7 @@
 #   - format_line_ranges: compress line numbers into range strings
 #   - get_module_from_file: map a file path to its Gradle module
 #   - get_changed_files: list changed files in a git repo
+#   - safe_rg: cross-platform ripgrep with find+grep fallback on Windows
 #
 # All functions are pure — no global side effects, no exit calls.
 # =============================================================================
@@ -165,6 +166,144 @@ get_module_from_file() {
             fi
         fi
     done
+}
+
+# Cross-platform ripgrep wrapper with find+grep fallback.
+# rg --glob '!pattern' silently returns empty on Windows/MSYS2 (path mangling).
+# This function uses rg on Linux/macOS and falls back to find+grep on Windows.
+#
+# Usage: safe_rg <pattern> <directory> [options...]
+#   --include=GLOB   include only files matching glob (e.g. --include='*.kt')
+#   --exclude-dir=D  exclude directory from search
+#   -l               list files only (no content)
+#   -n               show line numbers
+#   -c               count matches per file
+#
+# Examples:
+#   safe_rg "import java.time" src/commonMain --include='*.kt'
+#   safe_rg "println" . --include='*.kt' --exclude-dir=build --exclude-dir=.gradle
+#   safe_rg -l "TODO" . --include='*.kt'
+safe_rg() {
+    local pattern=""
+    local directory="."
+    local includes=()
+    local excludes=()
+    local rg_flags=()
+    local list_only=false
+    local count_mode=false
+    local show_line_numbers=false
+
+    # Parse arguments
+    local positional_idx=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --include=*)
+                local glob="${1#--include=}"
+                glob="${glob//\'/}"
+                includes+=("$glob")
+                shift ;;
+            --exclude-dir=*)
+                local dir="${1#--exclude-dir=}"
+                excludes+=("$dir")
+                shift ;;
+            -l) list_only=true; shift ;;
+            -n) show_line_numbers=true; shift ;;
+            -c) count_mode=true; shift ;;
+            -*)
+                rg_flags+=("$1"); shift ;;
+            *)
+                if [[ $positional_idx -eq 0 ]]; then
+                    pattern="$1"
+                elif [[ $positional_idx -eq 1 ]]; then
+                    directory="$1"
+                fi
+                positional_idx=$((positional_idx + 1))
+                shift ;;
+        esac
+    done
+
+    if [[ -z "$pattern" ]]; then
+        echo "safe_rg: pattern required" >&2
+        return 1
+    fi
+
+    # Detect platform — Windows/MSYS2 rg has broken glob negation
+    local use_rg=true
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) use_rg=false ;;
+        *)
+            if ! command -v rg &>/dev/null; then
+                use_rg=false
+            fi
+            ;;
+    esac
+
+    if $use_rg; then
+        local rg_args=("${rg_flags[@]}")
+        for inc in "${includes[@]}"; do
+            rg_args+=("--glob" "$inc")
+        done
+        for exc in "${excludes[@]}"; do
+            rg_args+=("--glob" "!${exc}/**")
+        done
+        if $list_only; then rg_args+=("-l"); fi
+        if $count_mode; then rg_args+=("-c"); fi
+        if $show_line_numbers; then rg_args+=("-n"); fi
+
+        rg "${rg_args[@]}" "$pattern" "$directory" 2>/dev/null || true
+    else
+        # find+grep fallback
+        local find_args=("$directory")
+
+        # Prune excluded dirs
+        if [[ ${#excludes[@]} -gt 0 ]]; then
+            find_args+=("(")
+            local first=true
+            for exc in "${excludes[@]}"; do
+                if $first; then first=false; else find_args+=("-o"); fi
+                find_args+=("-name" "$exc" "-prune")
+            done
+            find_args+=(")" "-o")
+        fi
+
+        # File name filters
+        find_args+=("-type" "f")
+        if [[ ${#includes[@]} -gt 0 ]]; then
+            find_args+=("(")
+            local first=true
+            for inc in "${includes[@]}"; do
+                if $first; then first=false; else find_args+=("-o"); fi
+                find_args+=("-name" "$inc")
+            done
+            find_args+=(")")
+        fi
+        find_args+=("-print")
+
+        if $list_only; then
+            find "${find_args[@]}" 2>/dev/null | while IFS= read -r file; do
+                if grep -q "$pattern" "$file" 2>/dev/null; then
+                    echo "$file"
+                fi
+            done
+        elif $count_mode; then
+            find "${find_args[@]}" 2>/dev/null | while IFS= read -r file; do
+                local c
+                c=$(grep -c "$pattern" "$file" 2>/dev/null || echo "0")
+                if [[ "$c" -gt 0 ]]; then
+                    echo "$file:$c"
+                fi
+            done
+        else
+            local gflags=()
+            if $show_line_numbers; then gflags+=("-n"); fi
+            find "${find_args[@]}" 2>/dev/null | while IFS= read -r file; do
+                grep "${gflags[@]}" "$pattern" "$file" 2>/dev/null | while IFS= read -r line; do
+                    echo "$file:$line"
+                done
+            done
+        fi
+    fi
+    return 0
 }
 
 # List changed files in a git repository.

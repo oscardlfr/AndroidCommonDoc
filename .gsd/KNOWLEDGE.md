@@ -105,3 +105,23 @@ Bats and MCP test counts in README are approximate and NOT validated by CI. They
 Only **static filesystem counts** are CI-validated: skills, agents, rules, MCP tools, workflows, registry entries, commands.
 
 When updating README test counts, use the local count as the canonical value. Don't chase CI count differences — they're environmental.
+
+---
+
+## Windows/MSYS2 — rg glob negation is broken
+
+`rg --glob '!pattern'` silently returns empty on Windows/MSYS2 due to path mangling. This affects any script or agent that uses ripgrep exclusion globs interactively.
+
+**Workaround**: Use `safe_rg()` from `scripts/sh/lib/script-utils.sh`. It detects MINGW/MSYS/CYGWIN and falls back to `find -exec grep`. Supports `--include=GLOB`, `--exclude-dir=DIR`, `-l`, `-n`, `-c`.
+
+**For agents**: Prefer `grep -r` with `--exclude-dir` or `find -exec grep` over `rg` in scripts that must run on Windows. Document this in KNOWLEDGE.md entries tagged `platform:windows`.
+
+---
+
+## GSD/pi — Known Limitations (upstream)
+
+### Subagents don't inherit KNOWLEDGE.md (Bug 15)
+Subagents spawned via `subagent` get a fresh context window and do NOT receive the project's `.gsd/KNOWLEDGE.md`. This means platform workarounds (like "use find instead of rg on Windows") are unknown to subagents. **Mitigation**: Include critical platform rules in `AGENTS.md` (which IS inherited) or in the agent's task description.
+
+### ask_user_questions multi-select broken on Windows (Bug 17)
+`ask_user_questions` with `allowMultiple: true` does not work on Windows terminals — SPACE does not toggle checkboxes. **Mitigation**: Use single-select questions instead, or ask the user to type comma-separated choices in the free-form "None of the above" field.
