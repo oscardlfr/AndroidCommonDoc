@@ -717,7 +717,50 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
             }
 
             if ($covXmlCount -gt 0) {
-                Write-Host "  [!] Main coverage had errors (exit $covExitCode) but $covXmlCount reports generated (--continue saved partial results)" -ForegroundColor Yellow
+                # Partial success — retry modules that don't have XMLs yet
+                $missingCov = 0
+                $recoveredCov = 0
+                foreach ($mod in ($allModules | Where-Object { $_.ProjectRoot -eq $ProjectRoot })) {
+                    $modTool = $mod.CovTool
+                    if (-not $modTool -or $modTool -eq "none") { continue }
+                    $xmlCheck = Get-CoverageXmlPath -Tool $modTool -ModulePath $mod.Path -IsDesktop $Desktop
+                    if (-not $xmlCheck) {
+                        $missingCov++
+                        $modName = $mod.Name.TrimStart(':')
+                        $gpath = ":$modName"
+                        $recovered = $false
+                        if ($modTool -eq "kover") {
+                            $fallbacks = Get-KoverTaskFallbacks -IsDesktop $Desktop
+                            foreach ($fb in $fallbacks) {
+                                Push-Location $ProjectRoot
+                                & ./gradlew "${gpath}:${fb}" --rerun-tasks 2>&1 | Out-Null
+                                $fbExit = $LASTEXITCODE
+                                Pop-Location
+                                if ($fbExit -eq 0) {
+                                    Write-Host "    [OK] $($mod.Name): recovered via $fb" -ForegroundColor DarkGray
+                                    $recoveredCov++
+                                    $recovered = $true
+                                    break
+                                }
+                            }
+                        } else {
+                            $covTaskName = Get-CoverageGradleTask -Tool $modTool -TestType $TestType -IsDesktop $Desktop
+                            Push-Location $ProjectRoot
+                            & ./gradlew "${gpath}:${covTaskName}" --rerun-tasks 2>&1 | Out-Null
+                            $fbExit = $LASTEXITCODE
+                            Pop-Location
+                            if ($fbExit -eq 0) { $recoveredCov++; $recovered = $true }
+                        }
+                        if (-not $recovered) {
+                            Write-Host "    [!] $($mod.Name): no kover task worked" -ForegroundColor DarkGray
+                        }
+                    }
+                }
+                if ($missingCov -gt 0) {
+                    Write-Host "  [!] Batch partial: $covXmlCount ok, $missingCov missing -> recovered $recoveredCov via per-module retry" -ForegroundColor Yellow
+                } else {
+                    Write-Host "  [OK] Main project coverage reports generated ($covXmlCount modules)" -ForegroundColor Green
+                }
             } else {
                 Write-Host "  [!] Batch coverage failed (exit $covExitCode), 0 reports - retrying per-module..." -ForegroundColor Yellow
                 $covOk = 0
@@ -729,6 +772,29 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
                     Pop-Location
                     if ($taskExit -eq 0) {
                         $covOk++
+                    } elseif ($covTask -match "kover") {
+                        # Try kover task fallbacks
+                        $taskPrefix = $covTask -replace ':[^:]+$', ''
+                        $fallbacks = Get-KoverTaskFallbacks -IsDesktop $Desktop
+                        $fbOk = $false
+                        foreach ($fb in $fallbacks) {
+                            $fullFb = "${taskPrefix}:${fb}"
+                            if ($fullFb -eq $covTask) { continue }
+                            Push-Location $ProjectRoot
+                            & ./gradlew $fullFb 2>&1 | Out-Null
+                            $fbExit = $LASTEXITCODE
+                            Pop-Location
+                            if ($fbExit -eq 0) {
+                                Write-Host "    [OK] $covTask failed -> $fullFb succeeded" -ForegroundColor DarkGray
+                                $covOk++
+                                $fbOk = $true
+                                break
+                            }
+                        }
+                        if (-not $fbOk) {
+                            $covFail++
+                            Write-Host "  [!] $covTask failed (no fallback worked)" -ForegroundColor Yellow
+                        }
                     } else {
                         $covFail++
                         Write-Host "  [!] $covTask failed (skipped)" -ForegroundColor Yellow

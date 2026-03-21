@@ -184,6 +184,25 @@ function Get-CoverageXmlPath {
     }
 }
 
+
+function Get-KoverTaskFallbacks {
+    <#
+    .SYNOPSIS
+        Returns an ordered list of kover task names to try as fallbacks.
+    .PARAMETER IsDesktop
+        Whether this is a desktop/KMP build.
+    .OUTPUTS
+        Array of task name strings.
+    #>
+    param([bool]$IsDesktop)
+
+    if ($IsDesktop) {
+        return @("koverXmlReportDesktop", "koverXmlReport", "koverXmlReportDebug")
+    } else {
+        return @("koverXmlReportDebug", "koverXmlReport", "koverXmlReportDesktop")
+    }
+}
+
 function Get-CoverageReportDir {
     <#
     .SYNOPSIS
