@@ -2,8 +2,14 @@
 /**
  * CLI entry point for L0 sync.
  *
- * Synchronizes L0 skills, agents, and commands from the AndroidCommonDoc
- * registry to a downstream project based on its l0-manifest.json.
+ * Synchronizes skills, agents, and commands from upstream layers to a
+ * downstream project based on its l0-manifest.json.
+ *
+ * Automatically detects topology:
+ *   - Flat (1 source): calls syncL0() with the L0 root
+ *   - Chain (2+ sources): calls syncMultiSource() which merges all registries
+ *
+ * If no manifest exists, auto-discovers L0/L1 sources nearby and creates one.
  *
  * Usage:
  *   node build/sync/sync-l0-cli.js [--project-root <path>] [--l0-root <path>] [--prune] [--force] [--dry-run]
@@ -22,8 +28,25 @@
 
 import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import { syncL0, resolveL0Source, type SyncOptions } from "./sync-engine.js";
-import { createDefaultManifest, getL0Source } from "./manifest-schema.js";
+import { existsSync } from "node:fs";
+import {
+  syncL0,
+  syncMultiSource,
+  resolveL0Source,
+  type SyncOptions,
+  type SyncReport,
+  type MultiSourceSyncReport,
+} from "./sync-engine.js";
+import {
+  createDefaultManifest,
+  getL0Source,
+  readManifest,
+} from "./manifest-schema.js";
+import {
+  discoverLayers,
+  formatDiscovery,
+  suggestTopology,
+} from "./layer-discovery.js";
 
 // ---------------------------------------------------------------------------
 // Argument parsing
@@ -68,59 +91,65 @@ function parseArgs(argv: string[]): CliArgs {
 // ---------------------------------------------------------------------------
 
 /**
- * Ensure l0-manifest.json exists. If not, create a default one.
- * Returns the l0Root resolved robustly (git toplevel + env fallback).
+ * Ensure l0-manifest.json exists. If not, auto-discover sources and create one.
+ * Returns the resolved topology info for the caller.
  */
 async function ensureManifest(
   projectRoot: string,
   l0RootOverride?: string,
-): Promise<string> {
+): Promise<{ l0Root: string; isMultiSource: boolean }> {
   const manifestPath = path.join(projectRoot, "l0-manifest.json");
 
-  try {
-    await readFile(manifestPath, "utf-8");
-  } catch {
-    // Manifest doesn't exist - create default
+  if (!existsSync(manifestPath)) {
+    // No manifest — try auto-discovery
+    console.log("No l0-manifest.json found — discovering sources...");
+
+    const discovery = discoverLayers(projectRoot);
+    if (discovery.layers.length > 0) {
+      console.log(formatDiscovery(discovery));
+      const suggestion = suggestTopology(discovery);
+      console.log(`Suggested topology: ${suggestion.topology} — ${suggestion.reason}`);
+    }
+
+    // Use override, env discovery, or first discovered L0
     const l0Source =
       l0RootOverride ??
+      discovery.layers.find(l => l.role === "L0")?.absolutePath ??
       path.resolve(import.meta.dirname, "..", "..", "..");
 
     const relativePath = path.relative(projectRoot, l0Source);
-    const manifest = createDefaultManifest(relativePath);
 
-    await writeFile(
-      manifestPath,
-      JSON.stringify(manifest, null, 2) + "\n",
-      "utf-8",
-    );
+    // Check if chain is appropriate (L1 found nearby)
+    const l1 = discovery.layers.find(l => l.role === "L1");
+    let manifest;
+    if (l1 && !l0RootOverride) {
+      // Auto-create chain manifest
+      const { createChainManifest } = await import("./manifest-schema.js");
+      manifest = createChainManifest([
+        { layer: "L0", path: relativePath, role: "tooling" },
+        { layer: "L1", path: l1.relativePath, role: "ecosystem" },
+      ]);
+      console.log(`Created chain manifest: L0=${relativePath}, L1=${l1.relativePath}`);
+    } else {
+      manifest = createDefaultManifest(relativePath);
+      console.log(`Created flat manifest: L0=${relativePath}`);
+    }
 
-    console.log(`Created default l0-manifest.json (l0_source: ${relativePath})`);
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf-8");
   }
 
-  // If l0Root was provided explicitly, use it directly
+  // Read manifest to determine topology
+  const manifest = await readManifest(manifestPath);
+  const isMultiSource = manifest.sources.length > 1;
+
+  // Resolve L0 root
   if (l0RootOverride) {
-    return l0RootOverride;
+    return { l0Root: l0RootOverride, isMultiSource };
   }
 
-  // Read the manifest to get l0_source and resolve it robustly
-  const content = await readFile(manifestPath, "utf-8");
-  const manifest = JSON.parse(content);
-
-  // Handle both v1 (l0_source) and v2 (sources[]) format
-  let l0Source: string;
-  if (manifest.sources && Array.isArray(manifest.sources)) {
-    const l0 = manifest.sources.find((s: { layer: string }) => s.layer === "L0");
-    l0Source = l0?.path ?? manifest.sources[0]?.path;
-  } else {
-    l0Source = manifest.l0_source;
-  }
-
-  if (!l0Source) {
-    throw new Error("Manifest has no L0 source path. Check l0-manifest.json.");
-  }
-
-  // Fix #2: Use resolveL0Source (git toplevel + env fallback + registry validation)
-  return resolveL0Source(l0Source, projectRoot);
+  const l0Source = getL0Source(manifest);
+  const l0Root = await resolveL0Source(l0Source, projectRoot);
+  return { l0Root, isMultiSource };
 }
 
 // ---------------------------------------------------------------------------
@@ -130,17 +159,44 @@ async function ensureManifest(
 async function main(): Promise<void> {
   const { projectRoot, l0Root: l0RootArg, prune, force, dryRun } = parseArgs(process.argv);
 
-  console.log(`Sync L0 -> ${projectRoot}`);
+  console.log(`Sync → ${projectRoot}`);
   if (dryRun) console.log("  (dry-run mode — no files will be modified)");
 
-  const l0Root = await ensureManifest(projectRoot, l0RootArg);
-
-  console.log(`L0 source: ${l0Root}`);
-  console.log(`Mode: ${prune ? "prune (with removes)" : "additive (no removes)"}`);
-  console.log("");
+  const { l0Root, isMultiSource } = await ensureManifest(projectRoot, l0RootArg);
 
   const options: SyncOptions = { prune, force, dryRun };
-  const report = await syncL0(projectRoot, l0Root, options);
+  let report: SyncReport;
+
+  if (isMultiSource) {
+    // Chain topology: merge registries from all sources
+    console.log(`Topology: chain (multi-source)`);
+    console.log(`Mode: ${prune ? "prune (with removes)" : "additive (no removes)"}`);
+    console.log("");
+
+    const multiReport = await syncMultiSource(projectRoot, options);
+    report = multiReport;
+
+    // Print per-source breakdown
+    console.log("Sources:");
+    for (const [layer, count] of Object.entries(multiReport.sourceCounts)) {
+      console.log(`  ${layer}: ${count} entries`);
+    }
+    if (multiReport.overrides.length > 0) {
+      console.log("Overrides (higher layer wins):");
+      for (const ov of multiReport.overrides) {
+        console.log(`  ${ov.name} (${ov.type}): ${ov.overrides} → ${ov.overriddenBy}`);
+      }
+    }
+    console.log("");
+  } else {
+    // Flat topology: single L0 source
+    console.log(`Topology: flat`);
+    console.log(`L0 source: ${l0Root}`);
+    console.log(`Mode: ${prune ? "prune (with removes)" : "additive (no removes)"}`);
+    console.log("");
+
+    report = await syncL0(projectRoot, l0Root, options);
+  }
 
   // Print summary
   console.log(`  Added:     ${report.added}`);

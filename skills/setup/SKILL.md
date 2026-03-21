@@ -127,7 +127,30 @@ Proceed? [Y/n]
 
 ### Wizard W0 — Layer topology (always shown first)
 
-Ask the user whether this project consumes L0 directly or through a chain.
+Auto-discovers L0/L1 sources by scanning sibling directories (`../`, `../../`),
+`$ANDROID_COMMON_DOC` env var, and any existing `l0-manifest.json`.
+
+**Discovery markers:**
+- **L0**: has `skills/registry.json` + `mcp-server/` (no `l0-manifest.json`)
+- **L1**: has `skills/registry.json` + `l0-manifest.json` (own registry + consumes upstream)
+- **L2**: has `l0-manifest.json` only (consumer, no own registry)
+
+```
+Scanning for L0/L1 sources...
+
+Discovered sources:
+  ✅ L0: AndroidCommonDoc → ../AndroidCommonDoc (from $ANDROID_COMMON_DOC)
+  ✅ L1: shared-kmp-libs   → ../shared-kmp-libs  (found nearby)
+
+Suggested topology: chain
+  Found L1 (shared-kmp-libs) — chain topology lets you inherit its conventions.
+
+Use these sources? [Y/n]
+  (n = enter paths manually)
+```
+
+If the user confirms, the wizard uses the discovered paths directly.
+If the user declines, fall back to manual prompts:
 
 ```
 Layer topology:
@@ -146,7 +169,9 @@ Parent layer name (e.g. L1):
 ```
 Then `topology: "chain"`, `sources` = `[{ layer: "L0", path: l0_source, role: "tooling" }, { layer: "L1", path: parent_path, role: "ecosystem" }]`.
 
-Validate that the parent path contains `skills/registry.json` before proceeding.
+Validate that each source path contains `skills/registry.json` before proceeding.
+
+**Discovery engine:** `mcp-server/src/sync/layer-discovery.ts` — `discoverLayers()`, `classifyRepo()`, `suggestTopology()`.
 
 > `--topology flat` or `--topology chain --parent PATH` → skip this wizard.
 
