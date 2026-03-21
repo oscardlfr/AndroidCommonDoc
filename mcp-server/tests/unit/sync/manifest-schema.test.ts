@@ -112,6 +112,42 @@ describe("ManifestSchemaV2", () => {
     if (result.success) expect(result.data.topology).toBe("flat");
   });
 
+  it("validates source with optional remote URL", () => {
+    const manifest = makeV2Manifest({
+      sources: [
+        { layer: "L0", path: "../AndroidCommonDoc", role: "tooling", remote: "https://github.com/org/AndroidCommonDoc.git" },
+      ],
+    });
+    const result = ManifestSchemaV2.safeParse(manifest);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sources[0].remote).toBe("https://github.com/org/AndroidCommonDoc.git");
+    }
+  });
+
+  it("validates source without remote (optional field)", () => {
+    const manifest = makeV2Manifest({
+      sources: [
+        { layer: "L0", path: "../AndroidCommonDoc", role: "tooling" },
+      ],
+    });
+    const result = ManifestSchemaV2.safeParse(manifest);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sources[0].remote).toBeUndefined();
+    }
+  });
+
+  it("rejects source with invalid remote URL", () => {
+    const manifest = makeV2Manifest({
+      sources: [
+        { layer: "L0", path: "../x", role: "tooling", remote: "not-a-url" },
+      ],
+    });
+    const result = ManifestSchemaV2.safeParse(manifest);
+    expect(result.success).toBe(false);
+  });
+
   it("accepts all valid roles: tooling, ecosystem, application", () => {
     for (const role of ["tooling", "ecosystem", "application"] as const) {
       const manifest = makeV2Manifest({

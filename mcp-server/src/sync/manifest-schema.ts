@@ -29,6 +29,8 @@ export const LayerSourceSchema = z.object({
   path: z.string().min(1),
   /** Role hint for tooling */
   role: z.enum(["tooling", "ecosystem", "application"]).default("tooling"),
+  /** Remote git URL for cloning when path doesn't exist locally */
+  remote: z.string().url().optional(),
 });
 
 export type LayerSource = z.infer<typeof LayerSourceSchema>;

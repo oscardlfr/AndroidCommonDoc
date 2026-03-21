@@ -350,6 +350,39 @@ async function validateL0Path(l0Path: string): Promise<void> {
 }
 
 /**
+ * Clone a remote git repository to a temporary directory.
+ * Returns the temp dir path. Caller is responsible for cleanup.
+ */
+export function cloneRemoteSource(remoteUrl: string): string {
+  const tmpDir = path.join(
+    require("os").tmpdir(),
+    `l0-sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  );
+  try {
+    execSync(`git clone --depth=1 "${remoteUrl}" "${tmpDir}"`, {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    return tmpDir;
+  } catch (err) {
+    throw new Error(
+      `Failed to clone remote source ${remoteUrl}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/**
+ * Remove a temporary clone directory.
+ */
+export function cleanupClone(dirPath: string): void {
+  try {
+    require("fs").rmSync(dirPath, { recursive: true, force: true });
+  } catch {
+    // Best effort cleanup
+  }
+}
+
+/**
  * Get the current git commit hash at a path, or undefined if not a git repo.
  */
 export function getGitCommit(dirPath: string): string | undefined {

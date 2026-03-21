@@ -734,7 +734,7 @@ AndroidCommonDoc/
 |   +-- sh/                 # Bash (macOS/Linux) -- 22 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
-|   +-- tests/              # bats shell test suite (497 tests, 4 fixture XMLs)
+|   +-- tests/              # bats shell test suite (514 tests, 4 fixture XMLs)
 +-- mcp-server/             # MCP server (32 tools, 3 prompts, dynamic resources)
 |   +-- src/
 |   |   +-- tools/          # 32 tools: validation, analysis, metrics, audit, sync, vault
@@ -765,6 +765,7 @@ AndroidCommonDoc/
 +-- .github/workflows/
 |   +-- l0-ci.yml                            # L0 unified CI (all checks on push/PR)
 |   +-- l0-sync-dispatch.yml                # Dispatch l0-sync events to downstream repos on push
+|   +-- l0-release-assets.yml               # Package skills+agents+commands as release tarball
 |   +-- mcp-server-ci.yml                    # MCP server test CI (path-filtered)
 |   +-- doc-monitor.yml                      # Upstream doc monitoring cron
 |   +-- readme-audit.yml                     # README count verification

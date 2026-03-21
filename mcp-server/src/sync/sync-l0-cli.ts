@@ -33,6 +33,8 @@ import {
   syncL0,
   syncMultiSource,
   resolveL0Source,
+  cloneRemoteSource,
+  cleanupClone,
   type SyncOptions,
   type SyncReport,
   type MultiSourceSyncReport,
@@ -97,7 +99,7 @@ function parseArgs(argv: string[]): CliArgs {
 async function ensureManifest(
   projectRoot: string,
   l0RootOverride?: string,
-): Promise<{ l0Root: string; isMultiSource: boolean }> {
+): Promise<{ l0Root: string; isMultiSource: boolean; clonedDirs: string[] }> {
   const manifestPath = path.join(projectRoot, "l0-manifest.json");
 
   if (!existsSync(manifestPath)) {
@@ -141,15 +143,35 @@ async function ensureManifest(
   // Read manifest to determine topology
   const manifest = await readManifest(manifestPath);
   const isMultiSource = manifest.sources.length > 1;
+  const clonedDirs: string[] = [];
 
-  // Resolve L0 root
+  // Resolve L0 root — try local path first, then remote clone
   if (l0RootOverride) {
-    return { l0Root: l0RootOverride, isMultiSource };
+    return { l0Root: l0RootOverride, isMultiSource, clonedDirs };
   }
 
   const l0Source = getL0Source(manifest);
+  const l0SourceEntry = manifest.sources.find(s => s.layer === "L0") ?? manifest.sources[0];
+  const localPath = path.resolve(projectRoot, l0Source);
+
+  if (existsSync(localPath)) {
+    const l0Root = await resolveL0Source(l0Source, projectRoot);
+    return { l0Root, isMultiSource, clonedDirs };
+  }
+
+  // Local path doesn't exist — try remote clone
+  if (l0SourceEntry.remote) {
+    console.log(`Local path not found: ${l0Source}`);
+    console.log(`Cloning from remote: ${l0SourceEntry.remote}`);
+    const clonedDir = cloneRemoteSource(l0SourceEntry.remote);
+    clonedDirs.push(clonedDir);
+    console.log(`Cloned to: ${clonedDir}`);
+    return { l0Root: clonedDir, isMultiSource, clonedDirs };
+  }
+
+  // Neither local nor remote — try resolveL0Source (env var fallback)
   const l0Root = await resolveL0Source(l0Source, projectRoot);
-  return { l0Root, isMultiSource };
+  return { l0Root, isMultiSource, clonedDirs };
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +184,9 @@ async function main(): Promise<void> {
   console.log(`Sync → ${projectRoot}`);
   if (dryRun) console.log("  (dry-run mode — no files will be modified)");
 
-  const { l0Root, isMultiSource } = await ensureManifest(projectRoot, l0RootArg);
+  const { l0Root, isMultiSource, clonedDirs } = await ensureManifest(projectRoot, l0RootArg);
+
+  try {
 
   const options: SyncOptions = { prune, force, dryRun };
   let report: SyncReport;
@@ -267,6 +291,13 @@ async function main(): Promise<void> {
 
   if (report.errors.length > 0) {
     process.exit(1);
+  }
+  } finally {
+    // Cleanup temporary clones
+    for (const dir of clonedDirs) {
+      console.log(`Cleaning up temporary clone: ${dir}`);
+      cleanupClone(dir);
+    }
   }
 }
 

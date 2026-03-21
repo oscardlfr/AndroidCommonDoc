@@ -1,0 +1,147 @@
+name: L0 Release Assets
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Publishes a release tarball of L0 distributable assets on every tag push.
+#
+# The tarball contains everything needed to sync L0 to a consumer project:
+#   - skills/         (SKILL.md files + registry.json)
+#   - .claude/agents/  (agent .md files)
+#   - .claude/commands/ (command .md files)
+#   - detekt-rules/src/main/resources/config/ (detekt base config)
+#
+# Consumer usage:
+#   curl -sL https://github.com/<org>/AndroidCommonDoc/releases/latest/download/androidcommondoc-assets.tar.gz | tar xz
+#   # Then run sync-l0 CLI pointing at the extracted directory
+#
+# Triggered by:
+#   - Tag push (v*)
+#   - Manual workflow_dispatch
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for the release (e.g. v1.0.0). Leave empty for snapshot.'
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  release-assets:
+    name: "📦 Package & Release"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            VERSION="${{ github.event.inputs.tag_name }}"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="snapshot-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "📌 Version: $VERSION"
+
+      - name: Package distributable assets
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          STAGING="androidcommondoc-${VERSION}"
+          mkdir -p "$STAGING"
+
+          # Skills (SKILL.md files + registry)
+          cp -r skills/ "$STAGING/skills/"
+
+          # Agents
+          cp -r .claude/agents/ "$STAGING/.claude/agents/"
+
+          # Commands
+          cp -r .claude/commands/ "$STAGING/.claude/commands/"
+
+          # Detekt base config
+          mkdir -p "$STAGING/detekt-rules/src/main/resources/config/"
+          cp detekt-rules/src/main/resources/config/*.yml \
+             "$STAGING/detekt-rules/src/main/resources/config/" 2>/dev/null || true
+
+          # Sync engine (pre-built for consumers without Node.js)
+          # Consumers with Node.js can use the CLI directly
+          mkdir -p "$STAGING/setup/templates/workflows/"
+          cp setup/templates/workflows/*.yml "$STAGING/setup/templates/workflows/"
+
+          # Manifest examples
+          cp -r docs/architecture/layer-topology.md "$STAGING/LAYER-TOPOLOGY.md" 2>/dev/null || true
+
+          # Create tarball
+          tar czf "androidcommondoc-assets.tar.gz" "$STAGING/"
+          echo "📦 Packaged: androidcommondoc-assets.tar.gz"
+          echo "   Size: $(du -h androidcommondoc-assets.tar.gz | cut -f1)"
+          echo "   Contents:"
+          echo "   - Skills: $(find "$STAGING/skills" -name "SKILL.md" | wc -l)"
+          echo "   - Agents: $(find "$STAGING/.claude/agents" -name "*.md" | wc -l)"
+          echo "   - Commands: $(find "$STAGING/.claude/commands" -name "*.md" | wc -l)"
+          echo "   - Workflow templates: $(find "$STAGING/setup" -name "*.yml" | wc -l)"
+
+      - name: Create or update GitHub Release
+        if: github.ref_type == 'tag' || github.event.inputs.tag_name != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          SKILLS=$(find "androidcommondoc-${VERSION}/skills" -name "SKILL.md" | wc -l)
+          AGENTS=$(find "androidcommondoc-${VERSION}/.claude/agents" -name "*.md" | wc -l)
+          COMMANDS=$(find "androidcommondoc-${VERSION}/.claude/commands" -name "*.md" | wc -l)
+
+          gh release create "$VERSION" \
+            --title "AndroidCommonDoc $VERSION" \
+            --notes "## L0 Toolkit Release
+
+          | Asset | Count |
+          |-------|-------|
+          | Skills | $SKILLS |
+          | Agents | $AGENTS |
+          | Commands | $COMMANDS |
+
+          ### Quick start (no git clone needed)
+
+          \`\`\`bash
+          # Download and extract
+          curl -sL https://github.com/${{ github.repository }}/releases/download/${VERSION}/androidcommondoc-assets.tar.gz | tar xz
+
+          # Point your manifest at the extracted directory
+          # Then run /sync-l0 --l0-root androidcommondoc-${VERSION}
+          \`\`\`
+
+          ### Auto-sync (recommended)
+          See [Updating docs](docs/architecture/layer-topology.md#auto-sync) for automatic PR-based sync." \
+            androidcommondoc-assets.tar.gz \
+          || gh release upload "$VERSION" androidcommondoc-assets.tar.gz --clobber
+
+      - name: Upload as artifact (for snapshot builds)
+        if: github.ref_type != 'tag' && github.event.inputs.tag_name == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: androidcommondoc-assets-snapshot
+          path: androidcommondoc-assets.tar.gz
+          retention-days: 7
+
+      - name: Summary
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          echo "### 📦 L0 Assets Packaged" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version: \`$VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ github.ref_type }}" = "tag" ] || [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            echo "Published to [GitHub Releases](https://github.com/${{ github.repository }}/releases/tag/$VERSION)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Snapshot artifact uploaded (7-day retention)" >> "$GITHUB_STEP_SUMMARY"
+          fi

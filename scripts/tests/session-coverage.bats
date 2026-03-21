@@ -633,3 +633,83 @@ teardown() {
 @test "README: has open consumer quick setup" {
     sed -n '/^## Updating/,/^## /p' "$README" | grep -q "open consumer\|2 steps"
 }
+
+# ===========================================================================
+# N. Release assets workflow
+# ===========================================================================
+
+@test "release-assets workflow: file exists" {
+    [ -f "$L0_ROOT/.github/workflows/l0-release-assets.yml" ]
+}
+
+@test "release-assets workflow: triggers on tag push v*" {
+    grep -q "tags:" "$L0_ROOT/.github/workflows/l0-release-assets.yml"
+    grep -q "'v\*'" "$L0_ROOT/.github/workflows/l0-release-assets.yml"
+}
+
+@test "release-assets workflow: has workflow_dispatch" {
+    grep -q "workflow_dispatch:" "$L0_ROOT/.github/workflows/l0-release-assets.yml"
+}
+
+@test "release-assets workflow: packages skills directory" {
+    grep -q "skills/" "$L0_ROOT/.github/workflows/l0-release-assets.yml"
+}
+
+@test "release-assets workflow: packages agents directory" {
+    grep -q "agents/" "$L0_ROOT/.github/workflows/l0-release-assets.yml"
+}
+
+@test "release-assets workflow: packages commands directory" {
+    grep -q "commands/" "$L0_ROOT/.github/workflows/l0-release-assets.yml"
+}
+
+@test "release-assets workflow: creates tarball" {
+    grep -q "tar czf" "$L0_ROOT/.github/workflows/l0-release-assets.yml"
+    grep -q "androidcommondoc-assets.tar.gz" "$L0_ROOT/.github/workflows/l0-release-assets.yml"
+}
+
+@test "release-assets workflow: creates GitHub Release on tag" {
+    grep -q "gh release create" "$L0_ROOT/.github/workflows/l0-release-assets.yml"
+}
+
+@test "release-assets workflow: uploads artifact for snapshots" {
+    grep -q "upload-artifact" "$L0_ROOT/.github/workflows/l0-release-assets.yml"
+}
+
+@test "release-assets workflow: includes workflow templates" {
+    grep -q "setup/templates/workflows" "$L0_ROOT/.github/workflows/l0-release-assets.yml"
+}
+
+@test "release-assets workflow: has job summary" {
+    grep -q "GITHUB_STEP_SUMMARY" "$L0_ROOT/.github/workflows/l0-release-assets.yml"
+}
+
+# ===========================================================================
+# O. Remote clone in manifest schema + sync engine
+# ===========================================================================
+
+@test "manifest schema: LayerSource has remote field" {
+    grep -q "remote.*url\|remote.*string\|remote.*optional" "$L0_ROOT/mcp-server/src/sync/manifest-schema.ts"
+}
+
+@test "sync engine: cloneRemoteSource function exists" {
+    grep -q "export function cloneRemoteSource" "$L0_ROOT/mcp-server/src/sync/sync-engine.ts"
+}
+
+@test "sync engine: cleanupClone function exists" {
+    grep -q "export function cleanupClone" "$L0_ROOT/mcp-server/src/sync/sync-engine.ts"
+}
+
+@test "CLI: imports cloneRemoteSource and cleanupClone" {
+    grep -q "cloneRemoteSource" "$L0_ROOT/mcp-server/src/sync/sync-l0-cli.ts"
+    grep -q "cleanupClone" "$L0_ROOT/mcp-server/src/sync/sync-l0-cli.ts"
+}
+
+@test "CLI: checks for remote when local path missing" {
+    grep -q "l0SourceEntry.remote\|source.*remote" "$L0_ROOT/mcp-server/src/sync/sync-l0-cli.ts"
+}
+
+@test "CLI: cleans up cloned dirs in finally block" {
+    grep -q "finally" "$L0_ROOT/mcp-server/src/sync/sync-l0-cli.ts"
+    grep -q "cleanupClone\|clonedDirs" "$L0_ROOT/mcp-server/src/sync/sync-l0-cli.ts"
+}
