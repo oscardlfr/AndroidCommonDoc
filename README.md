@@ -22,7 +22,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Detekt rules** that enforce architecture patterns at build time -- 17 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
-- **Coverage tooling** with configurable engine (JaCoCo or Kover), parallel execution, and gap analysis
+- **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
 - **MCP server** with 32 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, and doc intelligence
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
@@ -630,7 +630,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `pattern-lint` | **Deterministic code pattern checks** -- 8 grep-based rules (CancellationException, MutableSharedFlow, forbidden imports, println, TODO crash, runBlocking, GlobalScope, System.currentTimeMillis) |
 | `run-android-tests` | Instrumented test orchestration on device/emulator |
 | `run-changed-modules-tests` | Git diff-based module detection + selective test execution |
-| `run-parallel-coverage-suite` | Parallel test execution + XML parsing + markdown report |
+| `run-parallel-coverage-suite` | Parallel test execution + per-module coverage (auto-detect JaCoCo/Kover) + kover task fallback retry + XML parsing + markdown report. `--exclude-coverage` for test-utility modules, auto-excludes `*:testing`, `konsist-guard`, etc. |
 | `scan-sbom` | CVE scanning via Trivy |
 | `verify-kmp-packages` | KMP source set validation and import checking |
 
@@ -657,7 +657,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 |---------|----------|---------|
 | `audit-append` | `scripts/sh/lib/`, `scripts/ps1/lib/` | Append events to `audit-log.jsonl` |
 | `findings-append` | `scripts/sh/lib/`, `scripts/ps1/lib/` | Append findings to `findings-log.jsonl` |
-| `coverage-detect` | `scripts/sh/lib/`, `scripts/ps1/lib/` | Auto-detect JaCoCo vs Kover coverage engine |
+| `coverage-detect` | `scripts/sh/lib/`, `scripts/ps1/lib/` | Auto-detect JaCoCo vs Kover per module — checks build file, report dirs, root buildscript, build-logic convention plugins, and gradle/libs.versions.toml. Provides task name resolution with kover variant fallbacks. |
 | `script-utils` | `scripts/sh/lib/` | Common shell utilities: `glob_match`, `get_project_type`, `format_line_ranges`, `safe_rg` (cross-platform ripgrep with find+grep fallback on Windows) |
 
 ---
@@ -797,11 +797,15 @@ AndroidCommonDoc/
 │  1. DAEMON MANAGEMENT                                               │
 │     --fresh-daemon → stop daemons + wipe build/reports/kover|jacoco │
 │                                                                     │
-│  2. DISCOVER MODULES                                                │
+│  2. DISCOVER MODULES + EXCLUDE                                      │
 │     Scan settings.gradle.kts → detect KMP vs Android → filter       │
 │     --module-filter "core:*"  --coverage-only  --include-shared     │
+│     --exclude-coverage "core:testing,konsist-guard"                 │
+│     Auto-excludes: *:testing, *:test-fakes, konsist-guard, etc.    │
 │                                                                     │
-│  3. BUILD TASK LISTS                                                │
+│  3. BUILD TASK LISTS (per-module coverage detection)                │
+│     coverage-detect.sh checks: build.gradle.kts → report dirs →    │
+│       root buildscript → build-logic/ → gradle/libs.versions.toml  │
 │     Auto-detect test type (common|androidUnit|desktop) per module   │
 │     --test-type all  → run every variant                            │
 │                                                                     │
@@ -809,6 +813,10 @@ AndroidCommonDoc/
 │     gradlew :mod:test :mod:koverXmlReport --parallel --continue     │
 │     --rerun-tasks (coverage phase only — avoids stale XMLs)         │
 │     --max-workers N  --timeout 600                                  │
+│                                                                     │
+│  4b. KOVER RECOVERY (if batch partial — e.g. 3/18 XMLs)            │
+│     Retry missing modules with task fallbacks:                      │
+│     koverXmlReportDesktop → koverXmlReport → koverXmlReportDebug   │
 │                                                                     │
 │  5. PARSE COVERAGE (lib/coverage-detect.sh)                         │
 │     Auto-detect JaCoCo vs Kover → parse XML → per-module metrics    │
@@ -837,7 +845,7 @@ The same script powers all coverage skills:
 | `/coverage` | Steps 5-7 only (parse existing XMLs) | 0 |
 | `/auto-cover` | Reads report → generates tests for gaps | 0 + 1 per new test |
 
-All skills accept `--coverage-tool jacoco|kover|auto|none`.
+All skills accept `--coverage-tool jacoco|kover|auto|none` and `--exclude-coverage <modules>`.
 
 ---
 
