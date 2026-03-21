@@ -713,3 +713,64 @@ teardown() {
     grep -q "finally" "$L0_ROOT/mcp-server/src/sync/sync-l0-cli.ts"
     grep -q "cleanupClone\|clonedDirs" "$L0_ROOT/mcp-server/src/sync/sync-l0-cli.ts"
 }
+
+# ===========================================================================
+# P. README consumer vs internal separation
+# ===========================================================================
+
+@test "README: skills section has 'Consumer Skills' subsection" {
+    grep -q "### Consumer Skills" "$README"
+}
+
+@test "README: skills section has 'L0 Development Skills' subsection" {
+    grep -q "### L0 Development Skills" "$README"
+}
+
+@test "README: L0 skills section says 'not synced'" {
+    sed -n '/### L0 Development Skills/,/^## /p' "$README" | grep -qi "not.*synced\|not synced\|excluded"
+}
+
+@test "README: agents section has 'Consumer Agents' subsection" {
+    grep -q "### Consumer Agents" "$README"
+}
+
+@test "README: agents section has 'L0 Quality Gate Agents' subsection" {
+    grep -q "### L0 Quality Gate Agents" "$README"
+}
+
+@test "README: L0 agents section says 'not synced'" {
+    sed -n '/### L0 Quality Gate Agents/,/^## /p' "$README" | grep -qi "not.*synced\|not synced"
+}
+
+@test "README: MCP section has 'Consumer Tools' subsection" {
+    grep -q "### Consumer Tools" "$README"
+}
+
+@test "README: MCP section has 'L0 Internal Tools' subsection" {
+    grep -q "### L0 Internal Tools" "$README"
+}
+
+@test "README: has 'What gets synced' section" {
+    grep -q "What gets synced" "$README"
+}
+
+@test "README: 'What gets synced' lists consumer counts" {
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "31"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "27"
+}
+
+@test "README: 'What gets synced' clarifies what is NOT synced" {
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -qi "not synced"
+}
+
+@test "README: docs count is 54 sub-docs (not 57)" {
+    grep -q "54 sub-docs" "$README"
+}
+
+@test "README: vitest count is 1056" {
+    grep -q "1056 tests" "$README"
+}
+
+@test "README: vitest files count is 79" {
+    grep -q "79 test files" "$README"
+}

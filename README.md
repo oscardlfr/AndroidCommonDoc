@@ -107,6 +107,19 @@ Choose topology in `/setup` wizard (W0) or edit `l0-manifest.json` directly. Man
 - **Multi-layer doc search**: `find-pattern --from_manifest` searches docs from all sources, ranked by proximity (local > L1 > L0)
 - **Convention plugin chain**: Detekt config loads L0 base → L1 override → L2 local via `config.setFrom()` — see [convention-plugin-chain.md](docs/guides/convention-plugin-chain.md)
 
+### What gets synced to your project
+
+When you run `/sync-l0` or merge an auto-sync PR, only **consumer assets** are materialized:
+
+| What | Destination | Count |
+|------|-------------|-------|
+| Consumer skills | `.claude/skills/*/SKILL.md` | 31 |
+| Consumer agents | `.claude/agents/*.md` | 10 (8 domain + 2 orchestrators) |
+| Commands | `.claude/commands/*.md` | 27 |
+| **Total** | | **68 entries** |
+
+**Not synced:** L0 development skills (9), L0 quality gate agents (5), scripts (invoked at runtime from L0), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
+
 ### Materialization model
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
@@ -375,11 +388,17 @@ Real-time pattern enforcement during AI-assisted development:
 
 40 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat.
 
+**31 consumer skills** are synced to downstream projects. **9 L0 development skills** are only useful when working on AndroidCommonDoc itself.
+
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
 > **Audit skills** (`/audit`, `/full-audit`) read from `.androidcommondoc/audit-log.jsonl` and `findings-log.jsonl` -- written by scripts automatically. No extra Gradle runs.
 
-### Daily Development
+### Consumer Skills (synced to your project)
+
+These are the skills that get materialized to your `.claude/skills/` directory via `/sync-l0`.
+
+#### Daily Development
 
 | Skill | What it does |
 |-------|-------------|
@@ -389,7 +408,7 @@ Real-time pattern enforcement during AI-assisted development:
 | `/test <module>` | Run tests for a single module with smart retry and daemon recovery |
 | `/test-changed` | Test only modules with uncommitted changes (git-aware) |
 
-### Full Validation
+#### Full Validation
 
 | Skill | What it does |
 |-------|-------------|
@@ -399,7 +418,7 @@ Real-time pattern enforcement during AI-assisted development:
 | `/test-full` | Run all tests across all modules with full coverage report |
 | `/test-full-parallel` | Same but single `--parallel` Gradle invocation (~2-3x faster) |
 
-### Pre-PR & Git Flow
+#### Pre-PR & Git Flow
 
 | Skill | What it does |
 |-------|-------------|
@@ -408,47 +427,28 @@ Real-time pattern enforcement during AI-assisted development:
 | `/lint-resources` | Enforce string resource naming conventions |
 | `/pre-pr` | Orchestrate all pre-merge checks: lint, tests, commit format, summary table |
 
-### Architecture & Maintenance
+#### Architecture & Maintenance
 
 | Skill | What it does | Platform |
 |-------|-------------|----------|
-| `/audit-l0` | Run coherence audit on any L0/L1/L2 layer root | Android + KMP |
 | `/sbom` | Generate CycloneDX Software Bill of Materials | Android + KMP |
 | `/sbom-analyze` | Analyze SBOM dependencies, licenses, and transitive tree | Android + KMP |
 | `/sbom-scan` | Scan SBOM for known CVEs using Trivy | Android + KMP |
-| `/set-model-profile` | Switch agent model tier: budget / balanced / advanced / quality (auto-bootstraps from L0) | Android + KMP |
+| `/set-model-profile` | Switch agent model tier: budget / balanced / advanced / quality | Android + KMP |
 | `/setup` | Interactive wizard -- configure any project to consume AndroidCommonDoc | Android + KMP |
+| `/sync-l0` | Synchronize L0 skills, agents, and commands to current project | Android + KMP |
 | `/sync-versions` | Check version alignment between projects and shared catalog | KMP / multi-project |
 | `/validate-patterns` | Validate code against documented architecture patterns | Android + KMP |
 | `/verify-kmp` | Validate KMP source set rules, imports, and expect/actual contracts | KMP only |
 
-### Doc Intelligence
-
-| Skill | What it does |
-|-------|-------------|
-| `/doc-reorganize` | Reorganize docs/ into domain-based subdirectories |
-| `/generate-rules` | Generate Kotlin Detekt rules from pattern doc frontmatter |
-| `/ingest-content` | Fetch and match external content against pattern doc metadata |
-| `/monitor-docs` | Monitor upstream sources for version drift -- auto-bumps `versions-manifest.json` on accept |
-| `/readme-audit` | Audit README.md against repo state -- surfaces stale counts and missing sections |
-
-### Audit & Reporting
+#### Audit & Reporting
 
 | Skill | What it does |
 |-------|-------------|
 | `/audit` | Quality trend report -- coverage, Detekt, tests, CVEs. Reads existing log, zero extra runs |
 | `/full-audit` | **Unified audit** -- wave-based execution, 15 agents + scripts, 3-pass dedup, consolidated report |
 
-### Sync & Distribution
-
-| Skill | What it does |
-|-------|-------------|
-| `/sync-gsd-skills` | Sync skills from all sources (marketplace, L0, L0 agents) to GSD-2 |
-| `/sync-gsd-agents` | Sync .claude/agents/ to GSD subagent system and verify parity |
-| `/sync-l0` | Synchronize L0 skills, agents, and commands to current project (additive default, `--prune` for removes) |
-| `/sync-vault` | Sync documentation into unified Obsidian vault |
-
-### Web Development
+#### Web Development
 
 | Skill | What it does |
 |-------|-------------|
@@ -459,51 +459,61 @@ Real-time pattern enforcement during AI-assisted development:
 | `/seo` | Validate SEO metadata, structure, and discoverability |
 | `/web-quality-audit` | Comprehensive web quality audit across all dimensions |
 
+### L0 Development Skills (internal — not synced to consumers)
+
+These skills are for maintaining AndroidCommonDoc itself. They are **not** synced to downstream projects by the sync engine (they're excluded from the consumer registry).
+
+| Skill | What it does |
+|-------|-------------|
+| `/audit-l0` | Run coherence audit on any L0/L1/L2 layer root (doc structure, frontmatter, line limits) |
+| `/doc-reorganize` | Reorganize `docs/` into domain-based subdirectories |
+| `/generate-rules` | Generate Kotlin Detekt rules from pattern doc YAML frontmatter |
+| `/ingest-content` | Fetch and match external content against pattern doc metadata |
+| `/monitor-docs` | Monitor upstream sources for version drift -- auto-bumps `versions-manifest.json` on accept |
+| `/readme-audit` | Audit README.md against repo state -- surfaces stale counts and missing sections |
+| `/sync-gsd-agents` | Sync `.claude/agents/` to GSD subagent system and verify parity |
+| `/sync-gsd-skills` | Sync skills from all sources (marketplace, L0, L0 agents) to GSD-2 |
+| `/sync-vault` | Sync documentation into unified Obsidian vault |
+
 ---
 
 ## Agents
 
-15 specialized agents in `.claude/agents/`. User-facing agents can be invoked directly; internal agents are orchestrated by `quality-gate-orchestrator` or `full-audit-orchestrator`.
+15 specialized agents in `.claude/agents/`. **8 consumer agents** are synced to downstream projects and can be invoked directly. **5 L0 quality gate agents** are internal to AndroidCommonDoc development. **2 orchestrators** coordinate multi-agent workflows.
 
-### Unified Audit
+### Consumer Agents (synced to your project)
+
+These agents are materialized to your `.claude/agents/` via `/sync-l0`. Invoke them directly in Claude Code.
+
+| Agent | What It Does |
+|-------|-------------|
+| `api-rate-limit-auditor` | HTTP client rate limiting, retry backoff, timeouts, concurrency |
+| `beta-readiness-agent` | Feature completeness, stability, and beta criteria |
+| `cross-platform-validator` | Platform parity across Android, iOS, and Desktop targets |
+| `doc-alignment-agent` | Documentation accuracy against actual implementation |
+| `privacy-auditor` | PII in logs, analytics consent, encrypted storage, data retention |
+| `release-guardian-agent` | Release checklist -- debug flags, secrets, build config, hardcoded URLs, ProGuard |
+| `test-specialist` | Test pattern compliance and coverage gap analysis |
+| `ui-specialist` | Compose UI accessibility, Material3, and design system review |
+
+### Orchestrators (synced — invoke via `/full-audit` or `/quality-gate`)
 
 | Agent | What It Does |
 |-------|-------------|
 | `full-audit-orchestrator` | Orchestrates `/full-audit` -- wave execution, finding collection, 3-pass dedup, consolidated report |
+| `quality-gate-orchestrator` | Unified pass/fail report across all gates with token cost |
 
-### Toolkit Quality Gates (internal -- invoked by quality-gate-orchestrator)
+### L0 Quality Gate Agents (internal — not synced to consumers)
+
+These agents verify the consistency of AndroidCommonDoc itself. They are invoked by `quality-gate-orchestrator` during L0 development and are **not** synced to downstream projects.
 
 | Agent | What It Verifies |
 |-------|-----------------|
 | `doc-code-drift-detector` | Pattern doc version references match `versions-manifest.json` |
 | `l0-coherence-auditor` | Full L0/L1/L2 coherence audit (9 checks incl. Context7 + Jina) |
-| `quality-gate-orchestrator` | Unified pass/fail report across all gates with token cost |
 | `script-parity-validator` | PS1 and SH scripts produce equivalent behavior |
 | `skill-script-alignment` | Skills reference correct scripts and parameters |
 | `template-sync-validator` | Claude commands and Copilot prompts are semantically equivalent |
-
-### Release & Readiness
-
-| Agent | What It Does |
-|-------|-------------|
-| `beta-readiness-agent` | Feature completeness, stability, and beta criteria |
-| `release-guardian-agent` | Release checklist -- debug flags, secrets, build config, hardcoded URLs, ProGuard |
-
-### Cross-Cutting Validation
-
-| Agent | What It Does |
-|-------|-------------|
-| `cross-platform-validator` | Platform parity across Android, iOS, and Desktop targets |
-| `doc-alignment-agent` | Documentation accuracy against actual implementation |
-
-### Domain Specialists
-
-| Agent | What It Does |
-|-------|-------------|
-| `api-rate-limit-auditor` | HTTP client rate limiting, retry backoff, timeouts, concurrency |
-| `privacy-auditor` | PII in logs, analytics consent, encrypted storage, data retention |
-| `test-specialist` | Test pattern compliance and coverage gap analysis |
-| `ui-specialist` | Compose UI accessibility, Material3, and design system review |
 
 ### Model Tier Strategy
 
@@ -531,39 +541,50 @@ Agents don't have hardcoded models -- the active profile determines which model 
 
 32 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
+**19 consumer tools** work in any project. **13 L0 internal tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
+
+### Consumer Tools
+
 | Tool | Category | What It Does |
 |------|----------|-------------|
-| `code-metrics` | Analysis | Code complexity metrics: LOC, nesting depth, function count per module |
-| `dependency-graph` | Analysis | Build module dependency graph with DFS cycle detection + Mermaid output |
-| `module-health` | Analysis | Per-module health dashboard: LOC, test count, deps, coverage |
-| `string-completeness` | Analysis | Compare base strings.xml vs locale variants, report missing translations |
-| `unused-resources` | Analysis | Detect orphan strings/drawables not referenced in source code |
-| `skill-usage-analytics` | Analytics | Toolkit usage stats: run counts, common findings, per-skill trends |
 | `api-surface-diff` | API | Detect breaking public API changes between git branches |
 | `audit-report` | Audit | Read `audit-log.jsonl` and return aggregated quality trend data |
-| `findings-report` | Audit | Read `findings-log.jsonl` with dedup, severity filter, resolution tracking |
-| `pattern-coverage` | Coverage | Map pattern doc enforcement: Detekt rules, scripts, agents per doc |
+| `check-version-sync` | Validation | Check version alignment between projects |
+| `code-metrics` | Analysis | Code complexity metrics: LOC, nesting depth, function count per module |
+| `compose-preview-audit` | Quality | Audit @Preview quality: dark mode, screen sizes, PreviewParameter usage |
+| `dependency-graph` | Analysis | Build module dependency graph with DFS cycle detection + Mermaid output |
 | `find-pattern` | Discovery | Search pattern registry by query terms (supports `from_manifest` for multi-layer search) |
+| `findings-report` | Audit | Read `findings-log.jsonl` with dedup, severity filter, resolution tracking |
+| `gradle-config-lint` | Linting | Check convention plugin usage, hardcoded versions, version catalog compliance |
+| `migration-validator` | Validation | Validate Room/SQLDelight migration sequences and flag destructive ops |
+| `module-health` | Analysis | Per-module health dashboard: LOC, test count, deps, coverage |
+| `proguard-validator` | Validation | Validate ProGuard references exist and recommend keep rules by library |
+| `rate-limit-status` | Utility | Check current rate limit status |
+| `setup-check` | Setup | Verify toolkit installation in a project |
+| `skill-usage-analytics` | Analytics | Toolkit usage stats: run counts, common findings, per-skill trends |
+| `string-completeness` | Analysis | Compare base strings.xml vs locale variants, report missing translations |
+| `unused-resources` | Analysis | Detect orphan strings/drawables not referenced in source code |
+| `validate-all` | Validation | Run all validation scripts with structured output |
+| `verify-kmp` | Validation | Validate KMP source sets and imports |
+
+### L0 Internal Tools (not useful in consumer projects)
+
+These tools operate on AndroidCommonDoc's own documentation, vault, and toolkit structure.
+
+| Tool | Category | What It Does |
+|------|----------|-------------|
+| `check-doc-freshness` | Monitoring | Alias for monitor-sources (backward compatible) |
 | `generate-detekt-rules` | Generation | Generate Kotlin Detekt rules from pattern doc frontmatter |
 | `ingest-content` | Ingestion | Fetch and analyze external content against pattern metadata |
-| `gradle-config-lint` | Linting | Check convention plugin usage, hardcoded versions, version catalog compliance |
-| `check-doc-freshness` | Monitoring | Alias for monitor-sources (backward compatible) |
-| `monitor-sources` | Monitoring | Check upstream sources for version changes and deprecations |
-| `compose-preview-audit` | Quality | Audit @Preview quality: dark mode, screen sizes, PreviewParameter usage |
-| `script-parity` | Quality | Compare PS1 and SH script behavior |
-| `setup-check` | Setup | Verify toolkit installation in a project |
 | `l0-diff` | Sync | Compare L0 registry vs downstream manifest to preview sync delta |
-| `rate-limit-status` | Utility | Check current rate limit status |
-| `check-version-sync` | Validation | Check version alignment between projects |
-| `migration-validator` | Validation | Validate Room/SQLDelight migration sequences and flag destructive ops |
-| `proguard-validator` | Validation | Validate ProGuard references exist and recommend keep rules by library |
-| `validate-all` | Validation | Run all validation scripts with structured output |
+| `monitor-sources` | Monitoring | Check upstream sources for version changes and deprecations |
+| `pattern-coverage` | Coverage | Map pattern doc enforcement: Detekt rules, scripts, agents per doc |
+| `script-parity` | Quality | Compare PS1 and SH script behavior |
+| `sync-vault` | Vault | Sync documentation into unified Obsidian vault |
 | `validate-claude-md` | Validation | Validate CLAUDE.md ecosystem: template structure, canonical coverage |
 | `validate-doc-structure` | Validation | Validate documentation structure and frontmatter completeness |
 | `validate-skills` | Validation | Validate skills registry, frontmatter, and downstream sync |
 | `validate-vault` | Validation | Validate vault content and wikilink integrity |
-| `verify-kmp` | Validation | Validate KMP source sets and imports |
-| `sync-vault` | Vault | Sync documentation into unified Obsidian vault |
 | `vault-status` | Vault | Check vault sync status and statistics |
 
 ---
@@ -664,7 +685,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-13 domain hubs, 57 sub-docs, 19 guides -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
+13 domain hubs, 54 sub-docs, 19 guides -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
 
 | Hub | Covers | Platform |
 |-----|--------|----------|
@@ -734,7 +755,7 @@ AndroidCommonDoc/
 |   +-- sh/                 # Bash (macOS/Linux) -- 22 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
-|   +-- tests/              # bats shell test suite (514 tests, 4 fixture XMLs)
+|   +-- tests/              # bats shell test suite (528 tests, 4 fixture XMLs)
 +-- mcp-server/             # MCP server (32 tools, 3 prompts, dynamic resources)
 |   +-- src/
 |   |   +-- tools/          # 32 tools: validation, analysis, metrics, audit, sync, vault
@@ -744,7 +765,7 @@ AndroidCommonDoc/
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
 |   |   +-- cli/            # CLI entrypoint for CI monitoring
-|   +-- tests/              # 77 test files -- vitest unit + integration (1014 tests)
+|   +-- tests/              # 79 test files -- vitest unit + integration (1056 tests)
 +-- detekt-rules/
 |   +-- src/main/kotlin/    # 17 hand-written AST-only Detekt rules
 |   +-- src/main/resources/
