@@ -8,7 +8,7 @@ description: "Convention plugin pattern for chain Detekt config loading across L
 slug: convention-plugin-chain
 status: active
 layer: L0
-category: gradle
+category: guides
 assumes_read: gradle-hub
 token_budget: 600
 ---
