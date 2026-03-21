@@ -225,8 +225,13 @@ jobs:
           Review the changes, then merge to apply the sync.
 
           ---
-          *Created automatically by [l0-auto-sync](.github/workflows/l0-auto-sync.yml)*" \
-              --label "sync"
+          *Created automatically by [l0-auto-sync](.github/workflows/l0-auto-sync.yml)*"
+
+            # Try to add label (may not exist in new repos)
+            NEW_PR=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' || echo "")
+            if [ -n "$NEW_PR" ]; then
+              gh pr edit "$NEW_PR" --add-label "sync" 2>/dev/null || true
+            fi
           fi
 
       - name: Cascade dispatch (chain topology)
