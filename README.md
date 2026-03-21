@@ -734,7 +734,7 @@ AndroidCommonDoc/
 |   +-- sh/                 # Bash (macOS/Linux) -- 22 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
-|   +-- tests/              # bats shell test suite (477 tests, 4 fixture XMLs)
+|   +-- tests/              # bats shell test suite (489 tests, 4 fixture XMLs)
 +-- mcp-server/             # MCP server (32 tools, 3 prompts, dynamic resources)
 |   +-- src/
 |   |   +-- tools/          # 32 tools: validation, analysis, metrics, audit, sync, vault
@@ -875,15 +875,25 @@ Downstream projects sync automatically — no manual steps needed.
 
 ### Automatic (recommended)
 
-When L0 pushes to master, a dispatch workflow notifies all downstream repos. Each runs `sync-l0`, creates a PR with the changes, and cascades to its own downstreams:
+When L0 pushes to master, a dispatch workflow notifies all downstream repos. Each clones L0, runs the sync engine, and opens a PR with the changes:
 
 ```
-L0 push → dispatch → L1 auto-sync PR → dispatch → L2 auto-sync PR
+L0 push to master
+  → l0-sync-dispatch.yml reads .github/downstream-repos.json
+  → repository_dispatch to each downstream repo
+  → L1 l0-auto-sync.yml: clone L0 → sync → PR "chore(sync): auto-sync from L0"
+  → (chain) L1 cascades dispatch → L2 auto-sync PR
 ```
 
-A daily cron job (06:00 UTC) acts as safety net — compares upstream HEAD against `l0Commit` in the manifest and syncs if they diverge.
+A daily cron (06:00 UTC) acts as safety net — compares upstream HEAD against `l0Commit` in the manifest and syncs if they diverge.
 
-**Setup**: Copy `setup/templates/workflows/l0-auto-sync.yml` to downstream `.github/workflows/`. The `/setup` wizard does this automatically.
+**Quick setup (3 steps):**
+
+1. **L0**: Add downstream repos to `.github/downstream-repos.json` + set `DOWNSTREAM_SYNC_TOKEN` secret (fine-grained PAT with Contents:RW)
+2. **L1/L2**: Copy `setup/templates/workflows/l0-auto-sync.yml` → `.github/workflows/` (or use `/setup` wizard W5)
+3. **L1/L2**: Enable "Allow GitHub Actions to create and approve pull requests" in repo Settings → Actions → General
+
+See [layer-topology.md](docs/architecture/layer-topology.md#auto-sync) for the full setup guide with screenshots and troubleshooting.
 
 ### Manual
 
@@ -894,7 +904,7 @@ A daily cron job (06:00 UTC) acts as safety net — compares upstream HEAD again
 /sync-l0 --dry-run    # preview changes without writing
 ```
 
-The sync engine compares SHA-256 hashes and only updates changed files. Works identically for flat and chain topologies — chain mode syncs from all sources in manifest order (L0 → L1).
+The sync engine compares SHA-256 hashes and only updates changed files. Works identically for flat and chain topologies — chain mode syncs from all sources in manifest order (L0 → L1). User selections (`exclude_skills`, `exclude_categories`, `l2_specific`) are never overwritten.
 
 See [layer-topology.md](docs/architecture/layer-topology.md) for auto-sync setup details.
 

@@ -527,3 +527,69 @@ teardown() {
 @test "README: directory tree includes release.yml template" {
     grep -q "release.yml" "$README"
 }
+
+# ===========================================================================
+# L. Auto-sync documentation completeness
+# ===========================================================================
+
+@test "topology doc: has setup guide with 5 steps" {
+    grep -q "Step 1.*dispatch target\|Step 1.*Configure" "$TOPOLOGY_DOC"
+    grep -q "Step 2.*DOWNSTREAM_SYNC_TOKEN" "$TOPOLOGY_DOC"
+    grep -q "Step 3.*Install auto-sync" "$TOPOLOGY_DOC"
+    grep -q "Step 4.*Enable Actions PR" "$TOPOLOGY_DOC"
+    grep -q "Step 5.*cascade\|Step 5.*chain" "$TOPOLOGY_DOC"
+}
+
+@test "topology doc: has troubleshooting table" {
+    grep -q "Troubleshooting" "$TOPOLOGY_DOC"
+    grep -q "not permitted to create" "$TOPOLOGY_DOC"
+    grep -q "DOWNSTREAM_SYNC_TOKEN.*expired" "$TOPOLOGY_DOC"
+}
+
+@test "topology doc: describes fine-grained PAT creation" {
+    grep -q "Fine-grained\|fine-grained" "$TOPOLOGY_DOC"
+    grep -q "Contents.*Read and write\|Contents:.*RW" "$TOPOLOGY_DOC"
+}
+
+@test "topology doc: describes PR format" {
+    grep -q "auto-sync/l0-update" "$TOPOLOGY_DOC"
+    grep -q "chore(sync)" "$TOPOLOGY_DOC"
+}
+
+@test "topology doc: shows dispatch flow diagram" {
+    grep -q "l0-sync-dispatch.yml" "$TOPOLOGY_DOC"
+    grep -q "repository_dispatch" "$TOPOLOGY_DOC"
+    grep -q "downstream-repos.json" "$TOPOLOGY_DOC"
+}
+
+@test "topology doc: has path filter list" {
+    grep -q "skills/" "$TOPOLOGY_DOC"
+    grep -q "agents/" "$TOPOLOGY_DOC"
+    grep -q "scripts/" "$TOPOLOGY_DOC"
+}
+
+@test "topology doc: under 300 lines" {
+    LINES=$(wc -l < "$TOPOLOGY_DOC" | tr -d ' \r')
+    [ "$LINES" -le 300 ]
+}
+
+@test "README: Updating section has 3-step quick setup" {
+    grep -q "Quick setup\|quick setup\|3 steps" "$README"
+}
+
+@test "README: mentions DOWNSTREAM_SYNC_TOKEN in Updating" {
+    # The Updating section should mention the secret
+    sed -n '/^## Updating/,/^## /p' "$README" | grep -q "DOWNSTREAM_SYNC_TOKEN"
+}
+
+@test "README: mentions Actions PR permission in Updating" {
+    sed -n '/^## Updating/,/^## /p' "$README" | grep -q "Allow GitHub Actions\|create and approve"
+}
+
+@test "README: links to layer-topology auto-sync section" {
+    grep -q "layer-topology.md.*auto-sync\|layer-topology.md#auto-sync" "$README"
+}
+
+@test "README: mentions user selections are never overwritten" {
+    sed -n '/^## Updating/,/^## /p' "$README" | grep -q "never overwritten\|never.*overwrite"
+}

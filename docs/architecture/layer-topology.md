@@ -146,32 +146,121 @@ Or set `topology` in `l0-manifest.json` directly.
 
 ## Auto-Sync
 
-Downstream projects sync automatically via two complementary mechanisms:
+Downstream projects sync automatically — no manual `git pull` or `/sync-l0` needed. Two complementary mechanisms ensure changes propagate reliably.
+
+### How it works
+
+```
+L0 push to master
+  │
+  ├─ l0-sync-dispatch.yml (L0 repo)
+  │  reads .github/downstream-repos.json
+  │  sends repository_dispatch to each repo
+  │
+  ▼
+L1 l0-auto-sync.yml (L1 repo)
+  │  triggered by dispatch event
+  │  clones L0 → builds sync CLI → runs syncL0()
+  │  creates branch auto-sync/l0-update
+  │  opens PR with changes (26 files updated, etc.)
+  │
+  ├─ (if chain) cascades dispatch to L2
+  │
+  ▼
+L2 l0-auto-sync.yml (L2 repo)
+     same flow → PR with L0+L1 merged changes
+```
 
 ### 1. Dispatch (instant)
 
-When L0 pushes to master, `l0-sync-dispatch.yml` sends a `repository_dispatch` to every repo in `.github/downstream-repos.json`. The downstream `l0-auto-sync.yml` workflow receives the event, runs `sync-l0`, and creates a PR with the changes.
+When L0 pushes to master, `l0-sync-dispatch.yml` fires. It reads `.github/downstream-repos.json` and sends a `repository_dispatch` event to each listed repo. The downstream `l0-auto-sync.yml` workflow receives the event, clones L0, builds the sync CLI, runs `syncL0()`, and creates a PR.
 
-```
-L0 push → dispatch → L1 sync → dispatch → L2 sync
-```
-
-For chain topology, L1 cascades the dispatch to L2 automatically after its own sync completes.
+**Path filter:** Only triggers when relevant files change (`skills/`, `agents/`, `scripts/`, `docs/`, `detekt-rules/`, `mcp-server/src/`, `.claude/commands/`, `versions-manifest.json`).
 
 ### 2. Scheduled (safety net)
 
-`l0-auto-sync.yml` also runs daily at 06:00 UTC via cron. It compares the upstream HEAD against the `l0Commit` stored in `l0-manifest.json` — if they differ, it syncs. This catches missed dispatches (token expiry, downtime, new repos).
+`l0-auto-sync.yml` runs daily at 06:00 UTC via cron. It compares upstream HEAD against the `l0Commit` in `l0-manifest.json`. If they differ, it syncs. This catches missed dispatches (token expiry, downtime, new repos not yet in the dispatch list).
 
-### Setup
+### 3. Manual (always available)
 
-**L0 (source):**
-- Add downstream repos to `.github/downstream-repos.json`
-- Set `DOWNSTREAM_SYNC_TOKEN` secret (PAT with `repo` scope)
+```bash
+/sync-l0              # additive sync (new + updated, never removes)
+/sync-l0 --prune      # also removes orphaned files
+/sync-l0 --dry-run    # preview changes without writing
+```
 
-**L1/L2 (downstream):**
-- Copy `setup/templates/workflows/l0-auto-sync.yml` to `.github/workflows/`
-- Ensure `l0-manifest.json` exists (created by `/setup` wizard)
-- For chain: add L2 repos to L1's `.github/downstream-repos.json`
+### Setup guide
+
+#### Step 1: L0 — Configure dispatch target list
+
+Add downstream repos to `.github/downstream-repos.json`:
+
+```json
+[
+  "your-org/shared-kmp-libs",
+  "your-org/my-app"
+]
+```
+
+#### Step 2: L0 — Create DOWNSTREAM_SYNC_TOKEN secret
+
+The dispatch needs a token with permission to trigger workflows in downstream repos.
+
+1. Go to **github.com → Settings → Developer settings → Fine-grained tokens → Generate new token**
+2. Name: `L0 Auto-Sync Dispatch`
+3. Expiration: 90 days (or your org policy)
+4. Repository access → **Only select repositories** → select all downstream repos
+5. Permissions → Repository permissions → **Contents: Read and write**
+6. Generate token → copy the value
+7. Go to **L0 repo → Settings → Secrets and variables → Actions → New repository secret**
+8. Name: `DOWNSTREAM_SYNC_TOKEN`, paste the token value
+
+#### Step 3: L1/L2 — Install auto-sync workflow
+
+Copy the template to each downstream repo:
+
+```bash
+cp <L0>/setup/templates/workflows/l0-auto-sync.yml .github/workflows/
+```
+
+Or use `/setup` wizard (W5 installs it automatically).
+
+#### Step 4: L1/L2 — Enable Actions PR creation
+
+GitHub Actions cannot create PRs by default. Enable it:
+
+1. Go to **downstream repo → Settings → Actions → General**
+2. Scroll to **Workflow permissions**
+3. Check ✅ **Allow GitHub Actions to create and approve pull requests**
+4. Save
+
+#### Step 5 (chain only): L1 — Configure cascade dispatch
+
+If L1 has its own downstream repos (L2), add:
+
+- `.github/downstream-repos.json` in L1 (listing L2 repos)
+- `DOWNSTREAM_SYNC_TOKEN` secret in L1 (with access to L2 repos)
+
+### What the PR looks like
+
+The auto-sync creates a PR with:
+- Title: `chore(sync): auto-sync from L0`
+- Branch: `auto-sync/l0-update`
+- Body: table with added/updated counts, source commit, trigger type
+- Changes: updated skills, agents, commands, manifest checksums
+
+The PR is force-pushed on subsequent syncs (single PR, always up to date).
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| No dispatch fires | `downstream-repos.json` missing or empty | Create the file with repo list |
+| Dispatch fires but L1 no run | `l0-auto-sync.yml` not in L1 `.github/workflows/` | Copy the template |
+| Sync runs but PR fails: "not permitted to create pull requests" | Actions PR permission disabled | Settings → Actions → General → enable checkbox |
+| Sync runs but PR fails: "'sync' not found" | Label doesn't exist (fixed in latest template) | Update `l0-auto-sync.yml` to latest |
+| Cron runs but skips | Upstream HEAD matches `l0Commit` in manifest | Expected — no changes to sync |
+| DOWNSTREAM_SYNC_TOKEN expired | Fine-grained PAT has expiration | Regenerate and update secret |
 
 ## Cross-references
 
