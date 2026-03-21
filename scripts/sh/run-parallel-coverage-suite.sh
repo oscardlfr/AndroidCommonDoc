@@ -495,7 +495,7 @@ for mi in "${!MOD_NAMES[@]}"; do
     build_file="${MOD_PATHS[$mi]}/build.gradle.kts"
 
     # Check if module is excluded from coverage
-    local skip_cov=false
+    skip_cov=false
     if [[ -n "$EXCLUDE_COVERAGE" ]]; then
         IFS=',' read -ra excl_list <<< "$EXCLUDE_COVERAGE"
         for excl in "${excl_list[@]}"; do
@@ -762,13 +762,13 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                     if [[ -z "$xml_check" ]]; then
                         MISSING_COV=$((MISSING_COV + 1))
                         # Try to recover this module individually
-                        local short_mod="${MOD_NAMES[$idx]}"
+                        short_mod="${MOD_NAMES[$idx]}"
                         short_mod="${short_mod#:}"
-                        local gpath=":${short_mod}"
-                        local recovered=false
+                        gpath=":${short_mod}"
+                        recovered=false
                         if [[ "$mod_tool" == "kover" ]]; then
                             # Try all kover task variants
-                            local fallbacks
+                            fallbacks=""
                             fallbacks="$(get_kover_task_fallbacks "$IS_DESKTOP")"
                             for fb_task in $fallbacks; do
                                 if (cd "$PROJECT_ROOT" && ./gradlew "${gpath}:${fb_task}" --rerun-tasks 2>&1) >/dev/null; then
@@ -780,7 +780,6 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                             done
                         else
                             # jacoco — single task name
-                            local cov_task_name
                             cov_task_name="$(get_coverage_gradle_task "$mod_tool" "$TEST_TYPE" "$IS_DESKTOP")"
                             if (cd "$PROJECT_ROOT" && ./gradlew "${gpath}:${cov_task_name}" --rerun-tasks 2>&1) >/dev/null; then
                                 RECOVERED_COV=$((RECOVERED_COV + 1))
@@ -808,12 +807,12 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                     else
                         # For kover tasks: try fallback task names
                         if [[ "$cov_task" == *"kover"* ]]; then
-                            local gradle_path="${cov_task%:*}"  # :core:domain
-                            local fallbacks
+                            gradle_path="${cov_task%:*}"  # :core:domain
+                            fallbacks=""
                             fallbacks="$(get_kover_task_fallbacks "$IS_DESKTOP")"
-                            local fallback_ok=false
+                            fallback_ok=false
                             for fb_task in $fallbacks; do
-                                local full_fb="${gradle_path}:${fb_task}"
+                                full_fb="${gradle_path}:${fb_task}"
                                 [[ "$full_fb" == "$cov_task" ]] && continue  # skip the one that already failed
                                 if (cd "$PROJECT_ROOT" && ./gradlew "$full_fb" 2>&1) >/dev/null; then
                                     gray "    [OK] $cov_task failed → $full_fb succeeded"

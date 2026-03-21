@@ -153,3 +153,37 @@ LIB_DIR="$SH_DIR/lib"
 @test "regression: PS1 has ExcludeCoverage parameter" {
     grep -q "ExcludeCoverage" scripts/ps1/run-parallel-coverage-suite.ps1
 }
+
+# ---------------------------------------------------------------------------
+# Bug 20: local keyword used outside function in main script body
+# ---------------------------------------------------------------------------
+
+@test "regression: no 'local' outside functions in any SH script" {
+    FAIL=0
+    for script in scripts/sh/*.sh scripts/sh/lib/*.sh; do
+        [ -f "$script" ] || continue
+        # Use python to detect local outside function scope
+        result=$(python3 -c "
+import re, sys
+with open('$script', encoding='utf-8', errors='replace') as f:
+    lines = f.readlines()
+in_func = False
+depth = 0
+violations = []
+for i, line in enumerate(lines, 1):
+    s = line.strip()
+    if re.match(r'^[a-zA-Z_]\w*\s*\(\)', s): in_func = True
+    depth += s.count('{') - s.count('}')
+    if depth <= 0 and in_func:
+        in_func = False
+        depth = 0
+    if s.startswith('local ') and not in_func:
+        violations.append(f'{i}: {s}')
+if violations:
+    print(f'$(basename "$script"):')
+    for v in violations: print(f'  {v}')
+    sys.exit(1)
+" 2>&1) || { echo "$result"; FAIL=1; }
+    done
+    [ "$FAIL" -eq 0 ]
+}
