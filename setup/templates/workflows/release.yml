@@ -1,0 +1,251 @@
+name: Release
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AndroidCommonDoc — Release template for Git Flow + Conventional Commits
+#
+# SETUP:
+#   1. Copy to .github/workflows/release.yml in your project
+#   2. Ensure version.properties exists: major=0, minor=1, patch=0
+#   3. Ensure CHANGELOG.md exists (Keep a Changelog format)
+#   4. Branch model: master (production) + develop (integration)
+#   5. Commits follow Conventional Commits: feat:, fix:, chore:, etc.
+#
+# BEHAVIOR:
+#   - Triggers on push to master (merge from develop/release/hotfix)
+#   - Infers bump from commits since last tag:
+#       feat: → minor (0.1.0 → 0.2.0)
+#       fix/chore/refactor/etc: → patch (0.1.0 → 0.1.1)
+#   - Creates: version bump commit, git tag, CHANGELOG entry, GitHub Release
+#   - Back-merges to develop so version.properties stays in sync
+#   - Skips if push is from the bot itself (prevents infinite loop)
+#   - Manual dry-run available via workflow_dispatch
+#
+# CUSTOMIZATION POINTS (search for CUSTOMIZE):
+#   - Branch names (master/develop)
+#   - version.properties location
+#   - CHANGELOG format
+#   - Additional release artifacts (APK, XCFramework, etc.)
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches:
+      - master  # CUSTOMIZE: change if your production branch has a different name
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Preview only — do not push or create release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: "🚀 Release"
+    runs-on: ubuntu-latest
+    # Skip if this push was made by the release bot itself (prevents infinite loop)
+    if: "!contains(github.event.head_commit.message, 'chore(release):')"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Read current version
+        id: current
+        run: |
+          # CUSTOMIZE: adjust path if version.properties is elsewhere
+          source version.properties
+          echo "major=$major" >> "$GITHUB_OUTPUT"
+          echo "minor=$minor" >> "$GITHUB_OUTPUT"
+          echo "patch=$patch" >> "$GITHUB_OUTPUT"
+          echo "version=$major.$minor.$patch" >> "$GITHUB_OUTPUT"
+          echo "📌 Current version: $major.$minor.$patch"
+
+      - name: Detect bump type from commits
+        id: bump
+        run: |
+          CURRENT="v${{ steps.current.outputs.version }}"
+          LAST_TAG=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null || echo "")
+
+          if [ -n "$LAST_TAG" ]; then
+            RANGE="$LAST_TAG..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+
+          echo "Scanning commits in range: $RANGE"
+
+          # Count conventional commit types
+          FEAT_COUNT=$(git log $RANGE --pretty=format:"%s" | grep -c "^feat" || true)
+          FIX_COUNT=$(git log $RANGE --pretty=format:"%s" | grep -c "^fix\|^refactor\|^perf\|^ci\|^chore\|^docs\|^style\|^test\|^build" || true)
+          TOTAL=$((FEAT_COUNT + FIX_COUNT))
+
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "⏭️ No conventional commits found since $LAST_TAG. Skipping release."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$FEAT_COUNT" -gt 0 ]; then
+            echo "type=minor" >> "$GITHUB_OUTPUT"
+            echo "🔼 Minor bump (found $FEAT_COUNT feat commits)"
+          else
+            echo "type=patch" >> "$GITHUB_OUTPUT"
+            echo "🔧 Patch bump (found $FIX_COUNT fix/chore commits)"
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate next version
+        if: steps.bump.outputs.skip != 'true'
+        id: next
+        run: |
+          MAJOR=${{ steps.current.outputs.major }}
+          MINOR=${{ steps.current.outputs.minor }}
+          PATCH=${{ steps.current.outputs.patch }}
+          BUMP=${{ steps.bump.outputs.type }}
+
+          if [ "$BUMP" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+          echo "minor=$MINOR" >> "$GITHUB_OUTPUT"
+          echo "patch=$PATCH" >> "$GITHUB_OUTPUT"
+          echo "🚀 Next version: $VERSION ($BUMP bump)"
+
+      - name: Generate changelog entry
+        if: steps.bump.outputs.skip != 'true'
+        id: changelog
+        run: |
+          VERSION=${{ steps.next.outputs.version }}
+          DATE=$(date +%Y-%m-%d)
+          LAST_TAG=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null || echo "")
+
+          if [ -n "$LAST_TAG" ]; then
+            RANGE="$LAST_TAG..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+
+          # CUSTOMIZE: adjust categories to match your commit conventions
+          FEATS=$(git log $RANGE --pretty=format:"- %s" --grep="^feat" 2>/dev/null || echo "")
+          FIXES=$(git log $RANGE --pretty=format:"- %s" --grep="^fix" 2>/dev/null || echo "")
+          REFACTORS=$(git log $RANGE --pretty=format:"- %s" --grep="^refactor" 2>/dev/null || echo "")
+          CI_CHANGES=$(git log $RANGE --pretty=format:"- %s" --grep="^ci" 2>/dev/null || echo "")
+          CHORES=$(git log $RANGE --pretty=format:"- %s" --grep="^chore" 2>/dev/null || echo "")
+          DOCS=$(git log $RANGE --pretty=format:"- %s" --grep="^docs" 2>/dev/null || echo "")
+
+          {
+            echo "entry<<CHANGELOG_EOF"
+            echo "## [$VERSION] - $DATE"
+            echo ""
+            [ -n "$FEATS" ] && echo "### Added" && echo "$FEATS" && echo ""
+            [ -n "$FIXES" ] && echo "### Fixed" && echo "$FIXES" && echo ""
+            [ -n "$REFACTORS" ] && echo "### Changed" && echo "$REFACTORS" && echo ""
+            [ -n "$CI_CHANGES" ] && echo "### CI" && echo "$CI_CHANGES" && echo ""
+            [ -n "$CHORES" ] && echo "### Maintenance" && echo "$CHORES" && echo ""
+            [ -n "$DOCS" ] && echo "### Documentation" && echo "$DOCS" && echo ""
+            echo "[$VERSION]: https://github.com/${{ github.repository }}/releases/tag/v$VERSION"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Preview (dry run)
+        if: steps.bump.outputs.skip != 'true' && inputs.dry_run == true
+        run: |
+          echo "═══════════════════════════════════════"
+          echo "DRY RUN — would release v${{ steps.next.outputs.version }}"
+          echo "═══════════════════════════════════════"
+          echo ""
+          echo "${{ steps.changelog.outputs.entry }}"
+
+      - name: Bump version.properties
+        if: steps.bump.outputs.skip != 'true' && inputs.dry_run != true
+        run: |
+          # CUSTOMIZE: adjust path if version.properties is elsewhere
+          printf 'major=%s\nminor=%s\npatch=%s\n' \
+            "${{ steps.next.outputs.major }}" \
+            "${{ steps.next.outputs.minor }}" \
+            "${{ steps.next.outputs.patch }}" \
+            > version.properties
+
+      - name: Update CHANGELOG.md
+        if: steps.bump.outputs.skip != 'true' && inputs.dry_run != true
+        run: |
+          ENTRY='${{ steps.changelog.outputs.entry }}'
+          if [ -f CHANGELOG.md ]; then
+            FIRST_ENTRY=$(grep -n "^## \[" CHANGELOG.md | head -1 | cut -d: -f1)
+            if [ -n "$FIRST_ENTRY" ]; then
+              head -n $((FIRST_ENTRY - 1)) CHANGELOG.md > CHANGELOG.tmp
+              echo "" >> CHANGELOG.tmp
+              echo "$ENTRY" >> CHANGELOG.tmp
+              echo "" >> CHANGELOG.tmp
+              tail -n +$FIRST_ENTRY CHANGELOG.md >> CHANGELOG.tmp
+              mv CHANGELOG.tmp CHANGELOG.md
+            else
+              echo "$ENTRY" >> CHANGELOG.md
+            fi
+          fi
+
+      # CUSTOMIZE: add build/artifact steps here if needed (APK, XCFramework, etc.)
+      # - name: Build release artifacts
+      #   run: ./gradlew assembleRelease
+
+      - name: Commit, tag, back-merge
+        if: steps.bump.outputs.skip != 'true' && inputs.dry_run != true
+        run: |
+          VERSION=${{ steps.next.outputs.version }}
+
+          # Commit version bump on master
+          git add version.properties CHANGELOG.md
+          git commit -m "chore(release): v$VERSION"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+
+          # CUSTOMIZE: change 'develop' if your integration branch has a different name
+          git checkout develop
+          git pull origin develop
+          git merge --no-ff master -m "chore: back-merge v$VERSION into develop"
+
+          # Push everything
+          git push origin master develop "v$VERSION"
+
+      - name: Create GitHub Release
+        if: steps.bump.outputs.skip != 'true' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ steps.next.outputs.version }}
+          gh release create "v$VERSION" \
+            --title "v$VERSION" \
+            --notes "${{ steps.changelog.outputs.entry }}"
+          # CUSTOMIZE: attach artifacts with --file if built above
+          # gh release upload "v$VERSION" app/build/outputs/apk/release/app-release.apk
+
+      - name: Summary
+        if: always()
+        run: |
+          SKIP='${{ steps.bump.outputs.skip }}'
+          DRY='${{ inputs.dry_run }}'
+          VERSION='${{ steps.next.outputs.version }}'
+
+          if [ "$SKIP" = "true" ]; then
+            echo "### ⏭️ No release needed" >> "$GITHUB_STEP_SUMMARY"
+            echo "No conventional commits since last tag." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$DRY" = "true" ]; then
+            echo "### 🔍 Dry run — v$VERSION" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### 🚀 Released v$VERSION" >> "$GITHUB_STEP_SUMMARY"
+            echo "- [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/v$VERSION)" >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -310,6 +310,7 @@ Do you want to copy the CI workflow template and PR template? [y/N]
 
   .github/workflows/ci.yml             ← reusable L0 workflows + project jobs
   .github/workflows/l0-auto-sync.yml   ← auto-sync from upstream on push + daily cron
+  .github/workflows/release.yml        ← auto-release with version bump + changelog + tag
   .github/pull_request_template.md     ← standard PR checklist
 ```
 
@@ -317,6 +318,8 @@ If confirmed:
 - Copy `setup/github-workflows/ci-template.yml` → `$PROJECT_ROOT/.github/workflows/ci.yml`
   (replace `<org>` placeholder with the detected GitHub remote org if available)
 - Copy `setup/templates/workflows/l0-auto-sync.yml` → `$PROJECT_ROOT/.github/workflows/l0-auto-sync.yml`
+- Copy `setup/templates/workflows/release.yml` → `$PROJECT_ROOT/.github/workflows/release.yml`
+  (only if `version.properties` exists or user confirms Git Flow + Conventional Commits)
 - Copy `setup/github-workflows/pull_request_template.md` → `$PROJECT_ROOT/.github/pull_request_template.md`
 
 Detect GitHub remote org:
@@ -441,7 +444,7 @@ Run `install-guard-tests.sh` with confirmed package name. Skip if declined or no
 
 ### Step 6 — CI + PR templates + auto-sync workflow (conditional on W5)
 
-Copy templates. Replace `<org>` placeholder. Include `l0-auto-sync.yml` for automatic upstream sync. Skip if declined or files exist without `--force`.
+Copy templates. Replace `<org>` placeholder. Include `l0-auto-sync.yml` for automatic upstream sync. Include `release.yml` if the project uses Git Flow + Conventional Commits. Skip if declined or files exist without `--force`.
 
 ---
 
@@ -536,6 +539,7 @@ detekt.yml exists in project root
 Guard tests directory exists (konsist-guard/ or equivalent)
 .github/workflows/ci.yml exists
 .github/workflows/l0-auto-sync.yml exists
+.github/workflows/release.yml exists (if Git Flow confirmed)
 Model-profiles.json exists in .claude/
 
 # GSD (only if W7 confirmed)

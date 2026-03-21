@@ -445,3 +445,85 @@ teardown() {
         return 1
     fi
 }
+
+# ===========================================================================
+# K. Release workflow template
+# ===========================================================================
+
+@test "release template: file exists" {
+    [ -f "$L0_ROOT/setup/templates/workflows/release.yml" ]
+}
+
+@test "release template: triggers on push to master" {
+    grep -q "push:" "$L0_ROOT/setup/templates/workflows/release.yml"
+    grep -q "master" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "release template: has workflow_dispatch with dry_run" {
+    grep -q "workflow_dispatch:" "$L0_ROOT/setup/templates/workflows/release.yml"
+    grep -q "dry_run" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "release template: reads version.properties" {
+    grep -q "version.properties" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "release template: detects feat commits for minor bump" {
+    grep -q "feat" "$L0_ROOT/setup/templates/workflows/release.yml"
+    grep -q "minor" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "release template: detects fix commits for patch bump" {
+    grep -q "fix" "$L0_ROOT/setup/templates/workflows/release.yml"
+    grep -q "patch" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "release template: skips when no conventional commits" {
+    grep -q "Skipping release\|skip=true" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "release template: prevents infinite loop (bot commit skip)" {
+    grep -q "chore(release)" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "release template: creates git tag" {
+    grep -q "git tag" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "release template: updates CHANGELOG.md" {
+    grep -q "CHANGELOG" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "release template: back-merges to develop" {
+    grep -q "develop" "$L0_ROOT/setup/templates/workflows/release.yml"
+    grep -q "back-merge\|merge.*master" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "release template: creates GitHub Release" {
+    grep -q "gh release create" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "release template: has CUSTOMIZE markers" {
+    COUNT=$(grep -c "CUSTOMIZE" "$L0_ROOT/setup/templates/workflows/release.yml")
+    [ "$COUNT" -ge 4 ]
+}
+
+@test "release template: has job summary" {
+    grep -q "GITHUB_STEP_SUMMARY" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "release template: no @main references" {
+    ! grep -q "@main" "$L0_ROOT/setup/templates/workflows/release.yml"
+}
+
+@test "setup skill: W5 mentions release.yml" {
+    grep -q "release.yml" "$SETUP_SKILL"
+}
+
+@test "setup skill: release only if Git Flow confirmed" {
+    grep -q "version.properties.*exists\|Git Flow" "$SETUP_SKILL"
+}
+
+@test "README: directory tree includes release.yml template" {
+    grep -q "release.yml" "$README"
+}
