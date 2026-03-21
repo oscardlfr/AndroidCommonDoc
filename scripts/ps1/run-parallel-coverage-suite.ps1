@@ -82,7 +82,8 @@ param(
     [string]$CoverageModules = "core:model,core:domain,core:data,core:audio",
     [int]$Timeout = 600,
     [ValidateSet("jacoco", "kover", "auto", "none")]
-    [string]$CoverageTool = "auto"
+    [string]$CoverageTool = "auto",
+    [string]$ExcludeCoverage = ""
 )
 
 $ErrorActionPreference = "Continue"
@@ -457,7 +458,22 @@ foreach ($module in $allModules) {
 
     # Determine coverage tool for this module
     $buildFile = Join-Path $module.Path "build.gradle.kts"
-    if ($CoverageTool -eq "auto") {
+
+    # Check if module is excluded from coverage
+    $skipCov = $false
+    if ($ExcludeCoverage) {
+        $exclList = $ExcludeCoverage -split ',' | ForEach-Object { $_.Trim() }
+        $modNameClean = $module.Name.TrimStart(':')
+        foreach ($excl in $exclList) {
+            $exclClean = $excl.TrimStart(':')
+            if ($modNameClean -eq $exclClean) { $skipCov = $true; break }
+        }
+    }
+
+    if ($skipCov) {
+        $modCovTool = "none"
+        Write-Host "  [INFO] $($module.Name) - excluded from coverage (--ExcludeCoverage)" -ForegroundColor DarkGray
+    } elseif ($CoverageTool -eq "auto") {
         $modCovTool = Detect-CoverageTool -BuildFilePath $buildFile
     } elseif ($CoverageTool -eq "none") {
         $modCovTool = "none"

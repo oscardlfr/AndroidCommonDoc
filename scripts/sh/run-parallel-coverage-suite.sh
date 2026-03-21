@@ -47,6 +47,7 @@ FRESH_DAEMON=false
 COVERAGE_ONLY=false
 COVERAGE_MODULES="core:model,core:domain,core:data,core:audio"
 COVERAGE_TOOL="auto"
+EXCLUDE_COVERAGE=""
 TIMEOUT=600
 
 # ---------------------------------------------------------------------------
@@ -72,6 +73,7 @@ Options:
   --coverage-only             Only run coverage modules.
   --coverage-modules <list>   Comma-separated modules for coverage-only mode.
   --coverage-tool <tool>      Coverage tool: jacoco (default) | kover | auto | none
+  --exclude-coverage <list>   Comma-separated modules to exclude from coverage (still tested).
   --timeout <seconds>         Timeout for test execution. Default: 600
   -h | --help                 Show this help.
 USAGE
@@ -96,6 +98,7 @@ while [[ $# -gt 0 ]]; do
         --coverage-only)      COVERAGE_ONLY=true; shift ;;
         --coverage-modules)   COVERAGE_MODULES="$2"; shift 2 ;;
         --coverage-tool)      COVERAGE_TOOL="$2"; shift 2 ;;
+        --exclude-coverage)   EXCLUDE_COVERAGE="$2"; shift 2 ;;
         --timeout)            TIMEOUT="$2"; shift 2 ;;
         -h|--help)            usage ;;
         *) err "[ERROR] Unknown option: $1"; exit 1 ;;
@@ -113,6 +116,9 @@ fi
 SKIP_DESKTOP_MODULES="androidApp shared-ios iosApp macosApp"
 SKIP_ANDROID_MODULES="desktopApp"
 PARENT_ONLY_MODULES="shared-libs shared-libs:core-json shared-libs:core-io shared-libs:core-network"
+# Modules that run tests but should NOT generate coverage reports
+# (test utilities, guard tests, app shells without meaningful coverage)
+AUTO_EXCLUDE_COVERAGE_PATTERNS="*:testing *:test-fakes *:test-fixtures konsist-guard konsist-tests"
 
 IFS=',' read -ra CORE_ONLY_MODULES <<< "$COVERAGE_MODULES"
 # Trim whitespace from each element (bash builtins instead of sed subshell)
@@ -487,14 +493,48 @@ for mi in "${!MOD_NAMES[@]}"; do
 
     # Determine coverage tool for this module
     build_file="${MOD_PATHS[$mi]}/build.gradle.kts"
-    if [[ "$COVERAGE_TOOL" == "auto" ]]; then
-        mod_cov_tool="$(detect_coverage_tool "$build_file")"
-    elif [[ "$COVERAGE_TOOL" == "none" ]]; then
-        mod_cov_tool="none"
-    else
-        mod_cov_tool="$COVERAGE_TOOL"
+
+    # Check if module is excluded from coverage
+    local skip_cov=false
+    if [[ -n "$EXCLUDE_COVERAGE" ]]; then
+        IFS=',' read -ra excl_list <<< "$EXCLUDE_COVERAGE"
+        for excl in "${excl_list[@]}"; do
+            excl="${excl#"${excl%%[! ]*}"}"  # trim leading space
+            excl="${excl%"${excl##*[! ]}"}"  # trim trailing space
+            if [[ "${MOD_NAMES[$mi]}" == "$excl" || "${MOD_NAMES[$mi]}" == ":$excl" || ":${MOD_NAMES[$mi]#:}" == ":$excl" ]]; then
+                skip_cov=true
+                break
+            fi
+        done
     fi
-    MOD_COV_TOOL[$mi]="$mod_cov_tool"
+
+    if $skip_cov; then
+        MOD_COV_TOOL[$mi]="none"
+        gray "  [INFO] ${MOD_NAMES[$mi]} - excluded from coverage (--exclude-coverage)"
+    else
+        # Auto-exclude modules matching patterns (test utilities, guard tests)
+        for pattern in $AUTO_EXCLUDE_COVERAGE_PATTERNS; do
+            if [[ "${MOD_NAMES[$mi]}" == $pattern || ":${MOD_NAMES[$mi]#:}" == $pattern ]]; then
+                skip_cov=true
+                break
+            fi
+        done
+        if $skip_cov; then
+            MOD_COV_TOOL[$mi]="none"
+            gray "  [INFO] ${MOD_NAMES[$mi]} - auto-excluded from coverage (test utility pattern)"
+        fi
+    fi
+
+    if ! $skip_cov; then
+        if [[ "$COVERAGE_TOOL" == "auto" ]]; then
+            mod_cov_tool="$(detect_coverage_tool "$build_file")"
+        elif [[ "$COVERAGE_TOOL" == "none" ]]; then
+            mod_cov_tool="none"
+        else
+            mod_cov_tool="$COVERAGE_TOOL"
+        fi
+        MOD_COV_TOOL[$mi]="$mod_cov_tool"
+    fi
 
     # Determine coverage task
     cov_task="$(get_coverage_gradle_task "$mod_cov_tool" "$TEST_TYPE" "$IS_DESKTOP")"

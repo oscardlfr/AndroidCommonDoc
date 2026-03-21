@@ -129,3 +129,27 @@ LIB_DIR="$SH_DIR/lib"
 @test "regression: per-module kover retry tries multiple task variants" {
     grep -q "fb_task" scripts/sh/run-parallel-coverage-suite.sh
 }
+
+# ---------------------------------------------------------------------------
+# Bug 19: --exclude-coverage flag + auto-exclude patterns
+# ---------------------------------------------------------------------------
+
+@test "regression: coverage suite has --exclude-coverage flag" {
+    grep -q "\-\-exclude-coverage" scripts/sh/run-parallel-coverage-suite.sh
+}
+
+@test "regression: coverage suite has AUTO_EXCLUDE_COVERAGE_PATTERNS" {
+    grep -q "AUTO_EXCLUDE_COVERAGE_PATTERNS" scripts/sh/run-parallel-coverage-suite.sh
+}
+
+@test "regression: auto-exclude patterns include testing modules" {
+    grep "AUTO_EXCLUDE_COVERAGE_PATTERNS" scripts/sh/run-parallel-coverage-suite.sh | grep -q "testing"
+}
+
+@test "regression: auto-exclude patterns include konsist-guard" {
+    grep "AUTO_EXCLUDE_COVERAGE_PATTERNS" scripts/sh/run-parallel-coverage-suite.sh | grep -q "konsist"
+}
+
+@test "regression: PS1 has ExcludeCoverage parameter" {
+    grep -q "ExcludeCoverage" scripts/ps1/run-parallel-coverage-suite.ps1
+}
