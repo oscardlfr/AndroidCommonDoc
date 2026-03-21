@@ -349,9 +349,9 @@ teardown() {
     mkdir -p "$WORK_DIR/project/gradle"
     echo '' > "$WORK_DIR/project/settings.gradle.kts"
     echo 'android {}' > "$WORK_DIR/project/module/build.gradle.kts"
-    echo '// no kover anywhere' > "$WORK_DIR/project/build.gradle.kts"
+    echo '// plain android project' > "$WORK_DIR/project/build.gradle.kts"
     # Empty gradle dir and no build-logic
-    echo '# empty' > "$WORK_DIR/project/gradle/libs.versions.toml"
+    echo 'agp = "8.9.0"' > "$WORK_DIR/project/gradle/libs.versions.toml"
     result=$(detect_coverage_tool "$WORK_DIR/project/module/build.gradle.kts")
     [ "$result" = "jacoco" ]
 }
