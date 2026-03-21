@@ -2,11 +2,11 @@
 scope: [architecture, dependency-injection, sdk-design]
 sources: [dagger2, android-sdk]
 targets: [android]
-version: 1
+version: 2
 last_updated: "2026-03"
-description: "SDK initialization pattern with Dagger 2: selective module loading, shared singletons, zero-duplicate instances"
+description: "SDK initialization pattern with Dagger 2: selective module loading, shared singletons, zero-duplicate instances. For Android-only SDKs. See di-sdk-selective-init-comparison.md for KMP/Koin alternative."
 slug: dagger2-sdk-selective-init
-status: active
+status: archived
 layer: L0
 category: archive
 ---
@@ -14,6 +14,8 @@ category: archive
 # Dagger 2 SDK: Selective Module Initialization
 
 Pattern for SDKs multi-módulo con Dagger 2 donde el consumidor elige qué módulos activar en runtime, manteniendo **un único grafo de dependencias** y **cero duplicados de singletons compartidos**.
+
+> **Note:** This pattern is for **Android-only** SDKs using Dagger 2. For KMP SDKs, see [di-sdk-selective-init-comparison.md](di-sdk-selective-init-comparison.md) — the Koin approach was implemented and validated in shared-kmp-libs with 100% test coverage.
 
 ## Problema
 
@@ -267,78 +269,6 @@ object MySdk {
 }
 ```
 
-## Flujo de instancias
-
-```
-MySdk.init(modules = setOf(AUTH, ANALYTICS))
-
-┌──────────────────────────────────────────────────────┐
-│  SdkComponent (@Singleton)                           │
-│                                                      │
-│  ┌─────────────────┐   UNA instancia de cada:        │
-│  │  SdkConfig       │◄── @BindsInstance               │
-│  │  NetworkExecutor │◄── @Singleton en CoreModule     │
-│  │  Storage         │◄── @Singleton en CoreModule     │
-│  │  Logger          │◄── @Singleton en CoreModule     │
-│  └────────┬────────┘                                 │
-│           │ misma instancia inyectada en ambos        │
-│     ┌─────┴──────┐                                   │
-│     ▼            ▼                                   │
-│  AuthService  AnalyticsService                       │
-│  (inicializado)  (inicializado)                      │
-│                                                      │
-│  PaymentsService ← Provider no llamado, NO existe    │
-└──────────────────────────────────────────────────────┘
-```
-
-## Trampas a evitar
-
-### ❌ Componentes separados por feature
-
-```kotlin
-// MAL — cada componente tiene su propio @Singleton scope
-val authComponent = DaggerAuthComponent.create()          // NetworkExecutor #1
-val analyticsComponent = DaggerAnalyticsComponent.create() // NetworkExecutor #2
-```
-
-### ❌ Olvidar `@Singleton` en el componente
-
-```kotlin
-// MAL — sin @Singleton, Dagger crea instancias nuevas cada llamada
-@Component(modules = [CoreModule::class])
-interface SdkComponent { ... }
-
-// BIEN
-@Singleton
-@Component(modules = [CoreModule::class])
-interface SdkComponent { ... }
-```
-
-### ❌ Instancia directa en el mapa (no lazy)
-
-```kotlin
-// MAL — Dagger crea TODOS los initializers al pedir el mapa
-fun moduleInitializers(): Map<SdkModule, ModuleInitializer>
-
-// BIEN — solo se crea al llamar .get()
-fun moduleInitializers(): Map<SdkModule, @JvmSuppressWildcards Provider<ModuleInitializer>>
-```
-
-### ❌ Olvidar `@JvmSuppressWildcards`
-
-Obligatorio en mapas con `Provider`. Sin él, Dagger genera `Map<SdkModule, ? extends Provider<ModuleInitializer>>` y no compila.
-
-## Garantías del patrón
-
-| Propiedad | Garantía |
-|-----------|----------|
-| Singletons compartidos | Una instancia por componente vía `@Singleton` |
-| Inicialización selectiva | Solo los módulos en `init(modules=)` ejecutan `initialize()` |
-| Lazy instantiation | `Provider<>` en el mapa — features no pedidas no se materializan |
-| Config unificado | `@BindsInstance` inyecta el mismo `SdkConfig` en todo el grafo |
-| Fail-fast | `checkInitialized()` falla inmediatamente si se accede a un módulo no activado |
-| Teardown limpio | `shutdown()` recorre solo los módulos inicializados |
-
 ## Dependencias Gradle
 
 ```kotlin
@@ -348,12 +278,10 @@ dependencies {
     kapt("com.google.dagger:dagger-compiler:2.51.1")
 }
 
-// sdk-auth/build.gradle.kts
+// sdk-auth/build.gradle.kts — each feature module needs kapt too
 dependencies {
     implementation(project(":sdk-core"))
     implementation("com.google.dagger:dagger:2.51.1")
     kapt("com.google.dagger:dagger-compiler:2.51.1")
 }
 ```
-
-> **Nota:** `kapt` es necesario en cada módulo que defina `@Module` o `@Component`. El compiler genera el código de inyección en compile time.
