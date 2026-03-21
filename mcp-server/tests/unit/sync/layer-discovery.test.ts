@@ -115,12 +115,18 @@ describe("discoverLayers", () => {
   let workspace: string;
 
   beforeEach(() => {
-    workspace = mkdtempSync(join(tmpdir(), "discover-ws-"));
+    // Nest workspace 2 levels deep so parent scan doesn't escape into tmpdir
+    // where other test suites may have created L0-like dirs
+    const base = mkdtempSync(join(tmpdir(), "discover-ws-"));
+    workspace = join(base, "isolated", "root");
+    mkdirSync(workspace, { recursive: true });
     delete process.env.ANDROID_COMMON_DOC;
   });
 
   afterEach(() => {
-    rmSync(workspace, { recursive: true, force: true });
+    // Remove the full base (3 levels up from workspace = isolated/root)
+    const base = join(workspace, "..", "..");
+    rmSync(base, { recursive: true, force: true });
     delete process.env.ANDROID_COMMON_DOC;
   });
 
