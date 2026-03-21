@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 17 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 32 tools for programmatic access, a unified audit system with finding deduplication, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 17 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 32 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Platform support:** All skills, agents, and Detekt rules work on both **Android-only (AGP 8.x)** and **KMP (AGP 9.0+)** projects. A small subset is KMP-only (noted below).
 
@@ -97,19 +97,33 @@ In chain mode, an AI agent working on L2 (your app) sees:
 2. **L1 conventions**: "Repositories return Flow, use SqlDelight not Room"
 3. **L2 rules**: "Producer/consumer architecture, feature gates per tier"
 
-Choose topology in `/setup` wizard or edit `l0-manifest.json` directly. Manifest v1 (`l0_source` field) is auto-migrated to v2 on read.
+Choose topology in `/setup` wizard (W0) or edit `l0-manifest.json` directly. Manifest v1 (`l0_source` field) is auto-migrated to v2 on read.
+
+#### What chain mode provides (M003)
+
+- **Multi-source sync**: `syncMultiSource()` reads all `sources[]`, merges registries (last layer wins per entry name+type), materializes files from the correct source layer
+- **Knowledge cascade**: `sync-l0 --resolve` generates `KNOWLEDGE-RESOLVED.md` with tagged `[L0]`/`[L1]`/`[L2]` sections — agents see all layers' knowledge in one file
+- **Agent template injection**: Agent files can use `{{LAYER_KNOWLEDGE}}` and `{{LAYER_CONVENTIONS}}` placeholders, resolved from the knowledge cascade at sync time
+- **Multi-layer doc search**: `find-pattern --from_manifest` searches docs from all sources, ranked by proximity (local > L1 > L0)
+- **Convention plugin chain**: Detekt config loads L0 base → L1 override → L2 local via `config.setFrom()` — see [convention-plugin-chain.md](docs/guides/convention-plugin-chain.md)
 
 ### Materialization model
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
 1. **Registry** (`skills/registry.json`) -- catalogs all 82 L0 entries with SHA-256 hashes
-2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync and tracks checksums
-3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety.
+2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
+3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
 ```bash
 # In your project: sync all L0 skills (additive — safe)
 /sync-l0
+
+# Chain mode: sync from all manifest sources (L0 + L1)
+/sync-l0
+
+# Generate KNOWLEDGE-RESOLVED.md from all layers
+/sync-l0 --resolve
 
 # Remove orphaned files that no longer exist in L0
 /sync-l0 --prune
@@ -182,6 +196,7 @@ cd $env:ANDROID_COMMON_DOC
 </details>
 
 The wizard covers everything in order:
+- **W0 Topology** -- flat (L0 direct) or chain (L0→L1→L2 cascade) + parent layer path validation
 - **W1 Skills** -- which categories to import (testing, build, security, guides, ui...) + per-skill opt-out
 - **W2 Agents** -- user-facing agents vs internal quality-gate validators
 - **W3 Detekt** -- `all` / pick rule-by-rule / disable all / skip (Gradle projects only)
@@ -312,7 +327,7 @@ AndroidCommonDoc:
     active: false   # disabled during migration
 ```
 
-See [docs/guides/detekt-config.md](docs/guides/detekt-config.md) for the full guide.
+See [docs/guides/detekt-config.md](docs/guides/detekt-config.md) for the full guide and [docs/guides/convention-plugin-chain.md](docs/guides/convention-plugin-chain.md) for multi-layer chain loading (L0→L1→L2).
 
 ### One-Line Convention Plugin Adoption
 
@@ -528,7 +543,7 @@ Agents don't have hardcoded models -- the active profile determines which model 
 | `audit-report` | Audit | Read `audit-log.jsonl` and return aggregated quality trend data |
 | `findings-report` | Audit | Read `findings-log.jsonl` with dedup, severity filter, resolution tracking |
 | `pattern-coverage` | Coverage | Map pattern doc enforcement: Detekt rules, scripts, agents per doc |
-| `find-pattern` | Discovery | Search pattern registry by query terms |
+| `find-pattern` | Discovery | Search pattern registry by query terms (supports `from_manifest` for multi-layer search) |
 | `generate-detekt-rules` | Generation | Generate Kotlin Detekt rules from pattern doc frontmatter |
 | `ingest-content` | Ingestion | Fetch and analyze external content against pattern metadata |
 | `gradle-config-lint` | Linting | Check convention plugin usage, hardcoded versions, version catalog compliance |
@@ -598,7 +613,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Scripts
 
-22 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux).
+22 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 4 Bash-only scripts (`check-agent-parity`, `check-detekt-coverage`, `rehash-registry`, `sync-gsd-agents`).
 
 ### Core Scripts
 
@@ -633,6 +648,8 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `sync-gsd-skills` | GSD-2 skill sync from marketplace + L0 + L0 agents (opt-in) |
 | `sync-gsd-agents` | Generate GSD subagent wrappers from .claude/agents/ |
 | `check-agent-parity` | Verify parity between .claude/agents/ and GSD subagents |
+| `check-detekt-coverage` | Diagnose Detekt per-module task coverage (KMP source sets) |
+| `rehash-registry` | Recompute SHA-256 hashes in registry.json (CRLF→LF normalized) |
 
 ### Shared Libraries
 
@@ -641,13 +658,13 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `audit-append` | `scripts/sh/lib/`, `scripts/ps1/lib/` | Append events to `audit-log.jsonl` |
 | `findings-append` | `scripts/sh/lib/`, `scripts/ps1/lib/` | Append findings to `findings-log.jsonl` |
 | `coverage-detect` | `scripts/sh/lib/`, `scripts/ps1/lib/` | Auto-detect JaCoCo vs Kover coverage engine |
-| `script-utils` | `scripts/sh/lib/` | Common shell utilities |
+| `script-utils` | `scripts/sh/lib/` | Common shell utilities: `glob_match`, `get_project_type`, `format_line_ranges`, `safe_rg` (cross-platform ripgrep with find+grep fallback on Windows) |
 
 ---
 
 ## Documentation
 
-13 domain hubs, 67 sub-docs, 11 guides -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
+13 domain hubs, 57 sub-docs, 19 guides -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
 
 | Hub | Covers | Platform |
 |-----|--------|----------|
@@ -727,7 +744,7 @@ AndroidCommonDoc/
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
 |   |   +-- cli/            # CLI entrypoint for CI monitoring
-|   +-- tests/              # 76 test files -- vitest unit + integration (983 tests)
+|   +-- tests/              # 77 test files -- vitest unit + integration (1014 tests)
 +-- detekt-rules/
 |   +-- src/main/kotlin/    # 17 hand-written AST-only Detekt rules
 |   +-- src/main/resources/
