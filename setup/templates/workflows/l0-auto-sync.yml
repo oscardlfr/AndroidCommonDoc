@@ -189,8 +189,8 @@ jobs:
           BRANCH="auto-sync/l0-update"
           ADDED='${{ steps.sync.outputs.added }}'
           UPDATED='${{ steps.sync.outputs.updated }}'
-          SOURCE_LAYER='${{ github.event.client_payload.source_layer || "L0" }}'
-          SOURCE_COMMIT='${{ github.event.client_payload.l0_commit || "scheduled" }}'
+          SOURCE_LAYER='${{ github.event.client_payload.source_layer || 'L0' }}'
+          SOURCE_COMMIT='${{ github.event.client_payload.l0_commit || 'scheduled' }}'
 
           # Configure git
           git config user.name "github-actions[bot]"
