@@ -82,7 +82,7 @@ while IFS= read -r mod; do
     # Production code
     while IFS= read -r f; do
         files=$((files + 1))
-        loc=$(wc -l < "$f" 2>/dev/null | tr -d ' ')
+        loc=$(wc -l < "$f" 2>/dev/null | tr -d ' \r')
         prod_loc=$((prod_loc + loc))
         fns=$(grep -cE '^\s*(public\s+)?fun\s+' "$f" 2>/dev/null || echo "0")
         # Exclude private/internal/protected
@@ -93,7 +93,7 @@ while IFS= read -r mod; do
 
     # Test code
     while IFS= read -r f; do
-        loc=$(wc -l < "$f" 2>/dev/null | tr -d ' ')
+        loc=$(wc -l < "$f" 2>/dev/null | tr -d ' \r')
         test_loc=$((test_loc + loc))
     done < <(find "$full_path" -name "*.kt" -not -path "*/build/*" \
         \( -path "*/test/*" -o -path "*/androidTest/*" -o -path "*/commonTest/*" \) 2>/dev/null || true)

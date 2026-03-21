@@ -193,7 +193,7 @@ if [[ -z "$MODULES_RAW" ]]; then
 fi
 
 # Count modules
-total_modules=$(echo "$MODULES_RAW" | wc -l | tr -d ' ')
+total_modules=$(echo "$MODULES_RAW" | wc -l | tr -d ' \r')
 
 # Handle --list (no device needed)
 if [[ "$LIST_ONLY" == "true" ]]; then

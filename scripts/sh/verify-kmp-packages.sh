@@ -112,6 +112,11 @@ FORBIDDEN_IN_COMMON_MAIN=(
 # Format: "regex_pattern" — any import matching this is exempt from FORBIDDEN_IN_COMMON_MAIN
 COMMON_MAIN_ALLOWLIST=(
     'androidx\.compose\.'
+    'androidx\.datastore\.'
+    'androidx\.collection\.'
+    'androidx\.annotation\.'
+    'androidx\.lifecycle\.'
+    'androidx\.paging\.'
 )
 
 # --- Platform patterns (expected in their respective source sets) ---

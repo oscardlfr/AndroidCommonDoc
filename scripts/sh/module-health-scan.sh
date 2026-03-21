@@ -26,6 +26,10 @@ while [[ $# -gt 0 ]]; do
             MODULES_FILTER="$2"
             shift 2
             ;;
+        --project-root)
+            PROJECT_ROOT="$2"
+            shift 2
+            ;;
         --format)
             FORMAT="$2"
             shift 2
@@ -101,11 +105,15 @@ for mod in "${MODULES[@]}"; do
         src_files=$((src_files + 1))
         loc=$((loc + $(wc -l < "$f" 2>/dev/null || echo 0)))
     done < <(find "$full_path" -name "*.kt" -not -path "*/build/*" \
-        -not -path "*/test/*" -not -path "*/androidTest/*" -not -path "*/commonTest/*" 2>/dev/null || true)
+        -not -path "*/test/*" -not -path "*/androidTest/*" -not -path "*/commonTest/*" \
+        -not -path "*/androidUnitTest/*" -not -path "*/desktopTest/*" \
+        -not -path "*/iosTest/*" -not -path "*/jvmTest/*" 2>/dev/null || true)
 
-    # Count test .kt files
+    # Count test .kt files (all test source sets including platform-specific)
     test_files=$(find "$full_path" -name "*.kt" -not -path "*/build/*" \
-        \( -path "*/test/*" -o -path "*/androidTest/*" -o -path "*/commonTest/*" \) 2>/dev/null | wc -l | tr -d ' ')
+        \( -path "*/test/*" -o -path "*/androidTest/*" -o -path "*/commonTest/*" \
+           -o -path "*/androidUnitTest/*" -o -path "*/desktopTest/*" \
+           -o -path "*/iosTest/*" -o -path "*/jvmTest/*" \) 2>/dev/null | wc -l | tr -d ' \r')
 
     entry="{\"name\":\"$mod\",\"src_files\":$src_files,\"test_files\":$test_files,\"loc\":$loc}"
 

@@ -112,7 +112,7 @@ fi
 while IFS= read -r file; do
     rel="${file#$PROJECT_ROOT/}"
     module=$(dirname "$rel")
-    dup_count=$(grep -cE '^\s*id\s*\(' "$file" 2>/dev/null || echo "0")
+    dup_count=$(grep -cE '^\s*id\s*\(' "$file" 2>/dev/null | tr -d '\r' || echo "0")
     if [[ "$dup_count" -gt 10 ]]; then
         add_finding "$module" "excessive_plugins" "Module applies $dup_count plugins directly"
     fi

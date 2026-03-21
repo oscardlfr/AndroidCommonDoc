@@ -75,8 +75,8 @@ ERRORS=0
 WARNINGS=0
 TOTAL_CHECKS=0
 
-# Common grep excludes for performance (skip node_modules, .gradle, .git, build)
-GREP_EXCLUDES=(--exclude-dir=node_modules --exclude-dir=.gradle --exclude-dir=.git --exclude-dir=build)
+# Common grep excludes for performance (skip node_modules, .gradle, .git, build, .gsd worktrees)
+GREP_EXCLUDES=(--exclude-dir=node_modules --exclude-dir=.gradle --exclude-dir=.git --exclude-dir=build --exclude-dir=.gsd --exclude-dir=.worktrees)
 
 # Helper: scan production .kt files, excluding test dirs and test/fake files
 scan_prod() {
@@ -85,7 +85,8 @@ scan_prod() {
     grep -rn --include="*.kt" "${GREP_EXCLUDES[@]}" "$pattern" "$base_dir" 2>/dev/null \
         | grep -v "/test/" | grep -v "/androidTest/" | grep -v "/commonTest/" \
         | grep -v "/build/" \
-        | grep -v "Test.kt:" | grep -v "Fake" | grep -v "Mock" || true
+        | grep -v "Test.kt:" | grep -v "Fake" | grep -v "Mock" \
+        | grep -vE ':\s*\*|:\s*//' || true
 }
 
 report_check() {
@@ -125,14 +126,16 @@ if should_run "cancellation-rethrow"; then
         ce_hits=$({ grep -rn --include="*.kt" "${GREP_EXCLUDES[@]}" -E 'catch\s*\([^)]*:\s*(Exception|Throwable)\)' "$PROJECT_ROOT" 2>/dev/null \
             | grep -v "/test/" | grep -v "/androidTest/" | grep -v "/commonTest/" \
             | grep -v "/build/" \
-            | grep -v "Test.kt:" || true; } | wc -l | tr -d ' ')
+            | grep -v "Test.kt:" \
+            | grep -vE '^\s*\*|^\s*//' || true; } | wc -l | tr -d ' \r')
     fi
     report_check "cancellation-rethrow" "$ce_hits" "ERROR"
     if [[ "$SHOW_DETAILS" == "true" ]] && [[ $ce_hits -gt 0 ]]; then
         { grep -rn --include="*.kt" "${GREP_EXCLUDES[@]}" -E 'catch\s*\([^)]*:\s*(Exception|Throwable)\)' "$PROJECT_ROOT" 2>/dev/null \
             | grep -v "/test/" | grep -v "/androidTest/" | grep -v "/commonTest/" \
             | grep -v "/build/" \
-            | grep -v "Test.kt:" || true; } | head -10 | while IFS= read -r line; do
+            | grep -v "Test.kt:" \
+            | grep -vE '^\s*\*|^\s*//' || true; } | head -10 | while IFS= read -r line; do
             echo -e "    ${GRAY}$line${RESET}"
         done
     fi
@@ -140,7 +143,7 @@ fi
 
 # --- Check 2: MutableSharedFlow in production code ---
 if should_run "mutable-shared-flow"; then
-    msf_hits=$(scan_prod "$PROJECT_ROOT" "MutableSharedFlow" | wc -l | tr -d ' ')
+    msf_hits=$(scan_prod "$PROJECT_ROOT" "MutableSharedFlow" | wc -l | tr -d ' \r')
     report_check "mutable-shared-flow" "$msf_hits" "WARNING"
     show_details "$PROJECT_ROOT" "MutableSharedFlow"
 fi
@@ -150,7 +153,7 @@ if should_run "forbidden-jvm-imports"; then
     jvm_hits=0
     for pattern in "import java.time" "import java.text" "import java.security"; do
         count=$({ grep -rn --include="*.kt" "${GREP_EXCLUDES[@]}" "$pattern" "$PROJECT_ROOT" 2>/dev/null \
-            | grep "/commonMain/" | grep -v "/build/" || true; } | wc -l | tr -d ' ')
+            | grep "/commonMain/" | grep -v "/build/" || true; } | wc -l | tr -d ' \r')
         jvm_hits=$((jvm_hits + count))
     done
     report_check "forbidden-jvm-imports" "$jvm_hits" "ERROR"
@@ -166,9 +169,9 @@ fi
 
 # --- Check 4: println in production code ---
 if should_run "println-in-prod"; then
-    println_hits=$(scan_prod "$PROJECT_ROOT" "println(" | wc -l | tr -d ' ')
-    syserr_hits=$(scan_prod "$PROJECT_ROOT" "System.err.println" | wc -l | tr -d ' ')
-    sysout_hits=$(scan_prod "$PROJECT_ROOT" "System.out.print" | wc -l | tr -d ' ')
+    println_hits=$(scan_prod "$PROJECT_ROOT" "println(" | wc -l | tr -d ' \r')
+    syserr_hits=$(scan_prod "$PROJECT_ROOT" "System.err.println" | wc -l | tr -d ' \r')
+    sysout_hits=$(scan_prod "$PROJECT_ROOT" "System.out.print" | wc -l | tr -d ' \r')
     total=$((println_hits + syserr_hits + sysout_hits))
     report_check "println-in-prod" "$total" "WARNING"
     if [[ "$SHOW_DETAILS" == "true" ]] && [[ $total -gt 0 ]]; then
@@ -180,7 +183,7 @@ fi
 
 # --- Check 5: TODO("Not yet implemented") crash points ---
 if should_run "todo-crash"; then
-    todo_hits=$(scan_prod "$PROJECT_ROOT" 'TODO("Not yet implemented")' | wc -l | tr -d ' ')
+    todo_hits=$(scan_prod "$PROJECT_ROOT" 'TODO("Not yet implemented")' | wc -l | tr -d ' \r')
     report_check "todo-crash" "$todo_hits" "ERROR"
     show_details "$PROJECT_ROOT" 'TODO("Not yet implemented")'
 fi
@@ -188,7 +191,7 @@ fi
 # --- Check 6: System.currentTimeMillis() in commonMain ---
 if should_run "system-time"; then
     time_hits=$({ grep -rn --include="*.kt" "${GREP_EXCLUDES[@]}" "System.currentTimeMillis" "$PROJECT_ROOT" 2>/dev/null \
-        | grep "/commonMain/" | grep -v "/build/" || true; } | wc -l | tr -d ' ')
+        | grep "/commonMain/" | grep -v "/build/" || true; } | wc -l | tr -d ' \r')
     report_check "system-time" "$time_hits" "ERROR"
     if [[ "$SHOW_DETAILS" == "true" ]] && [[ $time_hits -gt 0 ]]; then
         { grep -rn --include="*.kt" "${GREP_EXCLUDES[@]}" "System.currentTimeMillis" "$PROJECT_ROOT" 2>/dev/null \
@@ -200,14 +203,14 @@ fi
 
 # --- Check 7: runBlocking outside test code ---
 if should_run "run-blocking"; then
-    rb_hits=$(scan_prod "$PROJECT_ROOT" "runBlocking" | wc -l | tr -d ' ')
+    rb_hits=$(scan_prod "$PROJECT_ROOT" "runBlocking" | wc -l | tr -d ' \r')
     report_check "run-blocking" "$rb_hits" "WARNING"
     show_details "$PROJECT_ROOT" "runBlocking"
 fi
 
 # --- Check 8: GlobalScope usage ---
 if should_run "global-scope"; then
-    gs_hits=$(scan_prod "$PROJECT_ROOT" "GlobalScope" | wc -l | tr -d ' ')
+    gs_hits=$(scan_prod "$PROJECT_ROOT" "GlobalScope" | wc -l | tr -d ' \r')
     report_check "global-scope" "$gs_hits" "WARNING"
     show_details "$PROJECT_ROOT" "GlobalScope"
 fi

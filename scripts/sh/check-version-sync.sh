@@ -390,8 +390,8 @@ for idx in "${!PROJECT_NAMES[@]}"; do
     project_name="${PROJECT_NAMES[$idx]}"
     disc_file="${PROJECT_DISC_FILES[$idx]}"
     extra_file="${PROJECT_EXTRA_FILES[$idx]}"
-    disc_count=$(wc -l < "$disc_file" | tr -d ' ')
-    extra_count=$(wc -l < "$extra_file" | tr -d ' ')
+    disc_count=$(wc -l < "$disc_file" | tr -d ' \r')
+    extra_count=$(wc -l < "$extra_file" | tr -d ' \r')
 
     echo "----------------------------------------"
     echo -ne "Project: "

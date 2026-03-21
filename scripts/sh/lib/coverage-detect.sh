@@ -24,12 +24,29 @@ detect_coverage_tool() {
     if [[ "$content" == *jacoco* ]]; then echo "jacoco"; return; fi
     if [[ "$content" == *testCoverageEnabled* ]]; then echo "jacoco"; return; fi
 
-    # Check if JaCoCo report directory exists from previous run
+    # Check if coverage report directories exist from previous runs
     local module_dir
     module_dir="$(dirname "$build_file")"
+    if [[ -d "$module_dir/build/reports/kover" ]]; then
+        echo "kover"
+        return
+    fi
     if [[ -d "$module_dir/build/reports/jacoco" ]]; then
         echo "jacoco"
         return
+    fi
+
+    # Check root/parent buildscripts for convention plugin applying kover
+    local root_build=""
+    if [[ -f "$module_dir/../build.gradle.kts" ]]; then
+        root_build="$module_dir/../build.gradle.kts"
+    elif [[ -f "$module_dir/../../build.gradle.kts" ]]; then
+        root_build="$module_dir/../../build.gradle.kts"
+    fi
+    if [[ -n "$root_build" ]]; then
+        local root_content
+        root_content="$(<"$root_build")"
+        if [[ "$root_content" == *kover* ]]; then echo "kover"; return; fi
     fi
 
     # Default: JaCoCo (built into AGP, no explicit config needed)

@@ -59,8 +59,17 @@ class NoJavaTimeInCommonMainRule(config: Config) : Rule(
         }
     }
 
+    private val platformSourceSets = listOf(
+        "/androidMain/", "/desktopMain/", "/iosMain/", "/appleMain/",
+        "/jvmMain/", "/nativeMain/", "/jsMain/", "/wasmMain/",
+        "/androidUnitTest/", "/desktopTest/", "/iosTest/",
+    )
+
     private fun isCommonMain(filePath: String): Boolean {
         val normalized = filePath.replace('\\', '/')
+        // Explicitly exclude platform source sets (Detekt 2.0 per-source-set tasks
+        // may report files without full path context)
+        if (platformSourceSets.any { normalized.contains(it) }) return false
         return normalized.contains("/commonMain/") || normalized.contains("/shared/")
     }
 }
