@@ -10,7 +10,7 @@ name: Reusable — Architecture Guards
 #
 #   jobs:
 #     architecture-guards:
-#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-architecture-guards.yml@main
+#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-architecture-guards.yml@master
 #       with:
 #         gradle_task: ":konsist-guard:test"
 #         java_version: "17"

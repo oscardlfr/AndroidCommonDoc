@@ -13,7 +13,7 @@ name: Reusable — Lint String Resources
 #
 #   jobs:
 #     lint-resources:
-#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-lint-resources.yml@main
+#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-lint-resources.yml@master
 #       with:
 #         androidcommondoc_path: "../AndroidCommonDoc"  # path to L0 toolkit
 # ──────────────────────────────────────────────────────────────────────────────

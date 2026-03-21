@@ -16,7 +16,7 @@ name: Reusable — KMP Safety Check
 #
 #   jobs:
 #     kmp-safety:
-#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-kmp-safety-check.yml@main
+#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-kmp-safety-check.yml@master
 #       with:
 #         fail_on_dispatchers_warning: false  # promote to error if your project requires it
 # ──────────────────────────────────────────────────────────────────────────────

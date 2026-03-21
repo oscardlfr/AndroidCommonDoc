@@ -575,25 +575,25 @@ Agents don't have hardcoded models -- the active profile determines which model 
 ```yaml
 jobs:
   commit-lint:
-    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-commit-lint.yml@main
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-commit-lint.yml@master
     with:
       valid_scopes: "core,data,ui,feature"
 
   lint-resources:
-    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-lint-resources.yml@main
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-lint-resources.yml@master
 
   safety-check:
-    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-kmp-safety-check.yml@main
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-kmp-safety-check.yml@master
     with:
       fail_on_dispatchers_warning: true   # scans for GlobalScope, hardcoded Dispatchers
 
   architecture-guards:
-    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-architecture-guards.yml@main
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-architecture-guards.yml@master
     with:
       gradle_task: ":konsist-guard:test"
 
   audit-report:
-    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-audit-report.yml@main
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-audit-report.yml@master
     with:
       weeks_lookback: 6
       generate_html: true         # downloadable HTML artifact
@@ -601,10 +601,10 @@ jobs:
       fail_on_regression: false   # set true to block merges on CRITICAL health
 
   shell-tests:
-    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-shell-tests.yml@main
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-shell-tests.yml@master
 
   agent-parity:
-    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-agent-parity.yml@main
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-agent-parity.yml@master
 ```
 
 See `setup/github-workflows/ci-template.yml` for a full consumer project template.

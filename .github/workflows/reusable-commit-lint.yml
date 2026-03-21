@@ -10,7 +10,7 @@ name: Reusable — Commit Lint
 #
 #   jobs:
 #     commit-lint:
-#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-commit-lint.yml@main
+#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-commit-lint.yml@master
 #       with:
 #         valid_scopes: "core,data,ui,feature,ci,deps,release"
 #         # valid_types: override only if your project uses non-standard types
