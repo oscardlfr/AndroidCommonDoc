@@ -734,7 +734,7 @@ AndroidCommonDoc/
 |   +-- sh/                 # Bash (macOS/Linux) -- 22 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
-|   +-- tests/              # bats shell test suite (489 tests, 4 fixture XMLs)
+|   +-- tests/              # bats shell test suite (497 tests, 4 fixture XMLs)
 +-- mcp-server/             # MCP server (32 tools, 3 prompts, dynamic resources)
 |   +-- src/
 |   |   +-- tools/          # 32 tools: validation, analysis, metrics, audit, sync, vault
@@ -875,25 +875,32 @@ Downstream projects sync automatically — no manual steps needed.
 
 ### Automatic (recommended)
 
-When L0 pushes to master, a dispatch workflow notifies all downstream repos. Each clones L0, runs the sync engine, and opens a PR with the changes:
+Two distribution models:
+
+- **Managed (instant):** L0 lists downstream repos in `.github/downstream-repos.json`. On push to master, dispatches `repository_dispatch` → each downstream clones L0, runs sync, opens PR. For your own ecosystem.
+- **Open (daily cron):** Any consumer installs `l0-auto-sync.yml` and points `l0-manifest.json` at L0. Daily cron checks for changes. L0 doesn't need to know they exist. For external teams.
 
 ```
 L0 push to master
-  → l0-sync-dispatch.yml reads .github/downstream-repos.json
-  → repository_dispatch to each downstream repo
-  → L1 l0-auto-sync.yml: clone L0 → sync → PR "chore(sync): auto-sync from L0"
-  → (chain) L1 cascades dispatch → L2 auto-sync PR
+  → l0-sync-dispatch.yml (managed repos: instant)
+  → L1 l0-auto-sync.yml: clone L0 → sync → PR
+  → merge PR → git pull develop → done
 ```
 
-A daily cron (06:00 UTC) acts as safety net — compares upstream HEAD against `l0Commit` in the manifest and syncs if they diverge.
+**Quick setup — managed (3 steps):**
 
-**Quick setup (3 steps):**
+1. **L0**: `.github/downstream-repos.json` + `DOWNSTREAM_SYNC_TOKEN` secret (fine-grained PAT, Contents:RW)
+2. **L1/L2**: Copy `setup/templates/workflows/l0-auto-sync.yml` → `.github/workflows/` (or `/setup` wizard W5)
+3. **L1/L2**: Enable "Allow GitHub Actions to create and approve pull requests" in Settings → Actions → General
 
-1. **L0**: Add downstream repos to `.github/downstream-repos.json` + set `DOWNSTREAM_SYNC_TOKEN` secret (fine-grained PAT with Contents:RW)
-2. **L1/L2**: Copy `setup/templates/workflows/l0-auto-sync.yml` → `.github/workflows/` (or use `/setup` wizard W5)
-3. **L1/L2**: Enable "Allow GitHub Actions to create and approve pull requests" in repo Settings → Actions → General
+**Quick setup — open consumers (2 steps):**
 
-See [layer-topology.md](docs/architecture/layer-topology.md#auto-sync) for the full setup guide with screenshots and troubleshooting.
+1. Copy `setup/templates/workflows/l0-auto-sync.yml` → `.github/workflows/`
+2. Run `/setup` to create `l0-manifest.json` (cron handles the rest)
+
+**After merging the PR:** `git pull develop` — skills, agents, and commands are updated in `.claude/`. No scripts to run.
+
+See [layer-topology.md](docs/architecture/layer-topology.md#auto-sync) for the full guide with troubleshooting.
 
 ### Manual
 

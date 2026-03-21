@@ -300,8 +300,8 @@ teardown() {
 # ===========================================================================
 
 @test "topology doc: has dispatch and cron subsections" {
-    grep -q "### 1.*Dispatch\|Dispatch.*instant" "$TOPOLOGY_DOC"
-    grep -q "### 2.*Scheduled\|Scheduled.*safety" "$TOPOLOGY_DOC"
+    grep -q "Dispatch.*managed\|Dispatch.*instant" "$TOPOLOGY_DOC"
+    grep -q "Cron.*open\|Cron.*daily" "$TOPOLOGY_DOC"
 }
 
 @test "topology doc: setup instructions for L0 and downstream" {
@@ -568,9 +568,9 @@ teardown() {
     grep -q "scripts/" "$TOPOLOGY_DOC"
 }
 
-@test "topology doc: under 300 lines" {
+@test "topology doc: under 500 lines (sub-doc absolute max)" {
     LINES=$(wc -l < "$TOPOLOGY_DOC" | tr -d ' \r')
-    [ "$LINES" -le 300 ]
+    [ "$LINES" -le 500 ]
 }
 
 @test "README: Updating section has 3-step quick setup" {
@@ -592,4 +592,44 @@ teardown() {
 
 @test "README: mentions user selections are never overwritten" {
     sed -n '/^## Updating/,/^## /p' "$README" | grep -q "never overwritten\|never.*overwrite"
+}
+
+# ===========================================================================
+# M. Distribution models + post-merge documentation
+# ===========================================================================
+
+@test "topology doc: has distribution models table" {
+    grep -q "Managed.*dispatch\|managed.*dispatch" "$TOPOLOGY_DOC"
+    grep -q "Open.*cron\|open.*cron" "$TOPOLOGY_DOC"
+}
+
+@test "topology doc: managed is for your repos, open for external" {
+    grep -q "your.*ecosystem\|repos you control" "$TOPOLOGY_DOC"
+    grep -q "external.*consumer\|other teams\|open-source" "$TOPOLOGY_DOC"
+}
+
+@test "topology doc: has post-merge workflow section" {
+    grep -q "Post-merge\|post-merge\|After merging" "$TOPOLOGY_DOC"
+    grep -q "git pull\|git checkout develop" "$TOPOLOGY_DOC"
+}
+
+@test "topology doc: clarifies sync-gsd scripts are L0-only" {
+    grep -q "sync-gsd.*L0-only\|scripts.*only exist in L0\|L0-only scripts" "$TOPOLOGY_DOC"
+}
+
+@test "topology doc: has open consumer setup guide" {
+    grep -q "open consumer\|Setup guide.*open" "$TOPOLOGY_DOC"
+}
+
+@test "README: describes both managed and open models" {
+    sed -n '/^### Automatic/,/^### Manual/p' "$README" | grep -q "Managed\|managed"
+    sed -n '/^### Automatic/,/^### Manual/p' "$README" | grep -q "Open\|open.*cron\|daily cron"
+}
+
+@test "README: has post-merge instructions" {
+    sed -n '/^## Updating/,/^## /p' "$README" | grep -q "After merging\|git pull develop"
+}
+
+@test "README: has open consumer quick setup" {
+    sed -n '/^## Updating/,/^## /p' "$README" | grep -q "open consumer\|2 steps"
 }

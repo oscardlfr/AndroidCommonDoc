@@ -146,40 +146,68 @@ Or set `topology` in `l0-manifest.json` directly.
 
 ## Auto-Sync
 
-Downstream projects sync automatically — no manual `git pull` or `/sync-l0` needed. Two complementary mechanisms ensure changes propagate reliably.
+Downstream projects sync automatically — no manual `git pull` or `/sync-l0` needed.
+
+### Distribution models
+
+| Model | Who knows whom | Latency | Scale |
+|-------|---------------|---------|-------|
+| **Managed (dispatch)** | L0 lists downstream repos | Instant (~30s) | Your repos |
+| **Open (cron-only)** | Each consumer knows L0 | ≤24h | Unlimited |
+
+**Managed** is for your own ecosystem — repos you control. L0 pushes dispatch events to known downstream repos. Use for internal teams, your L1/L2 projects.
+
+**Open** is for external consumers (other teams, open-source users). They install `l0-auto-sync.yml` and point their `l0-manifest.json` at L0. The daily cron does the rest. L0 doesn't need to know they exist.
+
+Both models can coexist: managed repos get instant sync, open consumers get daily cron.
 
 ### How it works
 
 ```
 L0 push to master
   │
-  ├─ l0-sync-dispatch.yml (L0 repo)
+  ├─ l0-sync-dispatch.yml (L0 repo)              ← managed
   │  reads .github/downstream-repos.json
   │  sends repository_dispatch to each repo
   │
   ▼
 L1 l0-auto-sync.yml (L1 repo)
-  │  triggered by dispatch event
+  │  triggered by: dispatch (instant) OR cron (daily)
   │  clones L0 → builds sync CLI → runs syncL0()
   │  creates branch auto-sync/l0-update
-  │  opens PR with changes (26 files updated, etc.)
+  │  opens PR "chore(sync): auto-sync from L0"
   │
-  ├─ (if chain) cascades dispatch to L2
+  ├─ (chain) cascades dispatch to L2
   │
   ▼
 L2 l0-auto-sync.yml (L2 repo)
-     same flow → PR with L0+L1 merged changes
+     same flow → PR with changes
 ```
 
-### 1. Dispatch (instant)
+### Post-merge workflow
 
-When L0 pushes to master, `l0-sync-dispatch.yml` fires. It reads `.github/downstream-repos.json` and sends a `repository_dispatch` event to each listed repo. The downstream `l0-auto-sync.yml` workflow receives the event, clones L0, builds the sync CLI, runs `syncL0()`, and creates a PR.
+After merging the auto-sync PR:
+
+```bash
+git checkout develop      # or your working branch
+git pull origin develop   # get the merged sync changes
+```
+
+That's it. Skills, agents, and commands are updated in `.claude/`. Restart Claude Code to pick up changes.
+
+**No scripts to run.** The sync engine updates `.claude/skills/`, `.claude/agents/`, `.claude/commands/`, and `l0-manifest.json`. These are static files — `git pull` is sufficient.
+
+> **Note:** `sync-gsd-agents` and `sync-gsd-skills` are L0-only scripts (they live in `scripts/sh/`). Downstream projects don't need them — the sync engine handles materialization. GSD integration is done once during `/setup` (W7).
+
+### 1. Dispatch — managed repos (instant)
+
+When L0 pushes to master, `l0-sync-dispatch.yml` fires. It reads `.github/downstream-repos.json` and sends a `repository_dispatch` event to each listed repo.
 
 **Path filter:** Only triggers when relevant files change (`skills/`, `agents/`, `scripts/`, `docs/`, `detekt-rules/`, `mcp-server/src/`, `.claude/commands/`, `versions-manifest.json`).
 
-### 2. Scheduled (safety net)
+### 2. Cron — open consumers (daily)
 
-`l0-auto-sync.yml` runs daily at 06:00 UTC via cron. It compares upstream HEAD against the `l0Commit` in `l0-manifest.json`. If they differ, it syncs. This catches missed dispatches (token expiry, downtime, new repos not yet in the dispatch list).
+`l0-auto-sync.yml` runs daily at 06:00 UTC. It compares upstream HEAD against the `l0Commit` in `l0-manifest.json`. If they differ, it syncs. No tokens needed in L0 — the consumer only needs read access to L0.
 
 ### 3. Manual (always available)
 
@@ -189,7 +217,7 @@ When L0 pushes to master, `l0-sync-dispatch.yml` fires. It reads `.github/downst
 /sync-l0 --dry-run    # preview changes without writing
 ```
 
-### Setup guide
+### Setup guide — managed repos
 
 #### Step 1: L0 — Configure dispatch target list
 
@@ -204,16 +232,11 @@ Add downstream repos to `.github/downstream-repos.json`:
 
 #### Step 2: L0 — Create DOWNSTREAM_SYNC_TOKEN secret
 
-The dispatch needs a token with permission to trigger workflows in downstream repos.
-
-1. Go to **github.com → Settings → Developer settings → Fine-grained tokens → Generate new token**
-2. Name: `L0 Auto-Sync Dispatch`
-3. Expiration: 90 days (or your org policy)
-4. Repository access → **Only select repositories** → select all downstream repos
-5. Permissions → Repository permissions → **Contents: Read and write**
-6. Generate token → copy the value
-7. Go to **L0 repo → Settings → Secrets and variables → Actions → New repository secret**
-8. Name: `DOWNSTREAM_SYNC_TOKEN`, paste the token value
+1. **github.com → Settings → Developer settings → Fine-grained tokens → Generate new token**
+2. Name: `L0 Auto-Sync Dispatch` | Expiration: 90 days
+3. Repository access → **Only select repositories** → select all downstream repos
+4. Permissions → **Contents: Read and write**
+5. **L0 repo → Settings → Secrets → Actions → New secret**: `DOWNSTREAM_SYNC_TOKEN`
 
 #### Step 3: L1/L2 — Install auto-sync workflow
 
@@ -241,15 +264,19 @@ If L1 has its own downstream repos (L2), add:
 - `.github/downstream-repos.json` in L1 (listing L2 repos)
 - `DOWNSTREAM_SYNC_TOKEN` secret in L1 (with access to L2 repos)
 
-### What the PR looks like
+### Setup guide — open consumers
 
-The auto-sync creates a PR with:
-- Title: `chore(sync): auto-sync from L0`
-- Branch: `auto-sync/l0-update`
-- Body: table with added/updated counts, source commit, trigger type
-- Changes: updated skills, agents, commands, manifest checksums
+1. Copy `setup/templates/workflows/l0-auto-sync.yml` → `.github/workflows/`
+2. Ensure `l0-manifest.json` exists with the L0 source path (created by `/setup`)
 
-The PR is force-pushed on subsequent syncs (single PR, always up to date).
+The cron checks upstream daily. No L0 configuration needed.
+
+### What the PR contains
+
+- **Title:** `chore(sync): auto-sync from L0`
+- **Branch:** `auto-sync/l0-update` (force-pushed on subsequent syncs)
+- **Body:** table with added/updated counts, source commit, trigger type
+- **Files:** `.claude/skills/`, `.claude/agents/`, `.claude/commands/`, `l0-manifest.json`
 
 ### Troubleshooting
 
@@ -257,10 +284,12 @@ The PR is force-pushed on subsequent syncs (single PR, always up to date).
 |---------|-------|-----|
 | No dispatch fires | `downstream-repos.json` missing or empty | Create the file with repo list |
 | Dispatch fires but L1 no run | `l0-auto-sync.yml` not in L1 `.github/workflows/` | Copy the template |
-| Sync runs but PR fails: "not permitted to create pull requests" | Actions PR permission disabled | Settings → Actions → General → enable checkbox |
-| Sync runs but PR fails: "'sync' not found" | Label doesn't exist (fixed in latest template) | Update `l0-auto-sync.yml` to latest |
-| Cron runs but skips | Upstream HEAD matches `l0Commit` in manifest | Expected — no changes to sync |
+| PR fails: "not permitted to create pull requests" | Actions PR permission disabled | Settings → Actions → General → enable checkbox |
+| PR fails: "'sync' not found" | Label doesn't exist | Update to latest `l0-auto-sync.yml` template |
+| Cron runs but skips | Upstream HEAD matches `l0Commit` | Expected — no changes to sync |
 | DOWNSTREAM_SYNC_TOKEN expired | Fine-grained PAT has expiration | Regenerate and update secret |
+| Sync runs, 0 added, 0 updated | PR was already merged with latest | Expected — nothing to sync |
+| `sync-gsd-agents.sh: not found` in L1 | Script only exists in L0 | Not needed — sync engine handles it |
 
 ## Cross-references
 
