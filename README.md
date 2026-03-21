@@ -74,8 +74,8 @@ Projects choose how they consume layers via `l0-manifest.json` (manifest v2):
 
 | Topology | Flow | Use case |
 |----------|------|----------|
-| **flat** | L0 → L2 directly | Enterprise, standalone apps, no shared-libs layer |
-| **chain** | L0 → L1 → L2 | Solo devs / small teams with shared libraries |
+| **flat** | L0 → L2 directly | Solo devs / small teams, standalone apps, no shared-libs layer |
+| **chain** | L0 → L1 → L2 | Enterprise, multi-team orgs with shared platform libraries |
 
 **Flat** (default): each project consumes L0 independently.
 ```json
