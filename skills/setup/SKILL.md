@@ -278,18 +278,20 @@ Installs: `NamingGuardTest.kt`, `ArchitectureGuardTest.kt`,
 
 ---
 
-### Wizard W5 — CI workflow + PR template (if `--ci` not set)
+### Wizard W5 — CI workflow + PR template + auto-sync (if `--ci` not set)
 
 ```
 Do you want to copy the CI workflow template and PR template? [y/N]
 
-  .github/workflows/ci.yml        ← reusable L0 workflows + project jobs
-  .github/pull_request_template.md ← standard PR checklist
+  .github/workflows/ci.yml             ← reusable L0 workflows + project jobs
+  .github/workflows/l0-auto-sync.yml   ← auto-sync from upstream on push + daily cron
+  .github/pull_request_template.md     ← standard PR checklist
 ```
 
 If confirmed:
 - Copy `setup/github-workflows/ci-template.yml` → `$PROJECT_ROOT/.github/workflows/ci.yml`
   (replace `<org>` placeholder with the detected GitHub remote org if available)
+- Copy `setup/templates/workflows/l0-auto-sync.yml` → `$PROJECT_ROOT/.github/workflows/l0-auto-sync.yml`
 - Copy `setup/github-workflows/pull_request_template.md` → `$PROJECT_ROOT/.github/pull_request_template.md`
 
 Detect GitHub remote org:
@@ -412,9 +414,9 @@ Run `install-guard-tests.sh` with confirmed package name. Skip if declined or no
 
 ---
 
-### Step 6 — CI + PR templates (conditional on W5)
+### Step 6 — CI + PR templates + auto-sync workflow (conditional on W5)
 
-Copy templates. Replace `<org>` placeholder. Skip if declined or files exist without `--force`.
+Copy templates. Replace `<org>` placeholder. Include `l0-auto-sync.yml` for automatic upstream sync. Skip if declined or files exist without `--force`.
 
 ---
 
@@ -508,6 +510,7 @@ Detekt JAR exists at $L0_ROOT/detekt-rules/build/libs/detekt-rules-1.0.0.jar
 detekt.yml exists in project root
 Guard tests directory exists (konsist-guard/ or equivalent)
 .github/workflows/ci.yml exists
+.github/workflows/l0-auto-sync.yml exists
 Model-profiles.json exists in .claude/
 
 # GSD (only if W7 confirmed)
@@ -532,6 +535,7 @@ GSD agent parity (bash $L0_ROOT/scripts/sh/check-agent-parity.sh)
 ║  detekt.yml         ✅ custom (9 active / 4 disabled)  ║  ← conditional
 ║  Konsist guards     ✅ 5 guard files (com.myapp)       ║  ← conditional
 ║  CI workflow        ✅ .github/workflows/ci.yml        ║  ← conditional
+║  Auto-sync          ✅ .github/workflows/l0-auto-sync  ║  ← conditional
 ║  PR template        ✅ .github/pull_request_template   ║  ← conditional
 ║  MCP server         ℹ️  Snippet printed above          ║  ← conditional
 ║  GSD skills         ✅ 40 skills synced                ║  ← conditional
