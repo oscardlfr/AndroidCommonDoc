@@ -100,6 +100,87 @@ Each artifact type gets a sync strategy matching its semantics:
 
 Resolution model is **classloader chain**: L2 local → L1 source → L0 source. First match wins for skills/commands. Merge for agents/knowledge.
 
+### Classloader chain — resolution order
+
+```
+Resolving "test-specialist" agent in L2:
+  L2 local?  → ./agents/test-specialist.md        → if exists, use this
+  L1 source? → shared-kmp-libs/agents/test-sp...   → if exists, use this
+  L0 source? → AndroidCommonDoc/agents/test-sp...  → fallback base
+
+Override without fork:
+  L2: test-specialist.override.md (only differences)
+  Merge: L0 base + L2 override → resolved agent
+```
+
+### Open questions — resolved
+
+**Q1: Reference at runtime or materialization at sync?**
+
+Materialization via `sync-l0 --resolve`, but manifest stores references. This gives:
+- Local file for offline use (materialized copy)
+- Reference for freshness check (`sync-l0 --resolve` re-resolves from sources)
+- `sync-l0` without `--resolve` behaves as today (copy)
+
+**Q2: Partial override or full replace?**
+
+- **Partial merge** for agents and knowledge (text artifacts — merge = concatenate sections with layer tags)
+- **Full replace** for skills and commands (atomic units — local copy wins completely)
+
+This matches semantics: knowledge is additive, agents need project context injected, but a skill is a self-contained instruction set.
+
+**Q3: Manifest v3 or v2 extension?**
+
+v2 extension — no breaking change. Fields added:
+- `artifacts.agents[name].override` → `"local"` indicates `.override.md` merge
+- `artifacts.skills[name].source` → `"l0"` | `"l1"` | `"local"`
+- `artifacts.knowledge.cascade` → `true` enables KNOWLEDGE-RESOLVED.md generation
+
+v1→v2 migration already exists. v2 extensions are optional fields — existing manifests unchanged.
+
+### Knowledge cascade detail
+
+```
+sync-l0 --resolve generates:
+
+  .resolved/KNOWLEDGE-RESOLVED.md =
+    ## [L0] AndroidCommonDoc
+    (contents of L0/KNOWLEDGE.md)
+
+    ## [L1] shared-kmp-libs
+    (contents of L1/KNOWLEDGE.md)
+
+    ## [L2] DawSync
+    (contents of L2/KNOWLEDGE.md)
+```
+
+Agents receive KNOWLEDGE-RESOLVED.md instead of local KNOWLEDGE.md. The resolved file is regenerated on each `sync-l0 --resolve` and gitignored (derived artifact).
+
+### Agent template + inject
+
+```yaml
+# L0 base agent: test-specialist.md
+---
+base: true
+inject: [KNOWLEDGE, DETEKT_CONFIG]
+---
+You are a test specialist...
+{{LAYER_KNOWLEDGE}}
+{{LAYER_CONVENTIONS}}
+```
+
+```yaml
+# L1 override: test-specialist.override.md
+---
+extends: l0:test-specialist
+---
+## Additional rules for shared-kmp-libs
+- Always use testDispatcher from StandardTestDispatcher
+- Fakes live in :core:test-fakes module
+```
+
+Engine merge: base template + resolved knowledge + layer override → final agent prompt.
+
 ### Rationale
 
 `sync-l0` today is a file copier — it creates stale copies that diverge. The classloader model gives:

@@ -141,7 +141,13 @@ The doc system already has per-layer conventions (enforced by `l0-coherence-audi
 
 1. Should L1 have its own registry.json or reuse L0's format?
 2. How does L1 declare "my rules" vs "L0 rules I'm passing through"?
-3. Should KNOWLEDGE.md be merged automatically or require explicit imports?
+3. ~~Should KNOWLEDGE.md be merged automatically or require explicit imports?~~ → **Resolved in D002**: cascade via `sync-l0 --resolve`, generates `KNOWLEDGE-RESOLVED.md` from all layers.
 4. How do version conflicts resolve? (L0 says Kotlin 2.3.20, L1 says 2.3.10)
 5. Should the doc standard per layer be a static doc or generated from test assertions?
-6. Should `find-pattern` auto-discover parent layer docs or require explicit manifest config?
+6. ~~Should `find-pattern` auto-discover parent layer docs or require explicit manifest config?~~ → **Resolved in D002**: manifest `sources[]` is used; `find-pattern` reads ordered sources from manifest.
+
+## Resolved Design Questions (from D002)
+
+- **Runtime vs materialization**: Materialization via `sync-l0 --resolve`. Manifest stores references, resolved files are gitignored derived artifacts.
+- **Partial vs full replace**: Partial merge for agents/knowledge (additive text), full replace for skills/commands (atomic units).
+- **Schema version**: v2 extension (optional fields), no v3 breaking change.
