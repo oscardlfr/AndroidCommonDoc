@@ -49,6 +49,31 @@ detect_coverage_tool() {
         if [[ "$root_content" == *kover* ]]; then echo "kover"; return; fi
     fi
 
+    # Check build-logic convention plugins for kover
+    local project_root=""
+    if [[ -f "$module_dir/../settings.gradle.kts" ]]; then
+        project_root="$module_dir/.."
+    elif [[ -f "$module_dir/../../settings.gradle.kts" ]]; then
+        project_root="$module_dir/../.."
+    fi
+    if [[ -n "$project_root" ]]; then
+        # Check build-logic/ directory for convention plugins applying kover
+        local build_logic_dir="$project_root/build-logic"
+        if [[ -d "$build_logic_dir" ]]; then
+            local kover_in_logic
+            kover_in_logic=$(grep -rl "kover" "$build_logic_dir" --include="*.gradle.kts" --include="*.kt" 2>/dev/null | head -1)
+            if [[ -n "$kover_in_logic" ]]; then echo "kover"; return; fi
+        fi
+
+        # Check version catalog for kover plugin declaration
+        local version_catalog="$project_root/gradle/libs.versions.toml"
+        if [[ -f "$version_catalog" ]]; then
+            local catalog_content
+            catalog_content="$(<"$version_catalog")"
+            if [[ "$catalog_content" == *kover* ]]; then echo "kover"; return; fi
+        fi
+    fi
+
     # Default: JaCoCo (built into AGP, no explicit config needed)
     echo "jacoco"
 }

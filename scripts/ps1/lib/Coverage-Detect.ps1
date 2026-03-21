@@ -34,13 +34,53 @@ function Detect-CoverageTool {
         return "jacoco"
     }
 
-    # Check if JaCoCo report directory exists from previous run
+    # Check if coverage report directories exist from previous runs
     $moduleDir = Split-Path $BuildFilePath -Parent
+    if (Test-Path (Join-Path $moduleDir "build/reports/kover")) {
+        return "kover"
+    }
     if (Test-Path (Join-Path $moduleDir "build/reports/jacoco")) {
         return "jacoco"
     }
 
-    return "none"
+    # Check root/parent buildscripts for convention plugin applying kover
+    $rootBuild = $null
+    $parentBuild = Join-Path $moduleDir "../build.gradle.kts"
+    $grandBuild = Join-Path $moduleDir "../../build.gradle.kts"
+    if (Test-Path $parentBuild) { $rootBuild = $parentBuild }
+    elseif (Test-Path $grandBuild) { $rootBuild = $grandBuild }
+
+    if ($rootBuild) {
+        $rootContent = Get-Content $rootBuild -Raw -ErrorAction SilentlyContinue
+        if ($rootContent -match "kover") { return "kover" }
+    }
+
+    # Check build-logic convention plugins for kover
+    $projectRoot = $null
+    $parentSettings = Join-Path $moduleDir "../settings.gradle.kts"
+    $grandSettings = Join-Path $moduleDir "../../settings.gradle.kts"
+    if (Test-Path $parentSettings) { $projectRoot = (Resolve-Path (Join-Path $moduleDir "..")).Path }
+    elseif (Test-Path $grandSettings) { $projectRoot = (Resolve-Path (Join-Path $moduleDir "../..")).Path }
+
+    if ($projectRoot) {
+        # Check build-logic/ directory
+        $buildLogicDir = Join-Path $projectRoot "build-logic"
+        if (Test-Path $buildLogicDir) {
+            $koverFiles = Get-ChildItem -Path $buildLogicDir -Recurse -Include "*.gradle.kts","*.kt" -ErrorAction SilentlyContinue |
+                Where-Object { (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match "kover" } |
+                Select-Object -First 1
+            if ($koverFiles) { return "kover" }
+        }
+
+        # Check version catalog for kover plugin declaration
+        $versionCatalog = Join-Path $projectRoot "gradle/libs.versions.toml"
+        if (Test-Path $versionCatalog) {
+            $catalogContent = Get-Content $versionCatalog -Raw -ErrorAction SilentlyContinue
+            if ($catalogContent -match "kover") { return "kover" }
+        }
+    }
+
+    return "jacoco"
 }
 
 function Get-CoverageGradleTask {

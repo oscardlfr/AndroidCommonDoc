@@ -68,6 +68,61 @@ teardown() {
     [ "$result" = "kover" ]
 }
 
+@test "detect_coverage_tool: returns 'kover' when kover report dir exists (no explicit config)" {
+    mkdir -p "$WORK_DIR/mod/build/reports/kover"
+    echo 'plugins { id("com.android.library") }' > "$WORK_DIR/mod/build.gradle.kts"
+    result=$(detect_coverage_tool "$WORK_DIR/mod/build.gradle.kts")
+    [ "$result" = "kover" ]
+}
+
+@test "detect_coverage_tool: kover report dir wins over jacoco default" {
+    mkdir -p "$WORK_DIR/mod/build/reports/kover"
+    echo 'android { }' > "$WORK_DIR/mod/build.gradle.kts"
+    result=$(detect_coverage_tool "$WORK_DIR/mod/build.gradle.kts")
+    [ "$result" = "kover" ]
+}
+
+@test "detect_coverage_tool: detects kover from root build.gradle.kts" {
+    mkdir -p "$WORK_DIR/project/core/domain"
+    echo 'plugins { id("com.android.library") }' > "$WORK_DIR/project/core/domain/build.gradle.kts"
+    echo 'plugins { id("org.jetbrains.kotlinx.kover") }' > "$WORK_DIR/project/core/build.gradle.kts"
+    result=$(detect_coverage_tool "$WORK_DIR/project/core/domain/build.gradle.kts")
+    [ "$result" = "kover" ]
+}
+
+@test "detect_coverage_tool: detects kover from build-logic convention plugin" {
+    mkdir -p "$WORK_DIR/project/core/domain"
+    mkdir -p "$WORK_DIR/project/build-logic/src/main/kotlin"
+    echo 'plugins { id("com.android.library") }' > "$WORK_DIR/project/core/domain/build.gradle.kts"
+    echo '// no kover here' > "$WORK_DIR/project/build.gradle.kts"
+    echo '' > "$WORK_DIR/project/settings.gradle.kts"
+    echo 'plugins { id("org.jetbrains.kotlinx.kover") }' > "$WORK_DIR/project/build-logic/src/main/kotlin/kmp-library.gradle.kts"
+    result=$(detect_coverage_tool "$WORK_DIR/project/core/domain/build.gradle.kts")
+    [ "$result" = "kover" ]
+}
+
+@test "detect_coverage_tool: detects kover from libs.versions.toml" {
+    mkdir -p "$WORK_DIR/project/core/domain"
+    mkdir -p "$WORK_DIR/project/gradle"
+    echo 'plugins { id("com.android.library") }' > "$WORK_DIR/project/core/domain/build.gradle.kts"
+    echo '// no kover here' > "$WORK_DIR/project/build.gradle.kts"
+    echo '' > "$WORK_DIR/project/settings.gradle.kts"
+    printf '[plugins]\nkover = { id = "org.jetbrains.kotlinx.kover", version = "0.9.0" }' > "$WORK_DIR/project/gradle/libs.versions.toml"
+    result=$(detect_coverage_tool "$WORK_DIR/project/core/domain/build.gradle.kts")
+    [ "$result" = "kover" ]
+}
+
+@test "detect_coverage_tool: defaults to jacoco when no kover evidence anywhere" {
+    mkdir -p "$WORK_DIR/project/core/domain"
+    mkdir -p "$WORK_DIR/project/gradle"
+    echo 'plugins { id("com.android.library") }' > "$WORK_DIR/project/core/domain/build.gradle.kts"
+    echo 'plugins { id("com.android.application") }' > "$WORK_DIR/project/build.gradle.kts"
+    echo '' > "$WORK_DIR/project/settings.gradle.kts"
+    printf '[plugins]\nandroid = { id = "com.android.library" }' > "$WORK_DIR/project/gradle/libs.versions.toml"
+    result=$(detect_coverage_tool "$WORK_DIR/project/core/domain/build.gradle.kts")
+    [ "$result" = "jacoco" ]
+}
+
 # ---------------------------------------------------------------------------
 # get_coverage_gradle_task
 # ---------------------------------------------------------------------------
