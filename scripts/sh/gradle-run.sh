@@ -425,6 +425,16 @@ while [[ $attempt -le $max_attempts ]]; do
                 full_cov_task=":${MODULE}:${cov_task_name}"
                 if ./gradlew "$full_cov_task" --console=plain >/dev/null 2>&1; then
                     echo -e "${color_green}Coverage report generated.${color_reset}"
+                elif [[ "$cov_tool" == "kover" ]]; then
+                    # Kover task name may vary — try fallbacks
+                    fallbacks="$(get_kover_task_fallbacks "$is_desktop")"
+                    for fb in $fallbacks; do
+                        [[ "$fb" == "$cov_task_name" ]] && continue
+                        if ./gradlew ":${MODULE}:${fb}" --console=plain >/dev/null 2>&1; then
+                            echo -e "${color_green}Coverage report generated (via $fb).${color_reset}"
+                            break
+                        fi
+                    done
                 fi
             fi
         fi

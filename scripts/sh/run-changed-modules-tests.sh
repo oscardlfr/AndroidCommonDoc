@@ -45,6 +45,7 @@ SHOW_MODULES_ONLY=false
 MAX_FAILURES=0
 MIN_MISSED_LINES=0
 COVERAGE_TOOL=""
+EXCLUDE_COVERAGE=""
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/script-utils.sh"
@@ -67,6 +68,7 @@ Options:
   --max-failures <N>          Stop after N failures. 0 = run all. Default: 0
   --min-missed-lines <N>      Min missed lines for gaps report. Default: 0
   --coverage-tool <tool>      Coverage tool: jacoco | kover | auto | none. Default: jacoco
+  --exclude-coverage <list>   Comma-separated modules to exclude from coverage.
   -h | --help                 Show this help.
 USAGE
     exit 0
@@ -85,6 +87,7 @@ while [[ $# -gt 0 ]]; do
         --max-failures)       MAX_FAILURES="$2"; shift 2 ;;
         --min-missed-lines)   MIN_MISSED_LINES="$2"; shift 2 ;;
         --coverage-tool)      COVERAGE_TOOL="$2"; shift 2 ;;
+        --exclude-coverage)   EXCLUDE_COVERAGE="$2"; shift 2 ;;
         -h|--help)            usage ;;
         *) err "[ERROR] Unknown option: $1"; exit 1 ;;
     esac
@@ -243,6 +246,10 @@ fi
 
 if [[ -n "$COVERAGE_TOOL" ]]; then
     SUITE_ARGS+=(--coverage-tool "$COVERAGE_TOOL")
+fi
+
+if [[ -n "$EXCLUDE_COVERAGE" ]]; then
+    SUITE_ARGS+=(--exclude-coverage "$EXCLUDE_COVERAGE")
 fi
 
 # Execute tests using the parallel coverage suite script

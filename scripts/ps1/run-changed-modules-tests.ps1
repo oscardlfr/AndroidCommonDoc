@@ -65,7 +65,8 @@ param(
     [int]$MaxFailures = 0,
     [int]$MinMissedLines = 0,
     [ValidateSet("jacoco", "kover", "auto", "none", "")]
-    [string]$CoverageTool = ""
+    [string]$CoverageTool = "",
+    [string]$ExcludeCoverage = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -264,6 +265,10 @@ if ($IncludeShared) {
 
 if ($CoverageTool -ne "") {
     $params.CoverageTool = $CoverageTool
+}
+
+if ($ExcludeCoverage -ne "") {
+    $params.ExcludeCoverage = $ExcludeCoverage
 }
 
 & "$ScriptRoot/run-parallel-coverage-suite.ps1" @params

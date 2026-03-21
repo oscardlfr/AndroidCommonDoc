@@ -420,6 +420,20 @@ try {
 
                     if ($LASTEXITCODE -eq 0) {
                         Write-Host "Coverage report generated." -ForegroundColor Green
+                    } elseif ($covTool -eq "kover") {
+                        # Kover task name may vary — try fallbacks
+                        $fallbackTasks = @("koverXmlReportDesktop", "koverXmlReport", "koverXmlReportDebug")
+                        if (-not $isDesktop) {
+                            $fallbackTasks = @("koverXmlReportDebug", "koverXmlReport", "koverXmlReportDesktop")
+                        }
+                        foreach ($fb in $fallbackTasks) {
+                            if ($fb -eq $covTaskName) { continue }
+                            & ./gradlew ":${Module}:${fb}" --console=plain 2>&1 | Out-Null
+                            if ($LASTEXITCODE -eq 0) {
+                                Write-Host "Coverage report generated (via $fb)." -ForegroundColor Green
+                                break
+                            }
+                        }
                     }
                 }
             }
