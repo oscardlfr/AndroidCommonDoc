@@ -12,10 +12,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { scanDirectory } from "../registry/scanner.js";
 import { resolveAllPatterns } from "../registry/resolver.js";
 import { discoverProjects } from "../registry/project-discovery.js";
 import { getDocsDir } from "../utils/paths.js";
+import { readManifest, getOrderedSources } from "../sync/manifest-schema.js";
 import type { RegistryEntry } from "../registry/types.js";
 import type { RateLimiter } from "../utils/rate-limiter.js";
 import { checkRateLimit } from "../utils/rate-limit-guard.js";
@@ -144,9 +146,15 @@ export function registerFindPatternTool(
           .describe(
             "Include full document content in results (default: false for token efficiency)",
           ),
+        from_manifest: z
+          .string()
+          .optional()
+          .describe(
+            "Path to l0-manifest.json — searches docs from all manifest sources, ranked by proximity (local > L1 > L0). Overrides project param when set.",
+          ),
       }),
     },
-    async ({ query, project, targets, category, include_content }) => {
+    async ({ query, project, targets, category, include_content, from_manifest }) => {
       const rateLimitResponse = checkRateLimit(limiter, "find-pattern");
       if (rateLimitResponse) return rateLimitResponse;
 
@@ -170,7 +178,46 @@ export function registerFindPatternTool(
 
         let entries: RegistryEntry[];
 
-        if (!project) {
+        if (from_manifest) {
+          // Manifest-based multi-layer search (M003/S03)
+          // Scans docs from each source in manifest, ordered by layer priority
+          try {
+            const manifest = await readManifest(from_manifest);
+            const sources = getOrderedSources(manifest);
+            const allEntries = new Map<string, RegistryEntry>();
+
+            for (const source of sources) {
+              const sourceDocsDir = path.join(source.path, "docs");
+              try {
+                const layerEntries = await scanDirectory(sourceDocsDir, source.layer as "L0" | "L1" | "L2");
+                for (const entry of layerEntries) {
+                  // Later layers override earlier ones (L1 > L0)
+                  allEntries.set(entry.slug, entry);
+                }
+              } catch {
+                logger.warn(`find-pattern: could not scan docs at ${sourceDocsDir} for layer ${source.layer}`);
+              }
+            }
+
+            // Also scan local project docs if they exist
+            const localDocsDir = path.join(path.dirname(from_manifest), "docs");
+            try {
+              const localEntries = await scanDirectory(localDocsDir, "L2");
+              for (const entry of localEntries) {
+                allEntries.set(entry.slug, entry); // Local wins
+              }
+            } catch {
+              // No local docs — fine
+            }
+
+            entries = Array.from(allEntries.values());
+          } catch (manifestError) {
+            logger.warn(`find-pattern: could not read manifest at ${from_manifest}: ${String(manifestError)}`);
+            // Fall through to standard L0 search
+            const docsDir = getDocsDir();
+            entries = await scanDirectory(docsDir, "L0");
+          }
+        } else if (!project) {
           // L0-only search: scan docs directory directly
           const docsDir = getDocsDir();
           entries = await scanDirectory(docsDir, "L0");

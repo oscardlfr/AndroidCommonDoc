@@ -28,7 +28,9 @@ import {
 import {
   readManifest,
   writeManifest,
+  getOrderedSources,
   type Manifest,
+  type LayerSource,
 } from "./manifest-schema.js";
 
 // ---------------------------------------------------------------------------
@@ -499,6 +501,414 @@ function hasL0Header(content: string): boolean {
 
 // ---------------------------------------------------------------------------
 // Main sync function
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Multi-source registry merge (M003/S01)
+// ---------------------------------------------------------------------------
+
+/**
+ * A tagged registry entry — carries the layer it came from.
+ */
+export interface LayeredRegistryEntry extends SkillRegistryEntry {
+  /** Which layer source provided this entry */
+  sourceLayer: string;
+}
+
+/**
+ * Merge multiple registries into one, respecting layer priority.
+ *
+ * Resolution: last source wins per entry name+type. If L0 and L1 both
+ * define a skill named "test", L1's version is used.
+ *
+ * Sources must be ordered by priority (L0 first, L1 second, etc.).
+ * Each entry is tagged with its `sourceLayer` for traceability.
+ *
+ * @param registries - Array of [layerName, registry] tuples, ordered L0 → L1 → L2
+ * @returns Merged registry with layer annotations
+ */
+export function mergeRegistries(
+  registries: Array<[string, SkillRegistry]>,
+): LayeredRegistryEntry[] {
+  // Use name+type as the unique key (a skill "test" and agent "test" can coexist)
+  const merged = new Map<string, LayeredRegistryEntry>();
+
+  for (const [layer, registry] of registries) {
+    for (const entry of registry.entries) {
+      const key = `${entry.type}:${entry.name}`;
+      merged.set(key, { ...entry, sourceLayer: layer });
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
+/**
+ * Extended sync report for multi-source operations.
+ */
+export interface MultiSourceSyncReport extends SyncReport {
+  /** Number of sources processed */
+  sourceCount: number;
+  /** Per-source entry counts */
+  sourceCounts: Record<string, number>;
+  /** Entries overridden by higher-priority layers */
+  overrides: Array<{ name: string; type: string; overriddenBy: string; overrides: string }>;
+}
+
+/**
+ * Execute a multi-source sync using manifest sources[].
+ *
+ * For each source in manifest.sources (ordered L0 → L1 → ...):
+ * 1. Resolve the absolute path
+ * 2. Generate registry from that source
+ * 3. Merge all registries (last wins per name+type)
+ * 4. Run the standard sync plan against the merged set
+ *
+ * Falls back to single-source syncL0() for flat topology with 1 source.
+ *
+ * @param projectRoot - Root of the downstream project
+ * @param options - Sync behavior options (prune, force, dryRun)
+ * @returns Extended sync report with multi-source metadata
+ */
+export async function syncMultiSource(
+  projectRoot: string,
+  options: SyncOptions = {},
+): Promise<MultiSourceSyncReport> {
+  const { prune = false, force = false, dryRun = false } = options;
+
+  const manifestPath = path.join(projectRoot, "l0-manifest.json");
+  const manifest = await readManifest(manifestPath);
+  const orderedSources = getOrderedSources(manifest);
+
+  // Collect registries from all sources
+  const registryTuples: Array<[string, SkillRegistry]> = [];
+  const sourceCounts: Record<string, number> = {};
+  const resolvedPaths: Record<string, string> = {};
+
+  for (const source of orderedSources) {
+    const resolvedPath = await resolveL0Source(source.path, projectRoot);
+    resolvedPaths[source.layer] = resolvedPath;
+
+    const registry = await generateRegistry(resolvedPath);
+    if (registry.entries.length === 0) {
+      throw new Error(
+        `Source ${source.layer} (${resolvedPath}) has 0 registry entries — aborting sync. ` +
+        `Verify the path contains skills/registry.json with valid entries.`,
+      );
+    }
+
+    registryTuples.push([source.layer, registry]);
+    sourceCounts[source.layer] = registry.entries.length;
+  }
+
+  // Merge registries — last wins per name+type
+  const merged = mergeRegistries(registryTuples);
+
+  // Detect overrides (entries from earlier layers replaced by later ones)
+  const overrides: MultiSourceSyncReport["overrides"] = [];
+  const seenByKey = new Map<string, string>(); // key → first layer
+  for (const [layer, registry] of registryTuples) {
+    for (const entry of registry.entries) {
+      const key = `${entry.type}:${entry.name}`;
+      const prev = seenByKey.get(key);
+      if (prev && prev !== layer) {
+        overrides.push({
+          name: entry.name,
+          type: entry.type,
+          overriddenBy: layer,
+          overrides: prev,
+        });
+      }
+      seenByKey.set(key, layer);
+    }
+  }
+
+  // Build a synthetic merged registry for resolveSyncPlan
+  const mergedRegistry: SkillRegistry = {
+    version: 1,
+    generated: new Date().toISOString(),
+    l0_root: resolvedPaths[orderedSources[0].layer] ?? "",
+    entries: merged,
+  };
+
+  // Use existing sync plan + action computation
+  const resolved = resolveSyncPlan(mergedRegistry, manifest);
+  const actions = computeSyncActions(resolved, manifest);
+
+  const report: MultiSourceSyncReport = {
+    added: 0,
+    updated: 0,
+    removed: 0,
+    unchanged: 0,
+    skippedRemoves: 0,
+    errors: [],
+    warnings: [],
+    missing: [],
+    actions,
+    l0Commit: getGitCommit(resolvedPaths[orderedSources[0].layer] ?? ""),
+    removedPaths: [],
+    sourceCount: orderedSources.length,
+    sourceCounts,
+    overrides,
+  };
+
+  // Log overrides as warnings for visibility
+  for (const ov of overrides) {
+    report.warnings.push(
+      `${ov.type} "${ov.name}" from ${ov.overrides} overridden by ${ov.overriddenBy}`,
+    );
+  }
+
+  // Remove handling (same logic as syncL0)
+  const removeActions = actions.filter((a) => a.action === "remove");
+  const removeCount = removeActions.length;
+
+  let allowRemoves = false;
+  if (removeCount > 0 && !prune) {
+    report.skippedRemoves = removeCount;
+    report.warnings.push(
+      `${removeCount} orphaned file(s) found but not removed (additive mode). ` +
+      `Use --prune to remove orphans.`,
+    );
+  } else if (removeCount > 5 && prune && !force) {
+    report.skippedRemoves = removeCount;
+    report.warnings.push(
+      `${removeCount} files would be removed — exceeds safety threshold (5). ` +
+      `Use --prune --force to confirm, or review with --dry-run --prune first.`,
+    );
+  } else if (prune) {
+    allowRemoves = true;
+  }
+
+  // Detekt baseline warning
+  const detektUpdate = actions.find(
+    (a) =>
+      (a.action === "add" || a.action === "update") &&
+      a.registryEntry.path.includes("detekt-l0-base"),
+  );
+  if (detektUpdate) {
+    report.warnings.push(
+      "⚠ detekt-l0-base.yml was updated — rebuild L0 rules JAR: " +
+      "cd $ANDROID_COMMON_DOC/detekt-rules && ./gradlew assemble",
+    );
+  }
+
+  // Process actions — resolve source path per entry using layered info
+  for (const planEntry of actions) {
+    const { registryEntry, action } = planEntry;
+
+    switch (action) {
+      case "add":
+      case "update": {
+        if (dryRun) {
+          if (action === "add") report.added++;
+          else report.updated++;
+          break;
+        }
+        try {
+          // Find the source root for this entry's layer
+          const layered = registryEntry as LayeredRegistryEntry;
+          const sourceRoot = layered.sourceLayer
+            ? (resolvedPaths[layered.sourceLayer] ?? resolvedPaths[orderedSources[0].layer])
+            : resolvedPaths[orderedSources[0].layer];
+
+          const sourcePath = path.join(sourceRoot, registryEntry.path);
+          const sourceContent = await readFile(sourcePath, "utf-8");
+          const materialized = materializeFile(sourceContent, registryEntry, sourceRoot);
+          const dest = destPath(registryEntry.path);
+          const destFilePath = path.join(projectRoot, dest);
+          await mkdir(path.dirname(destFilePath), { recursive: true });
+          await writeFile(destFilePath, materialized, "utf-8");
+          if (action === "add") report.added++;
+          else report.updated++;
+        } catch (err) {
+          report.errors.push(
+            `Failed to ${action} ${registryEntry.path}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        break;
+      }
+
+      case "remove": {
+        if (!allowRemoves) break;
+        if (dryRun) {
+          report.removed++;
+          report.removedPaths.push(registryEntry.path);
+          break;
+        }
+        try {
+          const destFilePath = path.join(projectRoot, registryEntry.path);
+          let content: string;
+          try {
+            content = await readFile(destFilePath, "utf-8");
+          } catch {
+            report.removed++;
+            break;
+          }
+          if (content.includes("l0_source:") && content.includes("l0_hash:")) {
+            await unlink(destFilePath);
+            report.removedPaths.push(registryEntry.path);
+          }
+          report.removed++;
+        } catch (err) {
+          report.errors.push(
+            `Failed to remove ${registryEntry.path}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        break;
+      }
+
+      case "unchanged":
+        report.unchanged++;
+        break;
+    }
+  }
+
+  if (!dryRun) {
+    const newChecksums: Record<string, string> = {};
+    for (const entry of resolved) {
+      newChecksums[destPath(entry.path)] = entry.hash;
+    }
+
+    manifest.checksums = newChecksums;
+    manifest.last_synced = new Date().toISOString();
+    await writeManifest(manifestPath, manifest);
+
+    // Post-sync verification
+    for (const planEntry of actions) {
+      if (planEntry.action === "add" || planEntry.action === "update") {
+        const dest = destPath(planEntry.registryEntry.path);
+        const destFilePath = path.join(projectRoot, dest);
+        try {
+          await readFile(destFilePath);
+        } catch {
+          report.missing.push(dest);
+          report.errors.push(
+            `Post-sync verification failed: ${dest} was not written to disk`,
+          );
+        }
+      }
+    }
+  }
+
+  return report;
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge cascade (M003/S02)
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a KNOWLEDGE-RESOLVED.md by concatenating knowledge files from
+ * all layers in order. Each layer's content is tagged with a heading.
+ *
+ * @param layerKnowledge - Array of [layerName, content] tuples, ordered L0 → L1 → L2
+ * @returns Merged markdown with layer-tagged sections
+ */
+export function generateKnowledgeCascade(
+  layerKnowledge: Array<[string, string]>,
+): string {
+  const sections: string[] = [
+    "# Knowledge — Resolved (auto-generated)",
+    "",
+    "<!-- Generated by sync-l0 --resolve. Do not edit manually. -->",
+    "<!-- Each section is tagged with its source layer. -->",
+    "",
+  ];
+
+  for (const [layer, content] of layerKnowledge) {
+    if (!content.trim()) continue;
+
+    sections.push(`## [${layer}]`);
+    sections.push("");
+
+    // Strip the top-level heading from the content if it exists
+    // (avoid duplicate "# Knowledge" headings)
+    const stripped = content
+      .replace(/^#\s+.*\n+/, "")
+      .replace(/^<!--[\s\S]*?-->\s*\n*/, "")
+      .trim();
+
+    if (stripped) {
+      sections.push(stripped);
+      sections.push("");
+    }
+  }
+
+  return sections.join("\n");
+}
+
+/**
+ * Resolve agent template placeholders with layer knowledge.
+ *
+ * Supported placeholders:
+ * - {{LAYER_KNOWLEDGE}} → full knowledge cascade content
+ * - {{LAYER_CONVENTIONS}} → conventions section (extracted from knowledge)
+ *
+ * @param template - Agent markdown template with placeholders
+ * @param knowledgeCascade - Resolved knowledge content
+ * @returns Agent content with placeholders resolved
+ */
+export function resolveAgentTemplate(
+  template: string,
+  knowledgeCascade: string,
+): string {
+  let resolved = template;
+  resolved = resolved.replace(/\{\{LAYER_KNOWLEDGE\}\}/g, knowledgeCascade);
+
+  // Extract conventions: any section titled "Conventions" or "Key Conventions"
+  const conventionsMatch = knowledgeCascade.match(
+    /^##\s+.*[Cc]onventions.*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/m,
+  );
+  const conventions = conventionsMatch?.[1]?.trim() ?? "";
+  resolved = resolved.replace(/\{\{LAYER_CONVENTIONS\}\}/g, conventions);
+
+  return resolved;
+}
+
+/**
+ * Read KNOWLEDGE.md files from all layer sources + project local,
+ * generate KNOWLEDGE-RESOLVED.md, and optionally resolve agent templates.
+ *
+ * @param projectRoot - Root of the downstream project
+ * @param sourcePaths - Map of layer → absolute path (from manifest resolution)
+ * @returns Object with resolvedKnowledge content and list of agents resolved
+ */
+export async function resolveKnowledgeCascade(
+  projectRoot: string,
+  sourcePaths: Record<string, string>,
+): Promise<{ resolvedKnowledge: string; layerCount: number }> {
+  const layerKnowledge: Array<[string, string]> = [];
+
+  // Read from each source layer
+  const orderedLayers = Object.keys(sourcePaths).sort();
+  for (const layer of orderedLayers) {
+    const knowledgePath = path.join(sourcePaths[layer], ".gsd", "KNOWLEDGE.md");
+    try {
+      const content = await readFile(knowledgePath, "utf-8");
+      layerKnowledge.push([layer, content]);
+    } catch {
+      // Layer doesn't have KNOWLEDGE.md — skip
+    }
+  }
+
+  // Read local project's KNOWLEDGE.md
+  const localLayer = `L${orderedLayers.length}`;
+  const localKnowledgePath = path.join(projectRoot, ".gsd", "KNOWLEDGE.md");
+  try {
+    const content = await readFile(localKnowledgePath, "utf-8");
+    layerKnowledge.push([localLayer, content]);
+  } catch {
+    // No local KNOWLEDGE.md
+  }
+
+  const resolvedKnowledge = generateKnowledgeCascade(layerKnowledge);
+
+  return { resolvedKnowledge, layerCount: layerKnowledge.length };
+}
+
+// ---------------------------------------------------------------------------
+// Main sync function (single-source, original)
 // ---------------------------------------------------------------------------
 
 /**
