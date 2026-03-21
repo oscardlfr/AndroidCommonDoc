@@ -90,6 +90,9 @@ export function parseRuleDefinitions(
     if (typeof obj.source_rule === "string") {
       definition.source_rule = obj.source_rule;
     }
+    if (obj.platforms != null && typeof obj.platforms === "object") {
+      definition.platforms = obj.platforms as Record<string, import("../registry/types.js").PlatformRuleConfig>;
+    }
 
     definitions.push(definition);
   }

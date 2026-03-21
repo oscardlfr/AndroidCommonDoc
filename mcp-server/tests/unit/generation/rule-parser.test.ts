@@ -124,6 +124,82 @@ describe("parseRuleDefinitions", () => {
     expect(rules).toEqual([]);
   });
 
+  it("extracts platforms map when present", () => {
+    const frontmatter: Record<string, unknown> = {
+      rules: [
+        {
+          id: "sealed-ui-state",
+          type: "prefer-construct",
+          message: "UiState must be sealed interface",
+          detect: { class_suffix: "UiState", must_be: "sealed" },
+          hand_written: true,
+          source_rule: "SealedUiStateRule.kt",
+          platforms: {
+            kotlin: {
+              tool: "detekt",
+              source_rule: "SealedUiStateRule.kt",
+              hand_written: true,
+            },
+            swift: {
+              tool: "swiftlint",
+              strategy: "custom_rule",
+              equivalent: "enum with associated values",
+            },
+          },
+        },
+      ],
+    };
+
+    const rules = parseRuleDefinitions(frontmatter);
+    expect(rules).toHaveLength(1);
+    expect(rules[0].platforms).toBeDefined();
+    expect(rules[0].platforms!.kotlin).toEqual({
+      tool: "detekt",
+      source_rule: "SealedUiStateRule.kt",
+      hand_written: true,
+    });
+    expect(rules[0].platforms!.swift).toEqual({
+      tool: "swiftlint",
+      strategy: "custom_rule",
+      equivalent: "enum with associated values",
+    });
+  });
+
+  it("platforms field is undefined when not present in frontmatter", () => {
+    const frontmatter: Record<string, unknown> = {
+      rules: [
+        {
+          id: "simple-rule",
+          type: "banned-import",
+          message: "Don't use X",
+          detect: { banned_import: "com.bad" },
+        },
+      ],
+    };
+
+    const rules = parseRuleDefinitions(frontmatter);
+    expect(rules).toHaveLength(1);
+    expect(rules[0].platforms).toBeUndefined();
+  });
+
+  it("platforms field is ignored when not an object", () => {
+    const frontmatter: Record<string, unknown> = {
+      rules: [
+        {
+          id: "bad-platforms",
+          type: "banned-import",
+          message: "test",
+          detect: { banned_import: "x" },
+          platforms: "not-an-object",
+        },
+      ],
+    };
+
+    const rules = parseRuleDefinitions(frontmatter);
+    expect(rules).toHaveLength(1);
+    expect(rules[0].platforms).toBeUndefined();
+  });
+
   it("skips entries with invalid RuleType", () => {
     const frontmatter: Record<string, unknown> = {
       rules: [

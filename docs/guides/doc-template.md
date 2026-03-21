@@ -66,6 +66,17 @@ rules:                              # Detekt rule definitions (for enforceable p
     type: banned-import             # See RuleType in registry/types.ts
     message: "Why this matters"
     detect: { ... }
+    hand_written: true              # true if implemented manually (not generated)
+    source_rule: RuleClassName.kt   # Kotlin file name for hand-written rules
+    platforms:                       # Optional: per-platform enforcement (see D001)
+      kotlin:
+        tool: detekt                # detekt | konsist
+        source_rule: RuleClassName.kt
+        hand_written: true
+      swift:                        # Future — not implemented yet
+        tool: swiftlint             # swiftlint | swift-format | validator-cli
+        strategy: custom_rule       # custom_rule | builtin | validator_cli | manual
+        equivalent: "Swift equivalent description"
 excludable_sources: [lib-name]      # Sources that can be excluded per-project
 ```
 

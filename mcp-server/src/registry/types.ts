@@ -52,6 +52,50 @@ export interface RuleDefinition {
   detect: Record<string, unknown>;
   hand_written?: boolean;
   source_rule?: string;
+  /**
+   * Per-platform enforcement configuration. Optional — when absent, the rule
+   * is assumed Kotlin-only with enforcement via `hand_written`/`source_rule`.
+   *
+   * When present, each key is a platform identifier and the value describes
+   * which tool enforces the rule and how.
+   *
+   * @example
+   * platforms:
+   *   kotlin: { tool: "detekt", source_rule: "SealedUiStateRule.kt", hand_written: true }
+   *   swift:  { tool: "swiftlint", strategy: "custom_rule", equivalent: "enum with associated values" }
+   *
+   * @see D001 in .gsd/DECISIONS.md for rationale and RuleType→Swift mapping.
+   */
+  platforms?: Record<string, PlatformRuleConfig>;
+}
+
+/** Supported platform identifiers for rule enforcement. */
+export type RulePlatform = "kotlin" | "swift";
+
+/** Tool used to enforce a rule on a specific platform. */
+export type RuleEnforcementTool = "detekt" | "konsist" | "swiftlint" | "swift-format" | "validator-cli";
+
+/**
+ * Enforcement strategy when tool alone isn't sufficient.
+ * - custom_rule: tool's custom rule mechanism (SwiftLint custom_rules, Detekt Rule class)
+ * - builtin: tool's built-in rule (SwiftLint identifier_name, Detekt naming)
+ * - validator_cli: separate CLI validator for complex checks (required-rethrow, banned-supertype)
+ * - manual: no automated enforcement — documented convention only
+ */
+export type RuleEnforcementStrategy = "custom_rule" | "builtin" | "validator_cli" | "manual";
+
+/** Per-platform enforcement configuration for a rule. */
+export interface PlatformRuleConfig {
+  /** Which tool enforces this rule on this platform. */
+  tool: RuleEnforcementTool;
+  /** Enforcement strategy when tool needs qualification. */
+  strategy?: RuleEnforcementStrategy;
+  /** For hand-written rules: source file name (e.g. "SealedUiStateRule.kt"). */
+  source_rule?: string;
+  /** Whether this is a hand-written (not generated) rule. */
+  hand_written?: boolean;
+  /** Human-readable Swift/platform equivalent of the Kotlin concept. */
+  equivalent?: string;
 }
 
 /** Severity level for monitoring findings. */
