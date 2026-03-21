@@ -774,3 +774,60 @@ teardown() {
 @test "README: vitest files count is 79" {
     grep -q "79 test files" "$README"
 }
+
+# ===========================================================================
+# Q. Coverage config cache + auto-exclude fixes
+# ===========================================================================
+
+@test "auto-exclude: detekt-rules* pattern in SH" {
+    grep -q "detekt-rules" "$SH_DIR/run-parallel-coverage-suite.sh"
+}
+
+@test "auto-exclude: detekt-rules-l1 matches detekt-rules* pattern" {
+    AUTO_EXCLUDE_COVERAGE_PATTERNS=("detekt-rules*" "*detekt-rules*")
+    skip_cov=false
+    for pattern in "${AUTO_EXCLUDE_COVERAGE_PATTERNS[@]}"; do
+        if [[ "detekt-rules-l1" == $pattern ]]; then skip_cov=true; break; fi
+    done
+    [ "$skip_cov" = "true" ]
+}
+
+@test "auto-exclude: konsist-guard still matches" {
+    AUTO_EXCLUDE_COVERAGE_PATTERNS=("konsist-guard" "konsist-tests" "detekt-rules*")
+    skip_cov=false
+    for pattern in "${AUTO_EXCLUDE_COVERAGE_PATTERNS[@]}"; do
+        if [[ "konsist-guard" == $pattern ]]; then skip_cov=true; break; fi
+    done
+    [ "$skip_cov" = "true" ]
+}
+
+@test "auto-exclude: core-domain does NOT match detekt-rules pattern" {
+    AUTO_EXCLUDE_COVERAGE_PATTERNS=("detekt-rules*" "*detekt-rules*")
+    skip_cov=false
+    for pattern in "${AUTO_EXCLUDE_COVERAGE_PATTERNS[@]}"; do
+        if [[ "core-domain" == $pattern ]]; then skip_cov=true; break; fi
+    done
+    [ "$skip_cov" = "false" ]
+}
+
+@test "config-cache: SH per-module retry uses --no-configuration-cache" {
+    grep -q "no-configuration-cache" "$SH_DIR/run-parallel-coverage-suite.sh"
+}
+
+@test "config-cache: SH all retry paths have --no-configuration-cache" {
+    # Count gradlew invocations in retry sections (after "retrying per-module")
+    count=$(grep -c "no-configuration-cache" "$SH_DIR/run-parallel-coverage-suite.sh" | tr -d ' \r')
+    [ "$count" -ge 4 ]
+}
+
+@test "config-cache: PS1 per-module retry uses --no-configuration-cache" {
+    grep -q "no-configuration-cache" "$PS1_DIR/run-parallel-coverage-suite.ps1"
+}
+
+@test "PS1 parity: auto-exclude patterns include detekt-rules" {
+    grep -q "detekt-rules" "$PS1_DIR/run-parallel-coverage-suite.ps1"
+}
+
+@test "PS1 parity: auto-exclude uses -like for glob matching" {
+    grep -q "\-like" "$PS1_DIR/run-parallel-coverage-suite.ps1"
+}

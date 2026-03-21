@@ -118,7 +118,7 @@ SKIP_ANDROID_MODULES="desktopApp"
 PARENT_ONLY_MODULES="shared-libs shared-libs:core-json shared-libs:core-io shared-libs:core-network"
 # Modules that run tests but should NOT generate coverage reports
 # (test utilities, guard tests, app shells without meaningful coverage)
-AUTO_EXCLUDE_COVERAGE_PATTERNS="*:testing *:test-fakes *:test-fixtures konsist-guard konsist-tests"
+AUTO_EXCLUDE_COVERAGE_PATTERNS=("*:testing" "*:test-fakes" "*:test-fixtures" "konsist-guard" "konsist-tests" "detekt-rules*" "*detekt-rules*")
 
 IFS=',' read -ra CORE_ONLY_MODULES <<< "$COVERAGE_MODULES"
 # Trim whitespace from each element (bash builtins instead of sed subshell)
@@ -513,7 +513,7 @@ for mi in "${!MOD_NAMES[@]}"; do
         gray "  [INFO] ${MOD_NAMES[$mi]} - excluded from coverage (--exclude-coverage)"
     else
         # Auto-exclude modules matching patterns (test utilities, guard tests)
-        for pattern in $AUTO_EXCLUDE_COVERAGE_PATTERNS; do
+        for pattern in "${AUTO_EXCLUDE_COVERAGE_PATTERNS[@]}"; do
             if [[ "${MOD_NAMES[$mi]}" == $pattern || ":${MOD_NAMES[$mi]#:}" == $pattern ]]; then
                 skip_cov=true
                 break
@@ -771,7 +771,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                             fallbacks=""
                             fallbacks="$(get_kover_task_fallbacks "$IS_DESKTOP")"
                             for fb_task in $fallbacks; do
-                                if (cd "$PROJECT_ROOT" && ./gradlew "${gpath}:${fb_task}" --rerun-tasks 2>&1) >/dev/null; then
+                                if (cd "$PROJECT_ROOT" && ./gradlew "${gpath}:${fb_task}" --no-configuration-cache --rerun-tasks 2>&1) >/dev/null; then
                                     gray "    [OK] ${MOD_NAMES[$idx]}: recovered via ${fb_task}"
                                     RECOVERED_COV=$((RECOVERED_COV + 1))
                                     recovered=true
@@ -781,7 +781,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                         else
                             # jacoco — single task name
                             cov_task_name="$(get_coverage_gradle_task "$mod_tool" "$TEST_TYPE" "$IS_DESKTOP")"
-                            if (cd "$PROJECT_ROOT" && ./gradlew "${gpath}:${cov_task_name}" --rerun-tasks 2>&1) >/dev/null; then
+                            if (cd "$PROJECT_ROOT" && ./gradlew "${gpath}:${cov_task_name}" --no-configuration-cache --rerun-tasks 2>&1) >/dev/null; then
                                 RECOVERED_COV=$((RECOVERED_COV + 1))
                                 recovered=true
                             fi
@@ -802,7 +802,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                 COV_OK=0
                 COV_FAIL=0
                 for cov_task in "${COV_TASKS[@]}"; do
-                    if (cd "$PROJECT_ROOT" && ./gradlew "$cov_task" 2>&1) >/dev/null; then
+                    if (cd "$PROJECT_ROOT" && ./gradlew "$cov_task" --no-configuration-cache --rerun-tasks 2>&1) >/dev/null; then
                         COV_OK=$((COV_OK + 1))
                     else
                         # For kover tasks: try fallback task names
@@ -814,7 +814,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                             for fb_task in $fallbacks; do
                                 full_fb="${gradle_path}:${fb_task}"
                                 [[ "$full_fb" == "$cov_task" ]] && continue  # skip the one that already failed
-                                if (cd "$PROJECT_ROOT" && ./gradlew "$full_fb" 2>&1) >/dev/null; then
+                                if (cd "$PROJECT_ROOT" && ./gradlew "$full_fb" --no-configuration-cache --rerun-tasks 2>&1) >/dev/null; then
                                     gray "    [OK] $cov_task failed → $full_fb succeeded"
                                     COV_OK=$((COV_OK + 1))
                                     fallback_ok=true
@@ -877,7 +877,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                     COV_OK_S=0
                     COV_FAIL_S=0
                     for cov_task in "${COV_TASKS_SHARED[@]}"; do
-                        if (cd "$SHARED_LIBS_PATH" && ./gradlew "$cov_task" 2>&1) >/dev/null; then
+                        if (cd "$SHARED_LIBS_PATH" && ./gradlew "$cov_task" --no-configuration-cache --rerun-tasks 2>&1) >/dev/null; then
                             COV_OK_S=$((COV_OK_S + 1))
                         else
                             COV_FAIL_S=$((COV_FAIL_S + 1))

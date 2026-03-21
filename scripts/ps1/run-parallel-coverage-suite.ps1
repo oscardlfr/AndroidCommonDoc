@@ -461,9 +461,21 @@ foreach ($module in $allModules) {
 
     # Check if module is excluded from coverage
     $skipCov = $false
-    if ($ExcludeCoverage) {
+
+    # Auto-exclude patterns (built-in)
+    $autoExcludePatterns = @("*:testing", "*:test-fakes", "*:test-fixtures", "konsist-guard", "konsist-tests", "detekt-rules*", "*detekt-rules*")
+    $modNameClean = $module.Name.TrimStart(':')
+    foreach ($pattern in $autoExcludePatterns) {
+        if ($modNameClean -like $pattern) {
+            $skipCov = $true
+            Write-Host "  [INFO] $($module.Name) - auto-excluded from coverage ($pattern)" -ForegroundColor DarkGray
+            break
+        }
+    }
+
+    # User-specified excludes
+    if (-not $skipCov -and $ExcludeCoverage) {
         $exclList = $ExcludeCoverage -split ',' | ForEach-Object { $_.Trim() }
-        $modNameClean = $module.Name.TrimStart(':')
         foreach ($excl in $exclList) {
             $exclClean = $excl.TrimStart(':')
             if ($modNameClean -eq $exclClean) { $skipCov = $true; break }
@@ -733,7 +745,7 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
                             $fallbacks = Get-KoverTaskFallbacks -IsDesktop $Desktop
                             foreach ($fb in $fallbacks) {
                                 Push-Location $ProjectRoot
-                                & ./gradlew "${gpath}:${fb}" --rerun-tasks 2>&1 | Out-Null
+                                & ./gradlew "${gpath}:${fb}" --no-configuration-cache --rerun-tasks 2>&1 | Out-Null
                                 $fbExit = $LASTEXITCODE
                                 Pop-Location
                                 if ($fbExit -eq 0) {
@@ -746,7 +758,7 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
                         } else {
                             $covTaskName = Get-CoverageGradleTask -Tool $modTool -TestType $TestType -IsDesktop $Desktop
                             Push-Location $ProjectRoot
-                            & ./gradlew "${gpath}:${covTaskName}" --rerun-tasks 2>&1 | Out-Null
+                            & ./gradlew "${gpath}:${covTaskName}" --no-configuration-cache --rerun-tasks 2>&1 | Out-Null
                             $fbExit = $LASTEXITCODE
                             Pop-Location
                             if ($fbExit -eq 0) { $recoveredCov++; $recovered = $true }
@@ -767,7 +779,7 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
                 $covFail = 0
                 foreach ($covTask in $covTasks) {
                     Push-Location $ProjectRoot
-                    & ./gradlew $covTask 2>&1 | Out-Null
+                    & ./gradlew $covTask --no-configuration-cache --rerun-tasks 2>&1 | Out-Null
                     $taskExit = $LASTEXITCODE
                     Pop-Location
                     if ($taskExit -eq 0) {
@@ -846,7 +858,7 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
                     $covFailS = 0
                     foreach ($covTask in $covTasksShared) {
                         Push-Location $sharedLibsPath
-                        & ./gradlew $covTask 2>&1 | Out-Null
+                        & ./gradlew $covTask --no-configuration-cache --rerun-tasks 2>&1 | Out-Null
                         $taskExit = $LASTEXITCODE
                         Pop-Location
                         if ($taskExit -eq 0) {
