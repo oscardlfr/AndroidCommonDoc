@@ -852,6 +852,199 @@ describe("syncL0 safety guardrails", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Manifest preservation guarantees
+// ---------------------------------------------------------------------------
+
+describe("syncL0 manifest preservation", () => {
+  let projectRoot: string;
+  let l0Root: string;
+
+  beforeEach(async () => {
+    projectRoot = await mkdtemp(join(tmpdir(), "sync-preserve-project-"));
+    l0Root = await mkdtemp(join(tmpdir(), "sync-preserve-l0-"));
+
+    // Create minimal L0 with one skill
+    await mkdir(join(l0Root, "skills", "test"), { recursive: true });
+    await writeFile(
+      join(l0Root, "skills", "test", "SKILL.md"),
+      `---\nname: test\ndescription: "Test skill"\ncategory: testing\n---\n\n# Test skill\n`,
+    );
+  });
+
+  afterEach(async () => {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(l0Root, { recursive: true, force: true });
+  });
+
+  it("preserves selection.mode after sync", async () => {
+    const manifest = makeManifest({
+      sources: [{ layer: "L0", path: l0Root, role: "tooling" }],
+      selection: {
+        mode: "explicit",
+        exclude_skills: [],
+        exclude_agents: [],
+        exclude_commands: [],
+        exclude_categories: [],
+      },
+    });
+    // Explicit mode: put the skill in checksums so it gets synced
+    manifest.checksums[".claude/skills/test/SKILL.md"] = "sha256:old";
+
+    await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify(manifest, null, 2));
+    await syncL0(projectRoot, l0Root);
+
+    const updated = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf-8"));
+    expect(updated.selection.mode).toBe("explicit");
+  });
+
+  it("preserves exclude_skills after sync", async () => {
+    const manifest = makeManifest({
+      sources: [{ layer: "L0", path: l0Root, role: "tooling" }],
+      selection: {
+        mode: "include-all",
+        exclude_skills: ["coverage", "auto-cover"],
+        exclude_agents: [],
+        exclude_commands: [],
+        exclude_categories: [],
+      },
+    });
+    await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify(manifest, null, 2));
+    await syncL0(projectRoot, l0Root);
+
+    const updated = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf-8"));
+    expect(updated.selection.exclude_skills).toEqual(["coverage", "auto-cover"]);
+  });
+
+  it("preserves exclude_agents after sync", async () => {
+    const manifest = makeManifest({
+      sources: [{ layer: "L0", path: l0Root, role: "tooling" }],
+      selection: {
+        mode: "include-all",
+        exclude_skills: [],
+        exclude_agents: ["quality-gate-orchestrator", "script-parity-validator"],
+        exclude_commands: [],
+        exclude_categories: [],
+      },
+    });
+    await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify(manifest, null, 2));
+    await syncL0(projectRoot, l0Root);
+
+    const updated = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf-8"));
+    expect(updated.selection.exclude_agents).toEqual(["quality-gate-orchestrator", "script-parity-validator"]);
+  });
+
+  it("preserves exclude_categories after sync", async () => {
+    const manifest = makeManifest({
+      sources: [{ layer: "L0", path: l0Root, role: "tooling" }],
+      selection: {
+        mode: "include-all",
+        exclude_skills: [],
+        exclude_agents: [],
+        exclude_commands: [],
+        exclude_categories: ["security", "ui"],
+      },
+    });
+    await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify(manifest, null, 2));
+    await syncL0(projectRoot, l0Root);
+
+    const updated = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf-8"));
+    expect(updated.selection.exclude_categories).toEqual(["security", "ui"]);
+  });
+
+  it("preserves topology after sync", async () => {
+    const manifest = makeManifest({
+      sources: [{ layer: "L0", path: l0Root, role: "tooling" }],
+      topology: "chain" as "flat" | "chain",
+    });
+    await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify(manifest, null, 2));
+    await syncL0(projectRoot, l0Root);
+
+    const updated = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf-8"));
+    expect(updated.topology).toBe("chain");
+  });
+
+  it("preserves sources array after sync", async () => {
+    const manifest = makeManifest({
+      sources: [
+        { layer: "L0", path: l0Root, role: "tooling" },
+        { layer: "L1", path: "/fake/shared-libs", role: "ecosystem" },
+      ],
+    });
+    await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify(manifest, null, 2));
+    await syncL0(projectRoot, l0Root);
+
+    const updated = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf-8"));
+    expect(updated.sources).toHaveLength(2);
+    expect(updated.sources[0].layer).toBe("L0");
+    expect(updated.sources[1].layer).toBe("L1");
+    expect(updated.sources[1].path).toBe("/fake/shared-libs");
+    expect(updated.sources[1].role).toBe("ecosystem");
+  });
+
+  it("preserves l2_specific after sync", async () => {
+    const manifest = makeManifest({
+      sources: [{ layer: "L0", path: l0Root, role: "tooling" }],
+      l2_specific: {
+        commands: ["my-custom-cmd"],
+        agents: ["my-custom-agent"],
+        skills: ["my-custom-skill"],
+      },
+    });
+    await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify(manifest, null, 2));
+    await syncL0(projectRoot, l0Root);
+
+    const updated = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf-8"));
+    expect(updated.l2_specific.commands).toEqual(["my-custom-cmd"]);
+    expect(updated.l2_specific.agents).toEqual(["my-custom-agent"]);
+    expect(updated.l2_specific.skills).toEqual(["my-custom-skill"]);
+  });
+
+  it("preserves version field after sync", async () => {
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
+    await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify(manifest, null, 2));
+    await syncL0(projectRoot, l0Root);
+
+    const updated = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf-8"));
+    expect(updated.version).toBe(2);
+  });
+
+  it("only mutates checksums and last_synced", async () => {
+    const manifest = makeManifest({
+      sources: [{ layer: "L0", path: l0Root, role: "tooling" }],
+      topology: "chain" as "flat" | "chain",
+      selection: {
+        mode: "include-all",
+        exclude_skills: ["sbom"],
+        exclude_agents: ["privacy-auditor"],
+        exclude_commands: ["start-track"],
+        exclude_categories: ["security"],
+      },
+      l2_specific: {
+        commands: ["deploy"],
+        agents: ["custom-agent"],
+        skills: ["custom-skill"],
+      },
+    });
+    const originalJson = JSON.stringify(manifest, null, 2);
+    await writeFile(join(projectRoot, "l0-manifest.json"), originalJson);
+    await syncL0(projectRoot, l0Root);
+
+    const updated = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf-8"));
+
+    // These should be IDENTICAL to original
+    expect(updated.version).toBe(manifest.version);
+    expect(updated.topology).toBe(manifest.topology);
+    expect(updated.sources).toEqual(manifest.sources);
+    expect(updated.selection).toEqual(manifest.selection);
+    expect(updated.l2_specific).toEqual(manifest.l2_specific);
+
+    // These should be DIFFERENT (updated by sync)
+    expect(updated.last_synced).not.toBe(manifest.last_synced);
+    expect(Object.keys(updated.checksums).length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // resolveL0Source (Fix #2: worktree-safe path resolution)
 // ---------------------------------------------------------------------------
 
