@@ -379,3 +379,69 @@ teardown() {
     result=$(get_coverage_report_dir "jacoco")
     [ "$result" = "build/reports/jacoco" ]
 }
+
+# ===========================================================================
+# I. Reusable workflows: L0 script access pattern
+# ===========================================================================
+
+@test "reusable-agent-parity: has androidcommondoc_path input" {
+    grep -q "androidcommondoc_path" "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+}
+
+@test "reusable-agent-parity: clones L0 with sparse-checkout when path empty" {
+    grep -q "sparse-checkout" "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+    grep -q "androidcommondoc-toolkit" "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+}
+
+@test "reusable-agent-parity: resolves script paths from L0 or clone" {
+    grep -q "scripts.outputs.sync\|scripts.outputs.check" "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+}
+
+@test "reusable-agent-parity: does NOT hardcode scripts/ as local path" {
+    # The old bug: bash scripts/sh/sync-gsd-agents.sh (assumes scripts in consumer repo)
+    ! grep -q 'bash scripts/sh/sync-gsd-agents.sh' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+    ! grep -q 'bash scripts/sh/check-agent-parity.sh' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+}
+
+@test "reusable-agent-parity: uses resolved paths via step outputs" {
+    grep -q 'steps.scripts.outputs.sync' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+    grep -q 'steps.scripts.outputs.check' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+}
+
+@test "reusable-lint-resources: has same L0 clone pattern" {
+    grep -q "sparse-checkout" "$L0_ROOT/.github/workflows/reusable-lint-resources.yml"
+    grep -q "androidcommondoc_path" "$L0_ROOT/.github/workflows/reusable-lint-resources.yml"
+    grep -q "androidcommondoc-toolkit" "$L0_ROOT/.github/workflows/reusable-lint-resources.yml"
+}
+
+@test "reusable workflows using scripts: all have L0 clone fallback" {
+    for wf in "$L0_ROOT"/.github/workflows/reusable-*.yml; do
+        if grep -q 'bash.*scripts/sh/' "$wf"; then
+            # Must either have sparse-checkout or androidcommondoc_path input
+            if ! grep -q "sparse-checkout\|androidcommondoc_path" "$wf"; then
+                echo "FAIL: $(basename "$wf") uses scripts but has no L0 clone pattern"
+                return 1
+            fi
+        fi
+    done
+}
+
+# ===========================================================================
+# J. ci-template @master + no @main anywhere
+# ===========================================================================
+
+@test "ci-template: uses @master not @main" {
+    ! grep -q "@main" "$L0_ROOT/setup/github-workflows/ci-template.yml"
+    grep -q "@master" "$L0_ROOT/setup/github-workflows/ci-template.yml"
+}
+
+@test "global: no @main in any yml or md file" {
+    FOUND=$(grep -rl "@main" "$L0_ROOT"/.github/workflows/*.yml \
+        "$L0_ROOT"/setup/github-workflows/*.yml \
+        "$L0_ROOT"/setup/templates/workflows/*.yml \
+        "$L0_ROOT"/README.md 2>/dev/null || true)
+    if [ -n "$FOUND" ]; then
+        echo "Files with @main: $FOUND"
+        return 1
+    fi
+}

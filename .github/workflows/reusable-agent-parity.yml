@@ -1,5 +1,20 @@
 name: Agent Parity Check
 
+# ──────────────────────────────────────────────────────────────────────────────
+# AndroidCommonDoc L0 reusable workflow — .claude/agents ↔ GSD parity
+#
+# Verifies that .claude/agents/ and GSD agents directories are in sync.
+# Clones AndroidCommonDoc for the scripts if not available locally.
+#
+# Usage from consumer project:
+#
+#   jobs:
+#     agent-parity:
+#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-agent-parity.yml@master
+#       with:
+#         target: project
+# ──────────────────────────────────────────────────────────────────────────────
+
 on:
   workflow_call:
     inputs:
@@ -8,6 +23,11 @@ on:
         required: false
         default: 'project'
         type: string
+      androidcommondoc_path:
+        description: 'Path to AndroidCommonDoc toolkit root (for scripts). Empty = auto-clone.'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   agent-parity:
@@ -15,6 +35,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      - name: Checkout AndroidCommonDoc (for scripts)
+        if: inputs.androidcommondoc_path == ''
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.repository_owner }}/AndroidCommonDoc
+          path: .androidcommondoc-toolkit
+          sparse-checkout: |
+            scripts/sh/sync-gsd-agents.sh
+            scripts/sh/check-agent-parity.sh
+
+      - name: Resolve script paths
+        id: scripts
+        run: |
+          if [ -n "${{ inputs.androidcommondoc_path }}" ]; then
+            ROOT="${{ inputs.androidcommondoc_path }}"
+          else
+            ROOT=".androidcommondoc-toolkit"
+          fi
+          echo "sync=${ROOT}/scripts/sh/sync-gsd-agents.sh" >> "$GITHUB_OUTPUT"
+          echo "check=${ROOT}/scripts/sh/check-agent-parity.sh" >> "$GITHUB_OUTPUT"
 
       - name: Setup GSD agents directory
         run: |
@@ -26,13 +67,13 @@ jobs:
 
       - name: Sync GSD agents
         run: |
-          bash scripts/sh/sync-gsd-agents.sh \
+          bash "${{ steps.scripts.outputs.sync }}" \
             --target "${{ inputs.target }}" \
             --project-root "$(pwd)" \
             --verbose
 
       - name: Check agent parity
         run: |
-          bash scripts/sh/check-agent-parity.sh \
+          bash "${{ steps.scripts.outputs.check }}" \
             --target "${{ inputs.target }}" \
             --project-root "$(pwd)"

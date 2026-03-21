@@ -41,7 +41,7 @@ jobs:
   commit-lint:
     name: "🔤 Commit Lint"
     if: github.event_name == 'pull_request'
-    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-commit-lint.yml@main
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-commit-lint.yml@master
     with:
       # Customize scopes for your project's domain:
       valid_scopes: "core,data,ui,feature,ci,deps,release"
@@ -49,14 +49,14 @@ jobs:
   lint-resources:
     name: "🌐 Lint String Resources"
     if: github.event_name == 'pull_request'
-    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-lint-resources.yml@main
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-lint-resources.yml@master
     with:
       strict: true
 
   architecture-guards:
     name: "🏛️ Architecture Guards"
     if: github.event_name == 'pull_request'
-    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-architecture-guards.yml@main
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-architecture-guards.yml@master
     with:
       gradle_task: ":konsist-guard:test"
       java_version: "17"
@@ -64,7 +64,7 @@ jobs:
   kmp-safety:
     name: "🛡️ KMP Safety"
     if: github.event_name == 'pull_request'
-    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-kmp-safety-check.yml@main
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-kmp-safety-check.yml@master
     with:
       fail_on_dispatchers_warning: false   # set true to enforce injected dispatchers
 
