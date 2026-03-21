@@ -52,19 +52,19 @@ This milestone is complete only when all are true:
 
 ## Slices
 
-- [ ] **S01: Multi-source sync engine** `risk:high` `depends:[]`
+- [x] **S01: Multi-source sync engine** `risk:high` `depends:[]`
   > After this: `sync-l0` reads `sources[]` from manifest, merges N registries, syncs from the merged set. Proven by vitest with 2-source fixture producing correct merged output.
 
-- [ ] **S02: Knowledge cascade + agent resolve** `risk:high` `depends:[S01]`
+- [x] **S02: Knowledge cascade + agent resolve** `risk:high` `depends:[S01]`
   > After this: `sync-l0 --resolve` generates `KNOWLEDGE-RESOLVED.md` with tagged `[L0]`/`[L1]`/`[L2]` sections, and resolves agent templates with `{{LAYER_KNOWLEDGE}}` injection. Proven by vitest + bats.
 
-- [ ] **S03: find-pattern multi-layer search** `risk:medium` `depends:[S01]`
+- [x] **S03: find-pattern multi-layer search** `risk:medium` `depends:[S01]`
   > After this: `find-pattern` MCP tool searches docs across all `sources[]` layers, returns results ranked by proximity. Proven by vitest with fixture docs in 2 source dirs.
 
-- [ ] **S04: Setup wizard topology choice** `risk:low` `depends:[S01]`
+- [x] **S04: Setup wizard topology choice** `risk:low` `depends:[S01]`
   > After this: `/setup` Step 0 asks flat vs chain, Step 1 wires `sources[]` in manifest. Proven by bats testing the SKILL.md flow.
 
-- [ ] **S05: Convention plugin template + docs** `risk:low` `depends:[S01]`
+- [x] **S05: Convention plugin template + docs** `risk:low` `depends:[S01]`
   > After this: `docs/guides/convention-plugin-chain.md` documents the Gradle chain config pattern with copy-paste Kotlin code. Integration test fixture validates config merge order. README chain section updated.
 
 ## Boundary Map

@@ -125,6 +125,33 @@ Proceed? [Y/n]
 
 ---
 
+### Wizard W0 — Layer topology (always shown first)
+
+Ask the user whether this project consumes L0 directly or through a chain.
+
+```
+Layer topology:
+  (1) flat (Recommended)  — This project consumes L0 directly
+  (2) chain               — This project inherits from a parent layer (L1→L0)
+```
+
+If **flat**: `topology: "flat"`, `sources` = `[{ layer: "L0", path: l0_source }]`.
+
+If **chain**: ask for the parent layer path:
+```
+Parent layer path (relative to this project):
+> ../../shared-kmp-libs
+Parent layer name (e.g. L1):
+> L1
+```
+Then `topology: "chain"`, `sources` = `[{ layer: "L0", path: l0_source, role: "tooling" }, { layer: "L1", path: parent_path, role: "ecosystem" }]`.
+
+Validate that the parent path contains `skills/registry.json` before proceeding.
+
+> `--topology flat` or `--topology chain --parent PATH` → skip this wizard.
+
+---
+
 ### Wizard W1 — Skill selection (if `--skills` not set)
 
 Show categories with their skills. Multi-select toggle (space = toggle, enter = confirm).
@@ -361,7 +388,11 @@ subprojects {
 
 ### Step 3 — Create `l0-manifest.json`
 
-Populate `selection` block from W1 + W2 choices. Do not overwrite without `--force`.
+Populate `selection` block from W1 + W2 choices. Use W0 topology choice:
+- **flat**: `createDefaultManifest(l0_source)`
+- **chain**: `createChainManifest([{ layer: "L0", ... }, { layer: "L1", ... }])`
+
+Do not overwrite without `--force`.
 
 ---
 
