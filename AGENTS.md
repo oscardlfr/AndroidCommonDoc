@@ -45,7 +45,7 @@ node mcp-server/build/cli/monitor-sources.js --tier all --output reports/monitor
 7. **Navigation:** State-driven -- never Channel-based.
 8. **No platform deps in ViewModels:** No `Context`, `Resources`, `UIKit` imports.
 
-## Available Skills (31)
+## Available Skills (40)
 
 Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-specific files.
 
@@ -63,6 +63,8 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `extract-errors` | Extract structured build and test errors from Gradle runs |
 | `run` | Build, install and run app with debug logging |
 | `android-test` | Run Android instrumented tests with logcat capture and error extraction |
+| `commit-lint` | Validate and fix commit messages against Conventional Commits v1.0.0 |
+| `git-flow` | Git Flow branch management — start/finish feature/release/hotfix branches |
 
 ### Architecture & Validation
 
@@ -75,6 +77,11 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `sbom` | Generate CycloneDX SBOM for project deliverables |
 | `sbom-scan` | Scan SBOM for known CVE vulnerabilities using Trivy |
 | `sbom-analyze` | Analyze SBOM for dependency statistics, licenses, and concerns |
+| `pre-pr` | Run all pre-PR checks locally before opening a pull request |
+| `lint-resources` | Validate string resource naming conventions (snake_case, prefixes, duplicates) |
+| `full-audit` | Run unified audit across all quality dimensions |
+| `audit` | Generate quality audit report from audit-log.jsonl |
+| `readme-audit` | Audit README.md against current repo state — surfaces stale counts |
 
 ### Doc Intelligence
 
@@ -91,7 +98,10 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 |-------|-------------|
 | `sync-l0` | Synchronize L0 skills, agents, and commands to a consumer project |
 | `sync-gsd-agents` | Sync .claude/agents/ to GSD subagent system and verify parity |
+| `sync-gsd-skills` | Sync skills from Claude Code marketplace/L0/agents to GSD user-level directory |
 | `sync-vault` | Sync documentation into unified Obsidian vault |
+| `setup` | Interactive wizard to configure a project to consume L0 |
+| `set-model-profile` | Switch agent model tier: budget / balanced / advanced / quality |
 
 ### Web Development
 
@@ -104,7 +114,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `seo` | Validate SEO metadata, structure, and discoverability |
 | `web-quality-audit` | Comprehensive web quality audit across all dimensions |
 
-## MCP Tools (17)
+## MCP Tools (31)
 
 Programmatic access via Model Context Protocol server (`mcp-server/`):
 
@@ -113,7 +123,7 @@ Programmatic access via Model Context Protocol server (`mcp-server/`):
 | `validate-all` | Run all validation scripts with structured output |
 | `verify-kmp` | Validate KMP source sets and imports |
 | `check-version-sync` | Check version alignment between projects |
-| `check-doc-freshness` | Alias for monitor-sources (backward compat) |
+| `check-freshness` | Check upstream doc sources for staleness |
 | `script-parity` | Compare PS1 and SH script behavior |
 | `setup-check` | Verify toolkit installation in a project |
 | `find-pattern` | Search pattern registry by query terms |
@@ -126,7 +136,21 @@ Programmatic access via Model Context Protocol server (`mcp-server/`):
 | `validate-skills` | Validate skill registry and SKILL.md structure |
 | `validate-claude-md` | Validate CLAUDE.md files across L0/L1/L2 layers |
 | `validate-vault` | Validate vault content and wikilink integrity |
-| `rate-limit-status` | Check current rate limit status |
+| `api-surface-diff` | Diff public API surface between branches/tags |
+| `audit-report` | Generate quality audit HTML report |
+| `code-metrics` | Collect code metrics (LOC, complexity, module stats) |
+| `compose-preview-audit` | Audit Compose previews for completeness |
+| `dependency-graph` | Visualize module dependency graph |
+| `findings-report` | Aggregate and deduplicate findings across agents |
+| `gradle-config-lint` | Lint Gradle build files for common misconfigurations |
+| `l0-diff` | Diff L0 registry against consumer manifests |
+| `migration-validator` | Validate database migration safety |
+| `module-health` | Scan module health (test count, coverage, complexity) |
+| `pattern-coverage` | Measure pattern doc coverage across codebase |
+| `proguard-validator` | Validate ProGuard/R8 rules |
+| `skill-usage-analytics` | Track skill invocation patterns |
+| `string-completeness` | Check string resource completeness across locales |
+| `unused-resources` | Find unused resources in the project |
 
 ## Quality Gate Agents (5)
 
@@ -140,7 +164,7 @@ Automated consistency verification via `.claude/agents/`:
 | `doc-code-drift-detector` | Pattern doc version references match versions-manifest.json |
 | `quality-gate-orchestrator` | Unified pass/fail report across all gates with token cost |
 
-## Pattern Docs (23)
+## Pattern Docs (13 categories, 54 sub-docs)
 
 Detailed pattern guidance in `docs/`, with YAML frontmatter (scope, sources, targets) for registry scanning:
 

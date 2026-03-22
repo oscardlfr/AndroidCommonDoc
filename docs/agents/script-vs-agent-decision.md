@@ -1,6 +1,6 @@
 ---
 scope: L0
-category: guides
+category: agents
 slug: script-vs-agent-decision
 sources: []
 targets: [".claude/agents/", "scripts/"]

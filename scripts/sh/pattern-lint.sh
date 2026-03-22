@@ -76,7 +76,7 @@ WARNINGS=0
 TOTAL_CHECKS=0
 
 # Common grep excludes for performance (skip node_modules, .gradle, .git, build, .gsd worktrees)
-GREP_EXCLUDES=(--exclude-dir=node_modules --exclude-dir=.gradle --exclude-dir=.git --exclude-dir=build --exclude-dir=.gsd --exclude-dir=.worktrees)
+GREP_EXCLUDES=(--exclude-dir=node_modules --exclude-dir=.gradle --exclude-dir=.git --exclude-dir=build --exclude-dir=.gsd --exclude-dir=.worktrees --exclude-dir=detekt-rules)
 
 # Helper: scan production .kt files, excluding test dirs and test/fake files
 scan_prod() {

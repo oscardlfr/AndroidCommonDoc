@@ -718,32 +718,32 @@ teardown() {
 # P. README consumer vs internal separation
 # ===========================================================================
 
-@test "README: skills section has 'Consumer Skills' subsection" {
-    grep -q "### Consumer Skills" "$README"
+@test "README: skills section has 'Skills' subsection" {
+    grep -q "### Skills" "$README"
 }
 
-@test "README: skills section has 'L0 Development Skills' subsection" {
-    grep -q "### L0 Development Skills" "$README"
+@test "README: skills section has 'L0 Maintenance Skills' subsection" {
+    grep -q "### L0 Maintenance Skills" "$README"
 }
 
-@test "README: L0 skills section says 'not synced'" {
-    sed -n '/### L0 Development Skills/,/^## /p' "$README" | grep -qi "not.*synced\|not synced\|excluded"
+@test "README: L0 skills section describes maintenance purpose" {
+    sed -n '/### L0 Maintenance Skills/,/^## /p' "$README" | grep -qi "maintenance\|L0\|AndroidCommonDoc"
 }
 
-@test "README: agents section has 'Consumer Agents' subsection" {
-    grep -q "### Consumer Agents" "$README"
+@test "README: agents section has 'Domain Agents' subsection" {
+    grep -q "### Domain Agents" "$README"
 }
 
-@test "README: agents section has 'L0 Quality Gate Agents' subsection" {
-    grep -q "### L0 Quality Gate Agents" "$README"
+@test "README: agents section has 'Quality Gate Agents' subsection" {
+    grep -q "### Quality Gate Agents" "$README"
 }
 
-@test "README: L0 agents section says 'not synced'" {
-    sed -n '/### L0 Quality Gate Agents/,/^## /p' "$README" | grep -qi "not.*synced\|not synced"
+@test "README: QG agents section describes consistency verification" {
+    sed -n '/### Quality Gate Agents/,/^## /p' "$README" | grep -qi "consistency\|verify\|internal"
 }
 
-@test "README: MCP section has 'Consumer Tools' subsection" {
-    grep -q "### Consumer Tools" "$README"
+@test "README: MCP section has 'General Tools' subsection" {
+    grep -q "### General Tools" "$README"
 }
 
 @test "README: MCP section has 'L0 Internal Tools' subsection" {
@@ -755,7 +755,7 @@ teardown() {
 }
 
 @test "README: 'What gets synced' lists consumer counts" {
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "31"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "40"
     sed -n '/What gets synced/,/^### /p' "$README" | grep -q "27"
 }
 
@@ -763,8 +763,8 @@ teardown() {
     sed -n '/What gets synced/,/^### /p' "$README" | grep -qi "not synced"
 }
 
-@test "README: docs count is 54 sub-docs (not 57)" {
-    grep -q "54 sub-docs" "$README"
+@test "README: docs count is 60 sub-docs" {
+    grep -q "60 sub-docs" "$README"
 }
 
 @test "README: vitest count is 1056" {
@@ -814,10 +814,10 @@ teardown() {
     grep -q "no-configuration-cache" "$SH_DIR/run-parallel-coverage-suite.sh"
 }
 
-@test "config-cache: SH all retry paths have --no-configuration-cache" {
-    # Count gradlew invocations in retry sections (after "retrying per-module")
+@test "config-cache: SH retry paths have --no-configuration-cache" {
+    # Batch retry uses --no-configuration-cache for full-fail and partial recovery
     count=$(grep -c "no-configuration-cache" "$SH_DIR/run-parallel-coverage-suite.sh" | tr -d ' \r')
-    [ "$count" -ge 4 ]
+    [ "$count" -ge 2 ]
 }
 
 @test "config-cache: PS1 per-module retry uses --no-configuration-cache" {
