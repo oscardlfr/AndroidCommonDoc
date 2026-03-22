@@ -55,6 +55,8 @@ export interface WriteGeneratedRulesOptions {
   testsOutputDir: string;
   /** If true, returns what would change without writing files. */
   dryRun?: boolean;
+  /** Kotlin package name for generated rules (default: com.androidcommondoc.detekt.rules.generated). */
+  generatedPackage?: string;
 }
 
 /**
@@ -81,7 +83,7 @@ function toPascalCase(kebab: string): string {
 export async function writeGeneratedRules(
   options: WriteGeneratedRulesOptions,
 ): Promise<GenerationResult> {
-  const { docsDir, rulesOutputDir, testsOutputDir, dryRun = false } = options;
+  const { docsDir, rulesOutputDir, testsOutputDir, dryRun = false, generatedPackage } = options;
 
   const generated: GenerationResult["generated"] = [];
   const skipped: GenerationResult["skipped"] = [];
@@ -104,14 +106,14 @@ export async function writeGeneratedRules(
     }
 
     // Emit Kotlin rule source
-    const ruleSource = emitRule(rule);
+    const ruleSource = emitRule(rule, generatedPackage);
     if (ruleSource === null) {
       skipped.push({ ruleId: rule.id, reason: "unsupported_type" });
       continue;
     }
 
     // Emit Kotlin test source
-    const testSource = emitRuleTest(rule);
+    const testSource = emitRuleTest(rule, generatedPackage);
     if (testSource === null) {
       skipped.push({ ruleId: rule.id, reason: "unsupported_test_type" });
       continue;
@@ -160,7 +162,7 @@ export async function writeGeneratedRules(
   }
 
   // Step 4: Generate RuleSetProvider update block
-  const providerUpdateBlock = emitRuleSetProviderUpdate(generatedClassNames);
+  const providerUpdateBlock = emitRuleSetProviderUpdate(generatedClassNames, generatedPackage);
 
   // Step 5: Generate config YAML
   const configYaml = emitFullConfig(allRules);
