@@ -946,8 +946,14 @@ teardown() {
     grep -q "UnsupportedClassVersionError" "$SH_DIR/run-parallel-coverage-suite.sh"
 }
 
-@test "SH: marks all as failed when gradle exits non-zero with 0 task failures" {
+@test "SH: marks all as failed when gradle exits non-zero with 0 task results" {
     grep -q "Marking all.*modules as failed" "$SH_DIR/run-parallel-coverage-suite.sh"
+    # Only when SUCCESS_COUNT is also 0 (no task output at all)
+    grep -q 'SUCCESS_COUNT.*-eq 0' "$SH_DIR/run-parallel-coverage-suite.sh"
+}
+
+@test "SH: does NOT mark as failed when tasks passed but gradle exit non-zero" {
+    grep -q "deprecation warnings\|not test failures" "$SH_DIR/run-parallel-coverage-suite.sh"
 }
 
 @test "PS1: has -JavaHome parameter" {
