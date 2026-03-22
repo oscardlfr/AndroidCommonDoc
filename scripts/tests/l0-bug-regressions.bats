@@ -122,12 +122,12 @@ LIB_DIR="$SH_DIR/lib"
     grep -q "retrying.*per-module\|recovered via\|Batch partial" scripts/sh/run-parallel-coverage-suite.sh
 }
 
-@test "regression: coverage suite uses get_kover_task_fallbacks for recovery" {
-    grep -q "get_kover_task_fallbacks" scripts/sh/run-parallel-coverage-suite.sh
+@test "regression: coverage suite uses batch recovery for missing modules" {
+    grep -q "Batch partial\|Batch recovery\|retrying as single batch" scripts/sh/run-parallel-coverage-suite.sh
 }
 
-@test "regression: per-module kover retry tries multiple task variants" {
-    grep -q "fb_task" scripts/sh/run-parallel-coverage-suite.sh
+@test "regression: coverage suite retries with --no-configuration-cache on full failure" {
+    grep -q "no-configuration-cache" scripts/sh/run-parallel-coverage-suite.sh
 }
 
 # ---------------------------------------------------------------------------

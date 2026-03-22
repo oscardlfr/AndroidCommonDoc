@@ -63,7 +63,7 @@ echo "▶ Checking skill tables..."
 
 # Actual skills on disk
 actual_skills=$(find skills -name "SKILL.md" -exec dirname {} \; | xargs -I {} basename {} | sort)
-actual_skill_count=$(echo "$actual_skills" | wc -l | tr -d ' ')
+actual_skill_count=$(echo "$actual_skills" | wc -l | tr -d ' \r')
 
 # Skills in AGENTS.md
 if [ -f AGENTS.md ]; then
@@ -192,7 +192,7 @@ for hub in docs/*/; do
   [ -f "$hub_file" ] || continue
   
   # Extract markdown links
-  grep -oE '\([a-zA-Z0-9_-]+\.md\)' "$hub_file" 2>/dev/null | tr -d '()' | while read link; do
+  grep -oE '\([a-zA-Z0-9_-]+\.md\)' "$hub_file" 2>/dev/null | tr -d '()\r' | while read link; do
     if [ ! -f "${hub}${link}" ]; then
       add_finding "MEDIUM" "broken-link" "Hub '$hub_file' links to '$link' which doesn't exist" "false"
     fi
@@ -222,7 +222,7 @@ if [ -f README.md ]; then
     if [ ! -f "$link" ]; then
       add_finding "MEDIUM" "broken-link" "README Documentation table links to '$link' which doesn't exist" "false"
     fi
-  done < <(sed -n '/^## Documentation/,/^---$/p' README.md | grep -oE '\(docs/[^)]+\)' | tr -d '()' 2>/dev/null)
+  done < <(sed -n '/^## Documentation/,/^---$/p' README.md | grep -oE '\(docs/[^)]+\)' | tr -d '()\r' 2>/dev/null)
   
   # Sub-doc count in each hub should match what's on disk
   for hub_dir in docs/*/; do
@@ -232,9 +232,9 @@ if [ -f README.md ]; then
     [ -f "$hub_file" ] || continue
     
     # Count sub-docs in hub (markdown links in the Documents table)
-    hub_links=$(grep -oE '\([a-zA-Z0-9_-]+\.md\)' "$hub_file" 2>/dev/null | wc -l | tr -d ' ')
+    hub_links=$(grep -oE '\([a-zA-Z0-9_-]+\.md\)' "$hub_file" 2>/dev/null | wc -l | tr -d ' \r')
     # Count actual non-hub .md files in the directory
-    actual_docs=$(find "$hub_dir" -maxdepth 1 -name "*.md" -not -name "*hub*" | wc -l | tr -d ' ')
+    actual_docs=$(find "$hub_dir" -maxdepth 1 -name "*.md" -not -name "*hub*" | wc -l | tr -d ' \r')
     
     if [ "$hub_links" -gt 0 ] && [ "$actual_docs" -gt 0 ] && [ "$hub_links" -ne "$actual_docs" ]; then
       add_finding "LOW" "count" "Hub '$hub_name': links $hub_links docs but directory has $actual_docs non-hub .md files" "true"
@@ -249,7 +249,7 @@ if [ -f README.md ]; then
   # MCP tools in description
   readme_mcp_desc=$(grep -oE 'MCP server with [0-9]+ tools' README.md | grep -oE '[0-9]+' | head -1 || echo "?")
   if [ -n "$readme_mcp_desc" ] && [ "$readme_mcp_desc" != "?" ]; then
-    actual_mcp_for_check=$(ls mcp-server/src/tools/*.ts 2>/dev/null | grep -v index | wc -l | tr -d ' ')
+    actual_mcp_for_check=$(ls mcp-server/src/tools/*.ts 2>/dev/null | grep -v index | wc -l | tr -d ' \r')
     if [ "$readme_mcp_desc" != "$actual_mcp_for_check" ]; then
       add_finding "HIGH" "count" "README description says '$readme_mcp_desc tools' but actual: $actual_mcp_for_check" "true"
     fi
@@ -258,7 +258,7 @@ if [ -f README.md ]; then
   # Detekt rules claim
   readme_detekt=$(grep -oE '[0-9]+ custom Detekt' README.md | grep -oE '[0-9]+' | head -1 || echo "?")
   if [ -n "$readme_detekt" ] && [ "$readme_detekt" != "?" ]; then
-    actual_detekt=$(find detekt-rules/src/main/kotlin -name "*Rule.kt" -type f 2>/dev/null | wc -l | tr -d ' ')
+    actual_detekt=$(find detekt-rules/src/main/kotlin -name "*Rule.kt" -type f 2>/dev/null | wc -l | tr -d ' \r')
     if [ "$readme_detekt" != "$actual_detekt" ]; then
       add_finding "HIGH" "count" "README says '$readme_detekt Detekt rules' but actual: $actual_detekt" "true"
     fi
@@ -267,7 +267,7 @@ if [ -f README.md ]; then
   # Guide count claim
   guides_claim=$(grep -oE '[0-9]+ guides' README.md | grep -oE '[0-9]+' | head -1 || echo "?")
   if [ -n "$guides_claim" ] && [ "$guides_claim" != "?" ]; then
-    actual_guides_count=$(find docs/guides -name "*.md" -not -name "*hub*" 2>/dev/null | wc -l | tr -d ' ')
+    actual_guides_count=$(find docs/guides -name "*.md" -not -name "*hub*" 2>/dev/null | wc -l | tr -d ' \r')
     if [ "$guides_claim" != "$actual_guides_count" ]; then
       add_finding "MEDIUM" "count" "README says '$guides_claim guides' but actual: $actual_guides_count" "true"
     fi
@@ -276,7 +276,7 @@ if [ -f README.md ]; then
   # Sub-docs claim
   subdocs_claim=$(grep -oE '[0-9]+ sub-docs' README.md | grep -oE '[0-9]+' | head -1 || echo "?")
   if [ -n "$subdocs_claim" ] && [ "$subdocs_claim" != "?" ]; then
-    actual_subdocs=$(find docs -name "*.md" -not -name "*hub*" -not -path "*/guides/*" -not -path "*/agents/*" -not -path "*/archive/*" 2>/dev/null | wc -l | tr -d ' ')
+    actual_subdocs=$(find docs -name "*.md" -not -name "*hub*" -not -path "*/guides/*" -not -path "*/agents/*" -not -path "*/archive/*" 2>/dev/null | wc -l | tr -d ' \r')
     if [ "$subdocs_claim" != "$actual_subdocs" ]; then
       add_finding "MEDIUM" "count" "README says '$subdocs_claim sub-docs' but actual: $actual_subdocs" "true"
     fi
@@ -285,7 +285,7 @@ if [ -f README.md ]; then
   # Commands count
   commands_claim=$(grep "Commands.*\.claude" README.md | grep -oE '[0-9]+' | head -1 || echo "?")
   if [ -n "$commands_claim" ] && [ "$commands_claim" != "?" ]; then
-    actual_cmds=$(ls .claude/commands/*.md 2>/dev/null | wc -l | tr -d ' ')
+    actual_cmds=$(ls .claude/commands/*.md 2>/dev/null | wc -l | tr -d ' \r')
     if [ "$commands_claim" != "$actual_cmds" ]; then
       add_finding "MEDIUM" "count" "README says '$commands_claim commands' but actual: $actual_cmds" "true"
     fi
