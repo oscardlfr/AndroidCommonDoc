@@ -277,7 +277,7 @@
       "description": "Generate Detekt custom rules from pattern doc frontmatter. Use when asked to create or update lint rules from documentation.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:c3b3bce1938bdc84987e294988ff248b59c9c35e186b3f08610ab9b68003852a",
+      "hash": "sha256:194aaf4ea4c32f0279d341f5cf78d364ea6d17923248a65654ba88cbbdd1f146",
       "dependencies": [],
       "frontmatter": {
         "name": "generate-rules",
@@ -672,7 +672,7 @@
       "description": "Validate code against pattern standards (ViewModel, UI, coroutines). Use when asked to check code quality or pattern compliance.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:497adf89b86796873e33972f0b3ba4456406162b97079127bf2ed3f349cbea09",
+      "hash": "sha256:a117fccbf1170f63c470cbc9eb78cd67e2cdb73c52cb1aa9ad07e96b2e606254",
       "dependencies": [],
       "frontmatter": {
         "name": "validate-patterns",

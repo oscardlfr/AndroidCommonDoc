@@ -75,5 +75,5 @@ If `fetch_page` is available (Jina):
 
 ## References
 
-- [l0-coherence-auditor](../.claude/agents/l0-coherence-auditor.md) — uses `optional_capabilities: [mcp-gsd]`
+- [l0-coherence-auditor](../agents/l0-coherence-auditor.md — see .claude/agents/) — uses `optional_capabilities: [mcp-gsd]`
 - [MCP Resources](../mcp-server/src/resources/gsd.ts) — implements `gsd://` scheme
