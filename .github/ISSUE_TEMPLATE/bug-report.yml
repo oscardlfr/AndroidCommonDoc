@@ -1,0 +1,85 @@
+name: "🐛 Bug Report"
+description: "Something isn't working as documented"
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Area"
+      description: "Which part of the toolkit is affected?"
+      options:
+        - "Skill (skills/)"
+        - "Agent (.claude/agents/)"
+        - "Script (scripts/sh/ or scripts/ps1/)"
+        - "Detekt rule (detekt-rules/)"
+        - "MCP tool (mcp-server/)"
+        - "CI workflow (.github/workflows/)"
+        - "Sync engine (/sync-l0)"
+        - "Setup wizard (/setup)"
+        - "Documentation (docs/)"
+        - "Other"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: "L0 commit or tag"
+      description: "Run `git rev-parse --short HEAD` in AndroidCommonDoc"
+      placeholder: "e.g. 86a191b or v1.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: "Platform"
+      options:
+        - "Windows (PowerShell / MSYS2)"
+        - "macOS"
+        - "Linux"
+        - "CI (GitHub Actions)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "What happened?"
+      description: "Describe the bug clearly. Include error messages."
+      placeholder: |
+        When I run `/test-full-parallel` on my project, the coverage phase
+        fails with "task 'koverXmlReportDesktop' not found in project ':detekt-rules-l1'".
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Expected behavior"
+      description: "What should have happened?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: "Steps to reproduce"
+      description: "Minimal steps to reproduce the issue"
+      placeholder: |
+        1. Clone shared-kmp-libs
+        2. Run `/test-full-parallel --project-root .`
+        3. See error in coverage phase
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: "Additional context"
+      description: "Manifest topology (flat/chain), project type (KMP/Android-only), relevant config"
+      placeholder: |
+        - Topology: flat
+        - Project type: KMP
+        - Gradle: 9.1.0
+        - l0-manifest.json: { "version": 2, "topology": "flat", ... }

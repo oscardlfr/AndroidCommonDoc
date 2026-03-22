@@ -1,0 +1,60 @@
+name: "✨ Feature Request"
+description: "Suggest a new skill, agent, script, or improvement"
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Area"
+      description: "Where would this feature live?"
+      options:
+        - "New skill"
+        - "New agent"
+        - "New script"
+        - "New Detekt rule"
+        - "New MCP tool"
+        - "Setup wizard improvement"
+        - "Sync engine improvement"
+        - "Documentation"
+        - "CI workflow"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "Description"
+      description: "What do you want and why?"
+      placeholder: |
+        I'd like a skill that analyzes Gradle build times per module
+        and suggests optimization strategies (configuration cache,
+        parallel execution, unnecessary dependencies).
+    validations:
+      required: true
+
+  - type: textarea
+    id: audience
+    attributes:
+      label: "Who benefits?"
+      description: "Consumer projects? L0 maintainers? Both?"
+      placeholder: "All consumer projects using KMP with >10 modules"
+
+  - type: dropdown
+    id: topology
+    attributes:
+      label: "Topology relevance"
+      description: "Does this feature affect a specific topology?"
+      options:
+        - "Both (flat + chain)"
+        - "Flat only"
+        - "Chain only"
+        - "Not applicable"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternatives considered"
+      description: "Have you tried other approaches?"

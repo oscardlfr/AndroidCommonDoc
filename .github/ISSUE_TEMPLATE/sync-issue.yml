@@ -1,0 +1,56 @@
+name: "🔄 Sync Issue"
+description: "Problem with /sync-l0, auto-sync, or manifest"
+labels: ["sync"]
+body:
+  - type: dropdown
+    id: sync_type
+    attributes:
+      label: "Sync method"
+      options:
+        - "Manual (/sync-l0)"
+        - "Auto-sync (dispatch PR)"
+        - "Auto-sync (cron)"
+        - "Setup wizard (/setup)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: topology
+    attributes:
+      label: "Topology"
+      options:
+        - "Flat (L0 → project)"
+        - "Chain (L0 → L1 → L2)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: manifest
+    attributes:
+      label: "l0-manifest.json (redacted if needed)"
+      description: "Paste your manifest — redact paths if they contain sensitive info"
+      render: json
+      placeholder: |
+        {
+          "version": 2,
+          "topology": "flat",
+          "sources": [{ "layer": "L0", "path": "../AndroidCommonDoc" }],
+          "selection": { "mode": "include-all" }
+        }
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "What happened?"
+      description: "Include the full sync output if possible"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Expected behavior"
+    validations:
+      required: true

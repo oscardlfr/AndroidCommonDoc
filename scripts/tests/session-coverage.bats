@@ -846,3 +846,85 @@ teardown() {
 @test "PS1: coverage task generation is inside skipCov guard" {
     grep -B5 "Get-CoverageGradleTask.*modCovTool" "$PS1_DIR/run-parallel-coverage-suite.ps1" | grep -q "skipCov"
 }
+
+# ===========================================================================
+# S. Community standards files
+# ===========================================================================
+
+@test "community: CODE_OF_CONDUCT.md exists" {
+    [ -f "$L0_ROOT/CODE_OF_CONDUCT.md" ]
+}
+
+@test "community: CODE_OF_CONDUCT.md references Contributor Covenant" {
+    grep -q "Contributor Covenant" "$L0_ROOT/CODE_OF_CONDUCT.md"
+}
+
+@test "community: CONTRIBUTING.md exists" {
+    [ -f "$L0_ROOT/CONTRIBUTING.md" ]
+}
+
+@test "community: CONTRIBUTING.md has branch model section" {
+    grep -q "Branch Model\|Git Flow" "$L0_ROOT/CONTRIBUTING.md"
+}
+
+@test "community: CONTRIBUTING.md mentions test requirement" {
+    grep -q "Every change needs tests\|test.*required\|No exceptions" "$L0_ROOT/CONTRIBUTING.md"
+}
+
+@test "community: CONTRIBUTING.md mentions downstream impact" {
+    grep -q "Downstream Impact\|downstream" "$L0_ROOT/CONTRIBUTING.md"
+}
+
+@test "community: SECURITY.md exists" {
+    [ -f "$L0_ROOT/SECURITY.md" ]
+}
+
+@test "community: SECURITY.md has reporting instructions" {
+    grep -q "Reporting.*Vulnerability\|report.*security" "$L0_ROOT/SECURITY.md"
+}
+
+@test "community: SECURITY.md mentions response timeline" {
+    grep -q "Timeline\|48 hours\|1 week" "$L0_ROOT/SECURITY.md"
+}
+
+@test "community: bug report issue template exists" {
+    [ -f "$L0_ROOT/.github/ISSUE_TEMPLATE/bug-report.yml" ]
+}
+
+@test "community: feature request issue template exists" {
+    [ -f "$L0_ROOT/.github/ISSUE_TEMPLATE/feature-request.yml" ]
+}
+
+@test "community: sync issue template exists" {
+    [ -f "$L0_ROOT/.github/ISSUE_TEMPLATE/sync-issue.yml" ]
+}
+
+@test "community: issue template config exists" {
+    [ -f "$L0_ROOT/.github/ISSUE_TEMPLATE/config.yml" ]
+}
+
+@test "community: PR template exists in .github/" {
+    [ -f "$L0_ROOT/.github/pull_request_template.md" ]
+}
+
+@test "community: PR template has downstream impact section" {
+    grep -q "Downstream Impact" "$L0_ROOT/.github/pull_request_template.md"
+}
+
+@test "community: PR template has quality checklist" {
+    grep -q "Quality Checklist" "$L0_ROOT/.github/pull_request_template.md"
+}
+
+@test "community: bug report template has area dropdown" {
+    grep -q "area" "$L0_ROOT/.github/ISSUE_TEMPLATE/bug-report.yml"
+    grep -q "Skill\|Script\|Detekt\|MCP" "$L0_ROOT/.github/ISSUE_TEMPLATE/bug-report.yml"
+}
+
+@test "community: sync issue template has topology dropdown" {
+    grep -q "topology" "$L0_ROOT/.github/ISSUE_TEMPLATE/sync-issue.yml"
+    grep -q "Flat\|Chain" "$L0_ROOT/.github/ISSUE_TEMPLATE/sync-issue.yml"
+}
+
+@test "community: sync issue template asks for manifest" {
+    grep -q "l0-manifest.json\|manifest" "$L0_ROOT/.github/ISSUE_TEMPLATE/sync-issue.yml"
+}
