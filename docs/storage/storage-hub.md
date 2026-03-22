@@ -45,6 +45,7 @@ Generic KMP storage patterns — platform models, encryption layers, key-value v
 
 ## Key Rules
 
-- Key-value: `multiplatform-settings` for small primitives; avoid `SharedPreferences` in `commonMain`
-- Relational: `Room` for Android/Desktop JVM; `SQLDelight` for native iOS/macOS
-- Encryption layer via `expect/actual` — `EncryptedSharedPreferences` on Android, `Keychain` on Apple
+- Key-value: `multiplatform-settings` or MMKV for small primitives; avoid `SharedPreferences` in `commonMain`
+- Relational: `SQLDelight` for all KMP targets; `Room` for Android-only projects
+- Encryption layer via `expect/actual` — see [Security Patterns](../security/security-patterns.md)
+- Thin module architecture: one module per storage backend, shared interface

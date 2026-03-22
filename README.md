@@ -691,7 +691,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-14 domain hubs, 54 sub-docs, 15 guides, 6 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
+15 domain hubs, 55 sub-docs, 15 guides, 6 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
 
 | Hub | Covers | Platform |
 |-----|--------|----------|
@@ -706,7 +706,8 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | [Navigation](docs/navigation/navigation-hub.md) | Navigation3, state-driven nav, deep links | Android + KMP |
 | [Offline-First](docs/offline-first/offline-first-hub.md) | Local-first data, sync strategies, conflict resolution | Android + KMP |
 | [Resources](docs/resources/resources-hub.md) | Memory, lifecycle, and platform resource handling | Android + KMP |
-| [Storage](docs/storage/storage-hub.md) | Key-value storage, encrypted storage, migrations | Android + KMP |
+| [Security](docs/security/security-hub.md) | Encryption, key management, biometric auth, platform crypto | Android + KMP |
+| [Storage](docs/storage/storage-hub.md) | Key-value, relational, secure, cache — thin module architecture | Android + KMP |
 | [Testing](docs/testing/testing-hub.md) | runTest, fakes, coroutine dispatchers, coverage strategy | Android + KMP |
 | [UI](docs/ui/ui-hub.md) | Sealed UiState, StateFlow, events, navigation, Compose screen structure | Android + KMP |
 
@@ -806,7 +807,7 @@ AndroidCommonDoc/
 |   +-- reusable-architecture-guards.yml     # workflow_call: Konsist guards
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
-+-- docs/                   # 14 hub docs, 54 sub-docs, 15 guides, 6 agent workflow docs
++-- docs/                   # 15 hub docs, 55 sub-docs, 15 guides, 6 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/
