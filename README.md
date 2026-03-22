@@ -695,7 +695,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | [DI](docs/di/di-hub.md) | Koin module declarations, test configuration | Android + KMP |
 | [Error Handling](docs/error-handling/error-handling-hub.md) | Result type, DomainException hierarchy, CancellationException | Android + KMP |
 | [Gradle](docs/gradle/gradle-hub.md) | Convention plugins (KMP + Android-only), version catalogs, Kover | Android + KMP |
-| [Guides](docs/guides/guides-hub.md) | Agent consumption, Claude Code workflow, CLAUDE.md template, Detekt config, baseline reduction, script-vs-agent decision | Android + KMP |
+| [Guides](docs/guides/guides-hub.md) | Agent consumption, Claude Code workflow, autonomous multi-agent pipelines, CLAUDE.md template, Detekt config, baseline reduction, script-vs-agent decision | Android + KMP |
 | [Navigation](docs/navigation/navigation-hub.md) | Navigation3, state-driven nav, deep links | Android + KMP |
 | [Offline-First](docs/offline-first/offline-first-hub.md) | Local-first data, sync strategies, conflict resolution | Android + KMP |
 | [Resources](docs/resources/resources-hub.md) | Memory, lifecycle, and platform resource handling | Android + KMP |
