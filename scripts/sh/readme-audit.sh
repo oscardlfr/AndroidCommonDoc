@@ -188,6 +188,49 @@ for hub in docs/*/; do
   done
 done
 
+# ─── 6b. README DOCUMENTATION TABLE vs FILESYSTEM ───
+echo "▶ Checking README Documentation table..."
+
+if [ -f README.md ]; then
+  # Every hub directory on disk should have a row in the Documentation table
+  for hub_dir in docs/*/; do
+    [ -d "$hub_dir" ] || continue
+    hub_name=$(basename "$hub_dir")
+    hub_file="${hub_dir}${hub_name}-hub.md"
+    [ -f "$hub_file" ] || continue
+    
+    # Check if this hub appears in the README Documentation table
+    if ! sed -n '/^## Documentation/,/^---$/p' README.md | grep -q "$hub_name"; then
+      add_finding "MEDIUM" "missing" "Hub '$hub_name/' exists on disk but missing from README Documentation table" "true"
+    fi
+  done
+  
+  # Every link in the Documentation table should point to an existing file
+  while IFS= read -r link; do
+    [ -z "$link" ] && continue
+    if [ ! -f "$link" ]; then
+      add_finding "MEDIUM" "broken-link" "README Documentation table links to '$link' which doesn't exist" "false"
+    fi
+  done < <(sed -n '/^## Documentation/,/^---$/p' README.md | grep -oE '\(docs/[^)]+\)' | tr -d '()' 2>/dev/null)
+  
+  # Sub-doc count in each hub should match what's on disk
+  for hub_dir in docs/*/; do
+    [ -d "$hub_dir" ] || continue
+    hub_name=$(basename "$hub_dir")
+    hub_file="${hub_dir}${hub_name}-hub.md"
+    [ -f "$hub_file" ] || continue
+    
+    # Count sub-docs in hub (markdown links in the Documents table)
+    hub_links=$(grep -oE '\([a-zA-Z0-9_-]+\.md\)' "$hub_file" 2>/dev/null | wc -l | tr -d ' ')
+    # Count actual non-hub .md files in the directory
+    actual_docs=$(find "$hub_dir" -maxdepth 1 -name "*.md" -not -name "*hub*" | wc -l | tr -d ' ')
+    
+    if [ "$hub_links" -gt 0 ] && [ "$actual_docs" -gt 0 ] && [ "$hub_links" -ne "$actual_docs" ]; then
+      add_finding "LOW" "count" "Hub '$hub_name': links $hub_links docs but directory has $actual_docs non-hub .md files" "true"
+    fi
+  done
+fi
+
 # ─── 7. PROSE NUMBER CLAIMS IN README ───
 echo "▶ Checking prose number claims..."
 
