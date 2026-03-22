@@ -156,7 +156,7 @@ fun PendingSyncIndicator(
 
 ## 3. Best Practices Summary
 
-- Local database as source of truth (Room, SQLite)
+- Local database as source of truth (Room, SQLDelight)
 - Repository pattern for orchestration
 - Outbox table for pending operations
 - Incremental sync with tokens/cursors
@@ -175,7 +175,7 @@ fun PendingSyncIndicator(
 For Kotlin Multiplatform projects:
 
 1. **Shared Data Layer**: Implement repository pattern in `commonMain`
-2. **Expect/Actual Pattern**: Database implementations vary (Room/Android, SQLite/iOS, SQLDelight/both)
+2. **Expect/Actual Pattern**: Database implementations vary (Room, SQLDelight — both support KMP)
 3. **Coroutines/Flow**: Use common Kotlin Coroutines for reactive data flows
 4. **Serialization**: Leverage kotlinx.serialization for cross-platform compatibility
 5. **Network Layer**: Platform-specific HTTP clients with shared sync logic
