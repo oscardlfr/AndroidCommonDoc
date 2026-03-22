@@ -1,7 +1,7 @@
 ---
 name: test-specialist
-description: Reviews test code for pattern compliance and identifies coverage gaps. Use when adding tests, reviewing test quality, or checking coverage metrics.
-tools: Read, Grep, Glob, Bash
+description: "Reviews test code and implements missing tests. Identifies coverage gaps, writes test cases, validates pattern compliance (no Turbine, StandardTestDispatcher, backgroundScope). Use for test audits and test implementation."
+tools: Read, Grep, Glob, Bash, Write
 model: sonnet
 memory: project
 skills:
@@ -87,3 +87,16 @@ Map your existing labels to the canonical scale:
 ### Category
 
 All findings from this agent use category: `"testing"`.
+
+
+## Output Format
+
+When invoked as a subagent, end your response with a structured summary:
+
+```
+## Summary
+- **Files analyzed**: N
+- **Issues found**: N (X blocker, Y high, Z medium)
+- **Files modified**: [list if applicable]
+- **Status**: PASS | FAIL | NEEDS_REVIEW
+```

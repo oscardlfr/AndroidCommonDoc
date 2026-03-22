@@ -26,7 +26,6 @@ Uses parameters from `params.json`:
 - `max-workers` -- Override Gradle worker count (default: auto based on CPU).
 - `min-missed-lines` -- Only show classes with >= N missed lines (default: 0).
 - `skip-tests` -- Skip test execution, regenerate report from existing data.
-- `skip-coverage` -- Skip coverage report generation.
 - `fresh-daemon` -- Stop existing Gradle daemons before starting.
 - `coverage-only` -- Only run modules specified by `coverage-modules`.
 - `coverage-modules` -- Comma-separated module patterns for coverage-only mode.

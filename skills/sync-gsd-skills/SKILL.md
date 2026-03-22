@@ -46,6 +46,8 @@ category: guides
 | L0 Skills | `$ANDROID_COMMON_DOC/skills/*/SKILL.md` | `~/.gsd/agent/skills/l0/{name}/SKILL.md` |
 | L0 Agents | `$ANDROID_COMMON_DOC/.claude/agents/*.md` | `~/.gsd/agent/skills/l0-agents/{name}/SKILL.md` |
 
+> **Important**: This skill syncs to the **user-level** `~/.gsd/agent/skills/` directory only. It does NOT copy marketplace skills into project-level `.claude/skills/`. Project-level skills are managed by `/sync-l0` (L0 canonical only). Pi/GSD reads both locations — user-level provides marketplace skills to all projects without duplicating files.
+
 ### Sync Algorithm
 
 1. Discover all source files matching patterns above

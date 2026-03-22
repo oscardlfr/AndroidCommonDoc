@@ -2,7 +2,19 @@
 
 All notable changes to AndroidCommonDoc are documented in this file.
 
-## [v1.1] - 2026-03-14 - Hardening & Intelligence
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- Agent templates for L1/L2 projects (`setup/agent-templates/`)
+- Copilot agent adapter (`adapters/copilot-agent-adapter.sh`)
+- Copilot agent templates (`setup/copilot-agent-templates/`)
+- Standardized `version.properties` pattern for all layers
+- Updated `/bump-version` command to use version.properties + CHANGELOG as standard
+
+## [1.1.0] - 2026-03-14 - Hardening & Intelligence
 
 Complete overhaul adding architecture verification, programmatic MCP access, pattern discovery, and documentation intelligence to the v1.0 script-and-skills foundation.
 

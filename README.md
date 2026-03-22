@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 17 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 32 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 17 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 31 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Platform support:** All skills, agents, and Detekt rules work on both **Android-only (AGP 8.x)** and **KMP (AGP 9.0+)** projects. A small subset is KMP-only (noted below).
 
@@ -16,14 +16,14 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 17 custo
 
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
-- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 22 cross-platform pairs
+- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 22 cross-platform pairs + 4 Bash-only utilities
 - **AI agent skills** for Claude Code and GitHub Copilot -- 40 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 17 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
-- **MCP server** with 32 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, and doc intelligence
+- **MCP server** with 31 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, and doc intelligence
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
@@ -109,16 +109,16 @@ Choose topology in `/setup` wizard (W0) or edit `l0-manifest.json` directly. Man
 
 ### What gets synced to your project
 
-When you run `/sync-l0` or merge an auto-sync PR, only **consumer assets** are materialized:
+When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized to your project:
 
 | What | Destination | Count |
 |------|-------------|-------|
-| Consumer skills | `.claude/skills/*/SKILL.md` | 31 |
-| Consumer agents | `.claude/agents/*.md` | 10 (8 domain + 2 orchestrators) |
+| Skills | `.claude/skills/*/SKILL.md` | 40 |
+| Agents | `.claude/agents/*.md` | 15 |
 | Commands | `.claude/commands/*.md` | 27 |
-| **Total** | | **68 entries** |
+| **Total** | | **82 entries** |
 
-**Not synced:** L0 development skills (9), L0 quality gate agents (5), scripts (invoked at runtime from L0), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
+**Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
 ### Materialization model
 
@@ -151,12 +151,17 @@ Downstream projects maintain local copies of L0 skills via the **registry + mani
 
 AndroidCommonDoc supports multiple AI coding agents from the same source of truth:
 
-| Agent | Skills Location | Format | Invocation |
-|-------|----------------|--------|------------|
-| Claude Code | `skills/*/SKILL.md` | Markdown skills (read directly) | `/test core:domain` |
-| GitHub Copilot | `setup/copilot-templates/` | `.prompt.md` files (generated) | `/test` in Copilot Chat |
+| Agent | Skills | Agents | Format | Invocation |
+|-------|--------|--------|--------|------------|
+| Claude Code | `skills/*/SKILL.md` | `.claude/agents/*.md` | Markdown (read directly) | `/test core:domain` |
+| GitHub Copilot | `setup/copilot-templates/` | `setup/copilot-agent-templates/` | `.prompt.md` / `.agent.md` (generated) | `/test` in Copilot Chat |
 
-Claude Code reads `SKILL.md` files directly from `skills/`. Both agents invoke the **same cross-platform scripts**. Copilot prompts are generated via the adapter pipeline (`adapters/copilot-adapter.sh`).
+Claude Code reads `SKILL.md` files directly from `skills/`. Both agents invoke the **same cross-platform scripts**. Copilot files are generated via the adapter pipeline (`adapters/generate-all.sh`):
+- `copilot-adapter.sh` — skills → `.prompt.md`
+- `copilot-agent-adapter.sh` — agents → `.agent.md` (maps tools, inlines skill summaries, strips Claude-specific fields)
+- `claude-md-copilot-adapter.sh` — CLAUDE.md → `.github/copilot-instructions.md`
+
+For L1/L2 projects, the agent adapter only generates Copilot agents for **project-specific** agents (listed in `l0-manifest.json`), skipping L0-synced agents to avoid duplication.
 
 ---
 
@@ -386,15 +391,13 @@ Real-time pattern enforcement during AI-assisted development:
 
 ## Skills Reference
 
-40 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat.
-
-**31 consumer skills** are synced to downstream projects. **9 L0 development skills** are only useful when working on AndroidCommonDoc itself.
+40 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
 > **Audit skills** (`/audit`, `/full-audit`) read from `.androidcommondoc/audit-log.jsonl` and `findings-log.jsonl` -- written by scripts automatically. No extra Gradle runs.
 
-### Consumer Skills (synced to your project)
+### Skills (synced to your project)
 
 These are the skills that get materialized to your `.claude/skills/` directory via `/sync-l0`.
 
@@ -459,9 +462,9 @@ These are the skills that get materialized to your `.claude/skills/` directory v
 | `/seo` | Validate SEO metadata, structure, and discoverability |
 | `/web-quality-audit` | Comprehensive web quality audit across all dimensions |
 
-### L0 Development Skills (internal — not synced to consumers)
+### L0 Maintenance Skills
 
-These skills are for maintaining AndroidCommonDoc itself. They are **not** synced to downstream projects by the sync engine (they're excluded from the consumer registry).
+Skills primarily useful when working on AndroidCommonDoc (L0) itself:
 
 | Skill | What it does |
 |-------|-------------|
@@ -470,7 +473,7 @@ These skills are for maintaining AndroidCommonDoc itself. They are **not** synce
 | `/generate-rules` | Generate Kotlin Detekt rules from pattern doc YAML frontmatter |
 | `/ingest-content` | Fetch and match external content against pattern doc metadata |
 | `/monitor-docs` | Monitor upstream sources for version drift -- auto-bumps `versions-manifest.json` on accept |
-| `/readme-audit` | Audit README.md against repo state -- surfaces stale counts and missing sections |
+| `/readme-audit` | Audit README.md against repo state -- surfaces stale counts, missing entries, and content drift |
 | `/sync-gsd-agents` | Sync `.claude/agents/` to GSD subagent system and verify parity |
 | `/sync-gsd-skills` | Sync skills from all sources (marketplace, L0, L0 agents) to GSD-2 |
 | `/sync-vault` | Sync documentation into unified Obsidian vault |
@@ -479,33 +482,35 @@ These skills are for maintaining AndroidCommonDoc itself. They are **not** synce
 
 ## Agents
 
-15 specialized agents in `.claude/agents/`. **8 consumer agents** are synced to downstream projects and can be invoked directly. **5 L0 quality gate agents** are internal to AndroidCommonDoc development. **2 orchestrators** coordinate multi-agent workflows.
+15 specialized agents in `.claude/agents/`. All synced to downstream projects. Claude Code auto-delegates to these agents based on their `description:` field — configure delegation rules in your CLAUDE.md [Agent Roster](docs/agents/claude-md-template.md).
 
-### Consumer Agents (synced to your project)
+**6 audit-only agents** (read-only). **2 audit+implement agents** (can write code). **5 quality gate agents** (internal). **2 orchestrators**.
 
-These agents are materialized to your `.claude/agents/` via `/sync-l0`. Invoke them directly in Claude Code.
+### Domain Agents
 
-| Agent | What It Does |
-|-------|-------------|
-| `api-rate-limit-auditor` | HTTP client rate limiting, retry backoff, timeouts, concurrency |
-| `beta-readiness-agent` | Feature completeness, stability, and beta criteria |
-| `cross-platform-validator` | Platform parity across Android, iOS, and Desktop targets |
-| `doc-alignment-agent` | Documentation accuracy against actual implementation |
-| `privacy-auditor` | PII in logs, analytics consent, encrypted storage, data retention |
-| `release-guardian-agent` | Release checklist -- debug flags, secrets, build config, hardcoded URLs, ProGuard |
-| `test-specialist` | Test pattern compliance and coverage gap analysis |
-| `ui-specialist` | Compose UI accessibility, Material3, and design system review |
+These agents are materialized to your `.claude/agents/` via `/sync-l0`. Claude Code delegates to them automatically when the task matches their description.
 
-### Orchestrators (synced — invoke via `/full-audit` or `/quality-gate`)
+| Agent | Mode | What It Does |
+|-------|------|-------------|
+| `api-rate-limit-auditor` | audit | HTTP client rate limiting, retry backoff, timeouts, concurrency |
+| `beta-readiness-agent` | audit | Feature completeness, stability, and beta criteria |
+| `cross-platform-validator` | audit | Platform parity across Android, iOS, and Desktop targets |
+| `doc-alignment-agent` | audit | Documentation accuracy against actual implementation |
+| `privacy-auditor` | audit | PII in logs, analytics consent, encrypted storage, data retention |
+| `release-guardian-agent` | audit | Release checklist -- debug flags, secrets, build config, hardcoded URLs, ProGuard |
+| `test-specialist` | **audit+impl** | Test pattern compliance, coverage gaps, **and test generation** |
+| `ui-specialist` | **audit+impl** | Compose UI accessibility, Material3, design system — **audits and implements fixes** |
+
+### Orchestrators
 
 | Agent | What It Does |
 |-------|-------------|
 | `full-audit-orchestrator` | Orchestrates `/full-audit` -- wave execution, finding collection, 3-pass dedup, consolidated report |
 | `quality-gate-orchestrator` | Unified pass/fail report across all gates with token cost |
 
-### L0 Quality Gate Agents (internal — not synced to consumers)
+### Quality Gate Agents
 
-These agents verify the consistency of AndroidCommonDoc itself. They are invoked by `quality-gate-orchestrator` during L0 development and are **not** synced to downstream projects.
+These agents verify internal consistency. Invoked by `quality-gate-orchestrator`.
 
 | Agent | What It Verifies |
 |-------|-----------------|
@@ -539,11 +544,11 @@ Agents don't have hardcoded models -- the active profile determines which model 
 
 ## MCP Server
 
-32 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
+31 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
-**19 consumer tools** work in any project. **13 L0 internal tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
+**18 tools** work in any project. **13 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
 
-### Consumer Tools
+### General Tools
 
 | Tool | Category | What It Does |
 |------|----------|-------------|
@@ -559,7 +564,6 @@ Agents don't have hardcoded models -- the active profile determines which model 
 | `migration-validator` | Validation | Validate Room/SQLDelight migration sequences and flag destructive ops |
 | `module-health` | Analysis | Per-module health dashboard: LOC, test count, deps, coverage |
 | `proguard-validator` | Validation | Validate ProGuard references exist and recommend keep rules by library |
-| `rate-limit-status` | Utility | Check current rate limit status |
 | `setup-check` | Setup | Verify toolkit installation in a project |
 | `skill-usage-analytics` | Analytics | Toolkit usage stats: run counts, common findings, per-skill trends |
 | `string-completeness` | Analysis | Compare base strings.xml vs locale variants, report missing translations |
@@ -567,13 +571,13 @@ Agents don't have hardcoded models -- the active profile determines which model 
 | `validate-all` | Validation | Run all validation scripts with structured output |
 | `verify-kmp` | Validation | Validate KMP source sets and imports |
 
-### L0 Internal Tools (not useful in consumer projects)
+### L0 Internal Tools (for AndroidCommonDoc development)
 
 These tools operate on AndroidCommonDoc's own documentation, vault, and toolkit structure.
 
 | Tool | Category | What It Does |
 |------|----------|-------------|
-| `check-doc-freshness` | Monitoring | Alias for monitor-sources (backward compatible) |
+| `check-freshness` | Monitoring | Alias for monitor-sources (backward compatible) |
 | `generate-detekt-rules` | Generation | Generate Kotlin Detekt rules from pattern doc frontmatter |
 | `ingest-content` | Ingestion | Fetch and analyze external content against pattern metadata |
 | `l0-diff` | Sync | Compare L0 registry vs downstream manifest to preview sync delta |
@@ -643,7 +647,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `ai-error-extractor` | Structured error extraction with categorization and fix suggestions |
 | `analyze-sbom` | SBOM dependency and license analysis |
 | `build-run-app` | Build + install + launch + logcat/stdout capture |
-| `check-doc-freshness` | Verify pattern doc version references against versions manifest |
+| `check-doc-freshness` | Verify pattern doc version references against versions manifest (calls check-freshness) |
 | `check-version-sync` | Version catalog diff between projects -- or against `versions-manifest.json` directly |
 | `generate-sbom` | CycloneDX SBOM generation via Gradle plugin |
 | `gradle-run` | Gradle execution with retry, timeout, OOM recovery, and daemon management |
@@ -670,6 +674,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `sync-gsd-agents` | Generate GSD subagent wrappers from .claude/agents/ |
 | `check-agent-parity` | Verify parity between .claude/agents/ and GSD subagents |
 | `check-detekt-coverage` | Diagnose Detekt per-module task coverage (KMP source sets) |
+| `readme-audit` | Comprehensive README/doc audit against filesystem (counts, tables, tree, hub links, prose claims) |
 | `rehash-registry` | Recompute SHA-256 hashes in registry.json (CRLF→LF normalized) |
 
 ### Shared Libraries
@@ -685,7 +690,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-13 domain hubs, 54 sub-docs, 19 guides -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
+14 domain hubs, 60 sub-docs, 14 guides, 6 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
 
 | Hub | Covers | Platform |
 |-----|--------|----------|
@@ -695,7 +700,8 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | [DI](docs/di/di-hub.md) | Koin module declarations, test configuration | Android + KMP |
 | [Error Handling](docs/error-handling/error-handling-hub.md) | Result type, DomainException hierarchy, CancellationException | Android + KMP |
 | [Gradle](docs/gradle/gradle-hub.md) | Convention plugins (KMP + Android-only), version catalogs, Kover | Android + KMP |
-| [Guides](docs/guides/guides-hub.md) | Agent consumption, Claude Code workflow, autonomous multi-agent pipelines, CLAUDE.md template, Detekt config, baseline reduction, script-vs-agent decision | Android + KMP |
+| [Agents](docs/agents/agents-hub.md) | CLAUDE.md Boris Cherny template, dev-lead workflow, multi-agent patterns, agent consumption, capability detection | All |
+| [Guides](docs/guides/guides-hub.md) | Getting started, Detekt config/migration/baseline, convention plugin chain, doc template | Android + KMP |
 | [Navigation](docs/navigation/navigation-hub.md) | Navigation3, state-driven nav, deep links | Android + KMP |
 | [Offline-First](docs/offline-first/offline-first-hub.md) | Local-first data, sync strategies, conflict resolution | Android + KMP |
 | [Resources](docs/resources/resources-hub.md) | Memory, lifecycle, and platform resource handling | Android + KMP |
@@ -752,13 +758,13 @@ AndroidCommonDoc/
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
 |   +-- ps1/                # PowerShell (Windows) -- 22 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 22 scripts
+|   +-- sh/                 # Bash (macOS/Linux) -- 27 scripts (22 cross-platform + 5 utilities)
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
-+-- mcp-server/             # MCP server (32 tools, 3 prompts, dynamic resources)
++-- mcp-server/             # MCP server (31 tools, 3 prompts, dynamic resources)
 |   +-- src/
-|   |   +-- tools/          # 32 tools: validation, analysis, metrics, audit, sync, vault
+|   |   +-- tools/          # 31 tools: validation, analysis, metrics, audit, sync, vault
 |   |   +-- types/          # Shared types (ValidationResult, AuditFinding, FindingsReport)
 |   |   +-- utils/          # Utilities (rate-limiter, jsonl-reader, gradle-parser, xml-report-reader, finding-dedup, logger)
 |   |   +-- generation/     # Detekt rule parser, emitters, config-emitter
@@ -777,7 +783,9 @@ AndroidCommonDoc/
 +-- konsist-tests/          # Konsist architecture verification tests
 +-- setup/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
-|   +-- copilot-templates/  # 40 Copilot prompt templates
+|   +-- copilot-templates/  # 40 Copilot prompt templates (generated from skills)
+|   +-- copilot-agent-templates/ # 4 Copilot agent templates (generated from agent-templates)
+|   +-- agent-templates/    # 5 generic agent templates for L1/L2 projects
 |   +-- github-workflows/   # CI template + PR template for consumer projects
 |   +-- templates/
 |   |   +-- workflows/
@@ -797,14 +805,15 @@ AndroidCommonDoc/
 |   +-- reusable-architecture-guards.yml     # workflow_call: Konsist guards
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
-+-- docs/                   # 13 hub docs, 67 sub-docs, 11 guides
-|   +-- architecture/       +-- compose/    +-- di/
++-- docs/                   # 14 hub docs, 60 sub-docs, 14 guides, 6 agent workflow docs
+|   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/
 |   +-- storage/            +-- testing/    +-- ui/
 |   +-- archive/
-+-- adapters/               # Code generation pipeline (skills -> commands/prompts)
++-- adapters/               # Code generation pipeline (skills → prompts, agents → Copilot agents, CLAUDE.md → copilot-instructions)
 +-- versions-manifest.json  # Canonical library versions + monitor_urls + coupled_versions
++-- version.properties      # Semver source of truth (major/minor/patch)
 +-- AGENTS.md               # Universal AI agent entry point
 +-- CHANGELOG.md
 ```
