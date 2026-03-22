@@ -946,7 +946,7 @@
       "description": "Reviews test code for pattern compliance and identifies coverage gaps. Use when adding tests, reviewing test quality, or checking coverage metrics.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:58a37e113535acd0bf466a1a571781806624511b2687d690bc36d1d20f50472d",
+      "hash": "sha256:02552e74fd5c38ca42a870d94842a2a655d8f3a5cff5cdcc64b6f9ac12174f4c",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -967,7 +967,7 @@
       "description": "Reviews Compose UI code for consistency, accessibility, Material3 compliance, and design system usage. Use when modifying Compose screens or components.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:300de72733833322fe792a67340e0683f5943602c25bd7a88533909d68c71f0d",
+      "hash": "sha256:968c69d1e3c9dd0ea5969b42ba34d91edd6343d1ca952ba627a70d6e2ea5e0c6",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
