@@ -1,26 +1,15 @@
 ---
 scope: [storage, data-persistence, architecture]
-sources: [android-storage, ios-storage, sqldelight, datastore, mmkv]
+sources: [sqldelight, datastore, mmkv, multiplatform-settings]
 targets: [android, desktop, ios, macos, jvm]
-version: 2
+version: 3
 last_updated: "2026-03"
 assumes_read: storage-hub
-token_budget: 788
-description: "Hub doc: Generic KMP storage patterns -- platform models, encryption layers, key-value vs relational, expect/actual for storage"
+token_budget: 800
+description: "Generic KMP storage patterns — storage categories, interface contracts, encryption boundaries, thin module architecture"
 slug: storage-patterns
 status: active
 layer: L0
-
-monitor_urls:
-  - url: "https://github.com/sqldelight/sqldelight/releases"
-    type: github-releases
-    tier: 1
-  - url: "https://developer.android.com/jetpack/androidx/releases/datastore"
-    type: doc-page
-    tier: 1
-  - url: "https://github.com/Tencent/MMKV/releases"
-    type: github-releases
-    tier: 2
 category: storage
 rules:
   - id: no-platform-storage-in-common
@@ -31,36 +20,96 @@ rules:
       banned_import_prefixes:
         - "android.content.SharedPreferences"
         - "android.database.sqlite"
-      prefer: "expect/actual + multiplatform-settings / Room"
+      prefer: "expect/actual + multiplatform-settings / SQLDelight"
     hand_written: false
-
 ---
 
 # KMP Storage Patterns
 
----
+## Storage Categories
 
-## Overview
+Every storage decision starts with the category. Choose based on data characteristics:
 
-Storage in KMP requires understanding platform differences and choosing the right abstraction level. Define storage interfaces in `commonMain` -- platform implementations in `androidMain`/`iosMain`/`desktopMain`.
+| Category | When | KMP Libraries |
+|----------|------|---------------|
+| **Key-value** | Preferences, flags, small primitives | multiplatform-settings, MMKV, DataStore |
+| **Relational** | Structured queries, relationships, migrations | SQLDelight (all targets), Room (JVM only) |
+| **Secure** | Tokens, passwords, API keys, encryption keys | Platform Keychain/KeyStore via expect/actual |
+| **Cache** | Temporary data, evictable, in-memory | Pure Kotlin with eviction policies |
+| **Encrypted KV** | Key-value + at-rest encryption | Decorator pattern over any KV store |
 
-**Core Principles**:
-1. Define storage interfaces in `commonMain` -- platform implementations in source sets
-2. Choose the storage category (key-value, relational, secure, cache) before choosing a library
-3. Encrypt at the storage boundary -- business logic should not know about encryption
-4. All storage I/O must be async (suspend functions) -- never block the main thread
+## Core Principles
 
----
+1. **Interfaces in commonMain** — platform implementations in source sets
+2. **Category-appropriate library** — don't use relational DB for key-value
+3. **Encrypt at the storage boundary** — business logic works with plain data
+4. **All I/O is async** — `suspend` functions, never block main thread
+5. **Thin module pattern** — one module per storage backend, shared API interface
 
-## Sub-documents
+## Interface Contracts
 
-- **[storage-patterns-implementation](storage-patterns-implementation.md)**: Implementation details -- platform storage models (Android/iOS/Desktop), encryption layer patterns, KMP expect/actual, DI integration, migration patterns, anti-patterns
+```kotlin
+// Key-value: simple typed get/put
+interface KeyValueStorage {
+    suspend fun getString(key: String, default: String = ""): String
+    suspend fun putString(key: String, value: String)
+    suspend fun remove(key: String)
+    suspend fun clear()
+}
 
----
+// Secure: separate interface for sensitive data (NOT KeyValueStorage)
+interface SecureStorage {
+    suspend fun getSecret(key: String): String?
+    suspend fun putSecret(key: String, value: String)
+    suspend fun deleteSecret(key: String)
+}
+
+// Relational: domain repository pattern (not raw driver)
+interface Repository<T> {
+    suspend fun getAll(): Result<List<T>>
+    suspend fun getById(id: String): Result<T?>
+    suspend fun insert(item: T): Result<Unit>
+    suspend fun delete(id: String): Result<Unit>
+}
+```
+
+## Thin Module Architecture
+
+Each storage backend is a separate module implementing a shared interface:
+
+```
+core-storage-api/       ← interfaces only (KeyValueStorage, SecureStorage)
+core-storage-mmkv/      ← MMKV implementation of KeyValueStorage
+core-storage-datastore/ ← DataStore implementation of KeyValueStorage
+core-storage-secure/    ← Platform Keychain/KeyStore → SecureStorage
+core-storage-sql/       ← SQLDelight driver factory
+core-storage-cache/     ← In-memory cache with eviction (pure Kotlin)
+core-storage-encryption/← Decorator: wraps any KeyValueStorage with encryption
+```
+
+Benefits: consumer picks only what they need, no transitive dependency bloat.
+
+## Encryption Boundary Pattern
+
+Business logic never sees encryption:
+
+```kotlin
+// Domain layer — no encryption awareness
+class SaveTokenUseCase(private val secureStore: SecureStorage) {
+    suspend operator fun invoke(token: String) = secureStore.putSecret("auth_token", token)
+}
+```
+
+Platform secure storage handles encryption transparently via expect/actual.
+
+For key-value encryption at rest, use the **decorator pattern**: wrap any `KeyValueStorage` with an encryption decorator that encrypts/decrypts values transparently.
+
+## Related Documents
+
+- **[storage-patterns-implementation](storage-patterns-implementation.md)**: Platform storage models (Android/iOS/Desktop), expect/actual factories, migration strategies, anti-patterns
 
 ## References
 
-- [Jetpack DataStore Guide](https://developer.android.com/topic/libraries/architecture/datastore)
-- [SQLDelight Multiplatform](https://sqldelight.github.io/sqldelight/2.0/multiplatform_sqlite/)
-- [KMP Architecture](../architecture/kmp-architecture.md) -- expect/actual pattern
-- [DI Patterns](../di/di-patterns.md) -- Platform-specific storage provider injection
+- [SQLDelight Multiplatform](https://sqldelight.github.io/sqldelight/)
+- [Security Patterns](../security/security-patterns.md) — encryption, key management
+- [KMP Architecture](../architecture/kmp-architecture.md) — expect/actual pattern
