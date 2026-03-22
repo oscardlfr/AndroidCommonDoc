@@ -276,7 +276,7 @@ if [ -f README.md ]; then
   # Sub-docs claim
   subdocs_claim=$(grep -oE '[0-9]+ sub-docs' README.md | grep -oE '[0-9]+' | head -1 || echo "?")
   if [ -n "$subdocs_claim" ] && [ "$subdocs_claim" != "?" ]; then
-    actual_subdocs=$(find docs -name "*.md" -not -name "*hub*" -not -path "*/guides/*" -not -path "*/archive/*" 2>/dev/null | wc -l | tr -d ' ')
+    actual_subdocs=$(find docs -name "*.md" -not -name "*hub*" -not -path "*/guides/*" -not -path "*/agents/*" -not -path "*/archive/*" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$subdocs_claim" != "$actual_subdocs" ]; then
       add_finding "MEDIUM" "count" "README says '$subdocs_claim sub-docs' but actual: $actual_subdocs" "true"
     fi

@@ -691,7 +691,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-14 domain hubs, 60 sub-docs, 15 guides, 6 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
+14 domain hubs, 54 sub-docs, 15 guides, 6 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
 
 | Hub | Covers | Platform |
 |-----|--------|----------|
@@ -772,7 +772,7 @@ AndroidCommonDoc/
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
 |   |   +-- cli/            # CLI entrypoint for CI monitoring
-|   +-- tests/              # 79 test files -- vitest unit + integration (1056 tests)
+|   +-- tests/              # 79 test files -- vitest unit + integration (1060 tests)
 +-- detekt-rules/
 |   +-- src/main/kotlin/    # 17 hand-written AST-only Detekt rules
 |   +-- src/main/resources/
@@ -806,7 +806,7 @@ AndroidCommonDoc/
 |   +-- reusable-architecture-guards.yml     # workflow_call: Konsist guards
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
-+-- docs/                   # 14 hub docs, 60 sub-docs, 15 guides, 6 agent workflow docs
++-- docs/                   # 14 hub docs, 54 sub-docs, 15 guides, 6 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/
