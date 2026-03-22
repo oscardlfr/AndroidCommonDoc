@@ -228,6 +228,94 @@ npm test
     const errors = issues.filter((i) => i.level === "error");
     expect(errors).toHaveLength(0);
   });
+
+  // Boris Cherny style tests
+  it("passes for Boris Cherny style L2 CLAUDE.md", () => {
+    const content = `# DawSync
+
+> L2 Application — Creative Project OS for musicians.
+
+## Workflow Orchestration
+
+### 1. Plan Mode Default
+- Enter plan mode for ANY non-trivial task
+
+### 2. Agent Delegation (mandatory)
+- MUST delegate domain audits to specialized agents
+
+| Agent | Domain | MUST delegate when |
+|-------|--------|-------------------|
+| \`daw-guardian\` | DAW safety | ANY change to background work |
+
+### 3. Verification Before Done
+- Never mark done without proving it works
+
+### 4. Autonomous Execution
+- Use L0 skills, never raw Gradle
+
+## Project Constraints
+
+### DO NOT DISTURB THE DAW
+- SILENT (0% CPU) when DAW is recording
+
+## Commands
+- \`/pre-pr\` — full pre-merge validation
+`;
+    const issues = validateTemplateStructure(content, "L2");
+    const errors = issues.filter((i) => i.level === "error");
+    expect(errors).toHaveLength(0);
+  });
+
+  it("warns when Boris Cherny style is missing Agent Delegation section", () => {
+    const content = `# MyApp
+
+> L2 Application — Some app.
+
+## Workflow Orchestration
+
+### 1. Plan Mode Default
+- Enter plan mode
+
+### 3. Verification Before Done
+- Never mark done without proving
+
+## Project Constraints
+- Some constraint
+`;
+    const issues = validateTemplateStructure(content, "L2");
+    const warnings = issues.filter((i) => i.level === "warning");
+    expect(warnings.some((w) => w.message.includes("Agent Delegation"))).toBe(true);
+  });
+
+  it("warns when Boris Cherny style is missing Workflow Orchestration", () => {
+    const content = `# MyApp
+
+> L2 Application — Some app.
+
+## Project Constraints
+- MUST delegate to agents
+
+## Commands
+- /test
+`;
+    const issues = validateTemplateStructure(content, "L2");
+    const warnings = issues.filter((i) => i.level === "warning");
+    expect(warnings.some((w) => w.message.includes("Workflow Orchestration"))).toBe(true);
+  });
+
+  it("errors when neither Boris Cherny nor Legacy format detected", () => {
+    const content = `# Some Random File
+
+Just some text without any recognized header format.
+
+## Build
+npm test
+`;
+    const issues = validateTemplateStructure(content, "L1");
+    const errors = issues.filter((i) => i.level === "error");
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0].message).toContain("No recognized CLAUDE.md format");
+  });
 });
 
 // ---------------------------------------------------------------------------

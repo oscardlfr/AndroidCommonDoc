@@ -649,7 +649,7 @@
       "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:6012ebe7ac26f847899b3a2b2fa519d0bbd185ae5b128774eadbe62f499c946a",
+      "hash": "sha256:fdcdea4a60aaf7524027ec16a5c0ffaa92be133780fde2d1e9cd07ca4b0e37eb",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -946,7 +946,7 @@
       "description": "Reviews test code for pattern compliance and identifies coverage gaps. Use when adding tests, reviewing test quality, or checking coverage metrics.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:4c1de373fce5e970c8bc8035cffea3b14fa6cc1bf370fd892214d348ccae25a7",
+      "hash": "sha256:58a37e113535acd0bf466a1a571781806624511b2687d690bc36d1d20f50472d",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -967,7 +967,7 @@
       "description": "Reviews Compose UI code for consistency, accessibility, Material3 compliance, and design system usage. Use when modifying Compose screens or components.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:e33d3b8656b60153257133ed1c9e591076bae2529161bc7edf3d6be852439c0b",
+      "hash": "sha256:300de72733833322fe792a67340e0683f5943602c25bd7a88533909d68c71f0d",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -999,7 +999,7 @@
       "description": "Bump Application Version",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e7ee1133b09b728397f2c0dc1090669a3480b1f2bfcf7b32d22f3cb558e61a9a",
+      "hash": "sha256:8ddc1071d220bc418a9b9bb8fc772354ab0361c2ded514974a7dbaa53b3177fb",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -1285,7 +1285,7 @@
       "description": "Sync skills from all sources (marketplace, L0, L0 agents) to GSD-2.",
       "category": "ecosystem",
       "tier": "core",
-      "hash": "sha256:afb8b2380d39f3aed086e6139ae5c925d4d49c3e34b6fec1605db5c65dd6b5f9",
+      "hash": "sha256:e135d532432b9f45682ddcdbe6141a9e4de2de530f721fda6e4fe43a17e86d60",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-gsd-skills",

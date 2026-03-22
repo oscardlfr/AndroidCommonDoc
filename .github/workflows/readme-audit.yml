@@ -116,9 +116,9 @@ jobs:
             RULES="skip"
           fi
 
-          # MCP tools
+          # MCP tools (exclude index.ts — it's the barrel export, not a tool)
           if [ "${{ inputs.check_mcp_tools || 'true' }}" = "true" ] && [ -d "${{ inputs.mcp_tools_dir || 'mcp-server/src/tools/' }}" ]; then
-            MCP_TOOLS=$(ls "${{ inputs.mcp_tools_dir || 'mcp-server/src/tools/' }}"*.ts 2>/dev/null | wc -l | tr -d ' ')
+            MCP_TOOLS=$(ls "${{ inputs.mcp_tools_dir || 'mcp-server/src/tools/' }}"*.ts 2>/dev/null | grep -v index.ts | wc -l | tr -d ' ')
           else
             MCP_TOOLS="skip"
           fi

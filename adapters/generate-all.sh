@@ -25,4 +25,8 @@ echo "Generating Copilot instructions from CLAUDE.md..."
 bash "$SCRIPT_DIR/claude-md-copilot-adapter.sh"
 echo ""
 
-echo "Done. Generated files are in setup/copilot-templates/"
+echo "Generating Copilot agent templates..."
+bash "$SCRIPT_DIR/copilot-agent-adapter.sh"
+echo ""
+
+echo "Done. Generated files are in setup/copilot-templates/ and setup/copilot-agent-templates/"

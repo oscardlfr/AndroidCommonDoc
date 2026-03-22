@@ -1,7 +1,7 @@
 ---
 name: ui-specialist
-description: Reviews Compose UI code for consistency, accessibility, Material3 compliance, and design system usage. Use when modifying Compose screens or components.
-tools: Read, Grep, Glob
+description: "Reviews and implements Compose UI accessibility, Material3 compliance, and design system patterns. Use for a11y audits, adding contentDescription, semantics blocks, and fixing UI compliance issues. Can both audit (read-only) and implement fixes."
+tools: Read, Grep, Glob, Bash, Write
 model: sonnet
 memory: project
 skills:
@@ -64,3 +64,16 @@ Map your existing labels to the canonical scale:
 ### Category
 
 All findings from this agent use category: `"ui-accessibility"`.
+
+
+## Output Format
+
+When invoked as a subagent, end your response with a structured summary:
+
+```
+## Summary
+- **Files analyzed**: N
+- **Issues found**: N (X blocker, Y high, Z medium)
+- **Files modified**: [list if applicable]
+- **Status**: PASS | FAIL | NEEDS_REVIEW
+```

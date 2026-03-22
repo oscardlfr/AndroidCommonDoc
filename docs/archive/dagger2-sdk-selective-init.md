@@ -2,9 +2,9 @@
 scope: [architecture, dependency-injection, sdk-design]
 sources: [dagger2, android-sdk]
 targets: [android]
-version: 2
+version: 3
 last_updated: "2026-03"
-description: "SDK initialization pattern with Dagger 2: selective module loading, shared singletons, zero-duplicate instances. For Android-only SDKs. See di-sdk-selective-init-comparison.md for KMP/Koin alternative."
+description: "SDK initialization pattern with Dagger 2: selective module loading, shared singletons, zero-duplicate instances. For Android-only SDKs. Includes discovery trade-off analysis vs KMP/Koin approach. See di-sdk-selective-init-comparison.md for full framework comparison."
 slug: dagger2-sdk-selective-init
 status: archived
 layer: L0
@@ -285,3 +285,48 @@ dependencies {
     kapt("com.google.dagger:dagger-compiler:2.51.1")
 }
 ```
+
+## Discovery Trade-Off: Dagger vs Koin/KMP
+
+Dagger sidesteps the module discovery problem entirely — but at a cost.
+
+### Dagger: No Discovery Problem
+
+The `@Component` annotation explicitly lists all `@Module` classes at compile time:
+
+```kotlin
+@Component(modules = [
+    CoreModule::class,
+    AuthDaggerModule::class,       // ← always compiled in
+    AnalyticsDaggerModule::class,  // ← always compiled in
+    PaymentsDaggerModule::class,   // ← always compiled in
+])
+interface SdkComponent { ... }
+```
+
+There's no class-loading mystery. No `init {}` blocks that may or may not fire. The generated `DaggerSdkComponent` hardcodes the full graph. Selective loading happens at runtime via `Provider<ModuleInitializer>` laziness — the module code is present but not instantiated until requested.
+
+**The trade-off:** The SDK orchestrator (`sdk-core`) depends on ALL impl modules. Adding a new SDK module (e.g. `sdk-push`) requires editing the `@Component` annotation. Every consumer binary includes all impl code — even modules they never activate.
+
+### Koin/KMP: Discovery Required, Binary Lean
+
+In the Koin approach (implemented in shared-kmp-libs), `core-sdk` depends on ZERO impl modules. The consumer's Gradle dependencies determine what's on the classpath. `SharedSdk.init()` uses platform-specific discovery:
+
+- **JVM:** `Class.forName(registrationClassName)` — triggers `<clinit>` → `init {}` → register
+- **Native:** `@EagerInitialization` — forces object init before `main()`
+
+Adding a new impl module requires NO changes to `core-sdk` (only a className entry in the exhaustive `when` on `SdkModule.registrationClassName`). The consumer binary includes only the impls they declared in Gradle.
+
+### When Dagger's Approach Is Better
+
+- **Android-only SDK** where binary size isn't critical
+- **Small number of impl modules** where "include everything" is acceptable
+- **Compile-time safety is paramount** — Dagger catches missing bindings at build time
+- **Team prefers zero-risk module wiring** — no possibility of runtime `ClassNotFoundException`
+
+### When Koin/KMP's Approach Is Better
+
+- **Multi-platform SDK** targeting iOS, macOS, Desktop, Android
+- **Large module matrix** where including everything bloats the binary
+- **Consumer selection of impls is a core product feature** (not all consumers need all impls)
+- **New modules added frequently** — no central orchestrator file to edit

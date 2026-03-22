@@ -8,7 +8,7 @@ description: "Pattern for declaring and checking optional tool capabilities in a
 slug: capability-detection
 status: active
 layer: L0
-category: guides
+category: agents
 assumes_read: guides-hub
 token_budget: 520
 monitor_urls:

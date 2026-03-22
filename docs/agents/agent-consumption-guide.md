@@ -15,8 +15,8 @@ monitor_urls:
   - url: "https://github.com/anthropics/anthropic-cookbook"
     type: github-releases
     tier: 3
-parent: guides-hub
-category: guides
+parent: agents-hub
+category: agents
 ---
 
 # Agent Consumption Guide
