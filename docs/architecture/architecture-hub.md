@@ -44,6 +44,7 @@ KMP source set organization, module structure, and architecture enforcement patt
 | [kmp-architecture](kmp-architecture.md) | Hub: source set hierarchy, module structure, quick reference |
 | [kmp-architecture-sourceset](kmp-architecture-sourceset.md) | Source sets — commonMain, jvmMain, appleMain, expect/actual, file naming |
 | [kmp-architecture-modules](kmp-architecture-modules.md) | Module structure — flat naming, Compose Resources config, module boundaries |
+| [layer-topology](layer-topology.md) | L0/L1/L2 layer model, flat vs chain topology, auto-sync setup |
 
 ## Key Rules
 
