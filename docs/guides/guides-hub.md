@@ -33,6 +33,7 @@ How-to guides for AI agent consumption, Claude Code workflow, and documentation 
 | [detekt-config](detekt-config.md) | Detekt L0/L1 config hierarchy, rule catalog, and how to add rules |
 | [detekt-migration-v2](detekt-migration-v2.md) | Migrating from Detekt 1.x to 2.0: plugin renames, property renames, config.validation, KMP baselines |
 | [baseline-reduction](baseline-reduction.md) | Playbook for progressively eliminating Detekt baseline suppressions (EN + ES) |
+| [autonomous-multi-agent-workflow](autonomous-multi-agent-workflow.md) | Design, wire, and operate autonomous multi-agent pipelines |
 | [getting-started](getting-started.md) | **Full L0/L1/L2 setup from scratch** — manifest, Detekt, MCP, CI (EN + ES) |
 
 ## Key Rules
