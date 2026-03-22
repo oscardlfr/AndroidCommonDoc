@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/audit-append.sh"
+source "$SCRIPT_DIR/lib/suppressions.sh" 2>/dev/null || true
 
 # pattern-lint.sh — Deterministic code pattern checks.
 #
