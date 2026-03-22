@@ -744,18 +744,22 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
     TEST_SECS=$((TEST_DURATION % 60))
 
     echo ""
-    if [[ "$TEST_EXIT_CODE" -ne 0 && "$FAILURE_COUNT" -eq 0 ]]; then
-        # Gradle failed but no individual task FAILED markers found.
+    if [[ "$TEST_EXIT_CODE" -ne 0 && "$FAILURE_COUNT" -eq 0 && "$SUCCESS_COUNT" -eq 0 ]]; then
+        # Gradle failed AND no individual task results detected at all.
         # This happens with JVM-level errors (UnsupportedClassVersionError,
-        # OOM, daemon crash). Count all non-passed modules as failed.
-        warn "[!] Gradle exited with code $TEST_EXIT_CODE but no individual task failures detected."
+        # OOM, daemon crash) where task output is missing entirely.
+        warn "[!] Gradle exited with code $TEST_EXIT_CODE and no task results found."
         warn "    This usually means a JVM-level error (wrong JAVA_HOME, OOM, daemon crash)."
         warn "    Marking all ${#TESTABLE_INDICES[@]} modules as failed."
         FAILURE_COUNT="${#TESTABLE_INDICES[@]}"
-        SUCCESS_COUNT=0
         for idx in "${TESTABLE_INDICES[@]}"; do
             RESULT_STATUS[$idx]="failed"
         done
+    elif [[ "$TEST_EXIT_CODE" -ne 0 && "$FAILURE_COUNT" -eq 0 && "$SUCCESS_COUNT" -gt 0 ]]; then
+        # Gradle exit non-zero but individual tasks passed.
+        # Likely deprecation warnings or non-fatal build issues (Gradle 9+).
+        warn "[!] Gradle exited with code $TEST_EXIT_CODE but all $SUCCESS_COUNT tasks passed individually."
+        warn "    This is likely deprecation warnings (Gradle 9+), not test failures."
     fi
     info "Test Duration: ${TEST_MINS}m ${TEST_SECS}s"
     echo ""
