@@ -110,8 +110,135 @@ LIB_DIR="$SH_DIR/lib"
 }
 
 @test "regression: pattern-lint cancellation check filters KDoc lines" {
-    # The cancellation-rethrow check should also have its own KDoc filter
-    grep -A10 "cancellation-rethrow" "$SH_DIR/pattern-lint.sh" | grep -q 'grep -vE'
+    # The cancellation-rethrow check should filter KDoc/comment lines by content
+    grep -A20 "cancellation-rethrow" "$SH_DIR/pattern-lint.sh" | grep -q 'trimmed.*\\\*'
+}
+
+# ---------------------------------------------------------------------------
+# Bug 21: cancellation-rethrow context-aware check (124 FP → real issues)
+# ---------------------------------------------------------------------------
+
+@test "regression: cancellation check parses Windows drive letter paths" {
+    # Must handle C:/Users/... paths via regex, not IFS=:
+    grep -A30 "cancellation-rethrow" "$SH_DIR/pattern-lint.sh" | grep -q 'A-Za-z]:'
+}
+
+@test "regression: cancellation check looks at surrounding context for CancellationException" {
+    # Must check lines BEFORE catch (prior catch block) for CancellationException
+    grep -A30 "cancellation-rethrow" "$SH_DIR/pattern-lint.sh" | grep -q 'line - 5\|start.*line.*5'
+}
+
+@test "regression: cancellation check skips catch blocks that rethrow exception" {
+    # Must check if catch block does throw e/it/ex (rethrow = safe)
+    grep -A40 "cancellation-rethrow" "$SH_DIR/pattern-lint.sh" | grep -q 'throw.*e\|throw.*it\|throw.*ex'
+}
+
+@test "regression: cancellation check filters comment lines by content not grep output" {
+    # Must trim the code portion and check for * or // prefix
+    grep -A30 "cancellation-rethrow" "$SH_DIR/pattern-lint.sh" | grep -q 'trimmed'
+}
+
+# ---------------------------------------------------------------------------
+# Bug 22: readme-audit tr -d must include \r for CRLF compat
+# ---------------------------------------------------------------------------
+
+@test "regression: readme-audit all wc-l pipes include \\r in tr -d" {
+    FAIL=0
+    while IFS= read -r line; do
+        echo "$line" | grep -q '\\r' && continue
+        echo "MISSING \\r in readme-audit.sh: $line"
+        FAIL=1
+    done < <(grep -n "wc -l.*tr -d" "$SH_DIR/readme-audit.sh" || true)
+    [ "$FAIL" -eq 0 ]
+}
+
+@test "regression: readme-audit tr -d on parentheses includes \\r" {
+    # tr -d '()' must be tr -d '()\r' for Windows compat
+    FAIL=0
+    while IFS= read -r line; do
+        echo "$line" | grep -q '\\r' && continue
+        echo "MISSING \\r in readme-audit.sh: $line"
+        FAIL=1
+    done < <(grep -n "tr -d '()'" "$SH_DIR/readme-audit.sh" || true)
+    [ "$FAIL" -eq 0 ]
+}
+
+# ---------------------------------------------------------------------------
+# Bug 23: Agent generification — no project-specific names in L0 agents
+# ---------------------------------------------------------------------------
+
+@test "regression: ui-specialist uses ExampleScreen not SettingsScreen" {
+    AGENT=".claude/agents/ui-specialist.md"
+    [ -f "$AGENT" ] || skip "Agent file not found"
+    ! grep -q "SettingsScreen" "$AGENT"
+}
+
+@test "regression: agents use generic layer names not module names" {
+    # L0 agents must not reference project-specific modules
+    FAIL=0
+    for agent in .claude/agents/test-specialist.md .claude/agents/ui-specialist.md; do
+        [ -f "$agent" ] || continue
+        if grep -qE "core:model|core:data|core:domain|core:database|feature/" "$agent"; then
+            echo "Project-specific module in $(basename "$agent")"
+            FAIL=1
+        fi
+    done
+    [ "$FAIL" -eq 0 ]
+}
+
+@test "regression: test-specialist has no pre-existing excuse rule" {
+    grep -q "No.*Pre-existing.*Excuse\|pre-existing" ".claude/agents/test-specialist.md"
+}
+
+@test "regression: ui-specialist has no pre-existing excuse rule" {
+    grep -q "No.*Pre-existing.*Excuse\|pre-existing" ".claude/agents/ui-specialist.md"
+}
+
+@test "regression: dev-lead template has no pre-existing excuse rule" {
+    grep -q "pre-existing" "setup/agent-templates/dev-lead.md"
+}
+
+@test "regression: test-specialist requires e2e for all core layers" {
+    # Must mention Model, Domain, Data, Database with e2e requirements
+    agent=".claude/agents/test-specialist.md"
+    grep -q "Model layer" "$agent"
+    grep -q "Domain layer" "$agent"
+    grep -q "Data layer" "$agent"
+    grep -q "Database layer" "$agent"
+}
+
+@test "regression: ui-specialist findings use generic file names" {
+    # Example JSON in findings should use ExampleScreen.kt, not SettingsScreen.kt
+    grep "dedupe_key.*Screen" ".claude/agents/ui-specialist.md" | grep -q "ExampleScreen"
+}
+
+# ---------------------------------------------------------------------------
+# Bug 24: suppressions system
+# ---------------------------------------------------------------------------
+
+@test "regression: suppressions library has load_suppressions function" {
+    [ -f "$LIB_DIR/suppressions.sh" ]
+    grep -q "load_suppressions" "$LIB_DIR/suppressions.sh"
+}
+
+@test "regression: suppressions library has is_suppressed function" {
+    grep -q "is_suppressed" "$LIB_DIR/suppressions.sh"
+}
+
+@test "regression: suppressions supports prefix matching with asterisk" {
+    grep -q '\*' "$LIB_DIR/suppressions.sh"
+}
+
+@test "regression: suppressions supports expiry dates" {
+    grep -q 'expires\|expir' "$LIB_DIR/suppressions.sh"
+}
+
+@test "regression: readme-audit sources suppressions library" {
+    grep -q "suppressions.sh" "$SH_DIR/readme-audit.sh"
+}
+
+@test "regression: pattern-lint sources suppressions library" {
+    grep -q "suppressions.sh" "$SH_DIR/pattern-lint.sh"
 }
 
 # ---------------------------------------------------------------------------
