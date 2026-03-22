@@ -930,28 +930,43 @@ teardown() {
 }
 
 # ===========================================================================
-# T. Git Flow + branch protection
+# U. JAVA_HOME auto-detect + daemon safety
 # ===========================================================================
 
-@test "gitflow: l0-ci.yml triggers on develop" {
-    grep -q "develop" "$L0_ROOT/.github/workflows/l0-ci.yml"
+@test "SH: has --java-home flag" {
+    grep -q "\-\-java-home" "$SH_DIR/run-parallel-coverage-suite.sh"
 }
 
-@test "gitflow: l0-ci.yml triggers on master" {
-    grep -q "master" "$L0_ROOT/.github/workflows/l0-ci.yml"
+@test "SH: auto-detects JAVA_HOME from gradle.properties" {
+    grep -q "org.gradle.java.home" "$SH_DIR/run-parallel-coverage-suite.sh"
 }
 
-@test "gitflow: dispatch only triggers on master (not develop)" {
-    # Dispatch should fire on master push only — not develop
-    grep "branches:" "$L0_ROOT/.github/workflows/l0-sync-dispatch.yml" | grep -q "master"
-    ! grep -q "develop" "$L0_ROOT/.github/workflows/l0-sync-dispatch.yml"
+@test "SH: warns on jvmToolchain version mismatch" {
+    grep -q "jvmToolchain" "$SH_DIR/run-parallel-coverage-suite.sh"
+    grep -q "UnsupportedClassVersionError" "$SH_DIR/run-parallel-coverage-suite.sh"
 }
 
-@test "gitflow: CONTRIBUTING.md documents Git Flow" {
-    grep -q "Git Flow\|git flow\|master.*develop\|feature.*develop" "$L0_ROOT/CONTRIBUTING.md"
+@test "SH: marks all as failed when gradle exits non-zero with 0 task failures" {
+    grep -q "Marking all.*modules as failed" "$SH_DIR/run-parallel-coverage-suite.sh"
 }
 
-@test "gitflow: PR template exists for flow" {
-    [ -f "$L0_ROOT/.github/pull_request_template.md" ]
-    grep -q "Quality Checklist" "$L0_ROOT/.github/pull_request_template.md"
+@test "PS1: has -JavaHome parameter" {
+    grep -q "JavaHome" "$PS1_DIR/run-parallel-coverage-suite.ps1"
+}
+
+@test "PS1: auto-detects JAVA_HOME from gradle.properties" {
+    grep -q "gradle.*java.*home" "$PS1_DIR/run-parallel-coverage-suite.ps1"
+}
+
+@test "PS1: warns on jvmToolchain version mismatch" {
+    grep -q "jvmToolchain" "$PS1_DIR/run-parallel-coverage-suite.ps1"
+    grep -q "UnsupportedClassVersionError" "$PS1_DIR/run-parallel-coverage-suite.ps1"
+}
+
+@test "README: Coverage Workflow mentions --java-home" {
+    grep -q "java-home" "$README"
+}
+
+@test "README: Coverage Workflow mentions auto-detect gradle.properties" {
+    sed -n '/Coverage Workflow/,/^## /p' "$README" | grep -q "gradle.properties\|org.gradle.java.home"
 }

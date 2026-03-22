@@ -275,6 +275,32 @@ PROJECT_NAME="$(basename "$PROJECT_ROOT")"
 # Set JAVA_HOME if provided
 if [[ -n "$JAVA_HOME_OVERRIDE" ]]; then
     export JAVA_HOME="$JAVA_HOME_OVERRIDE"
+    info "Using JAVA_HOME override: $JAVA_HOME"
+fi
+
+# Auto-detect required JDK version from project
+if [[ -z "$JAVA_HOME_OVERRIDE" && -d "$PROJECT_ROOT" ]]; then
+    required_jdk=""
+    # Check gradle.properties for org.gradle.java.home
+    if [[ -f "$PROJECT_ROOT/gradle.properties" ]]; then
+        gradle_java="$(grep "^org.gradle.java.home" "$PROJECT_ROOT/gradle.properties" 2>/dev/null | sed 's/.*=//' | tr -d ' \r')"
+        if [[ -n "$gradle_java" && -d "$gradle_java" ]]; then
+            export JAVA_HOME="$gradle_java"
+            info "Auto-detected JAVA_HOME from gradle.properties: $JAVA_HOME"
+        fi
+    fi
+    # Check jvmToolchain version in build files
+    if [[ -z "$gradle_java" ]]; then
+        jvm_version="$(grep -rh "jvmToolchain" "$PROJECT_ROOT" --include="*.gradle.kts" 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1)"
+        if [[ -n "$jvm_version" && -n "$JAVA_HOME" ]]; then
+            current_version="$(java -version 2>&1 | head -1 | grep -oE '"[0-9]+' | tr -d '"')"
+            if [[ -n "$current_version" && "$current_version" != "$jvm_version" ]]; then
+                warn "[!] Project requires JDK $jvm_version but current JAVA_HOME points to JDK $current_version"
+                warn "    Use --java-home <path-to-jdk-$jvm_version> or set JAVA_HOME before running"
+                warn "    With --fresh-daemon this WILL cause UnsupportedClassVersionError"
+            fi
+        fi
+    fi
 fi
 
 # Detect platform and test type
@@ -719,7 +745,17 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
 
     echo ""
     if [[ "$TEST_EXIT_CODE" -ne 0 && "$FAILURE_COUNT" -eq 0 ]]; then
-        warn "[!] Gradle exited with code $TEST_EXIT_CODE (some tasks may have failed)"
+        # Gradle failed but no individual task FAILED markers found.
+        # This happens with JVM-level errors (UnsupportedClassVersionError,
+        # OOM, daemon crash). Count all non-passed modules as failed.
+        warn "[!] Gradle exited with code $TEST_EXIT_CODE but no individual task failures detected."
+        warn "    This usually means a JVM-level error (wrong JAVA_HOME, OOM, daemon crash)."
+        warn "    Marking all ${#TESTABLE_INDICES[@]} modules as failed."
+        FAILURE_COUNT="${#TESTABLE_INDICES[@]}"
+        SUCCESS_COUNT=0
+        for idx in "${TESTABLE_INDICES[@]}"; do
+            RESULT_STATUS[$idx]="failed"
+        done
     fi
     info "Test Duration: ${TEST_MINS}m ${TEST_SECS}s"
     echo ""
