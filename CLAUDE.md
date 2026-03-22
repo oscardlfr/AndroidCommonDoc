@@ -52,7 +52,10 @@
 - Vault files: `lowercase-kebab-case` — uppercase causes ghost nodes in Obsidian
 
 ### Git Flow
-- `master` ← releases only. `develop` ← integration. `feature/*` ← from develop.
+- `master` ← releases only — **requires user approval** for any merge to master. `develop` ← integration. `feature/*` ← from develop.
+- Agents can autonomously: create branches, commit, push feature/develop branches, merge feature→develop, create PRs.
+- Agents MUST ask before: merging to master, creating releases, tagging, force push.
+- After pushing, **monitor CI** — check workflow status, fix failures, and re-push until CI is green.
 - Every PR must pass `/pre-pr` locally. Conventional Commits enforced.
 
 ## Commands
