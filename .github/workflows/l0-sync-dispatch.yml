@@ -16,7 +16,7 @@ name: L0 Sync Dispatch
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
     paths:
       - 'skills/**'
       - 'agents/**'
