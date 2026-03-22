@@ -970,3 +970,65 @@ teardown() {
 @test "README: Coverage Workflow mentions auto-detect gradle.properties" {
     sed -n '/Coverage Workflow/,/^## /p' "$README" | grep -q "gradle.properties\|org.gradle.java.home"
 }
+
+# ===========================================================================
+# V. Autonomous workflow guide
+# ===========================================================================
+
+@test "autonomous-workflow guide: file exists" {
+    [ -f "$L0_ROOT/docs/guides/autonomous-workflow.md" ]
+}
+
+@test "autonomous-workflow guide: has YAML frontmatter" {
+    head -1 "$L0_ROOT/docs/guides/autonomous-workflow.md" | grep -q "^---"
+}
+
+@test "autonomous-workflow guide: documents branch model" {
+    grep -q "master.*production\|master.*protected" "$L0_ROOT/docs/guides/autonomous-workflow.md"
+    grep -q "develop.*integration\|develop.*default" "$L0_ROOT/docs/guides/autonomous-workflow.md"
+    grep -q "feature/" "$L0_ROOT/docs/guides/autonomous-workflow.md"
+}
+
+@test "autonomous-workflow guide: documents auto-merge pattern" {
+    grep -q "gh pr merge --auto" "$L0_ROOT/docs/guides/autonomous-workflow.md"
+}
+
+@test "autonomous-workflow guide: documents multi-agent parallel" {
+    grep -q "Multi-Agent\|multi-agent\|parallel" "$L0_ROOT/docs/guides/autonomous-workflow.md"
+}
+
+@test "autonomous-workflow guide: documents CI checks table" {
+    grep -q "Commit Lint" "$L0_ROOT/docs/guides/autonomous-workflow.md"
+    grep -q "README Audit" "$L0_ROOT/docs/guides/autonomous-workflow.md"
+    grep -q "MCP Server" "$L0_ROOT/docs/guides/autonomous-workflow.md"
+}
+
+@test "autonomous-workflow guide: explains strict vs non-strict" {
+    grep -q "strict.*false\|strict: false" "$L0_ROOT/docs/guides/autonomous-workflow.md"
+    grep -q "strict.*true\|strict: true" "$L0_ROOT/docs/guides/autonomous-workflow.md"
+}
+
+@test "autonomous-workflow guide: documents downstream propagation" {
+    grep -q "dispatch\|Downstream\|l0-sync-dispatch" "$L0_ROOT/docs/guides/autonomous-workflow.md"
+}
+
+@test "autonomous-workflow guide: has quick reference section" {
+    grep -q "Quick Reference\|quick reference" "$L0_ROOT/docs/guides/autonomous-workflow.md"
+}
+
+@test "autonomous-workflow guide: under 300 lines" {
+    LINES=$(wc -l < "$L0_ROOT/docs/guides/autonomous-workflow.md" | tr -d ' \r')
+    [ "$LINES" -le 300 ]
+}
+
+@test "guides hub: lists autonomous-workflow" {
+    grep -q "autonomous-workflow" "$L0_ROOT/docs/guides/guides-hub.md"
+}
+
+@test "README: docs section mentions 20 guides" {
+    grep -q "20 guides" "$README"
+}
+
+@test "CONTRIBUTING: references autonomous workflow guide" {
+    grep -q "autonomous-workflow" "$L0_ROOT/CONTRIBUTING.md"
+}

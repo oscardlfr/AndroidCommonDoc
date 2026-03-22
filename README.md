@@ -685,7 +685,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-13 domain hubs, 54 sub-docs, 19 guides -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
+13 domain hubs, 54 sub-docs, 20 guides -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
 
 | Hub | Covers | Platform |
 |-----|--------|----------|
@@ -695,7 +695,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | [DI](docs/di/di-hub.md) | Koin module declarations, test configuration | Android + KMP |
 | [Error Handling](docs/error-handling/error-handling-hub.md) | Result type, DomainException hierarchy, CancellationException | Android + KMP |
 | [Gradle](docs/gradle/gradle-hub.md) | Convention plugins (KMP + Android-only), version catalogs, Kover | Android + KMP |
-| [Guides](docs/guides/guides-hub.md) | Agent consumption, Claude Code workflow, CLAUDE.md template, Detekt config, baseline reduction, script-vs-agent decision | Android + KMP |
+| [Guides](docs/guides/guides-hub.md) | Agent consumption, Claude Code workflow, autonomous multi-agent workflow, CLAUDE.md template, Detekt config, baseline reduction, script-vs-agent decision | Android + KMP |
 | [Navigation](docs/navigation/navigation-hub.md) | Navigation3, state-driven nav, deep links | Android + KMP |
 | [Offline-First](docs/offline-first/offline-first-hub.md) | Local-first data, sync strategies, conflict resolution | Android + KMP |
 | [Resources](docs/resources/resources-hub.md) | Memory, lifecycle, and platform resource handling | Android + KMP |
@@ -755,7 +755,7 @@ AndroidCommonDoc/
 |   +-- sh/                 # Bash (macOS/Linux) -- 22 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
-|   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
+|   +-- tests/              # bats shell test suite (580 tests, 4 fixture XMLs)
 +-- mcp-server/             # MCP server (32 tools, 3 prompts, dynamic resources)
 |   +-- src/
 |   |   +-- tools/          # 32 tools: validation, analysis, metrics, audit, sync, vault

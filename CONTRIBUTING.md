@@ -113,3 +113,5 @@ Changes to `skills/`, `agents/`, `.claude/commands/`, and `scripts/` are automat
 ## Questions?
 
 Open an issue or check the [documentation](docs/).
+
+For the autonomous AI agent workflow (auto-merge, multi-agent branches), see [docs/guides/autonomous-workflow.md](docs/guides/autonomous-workflow.md).

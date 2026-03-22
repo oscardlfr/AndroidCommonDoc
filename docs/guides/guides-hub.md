@@ -26,6 +26,7 @@ How-to guides for AI agent consumption, Claude Code workflow, and documentation 
 | Document | Description |
 |----------|-------------|
 | [agent-consumption-guide](agent-consumption-guide.md) | How AI agents should load and use pattern docs |
+| [autonomous-workflow](autonomous-workflow.md) | **Autonomous AI workflow**: Git Flow, auto-merge PRs, multi-agent branches, CI validation |
 | [claude-code-workflow](claude-code-workflow.md) | Claude Code setup, hooks, and workflow patterns |
 | [claude-md-template](claude-md-template.md) | Standard CLAUDE.md template for L0/L1/L2 projects |
 | [capability-detection](capability-detection.md) | Pattern for declaring optional tool capabilities in agents |
