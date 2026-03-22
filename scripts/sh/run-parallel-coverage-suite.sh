@@ -283,7 +283,7 @@ if [[ -z "$JAVA_HOME_OVERRIDE" && -d "$PROJECT_ROOT" ]]; then
     required_jdk=""
     # Check gradle.properties for org.gradle.java.home
     if [[ -f "$PROJECT_ROOT/gradle.properties" ]]; then
-        gradle_java="$(grep "^org.gradle.java.home" "$PROJECT_ROOT/gradle.properties" 2>/dev/null | sed 's/.*=//' | tr -d ' \r')"
+        gradle_java="$(grep "^org.gradle.java.home" "$PROJECT_ROOT/gradle.properties" 2>/dev/null | sed 's/.*=//' | tr -d ' \r' || true)"
         if [[ -n "$gradle_java" && -d "$gradle_java" ]]; then
             export JAVA_HOME="$gradle_java"
             info "Auto-detected JAVA_HOME from gradle.properties: $JAVA_HOME"
@@ -291,9 +291,9 @@ if [[ -z "$JAVA_HOME_OVERRIDE" && -d "$PROJECT_ROOT" ]]; then
     fi
     # Check jvmToolchain version in build files
     if [[ -z "$gradle_java" ]]; then
-        jvm_version="$(grep -rh "jvmToolchain" "$PROJECT_ROOT" --include="*.gradle.kts" 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1)"
+        jvm_version="$(grep -rh "jvmToolchain" "$PROJECT_ROOT" --include="*.gradle.kts" 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1 || true)"
         if [[ -n "$jvm_version" && -n "$JAVA_HOME" ]]; then
-            current_version="$(java -version 2>&1 | head -1 | grep -oE '"[0-9]+' | tr -d '"')"
+            current_version="$(java -version 2>&1 | head -1 | grep -oE '"[0-9]+' | tr -d '"' || true)"
             if [[ -n "$current_version" && "$current_version" != "$jvm_version" ]]; then
                 warn "[!] Project requires JDK $jvm_version but current JAVA_HOME points to JDK $current_version"
                 warn "    Use --java-home <path-to-jdk-$jvm_version> or set JAVA_HOME before running"
@@ -1247,7 +1247,7 @@ if $GAPS_EXIST; then
 
         if [[ "$mod" != "$CURRENT_GAP_MODULE" ]]; then
             # Get module summary from file-based lookup
-            lookup_line="$(grep "^${mod}|" "$mod_summary_lookup" 2>/dev/null | head -1)"
+            lookup_line="$(grep "^${mod}|" "$mod_summary_lookup" 2>/dev/null | head -1 || true)"
             mod_pct="$(echo "$lookup_line" | cut -d'|' -f2)"
             mod_missed="$(echo "$lookup_line" | cut -d'|' -f3)"
 
