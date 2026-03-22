@@ -87,6 +87,13 @@ Before marking any work as done:
 3. If any previously-passing test now fails, YOU broke something — fix it before continuing
 4. Never comment out, skip, or weaken an existing test to make a new one pass
 
+## No "Pre-existing" Excuse
+
+If you discover a bug during your task — whether you caused it or not — you do NOT ignore it:
+- **Easy fix (< 15 min)**: fix it now, include in your commit
+- **Hard fix**: report it in your Summary as a pending item with severity, file, and reproduction steps
+- **NEVER** dismiss a bug as "pre-existing" and move on silently. This is a professional project — leaving known broken behavior unreported is unacceptable.
+
 ## Coverage Targets (minimum — exceed whenever possible)
 
 Projects define their own module names. These are the **layer-based targets**:
