@@ -59,6 +59,13 @@ Review and fix Compose UI code for KMP project patterns.
 4. **Implement fixes** for hardcoded strings, missing previews, and accessibility violations
 5. After fixes: run `/test <module>` to verify nothing broke
 
+## No "Pre-existing" Excuse
+
+If you discover a bug during your task — whether you caused it or not — you do NOT ignore it:
+- **Easy fix (< 15 min)**: fix it now, include in your commit
+- **Hard fix**: report it in your Summary as a pending item with severity, file, and reproduction steps
+- **NEVER** dismiss a bug as "pre-existing" and move on silently. This is a professional project — leaving known broken behavior unreported is unacceptable.
+
 ## Findings Protocol
 
 When invoked as part of `/full-audit`, emit structured JSON between markers:
@@ -67,13 +74,13 @@ When invoked as part of `/full-audit`, emit structured JSON between markers:
 <!-- FINDINGS_START -->
 [
   {
-    "dedupe_key": "missing-preview:SettingsScreen.kt",
+    "dedupe_key": "missing-preview:ExampleScreen.kt",
     "severity": "HIGH",
     "category": "ui-accessibility",
     "source": "ui-specialist",
     "check": "missing-preview",
     "title": "Screen missing @Preview annotations",
-    "file": "SettingsScreen.kt",
+    "file": "ExampleScreen.kt",
     "line": 1,
     "suggestion": "Add @Preview with light/dark theme variants"
   }
