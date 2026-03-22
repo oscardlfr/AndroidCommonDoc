@@ -755,7 +755,7 @@ AndroidCommonDoc/
 |   +-- sh/                 # Bash (macOS/Linux) -- 22 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
-|   +-- tests/              # bats shell test suite (563 tests, 4 fixture XMLs)
+|   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
 +-- mcp-server/             # MCP server (32 tools, 3 prompts, dynamic resources)
 |   +-- src/
 |   |   +-- tools/          # 32 tools: validation, analysis, metrics, audit, sync, vault
@@ -823,6 +823,9 @@ AndroidCommonDoc/
 │                                                                     │
 │  1. DAEMON MANAGEMENT                                               │
 │     --fresh-daemon → stop daemons + wipe build/reports/kover|jacoco │
+│     --java-home <path> → override JAVA_HOME for Gradle execution   │
+│     Auto-detects: gradle.properties org.gradle.java.home            │
+│     Warns if jvmToolchain version ≠ current JAVA_HOME               │
 │                                                                     │
 │  2. DISCOVER MODULES + EXCLUDE                                      │
 │     Scan settings.gradle.kts → detect KMP vs Android → filter       │
