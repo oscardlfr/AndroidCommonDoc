@@ -4,6 +4,7 @@ import com.androidcommondoc.detekt.rules.CancellationExceptionRethrowRule
 import com.androidcommondoc.detekt.rules.MutableStateFlowExposedRule
 import com.androidcommondoc.detekt.rules.NoChannelForUiEventsRule
 import com.androidcommondoc.detekt.rules.NoChannelForNavigationRule
+import com.androidcommondoc.detekt.rules.NoHardcodedCredentialsRule
 import com.androidcommondoc.detekt.rules.NoHardcodedDispatchersRule
 import com.androidcommondoc.detekt.rules.NoHardcodedStringsInViewModelRule
 import com.androidcommondoc.detekt.rules.NoJavaTimeInCommonMainRule
@@ -15,6 +16,7 @@ import com.androidcommondoc.detekt.rules.NoSilentCatchRule
 import com.androidcommondoc.detekt.rules.NoSystemCurrentTimeMillisRule
 import com.androidcommondoc.detekt.rules.NoTurbineRule
 import com.androidcommondoc.detekt.rules.PreferKotlinTimeClockRule
+import com.androidcommondoc.detekt.rules.RequireRunCatchingCancellableRule
 import com.androidcommondoc.detekt.rules.SealedUiStateRule
 import com.androidcommondoc.detekt.rules.WhileSubscribedTimeoutRule
 import dev.detekt.api.RuleSet
@@ -51,6 +53,9 @@ class AndroidCommonDocRuleSetProvider : RuleSetProvider {
             ::NoJavaTimeInCommonMainRule,
             // ── Testing patterns ────────────────────────────────────────────────
             ::NoTurbineRule,
+            // ── Security ────────────────────────────────────────────────────────
+            ::NoHardcodedCredentialsRule,
+            ::RequireRunCatchingCancellableRule,
         )
     )
 }

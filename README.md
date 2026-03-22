@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 17 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 31 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 31 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Platform support:** All skills, agents, and Detekt rules work on both **Android-only (AGP 8.x)** and **KMP (AGP 9.0+)** projects. A small subset is KMP-only (noted below).
 
@@ -331,7 +331,7 @@ Findings are persisted to `.androidcommondoc/findings-log.jsonl` with resolution
 
 ### L0/L1 Config Hierarchy
 
-L0 ships `detekt-l0-base.yml` with all 17 rules `active: true`. The convention plugin loads both files automatically -- `detekt-l0-base.yml` as base, `config.yml` as L1 override (last file wins per key):
+L0 ships `detekt-l0-base.yml` with all 19 rules `active: true`. The convention plugin loads both files automatically -- `detekt-l0-base.yml` as base, `config.yml` as L1 override (last file wins per key):
 
 ```bash
 # Manual equivalent of what the plugin does:
@@ -736,7 +736,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 |.json     |       |  +--------------+    +---------------+  |
 +----------+       |  | detekt-      |    | build-logic/  |  |
                    |  | rules/       |--->| convention    |  |
-                   |  | (17 rules)   |    | plugin        |  |
+                   |  | (19 rules)   |    | plugin        |  |
                    |  +--------------+    +---------------+  |
                    +-----------------------------------------+
 ```
