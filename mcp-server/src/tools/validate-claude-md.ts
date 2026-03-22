@@ -111,7 +111,7 @@ export function validateTemplateStructure(
   }
 
   // Detect which style: Boris Cherny or Legacy
-  const hasBorisChernyHeader = /^>\s*L[012]\s+(Application|Ecosystem|Generic|Toolkit)/m.test(content);
+  const hasBorisChernyHeader = /^>\s*L[012]\s+\w[\w\s]*(?:—|--)/m.test(content);
   const hasLegacyHeader = />\s*\*\*Layer:\*\*/.test(content);
 
   if (hasBorisChernyHeader) {
