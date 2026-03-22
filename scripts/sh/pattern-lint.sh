@@ -124,22 +124,37 @@ echo ""
 if should_run "cancellation-rethrow"; then
     ce_hits=0
     if [[ -d "$PROJECT_ROOT" ]]; then
-        ce_hits=$({ grep -rn --include="*.kt" "${GREP_EXCLUDES[@]}" -E 'catch\s*\([^)]*:\s*(Exception|Throwable)\)' "$PROJECT_ROOT" 2>/dev/null \
+        # Find catch blocks, then verify surrounding context for CancellationException rethrow
+        while IFS= read -r match_line; do
+            # Parse file:line — handle Windows drive letters (C:/path:123:code)
+            if [[ "$match_line" =~ ^([A-Za-z]:)?(.+):([0-9]+):(.*) ]]; then
+                file="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+                line="${BASH_REMATCH[3]}"
+                code="${BASH_REMATCH[4]}"
+            else
+                continue
+            fi
+            # Skip KDoc and comments (check the actual code content)
+            trimmed=$(echo "$code" | sed 's/^[[:space:]]*//')
+            [[ "$trimmed" == \** ]] && continue
+            [[ "$trimmed" == //* ]] && continue
+            # Check lines before (prior catch block) AND after for CancellationException
+            start=$((line - 5)); [[ $start -lt 1 ]] && start=1
+            context=$(sed -n "${start},$((line+10))p" "$file" 2>/dev/null || true)
+            if ! echo "$context" | grep -q "CancellationException"; then
+                # Also skip if the catch block rethrows the exception (throw e / throw it)
+                next5=$(sed -n "$((line+1)),$((line+5))p" "$file" 2>/dev/null || true)
+                if ! echo "$next5" | grep -qE "throw\s+(e|it|ex)\b"; then
+                    ce_hits=$((ce_hits + 1))
+                    [[ "$SHOW_DETAILS" == "true" ]] && echo -e "    ${GRAY}${match_line}${RESET}"
+                fi
+            fi
+        done < <(grep -rn --include="*.kt" "${GREP_EXCLUDES[@]}" -E 'catch\s*\([^)]*:\s*(Exception|Throwable)\)' "$PROJECT_ROOT" 2>/dev/null \
             | grep -v "/test/" | grep -v "/androidTest/" | grep -v "/commonTest/" \
             | grep -v "/build/" \
-            | grep -v "Test.kt:" \
-            | grep -vE '^\s*\*|^\s*//' || true; } | wc -l | tr -d ' \r')
+            | grep -v "Test.kt:" || true)
     fi
     report_check "cancellation-rethrow" "$ce_hits" "ERROR"
-    if [[ "$SHOW_DETAILS" == "true" ]] && [[ $ce_hits -gt 0 ]]; then
-        { grep -rn --include="*.kt" "${GREP_EXCLUDES[@]}" -E 'catch\s*\([^)]*:\s*(Exception|Throwable)\)' "$PROJECT_ROOT" 2>/dev/null \
-            | grep -v "/test/" | grep -v "/androidTest/" | grep -v "/commonTest/" \
-            | grep -v "/build/" \
-            | grep -v "Test.kt:" \
-            | grep -vE '^\s*\*|^\s*//' || true; } | head -10 | while IFS= read -r line; do
-            echo -e "    ${GRAY}$line${RESET}"
-        done
-    fi
 fi
 
 # --- Check 2: MutableSharedFlow in production code ---
