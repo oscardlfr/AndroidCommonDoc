@@ -823,7 +823,7 @@
       "description": "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings, runs 3-pass deduplication, and produces consolidated report.",
       "category": "architecture",
       "tier": "core",
-      "hash": "sha256:e1ac356d13369e5e9fbaa88bf876b3d424816113decad30f67cc4598d06ab2d0",
+      "hash": "sha256:60258fcfd6039e834a74d521c9334f2c6193bfefae6b6570e179dafb6a953555",
       "dependencies": [],
       "frontmatter": {
         "name": "full-audit-orchestrator",
