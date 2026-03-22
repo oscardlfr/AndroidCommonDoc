@@ -831,3 +831,18 @@ teardown() {
 @test "PS1 parity: auto-exclude uses -like for glob matching" {
     grep -q "\-like" "$PS1_DIR/run-parallel-coverage-suite.ps1"
 }
+
+# ===========================================================================
+# R. Coverage task generation guarded by skip_cov
+# ===========================================================================
+
+@test "SH: coverage task generation is inside skip_cov guard" {
+    # The line "get_coverage_gradle_task" must be inside a "if ! \$skip_cov" block
+    grep -q 'if ! .skip_cov.*then' "$SH_DIR/run-parallel-coverage-suite.sh"
+    # And the coverage task generation line must come after that guard
+    grep -B5 "get_coverage_gradle_task.*mod_cov_tool" "$SH_DIR/run-parallel-coverage-suite.sh" | grep -q "skip_cov"
+}
+
+@test "PS1: coverage task generation is inside skipCov guard" {
+    grep -B5 "Get-CoverageGradleTask.*modCovTool" "$PS1_DIR/run-parallel-coverage-suite.ps1" | grep -q "skipCov"
+}

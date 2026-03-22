@@ -496,18 +496,20 @@ foreach ($module in $allModules) {
     # Store tool for later use in parsing
     $module | Add-Member -NotePropertyName "CovTool" -NotePropertyValue $modCovTool -Force
 
-    # Get coverage task
-    $covTaskName = Get-CoverageGradleTask -Tool $modCovTool -TestType $TestType -IsDesktop $Desktop
-    if ($covTaskName) {
-        $covTask = "${gradlePath}:${covTaskName}"
-        if ($isShared) {
-            $covTasksShared.Add($covTask)
+    # Get coverage task (only if not excluded)
+    if (-not $skipCov) {
+        $covTaskName = Get-CoverageGradleTask -Tool $modCovTool -TestType $TestType -IsDesktop $Desktop
+        if ($covTaskName) {
+            $covTask = "${gradlePath}:${covTaskName}"
+            if ($isShared) {
+                $covTasksShared.Add($covTask)
+            } else {
+                $covTasks.Add($covTask)
+            }
         } else {
-            $covTasks.Add($covTask)
+            $displayName = Get-CoverageDisplayName -Tool $modCovTool
+            Write-Host "  [INFO] $($module.Name) - no coverage ($displayName), skipping" -ForegroundColor DarkGray
         }
-    } else {
-        $displayName = Get-CoverageDisplayName -Tool $modCovTool
-        Write-Host "  [INFO] $($module.Name) - no coverage ($displayName), skipping" -ForegroundColor DarkGray
     }
 }
 

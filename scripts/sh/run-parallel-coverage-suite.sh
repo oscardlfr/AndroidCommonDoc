@@ -536,17 +536,19 @@ for mi in "${!MOD_NAMES[@]}"; do
         MOD_COV_TOOL[$mi]="$mod_cov_tool"
     fi
 
-    # Determine coverage task
-    cov_task="$(get_coverage_gradle_task "$mod_cov_tool" "$TEST_TYPE" "$IS_DESKTOP")"
-    if [[ -n "$cov_task" ]]; then
-        cov_task="${gradle_path}:${cov_task}"
-        if $is_shared; then
-            COV_TASKS_SHARED+=("$cov_task")
+    # Determine coverage task (only if not excluded)
+    if ! $skip_cov; then
+        cov_task="$(get_coverage_gradle_task "$mod_cov_tool" "$TEST_TYPE" "$IS_DESKTOP")"
+        if [[ -n "$cov_task" ]]; then
+            cov_task="${gradle_path}:${cov_task}"
+            if $is_shared; then
+                COV_TASKS_SHARED+=("$cov_task")
+            else
+                COV_TASKS+=("$cov_task")
+            fi
         else
-            COV_TASKS+=("$cov_task")
+            gray "  [INFO] ${MOD_NAMES[$mi]} - no coverage ($(get_coverage_display_name "$mod_cov_tool")), skipping"
         fi
-    else
-        gray "  [INFO] ${MOD_NAMES[$mi]} - no coverage ($(get_coverage_display_name "$mod_cov_tool")), skipping"
     fi
 done
 
