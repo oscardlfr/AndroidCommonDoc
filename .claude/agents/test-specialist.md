@@ -115,13 +115,13 @@ When invoked as part of `/full-audit`, emit a structured JSON block between mark
 <!-- FINDINGS_START -->
 [
   {
-    "dedupe_key": "test-pattern-violation:feature/player/src/test/PlayerViewModelTest.kt:15",
+    "dedupe_key": "test-pattern-violation:ui/screens/src/test/ExampleViewModelTest.kt:15",
     "severity": "HIGH",
     "category": "testing",
     "source": "test-specialist",
     "check": "test-pattern-violation",
     "title": "Uses runBlocking instead of runTest",
-    "file": "feature/player/src/test/PlayerViewModelTest.kt",
+    "file": "ui/screens/src/test/ExampleViewModelTest.kt",
     "line": 15,
     "suggestion": "Replace runBlocking with runTest for coroutine test support"
   }
