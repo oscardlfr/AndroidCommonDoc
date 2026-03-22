@@ -25,7 +25,7 @@ rules:
       banned_import_prefixes:
         - "android.content.SharedPreferences"
         - "android.database.sqlite"
-      prefer: "expect/actual + multiplatform-settings / Room"
+      prefer: "expect/actual + multiplatform-settings / SQLDelight"
     hand_written: false
 
 ---
@@ -41,10 +41,11 @@ Generic KMP storage patterns — platform models, encryption layers, key-value v
 | Document | Description |
 |----------|-------------|
 | [storage-patterns](storage-patterns.md) | Hub: storage architecture, platform models, quick reference |
-| [storage-patterns-implementation](storage-patterns-implementation.md) | Implementation patterns — Room, SQLDelight, multiplatform-settings |
+| [storage-patterns-implementation](storage-patterns-implementation.md) | Implementation patterns — SQLDelight, MMKV, expect/actual, migration |
 
 ## Key Rules
 
-- Key-value: `multiplatform-settings` for small primitives; avoid `SharedPreferences` in `commonMain`
-- Relational: `Room` for Android/Desktop JVM; `SQLDelight` for native iOS/macOS
-- Encryption layer via `expect/actual` — `EncryptedSharedPreferences` on Android, `Keychain` on Apple
+- Key-value: `multiplatform-settings` or MMKV for small primitives; avoid `SharedPreferences` in `commonMain`
+- Relational: `SQLDelight` for all KMP targets; `Room` for Android-only projects
+- Encryption layer via `expect/actual` — see [Security Patterns](../security/security-patterns.md)
+- Thin module architecture: one module per storage backend, shared interface

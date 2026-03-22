@@ -103,8 +103,8 @@ export function parseRuleDefinitions(
 /**
  * Scan a docs directory and collect all rule definitions with their source doc slug.
  *
- * Reads all .md files in the given directory, parses their YAML frontmatter,
- * and extracts any rule definitions found in the `rules:` field.
+ * Reads all .md files in the given directory (recursively), parses their YAML
+ * frontmatter, and extracts any rule definitions found in the `rules:` field.
  *
  * @param docsDir - Absolute path to the docs directory to scan
  * @returns Array of { slug, rule } objects for all discovered rules
@@ -112,19 +112,10 @@ export function parseRuleDefinitions(
 export async function collectAllRules(
   docsDir: string,
 ): Promise<Array<{ slug: string; rule: RuleDefinition }>> {
-  let files: string[];
-  try {
-    files = await readdir(docsDir);
-  } catch {
-    logger.warn(`Rule collector: directory not found: ${docsDir}`);
-    return [];
-  }
-
-  const mdFiles = files.filter((f) => f.endsWith(".md"));
+  const mdFiles = await collectMdFiles(docsDir);
   const results: Array<{ slug: string; rule: RuleDefinition }> = [];
 
-  for (const filename of mdFiles) {
-    const filepath = path.join(docsDir, filename);
+  for (const filepath of mdFiles) {
     let raw: string;
     try {
       raw = await readFile(filepath, "utf-8");
@@ -138,11 +129,46 @@ export async function collectAllRules(
       continue;
     }
 
-    const slug = filename.replace(/\.md$/, "");
+    const slug = path.basename(filepath).replace(/\.md$/, "");
     const rules = parseRuleDefinitions(parsed.data);
 
     for (const rule of rules) {
       results.push({ slug, rule });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Recursively collect all .md files in a directory tree.
+ * Skips archive/ directories.
+ */
+async function collectMdFiles(dir: string): Promise<string[]> {
+  const { stat } = await import("node:fs/promises");
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch {
+    logger.warn(`Rule collector: directory not found: ${dir}`);
+    return [];
+  }
+
+  const results: string[] = [];
+
+  for (const entry of entries) {
+    if (entry === "archive") continue;
+    const fullPath = path.join(dir, entry);
+    try {
+      const s = await stat(fullPath);
+      if (s.isDirectory()) {
+        const nested = await collectMdFiles(fullPath);
+        results.push(...nested);
+      } else if (entry.endsWith(".md")) {
+        results.push(fullPath);
+      }
+    } catch {
+      continue;
     }
   }
 

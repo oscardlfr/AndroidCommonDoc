@@ -72,7 +72,7 @@ Options:
   --fresh-daemon              Stop existing Gradle daemons before starting.
   --coverage-only             Only run coverage modules.
   --coverage-modules <list>   Comma-separated modules for coverage-only mode.
-  --coverage-tool <tool>      Coverage tool: jacoco (default) | kover | auto | none
+  --coverage-tool <tool>      Coverage tool: auto (default) | jacoco | kover | none
   --exclude-coverage <list>   Comma-separated modules to exclude from coverage (still tested).
   --timeout <seconds>         Timeout for test execution. Default: 600
   -h | --help                 Show this help.
@@ -275,6 +275,33 @@ PROJECT_NAME="$(basename "$PROJECT_ROOT")"
 # Set JAVA_HOME if provided
 if [[ -n "$JAVA_HOME_OVERRIDE" ]]; then
     export JAVA_HOME="$JAVA_HOME_OVERRIDE"
+    info "Using JAVA_HOME override: $JAVA_HOME"
+fi
+
+# Auto-detect required JDK version from project
+if [[ -z "$JAVA_HOME_OVERRIDE" && -d "$PROJECT_ROOT" ]]; then
+    required_jdk=""
+    gradle_java=""
+    # Check gradle.properties for org.gradle.java.home
+    if [[ -f "$PROJECT_ROOT/gradle.properties" ]]; then
+        gradle_java="$(grep "^org.gradle.java.home" "$PROJECT_ROOT/gradle.properties" 2>/dev/null | sed 's/.*=//' | tr -d ' \r' || true)"
+        if [[ -n "$gradle_java" && -d "$gradle_java" ]]; then
+            export JAVA_HOME="$gradle_java"
+            info "Auto-detected JAVA_HOME from gradle.properties: $JAVA_HOME"
+        fi
+    fi
+    # Check jvmToolchain version in build files
+    if [[ -z "$gradle_java" ]]; then
+        jvm_version="$(grep -rh "jvmToolchain" "$PROJECT_ROOT" --include="*.gradle.kts" 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1 || true)"
+        if [[ -n "$jvm_version" && -n "$JAVA_HOME" ]]; then
+            current_version="$(java -version 2>&1 | head -1 | grep -oE '"[0-9]+' | tr -d '"' || true)"
+            if [[ -n "$current_version" && "$current_version" != "$jvm_version" ]]; then
+                warn "[!] Project requires JDK $jvm_version but current JAVA_HOME points to JDK $current_version"
+                warn "    Use --java-home <path-to-jdk-$jvm_version> or set JAVA_HOME before running"
+                warn "    With --fresh-daemon this WILL cause UnsupportedClassVersionError"
+            fi
+        fi
+    fi
 fi
 
 # Detect platform and test type
@@ -718,8 +745,22 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
     TEST_SECS=$((TEST_DURATION % 60))
 
     echo ""
-    if [[ "$TEST_EXIT_CODE" -ne 0 && "$FAILURE_COUNT" -eq 0 ]]; then
-        warn "[!] Gradle exited with code $TEST_EXIT_CODE (some tasks may have failed)"
+    if [[ "$TEST_EXIT_CODE" -ne 0 && "$FAILURE_COUNT" -eq 0 && "$SUCCESS_COUNT" -eq 0 ]]; then
+        # Gradle failed AND no individual task results detected at all.
+        # This happens with JVM-level errors (UnsupportedClassVersionError,
+        # OOM, daemon crash) where task output is missing entirely.
+        warn "[!] Gradle exited with code $TEST_EXIT_CODE and no task results found."
+        warn "    This usually means a JVM-level error (wrong JAVA_HOME, OOM, daemon crash)."
+        warn "    Marking all ${#TESTABLE_INDICES[@]} modules as failed."
+        FAILURE_COUNT="${#TESTABLE_INDICES[@]}"
+        for idx in "${TESTABLE_INDICES[@]}"; do
+            RESULT_STATUS[$idx]="failed"
+        done
+    elif [[ "$TEST_EXIT_CODE" -ne 0 && "$FAILURE_COUNT" -eq 0 && "$SUCCESS_COUNT" -gt 0 ]]; then
+        # Gradle exit non-zero but individual tasks passed.
+        # Likely deprecation warnings or non-fatal build issues (Gradle 9+).
+        warn "[!] Gradle exited with code $TEST_EXIT_CODE but all $SUCCESS_COUNT tasks passed individually."
+        warn "    This is likely deprecation warnings (Gradle 9+), not test failures."
     fi
     info "Test Duration: ${TEST_MINS}m ${TEST_SECS}s"
     echo ""
@@ -753,88 +794,67 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
 
             if [[ "$COV_XML_COUNT" -gt 0 ]]; then
                 # --continue worked: some tasks succeeded, some failed — reports exist
-                # But some modules may be missing — retry those individually
-                MISSING_COV=0
-                RECOVERED_COV=0
+                # Collect missing modules and retry as a SINGLE batch (not per-module)
+                declare -a MISSING_TASKS=()
                 for idx in "${TESTABLE_INDICES[@]}"; do
                     [[ "${MOD_PROJ[$idx]}" != "$PROJECT_ROOT" ]] && continue
                     mod_tool="${MOD_COV_TOOL[$idx]:-}"
                     [[ -z "$mod_tool" || "$mod_tool" == "none" ]] && continue
                     xml_check="$(get_coverage_xml_path "$mod_tool" "${MOD_PATHS[$idx]}" "$IS_DESKTOP" 2>/dev/null)" || true
                     if [[ -z "$xml_check" ]]; then
-                        MISSING_COV=$((MISSING_COV + 1))
-                        # Try to recover this module individually
                         short_mod="${MOD_NAMES[$idx]}"
                         short_mod="${short_mod#:}"
                         gpath=":${short_mod}"
-                        recovered=false
-                        if [[ "$mod_tool" == "kover" ]]; then
-                            # Try all kover task variants
-                            fallbacks=""
-                            fallbacks="$(get_kover_task_fallbacks "$IS_DESKTOP")"
-                            for fb_task in $fallbacks; do
-                                if (cd "$PROJECT_ROOT" && ./gradlew "${gpath}:${fb_task}" --no-configuration-cache --rerun-tasks 2>&1) >/dev/null; then
-                                    gray "    [OK] ${MOD_NAMES[$idx]}: recovered via ${fb_task}"
-                                    RECOVERED_COV=$((RECOVERED_COV + 1))
-                                    recovered=true
-                                    break
-                                fi
-                            done
-                        else
-                            # jacoco — single task name
-                            cov_task_name="$(get_coverage_gradle_task "$mod_tool" "$TEST_TYPE" "$IS_DESKTOP")"
-                            if (cd "$PROJECT_ROOT" && ./gradlew "${gpath}:${cov_task_name}" --no-configuration-cache --rerun-tasks 2>&1) >/dev/null; then
-                                RECOVERED_COV=$((RECOVERED_COV + 1))
-                                recovered=true
-                            fi
-                        fi
-                        if ! $recovered; then
-                            gray "    [!] ${MOD_NAMES[$idx]}: no kover task worked"
-                        fi
+                        cov_task_name="$(get_coverage_gradle_task "$mod_tool" "$TEST_TYPE" "$IS_DESKTOP")"
+                        MISSING_TASKS+=("${gpath}:${cov_task_name}")
                     fi
                 done
+                MISSING_COV="${#MISSING_TASKS[@]}"
+                RECOVERED_COV=0
                 if [[ "$MISSING_COV" -gt 0 ]]; then
-                    warn "  [!] Batch partial: $COV_XML_COUNT ok, $MISSING_COV missing → recovered $RECOVERED_COV via per-module retry"
+                    # Batch retry: single invocation for all missing modules
+                    warn "  [>] Batch partial: $COV_XML_COUNT ok, $MISSING_COV missing → retrying as single batch..."
+                    if (cd "$PROJECT_ROOT" && ./gradlew "${MISSING_TASKS[@]}" --parallel --continue --rerun-tasks 2>&1) >/dev/null; then
+                        RECOVERED_COV="$MISSING_COV"
+                    else
+                        # Count how many were actually recovered
+                        for idx in "${TESTABLE_INDICES[@]}"; do
+                            [[ "${MOD_PROJ[$idx]}" != "$PROJECT_ROOT" ]] && continue
+                            mod_tool="${MOD_COV_TOOL[$idx]:-}"
+                            [[ -z "$mod_tool" || "$mod_tool" == "none" ]] && continue
+                            xml_check="$(get_coverage_xml_path "$mod_tool" "${MOD_PATHS[$idx]}" "$IS_DESKTOP" 2>/dev/null)" || true
+                            [[ -n "$xml_check" ]] && RECOVERED_COV=$((RECOVERED_COV + 1))
+                        done
+                        RECOVERED_COV=$((RECOVERED_COV - COV_XML_COUNT))
+                    fi
+                    warn "  [!] Batch recovery: $RECOVERED_COV / $MISSING_COV recovered"
                 else
                     ok "  [OK] Main project coverage reports generated ($COV_XML_COUNT modules)"
                 fi
             else
                 # Configuration failure: no XMLs at all — fallback to per-module
-                warn "  [!] Batch coverage failed (exit $COV_EXIT), 0 reports — retrying per-module..."
+                # Full batch failed — retry with --no-configuration-cache as single batch
+                warn "  [!] Batch coverage failed (exit $COV_EXIT), 0 reports — retrying full batch without config cache..."
                 COV_OK=0
                 COV_FAIL=0
-                for cov_task in "${COV_TASKS[@]}"; do
-                    if (cd "$PROJECT_ROOT" && ./gradlew "$cov_task" --no-configuration-cache --rerun-tasks 2>&1) >/dev/null; then
-                        COV_OK=$((COV_OK + 1))
-                    else
-                        # For kover tasks: try fallback task names
-                        if [[ "$cov_task" == *"kover"* ]]; then
-                            gradle_path="${cov_task%:*}"  # :core:domain
-                            fallbacks=""
-                            fallbacks="$(get_kover_task_fallbacks "$IS_DESKTOP")"
-                            fallback_ok=false
-                            for fb_task in $fallbacks; do
-                                full_fb="${gradle_path}:${fb_task}"
-                                [[ "$full_fb" == "$cov_task" ]] && continue  # skip the one that already failed
-                                if (cd "$PROJECT_ROOT" && ./gradlew "$full_fb" --no-configuration-cache --rerun-tasks 2>&1) >/dev/null; then
-                                    gray "    [OK] $cov_task failed → $full_fb succeeded"
-                                    COV_OK=$((COV_OK + 1))
-                                    fallback_ok=true
-                                    break
-                                fi
-                            done
-                            if ! $fallback_ok; then
-                                COV_FAIL=$((COV_FAIL + 1))
-                                warn "  [!] $cov_task failed (no fallback worked)"
-                            fi
+                if (cd "$PROJECT_ROOT" && ./gradlew "${COV_TASKS[@]}" --parallel --continue --rerun-tasks --no-configuration-cache 2>&1) >/dev/null; then
+                    COV_OK="${#COV_TASKS[@]}"
+                else
+                    # Count how many XMLs exist now
+                    for idx in "${TESTABLE_INDICES[@]}"; do
+                        [[ "${MOD_PROJ[$idx]}" != "$PROJECT_ROOT" ]] && continue
+                        mod_tool="${MOD_COV_TOOL[$idx]:-}"
+                        [[ -z "$mod_tool" || "$mod_tool" == "none" ]] && continue
+                        xml_check="$(get_coverage_xml_path "$mod_tool" "${MOD_PATHS[$idx]}" "$IS_DESKTOP" 2>/dev/null)" || true
+                        if [[ -n "$xml_check" ]]; then
+                            COV_OK=$((COV_OK + 1))
                         else
                             COV_FAIL=$((COV_FAIL + 1))
-                            warn "  [!] $cov_task failed (skipped)"
                         fi
-                    fi
-                done
+                    done
+                fi
                 if [[ "$COV_OK" -gt 0 ]]; then
-                    ok "  [OK] Per-module fallback: $COV_OK succeeded, $COV_FAIL failed"
+                    ok "  [OK] Batch retry: $COV_OK succeeded, $COV_FAIL failed"
                 else
                     warn "  [!] All ${#COV_TASKS[@]} coverage tasks failed"
                 fi
@@ -875,19 +895,23 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                 if [[ "$COV_XML_COUNT_S" -gt 0 ]]; then
                     warn "  [!] Shared coverage had errors (exit $COV_EXIT_SHARED) but $COV_XML_COUNT_S reports generated (--continue saved partial results)"
                 else
-                    warn "  [!] Batch shared coverage failed (exit $COV_EXIT_SHARED), 0 reports — retrying per-module..."
+                    warn "  [!] Batch shared coverage failed (exit $COV_EXIT_SHARED), 0 reports — retrying batch without config cache..."
                     COV_OK_S=0
                     COV_FAIL_S=0
-                    for cov_task in "${COV_TASKS_SHARED[@]}"; do
-                        if (cd "$SHARED_LIBS_PATH" && ./gradlew "$cov_task" --no-configuration-cache --rerun-tasks 2>&1) >/dev/null; then
-                            COV_OK_S=$((COV_OK_S + 1))
-                        else
-                            COV_FAIL_S=$((COV_FAIL_S + 1))
-                            warn "  [!] $cov_task failed (skipped)"
-                        fi
-                    done
+                    if (cd "$SHARED_LIBS_PATH" && ./gradlew "${COV_TASKS_SHARED[@]}" --parallel --continue --rerun-tasks --no-configuration-cache 2>&1) >/dev/null; then
+                        COV_OK_S="${#COV_TASKS_SHARED[@]}"
+                    else
+                        for idx in "${TESTABLE_INDICES[@]}"; do
+                            [[ "${MOD_NAMES[$idx]}" != shared-libs:* ]] && continue
+                            mod_tool="${MOD_COV_TOOL[$idx]:-}"
+                            [[ -z "$mod_tool" || "$mod_tool" == "none" ]] && continue
+                            xml_check="$(get_coverage_xml_path "$mod_tool" "${MOD_PATHS[$idx]}" "$IS_DESKTOP" 2>/dev/null)" || true
+                            if [[ -n "$xml_check" ]]; then COV_OK_S=$((COV_OK_S + 1))
+                            else COV_FAIL_S=$((COV_FAIL_S + 1)); fi
+                        done
+                    fi
                     if [[ "$COV_OK_S" -gt 0 ]]; then
-                        ok "  [OK] Per-module fallback: $COV_OK_S succeeded, $COV_FAIL_S failed"
+                        ok "  [OK] Batch retry: $COV_OK_S succeeded, $COV_FAIL_S failed"
                     else
                         warn "  [!] All ${#COV_TASKS_SHARED[@]} shared coverage tasks failed"
                     fi
@@ -1211,7 +1235,7 @@ if $GAPS_EXIST; then
 
         if [[ "$mod" != "$CURRENT_GAP_MODULE" ]]; then
             # Get module summary from file-based lookup
-            lookup_line="$(grep "^${mod}|" "$mod_summary_lookup" 2>/dev/null | head -1)"
+            lookup_line="$(grep "^${mod}|" "$mod_summary_lookup" 2>/dev/null | head -1 || true)"
             mod_pct="$(echo "$lookup_line" | cut -d'|' -f2)"
             mod_missed="$(echo "$lookup_line" | cut -d'|' -f3)"
 

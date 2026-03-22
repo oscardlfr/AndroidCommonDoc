@@ -2,9 +2,9 @@ name: L0 CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [master, develop]
   pull_request:
-    branches: [main, master]
+    branches: [master, develop]
 
 # Cancel in-progress runs for the same branch
 concurrency:
@@ -175,3 +175,46 @@ jobs:
       - name: Validate all registry hashes are current
         run: |
           bash scripts/sh/rehash-registry.sh --project-root . --check --verbose
+
+  # ── CI Gate ─────────────────────────────────────────────────────────────
+  # Single stable check name for branch-protection required status checks.
+  # All other jobs feed into this. Adding/removing/renaming CI jobs never
+  # breaks the branch-protection contract.
+
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs:
+      - commit-lint
+      - readme-audit
+      - agent-parity
+      - shell-tests
+      - detekt-rules
+      - mcp-server
+      - skill-registry
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          # commit-lint only runs on PRs — treat skipped as pass
+          results=(
+            "${{ needs.readme-audit.result }}"
+            "${{ needs.agent-parity.result }}"
+            "${{ needs.shell-tests.result }}"
+            "${{ needs.detekt-rules.result }}"
+            "${{ needs.mcp-server.result }}"
+            "${{ needs.skill-registry.result }}"
+          )
+          commit_lint="${{ needs.commit-lint.result }}"
+          if [[ "$commit_lint" != "success" && "$commit_lint" != "skipped" ]]; then
+            echo "❌ commit-lint: $commit_lint"
+            exit 1
+          fi
+          for r in "${results[@]}"; do
+            if [[ "$r" != "success" ]]; then
+              echo "❌ One or more required jobs failed or were cancelled."
+              echo "Results: ${results[*]}"
+              exit 1
+            fi
+          done
+          echo "✅ All CI checks passed."

@@ -277,7 +277,7 @@
       "description": "Generate Detekt custom rules from pattern doc frontmatter. Use when asked to create or update lint rules from documentation.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:c3b3bce1938bdc84987e294988ff248b59c9c35e186b3f08610ab9b68003852a",
+      "hash": "sha256:194aaf4ea4c32f0279d341f5cf78d364ea6d17923248a65654ba88cbbdd1f146",
       "dependencies": [],
       "frontmatter": {
         "name": "generate-rules",
@@ -649,7 +649,7 @@
       "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:6012ebe7ac26f847899b3a2b2fa519d0bbd185ae5b128774eadbe62f499c946a",
+      "hash": "sha256:fdcdea4a60aaf7524027ec16a5c0ffaa92be133780fde2d1e9cd07ca4b0e37eb",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -672,7 +672,7 @@
       "description": "Validate code against pattern standards (ViewModel, UI, coroutines). Use when asked to check code quality or pattern compliance.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:497adf89b86796873e33972f0b3ba4456406162b97079127bf2ed3f349cbea09",
+      "hash": "sha256:a117fccbf1170f63c470cbc9eb78cd67e2cdb73c52cb1aa9ad07e96b2e606254",
       "dependencies": [],
       "frontmatter": {
         "name": "validate-patterns",
@@ -823,7 +823,7 @@
       "description": "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings, runs 3-pass deduplication, and produces consolidated report.",
       "category": "architecture",
       "tier": "core",
-      "hash": "sha256:e1ac356d13369e5e9fbaa88bf876b3d424816113decad30f67cc4598d06ab2d0",
+      "hash": "sha256:60258fcfd6039e834a74d521c9334f2c6193bfefae6b6570e179dafb6a953555",
       "dependencies": [],
       "frontmatter": {
         "name": "full-audit-orchestrator",
@@ -946,7 +946,7 @@
       "description": "Reviews test code for pattern compliance and identifies coverage gaps. Use when adding tests, reviewing test quality, or checking coverage metrics.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:4c1de373fce5e970c8bc8035cffea3b14fa6cc1bf370fd892214d348ccae25a7",
+      "hash": "sha256:a13ec2a0b5841528fd7f1002a1ff40f8e1f60e8f2eec3c20328bef8a9f647706",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -967,7 +967,7 @@
       "description": "Reviews Compose UI code for consistency, accessibility, Material3 compliance, and design system usage. Use when modifying Compose screens or components.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:e33d3b8656b60153257133ed1c9e591076bae2529161bc7edf3d6be852439c0b",
+      "hash": "sha256:ae32a483201d86fb326dd3a854ab5afd043b014237437cff9603f22a8b9a39bd",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -999,7 +999,7 @@
       "description": "Bump Application Version",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e7ee1133b09b728397f2c0dc1090669a3480b1f2bfcf7b32d22f3cb558e61a9a",
+      "hash": "sha256:8ddc1071d220bc418a9b9bb8fc772354ab0361c2ded514974a7dbaa53b3177fb",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -1285,7 +1285,7 @@
       "description": "Sync skills from all sources (marketplace, L0, L0 agents) to GSD-2.",
       "category": "ecosystem",
       "tier": "core",
-      "hash": "sha256:afb8b2380d39f3aed086e6139ae5c925d4d49c3e34b6fec1605db5c65dd6b5f9",
+      "hash": "sha256:e135d532432b9f45682ddcdbe6141a9e4de2de530f721fda6e4fe43a17e86d60",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-gsd-skills",

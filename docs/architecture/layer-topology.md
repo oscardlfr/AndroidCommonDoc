@@ -298,4 +298,3 @@ The cron checks upstream daily. No L0 configuration needed.
 - Setup wizard: `skills/setup/SKILL.md` (Step 0 topology choice)
 - Auto-sync dispatch: `.github/workflows/l0-sync-dispatch.yml`
 - Auto-sync downstream: `setup/templates/workflows/l0-auto-sync.yml`
-- M003 spec: `.gsd/milestones/M003/M003-CONTEXT.md`

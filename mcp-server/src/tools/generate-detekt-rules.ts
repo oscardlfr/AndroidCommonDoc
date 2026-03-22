@@ -48,92 +48,61 @@ export function registerGenerateDetektRulesTool(
         consumer_project: z
           .string()
           .optional()
-          .describe("Path to consumer project for L1 rule generation"),
+          .describe("Path to consumer project for L1/L2 rule generation"),
+        docs_dir: z
+          .string()
+          .optional()
+          .describe("Docs directory to scan for pattern docs with rules: frontmatter (default: docs/ in project root)"),
+        rules_dir: z
+          .string()
+          .optional()
+          .describe("Module directory containing detekt rules (default: detekt-rules/)"),
+        generated_package: z
+          .string()
+          .optional()
+          .describe("Kotlin package for generated rules (default: com.androidcommondoc.detekt.rules.generated)"),
       }),
     },
-    async ({ dry_run, projectRoot, consumer_project }) => {
+    async ({ dry_run, projectRoot, consumer_project, docs_dir, rules_dir, generated_package }) => {
       const rateLimitResponse = checkRateLimit(limiter, "generate-detekt-rules");
       if (rateLimitResponse) return rateLimitResponse;
 
       try {
-        // Resolve toolkit root
-        const root = projectRoot ?? getToolkitRoot();
+        // Resolve project root
+        const root = consumer_project ?? projectRoot ?? getToolkitRoot();
 
-        // Determine directories based on context
-        let docsDir: string;
-        let rulesOutputDir: string;
-        let testsOutputDir: string;
+        // Resolve package → directory path
+        const pkg = generated_package ?? "com.androidcommondoc.detekt.rules.generated";
+        const pkgPath = pkg.replace(/\./g, path.sep);
 
-        if (consumer_project) {
-          // Consumer project: scan L1 docs
-          docsDir = path.join(consumer_project, ".androidcommondoc", "docs");
-          rulesOutputDir = path.join(
-            consumer_project,
-            "detekt-rules",
-            "src",
-            "main",
-            "kotlin",
-            "com",
-            "androidcommondoc",
-            "detekt",
-            "rules",
-            "generated",
-          );
-          testsOutputDir = path.join(
-            consumer_project,
-            "detekt-rules",
-            "src",
-            "test",
-            "kotlin",
-            "com",
-            "androidcommondoc",
-            "detekt",
-            "rules",
-            "generated",
-          );
-        } else {
-          // Toolkit: use standard paths
-          docsDir = projectRoot
+        // Resolve rules module directory
+        const rulesModule = rules_dir ?? "detekt-rules";
+
+        // Resolve docs directory
+        const resolvedDocsDir = docs_dir
+          ? path.resolve(root, docs_dir)
+          : consumer_project
             ? path.join(root, "docs")
-            : getDocsDir();
-          rulesOutputDir = path.join(
-            root,
-            "detekt-rules",
-            "src",
-            "main",
-            "kotlin",
-            "com",
-            "androidcommondoc",
-            "detekt",
-            "rules",
-            "generated",
-          );
-          testsOutputDir = path.join(
-            root,
-            "detekt-rules",
-            "src",
-            "test",
-            "kotlin",
-            "com",
-            "androidcommondoc",
-            "detekt",
-            "rules",
-            "generated",
-          );
-        }
+            : (projectRoot ? path.join(root, "docs") : getDocsDir());
+
+        // Output directories derive from package path
+        const rulesOutputDir = path.join(root, rulesModule, "src", "main", "kotlin", pkgPath);
+        const testsOutputDir = path.join(root, rulesModule, "src", "test", "kotlin", pkgPath);
 
         // Run the generation pipeline
         const result = await writeGeneratedRules({
-          docsDir,
+          docsDir: resolvedDocsDir,
           rulesOutputDir,
           testsOutputDir,
           dryRun: dry_run,
+          generatedPackage: pkg,
         });
 
         // Build next-steps instructions
+        const gradleTask = `:${rulesModule.replace(/\//g, ":")}:test`;
         const nextSteps = dry_run
-          ? "This was a dry-run. Re-run with dry_run=false to write files. Then compile with ./gradlew :detekt-rules:test"
-          : "Files written. Compile and test with ./gradlew :detekt-rules:test. If new rules were added, update AndroidCommonDocRuleSetProvider with the providerUpdateBlock above.";
+          ? `This was a dry-run. Re-run with dry_run=false to write files. Then compile with ./gradlew ${gradleTask}`
+          : `Files written. Compile and test with ./gradlew ${gradleTask}. If new rules were added, update your RuleSetProvider with the providerUpdateBlock above.`;
 
         return {
           content: [

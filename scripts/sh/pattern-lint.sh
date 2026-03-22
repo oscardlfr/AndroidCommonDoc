@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/audit-append.sh"
+source "$SCRIPT_DIR/lib/suppressions.sh" 2>/dev/null || true
 
 # pattern-lint.sh — Deterministic code pattern checks.
 #
@@ -76,7 +77,7 @@ WARNINGS=0
 TOTAL_CHECKS=0
 
 # Common grep excludes for performance (skip node_modules, .gradle, .git, build, .gsd worktrees)
-GREP_EXCLUDES=(--exclude-dir=node_modules --exclude-dir=.gradle --exclude-dir=.git --exclude-dir=build --exclude-dir=.gsd --exclude-dir=.worktrees)
+GREP_EXCLUDES=(--exclude-dir=node_modules --exclude-dir=.gradle --exclude-dir=.git --exclude-dir=build --exclude-dir=.gsd --exclude-dir=.worktrees --exclude-dir=detekt-rules)
 
 # Helper: scan production .kt files, excluding test dirs and test/fake files
 scan_prod() {

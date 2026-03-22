@@ -224,9 +224,9 @@ describe("L0 toolkit CLAUDE.md", () => {
     ).toHaveLength(0);
   });
 
-  it("should declare L0 inheritance", () => {
+  it("should declare layer identity", () => {
     expect(l0ToolkitContent).toMatch(
-      /inherits.*L0|inherits.*~\/\.claude\/CLAUDE\.md|auto-loaded by Claude Code/i,
+      /inherits.*L0|inherits.*~\/\.claude\/CLAUDE\.md|auto-loaded|>\s*L0\s+\w/i,
     );
   });
 

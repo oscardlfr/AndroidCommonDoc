@@ -87,9 +87,9 @@ const L2_PROJECT_NAMES: string[] = [];
 /**
  * Validate the template structure of a CLAUDE.md file.
  *
- * Checks:
- * - Identity header blockquote (Layer, Inherits, Purpose)
- * - Delegation statement present
+ * Accepts two styles:
+ * - **Legacy**: `> **Layer:** L{n}` + `> **Inherits:**` + `> **Purpose:**`
+ * - **Boris Cherny**: `> L{n} {Type} — description` one-liner + Workflow Orchestration section
  *
  * L0-global (~/.claude/CLAUDE.md) is exempt from identity header requirement
  * since it is the root of the hierarchy.
@@ -110,52 +110,94 @@ export function validateTemplateStructure(
     return issues;
   }
 
-  // Check identity header: look for Layer, Inherits, Purpose in blockquote
-  const hasLayer = />\s*\*\*Layer:\*\*/.test(content);
-  const hasInherits = />\s*\*\*Inherits:\*\*/.test(content);
-  const hasPurpose = />\s*\*\*Purpose:\*\*/.test(content);
+  // Detect which style: Boris Cherny or Legacy
+  const hasBorisChernyHeader = /^>\s*L[012]\s+\w[\w\s]*(?:—|--)/m.test(content);
+  const hasLegacyHeader = />\s*\*\*Layer:\*\*/.test(content);
 
-  if (!hasLayer) {
+  if (hasBorisChernyHeader) {
+    // Boris Cherny style validation
+    const hasWorkflowOrchestration = /^##\s+Workflow Orchestration/m.test(content);
+    const hasAgentDelegation = /Agent Delegation|Agent Roster|MUST delegate/i.test(content);
+    const hasVerification = /Verification Before Done/i.test(content);
+    const hasConstraints = /^##\s+Project Constraints/m.test(content);
+
+    if (!hasWorkflowOrchestration) {
+      issues.push({
+        level: "warning",
+        category: "template-structure",
+        file,
+        message: "Boris Cherny style: missing '## Workflow Orchestration' section",
+      });
+    }
+
+    if (!hasAgentDelegation) {
+      issues.push({
+        level: "warning",
+        category: "template-structure",
+        file,
+        message: "Boris Cherny style: missing Agent Delegation section or Agent Roster table",
+      });
+    }
+
+    if (!hasVerification) {
+      issues.push({
+        level: "warning",
+        category: "template-structure",
+        file,
+        message: "Boris Cherny style: missing 'Verification Before Done' section",
+      });
+    }
+
+    if (!hasConstraints) {
+      issues.push({
+        level: "warning",
+        category: "template-structure",
+        file,
+        message: "Boris Cherny style: missing '## Project Constraints' section",
+      });
+    }
+  } else if (hasLegacyHeader) {
+    // Legacy style validation (original behavior)
+    const hasInherits = />\s*\*\*Inherits:\*\*/.test(content);
+    const hasPurpose = />\s*\*\*Purpose:\*\*/.test(content);
+
+    if (!hasInherits) {
+      issues.push({
+        level: "error",
+        category: "template-structure",
+        file,
+        message: "Missing identity header: Inherits field not found (expected `> **Inherits:** path`)",
+      });
+    }
+
+    if (!hasPurpose) {
+      issues.push({
+        level: "error",
+        category: "template-structure",
+        file,
+        message: "Missing identity header: Purpose field not found (expected `> **Purpose:** description`)",
+      });
+    }
+
+    // Check for delegation statement
+    const hasDelegation =
+      /[Dd]elegat(es?|ion)\s+(to|via)\s/.test(content) ||
+      /[Dd]elegat(es?|ion)\s.*CLAUDE\.md/.test(content);
+    if (!hasDelegation) {
+      issues.push({
+        level: "warning",
+        category: "template-structure",
+        file,
+        message: "Missing delegation statement (expected text like 'Delegates to ~/.claude/CLAUDE.md')",
+      });
+    }
+  } else {
+    // Neither style detected
     issues.push({
       level: "error",
       category: "template-structure",
       file,
-      message:
-        "Missing identity header: Layer field not found (expected `> **Layer:** LX`)",
-    });
-  }
-
-  if (!hasInherits) {
-    issues.push({
-      level: "error",
-      category: "template-structure",
-      file,
-      message:
-        "Missing identity header: Inherits field not found (expected `> **Inherits:** path`)",
-    });
-  }
-
-  if (!hasPurpose) {
-    issues.push({
-      level: "error",
-      category: "template-structure",
-      file,
-      message:
-        "Missing identity header: Purpose field not found (expected `> **Purpose:** description`)",
-    });
-  }
-
-  // Check for delegation statement
-  const hasDelegation =
-    /[Dd]elegat(es?|ion)\s+(to|via)\s/.test(content) ||
-    /[Dd]elegat(es?|ion)\s.*CLAUDE\.md/.test(content);
-  if (!hasDelegation) {
-    issues.push({
-      level: "warning",
-      category: "template-structure",
-      file,
-      message:
-        "Missing delegation statement (expected text like 'Delegates to ~/.claude/CLAUDE.md for shared KMP rules')",
+      message: "No recognized CLAUDE.md format. Expected Boris Cherny style (`> L{n} Type — description`) or legacy (`> **Layer:** L{n}`)",
     });
   }
 
@@ -711,9 +753,11 @@ export async function validateClaudeMd(
       try {
         const projClaudeMd = path.join(project.path, "CLAUDE.md");
         const projContent = await readFile(projClaudeMd, "utf-8");
-        // Determine layer from content or default to L2
+        // Determine layer from content — supports both formats
         const layerMatch = projContent.match(
           />\s*\*\*Layer:\*\*\s*(L[012])/,
+        ) ?? projContent.match(
+          /^>\s*(L[012])\s+/m,
         );
         const layer = layerMatch ? layerMatch[1] : "L2";
         claudeFiles.push({

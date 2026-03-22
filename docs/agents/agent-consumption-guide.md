@@ -15,8 +15,8 @@ monitor_urls:
   - url: "https://github.com/anthropics/anthropic-cookbook"
     type: github-releases
     tier: 3
-parent: guides-hub
-category: guides
+parent: agents-hub
+category: agents
 ---
 
 # Agent Consumption Guide
@@ -202,7 +202,7 @@ The documentation ecosystem is served via an MCP server with these capabilities:
 
 ## Related Patterns
 
-- [Documentation Template](doc-template.md) -- Canonical template all docs must follow
+- [Documentation Template](../guides/doc-template.md) -- Canonical template all docs must follow
 - [KMP Architecture](../architecture/kmp-architecture.md) -- Source set hierarchy referenced across L0 docs
 
 ---
