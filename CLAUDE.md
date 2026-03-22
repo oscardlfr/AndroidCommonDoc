@@ -1,51 +1,71 @@
 # AndroidCommonDoc
 
-> **Layer:** L0 (Pattern Toolkit)
-> **Inherits:** `~/.claude/CLAUDE.md` (auto-loaded)
-> **Purpose:** L0 pattern toolkit — docs, skills, Detekt rules, MCP server, vault sync
+> L0 Pattern Toolkit — Source of truth for KMP patterns, skills, Detekt rules, MCP server, and vault sync. Feeds L1/L2 via `/sync-l0`.
 
-## Project Context
+## Workflow Orchestration
 
-AndroidCommonDoc is the **source of truth for all KMP patterns**. It feeds L1/L2 via sync-l0.
-- MCP server (`mcp-server/`) is Node.js TypeScript, tested with Vitest
-- Skills in `skills/*/SKILL.md`, commands in `commands/`, pattern docs in `docs/`
+### 1. Plan Mode Default
+- Enter plan mode for ANY non-trivial task (3+ steps or architectural impact)
+- Changing vault sync (`moc-generator.ts`, `transformer.ts`, `wikilink-generator.ts`) → plan mode — graph impact
+- Adding a new pattern doc → check hub doc size first; may need hub restructure
+- Changing L0→L1/L2 propagation → plan mode — blast radius is every consumer
 
-## Critical Rules
+### 2. Agent Delegation (mandatory)
+- **ALWAYS delegate domain audits to specialized agents** — never do them inline
+- Launch agents in parallel when they cover independent domains
 
-### 1. No console.log in MCP server
-- Use `logger` utility (stderr only) — `console.log` corrupts stdio and breaks Claude Desktop
+| Agent | Domain | MUST delegate when |
+|-------|--------|-------------------|
+| `test-specialist` | Testing | After implementation — pattern review, coverage gaps, write tests |
+| `ui-specialist` | Compose UI | ANY change to Compose code — accessibility, Material3 |
+| `doc-alignment-agent` | Doc accuracy | After code changes — verify docs match implementation |
+| `release-guardian-agent` | Release safety | Before ANY publish — debug flags, secrets, dev URLs |
+| `full-audit-orchestrator` | Quality audit | `/full-audit` — wave execution, 15 agents, 3-pass dedup |
+| `quality-gate-orchestrator` | Consistency | Quality gate runs — all 5 validators + pass/fail report |
 
-### 2. Doc size limits
-- Hub docs **<100 lines**, sub-docs **<300 lines**, absolute max 500 lines
-- If a doc is growing beyond this: split it, don't extend it
+### 3. Verification Before Done
+- MCP tool change → full Vitest suite + verify with `sync-vault`
+- New skill → `validate-skills`; new doc → `validate-doc-structure`
+- Vault fix → confirm graph in Obsidian before done
+- Doc changes → `cd mcp-server && npm test` + Detekt + Konsist
+- **Before any PR → `/pre-pr`**
 
-### 3. Vault sync is fragile
-- Run `validate-vault` before every sync (0 duplicates, 0 homogeneity errors)
-- Vault files must be `lowercase-kebab-case` — uppercase names cause ghost nodes in Obsidian
+### 4. Autonomous Execution
+- Use L0 skills: `/test`, `/readme-audit`, `/validate-patterns`, `/extract-errors`
+- MCP server is Node.js TypeScript, tested with Vitest — `cd mcp-server && npm test`
 
-### 4. Tests before committing doc changes
-- MCP server: `cd mcp-server && npm test`
-- Konsist: `./gradlew :konsist-tests:test`
-- Detekt: `./gradlew :detekt-rules:test`
-- Never mark doc changes done without running the relevant validator
+## Project Constraints
 
-### 5. Pattern docs need YAML frontmatter
-- Every doc must have `scope`, `sources`, `targets`, `category`, `slug`
+### No console.log in MCP server
+- Use `logger` utility (stderr only) — `console.log` corrupts stdio transport
+
+### Doc size limits
+- Hub docs **≤100 lines**, sub-docs **≤300 lines**, absolute max 500
+- If growing beyond: split it, don't extend it
+
+### Pattern docs need YAML frontmatter
+- Every doc: `scope`, `sources`, `targets`, `category`, `slug`
 - Cross-references use relative paths — no absolute paths between subdirectories
 
-## Workflow Overrides
+### Vault sync is fragile
+- Run `validate-vault` before every sync (0 duplicates, 0 homogeneity errors)
+- Vault files: `lowercase-kebab-case` — uppercase causes ghost nodes in Obsidian
 
-### Plan mode triggers
-- Any change that touches `moc-generator.ts`, `transformer.ts`, or `wikilink-generator.ts` → enter plan mode, the vault graph is affected
-- Any new pattern doc → check hub doc size before adding; may need hub restructure first
+### Git Flow
+- `master` ← releases only. `develop` ← integration. `feature/*` ← from develop.
+- Every PR must pass `/pre-pr` locally. Conventional Commits enforced.
 
-### Verification before done
-- MCP tool change → run full Vitest suite, verify against real vault with `sync-vault`
-- New skill → run `validate-skills`; new doc → run `validate-doc-structure`
-- Vault fix → open Obsidian and visually confirm graph before calling it done
+## Commands
+- `/pre-pr` — full pre-merge validation
+- `/readme-audit` — doc audit (13 checks, hub table, counts, links)
+- `/full-audit` — unified audit across all quality dimensions
+- `/validate-patterns` — code vs pattern compliance
+- `/sync-l0` — propagate skills/agents/commands to L1/L2
+- `/generate-rules` — emit Detekt rules from doc frontmatter
 
 ## Doc Consultation
-
-- Changing vault sync behavior → read `mcp-server/src/vault/` (transformer, moc-generator, wikilink-generator)
-- Adding a new skill → read `skills/sync-vault/SKILL.md` as the canonical example
-- Changing L0→L1/L2 propagation → read `skills/sync-l0/SKILL.md`
+- Vault sync → `mcp-server/src/vault/` (transformer, moc-generator, wikilink-generator)
+- New skill → `skills/sync-vault/SKILL.md` as canonical example
+- L0→L1/L2 propagation → `skills/sync-l0/SKILL.md`
+- Pattern docs → `docs/` with category hubs (14 domains, 60 sub-docs)
+- Detekt rules → `detekt-rules/` + `docs/guides/detekt-config.md`
