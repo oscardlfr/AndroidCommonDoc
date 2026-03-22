@@ -43,12 +43,12 @@ Ask yourself: "If I broke the implementation, would this test catch it?" If the 
 - Test names: `methodName_condition_expectedResult` or descriptive backtick names
 - Each test has isolated database (`TestDatabaseFactory` with `IN_MEMORY`)
 
-### 2. Integration / E2E Tests (core modules — MANDATORY)
-- `core:data` and `core:database`: full repository → datasource → DB roundtrips
-- Test the complete chain: insert → query → update → verify → delete
-- Test error recovery: corrupt data, network failures, concurrent access
-- Test migrations: verify data survives schema changes
-- These tests catch bugs that unit tests miss — interface boundaries, serialization, SQL correctness
+### 2. Integration / E2E Tests (ALL core modules — MANDATORY)
+- `core:model`: serialization/deserialization roundtrips (JSON, DB mapping), equality contracts, copy with mutations, boundary values, sealed type exhaustiveness
+- `core:domain`: full use case chains (UseCase → Repository → result), error propagation through the chain, CancellationException flows, concurrent use case execution, input validation edge cases
+- `core:data`: full repository → datasource → DB roundtrips, error recovery (corrupt data, network failures, concurrent access)
+- `core:database`: complete CRUD chains, migration tests (data survives schema changes), concurrent queries, edge cases (empty results, max values)
+- These tests catch bugs that unit tests miss — interface boundaries, serialization, state machines, race conditions
 
 ### 3. Compose Tests (feature modules — MANDATORY for UI)
 - Every screen must have `@Test` with `composeTestRule`
@@ -91,9 +91,9 @@ Before marking any work as done:
 
 | Layer | Target | E2E Required |
 |-------|--------|-------------|
-| `core:model` | 100% | No |
-| `core:domain` | 100% | No |
-| `core:data` | 99%+ | YES — repository roundtrips |
+| `core:model` | 100% | YES — serialization roundtrips, equality, copy, edge values |
+| `core:domain` | 100% | YES — use case chains, error propagation, cancellation flows |
+| `core:data` | 99%+ | YES — repository roundtrips, datasource integration |
 | `core:database` | 99%+ | YES — query + migration tests |
 | `core:designsystem` | 95% | No |
 | `feature:*` | 95%+ | Compose tests required |
