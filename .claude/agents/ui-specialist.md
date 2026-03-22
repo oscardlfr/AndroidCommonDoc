@@ -53,7 +53,7 @@ Review and fix Compose UI code for KMP project patterns.
 - Tests verify semantic nodes for accessibility
 
 ## Workflow
-1. Find `.kt` files in `feature/*/composeMain/`, `feature/*/commonMain/`, and `core/designsystem/`
+1. Find `.kt` files in UI source sets (Compose screens, components) and design system modules
 2. Check each against ALL 7 rules above
 3. Report violations with file:line and suggested fix
 4. **Implement fixes** for hardcoded strings, missing previews, and accessibility violations
@@ -67,13 +67,13 @@ When invoked as part of `/full-audit`, emit structured JSON between markers:
 <!-- FINDINGS_START -->
 [
   {
-    "dedupe_key": "missing-preview:feature/settings/src/commonMain/SettingsScreen.kt",
+    "dedupe_key": "missing-preview:SettingsScreen.kt",
     "severity": "HIGH",
     "category": "ui-accessibility",
     "source": "ui-specialist",
     "check": "missing-preview",
     "title": "Screen missing @Preview annotations",
-    "file": "feature/settings/src/commonMain/SettingsScreen.kt",
+    "file": "SettingsScreen.kt",
     "line": 1,
     "suggestion": "Add @Preview with light/dark theme variants"
   }
