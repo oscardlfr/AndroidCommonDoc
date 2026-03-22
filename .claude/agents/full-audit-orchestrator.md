@@ -72,7 +72,13 @@ After each wave completes:
 
 After all waves complete:
 
-### 1. Deduplicate
+### 1. Filter Suppressions
+Before deduplication, read `.androidcommondoc/audit-suppressions.jsonl` if it exists:
+- For each finding, check if its dedupe_key matches a suppression entry (exact or prefix with `*`)
+- Skip expired suppressions (check `expires` field vs current date)
+- Count suppressed findings separately — report them in the summary
+
+### 2. Deduplicate
 Apply the 3-pass deduplication algorithm:
 - Pass 1: Exact dedupe_key match
 - Pass 2: Proximity match (same file, similar title, within 5 lines)

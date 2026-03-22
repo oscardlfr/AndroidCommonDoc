@@ -9,6 +9,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/suppressions.sh" 2>/dev/null || true
+
 # ─── Defaults ───
 PROJECT_ROOT=""
 FIX_MODE=false
@@ -44,6 +47,14 @@ cd "$PROJECT_ROOT"
 # ─── Helpers ───
 add_finding() {
   local severity="$1" category="$2" message="$3" fixable="${4:-false}"
+  local dedupe_key="readme-audit:${category}:${message:0:80}"
+  
+  # Check if suppressed
+  if type is_suppressed &>/dev/null && is_suppressed "$PROJECT_ROOT" "$dedupe_key"; then
+    SUPPRESSED_COUNT=$((${SUPPRESSED_COUNT:-0} + 1))
+    return
+  fi
+  
   FINDINGS+=("$severity|$category|$message|$fixable")
 }
 
@@ -352,6 +363,7 @@ total=${#FINDINGS[@]}
 echo ""
 echo "  Total: $total findings ($high HIGH, $medium MEDIUM, $low LOW)"
 echo "  Fixable: $fixable / $total"
+[ "${SUPPRESSED_COUNT:-0}" -gt 0 ] && echo "  Suppressed: $SUPPRESSED_COUNT (see .androidcommondoc/audit-suppressions.jsonl)"
 echo "═══════════════════════════════════════════════"
 
 [ "$high" -gt 0 ] && exit 1 || exit 0
