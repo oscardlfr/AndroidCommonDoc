@@ -11,6 +11,7 @@ disable-model-invocation: true
 /generate-rules
 /generate-rules --dry-run
 /generate-rules --consumer path/to/project
+/generate-rules --consumer ../shared-kmp-libs --rules-dir detekt-rules-l1 --package com.grinx.shared.detekt.rules.generated
 ```
 
 ## Parameters
@@ -20,7 +21,9 @@ Uses parameters from `params.json`:
 
 Additional skill-specific arguments (not in params.json):
 - `--dry-run` -- Preview which rules would be generated, skipped, or removed without writing files (default behavior for safety).
-- `--consumer path/to/project` -- Generate rules from L1 pattern docs in a consumer project's `.androidcommondoc/docs/` directory.
+- `--consumer path/to/project` -- Generate rules from pattern docs in a consumer project's `docs/` directory.
+- `--rules-dir module-name` -- Detekt rules module directory (default: `detekt-rules`). Use `detekt-rules-l1` for L1, etc.
+- `--package com.example.detekt.rules.generated` -- Kotlin package for generated rule classes. Must match the module's source tree.
 
 ## Behavior
 

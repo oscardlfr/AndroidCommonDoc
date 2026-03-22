@@ -11,8 +11,8 @@
 
 import type { RuleDefinition } from "../registry/types.js";
 
-/** Generated rules package. */
-const GENERATED_PACKAGE = "com.androidcommondoc.detekt.rules.generated";
+/** Default generated rules package. */
+const DEFAULT_GENERATED_PACKAGE = "com.androidcommondoc.detekt.rules.generated";
 
 /**
  * Convert a kebab-case rule ID to a PascalCase class name with Rule suffix.
@@ -30,11 +30,12 @@ function toPascalCase(kebab: string): string {
 function emitBannedImportTest(
   className: string,
   rule: RuleDefinition,
+  pkg: string = DEFAULT_GENERATED_PACKAGE,
 ): string {
   const banned = rule.detect.banned_import as string;
   const prefer = rule.detect.prefer as string;
 
-  return `package ${GENERATED_PACKAGE}
+  return `package ${pkg}
 
 import dev.detekt.api.Config
 import dev.detekt.test.lint
@@ -70,6 +71,7 @@ class ${className}Test {
 function emitPreferConstructTest(
   className: string,
   rule: RuleDefinition,
+  pkg: string = DEFAULT_GENERATED_PACKAGE,
 ): string {
   const classSuffix = rule.detect.class_suffix as string;
   const mustBe = rule.detect.must_be as string;
@@ -90,7 +92,7 @@ function emitPreferConstructTest(
       compliantDecl = `sealed interface Home${classSuffix}`;
   }
 
-  return `package ${GENERATED_PACKAGE}
+  return `package ${pkg}
 
 import dev.detekt.api.Config
 import dev.detekt.test.lint
@@ -128,6 +130,7 @@ class ${className}Test {
 function emitBannedUsageTest(
   className: string,
   rule: RuleDefinition,
+  pkg: string = DEFAULT_GENERATED_PACKAGE,
 ): string {
   const bannedInit = rule.detect.banned_initializer as string;
   const prefer = rule.detect.prefer as string;
@@ -137,7 +140,7 @@ function emitBannedUsageTest(
 
   const extendsClause = inClassExtending ? ` : ${inClassExtending}()` : "";
 
-  return `package ${GENERATED_PACKAGE}
+  return `package ${pkg}
 
 import dev.detekt.api.Config
 import dev.detekt.test.lint
@@ -180,7 +183,7 @@ class ${className}Test {
  * @param rule - The rule definition from frontmatter
  * @returns Full Kotlin test source code string, or null
  */
-export function emitRuleTest(rule: RuleDefinition): string | null {
+export function emitRuleTest(rule: RuleDefinition, pkg: string = DEFAULT_GENERATED_PACKAGE): string | null {
   // Never generate tests for hand-written rules
   if (rule.hand_written === true) {
     return null;
@@ -190,11 +193,11 @@ export function emitRuleTest(rule: RuleDefinition): string | null {
 
   switch (rule.type) {
     case "banned-import":
-      return emitBannedImportTest(className, rule);
+      return emitBannedImportTest(className, rule, pkg);
     case "prefer-construct":
-      return emitPreferConstructTest(className, rule);
+      return emitPreferConstructTest(className, rule, pkg);
     case "banned-usage":
-      return emitBannedUsageTest(className, rule);
+      return emitBannedUsageTest(className, rule, pkg);
     default:
       return null;
   }
