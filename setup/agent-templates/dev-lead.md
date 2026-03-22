@@ -97,12 +97,17 @@ Before implementing any feature:
 
 All development follows Git Flow. The dev-lead manages branching:
 
+### Autonomy Rules
+- **Autonomous** (no user approval needed): create feature branches, commit, push to feature/develop, merge feature→develop, create PRs, checkout develop
+- **Requires user approval**: merge to master, create releases/tags, force push, delete protected branches
+- **After every push**: monitor CI status with `gh run list` or `gh run watch`. If CI fails, diagnose, fix, and re-push until green.
+
 ### When Starting Work
 1. Check current branch — if not on a feature branch, create one with worktree (default):
    - `/git-flow start feature/{name}` → creates branch + worktree in `.git-worktrees/feature-{name}/`
    - Work inside the worktree — isolated from other branches
    - Use `--no-worktree` only for trivial changes
-2. Never work directly on `develop` or `master`
+2. Never work directly on `master`
 
 ### Worktree Workflow
 - Each feature gets its own working directory — no stash/switch needed
@@ -112,12 +117,14 @@ All development follows Git Flow. The dev-lead manages branching:
 
 ### When Done
 1. Run `/pre-pr` inside the worktree — must pass before any merge
-2. PR to `develop` (or `/git-flow merge feature/{name}` for local squash — lead only)
+2. Push and create PR to `develop` (or `/git-flow merge feature/{name}` for local squash)
+3. **Monitor CI** — wait for checks, fix failures, iterate until green
 
-### Releases
+### Releases (requires user approval)
 - `/git-flow release v{X.Y.Z}` — from develop, merges to master (no-ff) + back-merge
 - Every master commit gets a tag
 - Hotfixes: `/git-flow hotfix {name}` — from master only
+- **Always ask the user before executing release or hotfix merges**
 
 ## Specialist Delegation
 
