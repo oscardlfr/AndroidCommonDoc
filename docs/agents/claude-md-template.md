@@ -179,5 +179,5 @@ The CLAUDE.md Agent Roster is the **discovery** mechanism. Without it, Claude Co
 ## Related Docs
 
 - [claude-code-workflow](claude-code-workflow.md) — How the dev-lead workflow operates
-- [autonomous-multi-agent-workflow](autonomous-multi-agent-workflow.md) — Multi-agent patterns and cost control
+- [autonomous-multi-agent-workflow](multi-agent-patterns.md) — Multi-agent patterns and cost control
 - [agent-consumption-guide](agent-consumption-guide.md) — How agents load and use pattern docs

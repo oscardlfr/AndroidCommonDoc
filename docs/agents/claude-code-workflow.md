@@ -166,6 +166,6 @@ Standard across all layers:
 ## Related Docs
 
 - [claude-md-template](claude-md-template.md) — Boris Cherny CLAUDE.md structure
-- [autonomous-multi-agent-workflow](autonomous-multi-agent-workflow.md) — Multi-agent patterns and cost control
+- [autonomous-multi-agent-workflow](multi-agent-patterns.md) — Multi-agent patterns and cost control
 - [agent-consumption-guide](agent-consumption-guide.md) — How agents load and use pattern docs
-- [getting-started](getting-started.md) — Full L0/L1/L2 setup from scratch
+- [getting-started](../guides/getting-started.md) — Full L0/L1/L2 setup from scratch

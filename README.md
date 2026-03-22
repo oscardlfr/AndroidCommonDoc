@@ -638,7 +638,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Scripts
 
-22 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 4 Bash-only scripts (`check-agent-parity`, `check-detekt-coverage`, `rehash-registry`, `sync-gsd-agents`).
+22 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 5 Bash-only scripts (`check-agent-parity`, `check-detekt-coverage`, `install-git-hooks`, `rehash-registry`, `sync-gsd-agents`).
 
 ### Core Scripts
 
@@ -676,6 +676,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `check-detekt-coverage` | Diagnose Detekt per-module task coverage (KMP source sets) |
 | `readme-audit` | Comprehensive README/doc audit against filesystem (counts, tables, tree, hub links, prose claims) |
 | `rehash-registry` | Recompute SHA-256 hashes in registry.json (CRLF→LF normalized) |
+| `install-git-hooks` | Install pre-commit (pattern-lint) + commit-msg (conventional commits) git hooks |
 
 ### Shared Libraries
 
@@ -758,7 +759,7 @@ AndroidCommonDoc/
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
 |   +-- ps1/                # PowerShell (Windows) -- 22 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 27 scripts (22 cross-platform + 5 utilities)
+|   +-- sh/                 # Bash (macOS/Linux) -- 28 scripts (22 cross-platform + 6 utilities)
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)

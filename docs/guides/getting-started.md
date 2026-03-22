@@ -41,6 +41,6 @@ AndroidCommonDoc (L0) — single source of truth
 ## Related docs
 
 - [Detekt config hierarchy](detekt-config.md)
-- [AI agent consumption guide](agent-consumption-guide.md)
-- [Claude Code workflow](claude-code-workflow.md)
-- [CLAUDE.md template](claude-md-template.md)
+- [AI agent consumption guide](../agents/agent-consumption-guide.md)
+- [Claude Code workflow](../agents/claude-code-workflow.md)
+- [CLAUDE.md template](../agents/claude-md-template.md)
