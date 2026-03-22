@@ -25,7 +25,7 @@ rules:
       banned_import_prefixes:
         - "android.content.SharedPreferences"
         - "android.database.sqlite"
-      prefer: "expect/actual + multiplatform-settings / Room"
+      prefer: "expect/actual + multiplatform-settings / SQLDelight"
     hand_written: false
 
 ---
@@ -41,7 +41,7 @@ Generic KMP storage patterns — platform models, encryption layers, key-value v
 | Document | Description |
 |----------|-------------|
 | [storage-patterns](storage-patterns.md) | Hub: storage architecture, platform models, quick reference |
-| [storage-patterns-implementation](storage-patterns-implementation.md) | Implementation patterns — Room, SQLDelight, multiplatform-settings |
+| [storage-patterns-implementation](storage-patterns-implementation.md) | Implementation patterns — SQLDelight, MMKV, expect/actual, migration |
 
 ## Key Rules
 
