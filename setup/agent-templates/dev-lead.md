@@ -62,10 +62,16 @@ Risk: [what could go wrong]
 ### Verification Before Done
 
 Nothing is done until verified:
-- Code change → tests pass
+- Code change → tests pass (`/test <module>`)
+- After ALL changes → full suite passes (`/test-full-parallel` without filter)
+- Before full suite → clean build: `./gradlew --stop && ./gradlew clean` in BOTH shared-kmp-libs AND app project
 - New module/feature → architecture guards pass
 - Public API change → consumer compatibility confirmed
 - **Doc coherence** → updated docs follow L0 pattern (see below)
+
+**Regression guard**: If any previously-passing test now fails, YOU broke something. Fix it before continuing. Never skip, comment out, or weaken existing tests.
+
+**Test quality gate**: When delegating to `test-specialist`, verify the output. Tests that only assert constants, count enum values, or call functions without verifying effects are coverage gaming — reject them and demand real behavioral tests.
 
 ### Documentation Gate (mandatory before closing any feature)
 
