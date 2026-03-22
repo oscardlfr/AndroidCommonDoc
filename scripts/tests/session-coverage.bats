@@ -928,3 +928,30 @@ teardown() {
 @test "community: sync issue template asks for manifest" {
     grep -q "l0-manifest.json\|manifest" "$L0_ROOT/.github/ISSUE_TEMPLATE/sync-issue.yml"
 }
+
+# ===========================================================================
+# T. Git Flow + branch protection
+# ===========================================================================
+
+@test "gitflow: l0-ci.yml triggers on develop" {
+    grep -q "develop" "$L0_ROOT/.github/workflows/l0-ci.yml"
+}
+
+@test "gitflow: l0-ci.yml triggers on master" {
+    grep -q "master" "$L0_ROOT/.github/workflows/l0-ci.yml"
+}
+
+@test "gitflow: dispatch only triggers on master (not develop)" {
+    # Dispatch should fire on master push only — not develop
+    grep "branches:" "$L0_ROOT/.github/workflows/l0-sync-dispatch.yml" | grep -q "master"
+    ! grep -q "develop" "$L0_ROOT/.github/workflows/l0-sync-dispatch.yml"
+}
+
+@test "gitflow: CONTRIBUTING.md documents Git Flow" {
+    grep -q "Git Flow\|git flow\|master.*develop\|feature.*develop" "$L0_ROOT/CONTRIBUTING.md"
+}
+
+@test "gitflow: PR template exists for flow" {
+    [ -f "$L0_ROOT/.github/pull_request_template.md" ]
+    grep -q "Quality Checklist" "$L0_ROOT/.github/pull_request_template.md"
+}
