@@ -122,6 +122,8 @@ Consequences:
 
 This is not a bug — it's the trade-off for compile-time safety. Dagger catches missing bindings before the app runs. Koin catches them at runtime (or in test via `checkModules()`).
 
+**Additional limitation for per-feature approaches (B, C):** Each feature has its own isolated `@Component`. Cross-feature dependencies (Feature A needs a service from Feature B) cannot be resolved via Dagger — they must be passed through a shared `CoreApis` interface, which grows as features share more services. See [cross-feature limitation](dagger2-sdk-selective-init.md#cross-feature-dependency-limitation-applies-to-b-and-c) for details.
+
 ### Why Koin can reach Level 3
 
 Koin's module registration is runtime: `module { single<SecurityService> { SecurityServiceImpl() } }`. The SDK can discover and register modules dynamically:

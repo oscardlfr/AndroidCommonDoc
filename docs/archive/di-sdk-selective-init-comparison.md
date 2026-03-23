@@ -222,7 +222,7 @@ FeatureObservability.init(core)
 - Binary size matters (enterprise SDKs with 20+ optional features)
 
 **When this is NOT the right choice:**
-- Many features need to share singletons (CoreApis gets complex)
+- Many features need to share services beyond CoreApis (each cross-feature dependency adds a field to CoreApis → [God Object risk](dagger2-sdk-selective-init.md#cross-feature-dependency-limitation-applies-to-b-and-c))
 - Team wants zero-ceremony module addition
 - Cross-feature compile-time graph validation needed
 
@@ -254,6 +254,7 @@ Builds on Per-Feature's isolated Components but adds `ServiceLoader` for automat
 - KMP required (ServiceLoader is JVM-only)
 - Team wants zero runtime error risk from missing deps
 - SDK has few features (overhead not justified)
+- Features depend on each other's services (same [CoreApis God Object risk](dagger2-sdk-selective-init.md#cross-feature-dependency-limitation-applies-to-b-and-c) as Per-Feature)
 
 ### 5. Hilt
 
@@ -299,7 +300,7 @@ Use for: **Android apps** (not libraries or SDKs).
 | **Binary lean** | ✅ | ❌ | ✅ | ✅ | ✅ |
 | **Build speed** | ✅ None | ❌ KAPT | ❌ KAPT/KSP | ❌ KAPT/KSP | ⚠️ KSP |
 | **Init model** | Umbrella | Umbrella | Per-feature | Umbrella (discovered) | Per-component |
-| **Singleton sharing** | Koin scope | @Singleton | CoreApis | CoreApis | Component |
+| **Singleton sharing** | koinApplication scope | @Singleton | CoreApis (⚠️) | CoreApis (⚠️) | Component |
 | **Auto-registration** | ✅ | ✅ @IntoMap | ❌ Manual | ✅ ServiceLoader | ❌ Manual |
 | **Adding a feature** | 1 entry | 1 @Component edit | New Component | META-INF only | New Component |
 | **Maturity** | Production | Production | Production | Production (JVM) | Pre-1.0 |
@@ -357,9 +358,14 @@ fun foundationModule(config: SdkConfig) = module {
     single<IdGenerator> { FoundationSingletons.idGenerator }   // survives reinit
     single<SdkConfig> { config }                               // recreated each init
 }
+
+// SDK init uses isolated koinApplication (not global startKoin)
+val app = koinApplication {
+    modules(foundationModule(config) + resolvedModules)
+}
 ```
 
-`shutdown()` calls `koinApp.close()` — the Koin container is destroyed, but `FoundationSingletons` is a Kotlin `object` (static), so its fields persist until process death.
+`shutdown()` calls `koinApp.close()` — the isolated Koin instance is destroyed, but `FoundationSingletons` is a Kotlin `object` (static), so its fields persist until process death.
 
 ### Dagger 2 — Monolithic
 
