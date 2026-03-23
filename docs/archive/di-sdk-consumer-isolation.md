@@ -155,3 +155,95 @@ But the consumer must explicitly compose components — there's no auto-discover
 | KMP support | 2-3 | Koin, kotlin-inject |
 
 Level 3 is the gold standard for large, evolving SDKs — but it's only achievable with runtime DI. If compile-time safety is non-negotiable, Level 1-2 with Dagger or kotlin-inject is the honest answer.
+
+## Hybrid: Koin Inside SDK + Dagger/Hilt in App
+
+A valid architecture is using **different DI frameworks** for the SDK and the consuming app. The SDK uses Koin internally (Level 3 discovery, KMP), while the app uses Dagger/Hilt (compile-time safety, team preference).
+
+### Why this works
+
+- **Dagger** generates code at compile time — no global runtime state. It doesn't care what else runs in the process.
+- **Koin** since 4.x supports `koinApplication {}` — an isolated instance that does NOT use the global `startKoin()`. The SDK creates its own Koin context; the app's Dagger graph is unaffected.
+
+```
+┌─────────────────────────────────────────────┐
+│ App (Dagger/Hilt)                           │
+│                                             │
+│  @Component → AppModule, ViewModelModule    │
+│  Lifecycle managed by Hilt / @Singleton     │
+│                                             │
+│  ┌────────────────────────────────────────┐  │
+│  │ SDK (Koin — isolated koinApplication)  │  │
+│  │                                        │  │
+│  │  SharedSdk.init(modules, config)       │  │
+│  │  Internal: koinApplication { modules } │  │
+│  │  Exposes: interfaces only              │  │
+│  └────────────────────────────────────────┘  │
+│                                             │
+│  // App accesses SDK via interfaces         │
+│  val security: SecurityService =            │
+│      SharedSdk.get<SecurityService>()       │
+│                                             │
+│  // Optionally bridge into Dagger:          │
+│  @Provides fun security(): SecurityService  │
+│      = SharedSdk.get()                      │
+└─────────────────────────────────────────────┘
+```
+
+### SDK side — isolated Koin (not global)
+
+```kotlin
+// SDK uses koinApplication (isolated), NOT startKoin (global)
+object SharedSdk {
+    private lateinit var koin: Koin
+
+    fun init(modules: Set<SdkModule>, config: SdkConfig) {
+        val app = koinApplication {
+            modules(foundationModule(config) + resolvedModules)
+        }
+        koin = app.koin  // isolated instance, does not affect GlobalContext
+    }
+
+    inline fun <reified T> get(): T = koin.get()
+}
+```
+
+**Critical:** `koinApplication {}` creates an isolated Koin instance. `startKoin {}` uses the global singleton. If the app also uses Koin (e.g. via `koin-android`), the SDK MUST use `koinApplication` to avoid conflicts.
+
+### App side — Dagger bridge (optional)
+
+```kotlin
+// App's Dagger module provides SDK services to the Dagger graph
+@Module
+@InstallIn(SingletonComponent::class)
+object SdkBridgeModule {
+    @Provides @Singleton
+    fun provideSecurityService(): SecurityService = SharedSdk.get()
+
+    @Provides @Singleton
+    fun provideStorageService(): StorageService = SharedSdk.get()
+}
+
+// Now app's ViewModels can @Inject SDK interfaces normally
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
+    private val security: SecurityService,  // comes from SDK via bridge
+) : ViewModel()
+```
+
+### When to use hybrid
+
+| Scenario | Fits? | Why |
+|----------|-------|-----|
+| SDK is KMP, app is Android-only | ✅ | SDK needs KMP DI (Koin), app uses Google-standard (Hilt) |
+| SDK team ≠ app team | ✅ | Each team uses what they know — no forced migration |
+| App is already Hilt, adding SDK later | ✅ | SDK doesn't require app to adopt Koin |
+| Both SDK and app are same team, same codebase | ❌ | Simpler to use one framework everywhere |
+| SDK is Android-only, no KMP needed | ❌ | Just use Dagger/Hilt everywhere |
+
+### Caveats
+
+1. **Two DI containers in memory** — minimal overhead (Koin is lightweight), but it's two systems to reason about during debugging.
+2. **SDK must use `koinApplication`, not `startKoin`** — if the SDK uses `startKoin` and the app also uses Koin (e.g. via `koin-android`), they'll conflict on `GlobalContext`. Currently L1 uses `startKoin` — this would need migration to `koinApplication` for true hybrid support.
+3. **Bridge module adds ceremony** — one `@Provides` per SDK interface exposed to Dagger. Manageable for 5-10 services, tedious for 50+.
+4. **Testing** — SDK tests use Koin test utilities, app tests use Hilt test utilities. Integration tests need both.
