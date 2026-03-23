@@ -17,7 +17,7 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custo
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
 - **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 22 cross-platform pairs + 4 Bash-only utilities
-- **AI agent skills** for Claude Code and GitHub Copilot -- 40 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
+- **AI agent skills** for Claude Code and GitHub Copilot -- 42 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 17 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
@@ -113,7 +113,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 | What | Destination | Count |
 |------|-------------|-------|
-| Skills | `.claude/skills/*/SKILL.md` | 40 |
+| Skills | `.claude/skills/*/SKILL.md` | 42 |
 | Agents | `.claude/agents/*.md` | 15 |
 | Commands | `.claude/commands/*.md` | 27 |
 | **Total** | | **84 entries** |
@@ -391,7 +391,7 @@ Real-time pattern enforcement during AI-assisted development:
 
 ## Skills Reference
 
-40 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
+42 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
@@ -757,7 +757,7 @@ AndroidCommonDoc/
 |   +-- hooks/              # Real-time Detekt enforcement hooks
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
-|   +-- */SKILL.md          # 40 canonical skill definitions
+|   +-- */SKILL.md          # 42 canonical skill definitions
 |   +-- registry.json       # L0 registry (84 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation

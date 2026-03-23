@@ -117,7 +117,7 @@ async function main(): Promise<void> {
   const result = await auditDocs(options);
 
   // Print human-readable report to stdout
-  console.log(formatReport(result));
+  process.stdout.write(formatReport(result) + "\n");
 
   // Exit with error if HIGH findings
   if (result.summary.high > 0) {
