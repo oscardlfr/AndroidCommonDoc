@@ -36,8 +36,8 @@ validate_upstream:
   - url: "https://insert-koin.io/docs/reference/koin-mp/kmp"
     assertions:
       - type: api_present
-        value: "startKoin"
-        context: "Koin initialization function"
+        value: "koinApplication"
+        context: "Koin isolated application — preferred for SDKs and testing"
       - type: api_present
         value: "module"
         context: "Koin module declaration"
@@ -66,7 +66,7 @@ Dependency Injection in KMP projects follows framework-agnostic principles: cons
 ## Sub-documents
 
 - **[di-patterns-modules](di-patterns-modules.md)**: Module declaration patterns -- Koin module declarations, koinViewModel, Dagger/Hilt ViewModel injection, app startup, KMP platform modules, Dagger @Module/@Binds/@Provides, KMP+Hilt hybrid pattern
-- **[di-patterns-testing](di-patterns-testing.md)**: DI testing patterns -- Koin test module setup, test lifecycle (startKoin/stopKoin), anti-patterns table, interface-based binding, scoping rules
+- **[di-patterns-testing](di-patterns-testing.md)**: DI testing patterns — Koin test module setup, test lifecycle (koinApplication/close), anti-patterns table, interface-based binding, scoping rules
 
 ---
 

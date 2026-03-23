@@ -244,6 +244,6 @@ class SettingsViewModel @Inject constructor(
 ### Caveats
 
 1. **Two DI containers in memory** — minimal overhead (Koin is lightweight), but it's two systems to reason about during debugging.
-2. **SDK must use `koinApplication`, not `startKoin`** — if the SDK uses `startKoin` and the app also uses Koin (e.g. via `koin-android`), they'll conflict on `GlobalContext`. Currently L1 uses `startKoin` — this would need migration to `koinApplication` for true hybrid support.
+2. **SDK must use `koinApplication`, not `startKoin`** — if the SDK uses `startKoin` and the app also uses Koin (e.g. via `koin-android`), they'll conflict on `GlobalContext`. L1 is migrating from `startKoin` to `koinApplication` for isolated instance support.
 3. **Bridge module adds ceremony** — one `@Provides` per SDK interface exposed to Dagger. Manageable for 5-10 services, tedious for 50+.
 4. **Testing** — SDK tests use Koin test utilities, app tests use Hilt test utilities. Integration tests need both.

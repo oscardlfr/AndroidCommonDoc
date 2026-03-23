@@ -259,7 +259,7 @@ fun foundationModule(config: SdkConfig) = module {
 }
 ```
 
-`shutdown()` calls `stopKoin()` — the Koin container is destroyed, but `FoundationSingletons` is a Kotlin `object` (static), so its fields persist until process death.
+`shutdown()` calls `koinApp.close()` — the Koin container is destroyed, but `FoundationSingletons` is a Kotlin `object` (static), so its fields persist until process death.
 
 ### Dagger 2 — Monolithic
 
