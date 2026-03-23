@@ -220,6 +220,19 @@ struct ContentView: View {
 - [Androidify Sample](https://github.com/nicholasjackson/androidify) -- Navigation3 in a full app
 - [Now in Android](https://github.com/android/nowinandroid) -- Architecture reference
 
+validate_upstream:
+  - url: "https://developer.android.com/develop/ui/compose/navigation"
+    assertions:
+      - type: api_present
+        value: "NavHost"
+        context: "Navigation container composable"
+      - type: api_present
+        value: "composable"
+        context: "Route registration function"
+      - type: deprecation_scan
+        value: "navigation-compose"
+        context: "Core navigation library we use"
+    on_failure: MEDIUM
 ---
 
 **Status**: Active -- All KMP projects must use these navigation patterns.
