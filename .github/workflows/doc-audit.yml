@@ -1,0 +1,54 @@
+name: Documentation Audit
+
+on:
+  schedule:
+    - cron: '0 10 * * 1'  # Weekly Monday 10am UTC (after doc-monitor at 9am)
+  workflow_dispatch:
+    inputs:
+      waves:
+        description: 'Waves to run (comma-separated: 1,2,3)'
+        default: '1,2'
+        type: string
+      with_upstream:
+        description: 'Include upstream content validation (Wave 3)'
+        default: false
+        type: boolean
+      layer:
+        description: 'Project layer (L0, L1, L2)'
+        default: 'L0'
+        type: string
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Run documentation audit
+        run: |
+          node build/cli/audit-docs.js \
+            --project-root "${{ github.workspace }}" \
+            --layer "${{ inputs.layer || 'L0' }}" \
+            --waves "${{ inputs.waves || '1,2' }}" \
+            ${{ inputs.with_upstream == 'true' && '--with-upstream' || '' }}
+
+      - name: Upload audit report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doc-audit-report
+          path: reports/
+          retention-days: 14
