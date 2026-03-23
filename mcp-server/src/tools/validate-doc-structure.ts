@@ -168,8 +168,8 @@ export function checkSizeLimits(
     );
   }
 
-  // Hub doc max: 100 lines (identified by "## Sub-documents" section)
-  const isHub = lines.some((line) => line.trim() === "## Sub-documents");
+  // Hub doc max: 100 lines (identified by filename containing "hub")
+  const isHub = filepath.toLowerCase().includes("hub");
   if (isHub && lineCount > 100) {
     errors.push(
       `${filepath}: hub doc with ${lineCount} lines exceeds 100-line hub maximum`,

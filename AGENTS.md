@@ -47,7 +47,7 @@ node mcp-server/build/cli/monitor-sources.js --project-root /path/to/l1 --layer 
 7. **Navigation:** State-driven -- never Channel-based.
 8. **No platform deps in ViewModels:** No `Context`, `Resources`, `UIKit` imports.
 
-## Available Skills (40)
+## Available Skills (42)
 
 Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-specific files.
 
@@ -90,6 +90,8 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | Skill | Description |
 |-------|-------------|
 | `monitor-docs` | Monitor upstream documentation sources for changes and deprecations (`--layer L0/L1/L2`) |
+| `audit-docs` | Unified doc audit — structure (sizes, frontmatter), coherence (links, refs), upstream (assertions) |
+| `validate-upstream` | Validate pattern docs against upstream official documentation using Layer 1 assertions |
 | `generate-rules` | Generate Detekt rules from pattern doc frontmatter |
 | `ingest-content` | Fetch external content and match against pattern doc metadata |
 | `doc-reorganize` | Reorganize docs/ into domain-based subdirectories |
@@ -116,7 +118,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `seo` | Validate SEO metadata, structure, and discoverability |
 | `web-quality-audit` | Comprehensive web quality audit across all dimensions |
 
-## MCP Tools (31)
+## MCP Tools (32)
 
 Programmatic access via Model Context Protocol server (`mcp-server/`):
 
@@ -130,6 +132,7 @@ Programmatic access via Model Context Protocol server (`mcp-server/`):
 | `setup-check` | Verify toolkit installation in a project |
 | `find-pattern` | Search pattern registry by query terms |
 | `monitor-sources` | Check upstream sources for version changes and deprecations |
+| `audit-docs` | Unified doc audit — structure, coherence, upstream (3 waves) |
 | `generate-detekt-rules` | Generate Kotlin Detekt rules from pattern doc frontmatter |
 | `ingest-content` | Fetch and analyze external content against pattern metadata |
 | `sync-vault` | Sync documentation into Obsidian vault |
