@@ -314,3 +314,19 @@ if violations:
     done
     [ "$FAIL" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# Bug 25: monitor-sources URL deduplication
+# ---------------------------------------------------------------------------
+
+@test "regression: change-detector deduplicates URL checks with cache" {
+    grep -q "urlCache" mcp-server/src/monitoring/change-detector.ts
+}
+
+@test "regression: change-detector cache key is the URL" {
+    grep -q "cacheKey.*url\|monitorUrl.url" mcp-server/src/monitoring/change-detector.ts
+}
+
+@test "regression: change-detector reuses cached result" {
+    grep -q "urlCache.has\|urlCache.get" mcp-server/src/monitoring/change-detector.ts
+}
