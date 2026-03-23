@@ -56,7 +56,7 @@ validate_upstream:
 Dependency Injection in KMP projects follows framework-agnostic principles: constructor injection everywhere, module-scoped bindings in `di/` packages, platform-specific providers via `expect`/`actual`. The two most common frameworks are Koin (KMP-native, used in cross-platform projects) and Dagger/Hilt (Android-centric, used in enterprise Android projects).
 
 **Core Principles**:
-1. Constructor injection for ALL classes -- no field injection, no service locator
+1. Constructor injection for ALL production classes — dependencies declared in constructor, resolved at the DI boundary (app init, module declarations)
 2. Module declarations live in each module's `di/` package
 3. Platform-specific bindings use `expect`/`actual` or framework-specific mechanisms
 4. ViewModels get their dependencies via constructor -- never via manual DI lookups inside business logic
@@ -74,5 +74,7 @@ Dependency Injection in KMP projects follows framework-agnostic principles: cons
 
 - [Koin Documentation](https://insert-koin.io/docs/reference/introduction)
 - [Dagger/Hilt Documentation](https://dagger.dev/hilt/)
-- [KMP Architecture](../architecture/kmp-architecture.md) -- expect/actual for platform bindings
-- [Testing Patterns](../testing/testing-patterns.md) -- Fake injection, Koin test lifecycle
+- [KMP Architecture](../architecture/kmp-architecture.md) — expect/actual for platform bindings
+- [Testing Patterns](../testing/testing-patterns.md) — Fake injection, Koin test lifecycle
+- [SDK DI Concepts](../archive/di-sdk-consumer-isolation.md) — DI vs Service Locator, isolation levels, cross-feature deps
+- [Framework Comparison](../archive/di-sdk-selective-init-comparison.md) — Dagger vs Koin vs kotlin-inject for SDKs
