@@ -1,38 +1,82 @@
-# M011 — Upstream Content Validation Engine
+# M011 — Unified Documentation Validation System
 
 ## Goal
 
-Extend the monitoring infrastructure from **change detection** (does the URL still exist? did the version bump?) to **semantic validation** (does our documentation still match what upstream teaches?). Detect deprecated APIs, removed patterns, and divergent recommendations before they reach developers.
+Build a complete documentation validation pipeline that answers three questions:
+1. **Structure** — ¿Nuestros docs cumplen los estándares L0? (sizes, frontmatter, links, counts)
+2. **Coherence** — ¿Nuestros docs están alineados entre sí y con el código? (refs, drift, cross-layer)
+3. **Upstream** — ¿Nuestros docs siguen al día con las fuentes oficiales? (APIs, patterns, deprecations)
+
+Unified under a single command: `/audit-docs`
 
 ## Problem Statement
 
-Current `monitor-sources` detects that upstream content *changed* but cannot answer:
-- Did they deprecate an API we teach?
-- Did they change a recommended pattern we document?
-- Is our code example still valid against the current API?
-- Did they add a new API that supersedes our recommended approach?
+Today documentation validation is fragmented across 9 tools with no unified view:
 
-This creates a window where L0/L1/L2 docs confidently teach patterns that upstream has already abandoned.
+| Tool | What | Limitation |
+|------|------|------------|
+| `validate-doc-structure` (MCP) | Sizes, frontmatter, naming | No content validation |
+| `readme-audit` (script) | README counts match reality | L0-only format |
+| `doc-structure.test.ts` (vitest) | L0 refs, hub limits | CI-only, not interactive |
+| `monitor-sources` (MCP/CLI) | URL reachable, version drift | Doesn't read content |
+| `doc-alignment-agent` | Code → doc drift | Manual invocation |
+| `l0-coherence-auditor` | Hub structure, frontmatter | L0-only |
+| `ingest-content` (MCP) | Analyze external content | Manual, no assertions |
+| `pattern-lint` (script) | Code anti-patterns | Doesn't validate docs |
+| `validate-patterns` (skill) | 7 code pattern categories | Doesn't validate docs |
+
+No single command answers "are our docs healthy?" — you have to run 5+ tools and mentally merge the results.
 
 ## Architecture
 
-### Two-layer validation pipeline
+### `/audit-docs` — unified doc audit command
 
 ```
-Layer 1: Deterministic (CI, $0)          Layer 2: Semantic (on-demand, ~$0.05/doc)
-┌─────────────────────────┐              ┌──────────────────────────────┐
-│ Frontmatter assertions  │              │ LLM analysis                 │
-│                         │              │                              │
-│ validate_upstream:      │   triggers   │ "Compare our pattern doc     │
-│   - api: "stateIn"     │─────────────▶│  against this upstream page. │
-│     must_exist: true    │  on change   │  Report: deprecated APIs,    │
-│   - keyword: "Channel" │  detected    │  changed recommendations,    │
-│     alert_if: recommend │              │  missing new APIs"           │
-│                         │              │                              │
-│ Output: PASS/FAIL with  │              │ Output: structured findings  │
-│ specific violations     │              │ with remediation actions     │
-└─────────────────────────┘              └──────────────────────────────┘
+/audit-docs                              # all checks, local only
+/audit-docs --with-upstream              # include upstream content validation (network)
+/audit-docs --layer L1 --project-root /path/to/l1
+/audit-docs --profile deep              # include LLM semantic analysis
 ```
+
+Three waves, separated by cost:
+
+```
+Wave 1: Structure (local, $0, <5s)       Wave 2: Coherence (local, $0, <15s)
+┌──────────────────────────┐              ┌──────────────────────────────┐
+│ • Hub docs ≤ 100 lines   │              │ • Internal links resolve     │
+│ • Sub-docs ≤ 300 lines   │              │ • L0 refs from L1/L2 valid   │
+│ • Frontmatter complete   │              │ • Doc alignment with code    │
+│ • Naming conventions     │              │ • README counts match        │
+│ • archive/ excluded      │              │ • Hub tables complete        │
+└──────────────────────────┘              │ • Cross-layer refs valid     │
+                                          └──────────────────────────────┘
+
+Wave 3: Upstream (network, ~$0.30, opt-in)
+┌──────────────────────────────────────────┐
+│ Layer 1: Deterministic ($0)              │
+│ • API present/absent assertions          │
+│ • Deprecation keyword scan               │
+│ • Version drift (manifest vs upstream)   │
+│                                          │
+│ Layer 2: Semantic (LLM, ~$0.03/doc)      │
+│ • Pattern doc vs upstream content diff   │
+│ • Changed recommendations detection      │
+│ • New API discovery                      │
+└──────────────────────────────────────────┘
+```
+
+### Separation from `/full-audit`
+
+| | `/full-audit` | `/audit-docs` |
+|---|---|---|
+| **Scope** | Code, architecture, tests, security, release | Documentation only |
+| **Network** | Never | Only Wave 3 (opt-in) |
+| **LLM** | Never | Only `--profile deep` |
+| **Cost** | $0 | $0 default, ~$0.30 with `--with-upstream` |
+| **When** | Every PR, pre-release | Weekly cron, manual, pre-release |
+| **Doc checks** | Only `doc-alignment-agent` (code→doc drift) | All doc validation |
+
+`/full-audit` keeps `doc-alignment-agent` because it detects when a code change broke a doc — that belongs in code review. Everything else doc-related moves to `/audit-docs`.
 
 ### Frontmatter schema extension
 
@@ -51,20 +95,17 @@ validate_upstream:
         value: "Channel"
         qualifier: "recommended"
         context: "We teach SharedFlow over Channel for UI events"
-      - type: pattern_match
-        value: "WhileSubscribed"
-        context: "Upstream still recommends WhileSubscribed for StateFlow"
     on_failure: HIGH
 ```
 
-### Assertion types (Layer 1)
+### Assertion types (Wave 3, Layer 1)
 
-| Type | Behavior | Finding severity |
-|------|----------|-----------------|
-| `api_present` | Grep for API name in upstream content. FAIL if absent. | HIGH — API may be removed |
-| `api_absent` | Grep for API name. FAIL if found. | MEDIUM — we explicitly avoid this |
-| `keyword_absent` | FAIL if keyword appears near qualifier. | MEDIUM — upstream now recommends what we avoid |
-| `keyword_present` | FAIL if keyword NOT found. | LOW — upstream may have changed terminology |
+| Type | Behavior | Severity |
+|------|----------|----------|
+| `api_present` | Grep for API name in upstream content. FAIL if absent. | HIGH |
+| `api_absent` | Grep for API name. FAIL if found. | MEDIUM |
+| `keyword_absent` | FAIL if keyword appears near qualifier. | MEDIUM |
+| `keyword_present` | FAIL if keyword NOT found. | LOW |
 | `pattern_match` | Regex match on upstream content. FAIL if no match. | Configurable |
 | `deprecation_scan` | Scan for "deprecated", "removed", "no longer" near our API names. | HIGH |
 
@@ -72,92 +113,70 @@ validate_upstream:
 
 ```
 mcp-server/src/monitoring/
-  change-detector.ts          # existing — change detection
-  source-checker.ts           # existing — URL fetch + version extract
-  content-fetcher.ts          # NEW — fetch + cache upstream content (Jina/raw)
+  content-fetcher.ts          # NEW — fetch + cache (Jina/raw), shared with ingest-content
+  content-cache.ts            # NEW — disk cache with TTL (.androidcommondoc/upstream-cache/)
   assertion-engine.ts         # NEW — Layer 1 deterministic assertions
   semantic-analyzer.ts        # NEW — Layer 2 LLM analysis (optional)
-  upstream-validator.ts       # NEW — orchestrator (combines L1 + L2)
-  content-cache.ts            # NEW — disk cache for fetched content
 
 mcp-server/src/tools/
-  validate-upstream.ts        # NEW — MCP tool
-  
+  audit-docs.ts               # NEW — MCP tool (orchestrates all waves)
+  validate-upstream.ts        # NEW — MCP tool (Wave 3 standalone)
+
 mcp-server/src/cli/
-  validate-upstream.ts        # NEW — CLI entrypoint
+  audit-docs.ts               # NEW — CLI entrypoint
 
 skills/
-  validate-upstream/SKILL.md  # NEW — agent skill
+  audit-docs/SKILL.md         # NEW — unified skill
+  validate-upstream/SKILL.md  # NEW — standalone upstream validation
 ```
-
-### Content fetching strategy
-
-```
-1. Check disk cache (`.androidcommondoc/upstream-cache/{url-hash}.md`)
-   - If fresh (< 24h for CI, < 1h for manual): use cached
-   - If stale: re-fetch
-
-2. Fetch via Jina Reader (preferred) or raw HTTP
-   - Jina: clean markdown, no nav/ads
-   - Raw: fallback, needs basic HTML stripping
-   
-3. Store: { url, content_md, fetched_at, content_hash }
-```
-
-### Integration with existing infrastructure
-
-- `validate_upstream` frontmatter sits alongside existing `monitor_urls`
-- Reuses `CheckResult.content_hash` for change detection before running assertions
-- Findings follow existing `MonitoringFinding` interface
-- Review state (accept/reject/defer) reuses `review-state.ts`
-- Report format extends `report-generator.ts`
 
 ### Relationship with `ingest-content`
 
-`ingest-content` and `validate-upstream` are complementary tools that share content fetching infrastructure but serve different purposes:
+| | `ingest-content` | `validate-upstream` | `audit-docs` |
+|---|---|---|---|
+| **Trigger** | Manual | Automatic (Wave 3) | Manual or cron |
+| **Input** | Any URL or pasted text | URLs in frontmatter | Entire docs/ tree |
+| **Question** | "Should we add this to our docs?" | "Are our docs still valid?" | "How healthy are our docs?" |
+| **Direction** | Outside → In | Inside → Out | Both |
 
-| | `ingest-content` | `validate-upstream` |
-|---|---|---|
-| **Trigger** | Manual — user finds an article/blog | Automatic — CI weekly or on-demand |
-| **Input** | Any URL or pasted text (articles, blogs, docs) | URLs declared in frontmatter `validate_upstream` |
-| **Question** | "Does this content teach something we should add to our docs?" | "Do our docs still match what upstream teaches?" |
-| **Direction** | Outside → In (new knowledge into our docs) | Inside → Out (our docs still valid vs upstream) |
-| **Output** | Suggestions to update/create docs | Violations — our assertions failed against upstream |
+Shared infrastructure: `content-fetcher.ts` + `content-cache.ts`. Same URL fetched once, cached, used by all three.
 
-**Shared infrastructure (S01):**
-- `content-fetcher.ts` — Jina Reader fetch + raw fallback
-- `content-cache.ts` — disk cache with TTL
-- Both reuse the same cached content for the same URL
-
-`ingest-content` can also consume `validate-upstream` findings: when validate-upstream detects that upstream changed a recommended pattern, `ingest-content` can be invoked on the same URL to analyze what the new recommendation is and suggest doc updates. This creates a pipeline:
-
+Pipeline when upstream changes:
 ```
-validate-upstream (detect) → ingest-content (analyze) → human review → doc update
+audit-docs --with-upstream (detect) → ingest-content (analyze change) → human review → doc update
 ```
 
-This pipeline is NOT automated in M011 — it's a manual workflow. But the shared cache means the content is already fetched.
+### Multi-layer support
+
+Works on L0, L1, L2 via `--project-root` + `--layer`:
+- Wave 1 (structure): adapts limits per layer (archive/ excluded everywhere)
+- Wave 2 (coherence): L1/L2 checks `l0_refs` resolve to valid L0 slugs
+- Wave 3 (upstream): uses layer-appropriate `versions-manifest.json`
 
 ## Constraints
 
-- Layer 1 MUST work without LLM — pure grep/regex on fetched content
-- Layer 2 is OPTIONAL — only invoked when Layer 1 detects change or on manual trigger
-- Content cache MUST respect rate limits — no more than 1 fetch per URL per hour
-- Frontmatter schema extension MUST be backward compatible — `validate_upstream` is optional
-- All new code follows existing module patterns (TypeScript, vitest, logger not console.log)
-- Works on L0, L1, and L2 via `--project-root` + `--layer` (same as `monitor-sources`)
+- Wave 1 and 2 MUST work offline — no network, no LLM
+- Wave 3 is opt-in (`--with-upstream`) — never runs by default
+- LLM semantic analysis is opt-in (`--profile deep`) — never runs in CI
+- Content cache respects rate limits — max 1 fetch per URL per hour
+- `validate_upstream` frontmatter is optional — docs without it skip Wave 3
+- All findings follow existing `MonitoringFinding` interface
+- Review state (accept/reject/defer) reuses `review-state.ts`
+- Works on L0, L1, L2 with same command
 
 ## Non-goals
 
-- Not a full link checker (that's `check-freshness`)
-- Not a code compiler/linter (that's Detekt/pattern-lint)
-- Not a doc structure validator (that's `validate-doc-structure`)
+- Not a code linter (that's Detekt/pattern-lint in `/full-audit`)
+- Not a test runner (that's test-specialist in `/full-audit`)
 - Does NOT auto-fix docs — reports findings for human/agent review
+- Does NOT replace `/full-audit` — complements it
 
 ## Success criteria
 
-1. Run `validate-upstream --project-root <L0>` and get structured findings for docs with `validate_upstream` frontmatter
-2. Layer 1 catches a simulated deprecation (test with known deprecated API)
-3. Layer 2 (LLM) produces actionable diff when upstream content changes
-4. CI workflow runs weekly alongside `doc-monitor.yml`
-5. Findings integrate with existing review state (accept/reject/defer)
-6. Full test coverage: unit tests for assertion engine, integration tests for pipeline
+1. `/audit-docs` runs on L0 with 0 findings (Wave 1+2)
+2. `/audit-docs --with-upstream` detects a simulated deprecation
+3. `/audit-docs --layer L1 --project-root <L1>` works on consumer projects
+4. Wave 3 Layer 1 catches deprecated API in upstream content
+5. Wave 3 Layer 2 produces actionable diff (deep profile only)
+6. CI workflow runs weekly (Waves 1+2+3 Layer 1 only)
+7. Full test coverage: unit + integration per module
