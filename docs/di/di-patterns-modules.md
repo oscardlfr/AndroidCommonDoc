@@ -68,9 +68,10 @@ fun SnapshotListScreen(
 ### App Startup
 
 ```kotlin
-// Application or main entry point
-fun initKoin() {
-    startKoin {
+// Application or main entry point — uses isolated koinApplication (Koin 4.x)
+// For SDKs: koinApplication {} (isolated). For apps: startKoin {} (global) is acceptable.
+fun initKoin(): KoinApplication {
+    return koinApplication {
         modules(
             coreModule,
             networkModule,
