@@ -153,6 +153,7 @@ Always use L0 skills for standard operations — they save tokens and are mainta
 - **Testing**: `/test <module>` for single module, `/test-full-parallel --fresh-daemon` for full suite
 - **Coverage**: `/coverage` for gap analysis without running tests
 - **Pre-PR**: `/pre-pr` before any merge
+- **Doc audit**: `/audit-docs` for doc structure + coherence, `--with-upstream` for upstream validation
 - **Error extraction**: `/extract-errors` when builds fail
 
 ## Project-Specific Knowledge
