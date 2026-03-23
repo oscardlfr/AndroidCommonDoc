@@ -16,7 +16,7 @@ category: archive
 Comparison of DI approaches for an SDK where consumers select which modules to initialize without importing implementation classes. This document presents trade-offs — the right choice depends on your constraints.
 
 **Related docs:**
-- [dagger2-sdk-selective-init.md](dagger2-sdk-selective-init.md) — Dagger 2 implementation (monolithic + per-feature)
+- [dagger2-sdk-selective-init.md](dagger2-sdk-selective-init.md) — Dagger 2 implementation (Approach A: monolithic, B: per-feature, C: ServiceLoader)
 - [di-sdk-consumer-isolation.md](di-sdk-consumer-isolation.md) — Consumer isolation levels (what the app sees vs binary contents)
 
 ## The Problem
@@ -226,13 +226,42 @@ FeatureObservability.init(core)
 - Team wants zero-ceremony module addition
 - Cross-feature compile-time graph validation needed
 
-### 4. Hilt
+### 4. Dagger 2 — Per-Feature + ServiceLoader Discovery
+
+**Type:** Compile-time DI + runtime discovery | **KMP:** None (JVM only, ServiceLoader) | **Codegen:** KAPT/KSP
+
+Builds on Per-Feature's isolated Components but adds `ServiceLoader` for automatic feature registration. See [dagger2-sdk-selective-init.md — Approach C](dagger2-sdk-selective-init.md#approach-c-per-feature-with-serviceloader-discovery) for full implementation.
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| 1. Selective init | ✅ | `MySdk.init(setOf(...))` discovers available features |
+| 2. Consumer isolation | ✅ | Consumer uses `MySdk.get<Service>()`, no feature facade import |
+| 3. Shared singletons | ⚠️ | Via CoreApis interface |
+| 4. Lazy instantiation | ✅ | Undiscovered features not instantiated |
+| 5. SDK-core independence | ✅ | Core defines contract only — zero impl deps |
+| 6. Auto-registration | ✅ | META-INF/services — Gradle dep is enough |
+| 7. Binary lean | ✅ | Only features with Gradle dep are linked |
+| 8. Platform discovery | ❌ | ServiceLoader is JVM-only |
+| 9. Category validation | ⚠️ | Manual at init time |
+| 10. Compile-time safety | ⚠️ | Per-feature graph only, runtime discovery errors |
+
+**When this is the right choice:**
+- Large Android-only SDK with 20+ optional features
+- Adding features frequently without touching core
+- Team wants compile-time DI purity with runtime discovery convenience
+
+**When this is NOT the right choice:**
+- KMP required (ServiceLoader is JVM-only)
+- Team wants zero runtime error risk from missing deps
+- SDK has few features (overhead not justified)
+
+### 5. Hilt
 
 **Not recommended for SDKs.** `@HiltAndroidApp` annotation conflicts when multiple SDKs coexist in the same app. Designed for apps that own the `Application` class.
 
 Use for: **Android apps** (not libraries or SDKs).
 
-### 5. kotlin-inject
+### 6. kotlin-inject
 
 **Type:** Compile-time DI with KSP | **KMP:** Full | **Codegen:** KSP
 
@@ -261,19 +290,20 @@ Use for: **Android apps** (not libraries or SDKs).
 
 ## Side-by-Side Comparison
 
-| Criterion | Koin | Dagger Mono | Dagger Per-Feature | kotlin-inject |
-|-----------|------|-------------|-------------------|---------------|
-| **Max isolation level** | Level 3 | Level 1 | Level 1 | Level 2 |
-| **Graph validation** | Runtime | Compile | Compile (per-feat) | Compile |
-| **KMP support** | ✅ Full | ❌ JVM | ❌ JVM | ✅ Full |
-| **Consumer isolation** | ✅ | ❌ | ✅ | ✅ |
-| **Binary lean** | ✅ | ❌ | ✅ | ✅ |
-| **Build speed** | ✅ None | ❌ KAPT | ❌ KAPT/KSP | ⚠️ KSP |
-| **Init model** | Umbrella | Umbrella | Per-feature | Per-component |
-| **Singleton sharing** | Koin scope | @Singleton | CoreApis | Component |
-| **Auto-registration** | ✅ | ✅ @IntoMap | ❌ Manual | ❌ Manual |
-| **Maturity** | Production | Production | Production | Pre-1.0 |
-| **Ceremony per module** | 1 entry | 1 @Component edit | New Component | New Component |
+| Criterion | Koin | Dagger Mono | Dagger Per-Feature | Dagger + ServiceLoader | kotlin-inject |
+|-----------|------|-------------|-------------------|----------------------|---------------|
+| **Max isolation level** | Level 3 | Level 1 | Level 1 | Level 1-2 | Level 2 |
+| **Graph validation** | Runtime | Compile | Compile (per-feat) | Compile (per-feat) | Compile |
+| **KMP support** | ✅ Full | ❌ JVM | ❌ JVM | ❌ JVM | ✅ Full |
+| **Consumer isolation** | ✅ | ❌ | ✅ | ✅ | ✅ |
+| **Binary lean** | ✅ | ❌ | ✅ | ✅ | ✅ |
+| **Build speed** | ✅ None | ❌ KAPT | ❌ KAPT/KSP | ❌ KAPT/KSP | ⚠️ KSP |
+| **Init model** | Umbrella | Umbrella | Per-feature | Umbrella (discovered) | Per-component |
+| **Singleton sharing** | Koin scope | @Singleton | CoreApis | CoreApis | Component |
+| **Auto-registration** | ✅ | ✅ @IntoMap | ❌ Manual | ✅ ServiceLoader | ❌ Manual |
+| **Adding a feature** | 1 entry | 1 @Component edit | New Component | META-INF only | New Component |
+| **Maturity** | Production | Production | Production | Production (JVM) | Pre-1.0 |
+| **DI paradigm** | Service Locator | Pure DI | Pure DI | Pure DI | Pure DI |
 
 ## Decision Matrix
 
@@ -281,14 +311,17 @@ Use for: **Android apps** (not libraries or SDKs).
 |-----------------|----------|
 | Must support iOS/macOS/Desktop | Koin or kotlin-inject |
 | Compile-time safety non-negotiable | Dagger or kotlin-inject |
+| Pure DI (no service locator) | Dagger (any approach) or kotlin-inject |
 | Android-only, small module count | Dagger Monolithic |
 | Android-only, modular publishing | Dagger Per-Feature |
+| Android-only, 20+ features, zero central edits | Dagger + ServiceLoader |
 | Zero codegen, fastest builds | Koin |
 | KMP + compile-time safety | kotlin-inject |
-| Team has Dagger expertise | Dagger (either approach) |
+| Team has Dagger expertise | Dagger (any approach) |
 | Team prefers simple API | Koin |
-| Enterprise SDK, many optional features | Dagger Per-Feature or Koin |
-| Binary size critical | Koin, Dagger Per-Feature, or kotlin-inject |
+| Enterprise SDK, many optional features | Dagger + ServiceLoader or Koin |
+| Binary size critical | Koin, Dagger Per-Feature, Dagger + ServiceLoader, or kotlin-inject |
+| Hybrid: KMP SDK consumed by Dagger app | Koin inside SDK + Dagger bridge (see [isolation doc](di-sdk-consumer-isolation.md#hybrid-koin-inside-sdk--dagger-in-app)) |
 
 ## Version Compatibility (2026)
 

@@ -15,6 +15,10 @@ category: archive
 
 When building a modular SDK, a key decision is **how much the consumer app knows about implementation modules**. This document defines 4 isolation levels and documents honestly what each DI approach can achieve.
 
+**Related docs:**
+- [dagger2-sdk-selective-init.md](dagger2-sdk-selective-init.md) — Dagger 2 implementation (Approach A, B, C)
+- [di-sdk-selective-init-comparison.md](di-sdk-selective-init-comparison.md) — Framework comparison (6 approaches × 12 criteria)
+
 ## The 4 Levels
 
 | Level | What consumer sees | What consumer imports | Binary contains |
@@ -83,11 +87,11 @@ SharedSdk.init(
     config = SdkConfig(debug = false),
 )
 
-// Access via interface
-val service: SecurityService = koin.get()
+// Access via interface — consumer never touches Koin directly
+val service: SecurityService = SharedSdk.get()
 ```
 
-The consumer's Gradle dependency on `:security-integration` is sufficient. The SDK's init system discovers and registers the module automatically. The consumer never imports anything from the integration module — not even a facade.
+Internally, `SharedSdk.init()` uses `koinApplication {}` (isolated instance) to resolve modules. The consumer never sees Koin — only the sealed class and interface accessors.
 
 **Consumer Gradle:**
 ```kotlin
