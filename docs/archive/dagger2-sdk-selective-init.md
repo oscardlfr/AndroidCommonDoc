@@ -4,7 +4,7 @@ sources: [dagger2, android-sdk]
 targets: [android]
 version: 4
 last_updated: "2026-03"
-description: "SDK initialization pattern with Dagger 2: selective module loading. Covers monolithic Component (original) and per-feature Component (modern). Includes KAPT→KSP migration status, version compatibility notes, and comparison with Koin KMP approach."
+description: "SDK initialization pattern with Dagger 2: selective module loading. Three approaches — A: monolithic Component, B: per-feature Component, C: per-feature with ServiceLoader discovery. Includes KAPT→KSP migration, version compatibility, and isolation analysis."
 slug: dagger2-sdk-selective-init
 status: archived
 layer: L0
@@ -22,11 +22,12 @@ Pattern for Android-only SDKs with Dagger 2 where consumers choose which modules
 Both approaches hide `*Impl` classes from the consumer. But the **isolation level** differs — see [di-sdk-consumer-isolation.md](di-sdk-consumer-isolation.md) for full analysis.
 
 - **Approach A:** Level 1 (facade). Consumer calls `MySdk.init()` and `MySdk.auth()`. Does NOT see `AuthServiceImpl`. BUT all impl code is in the binary.
-- **Approach B:** Level 1 (facade). Consumer calls `FeatureSecurity.init(core)`. Does NOT see `SecurityServiceImpl`. Only selected features are in the binary.
+- **Approach B:** Level 1 (facade). Consumer calls `FeatureSecurity.init(core)` or `MySdk.init(setOf(...))` with delegating umbrella. Does NOT see `SecurityServiceImpl`. Only selected features are in the binary.
+- **Approach C:** Level 1-2 (facade + discovery). Builds on B's per-feature Components but adds ServiceLoader discovery — no central edit when adding features.
 
-Neither approach reaches Level 2+ (interface-only). Dagger's compile-time `@Component` annotation requires knowledge of impl modules at build time — there is no runtime discovery mechanism.
+Neither approach reaches Level 3 (sealed-class enum). Dagger's compile-time `@Component` annotation requires knowledge of impl modules at build time — there is no runtime class-loading discovery mechanism like Koin's.
 
-## Two Architectural Approaches
+## Three Architectural Approaches
 
 ### Approach A: Monolithic Component (original pattern)
 
@@ -251,46 +252,15 @@ val service = FeatureSecurity.securityService()
 
 **Best for:** SDK distributed as a single artifact but with optional features. Consumer gets a familiar `MySdk.init(setOf(...))` API.
 
-#### Option 3: Discovery-based umbrella (no central edit on new feature)
+#### B option comparison
 
-Combines Option 2's umbrella API with a registration mechanism so `MySdk` doesn't need to know about every feature at compile time. Uses `ServiceLoader` (JVM) or a manual registry.
-
-```kotlin
-// Each feature registers itself via ServiceLoader or META-INF
-// sdk-core defines the contract:
-interface FeatureInitializer {
-    val feature: Feature
-    fun init(core: CoreApis)
-    fun shutdown()
-}
-
-// sdk-core discovers and initializes:
-object MySdk {
-    fun init(context: Context, config: SdkConfig, features: Set<Feature>) {
-        val core = CoreApisImpl.create(context, config)
-        val available = ServiceLoader.load(FeatureInitializer::class.java)
-        for (initializer in available) {
-            if (initializer.feature in features) {
-                initializer.init(core)
-            }
-        }
-    }
-}
-```
-
-**Trade-off:** `MySdk` no longer edits when a new feature is added — but `ServiceLoader` is JVM-only and adds runtime complexity. Not available on Kotlin/Native without custom implementation.
-
-**Best for:** Large SDK (20+ features) where editing a central file per feature is unacceptable.
-
-#### Option comparison
-
-| | Option 1: Per-feature | Option 2: Umbrella | Option 3: Discovery |
-|---|---|---|---|
-| Consumer API | `Feature.init(core)` | `MySdk.init(setOf(...))` | `MySdk.init(setOf(...))` |
-| Central orchestrator | None | `MySdk` (thin delegator) | `MySdk` + ServiceLoader |
-| Adding a feature | New module only | Edit `MySdk` when block | New module + META-INF |
-| Global DaggerComponent | ❌ No | ❌ No | ❌ No |
-| Best for | Independent SDKs | Single SDK, optional features | Large SDK, many features |
+| | Option 1: Per-feature | Option 2: Umbrella |
+|---|---|---|
+| Consumer API | `Feature.init(core)` | `MySdk.init(setOf(...))` |
+| Central orchestrator | None | `MySdk` (thin delegator) |
+| Adding a feature | New module only | Edit `MySdk` when block |
+| Global DaggerComponent | ❌ No | ❌ No |
+| Best for | Independent SDKs | Single SDK, optional features |
 
 ### Per-feature facade
 
@@ -327,23 +297,135 @@ publishing {
 }
 ```
 
-## Approach A vs B — Trade-off Comparison
+## Approach C: Per-Feature with ServiceLoader Discovery
 
-| Criterion | A: Monolithic | B: Per-Feature |
-|-----------|--------------|----------------|
-| **Consumer sees impl classes** | ❌ No — but all impls in binary | ✅ No — only selected features in binary |
-| **Global DaggerComponent** | ❌ Yes — `@Component` lists all | ✅ No — each feature has own Component |
-| **Binary size** | ❌ Fat — all modules linked | ✅ Lean — only declared Gradle deps |
-| **Compile-time safety** | ✅ Full cross-feature graph | ⚠️ Per-feature only (no cross-feature) |
-| **Singleton sharing** | ✅ `@Singleton` on single Component | ⚠️ Via CoreApis interface (manual) |
-| **Adding a new feature** | Edit `@Component` annotation | New module, no central file edit |
-| **Multibindings (`@IntoMap`)** | ✅ Works — single graph | ❌ No global graph to collect into |
-| **Publishing** | Monolithic artifact | Per-module Maven publishing |
-| **Consumer init** | `MySdk.init(modules = ...)` umbrella | `Feature.init(core)` per-feature |
-| **Feature coupling** | ⚠️ All features compiled together | ✅ Features are fully isolated |
-| **Complexity** | Lower — one Component | Higher — CoreApis + N Components |
-| **SDK umbrella pattern** | ✅ Natural fit | ❌ Anti-pattern (reintroduces coupling) |
-| **Best for** | Small SDK, internal team, ≤10 modules | Large SDK, external consumers, modular publishing |
+Builds on Approach B's per-feature architecture (each feature has its own DaggerComponent, no global graph) but adds automatic discovery via `ServiceLoader`. The SDK orchestrator does NOT need to know about features at compile time — adding a new feature requires zero edits to the core module.
+
+### Architecture
+
+```
+sdk-core/                → MySdk, CoreApis, FeatureInitializer contract, ServiceLoader discovery
+feature/
+  security/
+    api/                 → SecurityApi interface
+    integration/         → DaggerSecurityComponent + SecurityFeatureInitializer
+                           + META-INF/services/FeatureInitializer
+  payments/
+    api/                 → PaymentsApi interface
+    integration/         → DaggerPaymentsComponent + PaymentsFeatureInitializer
+                           + META-INF/services/FeatureInitializer
+```
+
+### FeatureInitializer contract
+
+```kotlin
+// In :sdk-core — defines the discovery contract
+interface FeatureInitializer {
+    val feature: Feature
+    fun init(core: CoreApis)
+    fun shutdown()
+    fun <T> getService(serviceClass: Class<T>): T?
+}
+```
+
+### Feature registration via META-INF
+
+```kotlin
+// In :feature:security:integration
+class SecurityFeatureInitializer : FeatureInitializer {
+    private var component: SecurityComponent? = null
+
+    override val feature = Feature.SECURITY
+
+    override fun init(core: CoreApis) {
+        component = DaggerSecurityComponent.builder().core(core).build()
+    }
+
+    override fun shutdown() { component = null }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun <T> getService(serviceClass: Class<T>): T? =
+        when (serviceClass) {
+            SecurityService::class.java -> component?.securityService() as? T
+            else -> null
+        }
+}
+
+// META-INF/services/com.example.sdk.FeatureInitializer
+// → com.example.sdk.security.SecurityFeatureInitializer
+```
+
+### SDK entry point — discovery-based
+
+```kotlin
+object MySdk {
+    private val initializers = mutableMapOf<Feature, FeatureInitializer>()
+
+    fun init(context: Context, config: SdkConfig, features: Set<Feature>) {
+        val core = CoreApisImpl.create(context, config)
+
+        // Discover all available features on classpath
+        val available = ServiceLoader.load(FeatureInitializer::class.java)
+            .associateBy { it.feature }
+
+        for (feature in features) {
+            val initializer = available[feature]
+                ?: throw IllegalArgumentException(
+                    "Feature $feature not found on classpath. " +
+                    "Add the corresponding Gradle dependency."
+                )
+            initializer.init(core)
+            initializers[feature] = initializer
+        }
+    }
+
+    inline fun <reified T> get(): T {
+        for (initializer in initializers.values) {
+            initializer.getService(T::class.java)?.let { return it }
+        }
+        error("No service ${T::class.simpleName} found in initialized features")
+    }
+
+    fun shutdown() {
+        initializers.values.forEach { it.shutdown() }
+        initializers.clear()
+    }
+}
+
+// Consumer:
+MySdk.init(context, config, setOf(Feature.SECURITY, Feature.PAYMENTS))
+val security: SecurityService = MySdk.get()
+```
+
+### Approach C limitations
+
+- **JVM-only:** `ServiceLoader` requires `META-INF/services/` — standard JVM mechanism, NOT available on Kotlin/Native or iOS. For KMP, use Koin's `Class.forName` + `@EagerInitialization` approach instead.
+- **Runtime errors:** If the consumer forgets the Gradle dependency, `ServiceLoader` won't find the initializer → runtime crash (not compile-time error).
+- **Per-feature DaggerComponent:** Each feature still has its own `@Component` — compile-time graph validation is per-feature, not cross-feature.
+- **Complexity:** META-INF files, ServiceLoader, and `getService` casting add ceremony compared to Approach B.
+
+### When to use Approach C
+
+- Large Android-only SDK with 20+ optional features
+- New features added frequently without touching core module
+- Team wants `MySdk.init(setOf(...))` consumer API
+- Binary leanness required (only selected features linked)
+
+## Approach Comparison
+
+| Criterion | A: Monolithic | B: Per-Feature | C: Discovery |
+|-----------|--------------|----------------|--------------|
+| **Consumer sees impl classes** | ❌ No — but all in binary | ✅ No — selected only | ✅ No — selected only |
+| **Global DaggerComponent** | ❌ Yes | ✅ No | ✅ No |
+| **Binary size** | ❌ Fat | ✅ Lean | ✅ Lean |
+| **Compile-time safety** | ✅ Full graph | ⚠️ Per-feature | ⚠️ Per-feature |
+| **Singleton sharing** | ✅ @Singleton | ⚠️ CoreApis | ⚠️ CoreApis |
+| **Adding a feature** | Edit @Component | Edit MySdk (umbrella) or nothing (per-feature) | Nothing — META-INF only |
+| **Consumer init** | `MySdk.init(set)` | `Feature.init(core)` or `MySdk.init(set)` | `MySdk.init(set)` |
+| **Discovery mechanism** | None needed | None | ServiceLoader (JVM) |
+| **KMP support** | ❌ | ❌ | ❌ (ServiceLoader is JVM) |
+| **Complexity** | Low | Medium | High |
+| **Best for** | Small SDK, ≤10 modules | Modular SDK, per-module publish | Large SDK, 20+ features |
 
 ## Version Compatibility
 
@@ -376,6 +458,7 @@ dependencies { ksp("com.google.dagger:dagger-compiler:2.52") }
 |----------|----------|
 | Small SDK, ≤5 modules, team owns all code | A (monolithic) |
 | Large SDK, many consumers, per-module publishing | B (per-feature) |
-| Consumer must not see impl classes at all | B (per-feature) |
+| Large SDK, 20+ features, no central edit on new feature | C (discovery) |
+| Consumer must not see impl classes at all | B or C |
 | Compile-time validation of full graph is critical | A (monolithic) |
-| KMP support needed | Neither — use Koin (see comparison doc) |
+| KMP support needed | Neither — see [comparison doc](di-sdk-selective-init-comparison.md) for Koin and kotlin-inject |

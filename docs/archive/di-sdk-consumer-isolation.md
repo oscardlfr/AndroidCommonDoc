@@ -103,6 +103,7 @@ implementation("com.example.sdk:security-integration:1.0.0")  // auto-registers
 |-----------|-------------------|-----|------------|
 | **Dagger Monolithic** | Level 1 | Consumer calls `MySdk.init()`, accesses via facade | All impls compiled in binary regardless |
 | **Dagger Per-Feature** | Level 1 | Consumer calls `FeatureSecurity.init(core)` | Consumer imports facade from integration module |
+| **Dagger Per-Feature + ServiceLoader** | Level 1-2 | `MySdk.init(setOf(...))` with auto-discovery | JVM-only, runtime errors on missing deps |
 | **Koin** | Level 3 | Sealed class + `Class.forName` / `@EagerInitialization` | Runtime graph validation only |
 | **kotlin-inject** | Level 2 | Component composition, API/impl split | Consumer composes components explicitly |
 | **Manual DI** | Level 2 | Constructor injection, factory pattern | No codegen, no graph validation |
