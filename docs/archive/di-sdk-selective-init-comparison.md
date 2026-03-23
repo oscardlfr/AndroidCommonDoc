@@ -2,9 +2,9 @@
 scope: [architecture, dependency-injection, sdk-design, research]
 sources: [dagger2, koin, hilt, kotlin-inject, android-sdk, kmp]
 targets: [android, jvm, ios, macos]
-version: 4
+version: 5
 last_updated: "2026-03"
-description: "DI framework comparison for SDK selective init — Dagger 2 (monolithic + per-feature), Koin (KMP, validated), Hilt, kotlin-inject. Updated with real implementation data, KAPT→KSP status, and consumer isolation validation."
+description: "DI framework comparison for SDK selective init — Dagger 2 (monolithic + per-feature), Koin, Hilt, kotlin-inject. Architecture requirements checklist, approach trade-offs, decision matrix. Neutral — no framework preference."
 slug: di-sdk-selective-init-comparison
 status: archived
 layer: L0
@@ -13,9 +13,7 @@ category: archive
 
 # DI SDK Selective Init — Framework Comparison
 
-Comparison of DI frameworks for an SDK where consumers select which modules to initialize without importing implementation classes.
-
-**Status:** Koin implementation shipped and validated (14 impl modules, 15 registrations, 100% core-sdk coverage). All 10 architecture requirements verified against a real consumer app. See [Validation Results](#validation-results).
+Comparison of DI approaches for an SDK where consumers select which modules to initialize without importing implementation classes. This document presents trade-offs — the right choice depends on your constraints.
 
 ## The Problem
 
@@ -23,168 +21,224 @@ An SDK with N feature modules where:
 
 1. Each feature has multiple implementations (Ktor vs Retrofit, MMKV vs DataStore)
 2. Consumers pick which implementations to use at init time
-3. **Consumers never import implementation classes** — only a sealed class enum
+3. **Consumers never import implementation classes** — only a type-safe selector
 4. Shared singletons must not duplicate
 5. Modules not requested must not be instantiated
-6. Registration must happen automatically — Gradle dependency is sufficient
+6. Registration should be automatic — Gradle dependency is sufficient
 
-## Sealed Class — Common to All Solutions
+## Architecture Requirements Checklist
 
-```kotlin
-sealed class SdkModule(val key: String) {
-    sealed class Io(key: String) : SdkModule(key) {
-        data object KotlinxIo : Io("io-kotlinxio")
-        data object Okio : Io("io-okio")
-    }
-    sealed class Network(key: String) : SdkModule(key) {
-        data object Ktor : Network("network-ktor")
-        data object Retrofit : Network("network-retrofit")
-    }
-    sealed class Encryption(key: String) : SdkModule(key) {
-        data object Default : Encryption("encryption-default")
-    }
-    // ... Storage, Firebase, OAuth, System
-}
-```
+Use this checklist to evaluate ANY approach. A solution doesn't need to pass all 10 — prioritize based on your project constraints.
 
-Consumer: `SharedSdk.init(modules = setOf(SdkModule.Io.KotlinxIo, SdkModule.Encryption.Default))`
+| # | Requirement | Weight | Question |
+|---|-------------|--------|----------|
+| 1 | Selective init | Critical | Can the consumer pick exactly which modules to activate? |
+| 2 | Consumer impl isolation | Critical | Does production code import ZERO impl classes? |
+| 3 | Shared singletons | High | Are shared services (logger, config, network) guaranteed single-instance? |
+| 4 | Lazy instantiation | High | Are unselected modules never instantiated? |
+| 5 | SDK-core independence | High | Does the SDK orchestrator depend on ZERO impl modules in production? |
+| 6 | Auto-registration | Medium | Is adding a Gradle dependency sufficient, or must the consumer also call `register()`? |
+| 7 | Binary lean | Medium | Does the consumer binary include only selected impls? |
+| 8 | Platform discovery | Varies | Does module discovery work on all target platforms? |
+| 9 | Category validation | Medium | Are conflicting impls (two network backends) rejected at init? |
+| 10 | Compile-time safety | Varies | Are missing bindings caught at build time or runtime? |
 
-## Validation Results
+## Approaches
 
-Architecture requirements validated against real production consumer:
-
-| # | Requirement | Result |
-|---|-------------|--------|
-| 1 | Selective init — consumer picks modules | ✅ |
-| 2 | Consumer never imports impl classes (production) | ✅ 0 impl imports |
-| 3 | Shared singletons — single lifecycle manager | ✅ |
-| 4 | Lazy instantiation — unused modules not created | ✅ Class.forName only on requested |
-| 5 | Zero SDK-core → impl dependencies (production) | ✅ |
-| 6 | Auto-registration — Gradle dep is enough | ✅ 15 self-registering modules |
-| 7 | Binary lean — only selected impls linked | ✅ |
-| 8 | Platform-specific discovery | ✅ JVM + Native |
-| 9 | Category validation — no duplicate impls | ✅ Enforced at init |
-| 10 | New modules without central orchestrator edit | ✅ Exhaustive `when` on sealed class |
-
-## Auto-Discovery: Class-Loading Solution
-
-Each impl module has an `object : SdkModuleRegistration` with `init {}` that registers in `SdkModuleRegistry`. Platform-specific discovery triggers the registration:
-
-| Platform | Mechanism | How |
-|----------|-----------|-----|
-| **JVM** | `Class.forName(className)` | Triggers `<clinit>` → `init {}` → register |
-| **Native** | `@EagerInitialization` | Forces object init before `main()` |
-
-`SdkModule.registrationClassName` maps each sealed variant to its FQ class name via exhaustive `when` — adding a new variant without mapping is a compile error.
-
-## Framework Comparison
-
-### 1. Koin (Recommended for KMP)
+### 1. Koin — Runtime DI, Full KMP
 
 **Type:** Runtime service locator | **KMP:** Full | **Codegen:** None
 
-| Aspect | Assessment |
-|--------|-----------|
-| Graph validation | Runtime (`checkModules()` in tests) |
-| Consumer isolation | ✅ Consumer imports only sealed class |
-| Module discovery | Class.forName (JVM) + @EagerInit (Native) |
-| Ceremony per new module | 1 className entry + 1 nativeMain line |
-| Binary size | ✅ Only selected impls |
-| Build speed | ✅ No annotation processing |
-| Runtime overhead | ~μs service location |
+**Init model:** Umbrella with selective module set
+```kotlin
+SharedSdk.init(
+    modules = setOf(SdkModule.Io.KotlinxIo, SdkModule.Encryption.Default),
+    config = SdkConfig(debug = false),
+    appModules = listOf(myAppModule),
+)
+```
+
+**Module discovery:** `Class.forName` (JVM) + `@EagerInitialization` (Native). Each impl self-registers via `object init {}` block.
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| 1. Selective init | ✅ | Consumer passes `Set<SdkModule>` |
+| 2. Consumer isolation | ✅ | 0 impl imports in production code |
+| 3. Shared singletons | ✅ | Single Koin application lifecycle |
+| 4. Lazy instantiation | ✅ | Class.forName only on requested modules |
+| 5. SDK-core independence | ✅ | core-sdk has 0 impl deps in production |
+| 6. Auto-registration | ✅ | Gradle dep → object init → register |
+| 7. Binary lean | ✅ | Only selected impls on classpath |
+| 8. Platform discovery | ✅ | JVM + Native covered |
+| 9. Category validation | ✅ | `validateNoDuplicateCategories()` at init |
+| 10. Compile-time safety | ❌ | Missing bindings crash at runtime |
+
+**When this is the right choice:**
+- Multi-platform SDK (Android + iOS + Desktop + macOS)
+- Team values simplicity and zero codegen overhead
+- Runtime validation via `checkModules()` in tests is acceptable
+
+**When this is NOT the right choice:**
+- Compile-time binding safety is non-negotiable
+- Team is uncomfortable with service locator pattern
+- JVM-only project where Dagger's maturity is preferred
 
 ### 2. Dagger 2 — Monolithic Component
 
 **Type:** Compile-time DI | **KMP:** None (JVM only) | **Codegen:** KAPT or KSP (alpha)
 
-| Aspect | Assessment |
-|--------|-----------|
-| Graph validation | Compile-time ✅ |
-| Consumer isolation | ❌ All impls compiled in `@Component` |
-| Module discovery | Explicit `@Component` listing — no discovery needed |
-| Ceremony per new module | 1 `@Component` edit |
-| Binary size | ❌ All impls linked regardless of selection |
-| Build speed | ❌ KAPT slow; KSP alpha |
-| Runtime overhead | Zero (generated code) |
+**Init model:** Umbrella, all modules compiled in
+```kotlin
+MySdk.init(context, config, setOf(SdkModule.AUTH, SdkModule.ANALYTICS))
+```
 
-**KAPT → KSP:** Dagger KSP processors available since 2.48 (alpha). KAPT is in maintenance mode. Migration path exists but KSP support is not yet stable.
+**Module discovery:** Not needed — `@Component` lists all `@Module` classes explicitly.
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| 1. Selective init | ✅ | Via `Provider<ModuleInitializer>` laziness |
+| 2. Consumer isolation | ❌ | All impls compiled into `@Component` |
+| 3. Shared singletons | ✅ | `@Singleton` scope on single Component |
+| 4. Lazy instantiation | ✅ | `Provider<>` delays instantiation |
+| 5. SDK-core independence | ❌ | `@Component` must list all `@Module` classes |
+| 6. Auto-registration | ✅ | `@IntoMap` + `@Module` is sufficient |
+| 7. Binary lean | ❌ | All impl code linked regardless of selection |
+| 8. Platform discovery | N/A | JVM only, no discovery needed |
+| 9. Category validation | ✅ | Custom validation at init time |
+| 10. Compile-time safety | ✅ | Missing bindings = build error |
+
+**When this is the right choice:**
+- Android-only SDK with small number of modules (≤10)
+- Compile-time safety is the top priority
+- Team has Dagger experience
+- Binary size is not a concern (internal SDK)
+
+**When this is NOT the right choice:**
+- SDK has many optional modules (binary bloat)
+- Per-module publishing required
+- Consumer must not see impl classes
 
 ### 3. Dagger 2 — Per-Feature Component (Modern)
 
 **Type:** Compile-time DI, per-feature isolation | **KMP:** None | **Codegen:** KAPT/KSP
 
-| Aspect | Assessment |
-|--------|-----------|
-| Graph validation | Compile-time per-feature (not cross-feature) |
-| Consumer isolation | ✅ Each feature is independent module |
-| Module discovery | No global discovery — each feature inits independently |
-| Ceremony per new module | New Component + Builder |
-| Binary size | ✅ Only selected features linked |
-| Build speed | ❌ KAPT/KSP per integration module |
-| Singleton sharing | Via CoreApis interface (not @Singleton graph) |
+**Init model:** Per-module, consumer initializes each feature independently
+```kotlin
+val core = CoreApis.create(config)
+FeatureSecurity.init(core)
+FeatureObservability.init(core)
+```
 
-**Trade-off vs monolithic:** Gains true modularity and binary leanness, but loses compile-time cross-feature graph validation and `@IntoMap` multibindings.
+**Module discovery:** Not needed — each feature has its own Component and init.
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| 1. Selective init | ✅ | Consumer calls init on desired features only |
+| 2. Consumer isolation | ✅ | Each feature is an independent module |
+| 3. Shared singletons | ⚠️ | Via CoreApis interface, not `@Singleton` graph |
+| 4. Lazy instantiation | ✅ | Uninitialised features don't exist |
+| 5. SDK-core independence | ✅ | Core only has interfaces, no impl deps |
+| 6. Auto-registration | ❌ | Consumer must explicitly call `Feature.init()` |
+| 7. Binary lean | ✅ | Only selected features in binary |
+| 8. Platform discovery | N/A | JVM only, explicit init |
+| 9. Category validation | ⚠️ | Manual — no global registry to check |
+| 10. Compile-time safety | ✅ | Per-feature graph validated at build |
+
+**When this is the right choice:**
+- Large SDK distributed to external consumers
+- Per-module Maven publishing required
+- Consumer teams want fine-grained dependency control
+- Binary size matters (enterprise SDKs with 20+ optional features)
+
+**When this is NOT the right choice:**
+- Many features need to share singletons (CoreApis gets complex)
+- Team wants zero-ceremony module addition
+- Cross-feature compile-time graph validation needed
 
 ### 4. Hilt
 
-**Type:** Opinionated Dagger layer | **KMP:** None (Android only)
+**Not recommended for SDKs.** `@HiltAndroidApp` annotation conflicts when multiple SDKs coexist in the same app. Designed for apps that own the `Application` class.
 
-**Not recommended for SDKs.** `@HiltAndroidApp` conflicts when multiple SDKs coexist. Designed for apps, not libraries.
+Use for: **Android apps** (not libraries or SDKs).
 
 ### 5. kotlin-inject
 
 **Type:** Compile-time DI with KSP | **KMP:** Full | **Codegen:** KSP
 
-| Aspect | Assessment |
-|--------|-----------|
-| Graph validation | Compile-time ✅ |
-| Consumer isolation | ✅ Via component composition |
-| KMP support | ✅ Full (KSP runs on all targets) |
-| Multibindings | Added in 0.7+ |
-| Maturity | Pre-1.0, growing ecosystem |
-| Build speed | KSP (faster than KAPT) |
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| 1. Selective init | ✅ | Via component composition |
+| 2. Consumer isolation | ✅ | Separate component per feature |
+| 3. Shared singletons | ✅ | Component scope |
+| 4. Lazy instantiation | ✅ | Component not created = no instances |
+| 5. SDK-core independence | ✅ | Core defines interfaces only |
+| 6. Auto-registration | ❌ | Consumer composes components explicitly |
+| 7. Binary lean | ✅ | Only included components |
+| 8. Platform discovery | ✅ | KSP runs on all KMP targets |
+| 9. Category validation | ⚠️ | Manual validation |
+| 10. Compile-time safety | ✅ | Full compile-time graph validation |
 
-**Best-of-both-worlds candidate** — compile-time safety + KMP. Still maturing.
+**When this is the right choice:**
+- KMP SDK where compile-time safety is non-negotiable
+- Team willing to adopt a pre-1.0 framework
+- Multibindings needed (available since 0.7+)
+
+**When this is NOT the right choice:**
+- Need production-proven stability (Koin/Dagger are battle-tested)
+- Team wants zero codegen (Koin)
+- Simpler API preferred
 
 ## Side-by-Side Comparison
 
-| Criterion | Koin | Dagger Monolithic | Dagger Per-Feature | kotlin-inject |
-|-----------|------|-------------------|-------------------|---------------|
-| **Graph validation** | Runtime | Compile-time | Compile-time (per-feature) | Compile-time |
-| **KMP** | ✅ Full | ❌ JVM | ❌ JVM | ✅ Full |
-| **Consumer impl isolation** | ✅ 0 imports | ❌ All linked | ✅ Per-feature | ✅ Per-component |
+| Criterion | Koin | Dagger Mono | Dagger Per-Feature | kotlin-inject |
+|-----------|------|-------------|-------------------|---------------|
+| **Graph validation** | Runtime | Compile | Compile (per-feat) | Compile |
+| **KMP support** | ✅ Full | ❌ JVM | ❌ JVM | ✅ Full |
+| **Consumer isolation** | ✅ | ❌ | ✅ | ✅ |
 | **Binary lean** | ✅ | ❌ | ✅ | ✅ |
 | **Build speed** | ✅ None | ❌ KAPT | ❌ KAPT/KSP | ⚠️ KSP |
-| **Discovery** | Class.forName + @EagerInit | Explicit @Component | Per-feature init() | Explicit component |
-| **Multibindings** | N/A (registry pattern) | ✅ @IntoMap | ❌ No global map | ✅ (0.7+) |
-| **Singleton sharing** | ✅ Koin scope | ✅ @Singleton | ⚠️ CoreApis interface | ✅ Component scope |
-| **SDK-friendliness** | ✅ No app deps | ✅ Self-contained | ✅ Self-contained | ✅ Self-contained |
-| **Init model** | Umbrella (selective) | Umbrella (all linked) | Per-feature | Per-component |
+| **Init model** | Umbrella | Umbrella | Per-feature | Per-component |
+| **Singleton sharing** | Koin scope | @Singleton | CoreApis | Component |
+| **Auto-registration** | ✅ | ✅ @IntoMap | ❌ Manual | ❌ Manual |
+| **Maturity** | Production | Production | Production | Pre-1.0 |
+| **Ceremony per module** | 1 entry | 1 @Component edit | New Component | New Component |
 
-## Recommendation Matrix
+## Decision Matrix
 
-| Scenario | Recommended | Why |
-|----------|-------------|-----|
-| **KMP SDK** (multi-platform) | **Koin** | Proven, full platform support, 0 codegen |
-| **Android SDK, modular publishing** | **Dagger Per-Feature** | True isolation, compile-time safety |
-| **Android SDK, small, internal** | **Dagger Monolithic** | Simple, full graph validation |
-| **KMP SDK, strict compile-time safety** | **kotlin-inject** | KMP + compile-time, but less mature |
-| **Android app** (not SDK) | **Hilt** | Google-recommended for apps |
+| Your constraint | Best fit |
+|-----------------|----------|
+| Must support iOS/macOS/Desktop | Koin or kotlin-inject |
+| Compile-time safety non-negotiable | Dagger or kotlin-inject |
+| Android-only, small module count | Dagger Monolithic |
+| Android-only, modular publishing | Dagger Per-Feature |
+| Zero codegen, fastest builds | Koin |
+| KMP + compile-time safety | kotlin-inject |
+| Team has Dagger expertise | Dagger (either approach) |
+| Team prefers simple API | Koin |
+| Enterprise SDK, many optional features | Dagger Per-Feature or Koin |
+| Binary size critical | Koin, Dagger Per-Feature, or kotlin-inject |
+
+## Version Compatibility (2026)
+
+| Component | Koin | Dagger | kotlin-inject |
+|-----------|------|--------|---------------|
+| Kotlin | 2.3+ | 2.1+ (KSP), any (KAPT) | 2.0+ |
+| AGP | N/A | 8.9+ (KSP alpha pending AGP 9) | N/A |
+| Codegen | None | KAPT (stable), KSP (alpha 2.48+) | KSP |
+| Maturity | 4.1+ (stable) | 2.52+ (10+ years) | 0.7+ (pre-1.0) |
 
 ## Anti-Pattern: Consumer Imports Impl Classes
 
+Regardless of DI framework, consumers should never import implementation classes:
+
 ```kotlin
-// ❌ WRONG — consumer is coupled to implementation
+// ❌ WRONG — coupled to implementation
 import com.example.sdk.io.kotlinxio.KotlinxIoFileSystemProvider
-import com.example.sdk.encryption.JvmPasswordEncryptionService
+val fs = KotlinxIoFileSystemProvider()
 
-val fs = KotlinxIoFileSystemProvider()  // direct instantiation
-val enc = JvmPasswordEncryptionService()
-
-// ✅ RIGHT — consumer uses interfaces via DI
-// Impls provided by SDK module system (Koin, Dagger, etc.)
-val fs: FileSystemProvider = get()  // from Koin
-val enc: PasswordEncryptionService = get()  // from Koin
+// ✅ RIGHT — depends on interface, impl provided by DI
+val fs: FileSystemProvider = get()  // Koin
+val fs = component.fileSystemProvider()  // Dagger/kotlin-inject
 ```
 
-This applies regardless of DI framework. The consumer should only depend on API modules (interfaces), never implementation modules.
+If your consumer code imports classes from `*.impl.*`, `*.internal.*`, or platform-specific packages like `*.kotlinxio.*`, `*.okio.*`, `*.jvm.*` — you have a coupling problem that will break when the SDK changes implementations.
