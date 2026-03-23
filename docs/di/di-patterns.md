@@ -32,6 +32,19 @@ rules:
     hand_written: true
     source_rule: NoPlatformDepsInViewModelRule.kt
 
+validate_upstream:
+  - url: "https://insert-koin.io/docs/quickstart/kmp"
+    assertions:
+      - type: api_present
+        value: "koinApplication"
+        context: "Koin initialization function"
+      - type: api_present
+        value: "module"
+        context: "Koin module declaration"
+      - type: keyword_present
+        value: "Kotlin Multiplatform"
+        context: "Koin must still support KMP"
+    on_failure: MEDIUM
 ---
 
 # Dependency Injection Patterns for KMP
@@ -55,19 +68,6 @@ Dependency Injection in KMP projects follows framework-agnostic principles: cons
 - **[di-patterns-modules](di-patterns-modules.md)**: Module declaration patterns -- Koin module declarations, koinViewModel, Dagger/Hilt ViewModel injection, app startup, KMP platform modules, Dagger @Module/@Binds/@Provides, KMP+Hilt hybrid pattern
 - **[di-patterns-testing](di-patterns-testing.md)**: DI testing patterns -- Koin test module setup, test lifecycle (startKoin/stopKoin), anti-patterns table, interface-based binding, scoping rules
 
-validate_upstream:
-  - url: "https://insert-koin.io/docs/quickstart/kmp"
-    assertions:
-      - type: api_present
-        value: "koinApplication"
-        context: "Koin initialization function"
-      - type: api_present
-        value: "module"
-        context: "Koin module declaration"
-      - type: keyword_present
-        value: "Kotlin Multiplatform"
-        context: "Koin must still support KMP"
-    on_failure: MEDIUM
 ---
 
 ## References

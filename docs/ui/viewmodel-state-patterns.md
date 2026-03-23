@@ -47,6 +47,23 @@ rules:
       with_param: stopTimeoutMillis
     hand_written: true
     source_rule: WhileSubscribedTimeoutRule.kt
+validate_upstream:
+  - url: "https://developer.android.com/kotlin/coroutines/coroutines-best-practices"
+    assertions:
+      - type: api_present
+        value: "stateIn"
+        context: "WhileSubscribed(5000) pattern depends on stateIn"
+      - type: api_present
+        value: "viewModelScope"
+        context: "ViewModel coroutine scope management"
+      - type: keyword_absent
+        value: "Channel"
+        qualifier: "recommended"
+        context: "We teach SharedFlow over Channel for UI events"
+      - type: deprecation_scan
+        value: "StateFlow"
+        context: "StateFlow is our core state primitive"
+    on_failure: HIGH
 ---
 
 # ViewModel and State Patterns
@@ -91,23 +108,6 @@ See sub-docs for code examples: [viewmodel-state-management](viewmodel-state-man
 - [Android Architecture Guide](https://developer.android.com/topic/architecture)
 - [UI and Screen Patterns](ui-screen-patterns.md) - Companion doc
 
-validate_upstream:
-  - url: "https://developer.android.com/kotlin/coroutines/coroutines-best-practices"
-    assertions:
-      - type: api_present
-        value: "stateIn"
-        context: "WhileSubscribed(5000) pattern depends on stateIn"
-      - type: api_present
-        value: "viewModelScope"
-        context: "ViewModel coroutine scope management"
-      - type: keyword_absent
-        value: "Channel"
-        qualifier: "recommended"
-        context: "We teach SharedFlow over Channel for UI events"
-      - type: deprecation_scan
-        value: "StateFlow"
-        context: "StateFlow is our core state primitive"
-    on_failure: HIGH
 ---
 
 **Status**: Active | **Last Validated**: March 2026 with Koin 4.1.1 / kotlinx-coroutines 1.10.x

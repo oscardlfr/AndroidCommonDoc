@@ -26,6 +26,19 @@ rules:
     hand_written: true
     source_rule: CancellationExceptionRethrowRule.kt
 
+validate_upstream:
+  - url: "https://developer.android.com/topic/architecture/data-layer/offline-first"
+    assertions:
+      - type: api_present
+        value: "Flow"
+        context: "Observable data pattern for offline-first"
+      - type: keyword_present
+        value: "single source of truth"
+        context: "SSOT principle we teach"
+      - type: deprecation_scan
+        value: "LiveData"
+        context: "We teach Flow over LiveData"
+    on_failure: MEDIUM
 ---
 # Offline-First System Design Patterns (KMP)
 
@@ -94,19 +107,6 @@ enum class SyncStatus {
 }
 ```
 
-validate_upstream:
-  - url: "https://developer.android.com/topic/architecture/data-layer/offline-first"
-    assertions:
-      - type: api_present
-        value: "Flow"
-        context: "Observable data pattern for offline-first"
-      - type: keyword_present
-        value: "single source of truth"
-        context: "SSOT principle we teach"
-      - type: deprecation_scan
-        value: "LiveData"
-        context: "We teach Flow over LiveData"
-    on_failure: MEDIUM
 ---
 
 **Status**: Active | **Last Validated**: March 2026 with kotlinx-serialization 1.8.x / kotlinx-coroutines 1.10.x

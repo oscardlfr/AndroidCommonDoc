@@ -25,6 +25,19 @@ rules:
     hand_written: true
     source_rule: SealedUiStateRule.kt
 
+validate_upstream:
+  - url: "https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-images-resources.html"
+    assertions:
+      - type: api_present
+        value: "composeResources"
+        context: "Compose Multiplatform resource system"
+      - type: api_present
+        value: "Res.string"
+        context: "String resource access pattern"
+      - type: deprecation_scan
+        value: "painterResource"
+        context: "Image resource API we teach"
+    on_failure: MEDIUM
 ---
 
 # Compose Patterns
