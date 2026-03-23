@@ -133,6 +133,8 @@ export interface PatternMetadata {
   assumes_read?: string;
   token_budget?: number;
   optional_capabilities?: string[];
+  /** Upstream content validation assertions. */
+  validate_upstream?: import("../monitoring/assertion-engine.js").UpstreamValidation[];
 }
 
 /** A discovered pattern document with its metadata and location. */
