@@ -60,6 +60,24 @@ feature/
 **Pros:** Truly modular — no cross-feature coupling, per-module publishing, consumer binary includes only selected features.
 **Cons:** No cross-feature singleton sharing via Dagger (must use external holder or pass core APIs manually).
 
+### Approach C: Per-Feature + ServiceLoader Discovery (zero central edits)
+
+Builds on B's per-feature architecture but adds `ServiceLoader` auto-discovery. Adding a new feature requires zero edits to the core module — only a new integration module with META-INF registration.
+
+```
+sdk-core/                → MySdk, CoreApis, FeatureInitializer contract, ServiceLoader discovery
+feature/
+  security/
+    api/                 → SecurityApi interface
+    integration/         → DaggerSecurityComponent + SecurityFeatureInitializer + META-INF
+  payments/
+    api/                 → PaymentsApi interface
+    integration/         → DaggerPaymentsComponent + PaymentsFeatureInitializer + META-INF
+```
+
+**Pros:** Zero central edits on new feature, `MySdk.init(setOf(...))` consumer API, binary lean.
+**Cons:** JVM-only (ServiceLoader not available on Kotlin/Native), runtime errors on missing deps, added complexity (META-INF, casting).
+
 ## Approach A: Monolithic Implementation
 
 ### Init pattern
