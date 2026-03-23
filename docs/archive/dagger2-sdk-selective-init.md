@@ -98,27 +98,69 @@ class AuthDaggerModule {
 
 ## Approach B: Per-Feature Implementation
 
-### Init pattern — per module, not global
+### Gradle module structure
 
-```kotlin
-// Consumer initializes each feature independently
-object FeatureSecurity {
-    private var component: SecurityComponent? = null
-
-    fun init(core: CoreApis) {
-        component = DaggerSecurityComponent.builder()
-            .core(core)
-            .build()
-    }
-}
-
-// Consumer code:
-val core = CoreApis.create(config)
-FeatureSecurity.init(core)
-FeatureObservability.init(core)
+```
+sdk-core-apis/           → CoreApis interface, SdkConfig, shared contracts (NO Dagger)
+sdk-core-impl/           → CoreApisImpl with foundation singletons
+feature/
+  security/
+    api/                 → SecurityApi interface (NO Dagger, NO impl deps)
+    integration/         → DaggerSecurityComponent, SecurityImpl, SecurityModule
+  observability/
+    api/                 → ObservabilityApi interface
+    integration/         → DaggerObservabilityComponent, ObservabilityImpl
+  payments/
+    api/                 → PaymentsApi interface
+    integration/         → DaggerPaymentsComponent, PaymentsImpl
 ```
 
-### Each feature has its own Component
+Consumer's `build.gradle.kts` only declares what they need:
+```kotlin
+implementation("com.example.sdk:core-apis:1.0.0")
+implementation("com.example.sdk:security-api:1.0.0")
+implementation("com.example.sdk:security-integration:1.0.0")
+// Payments NOT included → not in binary, not instantiated
+```
+
+### CoreApis — shared state without global Dagger graph
+
+```kotlin
+// In :sdk-core-apis (NO Dagger dependency)
+interface CoreApis {
+    val logger: Logger
+    val config: SdkConfig
+    val networkExecutor: NetworkExecutor
+}
+
+data class SdkConfig(
+    val baseUrl: String,
+    val apiKey: String,
+    val environment: Environment = Environment.PRODUCTION,
+    val debugMode: Boolean = false,
+)
+```
+
+```kotlin
+// In :sdk-core-impl
+class CoreApisImpl private constructor(
+    override val config: SdkConfig,
+    context: Context,
+) : CoreApis {
+    // Foundation singletons survive reinit (same pattern as Koin FoundationSingletons)
+    override val logger: Logger = FoundationSingletons.logger
+    override val networkExecutor: NetworkExecutor = NetworkExecutorImpl(config)
+
+    companion object {
+        fun create(context: Context, config: SdkConfig): CoreApis =
+            CoreApisImpl(config, context.applicationContext)
+    }
+}
+```
+
+### Per-feature Component
+
+Each feature has its own Dagger Component. No global graph — each feature is self-contained:
 
 ```kotlin
 // In :feature:security:integration
@@ -133,28 +175,97 @@ interface SecurityComponent {
         fun build(): SecurityComponent
     }
 }
+
+@Module
+class SecurityModule {
+    @Provides @Singleton
+    fun provideSecurityService(core: CoreApis): SecurityService {
+        // core.logger, core.networkExecutor → same instances across all features
+        return SecurityServiceImpl(core.logger, core.networkExecutor, core.config)
+    }
+}
 ```
 
-### Shared state via CoreApis, not @Singleton graph
+### SDK entry point — optional umbrella OR per-feature init
+
+Consumer can initialize features individually OR use an optional umbrella:
 
 ```kotlin
-// In :core-apis (no Dagger)
-interface CoreApis {
-    val logger: Logger
-    val config: SdkConfig
-    val networkExecutor: NetworkExecutor
+// Option 1: Per-feature init (recommended for modular SDKs)
+val core = CoreApisImpl.create(context, SdkConfig(baseUrl = "...", apiKey = "..."))
+FeatureSecurity.init(core)
+FeatureObservability.init(core)
+// Payments never initialized → never instantiated, not in binary
+
+// Option 2: Umbrella init (convenience wrapper, optional)
+object MySdk {
+    private lateinit var core: CoreApis
+
+    fun init(context: Context, config: SdkConfig, features: Set<Feature>) {
+        core = CoreApisImpl.create(context, config)
+        for (feature in features) {
+            when (feature) {
+                Feature.SECURITY -> FeatureSecurity.init(core)
+                Feature.OBSERVABILITY -> FeatureObservability.init(core)
+                Feature.PAYMENTS -> FeaturePayments.init(core)
+            }
+        }
+    }
+}
+
+// Consumer: MySdk.init(context, config, setOf(Feature.SECURITY, Feature.OBSERVABILITY))
+```
+
+### Per-feature facade
+
+```kotlin
+// In :feature:security:integration
+object FeatureSecurity {
+    private var component: SecurityComponent? = null
+
+    fun init(core: CoreApis) {
+        check(component == null) { "Security already initialized" }
+        component = DaggerSecurityComponent.builder()
+            .core(core)
+            .build()
+    }
+
+    fun securityService(): SecurityService {
+        return component?.securityService()
+            ?: error("Security not initialized. Call FeatureSecurity.init(core) first.")
+    }
+
+    fun shutdown() {
+        component = null
+    }
 }
 ```
 
 ### Publishing
 
-Each module publishes independently:
+Each module publishes independently — consumer picks only what they need:
 ```kotlin
 // feature/security/integration/build.gradle.kts
 publishing {
     singleVariant("release") { withSourcesJar() }
 }
 ```
+
+## Approach A vs B — Trade-off Comparison
+
+| Criterion | A: Monolithic | B: Per-Feature |
+|-----------|--------------|----------------|
+| **Consumer isolation** | ❌ All impls compiled in | ✅ Only selected features |
+| **Binary size** | ❌ Fat — all modules linked | ✅ Lean — only declared deps |
+| **Compile-time safety** | ✅ Full graph validated | ⚠️ Per-feature only |
+| **Singleton sharing** | ✅ `@Singleton` on single Component | ⚠️ Via CoreApis (manual) |
+| **Adding a new feature** | Edit `@Component` annotation | New module, no central edit |
+| **Multibindings (`@IntoMap`)** | ✅ Works — single graph | ❌ No global graph |
+| **Publishing** | Monolithic artifact | Per-module Maven publishing |
+| **Consumer init** | `MySdk.init(modules = ...)` | Per-feature or optional umbrella |
+| **Feature coupling** | All features see each other | Features are isolated |
+| **Complexity** | Lower — one Component | Higher — CoreApis + N Components |
+| **Best for** | Small SDK, internal team | Large SDK, external consumers |
 
 ## Version Compatibility
 
