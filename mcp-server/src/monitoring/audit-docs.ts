@@ -38,6 +38,10 @@ export interface AuditDocsOptions {
   withUpstream?: boolean;
   /** Cache TTL override for upstream content in hours. */
   cacheTtlHours?: number;
+  /** Max docs to analyze with LLM in deep profile (default: unlimited). */
+  maxLlmDocs?: number;
+  /** Quality profile: "standard" (Layer 1 only) or "deep" (Layer 1 + LLM). */
+  profile?: "standard" | "deep";
 }
 
 /** Result of a single audit check. */
