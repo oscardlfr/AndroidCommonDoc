@@ -112,6 +112,31 @@ skills/
 - Review state (accept/reject/defer) reuses `review-state.ts`
 - Report format extends `report-generator.ts`
 
+### Relationship with `ingest-content`
+
+`ingest-content` and `validate-upstream` are complementary tools that share content fetching infrastructure but serve different purposes:
+
+| | `ingest-content` | `validate-upstream` |
+|---|---|---|
+| **Trigger** | Manual — user finds an article/blog | Automatic — CI weekly or on-demand |
+| **Input** | Any URL or pasted text (articles, blogs, docs) | URLs declared in frontmatter `validate_upstream` |
+| **Question** | "Does this content teach something we should add to our docs?" | "Do our docs still match what upstream teaches?" |
+| **Direction** | Outside → In (new knowledge into our docs) | Inside → Out (our docs still valid vs upstream) |
+| **Output** | Suggestions to update/create docs | Violations — our assertions failed against upstream |
+
+**Shared infrastructure (S01):**
+- `content-fetcher.ts` — Jina Reader fetch + raw fallback
+- `content-cache.ts` — disk cache with TTL
+- Both reuse the same cached content for the same URL
+
+`ingest-content` can also consume `validate-upstream` findings: when validate-upstream detects that upstream changed a recommended pattern, `ingest-content` can be invoked on the same URL to analyze what the new recommendation is and suggest doc updates. This creates a pipeline:
+
+```
+validate-upstream (detect) → ingest-content (analyze) → human review → doc update
+```
+
+This pipeline is NOT automated in M011 — it's a manual workflow. But the shared cache means the content is already fetched.
+
 ## Constraints
 
 - Layer 1 MUST work without LLM — pure grep/regex on fetched content
