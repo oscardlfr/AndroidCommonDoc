@@ -539,6 +539,34 @@ val security: SecurityService = MySdk.get()
 - **Per-feature DaggerComponent:** Each feature still has its own `@Component` — compile-time graph validation is per-feature, not cross-feature.
 - **Complexity:** META-INF files, ServiceLoader, and `getService` casting add ceremony compared to Approach B.
 
+### Cross-feature dependency limitation (applies to B and C)
+
+In Approach A (monolithic), all services live in one `@Component` graph. Any module can inject any singleton — `AuthService` can receive `NetworkExecutor`, which can receive `EventLogger`. The graph resolves everything.
+
+In Approaches B and C, each feature has its **own isolated** `DaggerComponent`. Features cannot inject services from other features. Shared dependencies must be passed via `CoreApis`:
+
+```kotlin
+// CoreApis must expose EVERYTHING that features share
+interface CoreApis {
+    val logger: EventLogger
+    val config: SdkConfig
+    val networkExecutor: NetworkExecutor  // ← what if Security needs this?
+    val storage: StorageService           // ← and this?
+    val idGenerator: IdGenerator          // ← and this?
+    // ... grows as features need more shared services
+}
+```
+
+**The problem:** If `SecurityFeature` needs `NetworkExecutor` (which is provided by `NetworkFeature`), there are two options:
+
+1. **Put NetworkExecutor in CoreApis** — but then CoreApis grows into a God Object that knows about every shared service. It becomes a monolithic interface, defeating the purpose of per-feature isolation.
+
+2. **Require features to be initialized in order** — `NetworkFeature.init(core)` first, then pass its services to `SecurityFeature.init(core, networkServices)`. This creates implicit ordering dependencies between "independent" features.
+
+**How Koin solves this:** All modules are loaded into ONE `koinApplication`. When `SecurityServiceImpl` calls `get<NetworkExecutor>()`, Koin resolves it from the global graph — regardless of which module registered it. There's no `CoreApis` interface and no ordering. The trade-off is runtime resolution instead of compile-time.
+
+**Honest assessment:** For SDKs where features are truly independent (no cross-feature dependencies), B and C work well. For SDKs where features depend on each other's services (common in large SDKs), the `CoreApis` approach adds significant complexity that Koin avoids.
+
 ### When to use Approach C
 
 - Large Android-only SDK with 20+ optional features
