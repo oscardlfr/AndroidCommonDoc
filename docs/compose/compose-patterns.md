@@ -26,7 +26,7 @@ rules:
     source_rule: SealedUiStateRule.kt
 
 validate_upstream:
-  - url: "https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-images-resources.html"
+  - url: "https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-multiplatform-resources-usage.html"
     assertions:
       - type: api_present
         value: "composeResources"
@@ -48,7 +48,7 @@ Patterns for Compose Multiplatform development in KMP projects. Covers resource 
 
 | Document | Description |
 |----------|----------validate_upstream:
-  - url: "https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-images-resources.html"
+  - url: "https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-multiplatform-resources-usage.html"
     assertions:
       - type: api_present
         value: "composeResources"

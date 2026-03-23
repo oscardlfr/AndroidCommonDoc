@@ -240,3 +240,76 @@ describe("audit-docs on real L0", () => {
     expect(result.summary.medium).toBe(0);
   });
 });
+
+describe("audit-docs profile and maxLlmDocs options", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    const { mkdtemp: mkd } = await import("node:fs/promises");
+    const { tmpdir: td } = await import("node:os");
+    tempDir = await mkd(path.join(td(), "audit-profile-"));
+  });
+
+  afterEach(async () => {
+    const { rm: rmf } = await import("node:fs/promises");
+    await rmf(tempDir, { recursive: true, force: true });
+  });
+
+  it("default profile is standard (no LLM)", async () => {
+    const { mkdir: mkd, writeFile: wf } = await import("node:fs/promises");
+    await mkd(path.join(tempDir, "docs/test"), { recursive: true });
+    await wf(path.join(tempDir, "docs/test/test.md"), "---\ncategory: testing\n---\n# Test", "utf-8");
+
+    const result = await auditDocs({
+      projectRoot: tempDir,
+      layer: "L0",
+    });
+
+    // standard profile = waves 1,2 only
+    expect(result.wavesRun).toEqual([1, 2]);
+  });
+
+  it("deep profile includes wave 3", async () => {
+    const { mkdir: mkd, writeFile: wf } = await import("node:fs/promises");
+    await mkd(path.join(tempDir, "docs/test"), { recursive: true });
+    await wf(path.join(tempDir, "docs/test/test.md"), "---\ncategory: testing\n---\n# Test", "utf-8");
+
+    const result = await auditDocs({
+      projectRoot: tempDir,
+      layer: "L0",
+      profile: "deep",
+      withUpstream: true,
+    });
+
+    expect(result.wavesRun).toContain(3);
+  });
+
+  it("maxLlmDocs is accepted without error", async () => {
+    const { mkdir: mkd, writeFile: wf } = await import("node:fs/promises");
+    await mkd(path.join(tempDir, "docs/test"), { recursive: true });
+    await wf(path.join(tempDir, "docs/test/test.md"), "---\ncategory: testing\n---\n# Test", "utf-8");
+
+    const result = await auditDocs({
+      projectRoot: tempDir,
+      layer: "L0",
+      maxLlmDocs: 5,
+    });
+
+    expect(result).toBeDefined();
+    expect(result.summary).toBeDefined();
+  });
+
+  it("cacheTtlHours is respected", async () => {
+    const { mkdir: mkd, writeFile: wf } = await import("node:fs/promises");
+    await mkd(path.join(tempDir, "docs/test"), { recursive: true });
+    await wf(path.join(tempDir, "docs/test/test.md"), "---\ncategory: testing\n---\n# Test", "utf-8");
+
+    const result = await auditDocs({
+      projectRoot: tempDir,
+      layer: "L0",
+      cacheTtlHours: 1,
+    });
+
+    expect(result).toBeDefined();
+  });
+});

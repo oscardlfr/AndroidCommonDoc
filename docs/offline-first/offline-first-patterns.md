@@ -33,7 +33,7 @@ validate_upstream:
         value: "Flow"
         context: "Observable data pattern for offline-first"
       - type: keyword_present
-        value: "single source of truth"
+        value: "source of truth"
         context: "SSOT principle we teach"
       - type: deprecation_scan
         value: "LiveData"

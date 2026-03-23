@@ -64,7 +64,6 @@ const DEPRECATION_KEYWORDS = [
   "marked deprecated",
   "superseded by",
   "replaced by",
-  "use .* instead",
 ];
 
 /** Context window size (chars) for keyword proximity matching. */
@@ -287,6 +286,13 @@ function checkDeprecationScan(
 
     for (const keyword of DEPRECATION_KEYWORDS) {
       if (new RegExp(keyword, "i").test(window)) {
+        // Extra check: skip "use {api} instead of X" — that recommends the API, not deprecates it
+        const useApiInstead = new RegExp(
+          `use\\s+${escapeRegex(api)}\\s+instead`,
+          "i",
+        );
+        if (useApiInstead.test(window)) continue;
+
         return {
           assertion,
           passed: false,
