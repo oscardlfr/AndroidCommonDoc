@@ -32,6 +32,19 @@ rules:
     hand_written: true
     source_rule: NoPlatformDepsInViewModelRule.kt
 
+validate_upstream:
+  - url: "https://insert-koin.io/docs/reference/koin-mp/kmp"
+    assertions:
+      - type: api_present
+        value: "startKoin"
+        context: "Koin initialization function"
+      - type: api_present
+        value: "module"
+        context: "Koin module declaration"
+      - type: keyword_present
+        value: "Kotlin Multiplatform"
+        context: "Koin must still support KMP"
+    on_failure: MEDIUM
 ---
 
 # Dependency Injection Patterns for KMP

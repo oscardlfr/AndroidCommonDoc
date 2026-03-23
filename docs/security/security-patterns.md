@@ -21,6 +21,16 @@ rules:
     type: banned-import
     message: "Never implement custom cryptography — use platform crypto APIs"
     detect: { banned_import: "javax.crypto.spec", prefer: "Platform KeyStore/Keychain" }
+validate_upstream:
+  - url: "https://developer.android.com/privacy-and-security/security-tips"
+    assertions:
+      - type: keyword_present
+        value: "encryption"
+        context: "Encryption patterns we teach"
+      - type: keyword_present
+        value: "KeyStore"
+        context: "Android KeyStore for key management"
+    on_failure: MEDIUM
 ---
 
 # KMP Security Patterns

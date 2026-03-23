@@ -31,6 +31,19 @@ rules:
     hand_written: true
     source_rule: NoChannelForNavigationRule.kt
 
+validate_upstream:
+  - url: "https://developer.android.com/develop/ui/compose/navigation"
+    assertions:
+      - type: api_present
+        value: "NavHost"
+        context: "Navigation container composable"
+      - type: api_present
+        value: "composable"
+        context: "Route registration function"
+      - type: deprecation_scan
+        value: "navigation-compose"
+        context: "Core navigation library we use"
+    on_failure: MEDIUM
 ---
 
 # Navigation3 Patterns for KMP

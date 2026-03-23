@@ -32,6 +32,7 @@ interface CliOptions {
   tier: MonitoringTier | "all";
   output: string;
   projectRoot: string;
+  layer: "L0" | "L1" | "L2";
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -39,6 +40,7 @@ function parseArgs(argv: string[]): CliOptions {
 
   let tier: MonitoringTier | "all" = "all";
   let output = "reports/monitoring-report.json";
+  let layer: "L0" | "L1" | "L2" = "L0";
   let projectRoot =
     process.env.ANDROID_COMMON_DOC ||
     path.resolve(
@@ -69,10 +71,17 @@ function parseArgs(argv: string[]): CliOptions {
     } else if (arg === "--project-root" && next) {
       projectRoot = next;
       i++;
+    } else if (arg === "--layer" && next) {
+      if (next === "L0" || next === "L1" || next === "L2") {
+        layer = next;
+      } else {
+        logger.warn(`Invalid layer "${next}", using "L0"`);
+      }
+      i++;
     }
   }
 
-  return { tier, output, projectRoot };
+  return { tier, output, projectRoot, layer };
 }
 
 /**
@@ -143,12 +152,13 @@ async function main(): Promise<void> {
 
   logger.info(`Doc Source Monitoring CLI`);
   logger.info(`Project root: ${options.projectRoot}`);
+  logger.info(`Layer: ${options.layer}`);
   logger.info(`Tier filter: ${options.tier}`);
   logger.info(`Output: ${options.output}`);
 
   // Scan docs directory for registry entries
   const docsDir = path.join(options.projectRoot, "docs");
-  const allEntries = await scanDirectory(docsDir, "L0");
+  const allEntries = await scanDirectory(docsDir, options.layer);
 
   // Filter to entries with monitor_urls
   let monitorableEntries = allEntries.filter(

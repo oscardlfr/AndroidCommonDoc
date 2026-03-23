@@ -38,6 +38,7 @@ import { registerGradleConfigLintTool } from "./gradle-config-lint.js";
 import { registerStringCompletenessTool } from "./string-completeness.js";
 import { registerComposePreviewAuditTool } from "./compose-preview-audit.js";
 import { registerProguardValidatorTool } from "./proguard-validator.js";
+import { registerAuditDocsTool } from "./audit-docs.js";
 import { registerFindingsReport } from "./findings-report.js";
 import { logger } from "../utils/logger.js";
 
@@ -84,6 +85,7 @@ export function registerTools(server: McpServer): void {
   registerStringCompletenessTool(server, rateLimiter);
   registerComposePreviewAuditTool(server, rateLimiter);
   registerProguardValidatorTool(server, rateLimiter);
+  registerAuditDocsTool(server, rateLimiter);
   registerFindingsReport(server, rateLimiter);
 
   // Register a rate-limit-status utility tool

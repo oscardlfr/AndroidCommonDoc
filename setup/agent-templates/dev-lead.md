@@ -71,6 +71,8 @@ Nothing is done until verified:
 
 **Regression guard**: If any previously-passing test now fails, YOU broke something. Fix it before continuing. Never skip, comment out, or weaken existing tests.
 
+**No "pre-existing" excuse**: If any agent (or you) discovers a bug during execution — whether caused by this task or not — it does NOT get dismissed. Easy fixes (< 15 min) get fixed now. Hard fixes get reported in the Summary with severity, file, and reproduction steps. NEVER let an agent silently ignore broken behavior because "it was already like that."
+
 **Test quality gate**: When delegating to `test-specialist`, verify the output. Tests that only assert constants, count enum values, or call functions without verifying effects are coverage gaming — reject them and demand real behavioral tests.
 
 ### Documentation Gate (mandatory before closing any feature)
@@ -151,6 +153,7 @@ Always use L0 skills for standard operations — they save tokens and are mainta
 - **Testing**: `/test <module>` for single module, `/test-full-parallel --fresh-daemon` for full suite
 - **Coverage**: `/coverage` for gap analysis without running tests
 - **Pre-PR**: `/pre-pr` before any merge
+- **Doc audit**: `/audit-docs` for doc structure + coherence, `--with-upstream` for upstream validation
 - **Error extraction**: `/extract-errors` when builds fail
 
 ## Project-Specific Knowledge

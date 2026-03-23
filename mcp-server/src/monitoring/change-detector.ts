@@ -82,13 +82,25 @@ export async function detectChanges(
 
   const manifest = await loadManifest(manifestPath);
 
+  // URL result cache — avoid checking the same URL multiple times
+  const urlCache = new Map<string, CheckResult>();
+
   for (const entry of entries) {
     const monitorUrls = entry.metadata.monitor_urls;
     if (!monitorUrls || monitorUrls.length === 0) continue;
 
     for (const monitorUrl of monitorUrls) {
       checked++;
-      const result = await checkSource(monitorUrl);
+
+      // Deduplicate: reuse cached result for the same URL
+      const cacheKey = monitorUrl.url;
+      let result: CheckResult;
+      if (urlCache.has(cacheKey)) {
+        result = urlCache.get(cacheKey)!;
+      } else {
+        result = await checkSource(monitorUrl);
+        urlCache.set(cacheKey, result);
+      }
 
       if (result.status === "error" || result.status === "unreachable") {
         errors++;

@@ -12,16 +12,18 @@ disable-model-invocation: true
 /monitor-docs --tier 1
 /monitor-docs --tier 2
 /monitor-docs --review
+/monitor-docs --layer L1 --project-root /path/to/shared-kmp-libs
 ```
 
 ## Parameters
 
 Uses parameters from `params.json`:
-- `project-root` -- Path to the AndroidCommonDoc toolkit root directory.
+- `project-root` -- Path to the project root directory (defaults to L0 toolkit root).
 
 Additional skill-specific arguments (not in params.json):
 - `--tier 1|2|3` -- Filter monitoring to a specific tier (1=critical version checks, 2=important doc pages, 3=informational community content). Default: all tiers.
 - `--review` -- Include previously reviewed findings in the output (default: only new findings).
+- `--layer L0|L1|L2` -- Project layer (default: L0). Use L1/L2 when monitoring consumer projects. The layer is passed to the doc scanner for correct registry classification.
 
 ## Behavior
 

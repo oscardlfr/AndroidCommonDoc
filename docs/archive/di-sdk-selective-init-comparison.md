@@ -2,9 +2,9 @@
 scope: [architecture, dependency-injection, sdk-design, research]
 sources: [dagger2, koin, hilt, kotlin-inject, android-sdk, kmp]
 targets: [android, jvm, ios, macos]
-version: 3
+version: 5
 last_updated: "2026-03"
-description: "DI framework comparison for SDK selective init — Dagger 2 vs Koin vs Hilt vs kotlin-inject. Sealed class pattern for impl-agnostic module selection. Updated with auto-discovery solution (Class.forName + @EagerInitialization) and Dagger 2 discovery trade-offs."
+description: "DI framework comparison for SDK selective init — Dagger 2 (monolithic + per-feature), Koin, Hilt, kotlin-inject. Architecture requirements checklist, approach trade-offs, decision matrix. Neutral — no framework preference."
 slug: di-sdk-selective-init-comparison
 status: archived
 layer: L0
@@ -13,269 +13,319 @@ category: archive
 
 # DI SDK Selective Init — Framework Comparison
 
-Research doc: comparison of DI frameworks for an SDK where consumers select which modules to initialize without knowing implementation classes.
-
-**Status:** Koin implementation shipped and validated in shared-kmp-libs (M003). Auto-discovery via Class.forName (JVM) + @EagerInitialization (Native) added post-M003. See [Implementation Results](#implementation-results-koin-in-shared-kmp-libs) for real-world findings and [Auto-Discovery](#auto-discovery-class-loading-problem-and-solution) for the platform-specific solution.
+Comparison of DI approaches for an SDK where consumers select which modules to initialize without importing implementation classes. This document presents trade-offs — the right choice depends on your constraints.
 
 ## The Problem
 
-An SDK with N feature modules (network, storage, io, json, firebase...) where:
+An SDK with N feature modules where:
 
-1. Each feature has multiple implementations (Ktor vs Retrofit, MMKV vs DataStore vs Settings)
+1. Each feature has multiple implementations (Ktor vs Retrofit, MMKV vs DataStore)
 2. Consumers pick which implementations to use at init time
-3. **Consumers never import implementation classes** — only a sealed class enum
-4. Shared singletons (logger, config, id generator) must not duplicate
+3. **Consumers never import implementation classes** — only a type-safe selector
+4. Shared singletons must not duplicate
 5. Modules not requested must not be instantiated
-6. **Registration must happen automatically** — the consumer adding a Gradle dependency is sufficient; no manual `register()` calls or impl class imports
+6. Registration should be automatic — Gradle dependency is sufficient
 
-## Sealed Class — Common to All Solutions
+## Architecture Requirements Checklist
 
-Regardless of DI framework, consumers interact through a sealed class:
+Use this checklist to evaluate ANY approach. A solution doesn't need to pass all 10 — prioritize based on your project constraints.
 
-```kotlin
-sealed class SdkModule(val key: String) {
-    sealed class Io(key: String) : SdkModule(key) {
-        data object KotlinxIo : Io("io-kotlinxio")
-        data object Okio : Io("io-okio")
-    }
-    sealed class Json(key: String) : SdkModule(key) {
-        data object KotlinxSerialization : Json("json-kotlinx")
-    }
-    sealed class Network(key: String) : SdkModule(key) {
-        data object Ktor : Network("network-ktor")
-        data object Retrofit : Network("network-retrofit")
-    }
-    sealed class Storage(key: String) : SdkModule(key) {
-        data object Settings : Storage("storage-settings")
-        data object DataStore : Storage("storage-datastore")
-        data object Mmkv : Storage("storage-mmkv")
-    }
-    // ... Firebase, OAuth, System
-}
-```
+| # | Requirement | Weight | Question |
+|---|-------------|--------|----------|
+| 1 | Selective init | Critical | Can the consumer pick exactly which modules to activate? |
+| 2 | Consumer impl isolation | Critical | Does production code import ZERO impl classes? |
+| 3 | Shared singletons | High | Are shared services (logger, config, network) guaranteed single-instance? |
+| 4 | Lazy instantiation | High | Are unselected modules never instantiated? |
+| 5 | SDK-core independence | High | Does the SDK orchestrator depend on ZERO impl modules in production? |
+| 6 | Auto-registration | Medium | Is adding a Gradle dependency sufficient, or must the consumer also call `register()`? |
+| 7 | Binary lean | Medium | Does the consumer binary include only selected impls? |
+| 8 | Platform discovery | Varies | Does module discovery work on all target platforms? |
+| 9 | Category validation | Medium | Are conflicting impls (two network backends) rejected at init? |
+| 10 | Compile-time safety | Varies | Are missing bindings caught at build time or runtime? |
 
-Consumer sees:
+## Approaches
+
+### 1. Koin — Runtime DI, Full KMP
+
+**Type:** Runtime service locator | **KMP:** Full | **Codegen:** None
+
+**Init model:** Umbrella with selective module set
 ```kotlin
 SharedSdk.init(
-    modules = setOf(SdkModule.Network.Ktor, SdkModule.Storage.Mmkv),
-    config = SdkConfig(debug = true),
+    modules = setOf(SdkModule.Io.KotlinxIo, SdkModule.Encryption.Default),
+    config = SdkConfig(debug = false),
+    appModules = listOf(myAppModule),
 )
 ```
 
-Consumer never sees: `KtorClientAdapter`, `MmkvStorage`, `KotlinxIoFileSystemProvider`.
+**Module discovery:** `Class.forName` (JVM) + `@EagerInitialization` (Native). Each impl self-registers via `object init {}` block.
 
----
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| 1. Selective init | ✅ | Consumer passes `Set<SdkModule>` |
+| 2. Consumer isolation | ✅ | 0 impl imports in production code |
+| 3. Shared singletons | ✅ | Single Koin application lifecycle |
+| 4. Lazy instantiation | ✅ | Class.forName only on requested modules |
+| 5. SDK-core independence | ✅ | core-sdk has 0 impl deps in production |
+| 6. Auto-registration | ✅ | Gradle dep → object init → register |
+| 7. Binary lean | ✅ | Only selected impls on classpath |
+| 8. Platform discovery | ✅ | JVM + Native covered |
+| 9. Category validation | ✅ | `validateNoDuplicateCategories()` at init |
+| 10. Compile-time safety | ❌ | Missing bindings crash at runtime |
 
-## Implementation Results: Koin in shared-kmp-libs
+**When this is the right choice:**
+- Multi-platform SDK (Android + iOS + Desktop + macOS)
+- Team values simplicity and zero codegen overhead
+- Runtime validation via `checkModules()` in tests is acceptable
 
-**Shipped in M003** — 14 impl modules, 58 total modules, 100% test coverage on core-sdk, 96.1% project-wide.
+**When this is NOT the right choice:**
+- Compile-time binding safety is non-negotiable
+- Team is uncomfortable with service locator pattern
+- JVM-only project where Dagger's maturity is preferred
 
-### Final API
+### 2. Dagger 2 — Monolithic Component
 
+**Type:** Compile-time DI | **KMP:** None (JVM only) | **Codegen:** KAPT or KSP (alpha)
+
+**Init model:** Umbrella, all modules compiled in
 ```kotlin
-SharedSdk.init(
-    modules = setOf(
-        SdkModule.Io.KotlinxIo,
-        SdkModule.Json.KotlinxSerialization,
-        SdkModule.Network.Ktor,
-    ),
-    config = SdkConfig(debug = true),
-    appModules = listOf(myDataModule),
-)
+MySdk.init(context, config, setOf(SdkModule.AUTH, SdkModule.ANALYTICS))
 ```
 
-The consumer imports only `com.grinx.shared.core.sdk.*`. No impl class imports.
+**Module discovery:** Not needed — `@Component` lists all `@Module` classes explicitly.
 
-### Auto-Registration Pattern
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| 1. Selective init | ✅ | Via `Provider<ModuleInitializer>` laziness |
+| 2. Consumer isolation | ❌ | All impls compiled into `@Component` |
+| 3. Shared singletons | ✅ | `@Singleton` scope on single Component |
+| 4. Lazy instantiation | ✅ | `Provider<>` delays instantiation |
+| 5. SDK-core independence | ❌ | `@Component` must list all `@Module` classes |
+| 6. Auto-registration | ✅ | `@IntoMap` + `@Module` is sufficient |
+| 7. Binary lean | ❌ | All impl code linked regardless of selection |
+| 8. Platform discovery | N/A | JVM only, no discovery needed |
+| 9. Category validation | ✅ | Custom validation at init time |
+| 10. Compile-time safety | ✅ | Missing bindings = build error |
 
-Each impl module has an `object : SdkModuleRegistration` with an `init` block that registers in `SdkModuleRegistry`:
+**When this is the right choice:**
+- Android-only SDK with small number of modules (≤10)
+- Compile-time safety is the top priority
+- Team has Dagger experience
+- Binary size is not a concern (internal SDK)
 
+**When this is NOT the right choice:**
+- SDK has many optional modules (binary bloat)
+- Per-module publishing required
+- Consumer must not see impl classes
+
+### 3. Dagger 2 — Per-Feature Component (Modern)
+
+**Type:** Compile-time DI, per-feature isolation | **KMP:** None | **Codegen:** KAPT/KSP
+
+**Init model:** Per-module, consumer initializes each feature independently
 ```kotlin
-// In core-io-kotlinxio (impl module)
-object KotlinxIoRegistration : SdkModuleRegistration {
-    override val module = SdkModule.Io.KotlinxIo
-    override val koinModule = module {
-        single<FileSystemProvider> { KotlinxIoFileSystemProvider() }
-        single<StreamingFileSystem> { KotlinxIoStreamingFileSystem() }
-    }
-    init { SdkModuleRegistry.register(module) { koinModule } }
-}
+val core = CoreApis.create(config)
+FeatureSecurity.init(core)
+FeatureObservability.init(core)
 ```
 
-Consumer doesn't call `register()` or reference `KotlinxIoRegistration`. The sealed class + Gradle dependency is enough.
+**Module discovery:** Not needed — each feature has its own Component and init.
 
-### Auto-Discovery: Class-Loading Problem and Solution
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| 1. Selective init | ✅ | Consumer calls init on desired features only |
+| 2. Consumer isolation | ✅ | Each feature is an independent module |
+| 3. Shared singletons | ⚠️ | Via CoreApis interface, not `@Singleton` graph |
+| 4. Lazy instantiation | ✅ | Uninitialised features don't exist |
+| 5. SDK-core independence | ✅ | Core only has interfaces, no impl deps |
+| 6. Auto-registration | ❌ | Consumer must explicitly call `Feature.init()` |
+| 7. Binary lean | ✅ | Only selected features in binary |
+| 8. Platform discovery | N/A | JVM only, explicit init |
+| 9. Category validation | ⚠️ | Manual — no global registry to check |
+| 10. Compile-time safety | ✅ | Per-feature graph validated at build |
 
-**The Problem:** Kotlin `object` init blocks only execute when the JVM classloader touches the class. If nobody references `OkioRegistration`, the `init {}` never fires and `SdkModuleRegistry` is empty when `SharedSdk.init()` runs. On Kotlin/Native, object initialization is also lazy since K/N 1.7.20. This means auto-registration via `object init {}` alone is a dead pattern in KMP.
+**When this is the right choice:**
+- Large SDK distributed to external consumers
+- Per-module Maven publishing required
+- Consumer teams want fine-grained dependency control
+- Binary size matters (enterprise SDKs with 20+ optional features)
 
-**The Solution:** Each platform has its own standard mechanism for this. `SharedSdk.init()` calls `expect fun discoverRegistrations(modules)` which delegates to the platform:
+**When this is NOT the right choice:**
+- Many features need to share singletons (CoreApis gets complex)
+- Team wants zero-ceremony module addition
+- Cross-feature compile-time graph validation needed
 
-| Platform | Mechanism | How it works |
-|----------|-----------|-------------|
-| **JVM** (Android + Desktop) | `Class.forName(className)` | Triggers `<clinit>` (static initializer) → executes the object's `init {}` block → calls `SdkModuleRegistry.register()`. Only requested modules are loaded. |
-| **Native** (iOS + macOS) | `@EagerInitialization` | Top-level `val` in `nativeMain/` forces object initialization **before main()**. `discoverRegistrations()` is a no-op. |
+### 4. Hilt
 
-**JVM actual:**
-```kotlin
-internal actual fun discoverRegistrations(modules: Set<SdkModule>) {
-    for (module in modules) {
-        if (SdkModuleRegistry.isRegistered(module)) continue
-        try {
-            Class.forName(module.registrationClassName)
-        } catch (_: ClassNotFoundException) {
-            throw IllegalArgumentException(
-                "Module '${module.key}' requested but its implementation is not on the classpath. " +
-                    "Add the corresponding Gradle dependency. " +
-                    "Expected class: ${module.registrationClassName}"
-            )
-        }
-    }
-}
-```
+**Not recommended for SDKs.** `@HiltAndroidApp` annotation conflicts when multiple SDKs coexist in the same app. Designed for apps that own the `Application` class.
 
-**Native impl module (e.g. core-io-okio/nativeMain):**
-```kotlin
-@EagerInitialization
-private val _okioInit = OkioRegistration
-```
+Use for: **Android apps** (not libraries or SDKs).
 
-**`SdkModule.registrationClassName`** maps each sealed variant to its fully-qualified Registration class name via an exhaustive `when`. Adding a new `SdkModule` variant without updating the mapping is a compile error:
+### 5. kotlin-inject
 
-```kotlin
-val registrationClassName: String
-    get() = when (this) {
-        is Io.KotlinxIo -> "com.grinx.shared.core.io.kotlinxio.KotlinxIoRegistration"
-        is Io.Okio -> "com.grinx.shared.core.io.okio.OkioRegistration"
-        is Network.Ktor -> "com.grinx.shared.core.network.ktor.KtorNetworkRegistration"
-        // ... exhaustive
-    }
-```
+**Type:** Compile-time DI with KSP | **KMP:** Full | **Codegen:** KSP
 
-This follows the same pattern used by Ktor (engine selection), SQLDelight (driver selection), and SLF4J (backend discovery). The consumer's Gradle dependency determines what's on the classpath; the consumer's Kotlin code never imports impl classes.
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| 1. Selective init | ✅ | Via component composition |
+| 2. Consumer isolation | ✅ | Separate component per feature |
+| 3. Shared singletons | ✅ | Component scope |
+| 4. Lazy instantiation | ✅ | Component not created = no instances |
+| 5. SDK-core independence | ✅ | Core defines interfaces only |
+| 6. Auto-registration | ❌ | Consumer composes components explicitly |
+| 7. Binary lean | ✅ | Only included components |
+| 8. Platform discovery | ✅ | KSP runs on all KMP targets |
+| 9. Category validation | ⚠️ | Manual validation |
+| 10. Compile-time safety | ✅ | Full compile-time graph validation |
 
-### Foundation Singletons Survive Reinit
+**When this is the right choice:**
+- KMP SDK where compile-time safety is non-negotiable
+- Team willing to adopt a pre-1.0 framework
+- Multibindings needed (available since 0.7+)
 
-`EventLogger` and `IdGenerator` are held in a `FoundationSingletons` object outside the Koin lifecycle. `shutdown() → init()` reuses the same logger instance — log destinations, correlation IDs, and cached state are preserved.
-
-### Category Validation
-
-`validateNoDuplicateCategories()` groups by `SdkModule.category` and rejects duplicates. OAuth modules use per-variant categories (`oauth:oauth-browser`, `oauth:oauth-native`) so they can coexist (different protocols).
-
-### Real Issues Encountered
-
-1. **KMP auto-discovery** — `object init` blocks don't fire on JVM unless something touches the class, and K/Native objects are lazy since 1.7.20. Solved with platform-specific discovery: `Class.forName()` on JVM (triggers `<clinit>` → `init {}`), `@EagerInitialization` on Native (forces init before `main()`). See [Auto-Discovery](#auto-discovery-class-loading-problem-and-solution).
-
-2. **`Class.forName` only triggers `<clinit>` once per classloader.** Subsequent calls are no-ops. In tests, `SdkModuleRegistry.clear()` wipes registrations permanently — `Class.forName` won't re-register. Tests must manually re-register after `clear()`.
-
-3. **Custom `jvmMain` intermediate source set** — breaks `desktopTest → commonMain` visibility. The test compiler can't see classes from commonMain when a custom intermediate sits between them. Fix: eliminated `jvmMain`, duplicated files to `androidMain` + `desktopMain`. (Note: core-sdk itself uses `jvmMain` for the JVM discovery actual — this is fine because the source set only contains the actual function, not the test-visible API.)
-
-4. **Platform-specific impl modules** — Firebase Native, OAuth Native, System all have platform-specific constructors (Context, etc.). Their Koin modules are empty registration points — consumer provides bindings via `appModules`.
-
-5. **JVM-only modules with native targets declared** — core-network-retrofit had iOS/macOS targets in its build.gradle.kts but zero native code (OkHttp is JVM-only). Cleaned up: native targets removed, no `@EagerInitialization` needed.
-
-### Metrics
-
-| Metric | Value |
-|--------|-------|
-| Impl modules with Koin registration | 14/14 |
-| Sealed class variants | 14 |
-| core-sdk test coverage | 100% |
-| Project test coverage | 96.1% |
-| Total modules compiling | 58/58 |
-| Test tasks passing | 344/344 |
-| Pre-existing test failures fixed | 3 |
-
----
-
-## Framework Comparison
-
-### 1. Koin
-
-**Type:** Runtime service locator / lightweight DI
-**KMP support:** Full (commonMain, all targets)
-**Annotation processing:** None
-
-#### Pros
-
-- **No code generation** — no kapt/ksp, no annotation processing overhead
-- **Full KMP** — works on iOS, macOS, JVM, JS, WASM
-- **Runtime flexibility** — module composition is dynamic
-- **Simple testing** — `checkModules()` verifies the graph
-- **Tiny API surface** — `single`, `factory`, `get()`, `module {}` — that's most of it
-
-#### Cons
-
-- **Runtime failure** — missing bindings crash at runtime, not compile time
-- **No compile-time graph validation** — `checkModules()` catches most issues in tests, not the compiler
-- **Platform-specific discovery required** — `Class.forName` on JVM, `@EagerInitialization` on Native. Each new impl module needs a one-line nativeMain file and a className entry in SdkModule. Manageable but not zero-ceremony.
-
-### 2. Dagger 2
-
-**Type:** Compile-time DI with code generation
-**KMP support:** None (requires JVM annotation processing)
-**Annotation processing:** kapt or ksp
-
-#### Pros
-
-- **Compile-time verification** — missing bindings fail the build
-- **Generated code** — no reflection, no runtime overhead
-- **Mature ecosystem** — 10+ years of production use
-- **No discovery problem** — Dagger's `@Component` explicitly lists all `@Module` classes. All impls are compiled in and graph-validated at build time. No class-loading tricks needed.
-
-#### Cons
-
-- **No KMP support** — JVM only
-- **All modules compiled in** — the `@Component` must reference all possible `@Module` classes. Cannot exclude unused impl code from the binary. Consumer selection happens at init time via `Provider<ModuleInitializer>` laziness, but the code is still linked.
-- **kapt build overhead** — significant build time
-- **Steep learning curve** — Components, Subcomponents, Scopes, Qualifiers, Multibindings...
-- **Discovery is eager, not lazy** — Adding a new SDK module requires editing the `@Component` annotation to include the new `@Module`. This is compile-time safe but means the SDK orchestrator module (equivalent to core-sdk) depends on ALL impl modules. This is the fat-umbrella trade-off: binary includes everything, consumer pays for unused impls.
-
-### 3. Hilt
-
-**Type:** Opinionated layer on Dagger 2 with Android lifecycle integration
-**KMP support:** None (Android-only)
-
-**Verdict for SDK use case: Not recommended.** Hilt is designed for apps, not SDKs. The `@HiltAndroidApp` conflict disqualifies it when multiple SDKs coexist.
-
-### 4. kotlin-inject
-
-**Type:** Compile-time DI with KSP, Kotlin-native
-**KMP support:** Full (KSP runs on all targets)
-
-#### Pros
-
-- **Compile-time verification** + **KMP support** — best of both worlds
-- **KSP is faster than kapt**
-- **Kotlin-native syntax**
-
-#### Cons
-
-- **Pre-1.0** — smaller ecosystem, API may change
-- **No multibindings** — no `@IntoMap` equivalent
-- **Limited tooling** — IDE support not as mature as Dagger
-
----
+**When this is NOT the right choice:**
+- Need production-proven stability (Koin/Dagger are battle-tested)
+- Team wants zero codegen (Koin)
+- Simpler API preferred
 
 ## Side-by-Side Comparison
 
-| Criterion | Koin | Dagger 2 | Hilt | kotlin-inject |
-|-----------|------|----------|------|---------------|
-| **Graph validation** | Runtime | Compile-time | Compile-time | Compile-time |
-| **KMP support** | ✅ Full | ❌ JVM only | ❌ Android only | ✅ Full (KSP) |
-| **Module discovery** | Class.forName (JVM) + @EagerInit (Native) | Explicit @Component listing | Explicit @Component listing | Explicit component composition |
-| **Discovery ceremony per new module** | 1 className entry + 1 nativeMain line | 1 @Component edit | 1 @Component edit | 1 component edit |
-| **Selective module loading** | ✅ Native | ⚠️ Via Provider + IntoMap | ❌ Not designed for it | ⚠️ Via component composition |
-| **Binary size impact** | ✅ Only included impls | ❌ All impls compiled in | ❌ All impls compiled in | ✅ Only included impls |
-| **Build speed** | ✅ No annotation processing | ❌ kapt is slow | ❌ kapt + bytecode transform | ⚠️ KSP (faster than kapt) |
-| **Runtime overhead** | ⚠️ Service location (~μs) | ✅ Zero (generated code) | ✅ Zero (generated code) | ✅ Zero (generated code) |
-| **SDK friendliness** | ✅ No app-level requirements | ✅ Component is self-contained | ❌ Requires @HiltAndroidApp | ✅ Component is self-contained |
-| **Singleton survival across reinit** | ✅ Via external holder | ✅ Via component lifecycle | N/A | ✅ Via component lifecycle |
+| Criterion | Koin | Dagger Mono | Dagger Per-Feature | kotlin-inject |
+|-----------|------|-------------|-------------------|---------------|
+| **Graph validation** | Runtime | Compile | Compile (per-feat) | Compile |
+| **KMP support** | ✅ Full | ❌ JVM | ❌ JVM | ✅ Full |
+| **Consumer isolation** | ✅ | ❌ | ✅ | ✅ |
+| **Binary lean** | ✅ | ❌ | ✅ | ✅ |
+| **Build speed** | ✅ None | ❌ KAPT | ❌ KAPT/KSP | ⚠️ KSP |
+| **Init model** | Umbrella | Umbrella | Per-feature | Per-component |
+| **Singleton sharing** | Koin scope | @Singleton | CoreApis | Component |
+| **Auto-registration** | ✅ | ✅ @IntoMap | ❌ Manual | ❌ Manual |
+| **Maturity** | Production | Production | Production | Pre-1.0 |
+| **Ceremony per module** | 1 entry | 1 @Component edit | New Component | New Component |
 
-## Recommendation Matrix
+## Decision Matrix
 
-| Scenario | Recommended | Why |
-|----------|-------------|-----|
-| **KMP SDK** (multi-platform) | **Koin** | Proven in shared-kmp-libs. Full platform support, simple API |
-| **Android-only SDK** (library) | **Dagger 2** | Compile-time safety, no runtime surprises |
-| **Android app** (you own Application) | **Hilt** | Google-recommended, lifecycle-aware |
-| **Large team, strict correctness** | **kotlin-inject** | Compile-time + KMP, but less mature |
+| Your constraint | Best fit |
+|-----------------|----------|
+| Must support iOS/macOS/Desktop | Koin or kotlin-inject |
+| Compile-time safety non-negotiable | Dagger or kotlin-inject |
+| Android-only, small module count | Dagger Monolithic |
+| Android-only, modular publishing | Dagger Per-Feature |
+| Zero codegen, fastest builds | Koin |
+| KMP + compile-time safety | kotlin-inject |
+| Team has Dagger expertise | Dagger (either approach) |
+| Team prefers simple API | Koin |
+| Enterprise SDK, many optional features | Dagger Per-Feature or Koin |
+| Binary size critical | Koin, Dagger Per-Feature, or kotlin-inject |
+
+## Version Compatibility (2026)
+
+| Component | Koin | Dagger | kotlin-inject |
+|-----------|------|--------|---------------|
+| Kotlin | 2.3+ | 2.1+ (KSP), any (KAPT) | 2.0+ |
+| AGP | N/A | 8.9+ (KSP alpha pending AGP 9) | N/A |
+| Codegen | None | KAPT (stable), KSP (alpha 2.48+) | KSP |
+| Maturity | 4.1+ (stable) | 2.52+ (10+ years) | 0.7+ (pre-1.0) |
+
+## Singleton Survival Across Reinit
+
+Some singletons must survive `shutdown() → init()` cycles. Typical example: a logger that holds file handles, correlation IDs, and buffered entries. Recreating it on reinit would lose pending logs and break tracing.
+
+The pattern: hold process-lifetime singletons in an **external holder** outside the DI lifecycle. The DI container references the existing instance — it never creates a new one.
+
+**What survives reinit:** Singletons that hold state accumulated over the process lifetime — loggers, telemetry pipelines, credential caches, ID generators.
+
+**What gets recreated:** Configuration that may change between cycles — debug flags, API endpoints, environment settings.
+
+### Koin
+
+```kotlin
+// External holder — lives outside Koin lifecycle
+internal object FoundationSingletons {
+    val logger: EventLogger = EventLoggerImpl()
+    val idGenerator: IdGenerator = UuidIdGenerator()
+}
+
+// Koin module references existing instance, never creates new
+fun foundationModule(config: SdkConfig) = module {
+    single<EventLogger> { FoundationSingletons.logger }       // survives reinit
+    single<IdGenerator> { FoundationSingletons.idGenerator }   // survives reinit
+    single<SdkConfig> { config }                               // recreated each init
+}
+```
+
+`shutdown()` calls `stopKoin()` — the Koin container is destroyed, but `FoundationSingletons` is a Kotlin `object` (static), so its fields persist until process death.
+
+### Dagger 2 — Monolithic
+
+```kotlin
+// External holder — same concept
+object FoundationSingletons {
+    val logger: EventLogger = EventLoggerImpl()
+}
+
+@Module
+object CoreModule {
+    @Provides @Singleton
+    fun provideLogger(): EventLogger = FoundationSingletons.logger  // survives reinit
+
+    @Provides @Singleton
+    fun provideConfig(config: SdkConfig): SdkConfig = config  // recreated via Builder
+}
+
+// On reinit: DaggerSdkComponent is rebuilt, but logger is the same instance
+```
+
+### Dagger 2 — Per-Feature
+
+```kotlin
+// CoreApis holds the survivors
+class CoreApisImpl private constructor(val config: SdkConfig) : CoreApis {
+    override val logger: EventLogger = FoundationSingletons.logger  // survives
+    override val config: SdkConfig = config                          // recreated
+
+    companion object {
+        fun create(config: SdkConfig) = CoreApisImpl(config)
+    }
+}
+
+// Each feature receives CoreApis — logger is always the same instance
+FeatureSecurity.init(CoreApis.create(newConfig))
+```
+
+### kotlin-inject
+
+```kotlin
+// Same external holder pattern
+object FoundationSingletons {
+    val logger: EventLogger = EventLoggerImpl()
+}
+
+@Component
+abstract class SdkComponent(
+    @get:Provides val config: SdkConfig,           // recreated each init
+) {
+    @Provides fun logger(): EventLogger =
+        FoundationSingletons.logger                 // survives reinit
+}
+```
+
+### Key Principle
+
+The pattern is framework-agnostic: **hold process-lifetime state in a `object` (Kotlin) or `static` (Java) outside the DI graph**. The DI container wraps it — it doesn't own it. This works identically in Koin, Dagger, and kotlin-inject.
+
+## Anti-Pattern: Consumer Imports Impl Classes
+
+Regardless of DI framework, consumers should never import implementation classes:
+
+```kotlin
+// ❌ WRONG — coupled to implementation
+import com.example.sdk.io.kotlinxio.KotlinxIoFileSystemProvider
+val fs = KotlinxIoFileSystemProvider()
+
+// ✅ RIGHT — depends on interface, impl provided by DI
+val fs: FileSystemProvider = get()  // Koin
+val fs = component.fileSystemProvider()  // Dagger/kotlin-inject
+```
+
+If your consumer code imports classes from `*.impl.*`, `*.internal.*`, or platform-specific packages like `*.kotlinxio.*`, `*.okio.*`, `*.jvm.*` — you have a coupling problem that will break when the SDK changes implementations.

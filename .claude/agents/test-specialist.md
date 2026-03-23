@@ -87,6 +87,13 @@ Before marking any work as done:
 3. If any previously-passing test now fails, YOU broke something — fix it before continuing
 4. Never comment out, skip, or weaken an existing test to make a new one pass
 
+## No "Pre-existing" Excuse
+
+If you discover a bug during your task — whether you caused it or not — you do NOT ignore it:
+- **Easy fix (< 15 min)**: fix it now, include in your commit
+- **Hard fix**: report it in your Summary as a pending item with severity, file, and reproduction steps
+- **NEVER** dismiss a bug as "pre-existing" and move on silently. This is a professional project — leaving known broken behavior unreported is unacceptable.
+
 ## Coverage Targets (minimum — exceed whenever possible)
 
 Projects define their own module names. These are the **layer-based targets**:
@@ -108,13 +115,13 @@ When invoked as part of `/full-audit`, emit a structured JSON block between mark
 <!-- FINDINGS_START -->
 [
   {
-    "dedupe_key": "test-pattern-violation:feature/player/src/test/PlayerViewModelTest.kt:15",
+    "dedupe_key": "test-pattern-violation:ui/screens/src/test/ExampleViewModelTest.kt:15",
     "severity": "HIGH",
     "category": "testing",
     "source": "test-specialist",
     "check": "test-pattern-violation",
     "title": "Uses runBlocking instead of runTest",
-    "file": "feature/player/src/test/PlayerViewModelTest.kt",
+    "file": "ui/screens/src/test/ExampleViewModelTest.kt",
     "line": 15,
     "suggestion": "Replace runBlocking with runTest for coroutine test support"
   }

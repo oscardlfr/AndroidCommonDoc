@@ -26,6 +26,22 @@ rules:
       prefer: "injected testDispatcher parameter"
     hand_written: false
 
+validate_upstream:
+  - url: "https://developer.android.com/kotlin/coroutines/test"
+    assertions:
+      - type: api_present
+        value: "runTest"
+        context: "Primary coroutine test builder"
+      - type: api_present
+        value: "StandardTestDispatcher"
+        context: "Test dispatcher we inject"
+      - type: api_present
+        value: "UnconfinedTestDispatcher"
+        context: "Used for StateFlow collection in tests"
+      - type: deprecation_scan
+        value: "runBlockingTest"
+        context: "Deprecated predecessor — we must not recommend it"
+    on_failure: HIGH
 ---
 
 # Coroutine Testing Patterns

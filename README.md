@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 31 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 32 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Platform support:** All skills, agents, and Detekt rules work on both **Android-only (AGP 8.x)** and **KMP (AGP 9.0+)** projects. A small subset is KMP-only (noted below).
 
@@ -17,13 +17,13 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custo
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
 - **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 22 cross-platform pairs + 4 Bash-only utilities
-- **AI agent skills** for Claude Code and GitHub Copilot -- 40 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
+- **AI agent skills** for Claude Code and GitHub Copilot -- 42 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 17 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
-- **MCP server** with 31 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, and doc intelligence
+- **MCP server** with 32 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, and doc intelligence
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
@@ -113,10 +113,10 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 | What | Destination | Count |
 |------|-------------|-------|
-| Skills | `.claude/skills/*/SKILL.md` | 40 |
+| Skills | `.claude/skills/*/SKILL.md` | 42 |
 | Agents | `.claude/agents/*.md` | 15 |
 | Commands | `.claude/commands/*.md` | 27 |
-| **Total** | | **82 entries** |
+| **Total** | | **84 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -391,7 +391,7 @@ Real-time pattern enforcement during AI-assisted development:
 
 ## Skills Reference
 
-40 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
+42 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
@@ -472,7 +472,9 @@ Skills primarily useful when working on AndroidCommonDoc (L0) itself:
 | `/doc-reorganize` | Reorganize `docs/` into domain-based subdirectories |
 | `/generate-rules` | Generate Kotlin Detekt rules from pattern doc YAML frontmatter |
 | `/ingest-content` | Fetch and match external content against pattern doc metadata |
-| `/monitor-docs` | Monitor upstream sources for version drift -- auto-bumps `versions-manifest.json` on accept |
+| `/monitor-docs` | Monitor upstream sources for version drift -- auto-bumps `versions-manifest.json` on accept. Supports `--layer L1/L2` for consumer projects |
+| `/audit-docs` | Unified doc audit — structure, coherence, upstream validation. `--with-upstream` for Wave 3 |
+| `/validate-upstream` | Validate pattern docs against upstream official documentation using deterministic assertions |
 | `/readme-audit` | Audit README.md against repo state -- surfaces stale counts, missing entries, and content drift |
 | `/sync-gsd-agents` | Sync `.claude/agents/` to GSD subagent system and verify parity |
 | `/sync-gsd-skills` | Sync skills from all sources (marketplace, L0, L0 agents) to GSD-2 |
@@ -544,7 +546,7 @@ Agents don't have hardcoded models -- the active profile determines which model 
 
 ## MCP Server
 
-31 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
+32 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
 **18 tools** work in any project. **13 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
 
@@ -581,7 +583,8 @@ These tools operate on AndroidCommonDoc's own documentation, vault, and toolkit 
 | `generate-detekt-rules` | Generation | Generate Kotlin Detekt rules from pattern doc frontmatter |
 | `ingest-content` | Ingestion | Fetch and analyze external content against pattern metadata |
 | `l0-diff` | Sync | Compare L0 registry vs downstream manifest to preview sync delta |
-| `monitor-sources` | Monitoring | Check upstream sources for version changes and deprecations |
+| `monitor-sources` | Monitoring | Check upstream sources for version changes and deprecations (`--layer L0/L1/L2`) |
+| `audit-docs` | Documentation | Unified doc audit — structure, coherence, upstream (3 waves) |
 | `pattern-coverage` | Coverage | Map pattern doc enforcement: Detekt rules, scripts, agents per doc |
 | `script-parity` | Quality | Compare PS1 and SH script behavior |
 | `sync-vault` | Vault | Sync documentation into unified Obsidian vault |
@@ -691,7 +694,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-15 domain hubs, 55 sub-docs, 15 guides, 6 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
+15 domain hubs, 55 sub-docs, 16 guides, 6 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
 
 | Hub | Covers | Platform |
 |-----|--------|----------|
@@ -722,7 +725,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (82 entries,     |   |
+                   |  | SKILL.md |    | (84 entries,     |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -754,8 +757,8 @@ AndroidCommonDoc/
 |   +-- hooks/              # Real-time Detekt enforcement hooks
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
-|   +-- */SKILL.md          # 40 canonical skill definitions
-|   +-- registry.json       # L0 registry (82 entries, SHA-256 hashes)
+|   +-- */SKILL.md          # 42 canonical skill definitions
+|   +-- registry.json       # L0 registry (84 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
@@ -764,16 +767,16 @@ AndroidCommonDoc/
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
-+-- mcp-server/             # MCP server (31 tools, 3 prompts, dynamic resources)
++-- mcp-server/             # MCP server (32 tools, 3 prompts, dynamic resources)
 |   +-- src/
-|   |   +-- tools/          # 31 tools: validation, analysis, metrics, audit, sync, vault
+|   |   +-- tools/          # 32 tools: validation, analysis, metrics, audit, sync, vault
 |   |   +-- types/          # Shared types (ValidationResult, AuditFinding, FindingsReport)
 |   |   +-- utils/          # Utilities (rate-limiter, jsonl-reader, gradle-parser, xml-report-reader, finding-dedup, logger)
 |   |   +-- generation/     # Detekt rule parser, emitters, config-emitter
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
 |   |   +-- cli/            # CLI entrypoint for CI monitoring
-|   +-- tests/              # 79 test files -- vitest unit + integration (1060 tests)
+|   +-- tests/              # 85 test files -- vitest unit + integration (1173 tests)
 +-- detekt-rules/
 |   +-- src/main/kotlin/    # 17 hand-written AST-only Detekt rules
 |   +-- src/main/resources/
@@ -807,7 +810,7 @@ AndroidCommonDoc/
 |   +-- reusable-architecture-guards.yml     # workflow_call: Konsist guards
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
-+-- docs/                   # 15 hub docs, 55 sub-docs, 15 guides, 6 agent workflow docs
++-- docs/                   # 15 hub docs, 55 sub-docs, 16 guides, 6 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/

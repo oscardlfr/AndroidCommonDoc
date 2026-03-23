@@ -62,6 +62,7 @@
 - `/pre-pr` — full pre-merge validation
 - `/readme-audit` — doc audit (13 checks, hub table, counts, links)
 - `/full-audit` — unified audit across all quality dimensions
+- `/audit-docs` — doc-specific audit (structure + coherence + upstream)
 - `/validate-patterns` — code vs pattern compliance
 - `/sync-l0` — propagate skills/agents/commands to L1/L2
 - `/generate-rules` — emit Detekt rules from doc frontmatter
@@ -70,5 +71,6 @@
 - Vault sync → `mcp-server/src/vault/` (transformer, moc-generator, wikilink-generator)
 - New skill → `skills/sync-vault/SKILL.md` as canonical example
 - L0→L1/L2 propagation → `skills/sync-l0/SKILL.md`
-- Pattern docs → `docs/` with category hubs (14 domains, 60 sub-docs)
+- Pattern docs → `docs/` with category hubs (15 domains, 55 sub-docs)
+- Upstream validation → `docs/guides/upstream-validation.md` (validate_upstream frontmatter)
 - Detekt rules → `detekt-rules/` + `docs/guides/detekt-config.md`

@@ -26,6 +26,19 @@ rules:
     hand_written: true
     source_rule: CancellationExceptionRethrowRule.kt
 category: error-handling
+validate_upstream:
+  - url: "https://kotlinlang.org/docs/exception-handling.html"
+    assertions:
+      - type: api_present
+        value: "CancellationException"
+        context: "Must always rethrow in coroutine catch blocks"
+      - type: keyword_present
+        value: "structured concurrency"
+        context: "Foundation of our error handling patterns"
+      - type: deprecation_scan
+        value: "runCatching"
+        context: "We use runCatchingCancellable wrapper"
+    on_failure: HIGH
 ---
 
 # Error Handling Patterns

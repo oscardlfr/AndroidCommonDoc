@@ -755,7 +755,7 @@ teardown() {
 }
 
 @test "README: 'What gets synced' lists consumer counts" {
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "40"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "42"
     sed -n '/What gets synced/,/^### /p' "$README" | grep -q "27"
 }
 
@@ -767,12 +767,12 @@ teardown() {
     grep -q "55 sub-docs" "$README"
 }
 
-@test "README: vitest count is 1056" {
-    grep -q "1060 tests" "$README"
+@test "README: vitest count is 1173" {
+    grep -q "1173 tests" "$README"
 }
 
-@test "README: vitest files count is 79" {
-    grep -q "79 test files" "$README"
+@test "README: vitest files count is 85" {
+    grep -q "85 test files" "$README"
 }
 
 # ===========================================================================
@@ -975,4 +975,42 @@ teardown() {
 
 @test "README: Coverage Workflow mentions auto-detect gradle.properties" {
     sed -n '/Coverage Workflow/,/^## /p' "$README" | grep -q "gradle.properties\|org.gradle.java.home"
+}
+
+# ---------------------------------------------------------------------------
+# monitor-sources multi-project support
+# ---------------------------------------------------------------------------
+
+@test "monitor-sources CLI: supports --layer flag" {
+    grep -q "\-\-layer" mcp-server/src/cli/monitor-sources.ts
+}
+
+@test "monitor-sources CLI: layer defaults to L0" {
+    grep -q '"L0"' mcp-server/src/cli/monitor-sources.ts
+}
+
+@test "monitor-sources CLI: passes layer to scanDirectory" {
+    grep -q "options.layer" mcp-server/src/cli/monitor-sources.ts
+}
+
+@test "monitor-sources CLI: accepts L1 and L2 as valid layers" {
+    grep -q '"L1"' mcp-server/src/cli/monitor-sources.ts
+    grep -q '"L2"' mcp-server/src/cli/monitor-sources.ts
+}
+
+@test "monitor-sources MCP tool: has layer parameter in schema" {
+    grep -q 'layer' mcp-server/src/tools/monitor-sources.ts
+    grep -q 'L0.*L1.*L2\|enum.*L0' mcp-server/src/tools/monitor-sources.ts
+}
+
+@test "monitor-sources MCP tool: passes layer to scanDirectory" {
+    grep -q "layer)" mcp-server/src/tools/monitor-sources.ts
+}
+
+@test "monitor-docs skill: documents --layer parameter" {
+    grep -q "\-\-layer" skills/monitor-docs/SKILL.md
+}
+
+@test "monitor-docs skill: shows L1 usage example" {
+    grep -q "layer L1" skills/monitor-docs/SKILL.md
 }

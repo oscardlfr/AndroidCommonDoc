@@ -138,6 +138,9 @@ export async function scanDirectory(
       l0_refs: Array.isArray(data.l0_refs)
         ? (data.l0_refs as string[])
         : undefined,
+      validate_upstream: Array.isArray(data.validate_upstream)
+        ? data.validate_upstream
+        : undefined,
     };
 
     const entry: RegistryEntry = {

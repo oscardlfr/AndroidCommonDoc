@@ -29,6 +29,19 @@ rules:
         - "platform.Foundation"
     hand_written: true
     source_rule: NoPlatformDepsInViewModelRule.kt
+validate_upstream:
+  - url: "https://kotlinlang.org/docs/multiplatform-expect-actual.html"
+    assertions:
+      - type: api_present
+        value: "expect"
+        context: "expect/actual is core KMP mechanism"
+      - type: api_present
+        value: "actual"
+        context: "expect/actual is core KMP mechanism"
+      - type: keyword_present
+        value: "commonMain"
+        context: "Primary shared source set"
+    on_failure: HIGH
 ---
 
 # KMP Source Set Architecture

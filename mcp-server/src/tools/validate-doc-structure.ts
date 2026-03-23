@@ -29,14 +29,23 @@ const SKIP_DIRS = new Set(["archive", "images", ".git", "node_modules"]);
  * Any category not in this set will be reported as a warning.
  */
 export const APPROVED_CATEGORIES = new Set([
+  "agents",
   "architecture",
-  "testing",
+  "compose",
   "data",
-  "security",
-  "build",
+  "di",
+  "error-handling",
+  "gradle",
   "guides",
   "domain",
+  "navigation",
+  "offline-first",
   "product",
+  "resources",
+  "security",
+  "storage",
+  "testing",
+  "build",
   "ui",
 ]);
 
@@ -159,8 +168,8 @@ export function checkSizeLimits(
     );
   }
 
-  // Hub doc max: 100 lines (identified by "## Sub-documents" section)
-  const isHub = lines.some((line) => line.trim() === "## Sub-documents");
+  // Hub doc max: 100 lines (identified by filename containing "hub")
+  const isHub = filepath.toLowerCase().includes("hub");
   if (isHub && lineCount > 100) {
     errors.push(
       `${filepath}: hub doc with ${lineCount} lines exceeds 100-line hub maximum`,

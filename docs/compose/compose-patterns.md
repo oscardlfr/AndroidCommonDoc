@@ -25,6 +25,19 @@ rules:
     hand_written: true
     source_rule: SealedUiStateRule.kt
 
+validate_upstream:
+  - url: "https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-multiplatform-resources-usage.html"
+    assertions:
+      - type: api_present
+        value: "composeResources"
+        context: "Compose Multiplatform resource system"
+      - type: api_present
+        value: "Res.string"
+        context: "String resource access pattern"
+      - type: deprecation_scan
+        value: "painterResource"
+        context: "Image resource API we teach"
+    on_failure: MEDIUM
 ---
 
 # Compose Patterns
@@ -34,7 +47,20 @@ Patterns for Compose Multiplatform development in KMP projects. Covers resource 
 ## Sub-documents
 
 | Document | Description |
-|----------|-------------|
+|----------|----------validate_upstream:
+  - url: "https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-multiplatform-resources-usage.html"
+    assertions:
+      - type: api_present
+        value: "composeResources"
+        context: "Compose Multiplatform resource system"
+      - type: api_present
+        value: "Res.string"
+        context: "String resource access pattern"
+      - type: deprecation_scan
+        value: "painterResource"
+        context: "Image resource API we teach"
+    on_failure: MEDIUM
+---|
 | [compose-resources-patterns](compose-resources-patterns.md) | Resource management hub: core principles, quick reference, related patterns |
 | [compose-resources-configuration](compose-resources-configuration.md) | Build configuration: generateResClass, source sets, multi-module setup |
 | [compose-resources-configuration-setup](compose-resources-configuration-setup.md) | Detailed setup: multi-module strategy, shared vs feature resources, cross-module access |
