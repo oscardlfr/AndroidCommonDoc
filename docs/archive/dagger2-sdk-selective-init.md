@@ -186,35 +186,23 @@ class SecurityModule {
 }
 ```
 
-### SDK entry point — optional umbrella OR per-feature init
+### SDK entry point — per-feature init
 
-Consumer can initialize features individually OR use an optional umbrella:
+Each feature is an independent SDK. There is no central orchestrator — the consumer initializes exactly what they need:
 
 ```kotlin
-// Option 1: Per-feature init (recommended for modular SDKs)
+// Step 1: Create shared core (no Dagger, no features, just config + singletons)
 val core = CoreApisImpl.create(context, SdkConfig(baseUrl = "...", apiKey = "..."))
+
+// Step 2: Initialize only the features you need
 FeatureSecurity.init(core)
 FeatureObservability.init(core)
-// Payments never initialized → never instantiated, not in binary
-
-// Option 2: Umbrella init (convenience wrapper, optional)
-object MySdk {
-    private lateinit var core: CoreApis
-
-    fun init(context: Context, config: SdkConfig, features: Set<Feature>) {
-        core = CoreApisImpl.create(context, config)
-        for (feature in features) {
-            when (feature) {
-                Feature.SECURITY -> FeatureSecurity.init(core)
-                Feature.OBSERVABILITY -> FeatureObservability.init(core)
-                Feature.PAYMENTS -> FeaturePayments.init(core)
-            }
-        }
-    }
-}
-
-// Consumer: MySdk.init(context, config, setOf(Feature.SECURITY, Feature.OBSERVABILITY))
+// Payments NOT initialized → not in binary, not instantiated, no cost
 ```
+
+The consumer's `build.gradle.kts` determines what features exist in the binary. If `:feature:payments:integration` is not a dependency, its code is not linked.
+
+> **Note:** An umbrella `MySdk.init(features)` wrapper is possible but discouraged — it reintroduces central coupling and defeats the purpose of per-feature isolation. If you need an umbrella, you're closer to Approach A.
 
 ### Per-feature facade
 
@@ -255,17 +243,19 @@ publishing {
 
 | Criterion | A: Monolithic | B: Per-Feature |
 |-----------|--------------|----------------|
-| **Consumer isolation** | ❌ All impls compiled in | ✅ Only selected features |
-| **Binary size** | ❌ Fat — all modules linked | ✅ Lean — only declared deps |
-| **Compile-time safety** | ✅ Full graph validated | ⚠️ Per-feature only |
-| **Singleton sharing** | ✅ `@Singleton` on single Component | ⚠️ Via CoreApis (manual) |
-| **Adding a new feature** | Edit `@Component` annotation | New module, no central edit |
-| **Multibindings (`@IntoMap`)** | ✅ Works — single graph | ❌ No global graph |
+| **Consumer sees impl classes** | ❌ No — but all impls in binary | ✅ No — only selected features in binary |
+| **Global DaggerComponent** | ❌ Yes — `@Component` lists all | ✅ No — each feature has own Component |
+| **Binary size** | ❌ Fat — all modules linked | ✅ Lean — only declared Gradle deps |
+| **Compile-time safety** | ✅ Full cross-feature graph | ⚠️ Per-feature only (no cross-feature) |
+| **Singleton sharing** | ✅ `@Singleton` on single Component | ⚠️ Via CoreApis interface (manual) |
+| **Adding a new feature** | Edit `@Component` annotation | New module, no central file edit |
+| **Multibindings (`@IntoMap`)** | ✅ Works — single graph | ❌ No global graph to collect into |
 | **Publishing** | Monolithic artifact | Per-module Maven publishing |
-| **Consumer init** | `MySdk.init(modules = ...)` | Per-feature or optional umbrella |
-| **Feature coupling** | All features see each other | Features are isolated |
+| **Consumer init** | `MySdk.init(modules = ...)` umbrella | `Feature.init(core)` per-feature |
+| **Feature coupling** | ⚠️ All features compiled together | ✅ Features are fully isolated |
 | **Complexity** | Lower — one Component | Higher — CoreApis + N Components |
-| **Best for** | Small SDK, internal team | Large SDK, external consumers |
+| **SDK umbrella pattern** | ✅ Natural fit | ❌ Anti-pattern (reintroduces coupling) |
+| **Best for** | Small SDK, internal team, ≤10 modules | Large SDK, external consumers, modular publishing |
 
 ## Version Compatibility
 
