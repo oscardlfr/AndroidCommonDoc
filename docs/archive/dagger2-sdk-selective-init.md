@@ -15,7 +15,16 @@ category: archive
 
 Pattern for Android-only SDKs with Dagger 2 where consumers choose which modules to activate at runtime.
 
-> **Note:** This pattern is for **Android-only** SDKs. For KMP SDKs, see [di-sdk-selective-init-comparison.md](di-sdk-selective-init-comparison.md) — the Koin approach is implemented and validated with 100% test coverage.
+> **Note:** This pattern is for **Android-only** SDKs. For KMP SDKs, see [di-sdk-selective-init-comparison.md](di-sdk-selective-init-comparison.md) for framework comparison. For consumer isolation analysis (what the app sees vs what's in the binary), see [di-sdk-consumer-isolation.md](di-sdk-consumer-isolation.md).
+
+## Consumer Isolation
+
+Both approaches hide `*Impl` classes from the consumer. But the **isolation level** differs — see [di-sdk-consumer-isolation.md](di-sdk-consumer-isolation.md) for full analysis.
+
+- **Approach A:** Level 1 (facade). Consumer calls `MySdk.init()` and `MySdk.auth()`. Does NOT see `AuthServiceImpl`. BUT all impl code is in the binary.
+- **Approach B:** Level 1 (facade). Consumer calls `FeatureSecurity.init(core)`. Does NOT see `SecurityServiceImpl`. Only selected features are in the binary.
+
+Neither approach reaches Level 2+ (interface-only). Dagger's compile-time `@Component` annotation requires knowledge of impl modules at build time — there is no runtime discovery mechanism.
 
 ## Two Architectural Approaches
 

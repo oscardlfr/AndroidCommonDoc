@@ -15,6 +15,10 @@ category: archive
 
 Comparison of DI approaches for an SDK where consumers select which modules to initialize without importing implementation classes. This document presents trade-offs — the right choice depends on your constraints.
 
+**Related docs:**
+- [dagger2-sdk-selective-init.md](dagger2-sdk-selective-init.md) — Dagger 2 implementation (monolithic + per-feature)
+- [di-sdk-consumer-isolation.md](di-sdk-consumer-isolation.md) — Consumer isolation levels (what the app sees vs binary contents)
+
 ## The Problem
 
 An SDK with N feature modules where:
@@ -192,6 +196,7 @@ Use for: **Android apps** (not libraries or SDKs).
 
 | Criterion | Koin | Dagger Mono | Dagger Per-Feature | kotlin-inject |
 |-----------|------|-------------|-------------------|---------------|
+| **Max isolation level** | Level 3 | Level 1 | Level 1 | Level 2 |
 | **Graph validation** | Runtime | Compile | Compile (per-feat) | Compile |
 | **KMP support** | ✅ Full | ❌ JVM | ❌ JVM | ✅ Full |
 | **Consumer isolation** | ✅ | ❌ | ✅ | ✅ |
