@@ -22,6 +22,8 @@ cd mcp-server && npm start
 
 # Run doc source monitoring (CLI)
 node mcp-server/build/cli/monitor-sources.js --tier all --output reports/monitoring-report.json
+# For L1/L2 projects:
+node mcp-server/build/cli/monitor-sources.js --project-root /path/to/l1 --layer L1 --tier all
 ```
 
 ## Architecture
@@ -87,7 +89,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 
 | Skill | Description |
 |-------|-------------|
-| `monitor-docs` | Monitor upstream documentation sources for changes and deprecations |
+| `monitor-docs` | Monitor upstream documentation sources for changes and deprecations (`--layer L0/L1/L2`) |
 | `generate-rules` | Generate Detekt rules from pattern doc frontmatter |
 | `ingest-content` | Fetch external content and match against pattern doc metadata |
 | `doc-reorganize` | Reorganize docs/ into domain-based subdirectories |

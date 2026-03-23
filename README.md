@@ -472,7 +472,7 @@ Skills primarily useful when working on AndroidCommonDoc (L0) itself:
 | `/doc-reorganize` | Reorganize `docs/` into domain-based subdirectories |
 | `/generate-rules` | Generate Kotlin Detekt rules from pattern doc YAML frontmatter |
 | `/ingest-content` | Fetch and match external content against pattern doc metadata |
-| `/monitor-docs` | Monitor upstream sources for version drift -- auto-bumps `versions-manifest.json` on accept |
+| `/monitor-docs` | Monitor upstream sources for version drift -- auto-bumps `versions-manifest.json` on accept. Supports `--layer L1/L2` for consumer projects |
 | `/readme-audit` | Audit README.md against repo state -- surfaces stale counts, missing entries, and content drift |
 | `/sync-gsd-agents` | Sync `.claude/agents/` to GSD subagent system and verify parity |
 | `/sync-gsd-skills` | Sync skills from all sources (marketplace, L0, L0 agents) to GSD-2 |
@@ -581,7 +581,7 @@ These tools operate on AndroidCommonDoc's own documentation, vault, and toolkit 
 | `generate-detekt-rules` | Generation | Generate Kotlin Detekt rules from pattern doc frontmatter |
 | `ingest-content` | Ingestion | Fetch and analyze external content against pattern metadata |
 | `l0-diff` | Sync | Compare L0 registry vs downstream manifest to preview sync delta |
-| `monitor-sources` | Monitoring | Check upstream sources for version changes and deprecations |
+| `monitor-sources` | Monitoring | Check upstream sources for version changes and deprecations (`--layer L0/L1/L2`) |
 | `pattern-coverage` | Coverage | Map pattern doc enforcement: Detekt rules, scripts, agents per doc |
 | `script-parity` | Quality | Compare PS1 and SH script behavior |
 | `sync-vault` | Vault | Sync documentation into unified Obsidian vault |

@@ -158,6 +158,42 @@ describe("monitor-sources tool", () => {
     }
   });
 
+  it("accepts layer parameter (defaults to L0)", async () => {
+    const { tools } = await client.listTools();
+    const tool = tools.find((t) => t.name === "monitor-sources");
+    expect(tool).toBeDefined();
+    const schema = tool!.inputSchema as { properties?: Record<string, unknown> };
+    expect(schema.properties).toHaveProperty("layer");
+  });
+
+  it("accepts L1 layer and scans external project", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ tag_name: "v1.10.2" }),
+      text: () => Promise.resolve("mock content"),
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await client.callTool({
+        name: "monitor-sources",
+        arguments: { tier: "all", layer: "L1", projectRoot: process.cwd().replace(/[\\/]mcp-server$/, "") },
+      });
+
+      expect(result.content).toHaveLength(1);
+      const parsed = JSON.parse(
+        (result.content[0] as { type: "text"; text: string }).text,
+      ) as MonitoringReportResult;
+
+      // Should return a valid report even when scanning L0 as L1
+      expect(parsed).toHaveProperty("timestamp");
+      expect(parsed).toHaveProperty("checked");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("returns structured error on tool failure", async () => {
     const originalFetch = globalThis.fetch;
     // Make all fetches throw to trigger error handling
