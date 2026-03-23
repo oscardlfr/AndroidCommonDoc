@@ -227,6 +227,93 @@ Use for: **Android apps** (not libraries or SDKs).
 | Codegen | None | KAPT (stable), KSP (alpha 2.48+) | KSP |
 | Maturity | 4.1+ (stable) | 2.52+ (10+ years) | 0.7+ (pre-1.0) |
 
+## Singleton Survival Across Reinit
+
+Some singletons must survive `shutdown() → init()` cycles. Typical example: a logger that holds file handles, correlation IDs, and buffered entries. Recreating it on reinit would lose pending logs and break tracing.
+
+The pattern: hold process-lifetime singletons in an **external holder** outside the DI lifecycle. The DI container references the existing instance — it never creates a new one.
+
+**What survives reinit:** Singletons that hold state accumulated over the process lifetime — loggers, telemetry pipelines, credential caches, ID generators.
+
+**What gets recreated:** Configuration that may change between cycles — debug flags, API endpoints, environment settings.
+
+### Koin
+
+```kotlin
+// External holder — lives outside Koin lifecycle
+internal object FoundationSingletons {
+    val logger: EventLogger = EventLoggerImpl()
+    val idGenerator: IdGenerator = UuidIdGenerator()
+}
+
+// Koin module references existing instance, never creates new
+fun foundationModule(config: SdkConfig) = module {
+    single<EventLogger> { FoundationSingletons.logger }       // survives reinit
+    single<IdGenerator> { FoundationSingletons.idGenerator }   // survives reinit
+    single<SdkConfig> { config }                               // recreated each init
+}
+```
+
+`shutdown()` calls `stopKoin()` — the Koin container is destroyed, but `FoundationSingletons` is a Kotlin `object` (static), so its fields persist until process death.
+
+### Dagger 2 — Monolithic
+
+```kotlin
+// External holder — same concept
+object FoundationSingletons {
+    val logger: EventLogger = EventLoggerImpl()
+}
+
+@Module
+object CoreModule {
+    @Provides @Singleton
+    fun provideLogger(): EventLogger = FoundationSingletons.logger  // survives reinit
+
+    @Provides @Singleton
+    fun provideConfig(config: SdkConfig): SdkConfig = config  // recreated via Builder
+}
+
+// On reinit: DaggerSdkComponent is rebuilt, but logger is the same instance
+```
+
+### Dagger 2 — Per-Feature
+
+```kotlin
+// CoreApis holds the survivors
+class CoreApisImpl private constructor(val config: SdkConfig) : CoreApis {
+    override val logger: EventLogger = FoundationSingletons.logger  // survives
+    override val config: SdkConfig = config                          // recreated
+
+    companion object {
+        fun create(config: SdkConfig) = CoreApisImpl(config)
+    }
+}
+
+// Each feature receives CoreApis — logger is always the same instance
+FeatureSecurity.init(CoreApis.create(newConfig))
+```
+
+### kotlin-inject
+
+```kotlin
+// Same external holder pattern
+object FoundationSingletons {
+    val logger: EventLogger = EventLoggerImpl()
+}
+
+@Component
+abstract class SdkComponent(
+    @get:Provides val config: SdkConfig,           // recreated each init
+) {
+    @Provides fun logger(): EventLogger =
+        FoundationSingletons.logger                 // survives reinit
+}
+```
+
+### Key Principle
+
+The pattern is framework-agnostic: **hold process-lifetime state in a `object` (Kotlin) or `static` (Java) outside the DI graph**. The DI container wraps it — it doesn't own it. This works identically in Koin, Dagger, and kotlin-inject.
+
 ## Anti-Pattern: Consumer Imports Impl Classes
 
 Regardless of DI framework, consumers should never import implementation classes:
