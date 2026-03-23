@@ -77,6 +77,13 @@ rules:                              # Detekt rule definitions (for enforceable p
         tool: swiftlint             # swiftlint | swift-format | validator-cli
         strategy: custom_rule       # custom_rule | builtin | validator_cli | manual
         equivalent: "Swift equivalent description"
+validate_upstream:                  # Assertions against upstream official docs
+  - url: "https://upstream-page.com/docs"
+    assertions:
+      - type: api_present           # api_present | api_absent | keyword_absent | keyword_present | pattern_match | deprecation_scan
+        value: "apiName"
+        context: "Why this assertion matters"
+    on_failure: HIGH                # HIGH | MEDIUM | LOW
 excludable_sources: [lib-name]      # Sources that can be excluded per-project
 ```
 
