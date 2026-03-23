@@ -195,23 +195,102 @@ class SecurityModule {
 }
 ```
 
-### SDK entry point — per-feature init
+### SDK entry point — three options
 
-Each feature is an independent SDK. There is no central orchestrator — the consumer initializes exactly what they need:
+Approach B supports three init patterns. The internal architecture (per-feature DaggerComponent) is the same in all three — the difference is how the consumer triggers init.
+
+#### Option 1: Per-feature init (most decoupled)
+
+Each feature is an independent SDK. No central orchestrator.
 
 ```kotlin
-// Step 1: Create shared core (no Dagger, no features, just config + singletons)
+// Consumer initializes each feature independently
 val core = CoreApisImpl.create(context, SdkConfig(baseUrl = "...", apiKey = "..."))
-
-// Step 2: Initialize only the features you need
 FeatureSecurity.init(core)
 FeatureObservability.init(core)
-// Payments NOT initialized → not in binary, not instantiated, no cost
+// Payments NOT initialized → not in binary, not instantiated
 ```
 
-The consumer's `build.gradle.kts` determines what features exist in the binary. If `:feature:payments:integration` is not a dependency, its code is not linked.
+**Best for:** Features published as independent Maven artifacts. Each consumer picks only what they need. No central SDK module exists.
 
-> **Note:** An umbrella `MySdk.init(features)` wrapper is possible but discouraged — it reintroduces central coupling and defeats the purpose of per-feature isolation. If you need an umbrella, you're closer to Approach A.
+#### Option 2: Umbrella with selective init (centralized entry, decoupled internals)
+
+A central `MySdk.init(modules)` delegates to per-feature inits internally. Each feature still has its own DaggerComponent — there is NO global `@Component`.
+
+```kotlin
+// sdk-core — thin orchestrator, does NOT have a DaggerSdkComponent
+object MySdk {
+    private lateinit var core: CoreApis
+
+    fun init(context: Context, config: SdkConfig, features: Set<Feature>) {
+        core = CoreApisImpl.create(context, config)
+        for (feature in features) {
+            when (feature) {
+                Feature.SECURITY -> FeatureSecurity.init(core)
+                Feature.OBSERVABILITY -> FeatureObservability.init(core)
+                Feature.PAYMENTS -> FeaturePayments.init(core)
+            }
+        }
+    }
+
+    fun shutdown() {
+        FeatureSecurity.shutdown()
+        FeatureObservability.shutdown()
+        FeaturePayments.shutdown()
+    }
+}
+
+// Consumer:
+MySdk.init(context, config, setOf(Feature.SECURITY, Feature.OBSERVABILITY))
+val service = FeatureSecurity.securityService()
+```
+
+**Key difference from Approach A:** `MySdk` does NOT have a `@Component`. It's a plain Kotlin object that delegates. Each feature's DaggerComponent is created independently inside `FeatureX.init()`. There is no global Dagger graph.
+
+**Trade-off:** `MySdk` depends on all feature integration modules (must know about `FeatureSecurity`, `FeatureObservability`, etc.). Adding a feature requires editing `MySdk`. But the consumer binary only includes features listed in Gradle — unlisted features are dead code eliminated by R8/ProGuard.
+
+**Best for:** SDK distributed as a single artifact but with optional features. Consumer gets a familiar `MySdk.init(setOf(...))` API.
+
+#### Option 3: Discovery-based umbrella (no central edit on new feature)
+
+Combines Option 2's umbrella API with a registration mechanism so `MySdk` doesn't need to know about every feature at compile time. Uses `ServiceLoader` (JVM) or a manual registry.
+
+```kotlin
+// Each feature registers itself via ServiceLoader or META-INF
+// sdk-core defines the contract:
+interface FeatureInitializer {
+    val feature: Feature
+    fun init(core: CoreApis)
+    fun shutdown()
+}
+
+// sdk-core discovers and initializes:
+object MySdk {
+    fun init(context: Context, config: SdkConfig, features: Set<Feature>) {
+        val core = CoreApisImpl.create(context, config)
+        val available = ServiceLoader.load(FeatureInitializer::class.java)
+        for (initializer in available) {
+            if (initializer.feature in features) {
+                initializer.init(core)
+            }
+        }
+    }
+}
+```
+
+**Trade-off:** `MySdk` no longer edits when a new feature is added — but `ServiceLoader` is JVM-only and adds runtime complexity. Not available on Kotlin/Native without custom implementation.
+
+**Best for:** Large SDK (20+ features) where editing a central file per feature is unacceptable.
+
+#### Option comparison
+
+| | Option 1: Per-feature | Option 2: Umbrella | Option 3: Discovery |
+|---|---|---|---|
+| Consumer API | `Feature.init(core)` | `MySdk.init(setOf(...))` | `MySdk.init(setOf(...))` |
+| Central orchestrator | None | `MySdk` (thin delegator) | `MySdk` + ServiceLoader |
+| Adding a feature | New module only | Edit `MySdk` when block | New module + META-INF |
+| Global DaggerComponent | ❌ No | ❌ No | ❌ No |
+| Best for | Independent SDKs | Single SDK, optional features | Large SDK, many features |
 
 ### Per-feature facade
 
