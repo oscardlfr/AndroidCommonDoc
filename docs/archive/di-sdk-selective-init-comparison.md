@@ -30,6 +30,73 @@ An SDK with N feature modules where:
 5. Modules not requested must not be instantiated
 6. Registration should be automatic — Gradle dependency is sufficient
 
+## DI vs Service Locator — The Fundamental Distinction
+
+Before comparing frameworks, understand the two paradigms. This is often the deciding factor for teams that prioritize architectural purity.
+
+### Dependency Injection (DI)
+
+The framework **pushes** dependencies into the class. The class declares what it needs — it never asks for it.
+
+```kotlin
+// Pure DI — class receives dependencies, doesn't know where they come from
+class SecurityServiceImpl @Inject constructor(
+    private val network: NetworkExecutor,   // injected by framework
+    private val logger: Logger,             // injected by framework
+) : SecurityService { ... }
+```
+
+The class has **zero knowledge** of the DI container. It works in any context — production, test, manual instantiation. The framework (Dagger, kotlin-inject) resolves the graph at compile time and generates the wiring code.
+
+**Frameworks:** Dagger 2, Hilt, kotlin-inject
+
+### Service Locator
+
+The class **pulls** dependencies from a global registry. The class actively asks for what it needs.
+
+```kotlin
+// Service Locator — class asks for dependencies
+class SecurityServiceImpl(
+    private val network: NetworkExecutor = get(),   // pulled from Koin
+    private val logger: Logger = get(),             // pulled from Koin
+) : SecurityService { ... }
+
+// Or via Koin's inject pattern:
+class MyViewModel : ViewModel() {
+    private val repository: Repository by inject()  // pulled at access time
+}
+```
+
+The class **knows about Koin** (or the locator). It cannot work without the container being initialized. Testing requires either starting the container or providing manual overrides.
+
+**Frameworks:** Koin, kodein
+
+### Why teams choose pure DI
+
+| Argument | Explanation |
+|----------|-------------|
+| **Compile-time safety** | Missing bindings fail the build, not the user's device |
+| **No hidden dependencies** | Constructor signature = complete dependency list |
+| **Testability** | Class works with `new SecurityServiceImpl(fakeNetwork, fakeLogger)` — no container needed |
+| **SOLID compliance** | Dependency Inversion Principle at the framework level |
+| **IDE support** | Dagger's generated code is navigable — click through from `@Inject` to `@Provides` |
+
+### Why teams choose Service Locator
+
+| Argument | Explanation |
+|----------|-------------|
+| **KMP support** | Koin works on all Kotlin targets — Dagger is JVM-only |
+| **Zero codegen** | No annotation processing, fastest builds |
+| **Simplicity** | `module { single<X> { XImpl() } }` — smaller API surface |
+| **Runtime flexibility** | Modules composable at runtime, not locked at compile time |
+| **Auto-discovery** | Level 3 isolation achievable (sealed class + Class.forName) |
+
+### The honest trade-off
+
+Dagger is architecturally purer — it implements true Inversion of Control where the class never knows about the container. Koin is pragmatically simpler and achieves better consumer isolation for SDKs — but at the cost of runtime resolution and container awareness in code.
+
+Neither is universally "better." The choice depends on whether the team values **compile-time purity** or **runtime flexibility**.
+
 ## Architecture Requirements Checklist
 
 Use this checklist to evaluate ANY approach. A solution doesn't need to pass all 10 — prioritize based on your project constraints.
