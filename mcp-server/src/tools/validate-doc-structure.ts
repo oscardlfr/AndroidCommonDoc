@@ -29,14 +29,23 @@ const SKIP_DIRS = new Set(["archive", "images", ".git", "node_modules"]);
  * Any category not in this set will be reported as a warning.
  */
 export const APPROVED_CATEGORIES = new Set([
+  "agents",
   "architecture",
-  "testing",
+  "compose",
   "data",
-  "security",
-  "build",
+  "di",
+  "error-handling",
+  "gradle",
   "guides",
   "domain",
+  "navigation",
+  "offline-first",
   "product",
+  "resources",
+  "security",
+  "storage",
+  "testing",
+  "build",
   "ui",
 ]);
 
