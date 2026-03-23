@@ -173,10 +173,13 @@ Works on L0, L1, L2 via `--project-root` + `--layer`:
 
 ## Success criteria
 
-1. `/audit-docs` runs on L0 with 0 findings (Wave 1+2)
+1. `/audit-docs` runs on L0 with 0 HIGH/MEDIUM findings (Wave 1+2)
 2. `/audit-docs --with-upstream` detects a simulated deprecation
 3. `/audit-docs --layer L1 --project-root <L1>` works on consumer projects
 4. Wave 3 Layer 1 catches deprecated API in upstream content
 5. Wave 3 Layer 2 produces actionable diff (deep profile only)
-6. CI workflow runs weekly (Waves 1+2+3 Layer 1 only)
-7. Full test coverage: unit + integration per module
+6. CI workflow `doc-audit.yml` runs weekly (Waves 1+2+3 Layer 1 only)
+7. Full test coverage per module — unit, integration, bats regression
+8. README/AGENTS.md counts match reality after S09 audit
+9. `/full-audit` correctly delegates to `/audit-docs` for doc checks
+10. Git Flow release: `release/v1.3.0` → master, tagged, back-merged to develop
