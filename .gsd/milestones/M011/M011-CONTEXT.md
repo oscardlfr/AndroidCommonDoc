@@ -51,17 +51,19 @@ Wave 1: Structure (local, $0, <5s)       Wave 2: Coherence (local, $0, <15s)
 └──────────────────────────┘              │ • Cross-layer refs valid     │
                                           └──────────────────────────────┘
 
-Wave 3: Upstream (network, ~$0.30, opt-in)
+Wave 3: Upstream (network, opt-in)
 ┌──────────────────────────────────────────┐
 │ Layer 1: Deterministic ($0)              │
 │ • API present/absent assertions          │
 │ • Deprecation keyword scan               │
 │ • Version drift (manifest vs upstream)   │
 │                                          │
-│ Layer 2: Semantic (LLM, ~$0.03/doc)      │
+│ Layer 2: Semantic (LLM, --profile deep)  │
 │ • Pattern doc vs upstream content diff   │
 │ • Changed recommendations detection      │
 │ • New API discovery                      │
+│ • Cost depends on model tier and docs    │
+│ • --max-llm-docs N to cap usage          │
 └──────────────────────────────────────────┘
 ```
 
@@ -72,7 +74,7 @@ Wave 3: Upstream (network, ~$0.30, opt-in)
 | **Scope** | Code, architecture, tests, security, release | Documentation only |
 | **Network** | Never | Only Wave 3 (opt-in) |
 | **LLM** | Never | Only `--profile deep` |
-| **Cost** | $0 | $0 default, ~$0.30 with `--with-upstream` |
+| **Cost** | $0 | $0 default, varies with `--profile deep` + model tier |
 | **When** | Every PR, pre-release | Weekly cron, manual, pre-release |
 | **Doc checks** | Only `doc-alignment-agent` (code→doc drift) | All doc validation |
 
