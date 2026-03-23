@@ -31,7 +31,20 @@ rules:
 Every storage decision starts with the category. Choose based on data characteristics:
 
 | Category | When | KMP Libraries |
-|----------|------|---------------|
+|----------|------|------------validate_upstream:
+  - url: "https://developer.android.com/training/data-storage/room"
+    assertions:
+      - type: api_present
+        value: "Room"
+        context: "Room is primary database for KMP since 2.7"
+      - type: keyword_present
+        value: "Kotlin Multiplatform"
+        context: "Room KMP support is critical"
+      - type: deprecation_scan
+        value: "Room"
+        context: "Room must not be deprecated"
+    on_failure: HIGH
+---|
 | **Key-value** | Preferences, flags, small primitives | multiplatform-settings, MMKV, DataStore |
 | **Relational** | Structured queries, relationships, migrations | SQLDelight (all targets), Room (JVM only) |
 | **Secure** | Tokens, passwords, API keys, encryption keys | Platform Keychain/KeyStore via expect/actual |
