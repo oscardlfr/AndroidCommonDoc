@@ -28,6 +28,7 @@ Setup, configuration, and authoring guides for the L0/L1/L2 ecosystem.
 | [convention-plugin-chain](convention-plugin-chain.md) | Detekt config chain: L0 base → L1 override → L2 local via `config.setFrom()` |
 | [doc-template](doc-template.md) | Standard doc template with frontmatter and section structure |
 | [audit-suppressions](audit-suppressions.md) | Suppress known false positives in audit findings — schema, expiry, prefix matching |
+| [upstream-validation](upstream-validation.md) | How to add `validate_upstream` assertions to pattern docs for automated upstream checks |
 
 ## Key Rules
 

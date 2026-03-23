@@ -694,7 +694,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-15 domain hubs, 55 sub-docs, 15 guides, 6 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
+15 domain hubs, 55 sub-docs, 16 guides, 6 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
 
 | Hub | Covers | Platform |
 |-----|--------|----------|
@@ -810,7 +810,7 @@ AndroidCommonDoc/
 |   +-- reusable-architecture-guards.yml     # workflow_call: Konsist guards
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
-+-- docs/                   # 15 hub docs, 55 sub-docs, 15 guides, 6 agent workflow docs
++-- docs/                   # 15 hub docs, 55 sub-docs, 16 guides, 6 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/
