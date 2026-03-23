@@ -59,10 +59,15 @@ export function registerMonitorSourcesTool(
         projectRoot: z
           .string()
           .optional()
-          .describe("Path to AndroidCommonDoc toolkit root"),
+          .describe("Path to project root (defaults to AndroidCommonDoc toolkit root)"),
+        layer: z
+          .enum(["L0", "L1", "L2"])
+          .optional()
+          .default("L0")
+          .describe("Project layer (L0=toolkit, L1=shared libs, L2=app)"),
       }),
     },
-    async ({ tier, include_reviewed, projectRoot }) => {
+    async ({ tier, include_reviewed, projectRoot, layer }) => {
       const rateLimitResponse = checkRateLimit(limiter, "monitor-sources");
       if (rateLimitResponse) return rateLimitResponse;
 
@@ -74,7 +79,7 @@ export function registerMonitorSourcesTool(
           : getDocsDir();
 
         // Scan docs directory for registry entries
-        const allEntries = await scanDirectory(docsDir, "L0");
+        const allEntries = await scanDirectory(docsDir, layer);
 
         // Filter to entries with monitor_urls
         let monitorableEntries = allEntries.filter(
