@@ -2,8 +2,8 @@
 
 ## Slices
 
-- [ ] **S01: Content fetcher + disk cache** `risk:low` `depends:[]`
-  Content fetching module with Jina Reader integration, disk cache with TTL, rate limiting. Foundation for all subsequent slices.
+- [ ] **S01: Content fetcher + disk cache (shared infra)** `risk:low` `depends:[]`
+  Content fetching module with Jina Reader integration, disk cache with TTL, rate limiting. Shared by `validate-upstream` (automated assertions) and `ingest-content` (manual analysis). Refactor existing `ingest-content` MCP tool to use the new fetcher instead of its internal fetch logic.
 
 - [ ] **S02: Assertion engine (Layer 1)** `risk:medium` `depends:[S01]`
   Deterministic assertion engine — parses `validate_upstream` frontmatter, runs assertions against cached content. Types: `api_present`, `api_absent`, `keyword_absent`, `keyword_present`, `pattern_match`, `deprecation_scan`. Pure grep/regex, no LLM.
