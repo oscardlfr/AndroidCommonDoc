@@ -80,22 +80,79 @@ feature/
 
 ## Approach A: Monolithic Implementation
 
-### Init pattern
+### SDK entry point
 
 ```kotlin
 object MySdk {
+    private var _component: SdkComponent? = null
+    private var _initialized = false
+    private var _activeModules = emptySet<SdkModule>()
+
+    val isInitialized: Boolean get() = _initialized
+
+    /**
+     * Initialize the SDK with the requested modules.
+     *
+     * @throws IllegalStateException if already initialized.
+     * @throws IllegalArgumentException if modules is empty, contains duplicates,
+     *   or references an unknown module.
+     */
     fun init(context: Context, config: SdkConfig, modules: Set<SdkModule>) {
+        check(!_initialized) { "SDK already initialized. Call shutdown() first." }
+        require(modules.isNotEmpty()) { "modules must not be empty." }
+        validateNoDuplicateCategories(modules)
+
         val comp = DaggerSdkComponent.builder()
             .context(context.applicationContext)
             .config(config)
             .build()
-        // Only requested modules get initialized (Provider laziness)
+
+        val initializers = comp.moduleInitializers()
         for (module in modules) {
-            comp.moduleInitializers()[module]?.get()?.initialize()
+            val initializer = initializers[module]
+                ?: throw IllegalArgumentException(
+                    "Unknown module: $module. Available: ${initializers.keys}"
+                )
+            initializer.get().initialize()
+        }
+
+        _component = comp
+        _initialized = true
+        _activeModules = modules.toSet()
+    }
+
+    /** Shut down all active modules and release the Dagger component. */
+    fun shutdown() {
+        if (!_initialized) return
+        val initializers = _component!!.moduleInitializers()
+        for (module in _activeModules) {
+            initializers[module]?.get()?.shutdown()
+        }
+        _component = null
+        _initialized = false
+        _activeModules = emptySet()
+    }
+
+    /** Check if a specific module was initialized. */
+    fun isModuleActive(module: SdkModule): Boolean {
+        check(_initialized) { "SDK not initialized." }
+        return module in _activeModules
+    }
+
+    /** Fail-fast guard — call in accessor functions. */
+    fun requireModule(module: SdkModule) {
+        check(_initialized) { "SDK not initialized. Call init() first." }
+        check(module in _activeModules) {
+            "Module '${module.key}' not initialized. Add it to init(modules = ...)."
         }
     }
+
+    /** Type-safe accessor example. */
+    fun auth(): AuthService {
+        requireModule(SdkModule.AUTH)
+        return _component!!.authService()
+    }
 }
-```
 
 ### Component lists all modules
 
@@ -239,10 +296,19 @@ A central `MySdk.init(modules)` delegates to per-feature inits internally. Each 
 ```kotlin
 // sdk-core — thin orchestrator, does NOT have a DaggerSdkComponent
 object MySdk {
-    private lateinit var core: CoreApis
+    private var _initialized = false
+    private var _activeFeatures = emptySet<Feature>()
+    private var _core: CoreApis? = null
+
+    val isInitialized: Boolean get() = _initialized
 
     fun init(context: Context, config: SdkConfig, features: Set<Feature>) {
-        core = CoreApisImpl.create(context, config)
+        check(!_initialized) { "SDK already initialized. Call shutdown() first." }
+        require(features.isNotEmpty()) { "features must not be empty." }
+
+        val core = CoreApisImpl.create(context, config)
+        _core = core
+
         for (feature in features) {
             when (feature) {
                 Feature.SECURITY -> FeatureSecurity.init(core)
@@ -250,17 +316,41 @@ object MySdk {
                 Feature.PAYMENTS -> FeaturePayments.init(core)
             }
         }
+
+        _initialized = true
+        _activeFeatures = features.toSet()
     }
 
     fun shutdown() {
-        FeatureSecurity.shutdown()
-        FeatureObservability.shutdown()
-        FeaturePayments.shutdown()
+        if (!_initialized) return
+        for (feature in _activeFeatures) {
+            when (feature) {
+                Feature.SECURITY -> FeatureSecurity.shutdown()
+                Feature.OBSERVABILITY -> FeatureObservability.shutdown()
+                Feature.PAYMENTS -> FeaturePayments.shutdown()
+            }
+        }
+        _core = null
+        _initialized = false
+        _activeFeatures = emptySet()
+    }
+
+    fun isFeatureActive(feature: Feature): Boolean {
+        check(_initialized) { "SDK not initialized." }
+        return feature in _activeFeatures
+    }
+
+    fun requireFeature(feature: Feature) {
+        check(_initialized) { "SDK not initialized. Call init() first." }
+        check(feature in _activeFeatures) {
+            "Feature $feature not initialized. Add it to init(features = ...)."
+        }
     }
 }
 
 // Consumer:
 MySdk.init(context, config, setOf(Feature.SECURITY, Feature.OBSERVABILITY))
+MySdk.requireFeature(Feature.SECURITY)
 val service = FeatureSecurity.securityService()
 ```
 
@@ -377,10 +467,18 @@ class SecurityFeatureInitializer : FeatureInitializer {
 
 ```kotlin
 object MySdk {
-    private val initializers = mutableMapOf<Feature, FeatureInitializer>()
+    private val _initializers = mutableMapOf<Feature, FeatureInitializer>()
+    private var _initialized = false
+    private var _core: CoreApis? = null
+
+    val isInitialized: Boolean get() = _initialized
 
     fun init(context: Context, config: SdkConfig, features: Set<Feature>) {
+        check(!_initialized) { "SDK already initialized. Call shutdown() first." }
+        require(features.isNotEmpty()) { "features must not be empty." }
+
         val core = CoreApisImpl.create(context, config)
+        _core = core
 
         // Discover all available features on classpath
         val available = ServiceLoader.load(FeatureInitializer::class.java)
@@ -393,20 +491,39 @@ object MySdk {
                     "Add the corresponding Gradle dependency."
                 )
             initializer.init(core)
-            initializers[feature] = initializer
+            _initializers[feature] = initializer
         }
+
+        _initialized = true
     }
 
+    /** Resolve a service from initialized features. */
     inline fun <reified T> get(): T {
-        for (initializer in initializers.values) {
+        check(_initialized) { "SDK not initialized. Call init() first." }
+        for (initializer in _initializers.values) {
             initializer.getService(T::class.java)?.let { return it }
         }
         error("No service ${T::class.simpleName} found in initialized features")
     }
 
+    fun isFeatureActive(feature: Feature): Boolean {
+        check(_initialized) { "SDK not initialized." }
+        return feature in _initializers
+    }
+
+    fun requireFeature(feature: Feature) {
+        check(_initialized) { "SDK not initialized. Call init() first." }
+        check(feature in _initializers) {
+            "Feature $feature not initialized. Add it to init(features = ...)."
+        }
+    }
+
     fun shutdown() {
-        initializers.values.forEach { it.shutdown() }
-        initializers.clear()
+        if (!_initialized) return
+        _initializers.values.forEach { it.shutdown() }
+        _initializers.clear()
+        _core = null
+        _initialized = false
     }
 }
 
