@@ -22,6 +22,19 @@ rules:
         - "android.database.sqlite"
       prefer: "expect/actual + multiplatform-settings / SQLDelight"
     hand_written: false
+validate_upstream:
+  - url: "https://developer.android.com/training/data-storage/room"
+    assertions:
+      - type: api_present
+        value: "Room"
+        context: "Room is primary database for KMP since 2.7"
+      - type: keyword_present
+        value: "Kotlin Multiplatform"
+        context: "Room KMP support is critical"
+      - type: deprecation_scan
+        value: "Room"
+        context: "Room must not be deprecated"
+    on_failure: HIGH
 ---
 
 # KMP Storage Patterns

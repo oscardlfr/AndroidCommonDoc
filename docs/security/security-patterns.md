@@ -21,6 +21,16 @@ rules:
     type: banned-import
     message: "Never implement custom cryptography — use platform crypto APIs"
     detect: { banned_import: "javax.crypto.spec", prefer: "Platform KeyStore/Keychain" }
+validate_upstream:
+  - url: "https://developer.android.com/privacy-and-security/security-tips"
+    assertions:
+      - type: keyword_present
+        value: "encryption"
+        context: "Encryption patterns we teach"
+      - type: keyword_present
+        value: "KeyStore"
+        context: "Android KeyStore for key management"
+    on_failure: MEDIUM
 ---
 
 # KMP Security Patterns
@@ -137,16 +147,6 @@ sealed class SecurityException(message: String, cause: Throwable? = null) : Exce
 | Skipping key rotation | Compromised key = all data | Version keys, rotate periodically |
 | Synchronous crypto on main thread | UI freeze | `suspend` + `Dispatchers.Default` |
 
-validate_upstream:
-  - url: "https://developer.android.com/privacy-and-security/security-tips"
-    assertions:
-      - type: keyword_present
-        value: "encryption"
-        context: "Encryption patterns we teach"
-      - type: keyword_present
-        value: "KeyStore"
-        context: "Android KeyStore for key management"
-    on_failure: MEDIUM
 ---
 
 Parent doc: [security-hub.md](security-hub.md)

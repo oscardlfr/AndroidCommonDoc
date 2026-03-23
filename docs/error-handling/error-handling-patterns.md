@@ -26,6 +26,19 @@ rules:
     hand_written: true
     source_rule: CancellationExceptionRethrowRule.kt
 category: error-handling
+validate_upstream:
+  - url: "https://kotlinlang.org/docs/exception-handling.html"
+    assertions:
+      - type: api_present
+        value: "CancellationException"
+        context: "Must always rethrow in coroutine catch blocks"
+      - type: keyword_present
+        value: "structured concurrency"
+        context: "Foundation of our error handling patterns"
+      - type: deprecation_scan
+        value: "runCatching"
+        context: "We use runCatchingCancellable wrapper"
+    on_failure: HIGH
 ---
 
 # Error Handling Patterns
@@ -82,19 +95,6 @@ This document is split into focused sub-docs for token-efficient loading:
 - [nowinandroid error handling](https://github.com/android/nowinandroid)
 - [kotlinx-coroutines-test guide](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-test/)
 
-validate_upstream:
-  - url: "https://kotlinlang.org/docs/exception-handling.html"
-    assertions:
-      - type: api_present
-        value: "CancellationException"
-        context: "Must always rethrow in coroutine catch blocks"
-      - type: keyword_present
-        value: "structured concurrency"
-        context: "Foundation of our error handling patterns"
-      - type: deprecation_scan
-        value: "runCatching"
-        context: "We use runCatchingCancellable wrapper"
-    on_failure: HIGH
 ---
 
 **Status**: Active -- All KMP projects must follow these error handling patterns.

@@ -14,6 +14,7 @@
  */
 
 import type { MonitoringFinding, FindingSeverity } from "../registry/types.js";
+import { createHash } from "node:crypto";
 
 /** A single assertion from frontmatter. */
 export interface UpstreamAssertion {
@@ -376,7 +377,6 @@ function hashFinding(
   url: string,
   assertion: UpstreamAssertion,
 ): string {
-  const { createHash } = require("node:crypto");
   return createHash("sha256")
     .update(`${slug}:${url}:${assertion.type}:${assertion.value}`)
     .digest("hex")

@@ -46,7 +46,7 @@ export interface FetchOptions {
   userAgent?: string;
 }
 
-const DEFAULT_TIMEOUT = 15000;
+const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_USER_AGENT = "AndroidCommonDoc-MCP/1.0";
 const JINA_PREFIX = "https://r.jina.ai/";
 
