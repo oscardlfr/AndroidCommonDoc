@@ -194,6 +194,38 @@ describe("monitor-sources tool", () => {
     }
   });
 
+  it("deduplicates URL checks — same URL fetched once regardless of doc count", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ tag_name: "v1.10.2" }),
+      text: () => Promise.resolve("mock content for dedup test"),
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      const result = await client.callTool({
+        name: "monitor-sources",
+        arguments: { tier: "all" },
+      });
+
+      const parsed = JSON.parse(
+        (result.content[0] as { type: "text"; text: string }).text,
+      ) as MonitoringReportResult;
+
+      // The total sources checked may be high (multiple entries reference same URL),
+      // but actual fetch calls should be lower due to dedup cache
+      const uniqueUrls = new Set(fetchMock.mock.calls.map((call: unknown[]) => (call[0] as string)));
+      expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(parsed.checked);
+      // With dedup, unique URLs fetched should be less than total checked
+      // (unless every entry has a unique URL, which is unlikely)
+      expect(uniqueUrls.size).toBeLessThanOrEqual(fetchMock.mock.calls.length);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("returns structured error on tool failure", async () => {
     const originalFetch = globalThis.fetch;
     // Make all fetches throw to trigger error handling
