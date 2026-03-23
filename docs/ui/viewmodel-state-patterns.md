@@ -48,7 +48,7 @@ rules:
     hand_written: true
     source_rule: WhileSubscribedTimeoutRule.kt
 validate_upstream:
-  - url: "https://developer.android.com/kotlin/coroutines/coroutines-best-practices"
+  - url: "https://developer.android.com/kotlin/flow/stateflow-and-sharedflow"
     assertions:
       - type: api_present
         value: "stateIn"
