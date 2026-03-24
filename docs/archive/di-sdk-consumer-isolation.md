@@ -140,61 +140,12 @@ The consumer never imports any impl module in code. Just adding the Gradle depen
 
 ## Cross-Feature Dependencies
 
-When Feature A needs a service from Feature B.
+When Feature A needs a service from Feature B. This is the key difference between single-graph approaches (Dagger A, Koin) and per-feature approaches (Dagger B, C).
 
-### In a single graph (Dagger A / Koin)
+- **Single graph (Dagger A / Koin):** Automatic — all services in one container, the framework resolves chains
+- **Per-feature (Dagger B / C):** Manual — through CoreApis (God Object risk at scale) or ordered init (fragile)
 
-No problem — all services are visible to each other:
-
-```
-┌─────────────────────────────────────────────────┐
-│              ONE graph (Dagger A or Koin)        │
-│                                                   │
-│  Logger ─── AuthService ─── PaymentService       │
-│    ↑             ↑                ↑               │
-│  CoreModule    AuthModule    PaymentsModule       │
-│                                   │               │
-│              PaymentsModule can @Inject AuthService│
-└─────────────────────────────────────────────────┘
-```
-
-PaymentsModule declares `AuthService` as a parameter, Dagger/Koin resolves it from the same graph.
-
-### In per-feature isolation (Dagger B, C)
-
-Each feature has its own separate DaggerComponent. They can't see each other:
-
-```
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│ SecurityComp │    │ PaymentsComp │    │ AnalyticsComp│
-│   @Singleton │    │   @Singleton │    │   @Singleton │
-│              │    │              │    │              │
-│ SecuritySvc  │    │ PaymentsSvc  │    │ AnalyticsSvc │
-│ SecurityImpl │    │ PaymentsImpl │    │ AnalyticsImpl│
-└──────┬───────┘    └──────┬───────┘    └──────┬───────┘
-       │                   │                   │
-       └──────────┬────────┘───────────────────┘
-                  ↓
-          ┌──────────────┐
-          │   CoreApis   │   ← plain Kotlin interface, NOT a @Component
-          │              │
-          │ logger       │   created once, passed to each feature
-          │ config       │
-          │ network      │
-          └──────────────┘
-```
-
-**What CoreApis is:** A plain Kotlin interface — not a Dagger component, not DI. It's a manual bridge. You create `CoreApisImpl` once and pass it as a constructor argument to each feature's `DaggerComponent.Builder`.
-
-**What CoreApis is NOT:** It does NOT resolve dependencies. It does NOT create singletons. It's just a data holder with references to shared objects.
-
-**The problem:** If `PaymentsService` needs `SecurityService`, there's no way to get it:
-
-1. **Add SecurityService to CoreApis** — works for 2-3 shared services. At 15+, CoreApis becomes a God Object that knows everything, defeating per-feature isolation.
-2. **Initialize in order** — init Security first, then pass `security.service()` to Payments. Creates hidden ordering dependencies between features.
-3. **Design features to be independent** — the architecturally honest answer. Shared infrastructure (logger, network, config) lives in CoreApis. Feature-specific services don't cross boundaries.
-
-**Bottom line:** Per-feature Dagger (B, C) works well when features are truly independent. If many features need each other's services, use Dagger Monolithic (A) or Koin.
+For concrete examples with code (including circular dep handling with `Lazy`/`provider`), see **[di-cross-feature-deps.md](di-cross-feature-deps.md)**.
 
 ---
 
@@ -239,29 +190,11 @@ When `shutdown()` destroys the DI container (Koin closes, Dagger component = nul
 
 ## Hybrid: Koin SDK + Dagger App
 
-A KMP SDK can use Koin internally while the consuming Android app uses Dagger/Hilt. No conflict because:
-- Dagger has no global runtime state — it generates plain factory classes
-- Koin 4.x supports `koinApplication {}` — isolated instance, not global
+A KMP SDK can use Koin internally while the consuming Android app uses Dagger/Hilt. Two separate containers connected by a bridge module. No conflict because Dagger is pure codegen (no runtime state) and Koin 4.x supports isolated `koinApplication {}`.
 
-```kotlin
-// SDK — uses isolated Koin instance
-object SharedSdk {
-    private var _koinApp: KoinApplication? = null
-    val koin: Koin get() = _koinApp!!.koin
+Key points:
+- SDK calls `SharedSdk.init(modules, config)` with `appModules = emptyList()` — app has no Koin modules
+- A Hilt `@Module` bridges SDK services: `@Provides fun encryption(): EncryptionService = SharedSdk.koin.get()`
+- The bridge is **unidirectional** — app can inject SDK services, but SDK cannot inject app bindings
 
-    fun init(modules: Set<SdkModule>, config: SdkConfig) {
-        _koinApp = koinApplication {   // isolated, NOT startKoin
-            modules(foundationModule(config) + resolvedModules)
-        }
-    }
-}
-
-// App — uses Dagger/Hilt, bridges to SDK's Koin
-@Module @InstallIn(SingletonComponent::class)
-object SdkBridgeModule {
-    @Provides @Singleton
-    fun security(): SecurityService = SharedSdk.koin.get()
-}
-```
-
-**Critical:** SDK must use `koinApplication {}` (isolated), not `startKoin {}` (global). Both claiming `GlobalContext` = crash.
+For complete implementation (architecture diagram, init ordering, testing, Gradle setup), see **[di-hybrid-koin-sdk-dagger-app.md](di-hybrid-koin-sdk-dagger-app.md)**.

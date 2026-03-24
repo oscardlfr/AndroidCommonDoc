@@ -154,7 +154,7 @@ Use this to evaluate any approach. Not all requirements have equal weight — pr
 | Android-only, modular publishing | Dagger B |
 | Android-only, 20+ features | Dagger C |
 | Zero codegen, fastest builds | Koin |
-| KMP SDK consumed by Dagger app | Hybrid: Koin SDK + Dagger bridge |
+| KMP SDK consumed by Dagger app | [Hybrid: Koin SDK + Dagger bridge](di-hybrid-koin-sdk-dagger-app.md) |
 | Binary size critical | Koin, Dagger B/C, kotlin-inject |
 | Team has Dagger expertise | Dagger (any approach) |
 

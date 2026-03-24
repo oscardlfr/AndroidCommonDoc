@@ -76,5 +76,7 @@ Dependency Injection in KMP projects follows framework-agnostic principles: cons
 - [Dagger/Hilt Documentation](https://dagger.dev/hilt/)
 - [KMP Architecture](../architecture/kmp-architecture.md) — expect/actual for platform bindings
 - [Testing Patterns](../testing/testing-patterns.md) — Fake injection, Koin test lifecycle
-- [SDK DI Concepts](../archive/di-sdk-consumer-isolation.md) — DI vs Service Locator, isolation levels, cross-feature deps
+- [SDK DI Concepts](../archive/di-sdk-consumer-isolation.md) — DI vs Service Locator, isolation levels
 - [Framework Comparison](../archive/di-sdk-selective-init-comparison.md) — Dagger vs Koin vs kotlin-inject for SDKs
+- [Cross-Feature Deps](../archive/di-cross-feature-deps.md) — How each approach resolves inter-feature dependencies
+- [Koin SDK + Dagger App](../archive/di-hybrid-koin-sdk-dagger-app.md) — Bridge pattern for KMP SDK in Hilt apps
