@@ -50,8 +50,10 @@ DI patterns for Kotlin Multiplatform projects — framework-agnostic principles 
 | Document | Description |
 |----------|-------------|
 | [dagger2-sdk-selective-init](../archive/dagger2-sdk-selective-init.md) | Dagger 2 SDK: 3 approaches (monolithic, per-feature, ServiceLoader) |
-| [di-sdk-selective-init-comparison](../archive/di-sdk-selective-init-comparison.md) | Framework comparison for modular SDKs (6 approaches × 10 requirements) |
+| [di-sdk-selective-init-comparison](../archive/di-sdk-selective-init-comparison.md) | Framework comparison for modular SDKs (5 approaches × 10 requirements) |
 | [di-sdk-consumer-isolation](../archive/di-sdk-consumer-isolation.md) | Isolation levels, DI vs Service Locator, cross-feature deps |
+| [di-cross-feature-deps](../archive/di-cross-feature-deps.md) | Cross-feature dependencies: real examples per approach |
+| [di-hybrid-koin-sdk-dagger-app](../archive/di-hybrid-koin-sdk-dagger-app.md) | Koin SDK + Dagger/Hilt app bridge pattern |
 
 ## Key Rules
 

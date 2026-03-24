@@ -17,6 +17,8 @@ Three approaches for building an Android SDK where consumers select which featur
 
 For framework comparison (Dagger vs Koin vs kotlin-inject), see [di-sdk-selective-init-comparison.md](di-sdk-selective-init-comparison.md).
 For DI concepts (isolation levels, cross-feature deps), see [di-sdk-consumer-isolation.md](di-sdk-consumer-isolation.md).
+For cross-feature dependency resolution, see [di-cross-feature-deps.md](di-cross-feature-deps.md).
+For Koin SDK + Dagger app hybrid, see [di-hybrid-koin-sdk-dagger-app.md](di-hybrid-koin-sdk-dagger-app.md).
 
 ---
 

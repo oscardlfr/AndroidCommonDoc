@@ -17,6 +17,8 @@ Side-by-side comparison of DI approaches for SDKs where consumers select which f
 
 For Dagger 2 implementation details, see [dagger2-sdk-selective-init.md](dagger2-sdk-selective-init.md).
 For DI concepts (isolation levels, DI vs Service Locator, cross-feature deps), see [di-sdk-consumer-isolation.md](di-sdk-consumer-isolation.md).
+For cross-feature dependency examples, see [di-cross-feature-deps.md](di-cross-feature-deps.md).
+For Koin SDK + Dagger app hybrid, see [di-hybrid-koin-sdk-dagger-app.md](di-hybrid-koin-sdk-dagger-app.md).
 
 ---
 

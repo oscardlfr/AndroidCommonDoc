@@ -17,6 +17,8 @@ Foundational concepts for building modular SDKs with dependency injection. Frame
 
 For Dagger 2 implementations, see [dagger2-sdk-selective-init.md](dagger2-sdk-selective-init.md).
 For framework comparison, see [di-sdk-selective-init-comparison.md](di-sdk-selective-init-comparison.md).
+For cross-feature dependency resolution, see [di-cross-feature-deps.md](di-cross-feature-deps.md).
+For Koin SDK + Dagger app hybrid, see [di-hybrid-koin-sdk-dagger-app.md](di-hybrid-koin-sdk-dagger-app.md).
 
 ---
 
