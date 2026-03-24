@@ -2,7 +2,7 @@
 scope: [architecture, dependency-injection, sdk-design]
 sources: [dagger2, koin, kotlin-inject, android-sdk, kmp]
 targets: [android, jvm, ios, macos]
-version: 3
+version: 4
 last_updated: "2026-03"
 description: "SDK DI concepts — isolation levels, DI vs Service Locator, cross-feature dependencies, singleton survival. Framework-agnostic principles with honest framework capabilities."
 slug: di-sdk-consumer-isolation
@@ -22,191 +22,207 @@ For framework comparison, see [di-sdk-selective-init-comparison.md](di-sdk-selec
 
 ## DI vs Service Locator
 
-Two paradigms for managing dependencies. Understanding this distinction is often the deciding factor for teams.
+Two paradigms for managing dependencies. Understanding this distinction matters because it determines what guarantees you get at compile time.
 
 ### Dependency Injection (Pure DI)
 
-The framework **pushes** dependencies into the class. The class never asks for them.
+The framework generates code that creates objects and passes their dependencies via constructor. The class never asks for anything:
 
 ```kotlin
-class SecurityServiceImpl @Inject constructor(
-    private val network: NetworkExecutor,   // framework provides this
-    private val logger: Logger,             // framework provides this
+// The class — zero knowledge of any DI container
+class SecurityServiceImpl(
+    private val network: NetworkExecutor,
+    private val logger: Logger,
 ) : SecurityService
+
+// Dagger module — tells Dagger HOW to create SecurityServiceImpl
+@Module class SecurityModule {
+    @Provides fun security(network: NetworkExecutor, logger: Logger): SecurityService =
+        SecurityServiceImpl(network, logger)  // Dagger calls this, passing network and logger
+}
 ```
 
-The class has zero knowledge of any DI container. It works with `new SecurityServiceImpl(fakeNetwork, fakeLogger)` in tests — no container setup needed.
+Dagger's annotation processor reads `@Provides`, sees that `SecurityServiceImpl` needs `NetworkExecutor` and `Logger`, finds those in other `@Provides` methods, and generates a factory class that wires everything at compile time. If `NetworkExecutor` has no provider, the build fails — not the app.
 
 **Frameworks:** Dagger 2, Hilt, kotlin-inject
 
 ### Service Locator
 
-The class **pulls** dependencies from a registry.
+The framework holds a registry of "how to create X". Code asks the registry at runtime:
 
 ```kotlin
-class SecurityServiceImpl(
-    private val network: NetworkExecutor = get(),   // class asks Koin
-    private val logger: Logger = get(),             // class asks Koin
-) : SecurityService
+// Koin module — registers HOW to create things
+val securityModule = module {
+    single<SecurityService> { SecurityServiceImpl(get(), get()) }
+    //                                             ^^^   ^^^
+    //                          asks Koin "give me a NetworkExecutor" and "give me a Logger"
+}
 ```
 
-The class knows about the DI container. It cannot work without the container being initialized.
+`get()` is a runtime lookup — Koin searches its registry for something that matches the requested type. If nothing is registered, it crashes at runtime.
+
+**Important nuance:** The `SecurityServiceImpl` class itself uses constructor injection — it takes `network` and `logger` as constructor args. The difference is WHERE the resolution happens. In Dagger, it happens at compile time (codegen). In Koin, it happens at runtime (`get()` inside the module lambda).
 
 **Frameworks:** Koin, kodein
 
 ### Trade-offs
 
-| | Pure DI | Service Locator |
+| | Pure DI (Dagger, kotlin-inject) | Service Locator (Koin) |
 |---|---|---|
-| **Compile-time safety** | ✅ Missing binding = build error | ❌ Missing binding = runtime crash |
-| **Testability** | ✅ Constructor args, no container | ⚠️ Need container or override |
-| **SOLID compliance** | ✅ True Dependency Inversion | ⚠️ Inverted control is partial |
-| **KMP support** | ⚠️ Dagger JVM-only; kotlin-inject full | ✅ Koin full KMP |
-| **Build speed** | ❌ Annotation processing (KAPT/KSP) | ✅ No codegen |
-| **Runtime flexibility** | ❌ Graph fixed at compile time | ✅ Modules composable at runtime |
-| **Auto-discovery** | ❌ Not possible with Dagger | ✅ Class.forName + @EagerInit |
+| **Missing dependency** | Build fails | App crashes at runtime |
+| **Graph validation** | Compile-time | `checkModules()` in tests |
+| **Build speed** | Slower (KAPT/KSP codegen) | Faster (no codegen) |
+| **KMP support** | Dagger: JVM only. kotlin-inject: full | Full (JVM + Native + JS) |
+| **Runtime flexibility** | Graph fixed at compile time | Modules composable at runtime |
+| **Feature auto-discovery** | Not possible with Dagger | Yes (Class.forName, @EagerInit) |
+| **Code size** | Generates factory classes | No generated code |
 
-Neither is universally better. Pure DI is architecturally stricter. Service Locator is pragmatically simpler and enables capabilities (auto-discovery, runtime composition) that pure DI cannot achieve.
+Neither is universally better. Pure DI catches more bugs at build time. Service Locator enables runtime composition (auto-discovery, conditional modules) that compile-time DI cannot.
 
 ---
 
 ## Consumer Isolation Levels
 
-How much does the consuming app know about SDK implementation details?
+How much does the consuming app know about SDK internals?
 
 ### Level 0 — No isolation (anti-pattern)
 
-Consumer directly instantiates impl classes:
+Consumer creates impl classes directly:
 ```kotlin
-import com.example.sdk.security.impl.SecurityServiceImpl
+import com.example.sdk.security.internal.SecurityServiceImpl
+import com.example.sdk.network.internal.KtorNetworkClient
 val service = SecurityServiceImpl(KtorNetworkClient())
 ```
-If the SDK renames the class or changes constructors, every consumer breaks.
+Consumer's Gradle: `implementation("com.example:security-impl:1.0")`.
+
+If the SDK renames `SecurityServiceImpl` or changes its constructor, the consumer's code breaks. The consumer is coupled to internal details.
 
 ### Level 1 — Facade
 
-Consumer calls a facade object. Does not see impl classes but does import the facade:
+Consumer calls a facade object. Sees the facade, not what's behind it:
 ```kotlin
-import com.example.sdk.security.FeatureSecurity
-FeatureSecurity.init(core)
-val service = FeatureSecurity.securityService()
+import com.example.sdk.MySdk
+MySdk.init(context, config, setOf(Feature.SECURITY))
+val service = MySdk.security()
 ```
-The facade lives in the `:integration` module. Consumer's Gradle depends on it.
+Consumer's Gradle: `implementation("com.example:sdk:1.0")`.
 
-### Level 2 — Interface only
+The consumer doesn't import `SecurityServiceImpl`, `KtorNetworkClient`, or any Dagger class. The facade hides all internal wiring. The SDK can completely rewrite its internals without breaking the consumer — as long as the facade API stays the same.
 
-Consumer depends on the API module only. Impl is injected:
-```kotlin
-import com.example.sdk.security.api.SecurityService
-val service: SecurityService = component.securityService()  // injected
-```
-Consumer's Gradle: `api("security-api")` + `runtimeOnly("security-integration")`.
+### Level 2 — Interface + auto-discovery
 
-### Level 3 — Sealed class / enum
-
-Consumer knows only a type-safe selector. Zero impl module imports:
+Consumer depends on an abstract API. The SDK discovers and wires implementations automatically:
 ```kotlin
 import com.example.sdk.SdkModule
+import com.example.sdk.SharedSdk
 SharedSdk.init(modules = setOf(SdkModule.Security))
-val service: SecurityService = SharedSdk.koin.get()
+val service: SecurityService = SharedSdk.get()
 ```
-Internally, `SharedSdk` uses `koinApplication {}` (isolated instance) and auto-discovery (`Class.forName` on JVM, `@EagerInitialization` on Native).
+Consumer's Gradle: `implementation("com.example:sdk-core:1.0")` + `runtimeOnly("com.example:security-impl:1.0")`.
+
+The consumer never imports any impl module in code. Just adding the Gradle dependency is enough — the SDK discovers it at runtime. This is only possible with runtime resolution (Koin, ServiceLoader).
 
 ### What each framework achieves
 
 | Framework | Max level | Why |
 |-----------|----------|-----|
-| Dagger Monolithic | 1 | Consumer doesn't see impls but all are compiled in |
-| Dagger Per-Feature | 1 | Consumer imports facade from integration module |
-| Dagger + ServiceLoader | 1-2 | ServiceLoader discovers, but consumer still declares Gradle dep |
-| Koin | 3 | Sealed class + runtime discovery, consumer imports only SDK core |
-| kotlin-inject | 2 | Consumer composes components, depends on API module |
+| **Dagger Monolithic** | 1 | Facade hides impls, but all are compiled into the binary |
+| **Dagger Per-Feature** | 1 | Facade per feature, consumer imports facade from integration module |
+| **Dagger + ServiceLoader** | 1-2 | ServiceLoader discovers, but limited to JVM |
+| **Koin** | 2 | Runtime discovery via Class.forName / @EagerInit, full KMP |
+| **kotlin-inject** | 1 | Consumer explicitly composes components |
 
-**Why Dagger cannot reach Level 3:** Dagger's `@Component` requires compile-time knowledge of all `@Module` classes. Auto-discovery via class loading cannot feed the annotation processor. This is the trade-off for compile-time graph validation.
+**Why Dagger can't reach Level 2:** Dagger needs to know ALL `@Module` classes at compile time to generate the factory code. It can't discover a module that was added as a Gradle dependency after the Component was compiled. This is the trade-off for compile-time safety.
 
 ---
 
 ## Cross-Feature Dependencies
 
-When Feature A needs a service that Feature B provides.
+When Feature A needs a service from Feature B.
 
-### In a single DI graph (Approach A / Koin)
+### In a single graph (Dagger A / Koin)
 
-No problem. All services are in the same container:
+No problem — all services are visible to each other:
 
-```kotlin
-// Dagger Monolithic: both in @Component
-@Provides fun authService(network: NetworkExecutor): AuthService  // from CoreModule
-@Provides fun paymentService(auth: AuthService): PaymentService   // from AuthModule — works
-
-// Koin: all modules in one koinApplication
-single<AuthService> { AuthServiceImpl(get()) }
-single<PaymentService> { PaymentServiceImpl(get<AuthService>()) }  // works
+```
+┌─────────────────────────────────────────────────┐
+│              ONE graph (Dagger A or Koin)        │
+│                                                   │
+│  Logger ─── AuthService ─── PaymentService       │
+│    ↑             ↑                ↑               │
+│  CoreModule    AuthModule    PaymentsModule       │
+│                                   │               │
+│              PaymentsModule can @Inject AuthService│
+└─────────────────────────────────────────────────┘
 ```
 
-### In per-feature isolation (Approach B, C)
+PaymentsModule declares `AuthService` as a parameter, Dagger/Koin resolves it from the same graph.
 
-Each feature has its own `DaggerComponent`. Feature B cannot inject from Feature A's component.
+### In per-feature isolation (Dagger B, C)
 
-**Option 1: Put shared services in CoreApis**
-```kotlin
-interface CoreApis {
-    val logger: Logger
-    val config: SdkConfig
-    val networkExecutor: NetworkExecutor
-    val authService: AuthService       // ← added because Payments needs it
-    val storageService: StorageService // ← added because Analytics needs it
-    val idGenerator: IdGenerator       // ← added because everyone needs it
-    // ... grows with every cross-feature dependency
-}
+Each feature has its own separate DaggerComponent. They can't see each other:
+
 ```
-CoreApis becomes a God Object — a single interface that knows about every shared service. At 15+ fields, it's unmanageable and defeats the purpose of per-feature isolation.
-
-**Option 2: Initialize in order**
-```kotlin
-val core = CoreApisImpl.create(context, config)
-FeatureAuth.init(core)               // first
-FeaturePayments.init(core, FeatureAuth.authService())  // second, needs auth
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│ SecurityComp │    │ PaymentsComp │    │ AnalyticsComp│
+│   @Singleton │    │   @Singleton │    │   @Singleton │
+│              │    │              │    │              │
+│ SecuritySvc  │    │ PaymentsSvc  │    │ AnalyticsSvc │
+│ SecurityImpl │    │ PaymentsImpl │    │ AnalyticsImpl│
+└──────┬───────┘    └──────┬───────┘    └──────┬───────┘
+       │                   │                   │
+       └──────────┬────────┘───────────────────┘
+                  ↓
+          ┌──────────────┐
+          │   CoreApis   │   ← plain Kotlin interface, NOT a @Component
+          │              │
+          │ logger       │   created once, passed to each feature
+          │ config       │
+          │ network      │
+          └──────────────┘
 ```
-Creates implicit initialization ordering. Features are not truly independent.
 
-**Option 3: Accept truly independent features**
+**What CoreApis is:** A plain Kotlin interface — not a Dagger component, not DI. It's a manual bridge. You create `CoreApisImpl` once and pass it as a constructor argument to each feature's `DaggerComponent.Builder`.
 
-Design features that do NOT depend on each other. Shared capabilities live in CoreApis (logger, config, network). Feature-specific services are never cross-injected.
+**What CoreApis is NOT:** It does NOT resolve dependencies. It does NOT create singletons. It's just a data holder with references to shared objects.
 
-This is the honest architectural constraint: **per-feature Dagger is best when features are truly independent**. If they need each other's services, either use Approach A (monolithic) or Koin (single graph with runtime resolution).
+**The problem:** If `PaymentsService` needs `SecurityService`, there's no way to get it:
+
+1. **Add SecurityService to CoreApis** — works for 2-3 shared services. At 15+, CoreApis becomes a God Object that knows everything, defeating per-feature isolation.
+2. **Initialize in order** — init Security first, then pass `security.service()` to Payments. Creates hidden ordering dependencies between features.
+3. **Design features to be independent** — the architecturally honest answer. Shared infrastructure (logger, network, config) lives in CoreApis. Feature-specific services don't cross boundaries.
+
+**Bottom line:** Per-feature Dagger (B, C) works well when features are truly independent. If many features need each other's services, use Dagger Monolithic (A) or Koin.
 
 ---
 
 ## Singleton Survival Across Reinit
 
-Some singletons must survive `shutdown() → init()` cycles — loggers with file handles, correlation IDs, buffered telemetry.
+Some singletons must survive `shutdown() → init()` cycles — loggers holding file handles, telemetry with buffered entries, correlation ID generators.
 
-The pattern is framework-agnostic: hold process-lifetime state in a Kotlin `object` outside the DI lifecycle.
+The pattern is framework-agnostic: hold process-lifetime state in a Kotlin `object` outside the DI container.
 
 ```kotlin
-// Works identically in Dagger, Koin, kotlin-inject
+// Lives outside any DI container — created once at class load time
 internal object FoundationSingletons {
-    val logger: EventLogger = EventLoggerImpl()     // created once, never recreated
+    val logger: EventLogger = EventLoggerImpl()
     val idGenerator: IdGenerator = CommonIdGenerator()
 }
 ```
 
-The DI container references the existing instance — it doesn't create a new one:
+Each framework references the existing instance instead of creating a new one:
 
 ```kotlin
-// Koin
+// Koin — lambda returns the existing object, doesn't create new
 fun foundationModule(config: SdkConfig) = module {
-    single<EventLogger> { FoundationSingletons.logger }   // survives reinit
-    single<SdkConfig> { config }                           // recreated per init
+    single<EventLogger> { FoundationSingletons.logger }   // same instance every init()
+    single<SdkConfig> { config }                           // new value each init()
 }
 
-// Dagger
+// Dagger — @Provides returns the existing object
 @Module object CoreModule {
     @Provides @Singleton
-    fun logger(): EventLogger = FoundationSingletons.logger  // survives reinit
-    @Provides @Singleton
-    fun config(config: SdkConfig): SdkConfig = config        // recreated
+    fun logger(): EventLogger = FoundationSingletons.logger
 }
 
 // kotlin-inject
@@ -215,31 +231,30 @@ fun foundationModule(config: SdkConfig) = module {
 }
 ```
 
-**What survives:** Logger, telemetry pipeline, credential cache, ID generator.
-**What gets recreated:** Config (debug flags may change), API endpoints, environment.
+When `shutdown()` destroys the DI container (Koin closes, Dagger component = null), `FoundationSingletons` survives because it's a Kotlin `object` (static singleton at the JVM/Native level). Next `init()` creates a new container that re-references the same instances.
 
 ---
 
 ## Hybrid: Koin SDK + Dagger App
 
 A KMP SDK can use Koin internally while the consuming Android app uses Dagger/Hilt. No conflict because:
-- Dagger has no global runtime state (pure codegen)
-- Koin 4.x supports `koinApplication {}` — isolated instance, does NOT use global `startKoin`
+- Dagger has no global runtime state — it generates plain factory classes
+- Koin 4.x supports `koinApplication {}` — isolated instance, not global
 
 ```kotlin
-// SDK (Koin isolated)
+// SDK — uses isolated Koin instance
 object SharedSdk {
     private var _koinApp: KoinApplication? = null
     val koin: Koin get() = _koinApp!!.koin
 
     fun init(modules: Set<SdkModule>, config: SdkConfig) {
-        _koinApp = koinApplication {
+        _koinApp = koinApplication {   // isolated, NOT startKoin
             modules(foundationModule(config) + resolvedModules)
         }
     }
 }
 
-// App (Dagger/Hilt bridge)
+// App — uses Dagger/Hilt, bridges to SDK's Koin
 @Module @InstallIn(SingletonComponent::class)
 object SdkBridgeModule {
     @Provides @Singleton
@@ -247,4 +262,4 @@ object SdkBridgeModule {
 }
 ```
 
-**Critical:** SDK must use `koinApplication {}` (isolated), not `startKoin {}` (global). If both SDK and app use `startKoin`, they conflict on `GlobalContext`.
+**Critical:** SDK must use `koinApplication {}` (isolated), not `startKoin {}` (global). Both claiming `GlobalContext` = crash.

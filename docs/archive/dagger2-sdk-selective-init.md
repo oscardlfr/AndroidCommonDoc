@@ -2,7 +2,7 @@
 scope: [architecture, dependency-injection, sdk-design]
 sources: [dagger2, android-sdk]
 targets: [android]
-version: 6
+version: 7
 last_updated: "2026-03"
 description: "Three Dagger 2 approaches for modular SDK initialization — A: monolithic, B: per-feature, C: ServiceLoader discovery. Enterprise-grade code with lifecycle management."
 slug: dagger2-sdk-selective-init
@@ -13,35 +13,47 @@ category: archive
 
 # Dagger 2: Modular SDK Initialization
 
-Three approaches for building an Android SDK where consumers select which features to activate. Each approach uses Dagger 2 for compile-time DI but differs in how features are organized, discovered, and initialized.
+Three approaches for building an Android SDK where consumers select which features to activate. Each uses Dagger 2 for compile-time DI but solves the problem differently.
 
 For framework comparison (Dagger vs Koin vs kotlin-inject), see [di-sdk-selective-init-comparison.md](di-sdk-selective-init-comparison.md).
-For isolation levels and DI concepts, see [di-sdk-consumer-isolation.md](di-sdk-consumer-isolation.md).
+For DI concepts (isolation levels, cross-feature deps), see [di-sdk-consumer-isolation.md](di-sdk-consumer-isolation.md).
 
 ---
 
-## Approach A: Monolithic Component
+## The Problem
 
-One `@Component` contains all feature modules. The consumer selects features at runtime but ALL feature code is compiled into the binary.
+You're building an SDK with N features (auth, analytics, payments, etc.). Consumers should:
+1. Pick which features to activate
+2. Not see implementation classes
+3. Not pay binary size for features they don't use
 
-### Module structure
+Dagger 2 solves (2) via compile-time codegen. But (1) and (3) conflict — Dagger needs to know all modules at compile time, and knowing them means compiling them. The three approaches navigate this tension differently.
+
+---
+
+## Approach A: One Component, All Features
 
 ```
-sdk-core/        → SdkComponent, SdkConfig, CoreModule (shared singletons)
-sdk-auth/        → AuthDaggerModule, AuthService
-sdk-analytics/   → AnalyticsDaggerModule, AnalyticsService  
-sdk-payments/    → PaymentsDaggerModule, PaymentService
+┌─────────────────────────────────────────────────────────┐
+│                   SdkComponent (@Singleton)              │
+│                                                          │
+│  CoreModule ─── AuthModule ─── PaymentsModule            │
+│  (Logger)       (AuthService)  (PaymentService)          │
+│  (Config)       can inject ←── can inject Logger,        │
+│  (Network)      Logger,        Config, AuthService       │
+│                 Config                                    │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### How singletons work
+ONE `@Component` lists ALL feature modules. Dagger generates ONE factory that knows how to create everything. Any module can inject any service from any other module.
 
-All features share one `@Singleton` scope because they're in one `@Component`:
+### Implementation
 
 ```kotlin
 @Singleton
 @Component(modules = [
-    CoreModule::class,         // Logger, NetworkExecutor, Storage
-    AuthDaggerModule::class,   // AuthService — always compiled in
+    CoreModule::class,          // Logger, NetworkExecutor, Storage
+    AuthDaggerModule::class,    // AuthService
     AnalyticsDaggerModule::class,
     PaymentsDaggerModule::class,
 ])
@@ -58,39 +70,33 @@ interface SdkComponent {
 }
 ```
 
-When `AuthDaggerModule` needs `NetworkExecutor`, Dagger resolves it from `CoreModule` in the same graph. No manual wiring needed.
-
-### Feature module example
+Each feature module provides its service and a lazy initializer:
 
 ```kotlin
 @Module
 class AuthDaggerModule {
     @Provides @Singleton
     fun provideAuthService(
-        network: NetworkExecutor,    // resolved from CoreModule
-        logger: Logger,              // resolved from CoreModule
-        config: SdkConfig,           // resolved from @BindsInstance
+        network: NetworkExecutor,    // Dagger resolves from CoreModule — same graph
+        logger: Logger,              // Dagger resolves from CoreModule — same graph
+        config: SdkConfig,           // Dagger resolves from @BindsInstance
     ): AuthService = AuthServiceImpl(network, logger, config)
 
     @Provides @IntoMap @SdkModuleKey(SdkModule.AUTH)
-    fun provideInitializer(service: Provider<AuthService>): ModuleInitializer {
-        return AuthModuleInitializer(service)
-    }
+    fun provideInitializer(service: Provider<AuthService>): ModuleInitializer =
+        AuthModuleInitializer(service)
 }
 ```
 
-### SDK entry point
+The SDK facade selectively initializes requested features:
 
 ```kotlin
 object MySdk {
     private var _component: SdkComponent? = null
-    private var _initialized = false
     private var _activeModules = emptySet<SdkModule>()
 
-    val isInitialized: Boolean get() = _initialized
-
     fun init(context: Context, config: SdkConfig, modules: Set<SdkModule>) {
-        check(!_initialized) { "SDK already initialized. Call shutdown() first." }
+        check(_component == null) { "SDK already initialized. Call shutdown() first." }
         require(modules.isNotEmpty()) { "modules must not be empty." }
 
         val comp = DaggerSdkComponent.builder()
@@ -98,41 +104,30 @@ object MySdk {
             .config(config)
             .build()
 
+        // Only initialize requested modules — others exist in the Component but are never called
         val initializers = comp.moduleInitializers()
         for (module in modules) {
-            val initializer = initializers[module]
-                ?: throw IllegalArgumentException(
-                    "Unknown module: $module. Available: ${initializers.keys}"
-                )
-            initializer.get().initialize()
+            val init = initializers[module]
+                ?: throw IllegalArgumentException("Unknown module: $module. Available: ${initializers.keys}")
+            init.get().initialize()
         }
 
         _component = comp
-        _initialized = true
         _activeModules = modules.toSet()
     }
 
+    fun auth(): AuthService {
+        check(SdkModule.AUTH in _activeModules) { "AUTH not initialized." }
+        return _component!!.authService()
+    }
+
     fun shutdown() {
-        if (!_initialized) return
-        val initializers = _component!!.moduleInitializers()
-        for (module in _activeModules) {
-            initializers[module]?.get()?.shutdown()
+        _component?.let { comp ->
+            val inits = comp.moduleInitializers()
+            _activeModules.forEach { inits[it]?.get()?.shutdown() }
         }
         _component = null
-        _initialized = false
         _activeModules = emptySet()
-    }
-
-    fun requireModule(module: SdkModule) {
-        check(_initialized) { "SDK not initialized. Call init() first." }
-        check(module in _activeModules) {
-            "Module '${module.key}' not initialized. Add it to init(modules = ...)."
-        }
-    }
-
-    fun auth(): AuthService {
-        requireModule(SdkModule.AUTH)
-        return _component!!.authService()
     }
 }
 ```
@@ -140,52 +135,79 @@ object MySdk {
 ### What the consumer sees
 
 ```kotlin
-// Consumer code — does NOT import AuthServiceImpl or any Dagger class
 MySdk.init(context, config, setOf(SdkModule.AUTH, SdkModule.ANALYTICS))
-val auth = MySdk.auth()
+val auth = MySdk.auth()     // works
+val pay = MySdk.payments()  // crashes — PAYMENTS not in set
 ```
 
-### Limitations
+### Why choose A
 
-- **Binary bloat:** `AuthDaggerModule`, `AnalyticsDaggerModule`, `PaymentsDaggerModule` are ALL compiled into every consumer's APK — even if they only use AUTH.
-- **Central coupling:** Adding a new feature requires editing the `@Component` annotation.
-- **No per-feature publishing:** Can't publish `sdk-auth` as an independent Maven artifact because `SdkComponent` must see all modules at compile time.
+- **Cross-feature injection works.** PaymentsModule can `@Inject AuthService` — same graph.
+- **Simple.** One Component, one builder, one init call.
+- **Full compile-time validation.** If any `@Provides` is missing, the build fails.
+
+### Why NOT A
+
+- **Binary bloat.** PaymentsDaggerModule is compiled into the APK even if the consumer never uses payments. Dagger generates the factory code for ALL modules.
+- **Central coupling.** Adding a new feature = edit the `@Component` annotation. Everyone who depends on sdk-core recompiles.
+- **Can't publish features independently.** `sdk-auth` can't be a separate Maven artifact because `SdkComponent` must see `AuthDaggerModule` at compile time.
 
 ---
 
-## Approach B: Per-Feature Components
-
-Each feature has its own `DaggerComponent`. No global graph. Shared state passes through a `CoreApis` interface.
-
-### Module structure
+## Approach B: Separate Component Per Feature
 
 ```
-sdk-core-apis/           → CoreApis interface, SdkConfig (NO Dagger)
-sdk-core-impl/           → CoreApisImpl, FoundationSingletons
-feature/
-  security/
-    api/                 → SecurityService interface (NO Dagger)
-    integration/         → DaggerSecurityComponent, SecurityServiceImpl
-  payments/
-    api/                 → PaymentsService interface
-    integration/         → DaggerPaymentsComponent, PaymentsServiceImpl
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│ SecurityComp │    │ PaymentsComp │    │ AnalyticsComp│
+│  @Singleton  │    │  @Singleton  │    │  @Singleton  │
+│              │    │              │    │              │
+│ SecuritySvc  │    │ PaymentsSvc  │    │ AnalyticsSvc │
+└──────┬───────┘    └──────┬───────┘    └──────┬───────┘
+       │                   │                   │
+       └──────────┬────────┘───────────────────┘
+                  ↓
+          ┌──────────────┐
+          │   CoreApis   │   ← plain Kotlin interface, NOT Dagger
+          │              │
+          │ .logger      │   created once before any feature init
+          │ .config      │
+          │ .network     │
+          └──────────────┘
 ```
 
-### How singletons work — the CoreApis trade-off
+Each feature has its OWN `DaggerComponent`. There is NO global Component. Shared infrastructure passes through `CoreApis` — a plain Kotlin interface, not a Dagger construct.
 
-There is NO shared `@Singleton` scope across features. Each `DaggerComponent` has its own scope. Shared services pass through `CoreApis`:
+### How CoreApis replaces the global graph
 
+In Approach A, features share singletons because they're in the same `@Component`. In B, there's no shared Component. So how does SecurityService get the Logger?
+
+**Step 1:** Create CoreApis before any feature:
 ```kotlin
-// sdk-core-apis — NO Dagger dependency
+// CoreApis is a plain interface — NO @Component, NO @Module
 interface CoreApis {
     val logger: Logger
     val config: SdkConfig
     val networkExecutor: NetworkExecutor
 }
+
+// Implementation creates the shared objects
+class CoreApisImpl private constructor(
+    override val logger: Logger,
+    override val config: SdkConfig,
+    override val networkExecutor: NetworkExecutor,
+) : CoreApis {
+    companion object {
+        fun create(context: Context, config: SdkConfig): CoreApis =
+            CoreApisImpl(
+                logger = FoundationSingletons.logger,
+                config = config,
+                networkExecutor = OkHttpNetworkExecutor(config),
+            )
+    }
+}
 ```
 
-Each feature receives `CoreApis` at init and uses its services:
-
+**Step 2:** Each feature's DaggerComponent receives CoreApis as input:
 ```kotlin
 @Singleton
 @Component(modules = [SecurityModule::class])
@@ -202,17 +224,14 @@ interface SecurityComponent {
 @Module
 class SecurityModule {
     @Provides @Singleton
-    fun provideSecurityService(core: CoreApis): SecurityService {
-        return SecurityServiceImpl(core.logger, core.networkExecutor, core.config)
-    }
+    fun provideSecurityService(core: CoreApis): SecurityService =
+        SecurityServiceImpl(core.logger, core.networkExecutor, core.config)
+        //                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        //    manually extracting deps from CoreApis — NOT Dagger resolution
 }
 ```
 
-**The cross-feature problem:** If `SecurityService` needs `PaymentsService`, there's no Dagger graph that contains both. Options:
-
-1. **Add it to CoreApis** — but CoreApis grows into a God Object containing every shared service. At 20+ services it becomes unmanageable.
-2. **Initialize in order and pass dependencies** — `PaymentsFeature.init(core)` first, then `SecurityFeature.init(core, payments.service())`. Creates implicit ordering and coupling.
-3. **Accept the limitation** — design features to be truly independent. If they need to talk, do it through CoreApis-level abstractions, not direct service injection.
+**Key insight:** `core.logger` is NOT Dagger resolving a dependency. It's plain Kotlin property access. Dagger generates the code that calls `provideSecurityService(coreApis)`, and inside that method, you manually pull what you need from the interface. This is the fundamental trade-off: you lose Dagger's automatic resolution across features, but gain the ability to compile features independently.
 
 ### Feature facade
 
@@ -222,81 +241,68 @@ object FeatureSecurity {
 
     fun init(core: CoreApis) {
         check(component == null) { "Security already initialized." }
-        component = DaggerSecurityComponent.builder()
-            .core(core)
-            .build()
+        component = DaggerSecurityComponent.builder().core(core).build()
     }
 
-    fun securityService(): SecurityService {
-        return component?.securityService()
-            ?: error("Security not initialized. Call FeatureSecurity.init(core) first.")
-    }
+    fun securityService(): SecurityService =
+        component?.securityService() ?: error("Security not initialized.")
 
-    fun shutdown() {
-        component = null
-    }
+    fun shutdown() { component = null }
 }
 ```
 
-### Consumer init — two options
+### Consumer init
 
-**Option 1: Per-feature (most decoupled)**
+**Option 1: Per-feature** — most decoupled, consumer decides order:
 ```kotlin
 val core = CoreApisImpl.create(context, config)
 FeatureSecurity.init(core)
-// FeaturePayments NOT imported, NOT in binary
+// FeaturePayments never imported, never in binary
 ```
 
-**Option 2: Thin umbrella (convenience, NOT a DaggerComponent)**
+**Option 2: Thin umbrella** — convenience, NOT a DaggerComponent:
 ```kotlin
 object MySdk {
-    private var _initialized = false
-    private var _core: CoreApis? = null
-
     fun init(context: Context, config: SdkConfig, features: Set<Feature>) {
-        check(!_initialized) { "SDK already initialized." }
         val core = CoreApisImpl.create(context, config)
-        _core = core
         for (feature in features) {
             when (feature) {
                 Feature.SECURITY -> FeatureSecurity.init(core)
                 Feature.PAYMENTS -> FeaturePayments.init(core)
             }
         }
-        _initialized = true
     }
 }
 ```
 
-Note: this umbrella is a plain Kotlin `object` — it does NOT have a `@Component`. Each feature's `DaggerComponent` is independent.
+This `when` block is the trade-off: adding a new feature requires editing it.
 
-### Limitations
+### Why choose B
 
-- **CoreApis grows:** Every service shared between features must be in CoreApis. With 10+ shared services, this interface becomes unwieldy.
-- **No cross-feature DI:** Feature A cannot `@Inject` a service from Feature B through Dagger. Only through CoreApis or manual passing.
-- **Consumer knows integration module:** Consumer imports `FeatureSecurity` from `:feature:security:integration`.
+- **Binary lean.** Consumer only gets feature code they depend on in Gradle. FeaturePayments not in Gradle → not in APK.
+- **Independent publishing.** `sdk-security` and `sdk-payments` are separate Maven artifacts. Teams can adopt features one at a time.
+- **No central Component edit.** Adding a feature doesn't force recompilation of other features.
+
+### Why NOT B
+
+- **No cross-feature DI.** If PaymentsService needs SecurityService, Dagger can't help — they're in separate Components. You must either:
+  - Add `SecurityService` to CoreApis (but at 15+ shared services, CoreApis becomes a God Object)
+  - Initialize in order and pass manually (creates hidden coupling)
+- **Manual singleton sharing.** `@Singleton` only scopes within one Component. Cross-feature singletons live in CoreApis (manually managed).
+- **Umbrella needs editing.** New feature → edit `when` block.
 
 ---
 
-## Approach C: Per-Feature with ServiceLoader Discovery
+## Approach C: Per-Feature + ServiceLoader Auto-Discovery
 
-Same per-feature architecture as B, but the SDK discovers features automatically via `ServiceLoader`. Adding a new feature requires zero edits to the core module.
+Same architecture as B (separate DaggerComponents, CoreApis bridge), but features register themselves via JVM's `ServiceLoader`. Adding a feature = add Gradle dependency + META-INF file. Zero edits to core.
 
-### Module structure
+### How it differs from B
 
-```
-sdk-core/                → MySdk, CoreApis, FeatureInitializer contract
-feature/
-  security/integration/  → DaggerSecurityComponent + SecurityFeatureInitializer
-                           + META-INF/services/com.example.sdk.FeatureInitializer
-  payments/integration/  → DaggerPaymentsComponent + PaymentsFeatureInitializer
-                           + META-INF/services/com.example.sdk.FeatureInitializer
-```
-
-### Discovery contract
+In B, the umbrella has a `when` block that maps features to facades. In C, the SDK discovers features at runtime:
 
 ```kotlin
-// sdk-core defines this — feature modules implement it
+// Core defines a contract — features implement it
 interface FeatureInitializer {
     val feature: Feature
     fun init(core: CoreApis)
@@ -305,74 +311,39 @@ interface FeatureInitializer {
 }
 ```
 
-### Feature implements the contract
-
-```kotlin
-// In :feature:security:integration
-class SecurityFeatureInitializer : FeatureInitializer {
-    private var component: SecurityComponent? = null
-
-    override val feature = Feature.SECURITY
-
-    override fun init(core: CoreApis) {
-        component = DaggerSecurityComponent.builder().core(core).build()
-    }
-
-    override fun shutdown() { component = null }
-
-    @Suppress("UNCHECKED_CAST")
-    override fun <T> getService(serviceClass: Class<T>): T? =
-        when (serviceClass) {
-            SecurityService::class.java -> component?.securityService() as? T
-            else -> null
-        }
-}
+Each feature provides a META-INF registration:
 ```
-
-Registration via `META-INF/services/com.example.sdk.FeatureInitializer`:
-```
+// feature/security/integration/src/main/resources/META-INF/services/com.example.sdk.FeatureInitializer
 com.example.sdk.security.SecurityFeatureInitializer
 ```
 
-### SDK entry point
-
+The SDK discovers all registered features at runtime:
 ```kotlin
 object MySdk {
     private val _initializers = mutableMapOf<Feature, FeatureInitializer>()
-    private var _initialized = false
 
     fun init(context: Context, config: SdkConfig, features: Set<Feature>) {
-        check(!_initialized) { "SDK already initialized." }
-        require(features.isNotEmpty()) { "features must not be empty." }
-
         val core = CoreApisImpl.create(context, config)
+
+        // ServiceLoader scans META-INF/services/ on the classpath
         val available = ServiceLoader.load(FeatureInitializer::class.java)
             .associateBy { it.feature }
 
         for (feature in features) {
             val initializer = available[feature]
                 ?: throw IllegalArgumentException(
-                    "Feature $feature not found. Add its Gradle dependency."
+                    "Feature $feature not on classpath. Add its Gradle dependency."
                 )
             initializer.init(core)
             _initializers[feature] = initializer
         }
-        _initialized = true
     }
 
     inline fun <reified T> get(): T {
-        check(_initialized) { "SDK not initialized." }
         for (init in _initializers.values) {
             init.getService(T::class.java)?.let { return it }
         }
-        error("No service ${T::class.simpleName} found.")
-    }
-
-    fun shutdown() {
-        if (!_initialized) return
-        _initializers.values.forEach { it.shutdown() }
-        _initializers.clear()
-        _initialized = false
+        error("No service ${T::class.simpleName} found in initialized features.")
     }
 }
 ```
@@ -384,56 +355,40 @@ MySdk.init(context, config, setOf(Feature.SECURITY))
 val security: SecurityService = MySdk.get()
 ```
 
-### Limitations
+### Why choose C over B
 
-- **JVM-only:** `ServiceLoader` requires `META-INF/services/` — not available on Kotlin/Native.
-- **Runtime errors:** Missing Gradle dependency = `IllegalArgumentException` at runtime, not compile-time.
-- **Same CoreApis problem as B:** Cross-feature dependencies must go through CoreApis.
-- **`getService` casting:** Runtime type resolution, not compile-time safe.
+- **Zero-edit feature addition.** New feature = new Gradle module + META-INF. No umbrella `when` to maintain.
+- **Good for 20+ features.** The `when` block in B becomes unmanageable at scale. C scales without central edits.
+
+### Why NOT C
+
+- **JVM-only.** `ServiceLoader` requires `META-INF/services/` — not available on Kotlin/Native or JS.
+- **Runtime errors.** Missing Gradle dependency = crash at init, not build error. B would catch this as a compile error (unused import warning, at least).
+- **`getService` casting.** Runtime type check, not compile-time.
+- **Same CoreApis limitation as B.** Cross-feature deps still go through CoreApis.
 
 ---
 
 ## Comparison
 
-| | A: Monolithic | B: Per-Feature | C: Discovery |
+|  | A: One Component | B: Per-Feature | C: Discovery |
 |---|---|---|---|
-| **Consumer init** | `MySdk.init(setOf(...))` | `Feature.init(core)` or umbrella | `MySdk.init(setOf(...))` |
-| **Global DaggerComponent** | Yes | No | No |
-| **Binary includes** | All features | Only selected | Only selected |
-| **Cross-feature deps** | ✅ Same graph | ❌ CoreApis only | ❌ CoreApis only |
-| **Singleton sharing** | `@Singleton` graph | CoreApis manual | CoreApis manual |
-| **Adding a feature** | Edit `@Component` | New module + edit umbrella | New module + META-INF |
-| **Compile-time safety** | Full graph | Per-feature | Per-feature |
-| **Publishing** | Monolithic | Per-module | Per-module |
-| **KMP** | No | No | No (ServiceLoader JVM) |
+| **Architecture** | 1 DaggerComponent with all modules | N separate DaggerComponents + CoreApis | Same as B + ServiceLoader |
+| **Cross-feature deps** | ✅ Same graph, any module injects any other | ❌ Only through CoreApis (manual) | ❌ Only through CoreApis (manual) |
+| **Singleton sharing** | ✅ `@Singleton` scope on the Component | ❌ Each Component has own scope. Shared = CoreApis | ❌ Same as B |
+| **Binary includes** | ❌ ALL feature code, even unused | ✅ Only Gradle dependencies | ✅ Only Gradle dependencies |
+| **Adding a feature** | Edit `@Component` + recompile core | New module + edit `when` block | New module + META-INF file |
+| **Publishing** | ❌ Monolithic — one artifact | ✅ Per-feature Maven artifacts | ✅ Per-feature Maven artifacts |
+| **Compile-time safety** | ✅ Full graph validated | ⚠️ Per-feature only | ⚠️ Per-feature + runtime discovery |
+| **KMP** | ❌ JVM only | ❌ JVM only | ❌ JVM only (ServiceLoader) |
 | **Complexity** | Low | Medium | High |
 
 ### When to use
 
 | Scenario | Approach |
 |----------|----------|
-| Small SDK (≤5 features), single team | A |
-| Modular SDK, per-feature publishing, features mostly independent | B |
-| Large SDK (20+ features), frequent additions, JVM-only | C |
-| Features heavily depend on each other's services | A (or consider Koin) |
-| KMP required | None — see [comparison doc](di-sdk-selective-init-comparison.md) |
-
-## Version Compatibility (2026)
-
-| Component | Version | Notes |
-|-----------|---------|-------|
-| Kotlin | 2.3+ | K2 compiler default since 2.0 |
-| AGP | 9.0+ | Requires Kotlin 2.1+ |
-| Dagger | 2.52+ | KSP alpha since 2.48, KAPT in maintenance |
-
-### KAPT → KSP
-
-```kotlin
-// KAPT (legacy)
-plugins { id("org.jetbrains.kotlin.kapt") }
-dependencies { kapt("com.google.dagger:dagger-compiler:2.52") }
-
-// KSP (alpha — validate before production use)
-plugins { id("com.google.devtools.ksp") }
-dependencies { ksp("com.google.dagger:dagger-compiler:2.52") }
-```
+| Small SDK (≤5 features), one team, features share data | **A** |
+| Modular SDK, per-feature publishing, features independent | **B** |
+| 20+ features, frequent additions, JVM-only | **C** |
+| Features heavily depend on each other | **A** (or consider Koin) |
+| KMP needed | None of these — see [comparison doc](di-sdk-selective-init-comparison.md) |

@@ -91,7 +91,7 @@ Use this to evaluate any approach. Not all requirements have equal weight — pr
 | # | Req | Status | Notes |
 |---|-----|--------|-------|
 | 1 | Selective init | ✅ | `SharedSdk.init(setOf(...))` |
-| 2 | Consumer isolation | ✅ | Level 3 — sealed class only |
+| 2 | Consumer isolation | ✅ | Level 2 — sealed class + auto-discovery |
 | 3 | Shared singletons | ✅ | Single `koinApplication` scope |
 | 4 | Lazy instantiation | ✅ | Class.forName on requested only |
 | 5 | SDK-core independence | ✅ | Zero impl deps |
@@ -127,7 +127,7 @@ Use this to evaluate any approach. Not all requirements have equal weight — pr
 | Criterion | Koin | Dagger A | Dagger B | Dagger C | kotlin-inject |
 |-----------|------|----------|----------|----------|---------------|
 | **DI paradigm** | Service Locator | Pure DI | Pure DI | Pure DI | Pure DI |
-| **Max isolation** | Level 3 | Level 1 | Level 1 | Level 1-2 | Level 2 |
+| **Max isolation** | Level 2 | Level 1 | Level 1 | Level 1 | Level 1 |
 | **Cross-feature** | ✅ | ✅ | ❌ | ❌ | ⚠️ |
 | **Binary lean** | ✅ | ❌ | ✅ | ✅ | ✅ |
 | **Compile-time** | ❌ | ✅ | ⚠️ | ⚠️ | ✅ |
