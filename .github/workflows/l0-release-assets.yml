@@ -61,10 +61,9 @@ jobs:
           # Skills (SKILL.md files + registry)
           cp -r skills/ "$STAGING/skills/"
 
-          # Agents
+          # Agents + Commands (need .claude/ parent)
+          mkdir -p "$STAGING/.claude"
           cp -r .claude/agents/ "$STAGING/.claude/agents/"
-
-          # Commands
           cp -r .claude/commands/ "$STAGING/.claude/commands/"
 
           # Detekt base config
