@@ -6,7 +6,7 @@ slug: archive-hub
 status: active
 layer: L0
 category: archive
-description: "Archive category hub: DI SDK architecture research and enterprise deployment proposals"
+description: "Archive category hub: DI SDK architecture research, enterprise deployment proposals, and CI standalone guides"
 version: 2
 last_updated: "2026-03"
 ---
@@ -24,6 +24,12 @@ DI architecture research and enterprise deployment proposals. These are referenc
 | [di-sdk-consumer-isolation](di-sdk-consumer-isolation.md) | DI concepts: isolation levels, DI vs Service Locator, singleton survival |
 | [di-cross-feature-deps](di-cross-feature-deps.md) | Cross-feature dependencies: how each approach resolves Feature A needing Feature B |
 | [di-hybrid-koin-sdk-dagger-app](di-hybrid-koin-sdk-dagger-app.md) | Hybrid: Koin SDK consumed by Dagger/Hilt apps via bridge module |
+
+## CI Standalone
+
+| Document | Description |
+|----------|-------------|
+| [commit-lint-ci-standalone](commit-lint-ci-standalone.md) | Guía para adoptar Commit Lint en CI sin depender de AndroidCommonDoc (Spanish) |
 
 ## Enterprise
 
