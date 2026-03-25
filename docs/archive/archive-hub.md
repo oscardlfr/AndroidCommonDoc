@@ -6,22 +6,34 @@ slug: archive-hub
 status: active
 layer: L0
 category: archive
-description: "Archive category hub: Superseded docs preserved for historical reference"
-version: 1
+description: "Archive category hub: DI SDK architecture research, enterprise deployment proposals, and CI standalone guides"
+version: 2
 last_updated: "2026-03"
 ---
 
 # Archive
 
-Superseded documents preserved for historical reference. Do not use these patterns in new code.
+DI architecture research and enterprise deployment proposals. These are reference documents — analysis of trade-offs, not prescriptive patterns.
 
-## Documents
+## DI SDK Architecture
 
 | Document | Description |
 |----------|-------------|
-| [enterprise-integration-proposal](enterprise-integration-proposal.md) | Enterprise deployment proposal (English) |
-| [propuesta-integracion-enterprise](propuesta-integracion-enterprise.md) | Enterprise deployment proposal (Spanish original) |
-| [dagger2-sdk-selective-init](dagger2-sdk-selective-init.md) | Dagger 2 SDK: selective module init with shared singletons |
-| [di-sdk-selective-init-comparison](di-sdk-selective-init-comparison.md) | DI framework comparison: Dagger 2 vs Koin vs Hilt vs kotlin-inject for SDK selective init |
+| [dagger2-sdk-selective-init](dagger2-sdk-selective-init.md) | Dagger 2: 3 approaches for modular SDK init (monolithic, per-feature, ServiceLoader) |
+| [di-sdk-selective-init-comparison](di-sdk-selective-init-comparison.md) | Framework comparison: 5 approaches × 10 requirements with decision matrix |
+| [di-sdk-consumer-isolation](di-sdk-consumer-isolation.md) | DI concepts: isolation levels, DI vs Service Locator, singleton survival |
+| [di-cross-feature-deps](di-cross-feature-deps.md) | Cross-feature dependencies: how each approach resolves Feature A needing Feature B |
+| [di-hybrid-koin-sdk-dagger-app](di-hybrid-koin-sdk-dagger-app.md) | Hybrid: Koin SDK consumed by Dagger/Hilt apps via bridge module |
 
-> These docs are superseded. The enterprise integration approach described has been replaced by the MCP server and materialization engine.
+## CI Standalone
+
+| Document | Description |
+|----------|-------------|
+| [commit-lint-ci-standalone](commit-lint-ci-standalone.md) | Guía para adoptar Commit Lint en CI sin depender de AndroidCommonDoc (Spanish) |
+
+## Enterprise
+
+| Document | Description |
+|----------|-------------|
+| [enterprise-integration-proposal](enterprise-integration-proposal.md) | Enterprise deployment proposal — 8 adoptable modules (English) |
+| [propuesta-integracion-enterprise](propuesta-integracion-enterprise.md) | Enterprise deployment proposal (Spanish) |

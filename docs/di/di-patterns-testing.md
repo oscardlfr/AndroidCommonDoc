@@ -40,12 +40,14 @@ Testing patterns for DI-wired code, including Koin test module setup, test lifec
 
 ## 1. Testing with Koin
 
-Initialize Koin BEFORE Activity/test launch. Use `koinApplication` for isolated test modules.
+Initialize Koin BEFORE Activity/test launch. Use `koinApplication` for isolated test modules — avoids conflicts with global state.
 
 ```kotlin
+private lateinit var koinApp: KoinApplication
+
 @Before
 fun setup() {
-    startKoin {
+    koinApp = koinApplication {
         modules(
             module {
                 single<SnapshotRepository> { FakeSnapshotRepository() }
@@ -57,7 +59,7 @@ fun setup() {
 
 @After
 fun tearDown() {
-    stopKoin()
+    koinApp.close()
 }
 ```
 

@@ -36,8 +36,8 @@ validate_upstream:
   - url: "https://insert-koin.io/docs/reference/koin-mp/kmp"
     assertions:
       - type: api_present
-        value: "startKoin"
-        context: "Koin initialization function"
+        value: "koinApplication"
+        context: "Koin isolated application — preferred for SDKs and testing"
       - type: api_present
         value: "module"
         context: "Koin module declaration"
@@ -56,7 +56,7 @@ validate_upstream:
 Dependency Injection in KMP projects follows framework-agnostic principles: constructor injection everywhere, module-scoped bindings in `di/` packages, platform-specific providers via `expect`/`actual`. The two most common frameworks are Koin (KMP-native, used in cross-platform projects) and Dagger/Hilt (Android-centric, used in enterprise Android projects).
 
 **Core Principles**:
-1. Constructor injection for ALL classes -- no field injection, no service locator
+1. Constructor injection for ALL production classes — dependencies declared in constructor, resolved at the DI boundary (app init, module declarations)
 2. Module declarations live in each module's `di/` package
 3. Platform-specific bindings use `expect`/`actual` or framework-specific mechanisms
 4. ViewModels get their dependencies via constructor -- never via manual DI lookups inside business logic
@@ -66,7 +66,7 @@ Dependency Injection in KMP projects follows framework-agnostic principles: cons
 ## Sub-documents
 
 - **[di-patterns-modules](di-patterns-modules.md)**: Module declaration patterns -- Koin module declarations, koinViewModel, Dagger/Hilt ViewModel injection, app startup, KMP platform modules, Dagger @Module/@Binds/@Provides, KMP+Hilt hybrid pattern
-- **[di-patterns-testing](di-patterns-testing.md)**: DI testing patterns -- Koin test module setup, test lifecycle (startKoin/stopKoin), anti-patterns table, interface-based binding, scoping rules
+- **[di-patterns-testing](di-patterns-testing.md)**: DI testing patterns — Koin test module setup, test lifecycle (koinApplication/close), anti-patterns table, interface-based binding, scoping rules
 
 ---
 
@@ -74,5 +74,9 @@ Dependency Injection in KMP projects follows framework-agnostic principles: cons
 
 - [Koin Documentation](https://insert-koin.io/docs/reference/introduction)
 - [Dagger/Hilt Documentation](https://dagger.dev/hilt/)
-- [KMP Architecture](../architecture/kmp-architecture.md) -- expect/actual for platform bindings
-- [Testing Patterns](../testing/testing-patterns.md) -- Fake injection, Koin test lifecycle
+- [KMP Architecture](../architecture/kmp-architecture.md) — expect/actual for platform bindings
+- [Testing Patterns](../testing/testing-patterns.md) — Fake injection, Koin test lifecycle
+- [SDK DI Concepts](../archive/di-sdk-consumer-isolation.md) — DI vs Service Locator, isolation levels
+- [Framework Comparison](../archive/di-sdk-selective-init-comparison.md) — Dagger vs Koin vs kotlin-inject for SDKs
+- [Cross-Feature Deps](../archive/di-cross-feature-deps.md) — How each approach resolves inter-feature dependencies
+- [Koin SDK + Dagger App](../archive/di-hybrid-koin-sdk-dagger-app.md) — Bridge pattern for KMP SDK in Hilt apps

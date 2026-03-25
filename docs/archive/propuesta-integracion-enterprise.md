@@ -1,348 +1,229 @@
 ---
-archived: true
-archived_date: "2026-03-14"
-reason: "Spanish duplicate of enterprise-integration-proposal.md"
-canonical: "docs/enterprise-integration-proposal.md"
-# Original frontmatter preserved below
 scope: [enterprise, integration, proposal]
-sources: [android-enterprise, managed-configurations]
-targets: [android]
-version: 1
+sources: [androidcommondoc, ci-cd, detekt, copilot, claude-code]
+targets: [android, kmp]
+version: 2
 last_updated: "2026-03"
-description: "Propuesta de integración enterprise para despliegues Android gestionados"
+description: "Catálogo de adopción enterprise para AndroidCommonDoc — modular, elige lo que necesites. Cada módulo es independiente."
 slug: propuesta-integracion-enterprise
 status: archived
 layer: L0
 category: archive
 ---
 
-# Propuesta de Integración Enterprise: AndroidCommonDoc en Entorno Corporativo
+# AndroidCommonDoc — Catálogo de Adopción Enterprise
 
-> **Autor:** Equipo de Desarrollo Android
-> **Fecha:** Marzo 2026
-> **Objetivo:** Integrar el repositorio de documentación técnica AndroidCommonDoc en el flujo de trabajo corporativo (Microsoft 365, Teams, GitHub Enterprise) para maximizar la productividad del equipo de desarrollo móvil.
+Esto NO es un paquete todo-o-nada. Cada módulo es **adoptable independientemente**. Elige lo que resuelva tu problema — ignora el resto.
 
----
+## Cómo Usar Este Documento
 
-## Índice
+1. Lee el [Catálogo de Módulos](#catálogo-de-módulos) — cada módulo tiene: qué es, qué necesita, qué te da
+2. Consulta el [Mapa de Dependencias](#mapa-de-dependencias) — algunos módulos funcionan mejor juntos pero ninguno es obligatorio
+3. Empieza por las [Quick Wins](#puntos-de-partida-recomendados)
+4. Para visibilidad de management: [Dashboard de Coverage](#módulo-7-dashboard-de-coverage-para-stakeholders)
 
-1. [Resumen Ejecutivo](#resumen-ejecutivo)
-2. [Ideas Implementables Ahora](#ideas-implementables-ahora-github-copilot--m365--teams)
-3. [Ideas a Medio Plazo (3-6 meses)](#ideas-a-medio-plazo-3-6-meses)
-4. [Ideas Futuras (1-2 años)](#ideas-futuras-1-2-años)
-5. [Tabla Resumen para Dirección](#tabla-resumen-para-dirección)
-6. [Consideraciones de Seguridad](#consideraciones-de-seguridad)
-7. [Próximos Pasos](#próximos-pasos)
+## Estrategia de Fork
 
----
+```
+Opción A: Fork completo (GitHub/GitLab interno)
+  → Clonar todo, eliminar lo que no se necesite
+  → Pro: todo disponible para explorar
+  → Con: carga de mantenimiento en partes no usadas
 
-## Resumen Ejecutivo
+Opción B: Cherry-pick de módulos (recomendado)
+  → Copiar solo los directorios elegidos del catálogo
+  → Pro: footprint mínimo, ownership claro
+  → Con: actualizaciones manuales cuando L0 evolucione
 
-AndroidCommonDoc es un repositorio de patrones, guías y convenciones de desarrollo Android/KMP mantenido activamente. Esta propuesta describe cómo integrar este conocimiento en las herramientas que ya usa el equipo (Teams, M365, GitHub Enterprise, Copilot) para reducir tiempos de onboarding, estandarizar código y mejorar la calidad de las entregas.
-
-Las propuestas se dividen en tres horizontes temporales según su complejidad de implementación y las restricciones de seguridad propias del sector bancario.
-
----
-
-## Ideas Implementables Ahora (GitHub Copilot + M365 + Teams)
-
-### 1. Instrucciones Copilot Personalizadas con AndroidCommonDoc
-
-**Descripción:** Configurar GitHub Copilot para que use los patrones de AndroidCommonDoc como contexto base al generar sugerencias de código.
-
-**Implementación:**
-- Crear archivo `.github/copilot-instructions.md` en cada repositorio de desarrollo
-- Incluir las convenciones clave: arquitectura por capas, reglas de ViewModel, naming de source sets KMP
-- Copilot priorizará sugerencias alineadas con nuestros estándares
-
-**Beneficio:** Las sugerencias de código siguen automáticamente los patrones del equipo sin intervención manual.
+Opción C: Git subtree / submodule
+  → Referenciar L0 como subtree en tu proyecto
+  → Pro: actualizaciones upstream vía git pull
+  → Con: requiere expertise Git, puede conflictuar con políticas corporativas
+```
 
 ---
 
-### 2. Wiki de Teams Sincronizada con el Repositorio
+## Catálogo de Módulos
 
-**Descripción:** Publicar automáticamente los documentos de AndroidCommonDoc en una wiki de Microsoft Teams accesible para todo el equipo.
+### Módulo 1: Reglas Detekt de Arquitectura
 
-**Implementación:**
-- Crear un canal de Teams dedicado: "Documentación Técnica Android"
-- Usar Power Automate para sincronizar cambios del repositorio con pestañas Wiki de Teams
-- Añadir pestañas directas a los documentos más consultados (patrones de ViewModel, testing, etc.)
+**Qué:** 19 reglas Detekt custom que enforce patrones arquitectónicos en compile-time. Detecta violaciones de sealed-interface, CancellationException tragada, credenciales hardcodeadas, imports prohibidos en commonMain.
 
-**Beneficio:** Los desarrolladores consultan la documentación sin salir de Teams, reduciendo la fricción.
+**Necesita:** Detekt 2.x en tu build Gradle. Ninguna otra dependencia de L0.
 
----
+**Te da:**
+- Violaciones detectadas en IDE (tiempo real) y CI (gate de PR)
+- Zero revisión manual para violaciones de patrones
+- Reglas configurables por proyecto vía `detekt.yml`
 
-### 3. Bot de Teams para Consultas de Patrones
+**Funciona sin:** Todo lo demás. Plugin Gradle puro.
 
-**Descripción:** Un bot simple en Teams que responde preguntas frecuentes sobre patrones de desarrollo Android enlazando a la documentación relevante.
-
-**Implementación:**
-- Usar Power Virtual Agents (incluido en licencia M365 E3/E5)
-- Alimentar con FAQ basadas en los documentos de AndroidCommonDoc
-- Configurar respuestas con enlaces directos a los archivos del repositorio
-
-**Beneficio:** Respuestas instantáneas a dudas comunes ("¿cómo estructuro un ViewModel?") sin interrumpir a compañeros senior.
+**Ideal para:** Cualquier equipo que quiera enforcement automático de arquitectura.
 
 ---
 
-### 4. Plantillas de Pull Request con Checklist de Patrones
+### Módulo 2: Workflows CI (GitHub Actions)
 
-**Descripción:** Plantillas de PR en GitHub que incluyen checklist automático basado en los estándares de AndroidCommonDoc.
+**Qué:** 14 workflows reutilizables — commit linting, README audit, Detekt, paridad de agentes, coverage, monitoreo de docs, KMP safety checks.
 
-**Implementación:**
-- Crear `.github/PULL_REQUEST_TEMPLATE.md` con secciones verificables
-- Incluir checks: "¿UiState es sealed interface?", "¿Se usa Result<T>?", "¿Tests con runTest?"
-- Integrar con GitHub Actions para validación automática de patrones básicos
+**Necesita:** GitHub Actions.
 
-**Beneficio:** Las revisiones de código son más rápidas y consistentes. Se detectan desviaciones antes del merge.
+**Te da:**
+- Gate de PR: commit-lint, pattern-lint, Detekt, validación de counts
+- Semanal: monitoreo de fuentes upstream, validación de docs
+- On-demand: audit completo, suite de coverage
 
----
+**Funciona sin:** Agentes, MCP server, pattern docs.
 
-### 5. Flujo de Onboarding Automatizado en Teams
-
-**Descripción:** Cuando un nuevo desarrollador se incorpora, recibe automáticamente un plan de lectura guiado de AndroidCommonDoc.
-
-**Implementación:**
-- Crear lista de tareas en Planner/To-Do integrada con Teams
-- Secuenciar la lectura: primero arquitectura, luego ViewModel, después testing
-- Incluir mini-quizzes o tareas prácticas por cada documento leído
-- Trigger automático al añadir miembro al equipo de Teams
-
-**Beneficio:** Onboarding estructurado y autoservicio. El nuevo desarrollador es productivo antes.
+**Ideal para:** Equipos en GitHub Actions que quieren gates de PR estandarizados.
 
 ---
 
-### 6. Alertas de Actualización de Documentación en Teams
+### Módulo 3: Sistema de Agentes IA (Claude Code)
 
-**Descripción:** Notificar automáticamente al equipo cuando se actualiza un documento de AndroidCommonDoc.
+**Qué:** 15 agentes especializados + 5 templates. Dev-lead orquesta, especialistas (test, UI, security, release) ejecutan tareas de dominio.
 
-**Implementación:**
-- Webhook de GitHub → Canal de Teams "Actualizaciones Doc"
-- Formato rico: muestra qué documento cambió, resumen del cambio, enlace al diff
-- Filtrar por relevancia (no notificar cambios menores como typos)
+**Necesita:** Claude Code (Anthropic).
 
-**Beneficio:** El equipo está siempre al día con los últimos patrones sin esfuerzo.
+**Te da:**
+- `dev-lead`: planifica, delega a especialistas
+- `test-specialist`: escribe tests, quality-over-coverage, e2e obligatorio
+- `ui-specialist`: accessibility Compose, previews, strings hardcodeados
+- `release-guardian`: scan pre-release (debug flags, secrets, URLs dev)
 
----
+**Funciona sin:** MCP server, CI, Detekt. Los agentes funcionan standalone.
 
-### 7. Snippets de Código Compartidos en GitHub Gists Corporativo
-
-**Descripción:** Extraer los ejemplos de código de AndroidCommonDoc como snippets reutilizables en el entorno corporativo.
-
-**Implementación:**
-- Crear repositorio de snippets vinculado a AndroidCommonDoc
-- Organizar por categoría: ViewModel, Testing, Navigation, DI
-- Integrar como fuente adicional de Copilot para sugerencias contextuales
-
-**Beneficio:** Los desarrolladores tienen acceso directo a código ejemplo aprobado y actualizado.
+**Ideal para:** Equipos usando Claude Code que quieren workflows multi-agente estructurados.
 
 ---
 
-### 8. Revisiones de Código Asistidas por Copilot con Contexto de Patrones
+### Módulo 4: Copilot Instructions + Adaptador
 
-**Descripción:** Usar Copilot Chat en las revisiones de PR para verificar conformidad con los patrones documentados.
+**Qué:** Instrucciones custom para GitHub Copilot generadas desde patrones L0. Adaptador que convierte agentes Claude a prompts Copilot.
 
-**Implementación:**
-- Configurar Copilot Chat con acceso al repositorio AndroidCommonDoc
-- Crear prompts predefinidos: "¿Este PR sigue los patrones de ViewModel de AndroidCommonDoc?"
-- Documentar flujo de revisión asistida en la guía de contribución
+**Necesita:** GitHub Copilot Enterprise o Individual.
 
-**Beneficio:** Revisiones más profundas sin aumentar el tiempo invertido por los revisores.
+**Te da:**
+- Sugerencias de Copilot alineadas con patrones del equipo
+- Script adaptador: `adapters/copilot-agent-adapter.sh`
 
----
+**Funciona sin:** Claude Code, MCP, CI. Mejora pura de Copilot.
 
-### 9. Canal de Decisiones Arquitectónicas (ADR) en Teams
-
-**Descripción:** Registrar y discutir decisiones arquitectónicas vinculadas a AndroidCommonDoc en un canal dedicado de Teams.
-
-**Implementación:**
-- Canal "Decisiones Arquitectónicas" con formato estructurado (contexto, decisión, consecuencias)
-- Vincular cada ADR con el documento de AndroidCommonDoc que afecta
-- Historial consultable para entender el "por qué" detrás de cada patrón
-
-**Beneficio:** Transparencia en decisiones técnicas. Nuevos miembros entienden la evolución de los estándares.
+**Ideal para:** Equipos en Copilot que quieren sugerencias convention-aware.
 
 ---
 
-## Ideas a Medio Plazo (3-6 meses)
+### Módulo 5: Documentación de Patrones (97 docs)
 
-### 10. GitHub Actions para Validación Automática de Patrones
+**Qué:** 15 hubs de dominio, 55 sub-docs, 16 guías — todo con frontmatter YAML para integración con tooling. Cubre ViewModel, Compose, Navigation, Testing, DI, Offline-first, Security, Storage, arquitectura KMP.
 
-**Descripción:** Pipeline de CI/CD que valida automáticamente que el código nuevo cumple los patrones de AndroidCommonDoc.
+**Necesita:** Nada. Archivos Markdown legibles por cualquiera.
 
-**Implementación:**
-- Crear reglas de lint personalizadas basadas en los patrones documentados
-- Integrar detekt/ktlint con reglas custom: sealed interface para UiState, Result<T> para errores
-- GitHub Action que ejecuta validación en cada PR y reporta resultados
-- Bloquear merge si no se cumplen patrones críticos
+**Te da:**
+- Patrones de arquitectura con ejemplos de código
+- Anti-patrones con explicaciones
+- Assertions `validate_upstream` que verifican contra docs oficiales
 
-**Beneficio:** Cumplimiento automatizado de estándares. Reduce carga de revisión manual.
+**Funciona sin:** Todo lo demás. Conocimiento standalone.
 
-**Plazo estimado:** 2-3 meses para reglas básicas, iteración continua para cobertura completa.
-
----
-
-### 11. Portal Interno de Documentación con Búsqueda Inteligente
-
-**Descripción:** Desplegar AndroidCommonDoc como un sitio web interno (intranet) con búsqueda full-text y navegación mejorada.
-
-**Implementación:**
-- Usar MkDocs o Docusaurus desplegado en infraestructura interna (Azure App Service)
-- Configurar Azure AD para autenticación SSO
-- Búsqueda inteligente que entiende sinónimos técnicos
-- Versionado de documentación alineado con releases
-
-**Beneficio:** Experiencia de consulta superior a navegar archivos Markdown en GitHub directamente.
-
-**Plazo estimado:** 3-4 meses incluyendo aprobación de seguridad.
+**Ideal para:** Cualquier equipo que quiera estándares documentados y buscables.
 
 ---
 
-### 12. Integración con Azure DevOps Boards para Trazabilidad
+### Módulo 6: MCP Server (32 herramientas)
 
-**Descripción:** Vincular tareas de Azure DevOps/Jira con los patrones de AndroidCommonDoc que aplican a cada historia de usuario.
+**Qué:** Servidor Model Context Protocol con 32 tools — validación de patrones, health de módulos, grafos de dependencia, métricas, validación de docs, análisis de coverage.
 
-**Implementación:**
-- Campos custom en work items: "Patrones Aplicables" con enlace a documentos
-- Plantillas de historias de usuario que referencian patrones relevantes
-- Reportes de conformidad por sprint
+**Necesita:** Node.js 24+. Herramienta compatible MCP (Claude Desktop, Claude Code).
 
-**Beneficio:** Trazabilidad directa entre requisitos, implementación y estándares de calidad.
+**Te da:**
+- `audit-docs`: validación de docs en 3 waves
+- `monitor-sources`: detección de drift de versiones upstream
+- `module-health`: tests, coverage, complejidad por módulo
+- 29 herramientas más
 
-**Plazo estimado:** 2-3 meses para integración básica.
+**Funciona sin:** Agentes, CI, Copilot. Las herramientas CLI funcionan standalone.
 
----
-
-### 13. Formaciones Técnicas Estructuradas con Contenido de AndroidCommonDoc
-
-**Descripción:** Programa de formación interna basado en los documentos del repositorio, con sesiones grabadas y material interactivo.
-
-**Implementación:**
-- Crear módulos formativos por cada área: Arquitectura, ViewModel, Testing, KMP, Compose
-- Grabar sesiones y alojar en Microsoft Stream (integrado con Teams)
-- Ejercicios prácticos que requieren aplicar los patrones documentados
-- Sistema de certificación interna (badges en Viva Learning)
-
-**Beneficio:** Formación escalable y reutilizable. Inversión una vez, retorno continuo.
-
-**Plazo estimado:** 4-6 meses para programa completo.
+**Ideal para:** Equipos que quieren acceso programático a herramientas de validación.
 
 ---
 
-### 14. Dashboard de Adopción de Patrones en Power BI
+### Módulo 7: Dashboard de Coverage para Stakeholders
 
-**Descripción:** Visualizar métricas de adopción de los patrones documentados mediante un dashboard en Power BI conectado a GitHub.
+**Qué:** Pipeline CI que genera historial de coverage, lo almacena como artifacts, y alimenta un dashboard visible para stakeholders no técnicos.
 
-**Implementación:**
-- Extraer datos de GitHub API: PRs aprobadas, checks de patrones pasados/fallidos
-- Crear dataset en Power BI (ya disponible en la organización)
-- Compartir dashboard vía Teams para visibilidad del equipo
+**Necesita:** GitHub Actions + herramienta de visualización (Power BI, Grafana, o HTML simple).
 
-**Beneficio:** Dirección puede ver el progreso de adopción de estándares con datos reales, no percepciones.
+**Arquitectura:**
+```
+CI (cada PR/merge)                    Dashboard (semanal)
+┌──────────────────────┐              ┌──────────────────────┐
+│ ./gradlew koverXml   │              │ Power BI / Grafana   │
+│         ↓            │              │                      │
+│ Parsear XML reports  │──artifacts──▶│ Tendencias coverage  │
+│         ↓            │              │ Desglose por módulo  │
+│ Append a             │              │ Heatmap de riesgo    │
+│ coverage-history.json│              │ Sprint-over-sprint   │
+└──────────────────────┘              └──────────────────────┘
+```
 
-**Plazo estimado:** 3-4 meses (requiere que la validación automática de la idea 10 esté operativa para generar datos).
+**El dashboard muestra (para management):**
+- Tendencia overall de coverage (gráfico de línea con límites de sprint)
+- Desglose por módulo (barras, coloreado: verde >95%, amarillo >80%, rojo <80%)
+- Módulos de riesgo (tabla: menor coverage, más churn, menos tests)
+- Delta de sprint ("+2.3% este sprint, 3 módulos mejoraron, 1 regresó")
 
----
+**Funciona sin:** Agentes, MCP, docs. Pipeline CI + datos pura.
 
-## Ideas Futuras (1-2 años)
-
-### 15. Asistente IA Contextual con Claude/LLM Corporativo
-
-**Descripción:** Cuando la organización apruebe el uso de LLMs avanzados (Claude, GPT-4), desplegar un asistente que tenga AndroidCommonDoc como base de conocimiento y responda consultas en lenguaje natural.
-
-**Potencial:**
-- "¿Cómo debo manejar errores de red en la capa de datos?" → Respuesta contextualizada con nuestros patrones
-- Sugerencias de refactoring basadas en los estándares del equipo
-- Generación de boilerplate alineado con la arquitectura definida
-
-**Dependencia:** Aprobación de seguridad para uso de LLM con código fuente corporativo.
-
----
-
-### 16. Generación Automática de Tests Basada en Patrones
-
-**Descripción:** Usar IA para generar automáticamente tests que verifiquen el cumplimiento de los patrones documentados.
-
-**Potencial:**
-- Dado un ViewModel nuevo, generar tests que verifiquen: sealed interface UiState, StateFlow con WhileSubscribed, runTest
-- Dado un repositorio nuevo, generar tests de Result<T> y manejo de CancellationException
-- Integrar en CI/CD como "tests de conformidad"
-
-**Dependencia:** Madurez de herramientas de generación de tests con IA en entorno seguro.
+**Ideal para:** Equipos cuyo management quiere visibilidad de calidad sin leer código.
 
 ---
 
-### 17. Visión a Largo Plazo: IA Aplicada al Ciclo de Desarrollo
+### Módulo 8: Shell Scripts (28 scripts)
 
-**Descripción:** Conjunto de capacidades que dependen de la madurez de herramientas IA en entorno enterprise y de la aprobación corporativa.
+**Qué:** Scripts Bash cross-platform para testing, coverage, pattern linting, gestión de registro, git hooks. Probados en Windows (MSYS2) y Linux (CI).
 
-**Líneas de exploración:**
-- **Refactoring guiado por IA:** Seleccionar un módulo legacy → generar PR automático que alinee con patrones AndroidCommonDoc → revisión humana antes de merge (Copilot Workspace o equivalente)
-- **Análisis de deuda técnica:** Dashboard de "salud de patrones" por módulo con tendencia temporal, alertas cuando un módulo se desvía de los estándares
-- **Documentación auto-actualizada:** Detectar patrones emergentes en código, identificar documentación obsoleta, mantener ejemplos sincronizados con implementación real
+**Necesita:** Bash. Algunos scripts necesitan `jq`, `python3`, o `node`.
 
-**Dependencia:** Disponibilidad de herramientas IA en plan Enterprise + aprobación de seguridad corporativa + volumen de datos histórico suficiente.
+**Funciona sin:** Todo lo demás. Scripts standalone.
 
 ---
 
-## Tabla Resumen para Dirección
+## Mapa de Dependencias
 
-| # | Iniciativa | Horizonte | Esfuerzo | Impacto | Riesgo | Herramientas |
-|---|-----------|-----------|----------|---------|--------|-------------|
-| 1 | Instrucciones Copilot personalizadas | **Ahora** | Bajo | Alto | Bajo | GitHub Copilot |
-| 2 | Wiki de Teams sincronizada | **Ahora** | Bajo | Medio | Bajo | Teams, Power Automate |
-| 3 | Bot de Teams para consultas | **Ahora** | Medio | Alto | Bajo | Power Virtual Agents |
-| 4 | Plantillas de PR con checklist | **Ahora** | Bajo | Alto | Bajo | GitHub |
-| 5 | Onboarding automatizado | **Ahora** | Bajo | Alto | Bajo | Teams, Planner |
-| 6 | Alertas de actualización | **Ahora** | Bajo | Medio | Bajo | GitHub Webhooks, Teams |
-| 7 | Snippets corporativos | **Ahora** | Bajo | Medio | Bajo | GitHub, Copilot |
-| 8 | Revisiones asistidas por Copilot | **Ahora** | Bajo | Alto | Bajo | Copilot Chat |
-| 9 | Canal ADR en Teams | **Ahora** | Bajo | Medio | Bajo | Teams |
-| 10 | Validación automática CI/CD | **3-6 meses** | Alto | Muy Alto | Medio | GitHub Actions, detekt |
-| 11 | Portal interno de documentación | **3-6 meses** | Alto | Alto | Medio | MkDocs, Azure |
-| 12 | Trazabilidad Azure DevOps | **3-6 meses** | Medio | Medio | Bajo | Azure DevOps |
-| 13 | Formaciones técnicas | **3-6 meses** | Alto | Muy Alto | Bajo | Teams, Stream, Viva |
-| 14 | Dashboard Power BI de adopción | **3-6 meses** | Medio | Alto | Bajo | Power BI, GitHub API |
-| 15 | Asistente IA contextual | **1-2 años** | Muy Alto | Muy Alto | Alto | Claude/LLM, Azure AI |
-| 16 | Generación automática de tests | **1-2 años** | Alto | Alto | Medio | IA + CI/CD |
-| 17 | IA aplicada al ciclo de desarrollo | **1-2 años** | Muy Alto | Alto | Alto | Copilot Workspace, ML |
+```
+Independientes (sin deps):       Mejor juntos:
+┌─────────────────────┐        ┌─────────────────────────────┐
+│ Módulo 1: Detekt    │        │ Módulo 3 (Agentes)          │
+│ Módulo 5: Docs      │        │   ↕ usa                     │
+│ Módulo 8: Scripts   │        │ Módulo 6 (MCP) ← Módulo 2   │
+│ Módulo 4: Copilot   │        │   ↕ alimenta       (CI)     │
+│ Módulo 7: Dashboard │        │ Módulo 7 (Dashboard)        │
+└─────────────────────┘        └─────────────────────────────┘
+```
 
-### Leyenda de Impacto
-- **Muy Alto:** Transformación significativa en productividad o calidad
-- **Alto:** Mejora notable y medible
-- **Medio:** Mejora incremental valiosa
+## Puntos de Partida Recomendados
 
----
+| Situación del equipo | Empieza con | Siguiente |
+|---------------------|-------------|-----------|
+| "No tenemos estándares" | Módulo 5 (docs) + Módulo 1 (Detekt) | Módulo 8 (scripts) |
+| "Los PRs no tienen gates" | Módulo 2 (CI) + Módulo 1 (Detekt) | Módulo 7 (dashboard) |
+| "Usamos Claude Code" | Módulo 3 (agentes) + Módulo 6 (MCP) | Módulo 2 (CI) |
+| "Usamos Copilot" | Módulo 4 (Copilot) + Módulo 5 (docs) | Módulo 1 (Detekt) |
+| "Management quiere métricas" | Módulo 7 (dashboard) + Módulo 2 (CI) | Módulo 1 (Detekt) |
+| "Queremos todo" | Fork (Opción A), habilitar progresivamente | — |
 
-## Consideraciones de Seguridad
+## Consideraciones de Seguridad (Banca/Enterprise)
 
-Dado que operamos en el sector bancario, todas las propuestas respetan las siguientes restricciones:
+| Módulo | Exposición de datos | ¿Necesita aprobación? |
+|--------|--------------------|-----------------------|
+| 1. Detekt | Ninguna — corre local + CI | No |
+| 2. CI workflows | GitHub Actions (ya aprobado) | No |
+| 3. Agentes | Claude Code — código enviado a Anthropic API | **Sí** — LLM con código fuente |
+| 4. Copilot | Copilot Enterprise — código en tenant | Verificar política Copilot existente |
+| 5. Docs | Ninguna — Markdown estático | No |
+| 6. MCP server | Proceso Node.js local | No — salvo validación upstream (Jina) |
+| 7. Dashboard | Solo datos de coverage (sin código fuente) | No — métricas numéricas |
+| 8. Scripts | Ejecución local | No |
 
-| Restricción | Cómo se aborda |
-|-------------|----------------|
-| **Código fuente no puede salir del perímetro** | Copilot Enterprise / Azure OpenAI con tenant privado. Sin envío a APIs públicas |
-| **Autenticación corporativa obligatoria** | SSO vía Azure AD en todas las herramientas propuestas |
-| **Auditoría de accesos** | Logs completos en Azure AD + GitHub Audit Log |
-| **Datos sensibles en documentación** | AndroidCommonDoc contiene solo patrones técnicos, sin datos de negocio ni clientes |
-| **Aprobación de herramientas nuevas** | Las propuestas "Ahora" usan herramientas ya aprobadas (M365, GitHub Enterprise, Copilot) |
-| **Cumplimiento normativo (EBA, BCE)** | Las propuestas a medio/largo plazo incluyen fase de evaluación de cumplimiento. La EBA (Autoridad Bancaria Europea) y el BCE (Banco Central Europeo) exigen evaluación de riesgos antes de adoptar nuevas herramientas tecnológicas, especialmente si implican terceros o servicios cloud |
-
----
-
-## Próximos Pasos
-
-1. **Semana 1-2:** Implementar ideas 1, 4, 6 y 9 (esfuerzo bajo, impacto inmediato)
-2. **Mes 1:** Implementar ideas 2, 3, 5 (requieren configuración de Teams)
-3. **Mes 2-3:** Implementar ideas 7 y 8 (requieren integración más profunda)
-4. **Trimestre 2:** Iniciar ideas 10-14 con plan de proyecto formal
-5. **Continuo:** Evaluar madurez de herramientas IA para horizonte futuro (ideas 15-17)
-
-### Métricas de Éxito Propuestas
-- Reducción del tiempo de onboarding, medido como días hasta primera PR mergeada (objetivo: -40%)
-- Porcentaje de PRs que pasan validación automática de patrones a la primera (objetivo: >60% en T1, >80% en T2)
-- Reducción de PRs rechazadas por incumplimiento de estándares (objetivo: -40%)
-- Satisfacción del equipo con la documentación (encuesta trimestral, objetivo: >4/5)
-
----
-
-*Documento generado a partir del repositorio [AndroidCommonDoc](https://github.com/) -- Marzo 2026*
+**Módulo 3 (Agentes) y Módulo 6 con validación upstream son los únicos que envían datos externamente.** Todo lo demás corre localmente o dentro de infraestructura corporativa existente.
