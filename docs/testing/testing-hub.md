@@ -19,7 +19,7 @@ monitor_urls:
 rules:
   - id: no-default-dispatcher-in-tests
     type: banned-usage
-    message: "Tests must inject TestDispatcher; never use Dispatchers.Default directly"
+    message: "Tests must inject TestDispatcher; never use Dispatchers.Default directly (exception: benchmarks — see testing-patterns-benchmarks)"
     detect:
       in_source_set: commonTest
       banned_expression: "Dispatchers.Default"
@@ -37,7 +37,7 @@ rules:
     source_rule: NoHardcodedDispatchersRule.kt
   - id: no-launch-in-init
     type: banned-usage
-    message: "launch {} inside init {} is dangerous � move to a named function"
+    message: "launch {} inside init {} is dangerous � move to a named function"
     detect:
       in_init_block: true
       banned_call: launch
@@ -71,6 +71,7 @@ Standard patterns for testing Kotlin Multiplatform projects.
 | [testing-patterns-fakes](testing-patterns-fakes.md) | Fake patterns — FakeRepository, FakeClock, why fakes over mocks |
 | [testing-patterns-coverage](testing-patterns-coverage.md) | Coverage — Kover config, thresholds, platform tests |
 | [testing-patterns-schedulers](testing-patterns-schedulers.md) | Scheduler testing — advancing time, virtual clocks |
+| [testing-patterns-benchmarks](testing-patterns-benchmarks.md) | Benchmark patterns — dispatcher selection, androidx vs kotlinx-benchmark |
 
 ## Key Rules
 

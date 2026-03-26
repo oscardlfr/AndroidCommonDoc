@@ -70,6 +70,7 @@ This document is split into focused sub-docs for token-efficient loading:
 - **[testing-patterns-schedulers](testing-patterns-schedulers.md)**: Scheduler testing -- triggerNow pattern, lifecycle tests, backoff/retry, test configs, interruption scenarios
 - **[testing-patterns-fakes](testing-patterns-fakes.md)**: Fake and test double patterns -- FakeRepository, FakeClock, FakeLogger, why fakes over mocks
 - **[testing-patterns-coverage](testing-patterns-coverage.md)**: Coverage and CI patterns -- Kover config, coverage targets by layer, platform-specific tests, MainDispatcherRule
+- **[testing-patterns-benchmarks](testing-patterns-benchmarks.md)**: Benchmark patterns -- dispatcher selection for coroutine benchmarks, androidx.benchmark vs kotlinx-benchmark, runTest vs runBlocking(Dispatchers.Default)
 
 ---
 
