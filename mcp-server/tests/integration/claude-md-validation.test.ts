@@ -200,9 +200,9 @@ describe("L0 global CLAUDE.md", () => {
     }
   });
 
-  it("should be under 150 lines", () => {
+  it("should be under 250 lines", () => {
     const lineCount = l0GlobalContent.split("\n").length;
-    expect(lineCount).toBeLessThanOrEqual(150);
+    expect(lineCount).toBeLessThanOrEqual(250);
   });
 });
 

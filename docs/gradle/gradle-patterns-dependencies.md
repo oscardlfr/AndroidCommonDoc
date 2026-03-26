@@ -10,7 +10,7 @@ monitor_urls:
   - url: "https://github.com/gradle/gradle/releases"
     type: github-releases
     tier: 1
-description: "Dependency management: version catalogs, composite builds, default hierarchy template, anti-patterns"
+description: "Dependency management: version catalogs, imported catalogs, composite builds, build-time vs runtime complementarity, enterprise API/impl split, anti-patterns"
 slug: gradle-patterns-dependencies
 status: active
 layer: L0
@@ -24,6 +24,10 @@ rules:
       forbidden_pattern: ".*:.*:.*"
       prefer: "flat-kebab-case"
     hand_written: false
+  - id: catalog-first
+    type: workflow-rule
+    message: "Check imported catalogs (sharedLibs) before adding deps to local libs.versions.toml"
+    hand_written: true
 
 ---
 
@@ -61,6 +65,49 @@ kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref 
 - Group related dependencies
 - Use version references (version.ref)
 - Keep Android-specific deps in separate local catalog
+
+## 1b. Importing Catalogs from Composite Builds
+
+When consuming a shared library via composite build, import its version catalog to avoid duplicating dependency versions:
+
+### settings.gradle.kts (consuming project)
+
+```kotlin
+includeBuild("../shared-kmp-libs") {
+    dependencySubstitution {
+        substitute(module("com.example.shared:core-result"))
+            .using(project(":core-result"))
+    }
+}
+
+dependencyResolutionManagement {
+    versionCatalogs {
+        create("sharedLibs") {
+            from(files("../shared-kmp-libs/gradle/libs.versions.toml"))
+        }
+    }
+}
+```
+
+This gives the consuming project two catalogs:
+- `libs` — local `gradle/libs.versions.toml` (project-specific deps)
+- `sharedLibs` — imported from the shared library (shared deps)
+
+### Usage
+
+```kotlin
+// Module build.gradle.kts
+dependencies {
+    implementation(sharedLibs.kotlinx.coroutines.core)  // from shared catalog
+    implementation(libs.app.specific.dep)                // from local catalog
+}
+```
+
+### Catalog-First Rule
+
+Before adding ANY dependency to local `libs.versions.toml`, check if it already exists in `sharedLibs`. Prefer the shared catalog to prevent version drift between projects sharing the same foundation.
+
+> **Note**: `sharedLibs` is the L0 convention name (configurable per project). Plugin aliases from imported catalogs may not work in `plugins {}` blocks on some Gradle versions; library aliases work without issue.
 
 ## 2. Default Hierarchy Template
 
@@ -114,6 +161,19 @@ includeBuild("../your-shared-libs") {
 - No need for Maven publishing during development
 - Type-safe dependency resolution
 
+### Build-Time vs Runtime (Complementarity)
+
+Composite builds and `SharedSdk.init()` serve orthogonal roles that coexist without conflict:
+
+| Layer | Mechanism | What it does |
+|-------|-----------|-------------|
+| **Build-time** (Gradle) | `includeBuild` + `dependencySubstitution` | Makes modules visible for compilation |
+| **Runtime** (DI) | `SharedSdk.init(modules, config)` | Wires implementations, creates Koin DI graph |
+
+A composite build makes `core-encryption` available to compile against. `SharedSdk.init()` creates the actual `EncryptionService` instance at app startup. Both are required; neither replaces the other.
+
+> See also: [DI App Startup](../di/di-patterns-modules.md) for the runtime wiring pattern.
+
 ## 4. Anti-Patterns
 
 ### Nested Module Names
@@ -160,6 +220,31 @@ kotlin {
     }
 }
 ```
+
+## 5. Enterprise Scale: API/Impl Split with runtimeOnly
+
+For SDKs consumed by many apps, split each feature into API and impl modules:
+
+```
+core-encryption-api/    ← interfaces only (EncryptionService)
+core-encryption-impl/   ← implementation (AesEncryptionService)
+```
+
+### Consumer's build.gradle.kts
+
+```kotlin
+dependencies {
+    implementation(sharedLibs.core.encryption.api)       // compile against interface
+    runtimeOnly(sharedLibs.core.encryption.impl)         // impl on classpath, invisible in code
+}
+```
+
+**Why `runtimeOnly`**: The consumer's code never imports impl classes. If someone tries `import ...impl.AesEncryptionService`, the compiler fails. Only `SharedSdk.init()` discovers and wires `runtimeOnly` implementations at runtime via Koin.
+
+**When to use**: Multiple consuming apps that need implementation swappability. For single-app projects, plain `implementation` is simpler.
+
+> Deep dive: [SDK Consumer Isolation](../archive/di-sdk-consumer-isolation.md) -- Level 2 (Interface + auto-discovery).
+> Runtime wiring: [DI App Startup](../di/di-patterns-modules.md) -- SharedSdk.init().
 
 ---
 
