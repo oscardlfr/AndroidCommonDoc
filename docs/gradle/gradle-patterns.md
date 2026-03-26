@@ -19,14 +19,7 @@ monitor_urls:
     type: maven-central
     tier: 1
 category: gradle
-rules:
-  - id: flat-module-names
-    type: naming-convention
-    message: "Module names must be flat kebab-case (core-json-api), not nested (core:json:api) -- AGP 9+ bug"
-    detect:
-      forbidden_pattern: ".*:.*:.*"
-      prefer: "flat-kebab-case"
-    hand_written: false
+# Rules live in sub-docs (gradle-patterns-dependencies.md is authoritative)
 
 ---
 
@@ -54,7 +47,7 @@ Standard Gradle patterns for Kotlin Multiplatform projects. A shared version cat
 
 This document is split into focused sub-docs for token-efficient loading:
 
-- **[gradle-patterns-dependencies](gradle-patterns-dependencies.md)**: Dependency management -- version catalogs, composite builds, api() vs implementation(), anti-patterns
+- **[gradle-patterns-dependencies](gradle-patterns-dependencies.md)**: Dependency management -- version catalogs, imported catalogs, composite builds, enterprise API/impl split, anti-patterns
 - **[gradle-patterns-conventions](gradle-patterns-conventions.md)**: Convention plugins -- build-logic structure, KmpLibraryConventionPlugin, AGP 9.0 patterns
 - **[gradle-patterns-publishing](gradle-patterns-publishing.md)**: Kover coverage -- configuration, verification rules, task reference, integration with coverage skills
 
@@ -67,6 +60,7 @@ This document is split into focused sub-docs for token-efficient loading:
 | Version catalog | All dependency versions |
 | Convention plugin | Shared module configuration |
 | Composite build | Cross-project module sharing |
+| Imported catalog | Consuming shared deps from composite build |
 | Flat module names | Always (AGP 9+ bug with nested) |
 | `commonMain/composeResources/` | All Compose resources |
 
