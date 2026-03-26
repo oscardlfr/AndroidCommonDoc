@@ -99,7 +99,7 @@ dependencies {
 
 ### Module 3: AI Agent System (Claude Code)
 
-**What:** 15 specialized agents + 5 templates for multi-agent development. Dev-lead orchestrates, specialists (test, UI, security, release) execute domain-specific tasks.
+**What:** 20 specialized agents + 5 templates for multi-agent development. Dev-lead orchestrates, specialists (test, UI, security, release) execute domain-specific tasks.
 
 **Requires:** Claude Code (Anthropic). Agents are `.md` files in `.claude/agents/`.
 
@@ -108,7 +108,7 @@ dependencies {
 - `test-specialist`: writes tests, enforces quality-over-coverage, mandatory e2e
 - `ui-specialist`: Compose accessibility, previews, hardcoded strings
 - `release-guardian`: pre-release safety scan (debug flags, secrets, dev URLs)
-- `full-audit-orchestrator`: runs 15 agents in waves with dedup
+- `full-audit-orchestrator`: runs specialized agents in waves with dedup
 
 **Install:** Copy `.claude/agents/` and `.claude/settings.json` to your project. Customize the dev-lead with your module map.
 
@@ -139,7 +139,7 @@ dependencies {
 
 ### Module 5: Pattern Documentation (97 docs)
 
-**What:** 15 domain hubs, 55 sub-docs, 16 guides, 6 agent workflow docs — all with YAML frontmatter for tooling integration. Covers ViewModel, Compose, Navigation, Testing, DI, Offline-first, Security, Storage, KMP architecture.
+**What:** 15 domain hubs, 88+ sub-docs, 16 guides, 8 agent workflow docs — all with YAML frontmatter for tooling integration. Covers ViewModel, Compose, Navigation, Testing, DI, Offline-first, Security, Storage, KMP architecture.
 
 **Requires:** Nothing. Markdown files readable by anyone.
 

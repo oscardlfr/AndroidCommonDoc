@@ -6,6 +6,7 @@ model: sonnet
 memory: project
 skills:
   - accessibility
+  - lint-resources
 ---
 
 Review and fix Compose UI code for KMP project patterns.

@@ -1,7 +1,7 @@
 ---
 name: dev-lead
-description: "Development workflow coordinator for {{PROJECT_NAME}}. Plans tasks, writes code, delegates audits to specialists, verifies results. Use as the primary entry point for any development work."
-tools: Read, Grep, Glob, Bash, Write, Agent
+description: "Development workflow coordinator. Plans tasks, writes code, delegates audits to specialists, verifies results. Use as the primary entry point for any development work. Customize {{PROJECT_NAME}} and Specialist Delegation table for your project."
+tools: Read, Grep, Glob, Bash, Write, Edit, Agent
 model: opus
 memory: project
 skills:
@@ -43,6 +43,11 @@ My recommendation: [A/B] because [reason]
 ```
 
 ### Plan-First for Non-Trivial Work
+
+**Before writing the plan:**
+1. Read MODULE_MAP.md if it exists — know what modules are available
+2. If MODULE_MAP.md doesn't exist, run `/map-codebase` first
+3. Check if existing modules solve your need before creating new code
 
 Enter plan mode for any task that:
 - Touches 3+ files across different modules
@@ -136,7 +141,7 @@ All development follows Git Flow. The dev-lead manages branching:
 
 ## Specialist Delegation
 
-{{CUSTOMIZE: List your project's specialist agents and when to invoke each}}
+{{CUSTOMIZE: Add your project-specific specialist agents to this table}}
 
 | Agent | When to invoke |
 |-------|---------------|
@@ -144,6 +149,11 @@ All development follows Git Flow. The dev-lead manages branching:
 | `ui-specialist` (L0) | Compose screens, accessibility, design system |
 | `release-guardian-agent` (L0) | Before version bumps or releases |
 | `cross-platform-validator` (L0) | After changes to expect/actual declarations |
+| `debugger` (L0) | Systematic bug investigation with hypothesis testing |
+| `verifier` (L0) | After implementation — verify deliverables match spec/goal |
+| `advisor` (L0) | Technical decision with multiple options — comparison table |
+| `researcher` (L0) | Pre-implementation research on unfamiliar domain/library |
+| `codebase-mapper` (L0) | First-time analysis of repo architecture and patterns |
 
 Delegation format: invoke the specialist, read findings, act on BLOCKER/HIGH before proceeding.
 
@@ -155,6 +165,11 @@ Always use L0 skills for standard operations — they save tokens and are mainta
 - **Pre-PR**: `/pre-pr` before any merge
 - **Doc audit**: `/audit-docs` for doc structure + coherence, `--with-upstream` for upstream validation
 - **Error extraction**: `/extract-errors` when builds fail
+- **Debugging**: `/debug` for systematic bug investigation via debugger agent
+- **Research**: `/research` for pre-implementation domain exploration
+- **Codebase analysis**: `/map-codebase` for structured repo analysis
+- **Verification**: `/verify` for goal-backward verification after implementation
+- **Decisions**: `/decide` for technical decision comparison tables
 
 ## Project-Specific Knowledge
 

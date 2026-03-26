@@ -380,10 +380,10 @@ try {
 
         if ($attempt -eq 2) {
             $clean = $true; $stop = $true
-            # Also stop shared-libs daemons (composite build)
-            $sharedPath = Join-Path (Split-Path $ProjectRoot -Parent) "shared-libs"
+            # Also stop shared-kmp-libs daemons (composite build)
+            $sharedPath = Join-Path (Split-Path $ProjectRoot -Parent) "shared-kmp-libs"
             if (Test-Path $sharedPath) {
-                Write-Host "Stopping shared-libs daemons..." -ForegroundColor Gray
+                Write-Host "Stopping shared-kmp-libs daemons..." -ForegroundColor Gray
                 Push-Location $sharedPath
                 & ./gradlew --stop 2>&1 | Out-Null
                 & ./gradlew clean --console=plain 2>&1 | Out-Null

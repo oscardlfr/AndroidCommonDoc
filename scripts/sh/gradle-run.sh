@@ -380,10 +380,10 @@ while [[ $attempt -le $max_attempts ]]; do
     if [[ $attempt -eq 2 ]]; then
         clean="true"
         stop="true"
-        # Also stop shared-libs daemons (composite build)
-        shared_path="$(dirname "$PROJECT_ROOT")/shared-libs"
+        # Also stop shared-kmp-libs daemons (composite build)
+        shared_path="$(dirname "$PROJECT_ROOT")/shared-kmp-libs"
         if [[ -d "$shared_path" ]]; then
-            echo -e "${color_gray}Stopping shared-libs daemons...${color_reset}"
+            echo -e "${color_gray}Stopping shared-kmp-libs daemons...${color_reset}"
             (
                 cd "$shared_path"
                 ./gradlew --stop >/dev/null 2>&1 || true

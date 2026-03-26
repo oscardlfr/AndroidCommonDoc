@@ -31,14 +31,16 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, dev-lead o
 | [agent-consumption-guide](agent-consumption-guide.md) | How agents load and use pattern docs (frontmatter, assumes_read, hub scanning) |
 | [capability-detection](capability-detection.md) | Graceful degradation for optional tools in agent definitions |
 | [script-vs-agent-decision](script-vs-agent-decision.md) | Decision framework: when a script is better than an agent |
+| [spec-driven-workflow](spec-driven-workflow.md) | Spec-driven agent workflow: debugger, verifier, advisor, researcher, codebase-mapper |
 
 ## Key Concepts
 
 - **CLAUDE.md** = workflow instructions (< 80 lines). Contains Agent Roster → triggers agent delegation.
 - **`.claude/agents/`** = specialist definitions. Canonical source. Synced via `/sync-l0`.
 - **`.claude/agents/`** = canonical agent definitions. Used by both Claude Code and GSD/pi.
-- **`.gsd/agents/`** = mirror for GSD/pi users. Synced via `/sync-gsd-agents`. Not needed if using Claude Code only.
+- **`.gsd/agents/`** = mirror for GSD/pi users (optional). Synced via `/sync-gsd-agents`. Not needed if using Claude Code only.
 - **dev-lead** = adaptive orchestrator. Inline for simple tasks, delegates for complex ones.
+- **Spec-driven agents** = 5 new agents (debugger, verifier, advisor, researcher, codebase-mapper) for autonomous research, decision-making, and codebase exploration.
 - **Skills** = token-efficient script wrappers. Always prefer over manual agent work.
 
 ## Rules

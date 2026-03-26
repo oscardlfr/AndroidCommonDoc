@@ -31,6 +31,8 @@ These are **starting points** — adapt to your project's specific modules, cons
 | Template | Purpose |
 |----------|---------|
 | `feature-domain-specialist.md` | Domain-specific architecture auditor (customize per domain) |
+| `product-strategist.md` | ICE-scored feature prioritization and milestone planning |
+| `content-creator.md` | Build-in-public marketing content (Reddit, Twitter, changelogs) |
 
 ## Conventions
 

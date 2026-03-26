@@ -10,7 +10,7 @@ monitor_urls:
   - url: "https://github.com/InsertKoinIO/koin/releases"
     type: github-releases
     tier: 2
-description: "DI module declaration patterns: Koin modules, koinViewModel, Dagger/Hilt ViewModel injection, KMP platform modules, hybrid patterns"
+description: "DI module declaration patterns: Koin modules, koinViewModel, SharedSdk.init() runtime wiring, Dagger/Hilt ViewModel injection, KMP platform modules, hybrid patterns"
 slug: di-patterns-modules
 status: active
 layer: L0
@@ -65,20 +65,39 @@ fun SnapshotListScreen(
 }
 ```
 
-### App Startup
+### App Startup — SharedSdk.init()
+
+The recommended startup pattern uses `SharedSdk.init()` as the single entry point for runtime DI wiring. It creates an isolated `koinApplication` (Koin 4.x), registers SDK modules and optional app modules, and exposes `SharedSdk.koin` for resolution.
 
 ```kotlin
-// Application or main entry point — uses isolated koinApplication (Koin 4.x)
-// For SDKs: koinApplication {} (isolated). For apps: startKoin {} (global) is acceptable.
-fun initKoin(): KoinApplication {
-    return koinApplication {
-        modules(
-            coreModule,
-            networkModule,
-            snapshotModule,
-            // ... all feature modules
-        )
-    }
+// Application entry point (L2 app)
+SharedSdk.init(
+    modules = setOf(
+        SdkModule.Encryption.Default,
+        SdkModule.Network.Ktor,
+        SdkModule.Io.KotlinxIo,
+    ),
+    config = SdkConfig(debug = BuildConfig.DEBUG),
+    appModules = listOf(dataModule, domainModule, viewModelModule),
+)
+
+// Resolve from the shared graph
+val koin = SharedSdk.koin
+```
+
+`SharedSdk.init()` is the **runtime** counterpart to Gradle composite builds (**build-time**). Both are required; neither replaces the other.
+
+> Authoritative reference: [Build-Time vs Runtime](../gradle/gradle-patterns-dependencies.md) — complementarity table and full explanation.
+> Deep dive: [Koin SDK + Dagger App hybrid](../archive/di-hybrid-koin-sdk-dagger-app.md) -- bridge pattern for Hilt consumers.
+
+### Fallback — Standalone Apps
+
+For projects **without** a shared SDK layer:
+
+```kotlin
+// Direct koinApplication (acceptable for single-app projects)
+fun initKoin(): KoinApplication = koinApplication {
+    modules(coreModule, networkModule, snapshotModule)
 }
 ```
 

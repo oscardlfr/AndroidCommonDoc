@@ -15,7 +15,7 @@ set -euo pipefail
 #
 # Examples:
 #   ./check-version-sync.sh --projects "../MyProject,../MyApp"
-#   ./check-version-sync.sh --source-of-truth "../shared-libs" --output-format json
+#   ./check-version-sync.sh --source-of-truth "../shared-kmp-libs" --output-format json
 #   ./check-version-sync.sh --from-manifest versions-manifest.json --projects "../MyApp"
 
 # --- Color helpers ---
@@ -30,7 +30,7 @@ GRAY='\033[90m'
 RESET='\033[0m'
 
 # --- Argument parsing ---
-SOURCE_OF_TRUTH="../shared-libs"
+SOURCE_OF_TRUTH="../shared-kmp-libs"
 FROM_MANIFEST=""
 PROJECTS_ARG=""
 OUTPUT_FORMAT="human"

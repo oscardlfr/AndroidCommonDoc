@@ -14,6 +14,8 @@ l0_requires: ANDROID_COMMON_DOC
 /test-full --test-type androidUnit
 /test-full --skip-tests --min-lines 5
 /test-full --max-failures 3
+/test-full --benchmark
+/test-full --benchmark --benchmark-config main
 ```
 
 ## Parameters
@@ -26,6 +28,8 @@ Uses parameters from `params.json`:
 - `min-missed-lines` -- Only show classes with >= N missed lines (default: 0).
 - `skip-tests` -- Skip test execution, use existing coverage data.
 - `coverage-tool` -- Coverage tool: `jacoco`, `kover`, `auto`, `none`.
+- `benchmark` -- Run benchmarks after tests/coverage (default: off).
+- `benchmark-config` -- Benchmark config: `smoke` (default), `main`, `stress`.
 - `project-root` -- Path to the project root directory.
 
 ## Behavior
@@ -40,6 +44,7 @@ Uses parameters from `params.json`:
 4. Generate coverage report per module.
 5. Produce consolidated coverage summary and gap analysis.
 6. Save comprehensive Markdown report to `coverage-full-report.md`.
+7. If `--benchmark`: run benchmark suite, parse JSON results, save `benchmark-report.md`.
 
 **CRITICAL:** Do NOT read XML coverage files directly. Trust the script output.
 
@@ -64,6 +69,8 @@ $maxFailures = 0
 $minLines = 0
 $skipTests = $false
 $coverageTool = ""
+$benchmark = $false
+$benchmarkConfig = "smoke"
 
 for ($i = 0; $i -lt $argList.Count; $i++) {
     $arg = $argList[$i]
@@ -81,6 +88,10 @@ for ($i = 0; $i -lt $argList.Count; $i++) {
         $skipTests = $true
     } elseif ($arg -eq "--coverage-tool" -and $i + 1 -lt $argList.Count) {
         $coverageTool = $argList[$i + 1]; $i++
+    } elseif ($arg -eq "--benchmark") {
+        $benchmark = $true
+    } elseif ($arg -eq "--benchmark-config" -and $i + 1 -lt $argList.Count) {
+        $benchmarkConfig = $argList[$i + 1]; $i++
     }
 }
 
@@ -95,6 +106,7 @@ if ($testType -ne "") { $params.TestType = $testType }
 if ($includeShared) { $params.IncludeShared = $true }
 if ($skipTests) { $params.SkipTests = $true }
 if ($coverageTool -ne "") { $params.CoverageTool = $coverageTool }
+if ($benchmark) { $params.Benchmark = $true; $params.BenchmarkConfig = $benchmarkConfig }
 
 & "$commonDoc\scripts\ps1\run-parallel-coverage-suite.ps1" @params
 ```
@@ -115,4 +127,4 @@ if ($coverageTool -ne "") { $params.CoverageTool = $coverageTool }
 
 - Pattern: `docs/testing-patterns.md`
 - Script: `scripts/sh/run-parallel-coverage-suite.sh`, `scripts/ps1/run-parallel-coverage-suite.ps1`
-- Related: `/test` (single module), `/coverage` (gap analysis), `/auto-cover` (auto-generate tests)
+- Related: `/test` (single module), `/coverage` (gap analysis), `/auto-cover` (auto-generate tests), `/benchmark` (standalone benchmarks)

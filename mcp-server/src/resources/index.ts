@@ -9,10 +9,12 @@ import { registerDocResources } from "./docs.js";
 import { registerSkillResources } from "./skills.js";
 import { registerChangelogResource } from "./changelog.js";
 import { registerGsdResources } from "./gsd.js";
+import { registerAgentResources } from "./agents.js";
 
 export async function registerResources(server: McpServer): Promise<void> {
   await registerDocResources(server);
   registerSkillResources(server);
   registerChangelogResource(server);
   await registerGsdResources(server);
+  registerAgentResources(server);
 }
