@@ -25,11 +25,12 @@ DI architecture research and enterprise deployment proposals. These are referenc
 | [di-cross-feature-deps](di-cross-feature-deps.md) | Cross-feature dependencies: how each approach resolves Feature A needing Feature B |
 | [di-hybrid-koin-sdk-dagger-app](di-hybrid-koin-sdk-dagger-app.md) | Hybrid: Koin SDK consumed by Dagger/Hilt apps via bridge module |
 
-## CI Standalone
+## CI & Commit Lint
 
 | Document | Description |
 |----------|-------------|
-| [commit-lint-ci-standalone](commit-lint-ci-standalone.md) | Guía para adoptar Commit Lint en CI sin depender de AndroidCommonDoc (Spanish) |
+| [commit-lint-ci-standalone](commit-lint-ci-standalone.md) | Commit Lint en CI — GitHub Actions standalone, cero dependencias (Spanish) |
+| [commit-lint-android-studio-hooks](commit-lint-android-studio-hooks.md) | Commit Lint local — git hooks distribuidos con Gradle para Android Studio (Spanish) |
 
 ## Enterprise
 
