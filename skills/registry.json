@@ -10,7 +10,7 @@
       "description": "Audit web accessibility against WCAG 2.1. Use when asked about a11y, WCAG compliance, or screen reader support.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:b794d38a5edf81e4a8dc45be74d2372895fc3f47d26947ebef643575f34ba9c0",
+      "hash": "sha256:c88484494c012dfb2ae554a960547d8dd2a9503b26107880bae23e5a63f3d5f9",
       "dependencies": [],
       "frontmatter": {
         "name": "accessibility",
@@ -116,7 +116,7 @@
       "description": "Generate tests for uncovered code paths. Use when asked to increase coverage or auto-generate tests for a module.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:2c8ca0550ceafcd2f7150db3bd10ff18474741c52d0d5000da9851c883c94199",
+      "hash": "sha256:8e9695dda3cc91ee095fc1b3d297900976fdc1f701223bc34abc5a030b6ace02",
       "dependencies": [],
       "frontmatter": {
         "name": "auto-cover",
@@ -162,7 +162,7 @@
       "description": "Web security, compatibility, and code quality patterns. Background knowledge for CSP, HTTPS, deprecated APIs, and modern standards.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:105e368efab083701d45316cef4afc0170815ee1cce1ca0c3e8d627d087954fd",
+      "hash": "sha256:c33ea5087cd518bd9848bda75a50a932633d9a5e97684d6e6ffd424a891dbd7c",
       "dependencies": [],
       "frontmatter": {
         "name": "best-practices",
@@ -204,7 +204,7 @@
       "description": "LCP, INP, and CLS optimization reference. Background knowledge for Core Web Vitals thresholds and fixes.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:07dbfb16b98d2376b1ef8789434d470c5d4b2391d68e5a60e227506a9157f198",
+      "hash": "sha256:78e699e55d6ecdf573acea7c85e203a4c2e91dbdd10610b0e043a9af461577da",
       "dependencies": [],
       "frontmatter": {
         "name": "core-web-vitals",
@@ -295,7 +295,7 @@
       "description": "Reorganize docs/ into category subdirectories using frontmatter. Use when asked to restructure or reorganize documentation.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:603244658f00b0838da7f3a8cbcfdc7a754530e3895ba8ebaf070fac5f545114",
+      "hash": "sha256:9ecf5dbf8ed435792fd258a62eef00d6937cea237e75810d029f5e72dcb0f29d",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-reorganize",
@@ -405,7 +405,7 @@
       "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:c7cf970a0677e98b08eafd619b3d27655a4bdd23eff7d15b94fa5bbd7ac0e560",
+      "hash": "sha256:42d9d07479b576668fb2d19f85147e3139daf40292de3255a74f27ce06fc0957",
       "dependencies": [],
       "frontmatter": {
         "name": "ingest-content",
@@ -496,7 +496,7 @@
       "description": "Web performance optimization patterns (loading, caching, images, fonts). Background knowledge for page speed improvements.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:660338f8e479a4d150ac1aa49ee2ed643df024fddfe90c8da5cb8b6ce30703ba",
+      "hash": "sha256:de4f1c083beb650f64808f350ee48ae626d72ca7ae68f949396f49765378010b",
       "dependencies": [],
       "frontmatter": {
         "name": "performance",
@@ -684,7 +684,7 @@
       "description": "SEO optimization patterns (meta tags, structured data, crawlability). Background knowledge for search engine visibility.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:6298cf92a39ee453413ea2185688e3aee83c81d165d98592a8e5ef4dfa86dc83",
+      "hash": "sha256:658dea9d477b5c77081652810c4847ccc314c4a1400ec321920a1bfab1b8e1ce",
       "dependencies": [],
       "frontmatter": {
         "name": "seo",
@@ -792,7 +792,7 @@
       "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:382f9cd616404e3304bc079be57173b35882940b43e69d0abad8ac6ff35ba650",
+      "hash": "sha256:b1f454344315b1bd045d57791a474a14e03a1315da11f2330fa9a8b620722fe3",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
@@ -813,7 +813,7 @@
       "description": "Sync documentation into Obsidian vault with L0/L1/L2 hierarchy. Use when asked to update, initialize, or clean the knowledge vault.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:eed9480846b5dc59ae316e329f9c30c73b1421214ceccb94fae7ece76068a0ec",
+      "hash": "sha256:d5724ca34a4c7ec29f127c1103e91faa1d392a438bebdfb526e3b365f7e901e8",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-vault",
@@ -1031,7 +1031,7 @@
       "description": "Run comprehensive web quality audit (performance, a11y, SEO, best practices). Use when asked to audit a website or run Lighthouse.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:7ae1e80d8e1ebd75f36e094bee8ef034260cdbf95a00df76195bb1c91f34d032",
+      "hash": "sha256:d3c6bcd8e178668a0791e33c3fb740e98bb4d13fb2306d024701fd64512d6bdb",
       "dependencies": [],
       "frontmatter": {
         "name": "web-quality-audit",
@@ -1084,7 +1084,7 @@
       "description": "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:7f276e4586fba4e37abdcfdfa75d3b5d423ee89b4c31b226f70f369b7683ef29",
+      "hash": "sha256:e8aeca5d78018f7c0574abcd3463e4e0a57ec616d6f1b89c8ca9c4ba1aa9b029",
       "dependencies": [],
       "frontmatter": {
         "name": "beta-readiness-agent",
@@ -1117,7 +1117,7 @@
       "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:3e67bfd6b835b29530e15cbd308b5b3be74f2f5c4789f01da4024cd256f71e54",
+      "hash": "sha256:dd72c2060ed2397ea6c2f70d51ff833523732aa7b82ef5a603d70d02cef9c254",
       "dependencies": [],
       "frontmatter": {
         "name": "cross-platform-validator",
@@ -1157,7 +1157,7 @@
       "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:6e3ecaff025374a4ca30756e6b11fc7bcda25435def29e9205c4f632071e0e85",
+      "hash": "sha256:f58d71e2c7dc27eb6bd383e07179a0eb00127e984257fa2f1038cca333c6bcaf",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-alignment-agent",
@@ -1178,7 +1178,7 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Detects drift between docs/*.md pattern documentation and what scripts/skills actually implement. Flags outdated patterns, missing validations, and version mismatches.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:de4db046dbf6ba4403e8675dbc4dc147a8771ef11a663a77eef149ed400b8764",
+      "hash": "sha256:b95edeaf3f98925f0ec7118d38a3ca9a0720075804ddc36674ba4b52c1ada7e4",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-code-drift-detector",
@@ -1252,7 +1252,7 @@
       "description": "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:842d880164dabfd2e29c4ecf7ba5da32dd89a5d2ab2a5f79527ebac6c4305783",
+      "hash": "sha256:86081978e3987ec71dbafbd4e0b9c37d5d14091e8a2cfa88f76fe4a13b0cd2c2",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gate-orchestrator",
@@ -1269,7 +1269,7 @@
       "description": "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:ded3158d621aeeff8fdc5fe010d0d59004f4bf0835c8ae00f56b07c6a6f704cc",
+      "hash": "sha256:2908cec55349c9aa557b6efd13cfb620d5cb447175fa4ffc90c2fbd62f5e39e9",
       "dependencies": [],
       "frontmatter": {
         "name": "release-guardian-agent",
@@ -1306,7 +1306,7 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that PowerShell and Bash script pairs are functionally equivalent. Checks flags, output format, and exit codes between scripts/ps1/ and scripts/sh/.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:981fb96e64ebbeacafe6826ce6853da8d645f95939ce85edf85d1181682fb40a",
+      "hash": "sha256:a8349229b5da288c062448647e4b1e1a0b46d420276f6b97176a82e4ab3e88b9",
       "dependencies": [],
       "frontmatter": {
         "name": "script-parity-validator",
@@ -1323,7 +1323,7 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:2875816b24305adc25a1e668737be0b3f58a2947f2c419923b289bb5e15683d0",
+      "hash": "sha256:1b9d7840e030dce10d30644dbaa0709ed502512d7fcf8c50ed0877f83a496a61",
       "dependencies": [],
       "frontmatter": {
         "name": "skill-script-alignment",
@@ -1340,7 +1340,7 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Checks every command has a wrapper template and a Copilot prompt.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:2c665d39b7be377e0544175a1b1652a9af7e5444367c064c80c3e5419395157b",
+      "hash": "sha256:ec4ac20d9dac3b25da2d17e6957966043e43f8a436e23949f6ed83b43872e6f8",
       "dependencies": [],
       "frontmatter": {
         "name": "template-sync-validator",
