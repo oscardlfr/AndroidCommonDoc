@@ -245,8 +245,8 @@ function determineRecommendedLayer(relativePath, content, classification) {
 
   // Conservative L0 promotion: ONLY if pattern is clearly from official docs
 
-  // Check for L1 candidates (shared-libs conventions)
-  if (contentLower.includes('shared-libs') || contentLower.includes('shared libs')) {
+  // Check for L1 candidates (shared-kmp-libs conventions)
+  if (contentLower.includes('shared-kmp-libs') || contentLower.includes('shared libs')) {
     return 'L1';
   }
 

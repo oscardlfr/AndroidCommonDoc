@@ -4,13 +4,13 @@
 
 .DESCRIPTION
     This script parses libs.versions.toml files from multiple projects and compares
-    them against a source of truth (shared-libs by default). It reports:
+    them against a source of truth (shared-kmp-libs by default). It reports:
     - Version discrepancies
     - Missing dependencies
     - Outdated versions
 
 .PARAMETER SourceOfTruth
-    Path to the project that defines canonical versions (default: shared-libs)
+    Path to the project that defines canonical versions (default: shared-kmp-libs)
 
 .PARAMETER Projects
     Array of project paths to compare against the source of truth
@@ -25,12 +25,12 @@
     ./check-version-sync.ps1 -Projects @("../MyApp", "../MyProject")
 
 .EXAMPLE
-    ./check-version-sync.ps1 -SourceOfTruth "../shared-libs" -Projects @("../MyApp") -OutputFormat json
+    ./check-version-sync.ps1 -SourceOfTruth "../shared-kmp-libs" -Projects @("../MyApp") -OutputFormat json
 #>
 
 param(
     [Parameter(Mandatory = $false)]
-    [string]$SourceOfTruth = "../shared-libs",
+    [string]$SourceOfTruth = "../shared-kmp-libs",
 
     [Parameter(Mandatory = $false)]
     [string[]]$Projects = @(),

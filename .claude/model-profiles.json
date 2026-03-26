@@ -7,7 +7,7 @@
       "overrides": {}
     },
     "balanced": {
-      "description": "Haiku for static/grep-like checks, Sonnet for cross-file reasoning — default",
+      "description": "Haiku for static/grep-like checks, Sonnet for cross-file reasoning, Opus for debugging — default",
       "default_model": "sonnet",
       "overrides": {
         "script-parity-validator": "haiku",
@@ -28,7 +28,8 @@
         "beta-readiness-agent": "opus",
         "cross-platform-validator": "opus",
         "privacy-auditor": "opus",
-        "test-specialist": "opus"
+        "test-specialist": "opus",
+        "debugger": "opus"
       }
     },
     "quality": {
