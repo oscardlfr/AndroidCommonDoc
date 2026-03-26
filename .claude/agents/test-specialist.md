@@ -9,6 +9,7 @@ skills:
   - test-full-parallel
   - coverage
   - extract-errors
+  - benchmark
 optional_capabilities:
   - context7
   - mcp-monitor

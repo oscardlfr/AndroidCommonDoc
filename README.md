@@ -17,7 +17,7 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custo
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
 - **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 22 cross-platform pairs + 4 Bash-only utilities
-- **AI agent skills** for Claude Code and GitHub Copilot -- 42 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
+- **AI agent skills** for Claude Code and GitHub Copilot -- 50 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 17 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
@@ -28,7 +28,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
 - **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, and architecture guards
-- **15 specialized agents** for quality gates, release readiness, cross-platform validation, privacy auditing, and unified audit orchestration
+- **20 specialized agents** for quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
 
 Install once, use across all your projects.
 
@@ -113,10 +113,10 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 | What | Destination | Count |
 |------|-------------|-------|
-| Skills | `.claude/skills/*/SKILL.md` | 42 |
-| Agents | `.claude/agents/*.md` | 15 |
-| Commands | `.claude/commands/*.md` | 27 |
-| **Total** | | **84 entries** |
+| Skills | `.claude/skills/*/SKILL.md` | 50 |
+| Agents | `.claude/agents/*.md` | 20 |
+| Commands | `.claude/commands/*.md` | 34 |
+| **Total** | | **104 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -124,7 +124,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 82 L0 entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 104 L0 entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -391,7 +391,7 @@ Real-time pattern enforcement during AI-assisted development:
 
 ## Skills Reference
 
-42 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
+50 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
@@ -444,12 +444,25 @@ These are the skills that get materialized to your `.claude/skills/` directory v
 | `/validate-patterns` | Validate code against documented architecture patterns | Android + KMP |
 | `/verify-kmp` | Validate KMP source set rules, imports, and expect/actual contracts | KMP only |
 
+#### Research & Decision
+
+| Skill | What it does |
+|-------|-------------|
+| `/debug` | Autonomous bug diagnosis -- logs, errors, root cause, fix, verify |
+| `/research` | Deep research on a topic using multiple sources and synthesis |
+| `/map-codebase` | Map codebase structure, dependencies, and architecture |
+| `/verify` | Verify implementation correctness against spec or requirements |
+| `/decide` | Decision framework -- pros/cons analysis with recommendation |
+| `/note` | Capture structured notes and observations during work |
+| `/review-pr` | Review pull request for quality, patterns, and correctness |
+| `/benchmark` | Performance benchmark with per-platform Gradle config |
+
 #### Audit & Reporting
 
 | Skill | What it does |
 |-------|-------------|
 | `/audit` | Quality trend report -- coverage, Detekt, tests, CVEs. Reads existing log, zero extra runs |
-| `/full-audit` | **Unified audit** -- wave-based execution, 15 agents + scripts, 3-pass dedup, consolidated report |
+| `/full-audit` | **Unified audit** -- wave-based execution, specialized agents + scripts, 3-pass dedup, consolidated report |
 
 #### Web Development
 
@@ -484,9 +497,9 @@ Skills primarily useful when working on AndroidCommonDoc (L0) itself:
 
 ## Agents
 
-15 specialized agents in `.claude/agents/`. All synced to downstream projects. Claude Code auto-delegates to these agents based on their `description:` field — configure delegation rules in your CLAUDE.md [Agent Roster](docs/agents/claude-md-template.md).
+20 specialized agents in `.claude/agents/`. All synced to downstream projects. Claude Code auto-delegates to these agents based on their `description:` field — configure delegation rules in your CLAUDE.md [Agent Roster](docs/agents/claude-md-template.md).
 
-**6 audit-only agents** (read-only). **2 audit+implement agents** (can write code). **5 quality gate agents** (internal). **2 orchestrators**.
+**6 audit-only agents** (read-only). **2 audit+implement agents** (can write code). **5 quality gate agents** (internal). **2 orchestrators**. **5 spec-driven agents** (debugger, verifier, advisor, researcher, codebase-mapper).
 
 ### Domain Agents
 
@@ -694,7 +707,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-15 domain hubs, 55 sub-docs, 16 guides, 6 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
+15 domain hubs, 88+ sub-docs, 16 guides, 8 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
 
 | Hub | Covers | Platform |
 |-----|--------|----------|
@@ -725,7 +738,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (84 entries,     |   |
+                   |  | SKILL.md |    | (104 entries,    |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -752,13 +765,13 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 27 Claude Code slash commands
-|   +-- agents/             # 15 specialized agents
+|   +-- commands/           # 34 Claude Code slash commands
+|   +-- agents/             # 20 specialized agents
 |   +-- hooks/              # Real-time Detekt enforcement hooks
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
-|   +-- */SKILL.md          # 42 canonical skill definitions
-|   +-- registry.json       # L0 registry (84 entries, SHA-256 hashes)
+|   +-- */SKILL.md          # 50 canonical skill definitions
+|   +-- registry.json       # L0 registry (104 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
@@ -810,7 +823,7 @@ AndroidCommonDoc/
 |   +-- reusable-architecture-guards.yml     # workflow_call: Konsist guards
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
-+-- docs/                   # 15 hub docs, 55 sub-docs, 16 guides, 6 agent workflow docs
++-- docs/                   # 15 hub docs, 88+ sub-docs, 16 guides, 8 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/

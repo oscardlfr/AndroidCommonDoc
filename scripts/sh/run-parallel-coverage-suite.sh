@@ -61,7 +61,7 @@ Required:
   --project-root <path>       Path to the main project root.
 
 Options:
-  --include-shared            Include shared-libs modules.
+  --include-shared            Include shared-kmp-libs modules.
   --test-type <type>          all | common | androidUnit | androidInstrumented | desktop
   --module-filter <pattern>   Filter modules (wildcards/comma-separated). Default: *
   --skip-tests                Skip test execution, regenerate coverage only.
@@ -75,6 +75,8 @@ Options:
   --coverage-tool <tool>      Coverage tool: auto (default) | jacoco | kover | none
   --exclude-coverage <list>   Comma-separated modules to exclude from coverage (still tested).
   --timeout <seconds>         Timeout for test execution. Default: 600
+  --benchmark                 Run benchmarks after tests/coverage (default: off).
+  --benchmark-config <name>   Benchmark config: smoke (default) | main | stress
   -h | --help                 Show this help.
 USAGE
     exit 0
@@ -100,6 +102,8 @@ while [[ $# -gt 0 ]]; do
         --coverage-tool)      COVERAGE_TOOL="$2"; shift 2 ;;
         --exclude-coverage)   EXCLUDE_COVERAGE="$2"; shift 2 ;;
         --timeout)            TIMEOUT="$2"; shift 2 ;;
+        --benchmark)          BENCHMARK=true; shift ;;
+        --benchmark-config)   BENCHMARK_CONFIG="$2"; shift 2 ;;
         -h|--help)            usage ;;
         *) err "[ERROR] Unknown option: $1"; exit 1 ;;
     esac
@@ -115,10 +119,10 @@ fi
 # ---------------------------------------------------------------------------
 SKIP_DESKTOP_MODULES="androidApp shared-ios iosApp macosApp"
 SKIP_ANDROID_MODULES="desktopApp"
-PARENT_ONLY_MODULES="shared-libs shared-libs:core-json shared-libs:core-io shared-libs:core-network"
+PARENT_ONLY_MODULES="shared-kmp-libs shared-kmp-libs:core-json shared-kmp-libs:core-io shared-kmp-libs:core-network"
 # Modules that run tests but should NOT generate coverage reports
 # (test utilities, guard tests, app shells without meaningful coverage)
-AUTO_EXCLUDE_COVERAGE_PATTERNS=("*:testing" "*:test-fakes" "*:test-fixtures" "konsist-guard" "konsist-tests" "detekt-rules*" "*detekt-rules*")
+AUTO_EXCLUDE_COVERAGE_PATTERNS=("*:testing" "*:test-fakes" "*:test-fixtures" "konsist-guard" "konsist-tests" "detekt-rules*" "*detekt-rules*" "benchmark" "benchmark-*" "desktopApp")
 
 IFS=',' read -ra CORE_ONLY_MODULES <<< "$COVERAGE_MODULES"
 # Trim whitespace from each element (bash builtins instead of sed subshell)
@@ -361,7 +365,7 @@ fi
 # ============================================================================
 
 # We store module info in parallel arrays (bash 3.2 compatible associative-array workaround)
-declare -a MOD_NAMES=()   # Display name (may include shared-libs: prefix)
+declare -a MOD_NAMES=()   # Display name (may include shared-kmp-libs: prefix)
 declare -a MOD_PATHS=()   # Filesystem path
 declare -a MOD_PROJ=()    # Project path this module belongs to
 declare -a MOD_SHORT=()   # Short name (last segment)
@@ -377,17 +381,17 @@ PROJ_PATHS+=("$PROJECT_ROOT")
 PROJ_PREFIXES+=("")
 
 if $INCLUDE_SHARED; then
-    SHARED_LIBS_PATH="$(cd "$(dirname "$PROJECT_ROOT")/shared-libs" 2>/dev/null && pwd)"
+    SHARED_LIBS_PATH="$(cd "$(dirname "$PROJECT_ROOT")/shared-kmp-libs" 2>/dev/null && pwd)"
     PROJECT_ROOT_RESOLVED="$(cd "$PROJECT_ROOT" && pwd)"
     if [[ -n "$SHARED_LIBS_PATH" && -d "$SHARED_LIBS_PATH" && "$SHARED_LIBS_PATH" != "$PROJECT_ROOT_RESOLVED" ]]; then
-        PROJ_NAMES+=("shared-libs")
+        PROJ_NAMES+=("shared-kmp-libs")
         PROJ_PATHS+=("$SHARED_LIBS_PATH")
-        PROJ_PREFIXES+=("shared-libs:")
-        ok "[+] Including shared-libs: $SHARED_LIBS_PATH"
+        PROJ_PREFIXES+=("shared-kmp-libs:")
+        ok "[+] Including shared-kmp-libs: $SHARED_LIBS_PATH"
     elif [[ "$SHARED_LIBS_PATH" == "$PROJECT_ROOT_RESOLVED" ]]; then
-        warn "[~] shared-libs IS the project root - skipping duplicate"
+        warn "[~] shared-kmp-libs IS the project root - skipping duplicate"
     else
-        warn "[!] shared-libs not found at: $(dirname "$PROJECT_ROOT")/shared-libs"
+        warn "[!] shared-kmp-libs not found at: $(dirname "$PROJECT_ROOT")/shared-kmp-libs"
     fi
 fi
 
@@ -495,9 +499,9 @@ for mi in "${!MOD_NAMES[@]}"; do
 
     is_shared=false
     short_mod="${MOD_NAMES[$mi]}"
-    if [[ "$short_mod" == shared-libs:* ]]; then
+    if [[ "$short_mod" == shared-kmp-libs:* ]]; then
         is_shared=true
-        short_mod="${short_mod#shared-libs:}"
+        short_mod="${short_mod#shared-kmp-libs:}"
     fi
     gradle_path=":${short_mod}"
 
@@ -675,10 +679,10 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
             pkill -f "GradleWorkerMain" 2>/dev/null || true
             sleep 2
 
-            # Cross-project clean: shared-libs first, then main project
-            SHARED_PATH="$(dirname "$PROJECT_ROOT")/shared-libs"
+            # Cross-project clean: shared-kmp-libs first, then main project
+            SHARED_PATH="$(dirname "$PROJECT_ROOT")/shared-kmp-libs"
             if [[ -d "$SHARED_PATH" ]]; then
-                warn "[RECOVERY] Stopping daemons in shared-libs..."
+                warn "[RECOVERY] Stopping daemons in shared-kmp-libs..."
                 (cd "$SHARED_PATH" && ./gradlew --stop 2>&1 >/dev/null) || true
             fi
             warn "[RECOVERY] Stopping daemons in $PROJECT_NAME..."
@@ -711,9 +715,9 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
         mod_name="${MOD_NAMES[$idx]}"
         is_shared=false
         short_mod="$mod_name"
-        if [[ "$short_mod" == shared-libs:* ]]; then
+        if [[ "$short_mod" == shared-kmp-libs:* ]]; then
             is_shared=true
-            short_mod="${short_mod#shared-libs:}"
+            short_mod="${short_mod#shared-kmp-libs:}"
         fi
         gradle_path=":${short_mod}"
 
@@ -864,11 +868,11 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
         fi
     fi
 
-    # Run shared-libs coverage tasks
+    # Run shared-kmp-libs coverage tasks
     if [[ "${#COV_TASKS_SHARED[@]}" -gt 0 ]]; then
         SHARED_LIBS_PATH=""
         for pi in "${!PROJ_NAMES[@]}"; do
-            if [[ "${PROJ_NAMES[$pi]}" == "shared-libs" ]]; then
+            if [[ "${PROJ_NAMES[$pi]}" == "shared-kmp-libs" ]]; then
                 SHARED_LIBS_PATH="${PROJ_PATHS[$pi]}"
                 break
             fi
@@ -877,7 +881,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
             COV_ARGS_SHARED=("${COV_TASKS_SHARED[@]}" "--parallel" "--continue" "--rerun-tasks")
             if [[ "$MAX_WORKERS" -gt 0 ]]; then COV_ARGS_SHARED+=("--max-workers=$MAX_WORKERS"); fi
 
-            info "  [>] Generating shared-libs coverage (${#COV_TASKS_SHARED[@]} modules)..."
+            info "  [>] Generating shared-kmp-libs coverage (${#COV_TASKS_SHARED[@]} modules)..."
             COV_EXIT_SHARED=0
             (cd "$SHARED_LIBS_PATH" && ./gradlew "${COV_ARGS_SHARED[@]}" 2>&1) || COV_EXIT_SHARED=$?
 
@@ -885,7 +889,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                 # Check if --continue saved us
                 COV_XML_COUNT_S=0
                 for idx in "${TESTABLE_INDICES[@]}"; do
-                    [[ "${MOD_NAMES[$idx]}" != shared-libs:* ]] && continue
+                    [[ "${MOD_NAMES[$idx]}" != shared-kmp-libs:* ]] && continue
                     mod_tool="${MOD_COV_TOOL[$idx]:-}"
                     [[ -z "$mod_tool" || "$mod_tool" == "none" ]] && continue
                     xml_check="$(get_coverage_xml_path "$mod_tool" "${MOD_PATHS[$idx]}" "$IS_DESKTOP" 2>/dev/null)" || true
@@ -902,7 +906,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                         COV_OK_S="${#COV_TASKS_SHARED[@]}"
                     else
                         for idx in "${TESTABLE_INDICES[@]}"; do
-                            [[ "${MOD_NAMES[$idx]}" != shared-libs:* ]] && continue
+                            [[ "${MOD_NAMES[$idx]}" != shared-kmp-libs:* ]] && continue
                             mod_tool="${MOD_COV_TOOL[$idx]:-}"
                             [[ -z "$mod_tool" || "$mod_tool" == "none" ]] && continue
                             xml_check="$(get_coverage_xml_path "$mod_tool" "${MOD_PATHS[$idx]}" "$IS_DESKTOP" 2>/dev/null)" || true
@@ -917,10 +921,10 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                     fi
                 fi
             else
-                ok "  [OK] shared-libs coverage reports generated (${#COV_TASKS_SHARED[@]} modules)"
+                ok "  [OK] shared-kmp-libs coverage reports generated (${#COV_TASKS_SHARED[@]} modules)"
             fi
         else
-            warn "  [!] shared-libs not found for coverage"
+            warn "  [!] shared-kmp-libs not found for coverage"
         fi
     fi
 
@@ -1162,8 +1166,8 @@ gray "$(printf -- '-%.0s' {1..70})"
 
 # Print main modules
 while IFS='|' read -r name covered missed total pct; do
-    # Skip shared-libs modules (print them separately below)
-    if [[ "$name" == shared-libs:* ]]; then continue; fi
+    # Skip shared-kmp-libs modules (print them separately below)
+    if [[ "$name" == shared-kmp-libs:* ]]; then continue; fi
     display_name="$name"
     if [[ "${#display_name}" -gt 46 ]]; then
         display_name="${display_name:0:43}..."
@@ -1176,10 +1180,10 @@ while IFS='|' read -r name covered missed total pct; do
     printf_color "$color" "%-48s %10s %8s\n" "$display_name" "$cov_str" "$missed"
 done < <(sort "$MODULE_SUMMARIES_FILE")
 
-# Print shared-libs modules
+# Print shared-kmp-libs modules
 HAS_SHARED=false
 while IFS='|' read -r name covered missed total pct; do
-    if [[ "$name" != shared-libs:* ]]; then continue; fi
+    if [[ "$name" != shared-kmp-libs:* ]]; then continue; fi
     if ! $HAS_SHARED; then
         gray "$(printf -- '-%.0s' {1..70})"
         HAS_SHARED=true
@@ -1328,6 +1332,17 @@ else
 fi
 _extra='"coverage_pct":'"${GRAND_COVERAGE:-0}"',"modules_total":'"${TESTABLE_COUNT:-0}"',"modules_passed":'"${SUCCESS_COUNT:-0}"',"modules_at_100":'"${MODULES_AT_100:-0}"',"missed_lines":'"${GRAND_MISSED:-0}"',"duration_s":'"${FINAL_DUR:-0}"',"detekt_violations":'"${DETEKT_VIOLATIONS}"',"detekt_rules_fired":'"${DETEKT_RULES_FIRED}"
 audit_append "$PROJECT_ROOT" "coverage" "$_audit_result" "$_extra"
+
+# ---------------------------------------------------------------------------
+# OPTIONAL BENCHMARK EXECUTION
+# ---------------------------------------------------------------------------
+if ${BENCHMARK:-false}; then
+    echo ""
+    info "[>] Running benchmarks (config: ${BENCHMARK_CONFIG:-smoke})..."
+    BENCH_ARGS="--project-root $PROJECT_ROOT --config ${BENCHMARK_CONFIG:-smoke}"
+    if $INCLUDE_SHARED; then BENCH_ARGS="$BENCH_ARGS --include-shared"; fi
+    "$SCRIPT_DIR/run-benchmarks.sh" $BENCH_ARGS || warn "[!] Benchmark execution had failures"
+fi
 
 # Exit code
 if [[ "$FAILURE_COUNT" -gt 0 ]]; then

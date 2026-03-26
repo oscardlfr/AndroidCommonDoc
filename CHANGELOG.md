@@ -3,6 +3,31 @@
 All notable changes to AndroidCommonDoc are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
+## [1.4.0] - 2026-03-26
+
+### Added
+- **Spec-driven agent ecosystem**: 5 new L0 agents for native Claude Code workflow
+  - `debugger`: Scientific debugging with hypothesis testing (`/debug`)
+  - `verifier`: Goal-backward verification against specs (`/verify`)
+  - `advisor`: Technical decision comparison tables (`/decide`)
+  - `researcher`: Ad-hoc technical research (`/research`)
+  - `codebase-mapper`: Structured repo architecture analysis (`/map-codebase`)
+- **7 new skills**: `/debug`, `/research`, `/map-codebase`, `/verify`, `/decide`, `/note`, `/review-pr`
+- **Benchmark infrastructure**: `/benchmark` skill with JVM/Android detection, runner scripts (sh+ps1)
+- **Spec-driven workflow doc**: `docs/agents/spec-driven-workflow.md` — native Claude Code flow without GSD
+- **2 new agent templates**: `product-strategist` (ICE scoring), `content-creator` (build-in-public)
+- **Coverage suite fixes**: Kover exclude patterns for benchmark/desktopApp modules
+- **Bug fix**: `shared-libs` → `shared-kmp-libs` rename across 9 scripts
+
+### Changed
+- **GSD decoupled**: Behavioral isolation via CLAUDE.md rules — `gsd-*` agents blocked from native invocation
+- **Hooks cleaned**: 3 GSD-only hooks removed from settings.json, 2 renamed (context-monitor, prompt-guard)
+- **GSD workflow-guard disabled**: No longer nudges toward GSD workflow
+- **6 DawSync-specific agents moved** from user-global to `DawSync/.claude/agents/`
+- **dev-lead template updated**: References 5 new agents + 5 new skills in delegation table
+- **CLAUDE.md (L0)**: New agent roster with 11 agents, 15 commands documented
+- **Skills 42→50**, agents 15→20, templates 4→6, commands 27→34
+
 ## [1.3.0] - 2026-03-23
 
 ### Added

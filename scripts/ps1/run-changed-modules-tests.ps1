@@ -12,13 +12,13 @@
     - Uses `git status --porcelain` to find changed files
     - Maps file paths to Gradle modules
     - Filters out modules without build.gradle.kts
-    - Optionally includes shared-libs changes
+    - Optionally includes shared-kmp-libs changes
 
 .PARAMETER ProjectRoot
     Path to the project root. Required.
 
 .PARAMETER IncludeShared
-    Include changes in shared-libs when detecting modules.
+    Include changes in shared-kmp-libs when detecting modules.
 
 .PARAMETER TestType
     Test type to run: "all", "common", "androidUnit", "androidInstrumented", "desktop".
@@ -45,7 +45,7 @@
     ./run-changed-modules-tests.ps1 -ProjectRoot "C:\Projects\MyApp" -ShowModulesOnly
 
 .EXAMPLE
-    # Only staged files, include shared-libs
+    # Only staged files, include shared-kmp-libs
     ./run-changed-modules-tests.ps1 -ProjectRoot "C:\Projects\MyApp" -StagedOnly -IncludeShared
 
 .NOTES
@@ -177,11 +177,11 @@ function Find-ChangedModules {
         }
     }
 
-    # Filter out shared-libs if not included
+    # Filter out shared-kmp-libs if not included
     if (-not $IncludeShared) {
         $filteredModules = @{}
         foreach ($key in $modules.Keys) {
-            if ($key -notmatch 'shared-libs') {
+            if ($key -notmatch 'shared-kmp-libs') {
                 $filteredModules[$key] = $modules[$key]
             }
         }
@@ -223,7 +223,7 @@ if ($changedModules.Count -eq 0) {
     Write-Host "Possible reasons:" -ForegroundColor Gray
     Write-Host "  - No changes in module source directories" -ForegroundColor Gray
     Write-Host "  - Changes only in non-module files (root scripts, etc.)" -ForegroundColor Gray
-    Write-Host "  - Use --include-shared to include shared-libs changes" -ForegroundColor Gray
+    Write-Host "  - Use --include-shared to include shared-kmp-libs changes" -ForegroundColor Gray
     exit 0
 }
 

@@ -138,7 +138,7 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 | API contracts | `docs/core-{module}/` |
 | Git Flow full branch diagram | `README.md` Development section |
 | Pattern details (PHANTOM→FULL, StateFlow events) | `docs/architecture/patterns-*.md` |
-| Temporal context (active sprints, tracks) | `.gsd/milestones/` |
+| Temporal context (active sprints, tracks) | Plan Mode, Memory (native) — primary; `.gsd/milestones/` (optional) |
 | Command `--help` details | `skills/*/SKILL.md` (each skill carries its own docs) |
 | CI workflow details | `.github/workflows/` |
 | Sub-project listing | `README.md` Ecosystem section |
@@ -161,7 +161,7 @@ CLAUDE.md                    .claude/agents/dev-lead.md
          │                              │
          ▼                              ▼
    .claude/agents/                   Claude Code reads these natively.
-   (canonical definitions)           GSD/pi mirrors to .gsd/agents/
+   (canonical definitions)           GSD/pi mirrors (optional) to .gsd/agents/
 ```
 
 The CLAUDE.md Agent Roster is the **discovery** mechanism. Without it, Claude Code uses generic agents (Explore, Plan, Code) instead of your specialists.

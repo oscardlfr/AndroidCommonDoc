@@ -20,8 +20,13 @@
 | `ui-specialist` | Compose UI | ANY change to Compose code — accessibility, Material3 |
 | `doc-alignment-agent` | Doc accuracy | After code changes — verify docs match implementation |
 | `release-guardian-agent` | Release safety | Before ANY publish — debug flags, secrets, dev URLs |
-| `full-audit-orchestrator` | Quality audit | `/full-audit` — wave execution, 15 agents, 3-pass dedup |
+| `full-audit-orchestrator` | Quality audit | `/full-audit` — wave execution, specialized agents, 3-pass dedup |
 | `quality-gate-orchestrator` | Consistency | Quality gate runs — all 5 validators + pass/fail report |
+| `debugger` | Bug investigation | Systematic bugs needing hypothesis testing — `/debug` |
+| `verifier` | Goal verification | After feature completion — verify spec is met — `/verify` |
+| `advisor` | Technical decisions | Choosing between approaches/libraries — `/decide` |
+| `researcher` | Domain research | Pre-implementation exploration — `/research` |
+| `codebase-mapper` | Architecture analysis | First-time repo analysis — `/map-codebase` |
 
 ### 3. Verification Before Done
 - MCP tool change → full Vitest suite + verify with `sync-vault`
@@ -66,11 +71,21 @@
 - `/validate-patterns` — code vs pattern compliance
 - `/sync-l0` — propagate skills/agents/commands to L1/L2
 - `/generate-rules` — emit Detekt rules from doc frontmatter
+- `/debug` — systematic bug investigation via debugger agent
+- `/research` — ad-hoc technical research via researcher agent
+- `/map-codebase` — structured codebase analysis via codebase-mapper agent
+- `/verify` — goal-backward verification via verifier agent
+- `/decide` — technical decision comparison via advisor agent
+- `/note` — zero-friction idea capture to memory
+- `/review-pr` — code review of a PR with structured suggestions
+- `/benchmark` — run benchmark suites (JVM/Android)
 
 ## Doc Consultation
 - Vault sync → `mcp-server/src/vault/` (transformer, moc-generator, wikilink-generator)
 - New skill → `skills/sync-vault/SKILL.md` as canonical example
 - L0→L1/L2 propagation → `skills/sync-l0/SKILL.md`
-- Pattern docs → `docs/` with category hubs (15 domains, 55 sub-docs)
+- Pattern docs → `docs/` with category hubs (15 domains, 88+ sub-docs)
 - Upstream validation → `docs/guides/upstream-validation.md` (validate_upstream frontmatter)
 - Detekt rules → `detekt-rules/` + `docs/guides/detekt-config.md`
+- Spec-driven workflow → `docs/agents/spec-driven-workflow.md`
+- Agent templates → `setup/agent-templates/` (dev-lead, product-strategist, content-creator)

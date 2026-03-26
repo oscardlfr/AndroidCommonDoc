@@ -19,7 +19,7 @@
     Path to the main project root. Required.
 
 .PARAMETER IncludeShared
-    Include shared-libs modules in test execution and coverage report.
+    Include shared-kmp-libs modules in test execution and coverage report.
 
 .PARAMETER TestType
     Test type: "common", "desktop", "androidUnit", "androidInstrumented", "all".
@@ -83,7 +83,10 @@ param(
     [int]$Timeout = 600,
     [ValidateSet("jacoco", "kover", "auto", "none")]
     [string]$CoverageTool = "auto",
-    [string]$ExcludeCoverage = ""
+    [string]$ExcludeCoverage = "",
+    [switch]$Benchmark,
+    [ValidateSet("smoke", "main", "stress")]
+    [string]$BenchmarkConfig = "smoke"
 )
 
 $ErrorActionPreference = "Continue"
@@ -100,10 +103,10 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SkipDesktopModules = @("androidApp", "shared-ios", "iosApp", "macosApp")
 $SkipAndroidModules = @("desktopApp")
 $ParentOnlyModules = @(
-    "shared-libs",
-    "shared-libs:core-json",
-    "shared-libs:core-io",
-    "shared-libs:core-network"
+    "shared-kmp-libs",
+    "shared-kmp-libs:core-json",
+    "shared-kmp-libs:core-io",
+    "shared-kmp-libs:core-network"
 )
 $CoreOnlyModules = $CoverageModules.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
 
@@ -365,20 +368,20 @@ $projectsToProcess = @(
 )
 
 if ($IncludeShared) {
-    $sharedLibsPath = Join-Path (Split-Path $ProjectRoot -Parent) "shared-libs"
+    $sharedLibsPath = Join-Path (Split-Path $ProjectRoot -Parent) "shared-kmp-libs"
     $sharedLibsResolved = (Resolve-Path $sharedLibsPath -ErrorAction SilentlyContinue).Path
     $projectRootResolved = (Resolve-Path $ProjectRoot).Path
     if ($sharedLibsResolved -and (Test-Path $sharedLibsResolved) -and ($sharedLibsResolved -ne $projectRootResolved)) {
         $projectsToProcess += [PSCustomObject]@{
-            Name = "shared-libs"
+            Name = "shared-kmp-libs"
             Path = $sharedLibsResolved
-            Prefix = "shared-libs:"
+            Prefix = "shared-kmp-libs:"
         }
-        Write-Host "[+] Including shared-libs: $sharedLibsResolved" -ForegroundColor Green
+        Write-Host "[+] Including shared-kmp-libs: $sharedLibsResolved" -ForegroundColor Green
     } elseif ($sharedLibsResolved -eq $projectRootResolved) {
-        Write-Host "[~] shared-libs IS the project root - skipping duplicate" -ForegroundColor DarkYellow
+        Write-Host "[~] shared-kmp-libs IS the project root - skipping duplicate" -ForegroundColor DarkYellow
     } else {
-        Write-Host "[!] shared-libs not found at: $sharedLibsPath" -ForegroundColor Yellow
+        Write-Host "[!] shared-kmp-libs not found at: $sharedLibsPath" -ForegroundColor Yellow
     }
 }
 
@@ -442,7 +445,7 @@ Write-Host ""
 # BUILD TASK LISTS
 # ============================================================================
 
-# Separate task lists by project (main vs shared-libs)
+# Separate task lists by project (main vs shared-kmp-libs)
 # Use List<T> for O(1) amortized appends instead of O(N) array += copies
 $testTasks = [System.Collections.Generic.List[string]]::new()
 $testTasksShared = [System.Collections.Generic.List[string]]::new()
@@ -469,8 +472,8 @@ foreach ($module in $allModules) {
 
     $testableModules.Add($module)
 
-    $isShared = $module.Name.StartsWith("shared-libs:")
-    $shortMod = if ($isShared) { $module.Name.Substring("shared-libs:".Length) } else { $module.Name }
+    $isShared = $module.Name.StartsWith("shared-kmp-libs:")
+    $shortMod = if ($isShared) { $module.Name.Substring("shared-kmp-libs:".Length) } else { $module.Name }
     # Convert colon-separated module path to Gradle task path
     $gradlePath = ":$($shortMod -replace ':', ':')"
 
@@ -499,7 +502,7 @@ foreach ($module in $allModules) {
     $skipCov = $false
 
     # Auto-exclude patterns (built-in)
-    $autoExcludePatterns = @("*:testing", "*:test-fakes", "*:test-fixtures", "konsist-guard", "konsist-tests", "detekt-rules*", "*detekt-rules*")
+    $autoExcludePatterns = @("*:testing", "*:test-fakes", "*:test-fixtures", "konsist-guard", "konsist-tests", "detekt-rules*", "*detekt-rules*", "benchmark", "benchmark-*", "desktopApp")
     $modNameClean = $module.Name.TrimStart(':')
     foreach ($pattern in $autoExcludePatterns) {
         if ($modNameClean -like $pattern) {
@@ -575,7 +578,7 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
     Write-Host "========================================" -ForegroundColor Yellow
     Write-Host ""
 
-    # Build Gradle command — main project tasks run from MyApp (composite build resolves shared-libs)
+    # Build Gradle command — main project tasks run from MyApp (composite build resolves shared-kmp-libs)
     $gradleArgs = @()
     $gradleArgs += $allTestTasks
     $gradleArgs += "--parallel"
@@ -652,10 +655,10 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
                 ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
             Start-Sleep -Seconds 2
 
-            # Cross-project clean: shared-libs first, then main project
-            $sharedPath = Join-Path (Split-Path $ProjectRoot -Parent) "shared-libs"
+            # Cross-project clean: shared-kmp-libs first, then main project
+            $sharedPath = Join-Path (Split-Path $ProjectRoot -Parent) "shared-kmp-libs"
             if (Test-Path $sharedPath) {
-                Write-Host "[RECOVERY] Stopping daemons in shared-libs..." -ForegroundColor Yellow
+                Write-Host "[RECOVERY] Stopping daemons in shared-kmp-libs..." -ForegroundColor Yellow
                 Push-Location $sharedPath
                 & ./gradlew --stop 2>&1 | Out-Null
                 Pop-Location
@@ -700,8 +703,8 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
     Remove-Item $tempLog -Force -ErrorAction SilentlyContinue
 
     foreach ($module in $testableModules) {
-        $isShared = $module.Name.StartsWith("shared-libs:")
-        $shortMod = if ($isShared) { $module.Name.Substring("shared-libs:".Length) } else { $module.Name }
+        $isShared = $module.Name.StartsWith("shared-kmp-libs:")
+        $shortMod = if ($isShared) { $module.Name.Substring("shared-kmp-libs:".Length) } else { $module.Name }
         $gradlePath = ":$($shortMod -replace ':', ':')"
 
         # Check if this module's test task failed
@@ -861,9 +864,9 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
         }
     }
 
-    # Run shared-libs coverage tasks from shared-libs directory
+    # Run shared-kmp-libs coverage tasks from shared-kmp-libs directory
     if ($covTasksShared.Count -gt 0) {
-        $sharedLibsPath = ($projectsToProcess | Where-Object { $_.Name -eq "shared-libs" } | Select-Object -First 1).Path
+        $sharedLibsPath = ($projectsToProcess | Where-Object { $_.Name -eq "shared-kmp-libs" } | Select-Object -First 1).Path
         if ($sharedLibsPath -and (Test-Path $sharedLibsPath)) {
             $covArgsShared = @()
             $covArgsShared += $covTasksShared
@@ -872,7 +875,7 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
             $covArgsShared += "--rerun-tasks"
             if ($MaxWorkers -gt 0) { $covArgsShared += "--max-workers=$MaxWorkers" }
 
-            Write-Host "  [>] Generating shared-libs coverage ($($covTasksShared.Count) modules)..." -ForegroundColor Cyan
+            Write-Host "  [>] Generating shared-kmp-libs coverage ($($covTasksShared.Count) modules)..." -ForegroundColor Cyan
             Push-Location $sharedLibsPath
             $covOutputShared = & ./gradlew @covArgsShared 2>&1
             $covExitCodeShared = $LASTEXITCODE
@@ -881,7 +884,7 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
             if ($covExitCodeShared -ne 0) {
                 # Check if --continue saved us
                 $covXmlCountS = 0
-                foreach ($mod in ($allModules | Where-Object { $_.Name -like "shared-libs:*" })) {
+                foreach ($mod in ($allModules | Where-Object { $_.Name -like "shared-kmp-libs:*" })) {
                     $modTool = $mod.CovTool
                     if (-not $modTool -or $modTool -eq "none") { continue }
                     $xmlCheck = Get-CoverageXmlPath -Tool $modTool -ModulePath $mod.Path -IsDesktop $Desktop
@@ -913,10 +916,10 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
                     }
                 }
             } else {
-                Write-Host "  [OK] shared-libs coverage reports generated ($($covTasksShared.Count) modules)" -ForegroundColor Green
+                Write-Host "  [OK] shared-kmp-libs coverage reports generated ($($covTasksShared.Count) modules)" -ForegroundColor Green
             }
         } else {
-            Write-Host "  [!] shared-libs not found for coverage at: $sharedLibsPath" -ForegroundColor Yellow
+            Write-Host "  [!] shared-kmp-libs not found for coverage at: $sharedLibsPath" -ForegroundColor Yellow
         }
     }
 
@@ -1114,8 +1117,8 @@ Write-Host ""
 Write-Host ("{0,-48} {1,10} {2,8}" -f "MODULE", "COVERAGE", "MISSED") -ForegroundColor White
 Write-Host ("-" * 70) -ForegroundColor DarkGray
 
-$mainModules = $moduleSummaries.Values | Where-Object { -not $_.Name.StartsWith("shared-libs:") } | Sort-Object Name
-$sharedModules = $moduleSummaries.Values | Where-Object { $_.Name.StartsWith("shared-libs:") } | Sort-Object Name
+$mainModules = $moduleSummaries.Values | Where-Object { -not $_.Name.StartsWith("shared-kmp-libs:") } | Sort-Object Name
+$sharedModules = $moduleSummaries.Values | Where-Object { $_.Name.StartsWith("shared-kmp-libs:") } | Sort-Object Name
 
 foreach ($m in $mainModules) {
     $color = if ($m.CoveragePct -lt 50) { "Red" } elseif ($m.CoveragePct -lt 80) { "Yellow" } else { "Green" }
@@ -1186,6 +1189,23 @@ $totalDurationFinal = (Get-Date) - $startTime
 Write-Host "SUMMARY: $grandCoverage% total | $grandMissed lines missed | $modulesAt100 modules at 100% | $([int]$totalDurationFinal.TotalMinutes)m $($totalDurationFinal.Seconds)s" -ForegroundColor $covColor
 Write-Host ("=" * 80) -ForegroundColor Cyan
 Write-Host ""
+
+# ============================================================================
+# OPTIONAL BENCHMARK EXECUTION
+# ============================================================================
+if ($Benchmark) {
+    Write-Host ""
+    Write-Host "[>] Running benchmarks (config: $BenchmarkConfig)..." -ForegroundColor Cyan
+    $benchParams = @{
+        ProjectRoot = $ProjectRoot
+        Config = $BenchmarkConfig
+    }
+    if ($IncludeShared) { $benchParams.IncludeShared = $true }
+    & "$scriptDir\run-benchmarks.ps1" @benchParams
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[!] Benchmark execution had failures" -ForegroundColor Yellow
+    }
+}
 
 # Exit code
 if ($failureCount -gt 0) {

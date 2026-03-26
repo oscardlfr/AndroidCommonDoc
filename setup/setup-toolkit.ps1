@@ -376,6 +376,53 @@ if ($SkipHooks) {
 }
 
 # ============================================================
+# Step 5.5: Register L0 MCP server in consumer project
+# ============================================================
+Write-Host ""
+Write-Host "  Step 5.5: MCP Server registration" -ForegroundColor Cyan
+
+$consumerSettingsPath = Join-Path $ProjectRoot ".claude" "settings.json"
+$mcpServerPath = Join-Path $AndroidCommonDoc "mcp-server" "build" "index.js"
+
+if (Test-Path $mcpServerPath) {
+    # Read or create settings.json
+    $settings = @{}
+    if (Test-Path $consumerSettingsPath) {
+        $settings = Get-Content $consumerSettingsPath -Raw | ConvertFrom-Json -AsHashtable
+    }
+
+    # Check if MCP server already registered
+    if (-not $settings.ContainsKey("mcpServers")) {
+        $settings["mcpServers"] = @{}
+    }
+
+    if ($settings["mcpServers"].ContainsKey("androidcommondoc")) {
+        $stepsSkipped += "Step 5.5: MCP Server (already registered)"
+    } else {
+        if (-not $DryRun) {
+            $settings["mcpServers"]["androidcommondoc"] = @{
+                "command" = "node"
+                "args" = @($mcpServerPath.Replace('\', '/'))
+                "env" = @{
+                    "ANDROID_COMMON_DOC" = $AndroidCommonDoc.Replace('\', '/')
+                }
+            }
+            # Ensure .claude directory exists
+            $claudeDir = Join-Path $ProjectRoot ".claude"
+            if (-not (Test-Path $claudeDir)) {
+                New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
+            }
+            $settings | ConvertTo-Json -Depth 10 | Set-Content $consumerSettingsPath -Encoding UTF8
+            $stepsDone += "Step 5.5: MCP Server registered"
+        } else {
+            $stepsDone += "Step 5.5: MCP Server (dry run — would register)"
+        }
+    }
+} else {
+    $stepsFailed += "Step 5.5: MCP Server (build/index.js not found — run 'npm run build' in mcp-server first)"
+}
+
+# ============================================================
 # Step 6: Summary
 # ============================================================
 Write-Host ""

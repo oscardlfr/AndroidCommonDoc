@@ -49,3 +49,8 @@ export function getL2DocsDir(): string {
 export function getL1DocsDir(projectPath: string): string {
   return path.join(projectPath, ".androidcommondoc", "docs");
 }
+
+/** Returns the agents directory: <toolkitRoot>/.claude/agents/ */
+export function getAgentsDir(): string {
+  return path.join(getToolkitRoot(), ".claude", "agents");
+}
