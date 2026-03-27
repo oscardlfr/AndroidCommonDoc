@@ -32,11 +32,17 @@ Resume session with a CEO/CTO dashboard — shows status by department from last
   Content: {docs/business/MARKETING.md status if exists}
   Landing: {docs/business/LANDING_PAGES.md status if exists}
 
+### Cross-Department Queue
+  {scan memory for notes prefixed with "cross-dept:"}
+  - [Source -> Target] {description}
+  {if none: "No pending cross-department requests."}
+
 ### Quick Actions
   /work <task>     — route to right agent
   /debug <bug>     — systematic debugging
   /pre-pr          — validate before merge
   /verify <goal>   — check spec compliance
+  /work dev + marketing <task>  — parallel departments
 ```
 
 6. **Wait for instructions**: After presenting the dashboard, wait for the user to give direction. If the user provides a task, route it using `/work` logic (Level 1 keyword match, then Level 2 frontmatter discovery).

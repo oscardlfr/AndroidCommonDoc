@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-03-27T16:59:08.496Z",
+  "generated": "2026-03-27T17:26:23.157Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -585,7 +585,7 @@
       "description": "",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:15aa5398a4d042628a8ecc1b3d82cbd3f0b31cc04ab7da56e70e7f60500ae07b",
+      "hash": "sha256:32d9a6a23e3479f9962a617bc108262284aa22da78745d4a98bafd6db99f4063",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -1073,7 +1073,7 @@
       "description": "",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:dfcdbf02a362b941661f2419c12fc6d6e55397000aabfe261e65fadcaf9885cb",
+      "hash": "sha256:a297ee623ad4ec97a6ba8faca3c28ff92666ada46b4f0ef5b465d7a743e60ab3",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -1511,7 +1511,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:84f6d1a8928b312fa555d33ec600602e14c2a01c33ea9159c8130f5a2c943b36",
+      "hash": "sha256:e5f7564f7785cf37f33ee54c30b65bb6e73b01895ffdfaf01c7f6a2ca8d38cb4",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",

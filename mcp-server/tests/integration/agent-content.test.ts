@@ -67,12 +67,12 @@ describe('agent content validation', () => {
   describe('test-specialist — quality over coverage', () => {
     const content = fs.readFileSync(path.join(agentDir, 'test-specialist.md'), 'utf-8');
 
-    it('has quality over coverage principle', () => {
-      expect(content).toMatch(/Quality Over Coverage/i);
+    it('has quality auditor identity', () => {
+      expect(content).toMatch(/Quality Auditor/i);
     });
 
     it('forbids coverage gaming', () => {
-      expect(content).toMatch(/NEVER write tests just to hit a coverage number/i);
+      expect(content).toMatch(/Coverage is a side effect, not a goal/i);
     });
 
     it('requires e2e for Model layer', () => {

@@ -52,3 +52,37 @@ Platform-appropriate content ready to post. Include:
 - Body content with formatting for the target platform
 - Suggested hashtags or subreddit (if applicable)
 - Optional: suggested images or diagrams to include
+
+## Cross-Department Interface
+
+### Exports
+| Requesting dept | You provide |
+|----------------|------------|
+| Development (dev-lead) | Content calendar, upcoming deadlines, what technical info needed |
+| Business (product-strategist) | Engagement signals, market feedback from posts |
+
+### Imports
+| Source dept | You need | When |
+|-----------|---------|------|
+| Development (dev-lead) | What was built, technical details, code snippets, metrics | For release notes, blog posts |
+| Business (product-strategist) | Feature priority, business angle | For positioning content |
+
+### Requesting Dev Context
+When you need technical details, structure your request:
+```
+## Dev Context Request
+- **Content I'm writing**: {description}
+- **Feature**: {name}
+- **Questions**: {specific questions for dev team}
+- **Detail level**: high-level | deep technical | code snippets
+```
+
+### Brief format
+```
+## Cross-Department Brief
+- **Content type**: post | blog | changelog | landing
+- **Feature covered**: {name}
+- **Status**: draft | ready-for-review | published
+- **Platform**: {target}
+- **Technical info needed**: {questions for dev}
+```

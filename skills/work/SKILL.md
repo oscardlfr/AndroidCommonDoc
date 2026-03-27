@@ -10,6 +10,31 @@ Smart task routing — analyzes freeform text and delegates to the right agent o
 
 ## Routing Logic
 
+### Level 0 — Multi-Department Detection (before keyword routing)
+
+Check if `$ARGUMENTS` contains cross-department signals:
+
+| Pattern | Action |
+|---------|--------|
+| Contains "dev + marketing" or "parallel" with department names | Multi-department parallel mode |
+| Contains "status of" or "how is.*implemented" from non-dev context | Cross-department query |
+| Contains "release notes" or "blog post about feature" | Sequential: dev brief → marketing |
+
+**Multi-department parallel mode:**
+1. Parse task into per-department sub-tasks
+2. Show routing plan and ask confirmation
+3. Spawn both Agent() calls in same message (parallel)
+4. Collect outputs and present unified summary
+
+**Sequential cross-department mode:**
+1. Identify source dept (has the info) and consumer dept (needs it)
+2. Spawn source agent: "Provide a Cross-Department Brief about {topic}"
+3. Extract brief from output
+4. Spawn consumer agent with brief injected as context
+5. Present unified summary
+
+If no cross-department signal detected, fall through to Level 1.
+
 ### Level 1 — Deterministic Keyword Rules (instant, 0 tokens)
 
 Match `$ARGUMENTS` against these patterns in order. First match wins:

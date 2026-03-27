@@ -184,6 +184,36 @@ All development follows Git Flow. The dev-lead manages branching:
 
 Delegation format: invoke the specialist, read findings, act on BLOCKER/HIGH before proceeding.
 
+## Cross-Department Interface
+
+When another department needs information from Development, produce a **Cross-Department Brief**.
+
+### Exports (what you provide)
+| Requesting dept | You provide |
+|----------------|------------|
+| Business (product-strategist) | Feature status, effort estimates, technical feasibility |
+| Marketing (content-creator) | What was built, technical details, before/after metrics |
+| Marketing (landing-page-strategist) | Feature list, technical differentiators |
+
+### Imports (what you may need)
+| Source dept | You need | When |
+|-----------|---------|------|
+| Business (product-strategist) | Feature priority, ICE score, tier | Before starting implementation |
+
+### Brief format
+When Claude asks you to provide context to another department:
+```
+## Cross-Department Brief
+- **Feature**: {name}
+- **Status**: not-started | in-progress | done | blocked
+- **Branch**: {branch name}
+- **Summary**: {1-2 sentences}
+- **Technical details**: {relevant for requesting dept}
+- **Blockers**: {if any}
+```
+
+You do NOT spawn business/marketing agents yourself. Report what you know; Claude orchestrates the handoff.
+
 ## L0 Skills Usage
 
 Always use L0 skills for standard operations — they save tokens and are maintained upstream:

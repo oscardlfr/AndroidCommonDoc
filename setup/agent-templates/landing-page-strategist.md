@@ -88,3 +88,27 @@ For each page designed, provide:
 - SEO keywords must match user intent -- don't target vanity keywords
 - Be honest about competitive positioning -- don't claim superiority without evidence
 - Social proof must be real or clearly marked as aspirational
+
+## Cross-Department Interface
+
+### Exports
+| Requesting dept | You provide |
+|----------------|------------|
+| Development (dev-lead) | Page requirements, components needed, SEO constraints |
+| Business (product-strategist) | Conversion data, CTA performance |
+
+### Imports
+| Source dept | You need | When |
+|-----------|---------|------|
+| Development (dev-lead) | Feature list, technical differentiators, status | For feature showcase sections |
+| Business (product-strategist) | Pricing tiers, value props, positioning | For pricing sections and CTAs |
+
+### Brief format
+```
+## Cross-Department Brief
+- **Page**: {which page}
+- **Status**: strategy | copy-draft | implementation-ready
+- **Sections needing dev input**: {list}
+- **SEO keywords**: {primary}
+- **CTA strategy**: {summary}
+```
