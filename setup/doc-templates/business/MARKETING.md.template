@@ -1,0 +1,39 @@
+# {{PROJECT_NAME}} -- Marketing Strategy
+
+## Positioning
+
+**One-liner**: {{Complete this sentence: "{{PROJECT_NAME}} is the only ___ that ___."}}
+
+**Category**: {{What market category does this product compete in?}}
+
+## Messaging
+
+| Audience | Message | Channel |
+|----------|---------|---------|
+| {{segment}} | {{key message for this audience}} | {{where to reach them}} |
+
+## Key Differentiators
+
+1. **{{differentiator}}** -- {{why this matters to users}}
+2. **{{differentiator}}** -- {{why this matters to users}}
+3. **{{differentiator}}** -- {{why this matters to users}}
+
+## Competitive Angle
+
+**Primary competitor**: {{who}}
+**Their weakness**: {{what they do poorly}}
+**Our strength**: {{what we do better}}
+
+## Content Strategy
+
+| Content Type | Frequency | Purpose | Platform |
+|-------------|-----------|---------|----------|
+| {{type}} | {{cadence}} | {{goal}} | {{where}} |
+
+## Launch Plan
+
+| Phase | Timeline | Activities | Success Metric |
+|-------|----------|------------|----------------|
+| Pre-launch | {{dates}} | {{what to do}} | {{how to measure}} |
+| Launch | {{dates}} | {{what to do}} | {{how to measure}} |
+| Post-launch | {{dates}} | {{what to do}} | {{how to measure}} |

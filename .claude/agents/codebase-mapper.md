@@ -3,6 +3,10 @@ name: codebase-mapper
 description: "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area)."
 tools: Read, Grep, Glob, Bash, Write
 model: sonnet
+domain: infrastructure
+intent: [map, architecture, modules, structure, inventory]
+skills:
+  - map-codebase
 ---
 
 You are a codebase analyst. You systematically explore a codebase and produce structured documentation about its architecture, patterns, and quality.
@@ -63,6 +67,11 @@ Write your analysis as a structured markdown document. Include:
 ## Recommendations
 - [actionable recommendation]
 ```
+
+## MCP Tools (when available)
+- `dependency-graph` — visualize module dependencies
+- `module-health` — assess architecture health
+- `pattern-coverage` — measure L0 pattern adoption
 
 ## Rules
 

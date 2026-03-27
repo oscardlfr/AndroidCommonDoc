@@ -3,6 +3,8 @@ name: script-parity-validator
 description: "Internal validator -- invoked by quality-gate-orchestrator. Validates that PowerShell and Bash script pairs are functionally equivalent. Checks flags, output format, and exit codes between scripts/ps1/ and scripts/sh/."
 tools: Read, Grep, Glob
 model: haiku
+domain: audit
+intent: [parity, ps1, sh, script]
 memory: project
 ---
 

@@ -1,0 +1,39 @@
+# {{PROJECT_NAME}} -- Pricing Strategy
+
+## Tiers
+
+| Tier | Price | Limits | Features |
+|------|-------|--------|----------|
+| Free | $0 | {{usage limits}} | {{included features}} |
+| Pro | ${{price}}/mo | {{usage limits}} | {{included features}} |
+| Enterprise | Custom | {{usage limits}} | {{included features}} |
+
+## Revenue Model
+
+**Model type**: {{Subscription / Freemium / One-time / Usage-based}}
+
+**Unit economics**:
+- CAC (Customer Acquisition Cost): ${{estimate}}
+- LTV (Lifetime Value): ${{estimate}}
+- LTV:CAC ratio target: {{target}}
+
+## Conversion Strategy
+
+| Funnel Stage | Tactic | Expected Rate |
+|-------------|--------|---------------|
+| Awareness -> Trial | {{how users discover and try}} | {{target %}} |
+| Trial -> Free | {{what converts trial to free signup}} | {{target %}} |
+| Free -> Pro | {{what triggers upgrade}} | {{target %}} |
+| Pro -> Enterprise | {{what triggers enterprise interest}} | {{target %}} |
+
+## Pricing Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| {{pricing question}} | {{what we decided}} | {{why}} |
+
+## Competitor Pricing
+
+| Competitor | Free Tier | Paid Tier | Notes |
+|-----------|-----------|-----------|-------|
+| {{name}} | {{what's free}} | ${{price}} | {{observations}} |

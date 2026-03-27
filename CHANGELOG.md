@@ -3,6 +3,14 @@
 All notable changes to AndroidCommonDoc are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
+## [Unreleased]
+
+### Added
+- **Ecosystem initialization skills**: `/work` (smart task routing), `/init-session` (project awareness), `/resume` (CEO/CTO dashboard)
+- **Business layer**: `landing-page-strategist` agent template, 5 business doc templates (PRODUCT_SPEC, MARKETING, PRICING, LANDING_PAGES, COMPETITIVE)
+- **Extensible routing**: `domain` + `intent` frontmatter on all 20 agents — `/work` discovers agents automatically via intent keywords
+- **CEO/CTO dashboard** (`/resume`): department-based session resume (development, product, marketing) with memory-backed persistence
+
 ## [1.4.0] - 2026-03-26
 
 ### Added

@@ -6,7 +6,9 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 32 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 32 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+
+> **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
 > **Platform support:** All skills, agents, and Detekt rules work on both **Android-only (AGP 8.x)** and **KMP (AGP 9.0+)** projects. A small subset is KMP-only (noted below).
 
@@ -17,18 +19,18 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custo
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
 - **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 22 cross-platform pairs + 4 Bash-only utilities
-- **AI agent skills** for Claude Code and GitHub Copilot -- 50 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
+- **AI agent skills** for Claude Code and GitHub Copilot -- 53 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 17 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
-- **MCP server** with 32 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, and doc intelligence
+- **MCP server** with 34 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
 - **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, and architecture guards
-- **20 specialized agents** for quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
+- **20 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper). Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
 
 Install once, use across all your projects.
 
@@ -113,10 +115,10 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 | What | Destination | Count |
 |------|-------------|-------|
-| Skills | `.claude/skills/*/SKILL.md` | 50 |
+| Skills | `.claude/skills/*/SKILL.md` | 53 |
 | Agents | `.claude/agents/*.md` | 20 |
-| Commands | `.claude/commands/*.md` | 34 |
-| **Total** | | **104 entries** |
+| Commands | `.claude/commands/*.md` | 49 |
+| **Total** | | **122 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -124,7 +126,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 104 L0 entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 122 L0 entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -238,6 +240,14 @@ skills and agents, and finishes with a full verification checklist.
 ### 4. Restart Claude Code
 
 Skills and hooks are loaded on startup. Restart after setup completes.
+
+### 5. First commands to try
+
+```
+/init-session          # See what's available: agents, skills, modules, business docs
+/work fix the login bug  # Smart routing — finds the right agent/skill automatically
+/resume                # CEO dashboard — department status across your project
+```
 
 > Full step-by-step guide: [docs/guides/getting-started.md](docs/guides/getting-started.md)
 
@@ -380,18 +390,23 @@ plugins {
 
 ## Claude Code Hooks
 
-Real-time pattern enforcement during AI-assisted development:
+Real-time pattern enforcement and context injection during AI-assisted development:
 
 | Hook | Trigger | What It Does |
 |------|---------|-------------|
 | `detekt-post-write.sh` | PostToolUse (Write/Edit) | Runs Detekt on modified `.kt` files, blocks if violations found |
 | `detekt-pre-commit.sh` | PreToolUse (git commit) | Validates all staged `.kt` files before commit |
+| `plan-context.js` | Plan mode entry | Injects MODULE_MAP.md contents so the agent understands project structure during planning |
+| `doc-freshness-alert.js` | Session start | Warns when pattern docs are stale relative to upstream sources |
+| `agent-delegation-reminder.js` | Task start | Nudges the agent to delegate to specialized agents instead of doing everything inline |
+| `readme-pre-commit.sh` | PreToolUse (git commit) | Validates README counts match filesystem before commit |
+| `registry-pre-commit.sh` | PreToolUse (git commit) | Validates registry.json hashes before commit |
 
 ---
 
 ## Skills Reference
 
-50 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
+53 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
@@ -475,6 +490,16 @@ These are the skills that get materialized to your `.claude/skills/` directory v
 | `/seo` | Validate SEO metadata, structure, and discoverability |
 | `/web-quality-audit` | Comprehensive web quality audit across all dimensions |
 
+#### Ecosystem & Workflow (Entry Points)
+
+These three skills are the recommended way to start any session. They discover agents, skills, and project structure automatically.
+
+| Skill | What it does |
+|-------|-------------|
+| `/work <task>` | **Primary entry point.** Smart task routing -- reads agent frontmatter (domain+intent), matches your task description, and delegates to the best agent or skill. Extensible: add new agents and `/work` finds them |
+| `/init-session` | Project context dashboard -- lists available agents, skills, modules, business docs, and recent activity. Run this when you open a project for the first time |
+| `/resume` | CEO/CTO session resume -- department-level status across your project (engineering, product, content). Picks up where you left off |
+
 ### L0 Maintenance Skills
 
 Skills primarily useful when working on AndroidCommonDoc (L0) itself:
@@ -497,7 +522,7 @@ Skills primarily useful when working on AndroidCommonDoc (L0) itself:
 
 ## Agents
 
-20 specialized agents in `.claude/agents/`. All synced to downstream projects. Claude Code auto-delegates to these agents based on their `description:` field — configure delegation rules in your CLAUDE.md [Agent Roster](docs/agents/claude-md-template.md).
+20 specialized agents in `.claude/agents/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in its YAML frontmatter, enabling **extensible routing** -- `/work` reads frontmatter at runtime and dispatches tasks to the best-matching agent automatically. To add a new agent, create a markdown file with domain+intent frontmatter; no registration step needed.
 
 **6 audit-only agents** (read-only). **2 audit+implement agents** (can write code). **5 quality gate agents** (internal). **2 orchestrators**. **5 spec-driven agents** (debugger, verifier, advisor, researcher, codebase-mapper).
 
@@ -554,6 +579,59 @@ Agents don't have hardcoded models -- the active profile determines which model 
 | **sonnet** | Cross-file reasoning, semantic analysis | quality-gate, beta-readiness, cross-platform, doc-alignment, test-specialist, ui-specialist, privacy-auditor, full-audit-orchestrator |
 
 **Advanced profile** upgrades orchestrators and deep-analysis agents to opus while keeping validators on sonnet.
+
+### Agent Templates
+
+7 reusable agent templates in `setup/agent-templates/` for bootstrapping domain-specific agents in L1/L2 projects:
+
+| Template | Purpose |
+|----------|---------|
+| `dev-lead` | Technical lead workflow: planning, delegation, code review |
+| `product-strategist` | Product vision, roadmap, feature prioritization |
+| `content-creator` | Marketing copy, blog posts, documentation |
+| `landing-page-strategist` | Landing page structure, copy, conversion optimization |
+| `platform-auditor` | Platform-specific compliance and best practices |
+| `module-lifecycle` | Module creation, deprecation, migration planning |
+| `feature-domain-specialist` | Deep expertise in a single feature domain |
+
+The first 3 (dev-lead, product-strategist, content-creator) cover business workflows. The remaining 4 cover technical domain specialization.
+
+---
+
+## Business Layer
+
+L2 projects can bootstrap business documentation using 5 templates in `setup/doc-templates/business/`:
+
+| Template | Purpose |
+|----------|---------|
+| `PRODUCT_SPEC.md` | Product specification with user stories and acceptance criteria |
+| `MARKETING.md` | Marketing strategy, positioning, and messaging |
+| `PRICING.md` | Pricing model, tiers, and competitive positioning |
+| `COMPETITIVE.md` | Competitive analysis matrix |
+| `LANDING_PAGES.md` | Landing page structure and conversion funnel |
+
+These templates pair with the business agent templates (product-strategist, content-creator, landing-page-strategist) to give AI agents structured context about your product when working on user-facing features.
+
+---
+
+## MODULE_MAP.md Pattern
+
+Each L1/L2 project should maintain a `MODULE_MAP.md` at its root -- a concise map of modules, their responsibilities, and key files. The `plan-context` hook automatically injects MODULE_MAP.md contents when Claude Code enters plan mode, giving the agent architectural awareness before it starts planning.
+
+```markdown
+# MODULE_MAP.md (example)
+## core:domain
+- Purpose: Business logic use cases
+- Key files: src/commonMain/kotlin/usecases/
+- Dependencies: core:model, core:error
+
+## feature:login
+- Purpose: Login/auth UI + ViewModel
+- Key files: src/commonMain/kotlin/login/
+- Dependencies: core:domain, core:network
+```
+
+This eliminates the "agent explores for 5 minutes before planning" problem. The hook is zero-cost when MODULE_MAP.md doesn't exist.
 
 ---
 
@@ -738,7 +816,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (104 entries,    |   |
+                   |  | SKILL.md |    | (122 entries,    |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -765,13 +843,13 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 34 Claude Code slash commands
+|   +-- commands/           # 49 Claude Code slash commands
 |   +-- agents/             # 20 specialized agents
 |   +-- hooks/              # Real-time Detekt enforcement hooks
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
-|   +-- */SKILL.md          # 50 canonical skill definitions
-|   +-- registry.json       # L0 registry (104 entries, SHA-256 hashes)
+|   +-- */SKILL.md          # 53 canonical skill definitions
+|   +-- registry.json       # L0 registry (122 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
@@ -780,7 +858,7 @@ AndroidCommonDoc/
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
-+-- mcp-server/             # MCP server (32 tools, 3 prompts, dynamic resources)
++-- mcp-server/             # MCP server (34 tools, 3 prompts, dynamic resources)
 |   +-- src/
 |   |   +-- tools/          # 32 tools: validation, analysis, metrics, audit, sync, vault
 |   |   +-- types/          # Shared types (ValidationResult, AuditFinding, FindingsReport)
@@ -789,7 +867,7 @@ AndroidCommonDoc/
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
 |   |   +-- cli/            # CLI entrypoint for CI monitoring
-|   +-- tests/              # 85 test files -- vitest unit + integration (1173 tests)
+|   +-- tests/              # 89 test files -- vitest unit + integration (1202 tests)
 +-- detekt-rules/
 |   +-- src/main/kotlin/    # 17 hand-written AST-only Detekt rules
 |   +-- src/main/resources/
@@ -803,7 +881,9 @@ AndroidCommonDoc/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
 |   +-- copilot-templates/  # 40 Copilot prompt templates (generated from skills)
 |   +-- copilot-agent-templates/ # 4 Copilot agent templates (generated from agent-templates)
-|   +-- agent-templates/    # 5 generic agent templates for L1/L2 projects
+|   +-- agent-templates/    # 7 agent templates: dev-lead, product-strategist, content-creator, landing-page-strategist, platform-auditor, module-lifecycle, feature-domain-specialist
+|   +-- doc-templates/
+|   |   +-- business/       # 5 business doc templates (PRODUCT_SPEC, MARKETING, PRICING, COMPETITIVE, LANDING_PAGES)
 |   +-- github-workflows/   # CI template + PR template for consumer projects
 |   +-- templates/
 |   |   +-- workflows/

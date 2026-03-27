@@ -3,6 +3,8 @@ name: template-sync-validator
 description: "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Checks every command has a wrapper template and a Copilot prompt."
 tools: Read, Grep, Glob
 model: haiku
+domain: audit
+intent: [template, sync, copilot]
 memory: project
 ---
 

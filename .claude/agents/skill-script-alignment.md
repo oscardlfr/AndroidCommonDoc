@@ -3,6 +3,8 @@ name: skill-script-alignment
 description: "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters."
 tools: Read, Grep, Glob
 model: haiku
+domain: audit
+intent: [skill, script, alignment, command]
 memory: project
 ---
 
