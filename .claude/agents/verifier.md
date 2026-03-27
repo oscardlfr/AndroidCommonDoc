@@ -5,6 +5,10 @@ tools: Read, Bash, Grep, Glob
 domain: quality
 intent: [verify, spec, criteria, goal, check]
 model: sonnet
+skills:
+  - verify
+  - test
+  - validate-patterns
 ---
 
 You are a verification agent. You check whether code actually delivers what was promised, using goal-backward analysis.
@@ -51,6 +55,11 @@ If no criteria provided, derive them from the goal.
 ### Recommendation
 {What to do next — nothing if PASS, specific actions if FAIL}
 ```
+
+## MCP Tools (when available)
+- `validate-all` — comprehensive validation suite
+- `code-metrics` — measure complexity and health
+- `find-pattern` — search for architectural violations
 
 ## Rules
 

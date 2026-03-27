@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-03-27T17:26:23.157Z",
+  "generated": "2026-03-27T17:45:44.459Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1108,7 +1108,7 @@
       "description": "Scans HTTP clients for rate limit handling, retry-after headers, exponential backoff, and timeout configuration. Use when auditing API integration robustness.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:421355429825e295b805c27d5ebc7b72ff9a67a48252031637e218af886e4fb8",
+      "hash": "sha256:a561873b2034ba6b8a794db526f2adf7f5b0074c889c193039a7ecb7f66f7151",
       "dependencies": [],
       "frontmatter": {
         "name": "api-rate-limit-auditor",
@@ -1122,7 +1122,10 @@
           "timeout",
           "http"
         ],
-        "memory": "project"
+        "memory": "project",
+        "skills": [
+          "validate-patterns"
+        ]
       }
     },
     {
@@ -1132,7 +1135,7 @@
       "description": "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:a3894f8a42773ff8d8ae640731fff4936499bc62596ced775ba9731149a372ba",
+      "hash": "sha256:1b5da370bb14651c98cf1bdf5c3b8d87e47ceaba683344992f58140d4fdc300f",
       "dependencies": [],
       "frontmatter": {
         "name": "beta-readiness-agent",
@@ -1146,7 +1149,11 @@
           "launch",
           "onboarding"
         ],
-        "memory": "project"
+        "memory": "project",
+        "skills": [
+          "pre-release",
+          "test-full-parallel"
+        ]
       }
     },
     {
@@ -1156,7 +1163,7 @@
       "description": "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:89d9acc3414825f5879bf695e6aa026b56fa196397fc95f643d4e6edf0689435",
+      "hash": "sha256:dd827e7e834d6d8bd72f7aa30d47f4b8ea151123a86a5806c3077642ab105c82",
       "dependencies": [],
       "frontmatter": {
         "name": "codebase-mapper",
@@ -1170,6 +1177,9 @@
           "modules",
           "structure",
           "inventory"
+        ],
+        "skills": [
+          "map-codebase"
         ]
       }
     },
@@ -1180,7 +1190,7 @@
       "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:d824736c5b0c2c1a95e24400feedbc3cc938d8a6053d2bc3b856c185b5d088a9",
+      "hash": "sha256:d1a6ee8a898c6c62da0497e9c3e16f41268666441773ee18e05e004e9c617565",
       "dependencies": [],
       "frontmatter": {
         "name": "cross-platform-validator",
@@ -1198,6 +1208,9 @@
         "optional_capabilities": [
           "context7",
           "jina"
+        ],
+        "skills": [
+          "verify-kmp"
         ]
       }
     },
@@ -1208,7 +1221,7 @@
       "description": "Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:3a2ad3c62bdb16d0088ec7419d7aa1e16b6db20f25f21cd8a1d975d17bbc6488",
+      "hash": "sha256:3a23031e47946cebfe92faa53fc0d2eeda484fb62c5742bbaffd2ee513770bf7",
       "dependencies": [],
       "frontmatter": {
         "name": "debugger",
@@ -1225,7 +1238,8 @@
           "exception"
         ],
         "skills": [
-          "test"
+          "test",
+          "extract-errors"
         ]
       }
     },
@@ -1236,7 +1250,7 @@
       "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:864938174be5a9518fe506ce90b81c53f7924a2c08a622fcafa8cfebf5ee8bf4",
+      "hash": "sha256:bfb3665d9fcccabe78a493c13fec9680c195fba2b14dfa1dae97318e21523b47",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-alignment-agent",
@@ -1252,8 +1266,9 @@
         ],
         "memory": "project",
         "skills": [
+          "audit-docs",
           "validate-patterns",
-          "doc-reorganize"
+          "readme-audit"
         ]
       }
     },
@@ -1340,7 +1355,7 @@
       "description": "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ba37b344cb92b04f50405dbf9c503b3863cfa321cf2dc651226857e00938bed5",
+      "hash": "sha256:b9da48bbc3496cb54a1588a11ca67bd7e1a6fe0486f8038b2c748ad2bf486872",
       "dependencies": [],
       "frontmatter": {
         "name": "privacy-auditor",
@@ -1355,7 +1370,10 @@
           "data",
           "analytics"
         ],
-        "memory": "project"
+        "memory": "project",
+        "skills": [
+          "validate-patterns"
+        ]
       }
     },
     {
@@ -1511,7 +1529,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:e5f7564f7785cf37f33ee54c30b65bb6e73b01895ffdfaf01c7f6a2ca8d38cb4",
+      "hash": "sha256:dbf05696bde15952776607134d82e58b082352b7922d7355a0c7cdcfbfc27bce",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -1546,7 +1564,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:dce161bf979feb8454844da927a38c1de7cef76c88cdaa5a84290cab62b7ec3d",
+      "hash": "sha256:611d97da3a91bab75938c263e5cf2e1546f0e53b08e47b73e72db85b3ba9cd7a",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -1563,7 +1581,8 @@
         "memory": "project",
         "skills": [
           "accessibility",
-          "lint-resources"
+          "lint-resources",
+          "validate-patterns"
         ]
       }
     },
@@ -1574,7 +1593,7 @@
       "description": "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8c7c159c1fe37796c90f576f4b4b0a0e155a83977b03cfa405c83716c11cd337",
+      "hash": "sha256:8a1d6bd93025cd07dacba2cb6e4ddb00f503634b23c2f643ab76251a65d6540e",
       "dependencies": [],
       "frontmatter": {
         "name": "verifier",
@@ -1588,7 +1607,12 @@
           "goal",
           "check"
         ],
-        "model": "sonnet"
+        "model": "sonnet",
+        "skills": [
+          "verify",
+          "test",
+          "validate-patterns"
+        ]
       }
     },
     {

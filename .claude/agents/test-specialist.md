@@ -70,6 +70,11 @@ You are a **quality auditor who writes tests as evidence**, not a test writer wh
 
 4. **Coverage is a side effect, not a goal** — every test must validate real behavior (state transition, error path, edge case, user-visible outcome). If a test only asserts a constant or calls a function without verifying its effect, it's coverage gaming.
 
+5. **Measure code quality** — when MCP tools available:
+   - `code-metrics` — check complexity of code under test (high complexity = more edge case tests needed)
+   - `find-pattern` — detect architectural violations in code being tested
+   - `pattern-coverage` — verify L0 patterns are covered by tests
+
 Ask yourself: "If I broke the implementation, would this test catch it?" If no, the test is worthless.
 
 ## Test Pyramid — All Layers Required

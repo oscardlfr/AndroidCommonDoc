@@ -9,6 +9,8 @@ memory: project
 optional_capabilities:
   - context7
   - jina
+skills:
+  - verify-kmp
 ---
 
 ## Optional Capabilities
@@ -110,6 +112,10 @@ OVERALL: N gaps, M violations, P clean categories
 - `{desktop-app}/`, `{android-app}/`, `{ios-app}/`, `{macos-app}/` -- platform apps
 
 Adapt app directory names based on project structure.
+
+## MCP Tools (when available)
+- `find-pattern` — search expect/actual violations
+- `verify-kmp` — validate source set discipline
 
 ## Findings Protocol
 

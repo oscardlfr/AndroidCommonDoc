@@ -9,6 +9,7 @@ memory: project
 skills:
   - accessibility
   - lint-resources
+  - validate-patterns
 ---
 
 Review and fix Compose UI code for KMP project patterns.
@@ -68,6 +69,11 @@ If you discover a bug during your task — whether you caused it or not — you 
 - **Easy fix (< 15 min)**: fix it now, include in your commit
 - **Hard fix**: report it in your Summary as a pending item with severity, file, and reproduction steps
 - **NEVER** dismiss a bug as "pre-existing" and move on silently. This is a professional project — leaving known broken behavior unreported is unacceptable.
+
+## MCP Tools (when available)
+- `compose-preview-audit` — validate @Preview coverage
+- `unused-resources` — detect unused strings/colors/drawables
+- `string-completeness` — validate string completeness across languages
 
 ## Findings Protocol
 
