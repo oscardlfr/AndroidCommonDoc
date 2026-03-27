@@ -26,17 +26,21 @@ Match `$ARGUMENTS` against these patterns in order. First match wins:
 | `pre-pr\|validate\|ready to merge` | `/pre-pr` |
 | `note\|idea\|remember` | `/note` |
 | `audit\|quality` | `/audit` |
-| `prioritize\|roadmap\|features\|backlog` | Agent(`product-strategist`) |
-| `post\|blog\|social\|marketing\|content` | Agent(`content-creator`) |
-| `landing\|page\|conversion\|copy\|seo` | Agent(`landing-page-strategist`) |
-| `pricing\|tiers\|monetize` | Agent(`product-strategist`) |
+| `prioritize\|roadmap\|features\|backlog` | Agent(`product-strategist`) * |
+| `post\|blog\|social\|marketing\|content` | Agent(`content-creator`) * |
+| `landing\|page\|conversion\|copy\|seo` | Agent(`landing-page-strategist`) * |
+| `pricing\|tiers\|monetize` | Agent(`product-strategist`) * |
+
+\* Business agents are opt-in. If the agent doesn't exist in `.claude/agents/`, fall through to Level 2.
 
 ### Level 2 — Frontmatter Discovery (if no Level 1 match)
 
 1. Scan `.claude/agents/*.md` for `intent:` frontmatter
 2. Match keywords in user description against intent arrays
 3. If match found -> suggest that agent
-4. If no match -> default: spawn `dev-lead` agent in worktree
+4. If no match -> check if `dev-lead` agent exists:
+   - If yes: spawn `dev-lead` in worktree
+   - If no: execute the task directly (Claude handles inline)
 
 ## Steps
 
@@ -63,5 +67,8 @@ Proceed? (y/n)
 
 - Level 1 is checked first — it is instant and deterministic
 - Level 2 only runs when Level 1 has no match
+- **Before routing to any agent, verify it exists** in `.claude/agents/` — if not, fall through
+- Business agents (product-strategist, content-creator, landing-page-strategist) are opt-in templates; they only exist if the project activated them via `/setup`
+- `dev-lead` is also a template — only exists if the project copied it from `setup/agent-templates/`
 - Always show the routing decision and ask for confirmation before executing
 - If the user disagrees with routing, ask them to clarify or pick a target manually

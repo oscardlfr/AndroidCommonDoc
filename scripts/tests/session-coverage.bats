@@ -51,8 +51,8 @@ teardown() {
     grep -q "function Get-CoverageGradleTask" "$PS1_LIB"
 }
 
-@test "parity: Get-KoverTaskFallbacks exists in PS1" {
-    grep -q "function Get-KoverTaskFallbacks" "$PS1_LIB"
+@test "parity: PS1 kover retry uses batch strategy" {
+    grep -q "rerun-tasks" "$PS1_DIR/run-parallel-coverage-suite.ps1"
 }
 
 @test "parity: Get-CoverageXmlPath exists in PS1" {
@@ -96,8 +96,8 @@ teardown() {
     grep -q "ExcludeCoverage" "$PS1_DIR/run-changed-modules-tests.ps1"
 }
 
-@test "parity: PS1 run-parallel has kover fallback retry (Get-KoverTaskFallbacks)" {
-    grep -q "Get-KoverTaskFallbacks" "$PS1_DIR/run-parallel-coverage-suite.ps1"
+@test "parity: PS1 run-parallel has kover batch retry (rerun-tasks)" {
+    grep -q "rerun-tasks" "$PS1_DIR/run-parallel-coverage-suite.ps1"
 }
 
 @test "parity: PS1 run-parallel has partial-success retry (missingCov)" {
@@ -755,8 +755,8 @@ teardown() {
 }
 
 @test "README: 'What gets synced' lists consumer counts" {
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "50"
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "34"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "53"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "49"
 }
 
 @test "README: 'What gets synced' clarifies what is NOT synced" {
@@ -767,12 +767,12 @@ teardown() {
     grep -q "88+ sub-docs" "$README"
 }
 
-@test "README: vitest count is 1173" {
-    grep -q "1173 tests" "$README"
+@test "README: vitest count is 1202" {
+    grep -q "1202 tests" "$README"
 }
 
-@test "README: vitest files count is 85" {
-    grep -q "85 test files" "$README"
+@test "README: vitest files count is 89" {
+    grep -q "89 test files" "$README"
 }
 
 # ===========================================================================
@@ -1076,9 +1076,9 @@ teardown() {
     grep -q "^slug: spec-driven-workflow" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
-@test "README: counts match 20 agents, 50 skills" {
+@test "README: counts match 20 agents, 53 skills" {
     grep -q "20 specialized agents" "$README"
-    grep -q "50 canonical" "$README"
+    grep -q "53 canonical" "$README"
 }
 
 @test "CLAUDE.md: lists all new agents in delegation table" {

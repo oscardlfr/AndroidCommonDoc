@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-03-27T15:24:33.781Z",
+  "generated": "2026-03-27T16:13:15.349Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1073,7 +1073,7 @@
       "description": "",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c1242d0846ca9076f91886354de5023f90ab4c76187daea81bb6eea4fff5d2b0",
+      "hash": "sha256:dfcdbf02a362b941661f2419c12fc6d6e55397000aabfe261e65fadcaf9885cb",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -1592,6 +1592,19 @@
       }
     },
     {
+      "name": "audit-docs",
+      "type": "command",
+      "path": ".claude/commands/audit-docs.md",
+      "description": "Audit documentation structure, coherence, and upstream validity.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:d74ca5f84bbcf837fb2510d218cac595c3b959a487a71404dd15e26a7266001c",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Audit documentation structure, coherence, and upstream validity."
+      }
+    },
+    {
       "name": "audit",
       "type": "command",
       "path": ".claude/commands/audit.md",
@@ -1602,6 +1615,19 @@
       "dependencies": [],
       "frontmatter": {
         "description": "Generate a quality audit report with trend data — coverage, Detekt, tests, CVEs."
+      }
+    },
+    {
+      "name": "benchmark",
+      "type": "command",
+      "path": ".claude/commands/benchmark.md",
+      "description": "Run benchmark suites with JVM/Android detection.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:dfa8a5f49fe8d154febcfba52c5cf50fa2056795f9ed44789f82fbfb6bc2e251",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Run benchmark suites with JVM/Android detection."
       }
     },
     {
@@ -1647,6 +1673,19 @@
       "hash": "sha256:7dbb319833eb97d006f8293168128a5f87b1299c0bdb7f2ff3530813cb43479b",
       "dependencies": [],
       "frontmatter": {}
+    },
+    {
+      "name": "coverage",
+      "type": "command",
+      "path": ".claude/commands/coverage.md",
+      "description": "Analyze test coverage gaps without running tests.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:ac688adc0595aa56298e4eba9caa639eb2a3908ee8adb93dae6d46a6d44a3663",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Analyze test coverage gaps without running tests."
+      }
     },
     {
       "name": "debug",
@@ -1697,6 +1736,19 @@
       "frontmatter": {}
     },
     {
+      "name": "extract-errors",
+      "type": "command",
+      "path": ".claude/commands/extract-errors.md",
+      "description": "Extract and format build/test errors from Gradle output.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:aa67f0f8f67ae87cadeeb640d274c45596a7695e083ad9fbd4c2c047979c2d86",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Extract and format build/test errors from Gradle output."
+      }
+    },
+    {
       "name": "feature-audit",
       "type": "command",
       "path": ".claude/commands/feature-audit.md",
@@ -1718,6 +1770,19 @@
       "dependencies": [],
       "frontmatter": {
         "description": "Run unified audit across all quality dimensions with findings dedup and consolidated report."
+      }
+    },
+    {
+      "name": "generate-rules",
+      "type": "command",
+      "path": ".claude/commands/generate-rules.md",
+      "description": "Generate Detekt rules from pattern doc frontmatter.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:5158c7b6a316bbf932e459002ecd7d707a4b22534215d8c01a202bb10cbcd94a",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Generate Detekt rules from pattern doc frontmatter."
       }
     },
     {
@@ -1973,6 +2038,19 @@
       "frontmatter": {}
     },
     {
+      "name": "sync-l0",
+      "type": "command",
+      "path": ".claude/commands/sync-l0.md",
+      "description": "Propagate L0 skills, agents, and commands to consuming projects.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:be6e218a4f1c1093c30e218b814f66b8695cbf60fdc33a6069fd3afd08f41748",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Propagate L0 skills, agents, and commands to consuming projects."
+      }
+    },
+    {
       "name": "sync-roadmap",
       "type": "command",
       "path": ".claude/commands/sync-roadmap.md",
@@ -1995,6 +2073,45 @@
       "frontmatter": {}
     },
     {
+      "name": "test-changed",
+      "type": "command",
+      "path": ".claude/commands/test-changed.md",
+      "description": "Run tests only for modules with uncommitted changes.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:29ec7e52cba8818774ba6cead8dd218cb1db5271d1b75d02b09bc4655825fb77",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Run tests only for modules with uncommitted changes."
+      }
+    },
+    {
+      "name": "test-full-parallel",
+      "type": "command",
+      "path": ".claude/commands/test-full-parallel.md",
+      "description": "Run full test suite in parallel across all modules.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:122fa8c2b447d174d133805ecf67f209b1ea061c31fe87af9c0057ac42fd6019",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Run full test suite in parallel across all modules."
+      }
+    },
+    {
+      "name": "test",
+      "type": "command",
+      "path": ".claude/commands/test.md",
+      "description": "Run tests for a specific module or all modules.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:54f00e8066b582c8d02f6d9d08e1b8de964f9c047ffee3a5f62c41ddd993d8db",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Run tests for a specific module or all modules."
+      }
+    },
+    {
       "name": "unlock-tests",
       "type": "command",
       "path": ".claude/commands/unlock-tests.md",
@@ -2004,6 +2121,45 @@
       "hash": "sha256:375d773cfa92764b863487c5cb4d5be3205a84350ce4e415e6406ce894eda03b",
       "dependencies": [],
       "frontmatter": {}
+    },
+    {
+      "name": "validate-patterns",
+      "type": "command",
+      "path": ".claude/commands/validate-patterns.md",
+      "description": "Check code compliance with L0 pattern conventions.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:e0a10b2c9a225428406291d7b6d1d960785d642ef45fb813367751ac2672e4fd",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Check code compliance with L0 pattern conventions."
+      }
+    },
+    {
+      "name": "validate-upstream",
+      "type": "command",
+      "path": ".claude/commands/validate-upstream.md",
+      "description": "Run upstream validation assertions against live documentation.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:3dab4ec7edddbc4b1bb7e9d507834da39e76e3bd3e7df41251c82ce74f59e256",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Run upstream validation assertions against live documentation."
+      }
+    },
+    {
+      "name": "verify-kmp",
+      "type": "command",
+      "path": ".claude/commands/verify-kmp.md",
+      "description": "Validate KMP source set discipline and imports.",
+      "category": "build",
+      "tier": "core",
+      "hash": "sha256:d2cc0a8d0511dbfe8bfaed7a025d95f848c77471abd2dbaec445a46c7d65b693",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Validate KMP source set discipline and imports."
+      }
     },
     {
       "name": "verify-migrations",

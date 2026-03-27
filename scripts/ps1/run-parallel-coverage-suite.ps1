@@ -770,91 +770,70 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
             }
 
             if ($covXmlCount -gt 0) {
-                # Partial success — retry modules that don't have XMLs yet
-                $missingCov = 0
-                $recoveredCov = 0
+                # Partial success — collect missing tasks and retry as a single batch
+                # (no --no-configuration-cache: cache is intact, just re-run missing tasks)
+                $missingTasks = [System.Collections.Generic.List[string]]::new()
                 foreach ($mod in ($allModules | Where-Object { $_.ProjectRoot -eq $ProjectRoot })) {
                     $modTool = $mod.CovTool
                     if (-not $modTool -or $modTool -eq "none") { continue }
                     $xmlCheck = Get-CoverageXmlPath -Tool $modTool -ModulePath $mod.Path -IsDesktop $Desktop
                     if (-not $xmlCheck) {
-                        $missingCov++
                         $modName = $mod.Name.TrimStart(':')
                         $gpath = ":$modName"
-                        $recovered = $false
-                        if ($modTool -eq "kover") {
-                            $fallbacks = Get-KoverTaskFallbacks -IsDesktop $Desktop
-                            foreach ($fb in $fallbacks) {
-                                Push-Location $ProjectRoot
-                                & ./gradlew "${gpath}:${fb}" --no-configuration-cache --rerun-tasks 2>&1 | Out-Null
-                                $fbExit = $LASTEXITCODE
-                                Pop-Location
-                                if ($fbExit -eq 0) {
-                                    Write-Host "    [OK] $($mod.Name): recovered via $fb" -ForegroundColor DarkGray
-                                    $recoveredCov++
-                                    $recovered = $true
-                                    break
-                                }
-                            }
-                        } else {
-                            $covTaskName = Get-CoverageGradleTask -Tool $modTool -TestType $TestType -IsDesktop $Desktop
-                            Push-Location $ProjectRoot
-                            & ./gradlew "${gpath}:${covTaskName}" --no-configuration-cache --rerun-tasks 2>&1 | Out-Null
-                            $fbExit = $LASTEXITCODE
-                            Pop-Location
-                            if ($fbExit -eq 0) { $recoveredCov++; $recovered = $true }
-                        }
-                        if (-not $recovered) {
-                            Write-Host "    [!] $($mod.Name): no kover task worked" -ForegroundColor DarkGray
-                        }
+                        $missingTaskName = Get-CoverageGradleTask -Tool $modTool -TestType $TestType -IsDesktop $Desktop
+                        $missingTasks.Add("${gpath}:${missingTaskName}")
                     }
                 }
+                $missingCov = $missingTasks.Count
+                $recoveredCov = 0
                 if ($missingCov -gt 0) {
-                    Write-Host "  [!] Batch partial: $covXmlCount ok, $missingCov missing -> recovered $recoveredCov via per-module retry" -ForegroundColor Yellow
+                    Write-Host "  [>] Batch partial: $covXmlCount ok, $missingCov missing -> retrying as single batch..." -ForegroundColor Yellow
+                    $retryArgs = @($missingTasks) + @("--parallel", "--continue", "--rerun-tasks")
+                    if ($MaxWorkers -gt 0) { $retryArgs += "--max-workers=$MaxWorkers" }
+                    Push-Location $ProjectRoot
+                    & ./gradlew @retryArgs 2>&1 | Out-Null
+                    $retryExit = $LASTEXITCODE
+                    Pop-Location
+                    if ($retryExit -eq 0) {
+                        $recoveredCov = $missingCov
+                    } else {
+                        # Count how many were actually recovered
+                        foreach ($mod in ($allModules | Where-Object { $_.ProjectRoot -eq $ProjectRoot })) {
+                            $modTool = $mod.CovTool
+                            if (-not $modTool -or $modTool -eq "none") { continue }
+                            $xmlCheck = Get-CoverageXmlPath -Tool $modTool -ModulePath $mod.Path -IsDesktop $Desktop
+                            if ($xmlCheck) { $recoveredCov++ }
+                        }
+                        $recoveredCov = $recoveredCov - $covXmlCount
+                    }
+                    Write-Host "  [!] Batch recovery: $recoveredCov / $missingCov recovered" -ForegroundColor Yellow
                 } else {
                     Write-Host "  [OK] Main project coverage reports generated ($covXmlCount modules)" -ForegroundColor Green
                 }
             } else {
-                Write-Host "  [!] Batch coverage failed (exit $covExitCode), 0 reports - retrying per-module..." -ForegroundColor Yellow
+                # Configuration failure: no XMLs at all — retry full batch without config cache
+                Write-Host "  [!] Batch coverage failed (exit $covExitCode), 0 reports - retrying full batch without config cache..." -ForegroundColor Yellow
                 $covOk = 0
                 $covFail = 0
-                foreach ($covTask in $covTasks) {
-                    Push-Location $ProjectRoot
-                    & ./gradlew $covTask --no-configuration-cache --rerun-tasks 2>&1 | Out-Null
-                    $taskExit = $LASTEXITCODE
-                    Pop-Location
-                    if ($taskExit -eq 0) {
-                        $covOk++
-                    } elseif ($covTask -match "kover") {
-                        # Try kover task fallbacks
-                        $taskPrefix = $covTask -replace ':[^:]+$', ''
-                        $fallbacks = Get-KoverTaskFallbacks -IsDesktop $Desktop
-                        $fbOk = $false
-                        foreach ($fb in $fallbacks) {
-                            $fullFb = "${taskPrefix}:${fb}"
-                            if ($fullFb -eq $covTask) { continue }
-                            Push-Location $ProjectRoot
-                            & ./gradlew $fullFb 2>&1 | Out-Null
-                            $fbExit = $LASTEXITCODE
-                            Pop-Location
-                            if ($fbExit -eq 0) {
-                                Write-Host "    [OK] $covTask failed -> $fullFb succeeded" -ForegroundColor DarkGray
-                                $covOk++
-                                $fbOk = $true
-                                break
-                            }
-                        }
-                        if (-not $fbOk) {
-                            $covFail++
-                            Write-Host "  [!] $covTask failed (no fallback worked)" -ForegroundColor Yellow
-                        }
-                    } else {
-                        $covFail++
-                        Write-Host "  [!] $covTask failed (skipped)" -ForegroundColor Yellow
+                $retryArgs = @($covTasks) + @("--parallel", "--continue", "--rerun-tasks", "--no-configuration-cache")
+                if ($MaxWorkers -gt 0) { $retryArgs += "--max-workers=$MaxWorkers" }
+                Push-Location $ProjectRoot
+                & ./gradlew @retryArgs 2>&1 | Out-Null
+                $retryExit = $LASTEXITCODE
+                Pop-Location
+                if ($retryExit -eq 0) {
+                    $covOk = $covTasks.Count
+                } else {
+                    # Count how many XMLs exist now
+                    foreach ($mod in ($allModules | Where-Object { $_.ProjectRoot -eq $ProjectRoot })) {
+                        $modTool = $mod.CovTool
+                        if (-not $modTool -or $modTool -eq "none") { continue }
+                        $xmlCheck = Get-CoverageXmlPath -Tool $modTool -ModulePath $mod.Path -IsDesktop $Desktop
+                        if ($xmlCheck) { $covOk++ } else { $covFail++ }
                     }
                 }
                 if ($covOk -gt 0) {
-                    Write-Host "  [OK] Per-module fallback: $covOk succeeded, $covFail failed" -ForegroundColor Green
+                    Write-Host "  [OK] Batch retry: $covOk succeeded, $covFail failed" -ForegroundColor Green
                 } else {
                     Write-Host "  [!] All $($covTasks.Count) coverage tasks failed" -ForegroundColor Yellow
                 }
@@ -894,23 +873,28 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
                 if ($covXmlCountS -gt 0) {
                     Write-Host "  [!] Shared coverage had errors (exit $covExitCodeShared) but $covXmlCountS reports generated (--continue saved partial results)" -ForegroundColor Yellow
                 } else {
-                    Write-Host "  [!] Batch shared coverage failed (exit $covExitCodeShared), 0 reports - retrying per-module..." -ForegroundColor Yellow
+                    # Configuration failure: no XMLs at all — retry full batch without config cache
+                    Write-Host "  [!] Batch shared coverage failed (exit $covExitCodeShared), 0 reports - retrying batch without config cache..." -ForegroundColor Yellow
                     $covOkS = 0
                     $covFailS = 0
-                    foreach ($covTask in $covTasksShared) {
-                        Push-Location $sharedLibsPath
-                        & ./gradlew $covTask --no-configuration-cache --rerun-tasks 2>&1 | Out-Null
-                        $taskExit = $LASTEXITCODE
-                        Pop-Location
-                        if ($taskExit -eq 0) {
-                            $covOkS++
-                        } else {
-                            $covFailS++
-                            Write-Host "  [!] $covTask failed (skipped)" -ForegroundColor Yellow
+                    $retryArgsS = @($covTasksShared) + @("--parallel", "--continue", "--rerun-tasks", "--no-configuration-cache")
+                    if ($MaxWorkers -gt 0) { $retryArgsS += "--max-workers=$MaxWorkers" }
+                    Push-Location $sharedLibsPath
+                    & ./gradlew @retryArgsS 2>&1 | Out-Null
+                    $retryExitS = $LASTEXITCODE
+                    Pop-Location
+                    if ($retryExitS -eq 0) {
+                        $covOkS = $covTasksShared.Count
+                    } else {
+                        foreach ($mod in ($allModules | Where-Object { $_.Name -like "shared-kmp-libs:*" })) {
+                            $modTool = $mod.CovTool
+                            if (-not $modTool -or $modTool -eq "none") { continue }
+                            $xmlCheck = Get-CoverageXmlPath -Tool $modTool -ModulePath $mod.Path -IsDesktop $Desktop
+                            if ($xmlCheck) { $covOkS++ } else { $covFailS++ }
                         }
                     }
                     if ($covOkS -gt 0) {
-                        Write-Host "  [OK] Per-module fallback: $covOkS succeeded, $covFailS failed" -ForegroundColor Green
+                        Write-Host "  [OK] Batch retry: $covOkS succeeded, $covFailS failed" -ForegroundColor Green
                     } else {
                         Write-Host "  [!] All $($covTasksShared.Count) shared coverage tasks failed" -ForegroundColor Yellow
                     }
