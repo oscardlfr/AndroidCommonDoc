@@ -1,0 +1,42 @@
+# {{PROJECT_NAME}} -- Competitive Analysis
+
+## Market Position
+
+**Our category**: {{what market we compete in}}
+**Our position**: {{leader / challenger / niche / newcomer}}
+**Our moat**: {{what's hard to replicate}}
+
+## Competitor Matrix
+
+| Dimension | {{PROJECT_NAME}} | {{Competitor A}} | {{Competitor B}} | {{Competitor C}} |
+|-----------|-----------------|------------------|------------------|------------------|
+| Strengths | {{our strengths}} | {{their strengths}} | {{their strengths}} | {{their strengths}} |
+| Weaknesses | {{our weaknesses}} | {{their weaknesses}} | {{their weaknesses}} | {{their weaknesses}} |
+| Pricing | {{our pricing}} | {{their pricing}} | {{their pricing}} | {{their pricing}} |
+| Target Audience | {{who we serve}} | {{who they serve}} | {{who they serve}} | {{who they serve}} |
+| Key Feature | {{differentiator}} | {{differentiator}} | {{differentiator}} | {{differentiator}} |
+| Our Advantage | -- | {{why we win}} | {{why we win}} | {{why we win}} |
+
+## Feature Comparison
+
+| Feature | {{PROJECT_NAME}} | {{Competitor A}} | {{Competitor B}} |
+|---------|-----------------|------------------|------------------|
+| {{feature}} | {{yes/no/partial}} | {{yes/no/partial}} | {{yes/no/partial}} |
+
+## Competitive Threats
+
+| Threat | Likelihood | Impact | Mitigation |
+|--------|-----------|--------|------------|
+| {{threat description}} | Low / Medium / High | Low / Medium / High | {{what we do about it}} |
+
+## Opportunities
+
+| Opportunity | Source | Effort | Potential Impact |
+|-------------|--------|--------|-----------------|
+| {{what we can exploit}} | {{competitor weakness or market gap}} | Low / Medium / High | {{expected result}} |
+
+## Key Takeaways
+
+1. {{Most important competitive insight}}
+2. {{Second most important insight}}
+3. {{Third most important insight}}

@@ -1,0 +1,48 @@
+# {{PROJECT_NAME}} -- Landing Pages
+
+## Page Inventory
+
+| Page | URL | Purpose | Primary CTA | Status |
+|------|-----|---------|-------------|--------|
+| Homepage | / | Convert visitors to signups | {{cta text}} | {{status}} |
+| Pricing | /pricing | Convert free to paid | {{cta text}} | {{status}} |
+| {{page}} | {{url}} | {{purpose}} | {{cta text}} | {{status}} |
+
+## Homepage Structure
+
+### Hero Section
+- **Headline**: {{8 words max}}
+- **Subheadline**: {{1 sentence}}
+- **CTA**: {{button text}}
+- **Visual**: {{what to show}}
+
+### How It Works
+1. {{Step 1}} -- {{brief description}}
+2. {{Step 2}} -- {{brief description}}
+3. {{Step 3}} -- {{brief description}}
+
+### Feature Showcase
+| Feature | Benefit | Visual |
+|---------|---------|--------|
+| {{feature}} | {{why it matters}} | {{screenshot/icon}} |
+
+### Social Proof
+- {{Testimonial, stat, or credibility signal}}
+
+### Final CTA
+- **Headline**: {{urgency or value reminder}}
+- **CTA**: {{button text}}
+
+## SEO Keywords
+
+| Page | Primary Keyword | Secondary Keywords | Search Intent |
+|------|----------------|-------------------|---------------|
+| Homepage | {{keyword}} | {{keyword, keyword}} | {{intent}} |
+| Pricing | {{keyword}} | {{keyword, keyword}} | {{intent}} |
+
+## CTA Strategy
+
+| CTA | Location | Text | Destination |
+|-----|----------|------|-------------|
+| Primary | Hero, Pricing, Footer | {{text}} | {{url}} |
+| Secondary | Features, FAQ | {{text}} | {{url}} |

@@ -79,6 +79,9 @@
 - `/note` — zero-friction idea capture to memory
 - `/review-pr` — code review of a PR with structured suggestions
 - `/benchmark` — run benchmark suites (JVM/Android)
+- `/work` — smart task routing to agents/skills (extensible via frontmatter intent)
+- `/init-session` — show project context and available tools
+- `/resume` — CEO/CTO dashboard with department status from last session
 
 ## Doc Consultation
 - Vault sync → `mcp-server/src/vault/` (transformer, moc-generator, wikilink-generator)
@@ -88,4 +91,5 @@
 - Upstream validation → `docs/guides/upstream-validation.md` (validate_upstream frontmatter)
 - Detekt rules → `detekt-rules/` + `docs/guides/detekt-config.md`
 - Spec-driven workflow → `docs/agents/spec-driven-workflow.md`
-- Agent templates → `setup/agent-templates/` (dev-lead, product-strategist, content-creator)
+- Agent templates → `setup/agent-templates/` (dev-lead, product-strategist, content-creator, landing-page-strategist)
+- Business doc templates → `setup/doc-templates/business/` (PRODUCT_SPEC, MARKETING, PRICING, LANDING_PAGES, COMPETITIVE)

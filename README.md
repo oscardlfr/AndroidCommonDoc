@@ -17,7 +17,7 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custo
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
 - **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 22 cross-platform pairs + 4 Bash-only utilities
-- **AI agent skills** for Claude Code and GitHub Copilot -- 50 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
+- **AI agent skills** for Claude Code and GitHub Copilot -- 53 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 17 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
@@ -113,10 +113,10 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 | What | Destination | Count |
 |------|-------------|-------|
-| Skills | `.claude/skills/*/SKILL.md` | 50 |
+| Skills | `.claude/skills/*/SKILL.md` | 53 |
 | Agents | `.claude/agents/*.md` | 20 |
-| Commands | `.claude/commands/*.md` | 34 |
-| **Total** | | **104 entries** |
+| Commands | `.claude/commands/*.md` | 37 |
+| **Total** | | **110 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -124,7 +124,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 104 L0 entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 110 L0 entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -391,7 +391,7 @@ Real-time pattern enforcement during AI-assisted development:
 
 ## Skills Reference
 
-50 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
+53 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
@@ -474,6 +474,14 @@ These are the skills that get materialized to your `.claude/skills/` directory v
 | `/performance` | Full web performance audit with recommendations |
 | `/seo` | Validate SEO metadata, structure, and discoverability |
 | `/web-quality-audit` | Comprehensive web quality audit across all dimensions |
+
+#### Ecosystem & Workflow
+
+| Skill | What it does |
+|-------|-------------|
+| `/work` | Smart task routing to agents/skills (extensible via frontmatter) |
+| `/init-session` | Project context dashboard (agents, skills, modules, business docs) |
+| `/resume` | CEO/CTO session resume with department status |
 
 ### L0 Maintenance Skills
 
@@ -738,7 +746,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (104 entries,    |   |
+                   |  | SKILL.md |    | (110 entries,    |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -765,13 +773,13 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 34 Claude Code slash commands
+|   +-- commands/           # 37 Claude Code slash commands
 |   +-- agents/             # 20 specialized agents
 |   +-- hooks/              # Real-time Detekt enforcement hooks
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
-|   +-- */SKILL.md          # 50 canonical skill definitions
-|   +-- registry.json       # L0 registry (104 entries, SHA-256 hashes)
+|   +-- */SKILL.md          # 53 canonical skill definitions
+|   +-- registry.json       # L0 registry (110 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
@@ -803,7 +811,7 @@ AndroidCommonDoc/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
 |   +-- copilot-templates/  # 40 Copilot prompt templates (generated from skills)
 |   +-- copilot-agent-templates/ # 4 Copilot agent templates (generated from agent-templates)
-|   +-- agent-templates/    # 5 generic agent templates for L1/L2 projects
+|   +-- agent-templates/    # 7 generic agent templates for L1/L2 projects
 |   +-- github-workflows/   # CI template + PR template for consumer projects
 |   +-- templates/
 |   |   +-- workflows/

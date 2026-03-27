@@ -3,6 +3,8 @@ name: test-specialist
 description: "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation."
 tools: Read, Grep, Glob, Bash, Write
 model: sonnet
+domain: testing
+intent: [test, coverage, quality, tdd]
 memory: project
 skills:
   - test

@@ -3,6 +3,8 @@ name: ui-specialist
 description: "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations."
 tools: Read, Grep, Glob, Bash, Write
 model: sonnet
+domain: development
+intent: [compose, ui, accessibility, material3]
 memory: project
 skills:
   - accessibility

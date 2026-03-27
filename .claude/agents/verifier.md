@@ -2,6 +2,8 @@
 name: verifier
 description: Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.
 tools: Read, Bash, Grep, Glob
+domain: quality
+intent: [verify, spec, criteria, goal, check]
 model: sonnet
 ---
 

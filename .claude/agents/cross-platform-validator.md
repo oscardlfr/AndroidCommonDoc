@@ -3,6 +3,8 @@ name: cross-platform-validator
 description: Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.
 tools: Read, Grep, Glob
 model: sonnet
+domain: quality
+intent: [platform, expect-actual, sourceset, kmp]
 memory: project
 optional_capabilities:
   - context7

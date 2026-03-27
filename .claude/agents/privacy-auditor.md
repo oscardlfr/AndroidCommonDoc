@@ -3,6 +3,8 @@ name: privacy-auditor
 description: Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits.
 tools: Read, Grep, Glob
 model: sonnet
+domain: security
+intent: [privacy, pii, gdpr, data, analytics]
 memory: project
 ---
 

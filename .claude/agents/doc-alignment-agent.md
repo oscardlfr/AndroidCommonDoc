@@ -3,6 +3,8 @@ name: doc-alignment-agent
 description: Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.
 tools: Read, Grep, Glob
 model: sonnet
+domain: quality
+intent: [docs, drift, alignment, stale]
 memory: project
 skills:
   - validate-patterns

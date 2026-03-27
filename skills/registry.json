@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-03-26T23:07:03.333Z",
+  "generated": "2026-03-27T15:24:33.781Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -422,6 +422,17 @@
       }
     },
     {
+      "name": "init-session",
+      "type": "skill",
+      "path": "skills/init-session/SKILL.md",
+      "description": "",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:5d94953842defef68c39c86710b9308c661dc49d47f62e3b00859403b8711400",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
       "name": "lint-resources",
       "type": "skill",
       "path": "skills/lint-resources/SKILL.md",
@@ -564,6 +575,17 @@
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:f497f74867a4b3bfe6adde528be9684a2271c7379c25836894299d52afefd7f8",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
+      "name": "resume",
+      "type": "skill",
+      "path": "skills/resume/SKILL.md",
+      "description": "",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:15aa5398a4d042628a8ecc1b3d82cbd3f0b31cc04ab7da56e70e7f60500ae07b",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -1045,19 +1067,38 @@
       }
     },
     {
+      "name": "work",
+      "type": "skill",
+      "path": "skills/work/SKILL.md",
+      "description": "",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:c1242d0846ca9076f91886354de5023f90ab4c76187daea81bb6eea4fff5d2b0",
+      "dependencies": [],
+      "frontmatter": {}
+    },
+    {
       "name": "advisor",
       "type": "agent",
       "path": ".claude/agents/advisor.md",
       "description": "Researches a single technical decision and returns a structured comparison table with recommendation. Use when choosing between approaches, libraries, or architectures.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b7b86fbd6f0151fa3d3a01520055733a9577b4baca08ad4e47bd506bb0f4ea78",
+      "hash": "sha256:c6949553188577a876b24c41e5d49b6e7a02b5abdbce1df28c168d01dad8a59c",
       "dependencies": [],
       "frontmatter": {
         "name": "advisor",
         "description": "Researches a single technical decision and returns a structured comparison table with recommendation. Use when choosing between approaches, libraries, or architectures.",
         "tools": "Read, Grep, Glob, WebSearch, WebFetch",
-        "model": "sonnet"
+        "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "decide",
+          "choose",
+          "compare",
+          "tradeoff",
+          "library"
+        ]
       }
     },
     {
@@ -1067,13 +1108,20 @@
       "description": "Scans HTTP clients for rate limit handling, retry-after headers, exponential backoff, and timeout configuration. Use when auditing API integration robustness.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:83ca6fe045464699bb536404f087ac71fc5ece934445278eee7c8069ce0091de",
+      "hash": "sha256:421355429825e295b805c27d5ebc7b72ff9a67a48252031637e218af886e4fb8",
       "dependencies": [],
       "frontmatter": {
         "name": "api-rate-limit-auditor",
         "description": "Scans HTTP clients for rate limit handling, retry-after headers, exponential backoff, and timeout configuration. Use when auditing API integration robustness.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "security",
+        "intent": [
+          "rate-limit",
+          "retry",
+          "timeout",
+          "http"
+        ],
         "memory": "project"
       }
     },
@@ -1084,13 +1132,20 @@
       "description": "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:e8aeca5d78018f7c0574abcd3463e4e0a57ec616d6f1b89c8ca9c4ba1aa9b029",
+      "hash": "sha256:a3894f8a42773ff8d8ae640731fff4936499bc62596ced775ba9731149a372ba",
       "dependencies": [],
       "frontmatter": {
         "name": "beta-readiness-agent",
         "description": "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.",
         "tools": "Read, Grep, Glob",
         "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "beta",
+          "readiness",
+          "launch",
+          "onboarding"
+        ],
         "memory": "project"
       }
     },
@@ -1101,13 +1156,21 @@
       "description": "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:79702cb706b03c7576d3c9b68f75d2a4abcb5ad5e747c0f0d385c32db9cc99b4",
+      "hash": "sha256:89d9acc3414825f5879bf695e6aa026b56fa196397fc95f643d4e6edf0689435",
       "dependencies": [],
       "frontmatter": {
         "name": "codebase-mapper",
         "description": "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area).",
         "tools": "Read, Grep, Glob, Bash, Write",
-        "model": "sonnet"
+        "model": "sonnet",
+        "domain": "infrastructure",
+        "intent": [
+          "map",
+          "architecture",
+          "modules",
+          "structure",
+          "inventory"
+        ]
       }
     },
     {
@@ -1117,13 +1180,20 @@
       "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:dd72c2060ed2397ea6c2f70d51ff833523732aa7b82ef5a603d70d02cef9c254",
+      "hash": "sha256:d824736c5b0c2c1a95e24400feedbc3cc938d8a6053d2bc3b856c185b5d088a9",
       "dependencies": [],
       "frontmatter": {
         "name": "cross-platform-validator",
         "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
         "tools": "Read, Grep, Glob",
         "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "platform",
+          "expect-actual",
+          "sourceset",
+          "kmp"
+        ],
         "memory": "project",
         "optional_capabilities": [
           "context7",
@@ -1138,13 +1208,22 @@
       "description": "Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:90456c0ad9f45e5271c81a8456691004962805770aeb7834db954072095cb859",
+      "hash": "sha256:3a2ad3c62bdb16d0088ec7419d7aa1e16b6db20f25f21cd8a1d975d17bbc6488",
       "dependencies": [],
       "frontmatter": {
         "name": "debugger",
         "description": "Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis.",
         "tools": "Read, Write, Edit, Bash, Grep, Glob, WebSearch",
         "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "bug",
+          "error",
+          "fix",
+          "broken",
+          "crash",
+          "exception"
+        ],
         "skills": [
           "test"
         ]
@@ -1157,13 +1236,20 @@
       "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:f58d71e2c7dc27eb6bd383e07179a0eb00127e984257fa2f1038cca333c6bcaf",
+      "hash": "sha256:864938174be5a9518fe506ce90b81c53f7924a2c08a622fcafa8cfebf5ee8bf4",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-alignment-agent",
         "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
         "tools": "Read, Grep, Glob",
         "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "docs",
+          "drift",
+          "alignment",
+          "stale"
+        ],
         "memory": "project",
         "skills": [
           "validate-patterns",
@@ -1178,13 +1264,19 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Detects drift between docs/*.md pattern documentation and what scripts/skills actually implement. Flags outdated patterns, missing validations, and version mismatches.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:b95edeaf3f98925f0ec7118d38a3ca9a0720075804ddc36674ba4b52c1ada7e4",
+      "hash": "sha256:8e29819fbaa88f611639e93bdc6a4f1fcb3c28a258b6c71dc3c223ede49bcc41",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-code-drift-detector",
         "description": "Internal validator -- invoked by quality-gate-orchestrator. Detects drift between docs/*.md pattern documentation and what scripts/skills actually implement. Flags outdated patterns, missing validations, and version mismatches.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "audit",
+        "intent": [
+          "drift",
+          "doc-code",
+          "pattern"
+        ],
         "memory": "project"
       }
     },
@@ -1195,13 +1287,19 @@
       "description": "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:60258fcfd6039e834a74d521c9334f2c6193bfefae6b6570e179dafb6a953555",
+      "hash": "sha256:e38aa50d5dec8532e3093f8c478cef086e823da2edc1d8f4bbfd088f1c1cdd12",
       "dependencies": [],
       "frontmatter": {
         "name": "full-audit-orchestrator",
         "description": "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking.",
         "tools": "Read, Grep, Glob, Bash, Agent, Write",
         "model": "sonnet",
+        "domain": "audit",
+        "intent": [
+          "full-audit",
+          "quality-gate",
+          "wave"
+        ],
         "memory": "project"
       }
     },
@@ -1212,13 +1310,20 @@
       "description": "Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1d6ad8777614cf4230dd2209c14bdaf921f1c1598cecb86d20ae68371cbe75d8",
+      "hash": "sha256:3892cc9a6704e8abe759200490ac12445f866fad9a0aa087bfcc70d107f79d7f",
       "dependencies": [],
       "frontmatter": {
         "name": "l0-coherence-auditor",
         "description": "Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "audit",
+        "intent": [
+          "coherence",
+          "l0",
+          "hub",
+          "frontmatter"
+        ],
         "memory": "project",
         "optional_capabilities": [
           "mcp-gsd",
@@ -1235,13 +1340,21 @@
       "description": "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:746539da9d5255d41ded390550b2a77c4b74c2299883c339aba9c605097aa647",
+      "hash": "sha256:ba37b344cb92b04f50405dbf9c503b3863cfa321cf2dc651226857e00938bed5",
       "dependencies": [],
       "frontmatter": {
         "name": "privacy-auditor",
         "description": "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits.",
         "tools": "Read, Grep, Glob",
         "model": "sonnet",
+        "domain": "security",
+        "intent": [
+          "privacy",
+          "pii",
+          "gdpr",
+          "data",
+          "analytics"
+        ],
         "memory": "project"
       }
     },
@@ -1252,13 +1365,19 @@
       "description": "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:86081978e3987ec71dbafbd4e0b9c37d5d14091e8a2cfa88f76fe4a13b0cd2c2",
+      "hash": "sha256:03cc967af7770371122cc03f927b37f1ea33009e61efe8d6552142de90e90912",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gate-orchestrator",
         "description": "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement.",
         "tools": "Read, Grep, Glob, Bash",
         "model": "sonnet",
+        "domain": "audit",
+        "intent": [
+          "quality-gate",
+          "consistency",
+          "validators"
+        ],
         "memory": "project"
       }
     },
@@ -1269,13 +1388,20 @@
       "description": "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:2908cec55349c9aa557b6efd13cfb620d5cb447175fa4ffc90c2fbd62f5e39e9",
+      "hash": "sha256:60c26510c804ae7f7fb9b8ea6fd9e6ac42a98bfecc07c22ad1439ff3c80d0daf",
       "dependencies": [],
       "frontmatter": {
         "name": "release-guardian-agent",
         "description": "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "infrastructure",
+        "intent": [
+          "release",
+          "publish",
+          "deploy",
+          "secrets"
+        ],
         "memory": "project",
         "skills": [
           "sbom",
@@ -1290,13 +1416,21 @@
       "description": "Ad-hoc technical research on any topic. Use before implementation to gather context, evaluate options, or understand a domain.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f3e2a50efba2e336ee06f0f6f5be8079d954c6952fe2256470c0c0d0ea9db92f",
+      "hash": "sha256:b8412aff5aae99a55036e826abdd766a1eb08c959f808446af302768451bbed2",
       "dependencies": [],
       "frontmatter": {
         "name": "researcher",
         "description": "Ad-hoc technical research on any topic. Use before implementation to gather context, evaluate options, or understand a domain.",
         "tools": "Read, Grep, Glob, WebSearch, WebFetch",
-        "model": "sonnet"
+        "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "research",
+          "investigate",
+          "explore",
+          "domain",
+          "learn"
+        ]
       }
     },
     {
@@ -1306,13 +1440,20 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that PowerShell and Bash script pairs are functionally equivalent. Checks flags, output format, and exit codes between scripts/ps1/ and scripts/sh/.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:a8349229b5da288c062448647e4b1e1a0b46d420276f6b97176a82e4ab3e88b9",
+      "hash": "sha256:8076c30532e7ec190d8ee05f4772163b7f2adb08b5cfe767faba59c6d84843d8",
       "dependencies": [],
       "frontmatter": {
         "name": "script-parity-validator",
         "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that PowerShell and Bash script pairs are functionally equivalent. Checks flags, output format, and exit codes between scripts/ps1/ and scripts/sh/.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "audit",
+        "intent": [
+          "parity",
+          "ps1",
+          "sh",
+          "script"
+        ],
         "memory": "project"
       }
     },
@@ -1323,13 +1464,20 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:1b9d7840e030dce10d30644dbaa0709ed502512d7fcf8c50ed0877f83a496a61",
+      "hash": "sha256:9ab922ea2815cbaeced38d279402fee1b8f373b643dc184becb511c615a1f238",
       "dependencies": [],
       "frontmatter": {
         "name": "skill-script-alignment",
         "description": "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "audit",
+        "intent": [
+          "skill",
+          "script",
+          "alignment",
+          "command"
+        ],
         "memory": "project"
       }
     },
@@ -1340,13 +1488,19 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Checks every command has a wrapper template and a Copilot prompt.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:ec4ac20d9dac3b25da2d17e6957966043e43f8a436e23949f6ed83b43872e6f8",
+      "hash": "sha256:eab63a3b6b3b87b79199367230b8334854787b041b71b6ced56b70f44f2a49df",
       "dependencies": [],
       "frontmatter": {
         "name": "template-sync-validator",
         "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Checks every command has a wrapper template and a Copilot prompt.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "audit",
+        "intent": [
+          "template",
+          "sync",
+          "copilot"
+        ],
         "memory": "project"
       }
     },
@@ -1357,13 +1511,20 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:0ffb6f8dd2869c7d7e787d99ead50c8b31caf961354afbb4035077d6d860704a",
+      "hash": "sha256:a2e18650d3a4b198bb38bc025fc628e4f31fab5339d839ac29fc9e7fa7ecb74a",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
         "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
         "tools": "Read, Grep, Glob, Bash, Write",
         "model": "sonnet",
+        "domain": "testing",
+        "intent": [
+          "test",
+          "coverage",
+          "quality",
+          "tdd"
+        ],
         "memory": "project",
         "skills": [
           "test",
@@ -1385,13 +1546,20 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:882f86d21d44f9f6dd0b500aefd81652f2d020d322365696bd14add58c23de05",
+      "hash": "sha256:dce161bf979feb8454844da927a38c1de7cef76c88cdaa5a84290cab62b7ec3d",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
         "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
         "tools": "Read, Grep, Glob, Bash, Write",
         "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "compose",
+          "ui",
+          "accessibility",
+          "material3"
+        ],
         "memory": "project",
         "skills": [
           "accessibility",
@@ -1406,12 +1574,20 @@
       "description": "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e20c7f43e5bfd27fef02586d201d8ec89bcd1c8ead3ef9c37bd1116caad9bf30",
+      "hash": "sha256:8c7c159c1fe37796c90f576f4b4b0a0e155a83977b03cfa405c83716c11cd337",
       "dependencies": [],
       "frontmatter": {
         "name": "verifier",
         "description": "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.",
         "tools": "Read, Bash, Grep, Glob",
+        "domain": "quality",
+        "intent": [
+          "verify",
+          "spec",
+          "criteria",
+          "goal",
+          "check"
+        ],
         "model": "sonnet"
       }
     },
@@ -1556,6 +1732,19 @@
       "frontmatter": {}
     },
     {
+      "name": "init-session",
+      "type": "command",
+      "path": ".claude/commands/init-session.md",
+      "description": "Show project context — available agents, skills, modules, and business docs.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:2dfdc04c30ff4654ef36e1d4f3d6afd6d2af2aca4cdf36894302478cd6b58230",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Show project context — available agents, skills, modules, and business docs."
+      }
+    },
+    {
       "name": "lint-resources",
       "type": "command",
       "path": ".claude/commands/lint-resources.md",
@@ -1694,6 +1883,19 @@
       }
     },
     {
+      "name": "resume",
+      "type": "command",
+      "path": ".claude/commands/resume.md",
+      "description": "Resume session with CEO/CTO dashboard — shows status by department from last session.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:81ae89d4f5ecb8fdf5b3d546eac9c464328ba6a55448dcdcc8c1f6d3a9adb690",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Resume session with CEO/CTO dashboard — shows status by department from last session."
+      }
+    },
+    {
       "name": "review-pr",
       "type": "command",
       "path": ".claude/commands/review-pr.md",
@@ -1825,6 +2027,19 @@
       "dependencies": [],
       "frontmatter": {
         "description": "Goal-backward verification — check if code achieves stated goals."
+      }
+    },
+    {
+      "name": "work",
+      "type": "command",
+      "path": ".claude/commands/work.md",
+      "description": "Smart task routing — analyzes your request and delegates to the right agent or skill.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:beaeeadf0bf014d1149958a272bd3fbac4198e131ee8799d2b30ac8fd270f0c0",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Smart task routing — analyzes your request and delegates to the right agent or skill."
       }
     }
   ]

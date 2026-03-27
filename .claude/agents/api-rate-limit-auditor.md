@@ -3,6 +3,8 @@ name: api-rate-limit-auditor
 description: Scans HTTP clients for rate limit handling, retry-after headers, exponential backoff, and timeout configuration. Use when auditing API integration robustness.
 tools: Read, Grep, Glob
 model: haiku
+domain: security
+intent: [rate-limit, retry, timeout, http]
 memory: project
 ---
 

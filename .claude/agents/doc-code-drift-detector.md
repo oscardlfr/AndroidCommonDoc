@@ -3,6 +3,8 @@ name: doc-code-drift-detector
 description: "Internal validator -- invoked by quality-gate-orchestrator. Detects drift between docs/*.md pattern documentation and what scripts/skills actually implement. Flags outdated patterns, missing validations, and version mismatches."
 tools: Read, Grep, Glob
 model: haiku
+domain: audit
+intent: [drift, doc-code, pattern]
 memory: project
 ---
 
