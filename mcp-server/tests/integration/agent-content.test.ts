@@ -218,6 +218,37 @@ describe('pattern-lint cancellation-rethrow check', () => {
   });
 });
 
+describe("v1.5.0 extensible routing", () => {
+  const agentsDir = path.join(ROOT, ".claude", "agents");
+
+  it("all agents have domain frontmatter", () => {
+    const agents = fs.readdirSync(agentsDir).filter(f => f.endsWith(".md"));
+    const missing: string[] = [];
+    for (const agent of agents) {
+      const content = fs.readFileSync(path.join(agentsDir, agent), "utf8");
+      if (!content.match(/^domain:/m)) missing.push(agent);
+    }
+    expect(missing, `Agents missing domain: ${missing.join(", ")}`).toHaveLength(0);
+  });
+
+  it("all agents have intent frontmatter", () => {
+    const agents = fs.readdirSync(agentsDir).filter(f => f.endsWith(".md"));
+    const missing: string[] = [];
+    for (const agent of agents) {
+      const content = fs.readFileSync(path.join(agentsDir, agent), "utf8");
+      if (!content.match(/^intent:/m)) missing.push(agent);
+    }
+    expect(missing, `Agents missing intent: ${missing.join(", ")}`).toHaveLength(0);
+  });
+
+  it("test-specialist has script-first execution rules", () => {
+    const content = fs.readFileSync(path.join(agentsDir, "test-specialist.md"), "utf8");
+    expect(content).toContain("NEVER run");
+    expect(content).toContain("/test");
+    expect(content).toContain("/benchmark");
+  });
+});
+
 describe('readme-audit CRLF compatibility', () => {
   const content = fs.readFileSync(
     path.join(ROOT, 'scripts/sh/readme-audit.sh'), 'utf-8'

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-03-27T16:13:15.349Z",
+  "generated": "2026-03-27T16:59:08.496Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1511,7 +1511,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:a2e18650d3a4b198bb38bc025fc628e4f31fab5339d839ac29fc9e7fa7ecb74a",
+      "hash": "sha256:84f6d1a8928b312fa555d33ec600602e14c2a01c33ea9159c8130f5a2c943b36",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",

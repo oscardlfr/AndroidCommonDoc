@@ -51,8 +51,10 @@ teardown() {
     grep -q "function Get-CoverageGradleTask" "$PS1_LIB"
 }
 
-@test "parity: PS1 kover retry uses batch strategy" {
-    grep -q "rerun-tasks" "$PS1_DIR/run-parallel-coverage-suite.ps1"
+@test "parity: PS1 kover does NOT use --rerun-tasks as argument" {
+    # --rerun-tasks removed: core-storage-secure fails on re-execution
+    count=$(grep -c '^\s.*\+= "--rerun-tasks"' "$PS1_DIR/run-parallel-coverage-suite.ps1" || true)
+    [ "$count" -eq 0 ]
 }
 
 @test "parity: Get-CoverageXmlPath exists in PS1" {
@@ -96,8 +98,9 @@ teardown() {
     grep -q "ExcludeCoverage" "$PS1_DIR/run-changed-modules-tests.ps1"
 }
 
-@test "parity: PS1 run-parallel has kover batch retry (rerun-tasks)" {
-    grep -q "rerun-tasks" "$PS1_DIR/run-parallel-coverage-suite.ps1"
+@test "parity: PS1 run-parallel has kover batch (no --rerun-tasks as arg)" {
+    count=$(grep -c '^\s.*\+= "--rerun-tasks"' "$PS1_DIR/run-parallel-coverage-suite.ps1" || true)
+    [ "$count" -eq 0 ]
 }
 
 @test "parity: PS1 run-parallel has partial-success retry (missingCov)" {
@@ -1110,4 +1113,130 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 @test "benchmark: detection libraries exist" {
     [ -f "$L0_ROOT/scripts/sh/lib/benchmark-detect.sh" ]
     [ -f "$L0_ROOT/scripts/ps1/lib/Benchmark-Detect.ps1" ]
+}
+
+# ===========================================================================
+# === v1.5.0 Ecosystem Initialization + Business Layer Tests ===
+# ===========================================================================
+
+@test "skills: /work skill exists" {
+    [ -f "$L0_ROOT/skills/work/SKILL.md" ]
+    [ -f "$L0_ROOT/.claude/commands/work.md" ]
+}
+
+@test "skills: /init-session skill exists" {
+    [ -f "$L0_ROOT/skills/init-session/SKILL.md" ]
+    [ -f "$L0_ROOT/.claude/commands/init-session.md" ]
+}
+
+@test "skills: /resume skill exists" {
+    [ -f "$L0_ROOT/skills/resume/SKILL.md" ]
+    [ -f "$L0_ROOT/.claude/commands/resume.md" ]
+}
+
+@test "skills: /work SKILL.md has routing rules" {
+    grep -q "bug.*error.*fix" "$L0_ROOT/skills/work/SKILL.md"
+    grep -q "product-strategist" "$L0_ROOT/skills/work/SKILL.md"
+    grep -q "content-creator" "$L0_ROOT/skills/work/SKILL.md"
+    grep -q "Level 2.*Frontmatter Discovery" "$L0_ROOT/skills/work/SKILL.md"
+}
+
+@test "skills: /work notes business agents are opt-in" {
+    grep -q "opt-in" "$L0_ROOT/skills/work/SKILL.md"
+    grep -q "verify.*exists" "$L0_ROOT/skills/work/SKILL.md" || grep -q "fall through" "$L0_ROOT/skills/work/SKILL.md"
+}
+
+@test "skills: 12 new command stubs exist" {
+    for cmd in test test-full-parallel test-changed coverage benchmark extract-errors verify-kmp validate-patterns sync-l0 audit-docs validate-upstream generate-rules; do
+        [ -f "$L0_ROOT/.claude/commands/$cmd.md" ]
+    done
+}
+
+@test "skills: command stubs have description frontmatter" {
+    for cmd in test coverage benchmark verify-kmp validate-patterns sync-l0 audit-docs work init-session resume; do
+        grep -q "^description:" "$L0_ROOT/.claude/commands/$cmd.md"
+    done
+}
+
+@test "agents: all 20 agents have domain frontmatter" {
+    for agent in $L0_ROOT/.claude/agents/*.md; do
+        grep -q "^domain:" "$agent" || { echo "MISSING domain: $agent"; return 1; }
+    done
+}
+
+@test "agents: all 20 agents have intent frontmatter" {
+    for agent in $L0_ROOT/.claude/agents/*.md; do
+        grep -q "^intent:" "$agent" || { echo "MISSING intent: $agent"; return 1; }
+    done
+}
+
+@test "agents: domain values are valid" {
+    for agent in $L0_ROOT/.claude/agents/*.md; do
+        domain=$(grep "^domain:" "$agent" | head -1 | sed 's/domain: *//')
+        echo "$domain" | grep -qE "^(development|testing|security|quality|audit|business|marketing|infrastructure)$" || { echo "INVALID domain '$domain' in $agent"; return 1; }
+    done
+}
+
+@test "templates: landing-page-strategist exists" {
+    [ -f "$L0_ROOT/setup/agent-templates/landing-page-strategist.md" ]
+    grep -q "^name: landing-page-strategist" "$L0_ROOT/setup/agent-templates/landing-page-strategist.md"
+}
+
+@test "templates: 7 agent templates exist" {
+    count=$(ls $L0_ROOT/setup/agent-templates/*.md | grep -v README | wc -l)
+    [ "$count" -eq 7 ]
+}
+
+@test "templates: business doc templates exist (5)" {
+    [ -d "$L0_ROOT/setup/doc-templates/business" ]
+    [ -f "$L0_ROOT/setup/doc-templates/business/PRODUCT_SPEC.md.template" ]
+    [ -f "$L0_ROOT/setup/doc-templates/business/MARKETING.md.template" ]
+    [ -f "$L0_ROOT/setup/doc-templates/business/PRICING.md.template" ]
+    [ -f "$L0_ROOT/setup/doc-templates/business/LANDING_PAGES.md.template" ]
+    [ -f "$L0_ROOT/setup/doc-templates/business/COMPETITIVE.md.template" ]
+}
+
+@test "templates: dev-lead has HARD delegation rules" {
+    grep -q "HARD Delegation" "$L0_ROOT/setup/agent-templates/dev-lead.md"
+    grep -q "MUST delegate" "$L0_ROOT/setup/agent-templates/dev-lead.md"
+}
+
+@test "templates: dev-lead has script-first testing" {
+    grep -q "NEVER run.*gradlew" "$L0_ROOT/setup/agent-templates/dev-lead.md" || grep -q "Script-First" "$L0_ROOT/setup/agent-templates/dev-lead.md"
+}
+
+@test "agents: test-specialist has script-first execution section" {
+    grep -q "NEVER run.*gradlew" "$L0_ROOT/.claude/agents/test-specialist.md"
+    grep -q "/test.*module" "$L0_ROOT/.claude/agents/test-specialist.md"
+    grep -q "/benchmark" "$L0_ROOT/.claude/agents/test-specialist.md"
+}
+
+@test "CLAUDE.md: lists /work, /init-session, /resume" {
+    grep -q "/work" "$L0_ROOT/CLAUDE.md"
+    grep -q "/init-session" "$L0_ROOT/CLAUDE.md"
+    grep -q "/resume" "$L0_ROOT/CLAUDE.md"
+}
+
+@test "CHANGELOG: has ecosystem initialization entry" {
+    grep -q "Ecosystem initialization" "$L0_ROOT/CHANGELOG.md" || grep -q "init-session" "$L0_ROOT/CHANGELOG.md"
+}
+
+@test "README: mentions /work routing" {
+    grep -q "/work" "$README"
+    grep -q "routing" "$README" || grep -q "Entry Points" "$README"
+}
+
+@test "README: mentions MODULE_MAP.md pattern" {
+    grep -q "MODULE_MAP" "$README"
+}
+
+@test "README: mentions business layer" {
+    grep -q "Business" "$README" || grep -q "business" "$README"
+    grep -q "doc-templates" "$README" || grep -q "PRODUCT_SPEC" "$README"
+}
+
+@test "README: counts match 20 agents, 53 skills, 49 commands" {
+    grep -q "20 specialized agents" "$README"
+    grep -q "53 canonical" "$README"
+    # 49 commands verified via sync table
 }

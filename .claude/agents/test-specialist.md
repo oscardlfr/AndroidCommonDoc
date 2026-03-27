@@ -29,6 +29,25 @@ If `monitor-sources` MCP tool is available (`mcp-monitor`):
 
 ---
 
+## Execution: ALWAYS Use Skills and Scripts
+
+**NEVER run `./gradlew` directly.** Always use L0 skills which wrap project scripts:
+
+| Task | Skill | Underlying Script |
+|------|-------|-------------------|
+| Run module tests | `/test <module>` | `scripts/sh/gradle-run.sh` (RTK-optimized) |
+| Run full suite | `/test-full-parallel` | `scripts/sh/run-parallel-coverage-suite.sh` |
+| Run changed only | `/test-changed` | `scripts/sh/run-changed-modules-tests.sh` |
+| Coverage analysis | `/coverage` | `scripts/sh/run-parallel-coverage-suite.sh` |
+| Benchmarks | `/benchmark` | `scripts/sh/run-benchmarks.sh` |
+| Extract errors | `/extract-errors` | `scripts/sh/gradle-run.sh` (error filter) |
+
+**Why:** Scripts handle Windows file locks, daemon management, Kover fallbacks, RTK token optimization, and parallel execution. Direct Gradle calls skip all of this and waste tokens on verbose output.
+
+**Only use `./gradlew` directly** as absolute last resort if the skill/script is broken.
+
+---
+
 ## Core Principle: Quality Over Coverage
 
 **NEVER write tests just to hit a coverage number.** Every test must validate real behavior — a state transition, an error path, an edge case, a user-visible outcome. If a test only asserts a constant or calls a function without verifying its effect, it's coverage gaming and you MUST NOT write it.

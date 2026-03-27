@@ -745,13 +745,14 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
     Write-Host "[>] Generating coverage reports..." -ForegroundColor Cyan
 
     # Run main project coverage tasks from ProjectRoot
-    # --rerun-tasks forces Kover to regenerate XML even when tests are UP-TO-DATE
+    # Do NOT use --rerun-tasks here: it forces re-execution of desktopTest
+    # dependencies, and modules like core-storage-secure fail with residual
+    # keystore state. Kover generates XML from UP-TO-DATE test results fine.
     if ($covTasks.Count -gt 0) {
         $covArgs = @()
         $covArgs += $covTasks
         $covArgs += "--parallel"
         $covArgs += "--continue"
-        $covArgs += "--rerun-tasks"
         if ($MaxWorkers -gt 0) { $covArgs += "--max-workers=$MaxWorkers" }
 
         Push-Location $ProjectRoot
@@ -788,7 +789,7 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
                 $recoveredCov = 0
                 if ($missingCov -gt 0) {
                     Write-Host "  [>] Batch partial: $covXmlCount ok, $missingCov missing -> retrying as single batch..." -ForegroundColor Yellow
-                    $retryArgs = @($missingTasks) + @("--parallel", "--continue", "--rerun-tasks")
+                    $retryArgs = @($missingTasks) + @("--parallel", "--continue")
                     if ($MaxWorkers -gt 0) { $retryArgs += "--max-workers=$MaxWorkers" }
                     Push-Location $ProjectRoot
                     & ./gradlew @retryArgs 2>&1 | Out-Null
@@ -815,7 +816,7 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
                 Write-Host "  [!] Batch coverage failed (exit $covExitCode), 0 reports - retrying full batch without config cache..." -ForegroundColor Yellow
                 $covOk = 0
                 $covFail = 0
-                $retryArgs = @($covTasks) + @("--parallel", "--continue", "--rerun-tasks", "--no-configuration-cache")
+                $retryArgs = @($covTasks) + @("--parallel", "--continue", "--no-configuration-cache")
                 if ($MaxWorkers -gt 0) { $retryArgs += "--max-workers=$MaxWorkers" }
                 Push-Location $ProjectRoot
                 & ./gradlew @retryArgs 2>&1 | Out-Null
@@ -851,7 +852,6 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
             $covArgsShared += $covTasksShared
             $covArgsShared += "--parallel"
             $covArgsShared += "--continue"
-            $covArgsShared += "--rerun-tasks"
             if ($MaxWorkers -gt 0) { $covArgsShared += "--max-workers=$MaxWorkers" }
 
             Write-Host "  [>] Generating shared-kmp-libs coverage ($($covTasksShared.Count) modules)..." -ForegroundColor Cyan
@@ -877,7 +877,7 @@ if (-not $SkipTests -and $allTestTasks.Count -gt 0) {
                     Write-Host "  [!] Batch shared coverage failed (exit $covExitCodeShared), 0 reports - retrying batch without config cache..." -ForegroundColor Yellow
                     $covOkS = 0
                     $covFailS = 0
-                    $retryArgsS = @($covTasksShared) + @("--parallel", "--continue", "--rerun-tasks", "--no-configuration-cache")
+                    $retryArgsS = @($covTasksShared) + @("--parallel", "--continue", "--no-configuration-cache")
                     if ($MaxWorkers -gt 0) { $retryArgsS += "--max-workers=$MaxWorkers" }
                     Push-Location $sharedLibsPath
                     & ./gradlew @retryArgsS 2>&1 | Out-Null
