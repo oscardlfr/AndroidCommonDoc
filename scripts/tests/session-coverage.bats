@@ -1014,3 +1014,100 @@ teardown() {
 @test "monitor-docs skill: shows L1 usage example" {
     grep -q "layer L1" skills/monitor-docs/SKILL.md
 }
+
+# ===========================================================================
+# v1.4.0 Agent Ecosystem Tests
+# ===========================================================================
+
+@test "agents: all 5 new agents exist" {
+    for agent in advisor codebase-mapper debugger researcher verifier; do
+        [ -f "$L0_ROOT/.claude/agents/$agent.md" ]
+    done
+}
+
+@test "agents: new agents have valid frontmatter (name + model)" {
+    for agent in advisor codebase-mapper debugger researcher verifier; do
+        grep -q "^name:" "$L0_ROOT/.claude/agents/$agent.md"
+        grep -q "^model:" "$L0_ROOT/.claude/agents/$agent.md"
+    done
+}
+
+@test "skills: all 7 new skills exist" {
+    for skill in debug research map-codebase verify decide note review-pr; do
+        [ -f "$L0_ROOT/skills/$skill/SKILL.md" ]
+    done
+}
+
+@test "skills: all 7 new commands exist" {
+    for cmd in debug research map-codebase verify decide note review-pr; do
+        [ -f "$L0_ROOT/.claude/commands/$cmd.md" ]
+    done
+}
+
+@test "skills: agent-invoking skills reference correct agents" {
+    grep -q 'subagent_type="debugger"' "$L0_ROOT/skills/debug/SKILL.md"
+    grep -q 'subagent_type="researcher"' "$L0_ROOT/skills/research/SKILL.md"
+    grep -q 'subagent_type="codebase-mapper"' "$L0_ROOT/skills/map-codebase/SKILL.md"
+    grep -q 'subagent_type="verifier"' "$L0_ROOT/skills/verify/SKILL.md"
+    grep -q 'subagent_type="advisor"' "$L0_ROOT/skills/decide/SKILL.md"
+}
+
+@test "agents: test-specialist knows benchmark skill" {
+    grep -q "benchmark" "$L0_ROOT/.claude/agents/test-specialist.md"
+}
+
+@test "agents: ui-specialist knows lint-resources skill" {
+    grep -q "lint-resources" "$L0_ROOT/.claude/agents/ui-specialist.md"
+}
+
+@test "hooks: 3 new hooks exist" {
+    [ -f "$L0_ROOT/.claude/hooks/plan-context.js" ]
+    [ -f "$L0_ROOT/.claude/hooks/doc-freshness-alert.js" ]
+    [ -f "$L0_ROOT/.claude/hooks/agent-delegation-reminder.js" ]
+}
+
+@test "templates: product-strategist and content-creator exist" {
+    [ -f "$L0_ROOT/setup/agent-templates/product-strategist.md" ]
+    [ -f "$L0_ROOT/setup/agent-templates/content-creator.md" ]
+}
+
+@test "docs: spec-driven-workflow exists with frontmatter" {
+    [ -f "$L0_ROOT/docs/agents/spec-driven-workflow.md" ]
+    grep -q "^slug: spec-driven-workflow" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+}
+
+@test "README: counts match 20 agents, 50 skills" {
+    grep -q "20 specialized agents" "$README"
+    grep -q "50 canonical" "$README"
+}
+
+@test "CLAUDE.md: lists all new agents in delegation table" {
+    for agent in debugger verifier advisor researcher codebase-mapper; do
+        grep -q "$agent" "$L0_ROOT/CLAUDE.md"
+    done
+}
+
+@test "CLAUDE.md: lists all new skills in commands section" {
+    for skill in debug research map-codebase verify decide note review-pr benchmark; do
+        grep -q "/$skill" "$L0_ROOT/CLAUDE.md"
+    done
+}
+
+@test "model-profiles: debugger is opus in advanced" {
+    python3 -c "
+import json
+d = json.load(open('$L0_ROOT/.claude/model-profiles.json'))
+assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugger not opus in advanced'
+"
+}
+
+@test "benchmark: SKILL.md exists with runner reference" {
+    [ -f "$L0_ROOT/skills/benchmark/SKILL.md" ]
+    [ -f "$L0_ROOT/scripts/sh/run-benchmarks.sh" ]
+    [ -f "$L0_ROOT/scripts/ps1/run-benchmarks.ps1" ]
+}
+
+@test "benchmark: detection libraries exist" {
+    [ -f "$L0_ROOT/scripts/sh/lib/benchmark-detect.sh" ]
+    [ -f "$L0_ROOT/scripts/ps1/lib/Benchmark-Detect.ps1" ]
+}

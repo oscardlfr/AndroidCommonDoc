@@ -122,6 +122,25 @@ describe('agent content validation', () => {
   });
 });
 
+describe('v1.4.0 spec-driven agents', () => {
+  const agentsDir = path.join(ROOT, '.claude/agents');
+  const newAgents = ["advisor", "codebase-mapper", "debugger", "researcher", "verifier"];
+
+  for (const agent of newAgents) {
+    it(`${agent} has no GSD references`, () => {
+      const content = fs.readFileSync(path.join(agentsDir, `${agent}.md`), 'utf-8');
+      expect(content).not.toContain('.planning/');
+      expect(content).not.toContain('.gsd/');
+      expect(content).not.toContain('gsd-tools');
+    });
+  }
+
+  it('debugger references /test skill', () => {
+    const content = fs.readFileSync(path.join(agentsDir, 'debugger.md'), 'utf-8');
+    expect(content).toContain('test');
+  });
+});
+
 describe('suppressions system', () => {
   it('suppressions.sh exists in lib/', () => {
     expect(fs.existsSync(path.join(ROOT, 'scripts/sh/lib/suppressions.sh'))).toBe(true);
