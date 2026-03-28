@@ -44,11 +44,12 @@ You are FORBIDDEN from doing these things directly:
 ### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
 
 ```
-□ 1. Agent(context-provider) called BEFORE TeamCreate?   → YES or STOP
-□ 2. Context report used to decide team composition?      → YES or STOP
-□ 3. Only needed peers in team (max 6-7)?                 → YES or STOP
-□ 4. context-provider spawned as team peer?               → YES or STOP
-□ 5. doc-updater spawned as team peer?                    → YES or STOP
+□ 1. Agent(context-provider) called BEFORE TeamCreate?     → YES or STOP
+□ 2. Agent(planner) called for non-trivial tasks?          → YES or STOP
+□ 3. Context report used to decide team composition?        → YES or STOP
+□ 4. Only needed peers in team (max 6-7)?                   → YES or STOP
+□ 5. context-provider + doc-updater spawned as team peers?  → YES or STOP
+□ 6. After doc changes: validate-doc-structure passes?      → YES or STOP
 ```
 
 **If ANY checkbox is NO → DO NOT proceed. Fix it first.**
@@ -81,17 +82,16 @@ SendMessage(to="arch-testing", summary="test written", message="test-specialist 
 
 ```
 1. Read the plan/task
-2. Agent(context-provider, prompt="Current state for: {task}") — SUB-AGENT before team
-3. Based on context report, decide team composition:
-   Default: arch-testing + arch-platform + arch-integration + context-provider + doc-updater
-   + marketing-lead → only if marketing/content work needed
-   + product-lead → only if pricing/spec decisions needed
-4. TeamCreate(team_name="wave-1")
-5. Spawn ONLY needed peers into team
-6. SendMessage(to="context-provider", ...) — share full context with team
-7. Architects detect → SendMessage to you for dev dispatch → you spawn devs → relay results
-8. Collect verdicts → SendMessage(to="doc-updater", ...) to document work
-9. Report to user
+2. Agent(context-provider, prompt="Current state for: {task}") — sub-agent, before team
+3. Agent(planner, prompt="Plan: {task}. Context: {report}") — sub-agent
+4. If planner flags cross-dept impact:
+   Agent(product-strategist, prompt="Review plan alignment with spec")
+   Agent(content-creator, prompt="Review plan impact on marketing claims")
+5. Synthesize final plan
+6. TeamCreate with needed peers (default: 3 arch + context-provider + doc-updater)
+7. Architects detect → SendMessage to PM for dev dispatch
+8. Quality Gate (see below)
+9. Commit
 ```
 
 **Why context before team**: Context report informs WHO to add. If issue is purely data-layer, you might not need all 3 architects.
@@ -199,6 +199,38 @@ PM (team peer) coordinates
 All APPROVE → next wave
 Any ESCALATE → PM re-plans (never codes)
 ```
+
+### Quality Gate Protocol (runs AFTER architect APPROVE, BEFORE commit)
+
+Sequential — each step BLOCKS. Do NOT skip steps.
+
+```
+0. validate-doc-structure → ALL docs have valid frontmatter → BLOCK if missing
+1. /test-full-parallel --fresh-daemon → ALL must pass → BLOCK if any fail
+2. /coverage → compare with baseline
+   - Drop ≤1%: document reason, proceed
+   - Drop >1%: INVESTIGATE root cause (see Coverage Investigation below)
+3. /benchmark → compare with baseline (if performance-sensitive changes)
+4. /pre-pr → final lint + commit checks
+```
+
+All pass → commit. Any fail → investigate → fix → re-run gate.
+
+### Coverage Drop Investigation (non-negotiable)
+
+When /coverage shows a module's % decreased >1%:
+
+1. **DO NOT** add tests to "fill the gap" — that's gaming
+2. **INVESTIGATE** why coverage dropped:
+   - New code paths not covered? → Are they testable? If not, WHY?
+   - Deleted tests? → Were they valid? Who deleted and why?
+   - Code moved between modules? → Coverage moved too, not dropped
+3. If new code is not testable → it's probably not SOLID:
+   - Too many dependencies? → Extract interface
+   - Side effects in constructor? → Dependency injection
+   - God class? → Single Responsibility violation
+4. Fix the **ROOT CAUSE** (refactor), then write quality tests
+5. Document the investigation in commit message
 
 ## Agent Roster
 

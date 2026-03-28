@@ -1,0 +1,111 @@
+---
+scope: [workflow, ai-agents, quality, verification]
+sources: [anthropic-claude-code, androidcommondoc]
+targets: [all]
+slug: quality-gate-protocol
+status: active
+layer: L0
+parent: agents-hub
+category: agents
+description: "Quality gate protocol: sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit"
+version: 1
+last_updated: "2026-03"
+assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
+token_budget: 1500
+---
+
+# Quality Gate Protocol
+
+Sequential verification that runs AFTER all 3 architects APPROVE and BEFORE commit. Each step blocks — failures must be investigated, not bypassed.
+
+---
+
+## When This Runs
+
+```
+Architects detect → PM dispatches devs → devs implement → architects verify
+  ↓
+All 3 architects: APPROVE
+  ↓
+Quality Gate (this protocol)
+  ↓
+All pass → commit
+Any fail → investigate → fix → re-run
+```
+
+---
+
+## Gate Steps (sequential, each blocks)
+
+### Step 0: Frontmatter Validation
+- `validate-doc-structure` on all docs/ files
+- Required: scope, sources, targets, slug, status, layer, category, description
+- **BLOCK** if any doc missing required fields
+- **Why**: Docs without frontmatter are invisible to context-provider's MCP tools
+
+### Step 1: Full Test Suite
+- `/test-full-parallel --fresh-daemon`
+- ALL modules must pass
+- No "pre-existing failure" exceptions
+- **BLOCK** on any failure
+
+### Step 2: Coverage Baseline
+- `/coverage` on touched modules
+- Compare with baseline
+- **Drop ≤1%**: Document reason, proceed
+- **Drop >1%**: INVESTIGATE (see Coverage Investigation Protocol)
+- **BLOCK** until investigation complete
+
+### Step 3: Benchmarks (conditional)
+- `/benchmark` if performance-sensitive changes
+- Compare with baseline
+- **Regression >10%**: INVESTIGATE
+- Skip if no performance-relevant code changed
+
+### Step 4: Pre-PR
+- `/pre-pr` — commit-lint + architecture guards + lint
+- Must pass
+- **BLOCK** on any failure
+
+---
+
+## Coverage Investigation Protocol
+
+When coverage drops >1% on any module:
+
+1. **DO NOT add tests to fill the gap** — that's gaming
+2. **INVESTIGATE root cause**:
+   - New code not covered → Is it testable? If not, WHY? (coupling? side effects?)
+   - Deleted tests → Were they valid? Why deleted?
+   - Code moved → Coverage moved, not dropped (false alarm)
+3. **If code is not testable → not SOLID**:
+   - Too many dependencies → Extract interface
+   - Side effects in constructor → Dependency injection
+   - God class → Single Responsibility violation
+4. **Fix root cause** (refactor), THEN write quality tests
+5. **Document** investigation in commit message
+
+---
+
+## Test Gaming Detection
+
+Anti-patterns that indicate test gaming (quantity over quality):
+
+| Pattern | Why it's gaming |
+|---------|----------------|
+| `assertEquals(X, X)` | Trivial — always passes |
+| `assertTrue(true)` | No-op — tests nothing |
+| `assertNotNull(...)` alone | Existence check, not behavior |
+| 1 assertion per test class | Minimum effort coverage |
+| Mock-only verification | Tests the test, not the code |
+| `@Ignore` with no ticket | Silenced failure |
+
+arch-testing detects these via grep on new/modified test files.
+
+---
+
+## Related Docs
+
+- [Multi-Agent Patterns](multi-agent-patterns.md) — orchestration and architect gates
+- [Context Rotation Guide](context-rotation-guide.md) — context management for long sessions
+- [Claude Code Workflow](claude-code-workflow.md) — single-agent patterns

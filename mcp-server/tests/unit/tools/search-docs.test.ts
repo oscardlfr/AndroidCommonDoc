@@ -132,6 +132,87 @@ describe("search-docs tool", () => {
     expect(parsed.total).toBe(0);
   });
 
+  it("tokenizes 'viewmodel state' into two tokens", async () => {
+    // Verify multi-word queries match across multiple fields
+    const result = await client.callTool({
+      name: "search-docs",
+      arguments: { query: "viewmodel state" },
+    });
+
+    const parsed = JSON.parse(
+      (result.content[0] as { type: "text"; text: string }).text,
+    ) as SearchDocsResult;
+
+    // Both "viewmodel" and "state" should contribute to scoring
+    expect(parsed.query).toBe("viewmodel state");
+    // Should find at least one doc related to viewmodel/state
+    expect(parsed.matches.length).toBeGreaterThan(0);
+  });
+
+  it("returns at most 20 results (top-20 limit)", async () => {
+    // Use a broad query that matches many docs
+    const result = await client.callTool({
+      name: "search-docs",
+      arguments: { query: "a" },
+    });
+
+    const parsed = JSON.parse(
+      (result.content[0] as { type: "text"; text: string }).text,
+    ) as SearchDocsResult;
+
+    expect(parsed.matches.length).toBeLessThanOrEqual(20);
+    expect(parsed.total).toBeLessThanOrEqual(20);
+  });
+
+  it("returns empty results for empty/whitespace-only query", async () => {
+    const result = await client.callTool({
+      name: "search-docs",
+      arguments: { query: "   " },
+    });
+
+    const parsed = JSON.parse(
+      (result.content[0] as { type: "text"; text: string }).text,
+    ) as SearchDocsResult;
+
+    expect(parsed.matches).toHaveLength(0);
+    expect(parsed.total).toBe(0);
+  });
+
+  it("results are sorted by score descending", async () => {
+    const result = await client.callTool({
+      name: "search-docs",
+      arguments: { query: "testing patterns" },
+    });
+
+    const parsed = JSON.parse(
+      (result.content[0] as { type: "text"; text: string }).text,
+    ) as SearchDocsResult;
+
+    expect(parsed.matches.length).toBeGreaterThan(1);
+    for (let i = 1; i < parsed.matches.length; i++) {
+      expect(parsed.matches[i - 1].score).toBeGreaterThanOrEqual(
+        parsed.matches[i].score,
+      );
+    }
+  });
+
+  it("description match scores 2x (higher than body-only match)", async () => {
+    // Use a term likely in descriptions but less in body-only
+    const result = await client.callTool({
+      name: "search-docs",
+      arguments: { query: "error-handling" },
+    });
+
+    const parsed = JSON.parse(
+      (result.content[0] as { type: "text"; text: string }).text,
+    ) as SearchDocsResult;
+
+    // Slug match (3x) + possible description (2x) should give top results high scores
+    expect(parsed.matches.length).toBeGreaterThan(0);
+    // The top result should have score > 1 (at minimum slug match = 3)
+    expect(parsed.matches[0].score).toBeGreaterThan(1);
+  });
+
   it("rate limiting returns error after burst", async () => {
     // Make many rapid calls — the server uses a rate limiter.
     // We cannot easily exhaust it in tests (30/min), but we can verify

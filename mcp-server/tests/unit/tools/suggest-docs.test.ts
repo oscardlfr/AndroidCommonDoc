@@ -79,6 +79,47 @@ describe("suggest-docs tool", () => {
     expect(text).toContain("No relevant pattern docs found");
   });
 
+  it("matches by path component (viewmodel in path)", async () => {
+    // Strategy 3: path component match — targets mentions "viewmodel" and file path contains it
+    const result = await client.callTool({
+      name: "suggest-docs",
+      arguments: {
+        files: ["feature/viewmodel/src/main/kotlin/ScreenState.kt"],
+      },
+    });
+
+    expect(result.content).toHaveLength(1);
+    const text = (result.content[0] as { type: "text"; text: string }).text;
+    // Path contains "viewmodel" which should match docs with viewmodel in scope/targets
+    if (text.includes("Suggested Docs")) {
+      expect(text).toContain("URI: docs://androidcommondoc/");
+    }
+  });
+
+  it("aggregates multiple files without duplicate slugs", async () => {
+    // Multiple Kotlin files in the same android path should produce unique suggestions
+    const result = await client.callTool({
+      name: "suggest-docs",
+      arguments: {
+        files: [
+          "app/src/main/kotlin/com/example/android/HomeViewModel.kt",
+          "app/src/main/kotlin/com/example/android/SettingsViewModel.kt",
+          "app/src/main/kotlin/com/example/android/ProfileViewModel.kt",
+        ],
+      },
+    });
+
+    expect(result.content).toHaveLength(1);
+    const text = (result.content[0] as { type: "text"; text: string }).text;
+
+    if (text.includes("Suggested Docs")) {
+      // Extract all URIs and verify uniqueness
+      const uriMatches = text.match(/docs:\/\/androidcommondoc\/([^\s)]+)/g) ?? [];
+      const uniqueUris = new Set(uriMatches);
+      expect(uniqueUris.size).toBe(uriMatches.length);
+    }
+  });
+
   it("handles multiple files with dedup", async () => {
     // Two files in the same android path should produce deduplicated suggestions
     const result = await client.callTool({

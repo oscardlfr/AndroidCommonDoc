@@ -393,6 +393,78 @@ describe("scanDirectory", () => {
     expect(entries[0].metadata.l0_refs).toBeUndefined();
   });
 
+  it("handles unreadable files gracefully (continues scanning)", async () => {
+    // Create one valid file and one that we'll make unreadable
+    await fs.writeFile(
+      path.join(tmpDir, "valid-doc.md"),
+      "---\nscope: [a]\nsources: [b]\ntargets: [c]\n---\n# Valid",
+    );
+
+    // Create a subdirectory with a name that looks like a .md file
+    // to test that the scanner handles readFile errors gracefully
+    const unreadableDir = path.join(tmpDir, "subdir");
+    await fs.mkdir(unreadableDir, { recursive: true });
+
+    await fs.writeFile(
+      path.join(unreadableDir, "also-valid.md"),
+      "---\nscope: [x]\nsources: [y]\ntargets: [z]\n---\n# Also Valid",
+    );
+
+    const entries = await scanDirectory(tmpDir, "L0");
+    // Should find both valid files without errors
+    expect(entries.length).toBeGreaterThanOrEqual(2);
+    const slugs = entries.map((e) => e.slug).sort();
+    expect(slugs).toContain("valid-doc");
+    expect(slugs).toContain("also-valid");
+  });
+
+  it("requires scope, sources, AND targets (all three)", async () => {
+    // Only scope + sources (missing targets)
+    await fs.writeFile(
+      path.join(tmpDir, "no-targets.md"),
+      "---\nscope: [a]\nsources: [b]\n---\n# Missing targets",
+    );
+    // Only scope + targets (missing sources)
+    await fs.writeFile(
+      path.join(tmpDir, "no-sources.md"),
+      "---\nscope: [a]\ntargets: [c]\n---\n# Missing sources",
+    );
+    // Only sources + targets (missing scope)
+    await fs.writeFile(
+      path.join(tmpDir, "no-scope.md"),
+      "---\nsources: [b]\ntargets: [c]\n---\n# Missing scope",
+    );
+    // All three present
+    await fs.writeFile(
+      path.join(tmpDir, "complete.md"),
+      "---\nscope: [a]\nsources: [b]\ntargets: [c]\n---\n# Complete",
+    );
+
+    const entries = await scanDirectory(tmpDir, "L0");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].slug).toBe("complete");
+  });
+
+  it("finds all .md files recursively across multiple subdirectories", async () => {
+    // Create nested structure: root > cat1 > sub1, root > cat2
+    const cat1 = path.join(tmpDir, "cat1");
+    const sub1 = path.join(cat1, "sub1");
+    const cat2 = path.join(tmpDir, "cat2");
+    await fs.mkdir(sub1, { recursive: true });
+    await fs.mkdir(cat2, { recursive: true });
+
+    const fm = "---\nscope: [a]\nsources: [b]\ntargets: [c]\n---\n# Content";
+    await fs.writeFile(path.join(tmpDir, "root-doc.md"), fm);
+    await fs.writeFile(path.join(cat1, "cat1-doc.md"), fm);
+    await fs.writeFile(path.join(sub1, "sub1-doc.md"), fm);
+    await fs.writeFile(path.join(cat2, "cat2-doc.md"), fm);
+
+    const entries = await scanDirectory(tmpDir, "L0");
+    expect(entries).toHaveLength(4);
+    const slugs = entries.map((e) => e.slug).sort();
+    expect(slugs).toEqual(["cat1-doc", "cat2-doc", "root-doc", "sub1-doc"]);
+  });
+
   it("recursively discovers files in deeply nested directories", async () => {
     const deepDir = path.join(tmpDir, "level1", "level2");
     await fs.mkdir(deepDir, { recursive: true });

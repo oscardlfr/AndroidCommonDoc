@@ -169,9 +169,9 @@ Escalate to PM when:
 ```
 
 ## Official Skills (use when available)
-- `architecture` — use for automated pattern validation and dependency analysis
-- `software-architecture` — use for ADR generation and architecture review
-- `api-patterns` — use for REST/GraphQL API design decisions
+- `architecture` — Automated pattern validation and dependency analysis
+- `software-architecture` — ADR generation and architecture review
+- `api-patterns` — REST/GraphQL API design decisions
 
 ## Done Criteria
 

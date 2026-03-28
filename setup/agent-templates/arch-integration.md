@@ -175,8 +175,7 @@ Escalate to PM when:
 ```
 
 ## Official Skills (use when available)
-- `webapp-testing` — use for integration test patterns (Playwright, navigation e2e)
-- `claude-api` — use when integrating Claude-powered features
+- `webapp-testing` — Integration test patterns (Playwright, navigation e2e)
 
 ## Done Criteria
 

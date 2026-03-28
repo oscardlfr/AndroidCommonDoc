@@ -334,3 +334,4 @@ PM receives: "Add snapshot-export feature"
 - [Script vs Agent Decision](script-vs-agent-decision.md) — when to use a script instead of an agent
 - [Capability Detection](capability-detection.md) — graceful degradation for optional tools
 - [Context Rotation Guide](context-rotation-guide.md) — context window management for TeamCreate teams
+- [Quality Gate Protocol](quality-gate-protocol.md) — sequential verification before commit

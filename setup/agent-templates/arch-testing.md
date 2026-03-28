@@ -159,10 +159,32 @@ Escalate to PM when:
 - MCP code-metrics: {if used}
 ```
 
+### 6. Coverage Baseline Gate
+- Run /coverage on every touched module
+- Compare with last known baseline
+- If ANY module dropped >1%:
+  - SendMessage(to="project-manager", summary="COVERAGE DROP", message="Module {X} dropped from {old}% to {new}%. Investigation needed before commit.")
+  - DO NOT suggest "add more tests" — PM must investigate root cause
+
+### 7. Test Gaming Detection
+- Grep new/modified test files for anti-patterns:
+  - `assertEquals(X, X)` — trivial assertion
+  - `assertTrue(true)` — no-op test
+  - `assertNotNull(...)` without behavioral verification after
+  - Test classes with only 1 assertion per test
+  - Tests that only verify mock interactions (no real behavior)
+- If gaming detected: SendMessage(to="project-manager", summary="TEST GAMING", message="Found gaming patterns in {files}: {details}")
+
+### 8. Frontmatter Completeness Gate
+- Run MCP `validate-doc-structure` on all docs/ files
+- Verify every .md in docs/ has: scope, sources, targets (minimum for MCP tool visibility)
+- If any doc lacks required fields: SendMessage(to="project-manager", summary="FRONTMATTER MISSING", message="Docs without valid frontmatter: {list}. These are invisible to context-provider.")
+- New docs without frontmatter = BLOCKER
+
 ## Official Skills (use when available)
-- `tdd-workflow` — use for Red-Green-Refactor enforcement when delegating to test-specialist
-- `webapp-testing` — use for Playwright-based e2e test patterns
-- `code-review-checklist` — use as quality rubric when assessing test coverage
+- `tdd-workflow` — Red-Green-Refactor enforcement when reviewing test quality
+- `webapp-testing` — Playwright-based e2e test patterns
+- `code-review-checklist` — Quality rubric when assessing test coverage
 
 ## Done Criteria
 
