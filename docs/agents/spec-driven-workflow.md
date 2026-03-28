@@ -11,6 +11,16 @@ description: Native Claude Code workflow for spec-driven development without GSD
 
 Native Claude Code workflow using agents, skills, Plan Mode, and worktrees.
 
+## Multi-Session Departments
+
+| Session | Command | Orchestrator |
+|---------|---------|-------------|
+| Development | `claude --agent project-manager` | PM → architects → devs + guardians |
+| Marketing | `claude --agent marketing-lead` | ML → content-creator, landing-page |
+| Product | `claude --agent product-lead` | PL → product-strategist, prioritizer |
+
+All sessions share context via `context-provider` agent and sync documentation via `doc-updater`.
+
 ## How to Start Work
 
 ```bash

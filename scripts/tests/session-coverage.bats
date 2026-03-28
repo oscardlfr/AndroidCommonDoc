@@ -1479,3 +1479,51 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 @test "arch: spec-driven-workflow has How to Start Work section" {
     grep -q "How to Start Work" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
+
+# ============================================================
+# Section: Multi-Session Department Architecture
+# ============================================================
+
+@test "dept: context-provider template exists" {
+    [ -f "$L0_ROOT/setup/agent-templates/context-provider.md" ]
+    grep -q "Read-only" "$L0_ROOT/setup/agent-templates/context-provider.md"
+    grep -q "search-docs\|find-pattern" "$L0_ROOT/setup/agent-templates/context-provider.md"
+    grep -q "NEVER modify" "$L0_ROOT/setup/agent-templates/context-provider.md"
+}
+
+@test "dept: doc-updater template exists" {
+    [ -f "$L0_ROOT/setup/agent-templates/doc-updater.md" ]
+    grep -q "audit-docs" "$L0_ROOT/setup/agent-templates/doc-updater.md"
+    grep -q "CHANGELOG" "$L0_ROOT/setup/agent-templates/doc-updater.md"
+}
+
+@test "dept: marketing-lead template exists and delegates" {
+    [ -f "$L0_ROOT/setup/agent-templates/marketing-lead.md" ]
+    grep -q "NEVER writes content" "$L0_ROOT/setup/agent-templates/marketing-lead.md"
+    grep -q "content-creator" "$L0_ROOT/setup/agent-templates/marketing-lead.md"
+    grep -q "landing-page-strategist" "$L0_ROOT/setup/agent-templates/marketing-lead.md"
+    grep -q "Agent tool" "$L0_ROOT/setup/agent-templates/marketing-lead.md"
+}
+
+@test "dept: product-lead template exists and delegates" {
+    [ -f "$L0_ROOT/setup/agent-templates/product-lead.md" ]
+    grep -q "NEVER write" "$L0_ROOT/setup/agent-templates/product-lead.md"
+    grep -q "product-strategist" "$L0_ROOT/setup/agent-templates/product-lead.md"
+    grep -q "Agent tool" "$L0_ROOT/setup/agent-templates/product-lead.md"
+}
+
+@test "dept: PM references context-provider and doc-updater" {
+    grep -q "context-provider" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "doc-updater" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "dept: spec-driven-workflow has multi-session section" {
+    grep -q "Multi-Session" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+    grep -q "marketing-lead" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+    grep -q "product-lead" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+}
+
+@test "dept: agents-hub has session-level rule" {
+    grep -q "session-level" "$L0_ROOT/docs/agents/agents-hub.md"
+    grep -q "context-provider" "$L0_ROOT/docs/agents/agents-hub.md"
+}

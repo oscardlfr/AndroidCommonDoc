@@ -54,3 +54,5 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, project-ma
 - project-manager orchestrates, NEVER codes — assigns to devs, launches architect gates
 - Agents classified as: Devs (write code), Architects (verify+manage), Guardians (read-only audit)
 - Official Anthropic skills enhance agents — reference them with capability detection (use when available)
+- Department heads are session-level agents (`claude --agent`), NOT sub-agents
+- Cross-department context via `context-provider`, NOT by calling other department leads
