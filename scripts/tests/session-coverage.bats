@@ -759,7 +759,7 @@ teardown() {
 
 @test "README: 'What gets synced' lists consumer counts" {
     sed -n '/What gets synced/,/^### /p' "$README" | grep -q "53"
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "49"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "50"
 }
 
 @test "README: 'What gets synced' clarifies what is NOT synced" {
@@ -1381,8 +1381,8 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "doc-templates" "$README" || grep -q "PRODUCT_SPEC" "$README"
 }
 
-@test "README: counts match 20 agents, 53 skills, 49 commands" {
+@test "README: counts match 20 agents, 53 skills, 50 commands" {
     grep -q "20 specialized agents" "$README"
     grep -q "53 canonical" "$README"
-    # 49 commands verified via sync table
+    # 50 commands verified via sync table
 }
