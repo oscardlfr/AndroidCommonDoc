@@ -3,6 +3,7 @@ name: benchmark
 description: "Run benchmarks across modules and show agent-friendly results summary. Detects available platforms and devices."
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
+copilot: true
 ---
 
 ## Usage Examples

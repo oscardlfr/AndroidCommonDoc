@@ -87,6 +87,10 @@ NETWORK:
 OVERALL: N critical, M warnings, P clean categories
 ```
 
+## Official Skills (use when available)
+- `/security-review` — first-pass PII/data-exposure scan before manual audit
+- `code-review-checklist` — systematic security checklist for auth/crypto paths
+
 ## Findings Protocol
 
 When invoked as part of `/full-audit`, emit a structured JSON block after your human-readable report:

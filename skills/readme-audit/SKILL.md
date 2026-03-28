@@ -4,6 +4,7 @@ description: "Audit README.md and AGENTS.md against the current state of the rep
 allowed-tools: [Bash, Read, Edit, Write]
 disable-model-invocation: false
 l0_requires: ANDROID_COMMON_DOC
+copilot: true
 ---
 
 ## Usage

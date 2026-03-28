@@ -3,6 +3,8 @@ name: seo
 description: "SEO optimization patterns (meta tags, structured data, crawlability). Background knowledge for search engine visibility."
 allowed-tools: [Read, Grep, Glob, Bash]
 user-invocable: false
+copilot: true
+copilot-template-type: behavioral
 ---
 
 # SEO optimization

@@ -53,7 +53,10 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 
 | Agent | Domain | When |
 |-------|--------|------|
-| `dev-lead` | Orchestration | Entry point — plans, codes, delegates, verifies |
+| `dev-lead` | Orchestration | Entry point — delegates planning, coding, and verification |
+| `arch-testing` | Test verification | Architect gate after each wave |
+| `arch-platform` | Architecture verification | Architect gate after each wave |
+| `arch-integration` | Integration verification | Architect gate after each wave |
 | `{specialist-1}` | {domain} | {trigger condition} |
 | `{specialist-2}` | {domain} | {trigger condition} |
 
@@ -103,6 +106,9 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 | Agent | Domain | When |
 |-------|--------|------|
 | `dev-lead` | Orchestration | Entry point |
+| `arch-testing` | Test verification | Architect gate after each wave |
+| `arch-platform` | Architecture verification | Architect gate after each wave |
+| `arch-integration` | Integration verification | Architect gate after each wave |
 | `api-contract-guardian` | API purity | Changing -api modules |
 | `platform-auditor` | Cross-cluster | Changes spanning multiple clusters |
 | `module-lifecycle` | Module mgmt | Adding or removing modules |
@@ -124,6 +130,9 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 | Agent | Domain | When |
 |-------|--------|------|
 | `dev-lead` | Orchestration | Entry point |
+| `arch-testing` | Test verification | Architect gate after each wave |
+| `arch-platform` | Architecture verification | Architect gate after each wave |
+| `arch-integration` | Integration verification | Architect gate after each wave |
 | `daw-guardian` | DAW safety | Background work, file I/O, schedulers |
 | `data-layer-specialist` | Data layer | core/data/, repositories |
 | `freemium-gate-checker` | Feature gates | New features, tier changes |

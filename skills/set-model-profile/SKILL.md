@@ -1,3 +1,9 @@
+---
+name: set-model-profile
+description: "> Switch the model tier used by all AndroidCommonDoc agents."
+copilot: false
+---
+
 # set-model-profile
 
 > Switch the model tier used by all AndroidCommonDoc agents.

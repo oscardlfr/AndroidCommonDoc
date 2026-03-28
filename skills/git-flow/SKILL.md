@@ -2,6 +2,8 @@
 name: git-flow
 description: "Git Flow branch management — start feature/release/hotfix branches, merge tracks, and manage releases. Generic implementation of the Git Flow model (feature/* → develop, release/* → master). Use when setting up branches, merging completed work, or creating releases."
 allowed-tools: [Bash, Read]
+copilot: true
+copilot-template-type: behavioral
 ---
 
 ## Usage Examples

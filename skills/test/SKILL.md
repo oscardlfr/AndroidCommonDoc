@@ -3,6 +3,7 @@ name: test
 description: "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests."
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
+copilot: true
 ---
 
 ## Usage Examples

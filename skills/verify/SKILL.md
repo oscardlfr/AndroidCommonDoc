@@ -1,3 +1,9 @@
+---
+name: verify
+description: "Goal-backward verification using the `verifier` agent."
+copilot: false
+---
+
 # Verify Skill
 
 Goal-backward verification using the `verifier` agent.

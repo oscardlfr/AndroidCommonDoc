@@ -75,6 +75,12 @@ If you discover a bug during your task — whether you caused it or not — you 
 - `unused-resources` — detect unused strings/colors/drawables
 - `string-completeness` — validate string completeness across languages
 
+## Official Skills (use when available)
+- `frontend-design` — use for layout and component composition recommendations
+- `uiux-design` — use for interaction patterns and accessibility standards
+- `uiux-design-system` — use for design token and component library validation
+- `webapp-testing` — use for visual regression testing patterns
+
 ## Findings Protocol
 
 When invoked as part of `/full-audit`, emit structured JSON between markers:

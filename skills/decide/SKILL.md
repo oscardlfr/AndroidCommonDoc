@@ -1,3 +1,9 @@
+---
+name: decide
+description: "Technical decision analysis using the `advisor` agent."
+copilot: false
+---
+
 # Decide Skill
 
 Technical decision analysis using the `advisor` agent.

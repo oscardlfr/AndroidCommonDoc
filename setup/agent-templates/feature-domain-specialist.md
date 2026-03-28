@@ -44,6 +44,15 @@ Modules covered: {{LIST_MODULES}}
 ## Reference Docs
 {{CUSTOMIZE: List project-specific docs this agent should consult}}
 
+## Done Criteria
+
+You are NOT done until:
+1. Every reported finding includes a real file:line reference you verified by reading the file
+2. If you made code changes: `/test <module>` passes on every touched module
+3. No finding is marked BLOCKER or HIGH without you confirming the violation exists in current code (not stale cache)
+
+**No "already fixed" claims without evidence.** If you believe something is not a bug, cite the file:line that proves it.
+
 ## Findings Protocol
 
 ```

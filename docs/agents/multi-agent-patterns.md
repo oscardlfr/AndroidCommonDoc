@@ -102,12 +102,25 @@ A coordinator agent dispatches waves of work, collects results, and decides what
 ```
 Orchestrator
   ├─ Wave 1: Scripts (fast, free)     ──→ findings[]
+  │  └─ Architect gate: spot-check findings
   ├─ Wave 2: Agents (focused, paid)   ──→ findings[]
+  │  └─ Architect gate: verify output + run tests
   ├─ Wave 3: Cross-cutting agents     ──→ findings[]
-  └─ Deduplication + Report
+  │  └─ Architect gate: full verification
+  └─ Deduplication + Report (only after all gates pass)
 ```
 
 **When to use**: Complex workflows where later waves depend on earlier results, or where cheap checks should gate expensive ones.
+
+### Architect Gate Pattern
+
+Between waves, launch architect mini-orchestrators in parallel. They detect issues using MCP tools, fix them (via specialists or directly), cross-verify each other's work, and re-verify:
+
+- **arch-testing**: TDD compliance, test quality — delegates to `test-specialist`, uses `code-metrics` MCP tool
+- **arch-platform**: KMP patterns, dependency direction — uses `verify-kmp-packages`, `dependency-graph` MCP tools
+- **arch-integration**: compilation, DI wiring — uses `gradle-config-lint`, `setup-check` MCP tools
+
+Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the orchestrator re-plans (never codes the fix itself). Architects can call each other for cross-verification — e.g., after `arch-platform` fixes an import, it calls `arch-testing` to verify tests still pass.
 
 ---
 
@@ -238,38 +251,27 @@ The `/full-audit` skill demonstrates the complete pattern:
 
 ```
 Wave 1 (scripts, free, ~10s)
-  ├─ pattern-lint.sh        → grep-based pattern violations
-  ├─ verify-kmp.sh          → source set validation
-  └─ rehash-registry.sh     → registry integrity
-
+  ├─ pattern-lint.sh, verify-kmp.sh, rehash-registry.sh
 Wave 2 (focused agents, ~30s, ~$0.10)
-  ├─ delegate to test-specialist: "Review test coverage in core/"
-  ├─ delegate to ui-specialist: "Audit Compose screens for a11y"
-  └─ delegate to doc-alignment-agent: "Check doc/code drift"
-
+  ├─ test-specialist, ui-specialist, doc-alignment-agent
 Wave 3 (cross-cutting agents, ~60s, ~$0.15)
-  ├─ delegate to cross-platform-validator: "Check feature parity"
-  ├─ delegate to release-guardian-agent: "Scan for release blockers"
-  └─ delegate to privacy-auditor: "Check PII in logs and storage"
-
+  ├─ cross-platform-validator, release-guardian-agent, privacy-auditor
 Aggregation
-  ├─ 3-pass deduplication (exact → proximity → category rollup)
-  └─ Consolidated report with severity counts
+  └─ 3-pass deduplication → consolidated report
 ```
 
-### DawSync-Specific Example
+### Example: Architect-Gated Workflow
 
 ```
 dev-lead receives: "Add snapshot-export feature"
 
-1. Plan inline (2K tokens)
-2. delegate to domain-model-specialist: "Design ExportConfig sealed class"
-3. Code inline — implement export in core/data/
-4. delegate to daw-guardian: "Audit export for ProcessingMode violations"
-5. delegate to freemium-gate-checker: "Verify export is gated to STUDIO tier"
-6. /test core:data → pass
-7. /pre-pr → pass
-8. Commit
+1. delegate to researcher: "Map export patterns in codebase"
+2. Synthesize plan from research output
+3. delegate to domain-model-specialist: "Design ExportConfig sealed class"
+4. Code inline — implement export in core/data/
+5. Architect gate: arch-testing + arch-platform + arch-integration
+6. All APPROVE → /pre-pr → pass → Commit
+   Any REJECT → fix issues → re-run architect gate
 ```
 
 ---

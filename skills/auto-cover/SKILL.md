@@ -2,6 +2,8 @@
 name: auto-cover
 description: "Generate tests for uncovered code paths. Use when asked to increase coverage or auto-generate tests for a module."
 allowed-tools: [Bash, Read, Write, Edit, Grep, Glob]
+copilot: true
+copilot-template-type: behavioral
 ---
 
 ## Usage Examples

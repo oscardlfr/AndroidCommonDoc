@@ -3,6 +3,7 @@ name: lint-resources
 description: "Validate string resource naming conventions (snake_case, prefixes, duplicates, Swift sync). Use when checking resource files or before merging UI changes."
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
+copilot: true
 ---
 
 ## Prerequisites

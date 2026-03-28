@@ -31,6 +31,10 @@ jobs:
     with:
       target: project
 
+  copilot-parity:
+    name: Copilot Parity
+    uses: ./.github/workflows/reusable-copilot-parity.yml
+
   # ── Wave 2: Test suites (parallel) ─────────────────────────────────────
 
   shell-tests:
@@ -188,6 +192,7 @@ jobs:
       - commit-lint
       - readme-audit
       - agent-parity
+      - copilot-parity
       - shell-tests
       - detekt-rules
       - mcp-server
@@ -200,6 +205,7 @@ jobs:
           results=(
             "${{ needs.readme-audit.result }}"
             "${{ needs.agent-parity.result }}"
+            "${{ needs.copilot-parity.result }}"
             "${{ needs.shell-tests.result }}"
             "${{ needs.detekt-rules.result }}"
             "${{ needs.mcp-server.result }}"

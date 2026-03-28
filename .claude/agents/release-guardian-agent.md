@@ -90,6 +90,17 @@ Severity levels:
 - **WARNING**: Should review but may be intentional
 - **OK**: Category is clean
 
+## MCP Tools (use when available)
+
+- `proguard-validator` — validates ProGuard/R8 rules reference existing classes
+- `unused-resources` — detects orphan strings/drawables to clean before release
+
+Keep manual checks for debug flags, secrets, dev URLs, disabled security (no MCP equivalent).
+
+## Official Skills (use when available)
+- `changelog-generator` — automate CHANGELOG.md from git history before release
+- `/security-review` — run AI-powered security scan on changed files before publish
+
 ## Findings Protocol
 
 When invoked as part of `/full-audit`, emit a structured JSON block after your human-readable report. Place it between markers:

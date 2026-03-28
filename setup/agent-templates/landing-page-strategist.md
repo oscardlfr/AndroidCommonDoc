@@ -89,6 +89,12 @@ For each page designed, provide:
 - Be honest about competitive positioning -- don't claim superiority without evidence
 - Social proof must be real or clearly marked as aspirational
 
+## Official Skills (use when available)
+- `frontend-design` — layout and component composition recommendations
+- `uiux-design` — conversion-focused UX patterns and accessibility
+- `brand-guidelines` — brand consistency across pages
+- `canvas-design` — visual mockup generation
+
 ## Cross-Department Interface
 
 ### Exports

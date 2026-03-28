@@ -3,6 +3,8 @@ name: ingest-content
 description: "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content."
 allowed-tools: [Bash, Read, Write, Edit, Grep, Glob]
 disable-model-invocation: true
+copilot: true
+copilot-template-type: behavioral
 ---
 
 ## Usage Examples

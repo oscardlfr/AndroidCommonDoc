@@ -90,6 +90,38 @@ val koin = SharedSdk.koin
 > Authoritative reference: [Build-Time vs Runtime](../gradle/gradle-patterns-dependencies.md) — complementarity table and full explanation.
 > Deep dive: [Koin SDK + Dagger App hybrid](../archive/di-hybrid-koin-sdk-dagger-app.md) -- bridge pattern for Hilt consumers.
 
+### Desktop/Compose — GlobalContext Bridge
+
+`SharedSdk.init()` creates an **isolated** `koinApplication` (not `startKoin`). Compose helpers (`koinViewModel()`, `LocalKoinScope`, `KoinContext`) look up `GlobalContext`, which remains empty unless explicitly bridged.
+
+**DO**: Register the SDK instance into GlobalContext on Desktop/Compose:
+
+```kotlin
+// desktopApp Main.kt
+fun main() = application {
+    val app = remember {
+        val koinApp = SharedSdk.init(
+            modules = setOf(SdkModule.Encryption.Default, ...),
+            appModules = listOf(appModule, viewModelModule),
+        )
+        GlobalContext.startKoin(koinApp)  // Bridge: isolated → global
+        koinApp
+    }
+
+    Window(onCloseRequest = ::exitApplication) {
+        App()  // koinViewModel() now works
+    }
+}
+```
+
+**DON'T**: Call `startKoin {}` separately — it creates a second Koin instance. Use `GlobalContext.startKoin(app)` with the existing `koinApplication` returned by `SharedSdk.init()`.
+
+**Why `remember`**: `SharedSdk.init()` has an idempotency guard, and `GlobalContext.startKoin` throws `KoinApplicationAlreadyStartedException` on double-call. Wrapping in `remember` prevents re-execution on recomposition.
+
+**Android**: `startKoin {}` in `Application.onCreate()` registers globally by default — no bridge needed. The issue is Desktop-specific because `application {}` is a composable scope.
+
+**Key insight**: `koinApplication {}` creates the DI graph but does NOT register it in `GlobalContext`. `startKoin {}` does both. `GlobalContext.startKoin(app)` bridges an existing isolated graph into the global scope. `createEagerInstances()` runs during the bridge call, activating `createdAtStart = true` singletons.
+
 ### Fallback — Standalone Apps
 
 For projects **without** a shared SDK layer:

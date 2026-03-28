@@ -70,6 +70,11 @@ You receive:
 - Prefer revenue-generating features in early milestones
 - Never recommend more than 5 features per milestone
 
+## Official Skills (use when available)
+- `xlsx` — export roadmaps and data to spreadsheets
+- `pptx` — create pitch decks from feature scores
+- `doc-coauthoring` — collaborative roadmap and spec editing
+
 ## Cross-Department Interface
 
 ### Exports

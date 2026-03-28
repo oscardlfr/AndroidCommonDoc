@@ -2,6 +2,8 @@
 name: audit-l0
 description: "Run coherence audit on any L0/L1/L2 layer root. Checks hub doc presence, line limits, frontmatter completeness, .planning/ references, monitor_urls coverage, and detekt_rules coverage. Use when validating ecosystem-wide doc health."
 allowed-tools: [Read, Grep, Glob, Write, Bash]
+copilot: true
+copilot-template-type: behavioral
 ---
 
 ## Usage Examples

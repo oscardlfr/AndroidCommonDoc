@@ -4,6 +4,7 @@ description: "Generate CycloneDX SBOM for project modules. Use when asked to pro
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
 disable-model-invocation: true
+copilot: true
 ---
 
 ## Usage Examples

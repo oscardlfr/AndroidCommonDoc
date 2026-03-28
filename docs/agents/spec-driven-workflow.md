@@ -22,11 +22,16 @@ Native Claude Code workflow using agents, skills, Plan Mode, and worktrees.
      Agent(dev-lead, worktree, prompt="implement task B per spec...")
 5. Each dev-lead:
      a) Reads CLAUDE.md → knows project rules
-     b) Implements code
-     c) Delegates to test-specialist → audits tests
-     d) Delegates to ui-specialist → audits UI (if applicable)
-     e) Runs /pre-pr → pre-merge validation
-     f) Reports result to Claude
+     b) Delegates research to researcher + decisions to advisor
+     c) Synthesizes plan, implements code
+     d) Delegates to test-specialist → audits tests
+     e) Delegates to ui-specialist → audits UI (if applicable)
+     f) Architect gate: arch-testing + arch-platform + arch-integration (parallel)
+        - Architects detect + fix + cross-verify autonomously using MCP tools
+        - All APPROVE → continue
+        - Any ESCALATE → dev-lead re-plans (never codes the fix itself)
+     g) Runs /pre-pr → pre-merge validation
+     h) Reports result to Claude
 6. Claude collects results from all dev-leads
 7. Claude launches verifier → "did we meet the spec?"
 8. If PASS → merge worktrees + PR
@@ -58,6 +63,11 @@ Native Claude Code workflow using agents, skills, Plan Mode, and worktrees.
 | `ui-specialist` | Compose/UI auditing | CLAUDE.md delegation |
 | `doc-alignment-agent` | Documentation drift detection | CLAUDE.md delegation |
 | `release-guardian-agent` | Pre-release safety scan | CLAUDE.md delegation |
+| `arch-testing` | Test quality verification gate | Architect gate after each wave |
+| `arch-platform` | KMP/architecture verification gate | Architect gate after each wave |
+| `arch-integration` | Wiring/compilation verification gate | Architect gate after each wave |
+
+> Agents use official Anthropic skills when installed (tdd-workflow, webapp-testing, systematic-debugging, etc.). See `/setup --check-skills`.
 
 ### L1/L2 Project-Specific Agents (from templates)
 

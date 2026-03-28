@@ -1,3 +1,9 @@
+---
+name: map-codebase
+description: "Structured codebase analysis using the `codebase-mapper` agent."
+copilot: false
+---
+
 # Map Codebase Skill
 
 Structured codebase analysis using the `codebase-mapper` agent.

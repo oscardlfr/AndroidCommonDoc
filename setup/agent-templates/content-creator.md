@@ -53,6 +53,14 @@ Platform-appropriate content ready to post. Include:
 - Suggested hashtags or subreddit (if applicable)
 - Optional: suggested images or diagrams to include
 
+## Official Skills (use when available)
+- `docx` — create Word documents for internal review
+- `pptx` — generate presentation slides for launches and pitches
+- `pdf` — compile branded PDF releases and reports
+- `doc-coauthoring` — collaborative document creation workflow
+- `internal-comms` — structured status reports and company announcements
+- `brand-guidelines` — brand consistency checking across content
+
 ## Cross-Department Interface
 
 ### Exports

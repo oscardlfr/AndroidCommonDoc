@@ -5,6 +5,8 @@ user-invocable: true
 allowed-tools: [Bash, Read, Write, Edit, Glob]
 l0_requires: ANDROID_COMMON_DOC
 category: guides
+copilot: true
+copilot-template-type: behavioral
 ---
 
 ## Usage Examples / Ejemplos de uso
@@ -272,6 +274,36 @@ Write `detekt.yml` with only disabled rules under `AndroidCommonDoc:`.
 > **Detekt 2.0 coordinates**: Plugin ID is `dev.detekt` (NOT `io.gitlab.arturbosch.detekt`).
 > Group ID is `dev.detekt`. Version: `2.0.0-alpha.2`. See `docs/guides/detekt-migration-v2.md`.
 > If using the `androidcommondoc.toolkit` convention plugin, this is handled automatically.
+
+---
+
+### Wizard W3.5 — Official Anthropic Skills & Plugins
+
+Check and install official skills that enhance agent capabilities.
+
+#### Check installed skills
+List currently installed skills and compare against the recommended set below.
+
+#### Recommended categories
+
+**Development Process** (all projects):
+  - `tdd-workflow`, `systematic-debugging`, `architecture`, `code-review-checklist`, `webapp-testing`, `changelog-generator`
+
+**UI/Design** (projects with UI):
+  - `frontend-design`, `uiux-design`, `uiux-design-system`, `brand-guidelines`
+
+**Business/Content** (projects with marketing/docs):
+  - `docx`, `pptx`, `xlsx`, `pdf`, `doc-coauthoring`, `internal-comms`
+
+**Security** (all projects):
+  - Copy `/security-review` from anthropics/claude-code-security-review to `.claude/commands/`
+  - Add GitHub Action: `anthropics/claude-code-security-review@main`
+
+**Knowledge-Work Plugins** (optional):
+  - `marketing`, `product-management` from anthropics/knowledge-work-plugins
+
+#### Verification
+Print which recommended skills are installed vs missing.
 
 ---
 
