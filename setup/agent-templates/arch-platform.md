@@ -62,17 +62,22 @@ Use these FIRST — they replace manual Grep/Glob:
 - Resources in `src/commonMain/composeResources/` (not custom source sets)
 - `generateResClass = always` for multi-module + composite builds
 
-## Fix Delegation
+## Dev Management
 
-When you find violations, fix them — don't just report:
+When you find violations, delegate fixes to devs or fix directly:
 
-| Violation | Action |
-|-----------|--------|
+| Violation | Delegate to |
+|-----------|------------|
 | Forbidden import in commonMain | Fix directly — move to correct source set |
-| Dependency direction (impl→api reversed) | Fix directly — swap dependency declaration |
-| Duplicate code across platform source sets | Fix directly — move to jvmMain/appleMain |
-| Convention plugin missing | Escalate — may require build-logic changes |
-| Five-layer violation (upward dependency) | Escalate — architectural decision needed |
+| Dependency direction reversed | Fix directly — swap dependency declaration |
+| Duplicate code across source sets | Fix directly — move to jvmMain/appleMain |
+| Domain model violation | `domain-model-specialist` — "Fix sealed pattern in {file}" |
+| Data layer architecture issue | `data-layer-specialist` — "Restructure repository in {file}" |
+| Source set violation (complex) | `data-layer-specialist` — "Refactor producer/consumer split" |
+| Convention plugin missing | Escalate to PM |
+| Five-layer violation | Escalate to PM |
+
+{{CUSTOMIZE: Add project-specific guardian calls here}}
 
 ## Cross-Architect Verification
 
@@ -82,7 +87,7 @@ When you find violations, fix them — don't just report:
 
 ## Escalation Criteria
 
-Escalate to dev-lead when:
+Escalate to PM when:
 - Convention plugin or build-logic changes needed
 - Five-layer architectural violations (require design decisions)
 - Module restructuring beyond simple import fixes

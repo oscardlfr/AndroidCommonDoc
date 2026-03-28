@@ -60,19 +60,22 @@ Use these for detection (when available):
 - No hardcoded debug URLs, test credentials, or `BuildConfig.DEBUG`-only paths in production flows
 - No `println()` or `console.log()` in production code (use structured logging)
 
-## Fix Delegation
+## Dev Management
 
-When you find wiring issues, fix them — don't just report:
+When you find wiring issues, delegate to devs or fix directly:
 
-| Issue | Action |
-|-------|--------|
-| Missing Koin module registration | Fix directly — add to module list |
-| Orphan component (defined, never rendered) | Fix directly — add to navigation/parent |
-| Missing `@Serializable` on route | Fix directly — add annotation |
-| Compilation error (missing import) | Fix directly |
-| Compilation error (type mismatch, design issue) | Escalate to dev-lead |
-| Missing feature gate | Escalate — business decision |
-| `TODO()` in production path | Fix directly — implement or escalate if complex |
+| Issue | Delegate to |
+|-------|------------|
+| Missing Koin registration | `data-layer-specialist` or `domain-model-specialist` — "Register in DI" |
+| Orphan UI component | `ui-specialist` — "Wire {component} into navigation" |
+| Missing navigation route | `ui-specialist` — "Add route for {screen}" |
+| Missing `@Serializable` | Fix directly — add annotation |
+| Compilation error (simple import) | Fix directly |
+| Compilation error (design issue) | Escalate to PM |
+| Missing feature gate | Escalate to PM — business decision |
+| `TODO()` in production | Delegate to appropriate dev — "Implement {feature}" |
+
+{{CUSTOMIZE: Add project-specific guardian calls here}}
 
 ## Cross-Architect Verification
 
@@ -82,7 +85,7 @@ When you find wiring issues, fix them — don't just report:
 
 ## Escalation Criteria
 
-Escalate to dev-lead when:
+Escalate to PM when:
 - Compilation errors from design issues (not simple wiring)
 - Feature gate decisions requiring business context
 - DI circular dependencies requiring architectural restructuring

@@ -194,8 +194,8 @@ LIB_DIR="$SH_DIR/lib"
     grep -q "No.*Pre-existing.*Excuse\|pre-existing" ".claude/agents/ui-specialist.md"
 }
 
-@test "regression: dev-lead template has no pre-existing excuse rule" {
-    grep -q "pre-existing" "setup/agent-templates/dev-lead.md"
+@test "regression: project-manager template has no pre-existing excuse rule" {
+    grep -q "pre-existing" "setup/agent-templates/project-manager.md"
 }
 
 @test "regression: test-specialist requires e2e for all core layers" {

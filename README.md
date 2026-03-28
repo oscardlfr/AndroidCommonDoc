@@ -586,7 +586,7 @@ Agents don't have hardcoded models -- the active profile determines which model 
 
 | Template | Purpose |
 |----------|---------|
-| `dev-lead` | Pure orchestrator: delegates planning, coding, and verification |
+| `project-manager` | Pure orchestrator: NEVER codes — assigns to devs, launches architect gates |
 | `arch-testing` | Test quality verification gate (TDD, regression, test quality) |
 | `arch-platform` | Architecture verification gate (KMP patterns, dependency direction) |
 | `arch-integration` | Integration verification gate (compilation, DI wiring, navigation) |
@@ -597,7 +597,7 @@ Agents don't have hardcoded models -- the active profile determines which model 
 | `module-lifecycle` | Module creation, deprecation, migration planning |
 | `feature-domain-specialist` | Deep expertise in a single feature domain |
 
-The first 4 (dev-lead + 3 architects) form the orchestration + verification layer. The remaining 6 cover business and technical domain specialization.
+The first 4 (project-manager + 3 architects) form the orchestration + verification layer. The remaining 6 cover business and technical domain specialization.
 
 ---
 
@@ -801,7 +801,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | [DI](docs/di/di-hub.md) | Koin module declarations, test configuration | Android + KMP |
 | [Error Handling](docs/error-handling/error-handling-hub.md) | Result type, DomainException hierarchy, CancellationException | Android + KMP |
 | [Gradle](docs/gradle/gradle-hub.md) | Convention plugins (KMP + Android-only), version catalogs, Kover | Android + KMP |
-| [Agents](docs/agents/agents-hub.md) | CLAUDE.md Boris Cherny template, dev-lead workflow, multi-agent patterns, agent consumption, capability detection | All |
+| [Agents](docs/agents/agents-hub.md) | CLAUDE.md Boris Cherny template, project-manager workflow, multi-agent patterns, agent consumption, capability detection | All |
 | [Guides](docs/guides/guides-hub.md) | Getting started, Detekt config/migration/baseline, convention plugin chain, doc template | Android + KMP |
 | [Navigation](docs/navigation/navigation-hub.md) | Navigation3, state-driven nav, deep links | Android + KMP |
 | [Offline-First](docs/offline-first/offline-first-hub.md) | Local-first data, sync strategies, conflict resolution | Android + KMP |
@@ -887,7 +887,7 @@ AndroidCommonDoc/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
 |   +-- copilot-templates/  # 40 Copilot prompt templates (generated from skills)
 |   +-- copilot-agent-templates/ # 4 Copilot agent templates (generated from agent-templates)
-|   +-- agent-templates/    # 10 agent templates: dev-lead, arch-testing, arch-platform, arch-integration, product-strategist, content-creator, landing-page-strategist, platform-auditor, module-lifecycle, feature-domain-specialist
+|   +-- agent-templates/    # 10 agent templates: project-manager, arch-testing, arch-platform, arch-integration, product-strategist, content-creator, landing-page-strategist, platform-auditor, module-lifecycle, feature-domain-specialist
 |   +-- doc-templates/
 |   |   +-- business/       # 5 business doc templates (PRODUCT_SPEC, MARKETING, PRICING, COMPETITIVE, LANDING_PAGES)
 |   +-- github-workflows/   # CI template + PR template for consumer projects

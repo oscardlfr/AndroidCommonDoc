@@ -91,6 +91,6 @@
 - Upstream validation → `docs/guides/upstream-validation.md` (validate_upstream frontmatter)
 - Detekt rules → `detekt-rules/` + `docs/guides/detekt-config.md`
 - Spec-driven workflow → `docs/agents/spec-driven-workflow.md`
-- Agent templates → `setup/agent-templates/` (dev-lead, product-strategist, content-creator, landing-page-strategist)
+- Agent templates → `setup/agent-templates/` (project-manager, product-strategist, content-creator, landing-page-strategist)
 - Business doc templates → `setup/doc-templates/business/` (PRODUCT_SPEC, MARKETING, PRICING, LANDING_PAGES, COMPETITIVE)
 - MCP tools → 35 tools via ~/.mcp.json (architects and specialists use these automatically)
