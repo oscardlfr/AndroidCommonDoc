@@ -1,7 +1,7 @@
 ---
 name: project-manager
 description: "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project."
-tools: Read, Grep, Glob, Bash, Agent
+tools: Read, Grep, Glob, Bash, Agent, TeamCreate, SendMessage, TaskCreate, TaskList
 model: opus
 memory: project
 skills:

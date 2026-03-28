@@ -1,7 +1,7 @@
 ---
 name: arch-testing
 description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
-tools: Read, Write, Edit, Grep, Glob, Bash, Agent
+tools: Read, Write, Edit, Grep, Glob, Bash, Agent, SendMessage
 model: opus
 skills:
   - test

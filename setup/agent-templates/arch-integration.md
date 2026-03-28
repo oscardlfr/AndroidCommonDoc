@@ -1,7 +1,7 @@
 ---
 name: arch-integration
 description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
-tools: Read, Write, Edit, Grep, Glob, Bash, Agent
+tools: Read, Write, Edit, Grep, Glob, Bash, Agent, SendMessage
 model: opus
 skills:
   - test

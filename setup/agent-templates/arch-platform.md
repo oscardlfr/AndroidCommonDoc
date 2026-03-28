@@ -1,7 +1,7 @@
 ---
 name: arch-platform
 description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
-tools: Read, Write, Edit, Grep, Glob, Bash, Agent
+tools: Read, Write, Edit, Grep, Glob, Bash, Agent, SendMessage
 model: opus
 skills:
   - verify-kmp

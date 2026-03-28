@@ -1,7 +1,7 @@
 ---
 name: marketing-lead
 description: "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists."
-tools: Read, Grep, Glob, Bash, Agent
+tools: Read, Grep, Glob, Bash, Agent, TeamCreate, SendMessage, TaskCreate, TaskList
 model: opus
 ---
 

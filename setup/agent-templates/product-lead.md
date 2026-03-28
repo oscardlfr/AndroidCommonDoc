@@ -1,7 +1,7 @@
 ---
 name: product-lead
 description: "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code."
-tools: Read, Grep, Glob, Bash, Agent
+tools: Read, Grep, Glob, Bash, Agent, TeamCreate, SendMessage, TaskCreate, TaskList
 model: opus
 ---
 
