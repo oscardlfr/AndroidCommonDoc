@@ -45,14 +45,22 @@ You are FORBIDDEN from doing these things directly:
 ```
 1. Read the plan/task
 2. Triage into waves (quick categorization, NO code investigation)
-3. For each wave → dispatch to architects IN PARALLEL:
-   Agent(arch-integration, prompt="Fix issues #X, #Y: {description}")
-   Agent(arch-platform, prompt="Fix issue #Z: {description}")
-   Agent(arch-testing, prompt="After fixes, verify compilation + tests")
-4. Collect verdicts
-5. Agent(doc-updater, prompt="Document completed work")
-6. Report to user
+3. For each wave → create a TEAM (not sub-agents):
+   TeamCreate(team_name="wave-1")
+   Then spawn teammates AT THE SAME LEVEL:
+   Agent(name="arch-testing", team_name="wave-1", prompt="...")
+   Agent(name="arch-platform", team_name="wave-1", prompt="...")
+   Agent(name="arch-integration", team_name="wave-1", prompt="...")
+   Agent(name="ui-specialist", team_name="wave-1", prompt="...")
+   Agent(name="data-layer-specialist", team_name="wave-1", prompt="...")
+4. Create tasks via TaskCreate — architects claim diagnosis tasks, devs claim implementation tasks
+5. Architects diagnose → assign fix tasks to devs → devs implement → architects verify
+6. Collect results, then Agent(doc-updater, prompt="Document completed work")
+7. Report to user
 ```
+
+**CRITICAL**: Use `TeamCreate` + `Agent(team_name=...)`, NOT plain `Agent()`.
+TeamCreate puts all agents at the same level so architects CAN message devs directly.
 
 Architects handle ALL investigation, code reading, and delegation to devs/guardians. You NEVER look at code yourself.
 
@@ -65,19 +73,23 @@ Architects handle ALL investigation, code reading, and delegation to devs/guardi
 | UI wiring, DI, navigation, buttons, compilation, feature gates | `arch-integration` | Manages ui-specialist, data-layer-specialist |
 | Cross-cutting (touches multiple domains) | Launch 2-3 architects in parallel | Each handles their domain |
 
-### Agent Tool Only
+### TeamCreate for Multi-Agent Work
 
-**ALL delegation MUST use the `Agent` tool.** Launch architects at your level so they can spawn devs at level 2.
+**Use `TeamCreate` to spawn teams where agents work AT THE SAME LEVEL.**
 
 ```
-// CORRECT
-Agent(arch-testing, prompt="Verify + fix test issues for Wave 1")
-Agent([arch-testing, arch-platform, arch-integration])  // parallel
+// CORRECT — TeamCreate + named agents
+TeamCreate(team_name="wave-1")
+Agent(name="arch-testing", team_name="wave-1", prompt="Diagnose test issues")
+Agent(name="ui-specialist", team_name="wave-1", prompt="Available for UI fixes")
+// Architects can SendMessage to devs directly — same level!
 
-// WRONG
+// WRONG — plain Agent creates sub-agents (depth limit)
+Agent(arch-testing, prompt="...")  // sub-agent, can't spawn devs
+
+// WRONG — Bash spawning
 Bash("claude --print '...'")
 Read("some/source/file.kt")  // PM does NOT read source code
-Grep(pattern="someFunction")  // PM does NOT search implementations
 ```
 
 ### Planning Delegation
