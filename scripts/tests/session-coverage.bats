@@ -1200,13 +1200,25 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     [ -f "$L0_ROOT/setup/doc-templates/business/COMPETITIVE.md.template" ]
 }
 
-@test "templates: dev-lead has HARD delegation rules" {
-    grep -q "HARD Delegation" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "MUST delegate" "$L0_ROOT/setup/agent-templates/dev-lead.md"
+@test "templates: project-manager has HARD delegation rules" {
+    grep -q "HARD Delegation" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "MUST delegate" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
-@test "templates: dev-lead has script-first testing" {
-    grep -q "NEVER run.*gradlew" "$L0_ROOT/setup/agent-templates/dev-lead.md" || grep -q "Script-First" "$L0_ROOT/setup/agent-templates/dev-lead.md"
+@test "templates: project-manager NEVER writes code" {
+    grep -q "NEVER write code" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "NEVER writes code" "$L0_ROOT/setup/agent-templates/project-manager.md" || grep -q "NEVER write code yourself" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "templates: project-manager has Devs/Architects/Guardians roster" {
+    grep -q "### Devs" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "### Architects" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "### Guardians" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "templates: project-manager delegates testing to skills" {
+    grep -q "/test" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "/test-full-parallel" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
 @test "templates: arch-testing is mini-orchestrator with MCP tools" {
@@ -1235,23 +1247,29 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "ESCALATE" "$L0_ROOT/setup/agent-templates/arch-integration.md"
 }
 
-@test "templates: dev-lead has architect verification gate" {
-    grep -q "Architect Verification Gate" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "arch-testing" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "arch-platform" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "arch-integration" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "Never self-approve" "$L0_ROOT/setup/agent-templates/dev-lead.md"
+@test "templates: architects have Dev Management section" {
+    for agent in arch-testing arch-platform arch-integration; do
+        grep -q "Dev Management" "$L0_ROOT/setup/agent-templates/${agent}.md"
+    done
 }
 
-@test "templates: dev-lead has planning delegation" {
-    grep -q "Planning Delegation" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "researcher" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "advisor" "$L0_ROOT/setup/agent-templates/dev-lead.md"
+@test "templates: project-manager has architect verification gate" {
+    grep -q "Architect Verification Gate" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "arch-testing" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "arch-platform" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "arch-integration" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "NEVER write code" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
-@test "templates: dev-lead has TDD-first for bug fixes" {
-    grep -q "TDD-first for bug fixes" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "failing test" "$L0_ROOT/setup/agent-templates/dev-lead.md"
+@test "templates: project-manager has planning delegation" {
+    grep -q "Planning Delegation" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "researcher" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "advisor" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "templates: project-manager has TDD-first for bug fixes" {
+    grep -q "TDD-first for bug fixes" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "failing test" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
 @test "templates: all architects can delegate and cross-verify" {
@@ -1273,10 +1291,10 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "string-completeness" "$L0_ROOT/.claude/agents/cross-platform-validator.md"
 }
 
-@test "templates: dev-lead has MCP tools section" {
-    grep -q "L0 MCP Tools" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "verify-kmp-packages" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "rate-limit-status" "$L0_ROOT/setup/agent-templates/dev-lead.md"
+@test "templates: project-manager has MCP tools section" {
+    grep -q "MCP Tools" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "verify-kmp-packages" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "35" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
 @test "docs: agents-hub references architect gate pattern" {
@@ -1316,11 +1334,11 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "test-full-parallel" "$L0_ROOT/setup/agent-templates/module-lifecycle.md"
 }
 
-@test "templates: dev-lead has post-change checklist" {
-    grep -q "Post-Change Checklist" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "never wait to be asked" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "audit-docs" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "readme-audit" "$L0_ROOT/setup/agent-templates/dev-lead.md"
+@test "templates: project-manager has post-change checklist" {
+    grep -q "Post-Change Checklist" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "automatic" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "audit-docs" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "readme-audit" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
 @test "README: template count is 10" {
@@ -1330,10 +1348,10 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "arch-integration" "$L0_ROOT/README.md"
 }
 
-@test "templates: dev-lead references official anthropic skills" {
-    grep -q "Official Skills" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "tdd-workflow" "$L0_ROOT/setup/agent-templates/dev-lead.md"
-    grep -q "security-review" "$L0_ROOT/setup/agent-templates/dev-lead.md"
+@test "templates: project-manager references official anthropic skills" {
+    grep -q "Official Skills" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "tdd-workflow" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "security-review" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
 @test "agents: 12 agents reference official skills" {

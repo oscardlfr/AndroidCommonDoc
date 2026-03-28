@@ -20,7 +20,7 @@ monitor_urls:
 
 # Autonomous Multi-Agent Workflow
 
-How to design agent pipelines where specialized agents collaborate on a task. Covers the dev-lead adaptive model, agent invocation, orchestration patterns, data handoff, failure handling, and cost control.
+How to design agent pipelines where specialized agents collaborate on a task. Covers the project-manager model, agent invocation, orchestration patterns, data handoff, failure handling, and cost control.
 
 ---
 
@@ -39,13 +39,13 @@ If one agent can do the job in a single context window, one agent is better. Mul
 
 ---
 
-## The dev-lead Adaptive Model
+## The Project Manager Model
 
-See [claude-code-workflow](claude-code-workflow.md) for the full dev-lead model. Key points:
+See [claude-code-workflow](claude-code-workflow.md) for the full project-manager model. Key points:
 
-- **Simple task** → dev-lead codes inline. Agent overhead > benefit.
-- **Large task / long session** → dev-lead orchestrates, delegates code + audits to agents.
-- **Rule of thumb**: if subtask < 5K tokens, do it inline. Delegate when it saves context or runs in parallel.
+- **PM NEVER codes** — all code is written by dev specialists, PM only orchestrates.
+- **Simple task** → PM assigns to a single dev specialist.
+- **Large task / long session** → PM orchestrates waves of devs + audits to specialists.
 - **CLAUDE.md Agent Roster** is the discovery mechanism. Without it, Claude uses generic agents.
 
 ---
@@ -263,15 +263,15 @@ Aggregation
 ### Example: Architect-Gated Workflow
 
 ```
-dev-lead receives: "Add snapshot-export feature"
+project-manager receives: "Add snapshot-export feature"
 
 1. delegate to researcher: "Map export patterns in codebase"
 2. Synthesize plan from research output
 3. delegate to domain-model-specialist: "Design ExportConfig sealed class"
-4. Code inline — implement export in core/data/
+4. delegate to dev specialist: "Implement export in core/data/ per plan"
 5. Architect gate: arch-testing + arch-platform + arch-integration
 6. All APPROVE → /pre-pr → pass → Commit
-   Any REJECT → fix issues → re-run architect gate
+   Any REJECT → assign fix to dev → re-run architect gate
 ```
 
 ---

@@ -1,7 +1,7 @@
 ---
 scope: workflow
 sources: [claude-code, agents, skills]
-targets: [CLAUDE.md, dev-lead]
+targets: [CLAUDE.md, project-manager]
 category: agents
 slug: spec-driven-workflow
 description: Native Claude Code workflow for spec-driven development without GSD dependency
@@ -17,22 +17,22 @@ Native Claude Code workflow using agents, skills, Plan Mode, and worktrees.
 1. Human writes SPEC.md / ROADMAP.md (goals + success criteria)
 2. Human asks Claude: "implement feature X from the spec"
 3. Claude enters Plan Mode → decomposes into tasks
-4. Claude launches dev-lead(s) in parallel worktrees:
-     Agent(dev-lead, worktree, prompt="implement task A per spec...")
-     Agent(dev-lead, worktree, prompt="implement task B per spec...")
-5. Each dev-lead:
+4. Claude launches project-manager(s) in parallel worktrees:
+     Agent(project-manager, worktree, prompt="implement task A per spec...")
+     Agent(project-manager, worktree, prompt="implement task B per spec...")
+5. Each project-manager:
      a) Reads CLAUDE.md → knows project rules
      b) Delegates research to researcher + decisions to advisor
-     c) Synthesizes plan, implements code
+     c) Synthesizes plan, assigns code to dev specialists (PM NEVER codes)
      d) Delegates to test-specialist → audits tests
      e) Delegates to ui-specialist → audits UI (if applicable)
      f) Architect gate: arch-testing + arch-platform + arch-integration (parallel)
         - Architects detect + fix + cross-verify autonomously using MCP tools
         - All APPROVE → continue
-        - Any ESCALATE → dev-lead re-plans (never codes the fix itself)
+        - Any ESCALATE → PM re-plans, assigns fix to dev (never codes itself)
      g) Runs /pre-pr → pre-merge validation
      h) Reports result to Claude
-6. Claude collects results from all dev-leads
+6. Claude collects results from all project-managers
 7. Claude launches verifier → "did we meet the spec?"
 8. If PASS → merge worktrees + PR
 9. If FAIL → Claude adjusts and relaunches with gaps
@@ -73,7 +73,7 @@ Native Claude Code workflow using agents, skills, Plan Mode, and worktrees.
 
 | Template | Layer | Role |
 |----------|-------|------|
-| `dev-lead` | L1/L2 | Feature executor with delegation |
+| `project-manager` | L1/L2 | Orchestrator — assigns code to devs, launches gates |
 | `platform-auditor` | L1 | Cross-module architecture |
 | `module-lifecycle` | L1 | Module creation/deprecation |
 | `product-strategist` | L2 | Feature prioritization (ICE) |

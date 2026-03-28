@@ -56,16 +56,19 @@ Use these for detection and assessment (when available):
 - `code-metrics` — assess complexity of code under test (high complexity = more edge cases needed)
 - `module-health` — LOC/test ratio baseline per module
 
-## Specialist Delegation
+## Dev Management
 
-When you find issues, fix them — don't just report:
+When you find issues, delegate fixes to devs:
 
-| Issue | Action |
-|-------|--------|
-| Missing regression test | Delegate to `test-specialist`: "Write failing test for {bug} in {file}" |
-| Coverage-gaming test | Delegate to `test-specialist`: "Rewrite {test} with behavioral assertions" |
+| Issue | Delegate to |
+|-------|------------|
+| Missing regression test | `test-specialist` — "Write failing test for {bug} in {file}" |
+| Coverage-gaming test | `test-specialist` — "Rewrite {test} with behavioral assertions" |
+| UI test gap | `ui-specialist` — "Add Compose test for {component}" |
 | Trivial test failure (import, assertion) | Fix directly |
-| Complex test failure | Escalate to dev-lead |
+| Complex test failure | Escalate to PM |
+
+{{CUSTOMIZE: Add project-specific guardian calls here}}
 
 ## Cross-Architect Verification
 
@@ -74,7 +77,7 @@ When you find issues, fix them — don't just report:
 
 ## Escalation Criteria
 
-Escalate to dev-lead when:
+Escalate to PM when:
 - Architectural test design decisions beyond your domain knowledge
 - Business logic tests that require product context
 - More than 3 systemic issues found (signals need to re-plan the wave)

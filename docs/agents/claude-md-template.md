@@ -28,7 +28,7 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 |-----------|------|
 | **Workflow, not docs** | CLAUDE.md = operational instructions. Project docs go in `docs/` and `README.md` |
 | **< 80 lines** | Agents lose rules in long files. Compress to one-liners. |
-| **Delegation-first** | List agents + trigger conditions. Agent does the audit, not the dev-lead. |
+| **Delegation-first** | List agents + trigger conditions. Agent does the audit, not the project-manager. |
 | **Boris Cherny 4 pillars** | Plan Mode, Agent Delegation, Verification Before Done, Autonomous Execution |
 | **Layer separation** | L0 auto-loads via `~/.claude/CLAUDE.md`. L1/L2 add ONLY project-specific rules. |
 
@@ -53,7 +53,7 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 
 | Agent | Domain | When |
 |-------|--------|------|
-| `dev-lead` | Orchestration | Entry point — delegates planning, coding, and verification |
+| `project-manager` | Orchestration | Entry point — NEVER codes, assigns to devs, launches architect gates |
 | `arch-testing` | Test verification | Architect gate after each wave |
 | `arch-platform` | Architecture verification | Architect gate after each wave |
 | `arch-integration` | Integration verification | Architect gate after each wave |
@@ -105,7 +105,7 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 ### 2. Agent Delegation
 | Agent | Domain | When |
 |-------|--------|------|
-| `dev-lead` | Orchestration | Entry point |
+| `project-manager` | Orchestration | Entry point — assigns to devs, never codes |
 | `arch-testing` | Test verification | Architect gate after each wave |
 | `arch-platform` | Architecture verification | Architect gate after each wave |
 | `arch-integration` | Integration verification | Architect gate after each wave |
@@ -129,7 +129,7 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 ### 2. Agent Delegation
 | Agent | Domain | When |
 |-------|--------|------|
-| `dev-lead` | Orchestration | Entry point |
+| `project-manager` | Orchestration | Entry point — assigns to devs, never codes |
 | `arch-testing` | Test verification | Architect gate after each wave |
 | `arch-platform` | Architecture verification | Architect gate after each wave |
 | `arch-integration` | Integration verification | Architect gate after each wave |
@@ -155,7 +155,7 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 ## CLAUDE.md + Agent Connection
 
 ```
-CLAUDE.md                    .claude/agents/dev-lead.md
+CLAUDE.md                    .claude/agents/project-manager.md
 ┌──────────────────────┐     ┌──────────────────────────┐
 │ ## Agent Delegation │     │ ## Specialist Delegation  │
 │ | daw-guardian | ...  │────▶│ invoke daw-guardian when  │
@@ -187,6 +187,6 @@ The CLAUDE.md Agent Roster is the **discovery** mechanism. Without it, Claude Co
 
 ## Related Docs
 
-- [claude-code-workflow](claude-code-workflow.md) — How the dev-lead workflow operates
+- [claude-code-workflow](claude-code-workflow.md) — How the project-manager workflow operates
 - [autonomous-multi-agent-workflow](multi-agent-patterns.md) — Multi-agent patterns and cost control
 - [agent-consumption-guide](agent-consumption-guide.md) — How agents load and use pattern docs
