@@ -1157,7 +1157,7 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 }
 
 @test "skills: command stubs have description frontmatter" {
-    for cmd in test coverage benchmark verify-kmp validate-patterns sync-l0 audit-docs work init-session resume; do
+    for cmd in test coverage benchmark verify-kmp validate-patterns sync-l0 audit-docs work init-session resume-work; do
         grep -q "^description:" "$L0_ROOT/.claude/commands/$cmd.md"
     done
 }

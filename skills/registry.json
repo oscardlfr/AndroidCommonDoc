@@ -2009,6 +2009,19 @@
       "frontmatter": {}
     },
     {
+      "name": "security-review",
+      "type": "command",
+      "path": ".claude/commands/security-review.md",
+      "description": "AI-powered security review of changed files. Scans for injection, auth flaws, PII exposure, crypto weaknesses, and more.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:158818f3fc9929698416af3247d6f8504f4130fa613d580a2cad3d5af16174d8",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "AI-powered security review of changed files. Scans for injection, auth flaws, PII exposure, crypto weaknesses, and more."
+      }
+    },
+    {
       "name": "setup",
       "type": "command",
       "path": ".claude/commands/setup.md",

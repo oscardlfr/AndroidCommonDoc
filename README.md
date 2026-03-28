@@ -25,7 +25,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
-- **MCP server** with 35 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
+- **MCP server** with 34 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
@@ -117,8 +117,8 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 |------|-------------|-------|
 | Skills | `.claude/skills/*/SKILL.md` | 53 |
 | Agents | `.claude/agents/*.md` | 20 |
-| Commands | `.claude/commands/*.md` | 49 |
-| **Total** | | **122 entries** |
+| Commands | `.claude/commands/*.md` | 50 |
+| **Total** | | **123 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -126,7 +126,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 122 L0 entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 123 L0 entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -640,7 +640,7 @@ This eliminates the "agent explores for 5 minutes before planning" problem. The 
 
 ## MCP Server
 
-35 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
+34 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
 **21 tools** work in any project. **14 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
 
@@ -822,7 +822,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (122 entries,    |   |
+                   |  | SKILL.md |    | (123 entries,    |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -849,13 +849,13 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 49 Claude Code slash commands
+|   +-- commands/           # 50 Claude Code slash commands
 |   +-- agents/             # 20 specialized agents
 |   +-- hooks/              # Real-time Detekt enforcement hooks
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
 |   +-- */SKILL.md          # 53 canonical skill definitions
-|   +-- registry.json       # L0 registry (122 entries, SHA-256 hashes)
+|   +-- registry.json       # L0 registry (123 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
@@ -864,9 +864,9 @@ AndroidCommonDoc/
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
-+-- mcp-server/             # MCP server (35 tools, 3 prompts, dynamic resources)
++-- mcp-server/             # MCP server (34 tools, 3 prompts, dynamic resources)
 |   +-- src/
-|   |   +-- tools/          # 35 tools: validation, analysis, metrics, audit, sync, vault
+|   |   +-- tools/          # 34 tools: validation, analysis, metrics, audit, sync, vault
 |   |   +-- types/          # Shared types (ValidationResult, AuditFinding, FindingsReport)
 |   |   +-- utils/          # Utilities (rate-limiter, jsonl-reader, gradle-parser, xml-report-reader, finding-dedup, logger)
 |   |   +-- generation/     # Detekt rule parser, emitters, config-emitter
