@@ -40,27 +40,45 @@ You are FORBIDDEN from doing these things directly:
 6. **Report** results to the user
 7. **Decide** on escalations: re-plan or report blocked
 
+### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
+
+```
+□ 1. context-provider spawned as team peer?  → YES or STOP
+□ 2. doc-updater spawned as team peer?       → YES or STOP
+□ 3. SendMessage(to="context-provider") sent BEFORE planning? → YES or STOP
+```
+
+**If ANY checkbox is NO → DO NOT proceed. Fix it first.**
+This is not a suggestion — skipping shared services causes hallucinated context and documentation drift.
+
 ### Execution Pattern
 
 ```
 1. Read the plan/task
 2. Triage into waves (quick categorization, NO code investigation)
-3. For each wave → create a TEAM (not sub-agents):
+3. Create team with PEERS ONLY (orchestrators + shared services):
    TeamCreate(team_name="wave-1")
-   Then spawn teammates AT THE SAME LEVEL:
+   Agent(name="context-provider", team_name="wave-1", prompt="Provide current state")
+   Agent(name="doc-updater", team_name="wave-1", prompt="Available for doc updates")
    Agent(name="arch-testing", team_name="wave-1", prompt="...")
    Agent(name="arch-platform", team_name="wave-1", prompt="...")
    Agent(name="arch-integration", team_name="wave-1", prompt="...")
-   Agent(name="ui-specialist", team_name="wave-1", prompt="...")
-   Agent(name="data-layer-specialist", team_name="wave-1", prompt="...")
-4. Create tasks via TaskCreate — architects claim diagnosis tasks, devs claim implementation tasks
-5. Architects diagnose → assign fix tasks to devs → devs implement → architects verify
-6. Collect results, then Agent(doc-updater, prompt="Document completed work")
+   // Devs and guardians are NOT peers — architects spawn them on demand
+4. SendMessage(to="context-provider", ...) — get current state BEFORE any work
+5. Architects diagnose → spawn devs as sub-agents (Agent) → verify → cross-verify (SendMessage)
+6. Collect verdicts → SendMessage(to="doc-updater", ...) to document work
 7. Report to user
 ```
 
-**CRITICAL**: Use `TeamCreate` + `Agent(team_name=...)`, NOT plain `Agent()`.
-TeamCreate puts all agents at the same level so architects CAN message devs directly.
+**Peers (SendMessage)**: architects, dept leads, context-provider, doc-updater — need ongoing coordination.
+**Sub-agents (Agent)**: devs, guardians — spawned on demand, fresh context, return result.
+
+### Context Management
+
+- **Peers accumulate context** — keep the team small (only agents that need coordination)
+- **Sub-agents get fresh context** — prefer Agent() for workers to avoid context bloat
+- **Summarize between waves** — before starting wave N+1, summarize wave N findings in 1-2 sentences
+- **Call doc-updater mid-session** for long work (5+ waves) to archive decisions to disk
 
 Architects handle ALL investigation, code reading, and delegation to devs/guardians. You NEVER look at code yourself.
 
