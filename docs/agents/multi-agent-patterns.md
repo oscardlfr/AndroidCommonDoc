@@ -144,15 +144,17 @@ PM creates cross-department team:
 
 **When to use**: Multi-agent workflows across any department. Default topology for all orchestrators.
 
+**Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies, PM-as-relay, and anti-patterns.
+
 ### Architect Gate Pattern
 
-Between waves, architect peers cross-verify via `SendMessage`. They spawn dev sub-agents on demand to fix issues:
+Between waves, architect peers cross-verify via `SendMessage`. They request dev work through PM (architects can't use Agent in in-process mode):
 
-- **arch-testing**: TDD compliance, test quality — spawns `test-specialist` (Agent sub-agent), uses `code-metrics` MCP tool
-- **arch-platform**: KMP patterns, dependency direction — spawns `data-layer-specialist`, uses `verify-kmp-packages`, `dependency-graph` MCP tools
-- **arch-integration**: compilation, DI wiring — spawns `ui-specialist`, uses `gradle-config-lint`, `setup-check` MCP tools
+- **arch-testing**: TDD compliance, test quality — requests `test-specialist` via PM, uses `code-metrics` MCP tool
+- **arch-platform**: KMP patterns, dependency direction — requests `data-layer-specialist` via PM, uses `verify-kmp-packages`, `dependency-graph` MCP tools
+- **arch-integration**: compilation, DI wiring — requests `ui-specialist` via PM, uses `gradle-config-lint`, `setup-check` MCP tools
 
-Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the PM re-plans (never codes the fix itself). Architects cross-verify via `SendMessage(to="arch-testing", summary="verify tests", message="Run /test on modules I modified")`.
+Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the PM re-plans (never codes the fix itself). Architects cross-verify via `SendMessage(to="arch-testing", summary="verify tests", message="Run /test on modules I modified")`. Dev dispatch goes through PM — see [Context Rotation Guide](context-rotation-guide.md) for the PM-as-relay pattern.
 
 ---
 
@@ -331,3 +333,4 @@ PM receives: "Add snapshot-export feature"
 - [Agent Consumption Guide](agent-consumption-guide.md) — how agents load and use documentation
 - [Script vs Agent Decision](script-vs-agent-decision.md) — when to use a script instead of an agent
 - [Capability Detection](capability-detection.md) — graceful degradation for optional tools
+- [Context Rotation Guide](context-rotation-guide.md) — context window management for TeamCreate teams

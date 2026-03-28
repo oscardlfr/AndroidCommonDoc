@@ -3,6 +3,7 @@ name: doc-updater
 description: "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Follows L0 patterns (frontmatter, line limits, hub structure)."
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: sonnet
+token_budget: 2000
 skills:
   - audit-docs
   - readme-audit

@@ -3,6 +3,7 @@ name: content-creator
 description: "Drafts developer-focused content for build-in-public marketing. Creates posts for Reddit, Twitter/X, forums, and changelogs. Customize {{PRODUCT_NAME}} and tone for your project."
 tools: Read, Grep, Glob, WebSearch
 model: sonnet
+token_budget: 3000
 domain: marketing
 intent: [post, blog, social, changelog, marketing, content]
 ---
