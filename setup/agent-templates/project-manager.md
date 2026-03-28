@@ -56,6 +56,15 @@ You are FORBIDDEN from doing these things directly:
 
 Architects handle ALL investigation, code reading, and delegation to devs/guardians. You NEVER look at code yourself.
 
+### Architect Routing Table
+
+| Issue domain | Assign to | Why |
+|-------------|-----------|-----|
+| Tests, test quality, TDD, coverage | `arch-testing` | Manages test-specialist, ui-specialist |
+| KMP patterns, encoding, data layer, domain model, source sets | `arch-platform` | Manages domain-model-specialist, data-layer-specialist |
+| UI wiring, DI, navigation, buttons, compilation, feature gates | `arch-integration` | Manages ui-specialist, data-layer-specialist |
+| Cross-cutting (touches multiple domains) | Launch 2-3 architects in parallel | Each handles their domain |
+
 ### Agent Tool Only
 
 **ALL delegation MUST use the `Agent` tool.** Launch architects at your level so they can spawn devs at level 2.
