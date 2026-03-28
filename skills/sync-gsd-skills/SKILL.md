@@ -4,6 +4,7 @@ description: "Sync skills from Claude Code marketplace, L0, and L0 agents to GSD
 user-invocable: true
 allowed-tools: [Bash, Read, Glob]
 category: guides
+copilot: false
 ---
 
 ## Usage Examples

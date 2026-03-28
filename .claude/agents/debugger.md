@@ -42,6 +42,19 @@ For each hypothesis, starting with most likely:
 3. Add a test that catches this specific bug
 4. Verify the reproduction case no longer fails
 
+### Done Criteria (non-negotiable)
+
+You are NOT done until:
+1. The failing test from step 3 above EXISTS and PASSES
+2. `/test <module>` passes on every module you touched
+3. You can state the root cause in one sentence — if you can't, you haven't found it
+4. Your fix is minimal — if you changed more than the root cause site, justify every extra change
+
+**Never claim "fixed" without a passing test that would have caught the original bug.**
+
+## Official Skills (use when available)
+- `systematic-debugging` — enhances Phase 2-3 with structured hypothesis ranking and evidence logging
+
 ## Cognitive Traps to Avoid
 
 | Trap | Symptom | Counter |

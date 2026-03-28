@@ -81,7 +81,7 @@
 - `/benchmark` — run benchmark suites (JVM/Android)
 - `/work` — smart task routing to agents/skills (extensible via frontmatter intent)
 - `/init-session` — show project context and available tools
-- `/resume` — CEO/CTO dashboard with department status from last session
+- `/resume-work` — CEO/CTO dashboard with department status from last session
 
 ## Doc Consultation
 - Vault sync → `mcp-server/src/vault/` (transformer, moc-generator, wikilink-generator)
@@ -93,3 +93,4 @@
 - Spec-driven workflow → `docs/agents/spec-driven-workflow.md`
 - Agent templates → `setup/agent-templates/` (dev-lead, product-strategist, content-creator, landing-page-strategist)
 - Business doc templates → `setup/doc-templates/business/` (PRODUCT_SPEC, MARKETING, PRICING, LANDING_PAGES, COMPETITIVE)
+- MCP tools → 35 tools via ~/.mcp.json (architects and specialists use these automatically)

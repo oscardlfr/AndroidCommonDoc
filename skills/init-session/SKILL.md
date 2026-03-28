@@ -1,3 +1,9 @@
+---
+name: init-session
+description: "Show project context — available agents, skills, modules, and business docs."
+copilot: false
+---
+
 # Init-Session Skill
 
 Show project context — available agents, skills, modules, and business docs.

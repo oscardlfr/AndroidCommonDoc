@@ -28,6 +28,8 @@ $maxFailures = 0
 $minLines = 0
 $skipTests = $false
 $coverageTool = ""
+$benchmark = $false
+$benchmarkConfig = "smoke"
 
 for ($i = 0; $i -lt $argList.Count; $i++) {
     $arg = $argList[$i]
@@ -45,6 +47,10 @@ for ($i = 0; $i -lt $argList.Count; $i++) {
         $skipTests = $true
     } elseif ($arg -eq "--coverage-tool" -and $i + 1 -lt $argList.Count) {
         $coverageTool = $argList[$i + 1]; $i++
+    } elseif ($arg -eq "--benchmark") {
+        $benchmark = $true
+    } elseif ($arg -eq "--benchmark-config" -and $i + 1 -lt $argList.Count) {
+        $benchmarkConfig = $argList[$i + 1]; $i++
     }
 }
 
@@ -59,6 +65,7 @@ if ($testType -ne "") { $params.TestType = $testType }
 if ($includeShared) { $params.IncludeShared = $true }
 if ($skipTests) { $params.SkipTests = $true }
 if ($coverageTool -ne "") { $params.CoverageTool = $coverageTool }
+if ($benchmark) { $params.Benchmark = $true; $params.BenchmarkConfig = $benchmarkConfig }
 
 & "$commonDoc\scripts\ps1\run-parallel-coverage-suite.ps1" @params
 ```

@@ -3,6 +3,7 @@ name: test-full
 description: "Run all tests sequentially with full coverage report. Use when asked to run the complete test suite or generate a full coverage report."
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
+copilot: true
 ---
 
 ## Usage Examples

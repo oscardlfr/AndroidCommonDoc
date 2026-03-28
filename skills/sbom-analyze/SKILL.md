@@ -4,6 +4,7 @@ description: "Analyze SBOM for dependency statistics, licenses, and concerns. Us
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
 disable-model-invocation: true
+copilot: true
 ---
 
 ## Usage Examples

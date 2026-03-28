@@ -1,11 +1,17 @@
-# Resume Skill
+---
+name: resume-work
+description: "Resume session with a CEO/CTO dashboard — shows status by department from last session."
+copilot: false
+---
+
+# Resume Work Skill
 
 Resume session with a CEO/CTO dashboard — shows status by department from last session.
 
 ## Usage
 
 ```
-/resume
+/resume-work
 ```
 
 ## Steps

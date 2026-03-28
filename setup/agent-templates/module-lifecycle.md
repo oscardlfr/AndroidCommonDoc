@@ -58,6 +58,15 @@ You manage the lifecycle of modules — from creation through deprecation.
 - [ ] Delete module directory
 - [ ] Update consumer configurations
 
+## Done Criteria
+
+New module is not "done" until:
+- [ ] `/test <module>` passes (not just "tests written")
+- [ ] Full suite `/test-full-parallel` still passes (no regressions)
+- [ ] Module appears in `settings.gradle.kts` (verified by building)
+
+Module deprecation is not "done" until no consumer references the deprecated module in their build files.
+
 ## Findings Protocol
 
 ```

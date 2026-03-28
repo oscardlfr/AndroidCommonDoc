@@ -8,7 +8,7 @@
 
 Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 32 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
-> **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
+> **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
 > **Platform support:** All skills, agents, and Detekt rules work on both **Android-only (AGP 8.x)** and **KMP (AGP 9.0+)** projects. A small subset is KMP-only (noted below).
 
@@ -117,8 +117,8 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 |------|-------------|-------|
 | Skills | `.claude/skills/*/SKILL.md` | 53 |
 | Agents | `.claude/agents/*.md` | 20 |
-| Commands | `.claude/commands/*.md` | 49 |
-| **Total** | | **122 entries** |
+| Commands | `.claude/commands/*.md` | 50 |
+| **Total** | | **123 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -126,7 +126,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 122 L0 entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 123 L0 entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -246,7 +246,7 @@ Skills and hooks are loaded on startup. Restart after setup completes.
 ```
 /init-session          # See what's available: agents, skills, modules, business docs
 /work fix the login bug  # Smart routing — finds the right agent/skill automatically
-/resume                # CEO dashboard — department status across your project
+/resume-work                # CEO dashboard — department status across your project
 ```
 
 > Full step-by-step guide: [docs/guides/getting-started.md](docs/guides/getting-started.md)
@@ -498,7 +498,7 @@ These three skills are the recommended way to start any session. They discover a
 |-------|-------------|
 | `/work <task>` | **Primary entry point.** Smart task routing -- reads agent frontmatter (domain+intent), matches your task description, and delegates to the best agent or skill. Extensible: add new agents and `/work` finds them |
 | `/init-session` | Project context dashboard -- lists available agents, skills, modules, business docs, and recent activity. Run this when you open a project for the first time |
-| `/resume` | CEO/CTO session resume -- department-level status across your project (engineering, product, content). Picks up where you left off |
+| `/resume-work` | CEO/CTO session resume -- department-level status across your project (engineering, product, content). Picks up where you left off |
 
 ### L0 Maintenance Skills
 
@@ -582,11 +582,14 @@ Agents don't have hardcoded models -- the active profile determines which model 
 
 ### Agent Templates
 
-7 reusable agent templates in `setup/agent-templates/` for bootstrapping domain-specific agents in L1/L2 projects:
+10 reusable agent templates in `setup/agent-templates/` for bootstrapping domain-specific agents in L1/L2 projects:
 
 | Template | Purpose |
 |----------|---------|
-| `dev-lead` | Technical lead workflow: planning, delegation, code review |
+| `dev-lead` | Pure orchestrator: delegates planning, coding, and verification |
+| `arch-testing` | Test quality verification gate (TDD, regression, test quality) |
+| `arch-platform` | Architecture verification gate (KMP patterns, dependency direction) |
+| `arch-integration` | Integration verification gate (compilation, DI wiring, navigation) |
 | `product-strategist` | Product vision, roadmap, feature prioritization |
 | `content-creator` | Marketing copy, blog posts, documentation |
 | `landing-page-strategist` | Landing page structure, copy, conversion optimization |
@@ -594,7 +597,7 @@ Agents don't have hardcoded models -- the active profile determines which model 
 | `module-lifecycle` | Module creation, deprecation, migration planning |
 | `feature-domain-specialist` | Deep expertise in a single feature domain |
 
-The first 3 (dev-lead, product-strategist, content-creator) cover business workflows. The remaining 4 cover technical domain specialization.
+The first 4 (dev-lead + 3 architects) form the orchestration + verification layer. The remaining 6 cover business and technical domain specialization.
 
 ---
 
@@ -637,9 +640,9 @@ This eliminates the "agent explores for 5 minutes before planning" problem. The 
 
 ## MCP Server
 
-32 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
+34 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
-**18 tools** work in any project. **13 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
+**21 tools** work in any project. **14 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
 
 ### General Tools
 
@@ -663,6 +666,9 @@ This eliminates the "agent explores for 5 minutes before planning" problem. The 
 | `unused-resources` | Analysis | Detect orphan strings/drawables not referenced in source code |
 | `validate-all` | Validation | Run all validation scripts with structured output |
 | `verify-kmp` | Validation | Validate KMP source sets and imports |
+| `rate-limit-status` | Utility | Show current MCP rate-limit counters and reset time |
+| `search-docs` | Doc Intelligence | Full-text search across pattern docs and guides |
+| `suggest-docs` | Doc Intelligence | Suggest relevant docs for a given topic or error message |
 
 ### L0 Internal Tools (for AndroidCommonDoc development)
 
@@ -816,7 +822,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (122 entries,    |   |
+                   |  | SKILL.md |    | (123 entries,    |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -843,13 +849,13 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 49 Claude Code slash commands
+|   +-- commands/           # 50 Claude Code slash commands
 |   +-- agents/             # 20 specialized agents
 |   +-- hooks/              # Real-time Detekt enforcement hooks
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
 |   +-- */SKILL.md          # 53 canonical skill definitions
-|   +-- registry.json       # L0 registry (122 entries, SHA-256 hashes)
+|   +-- registry.json       # L0 registry (123 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
@@ -860,7 +866,7 @@ AndroidCommonDoc/
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
 +-- mcp-server/             # MCP server (34 tools, 3 prompts, dynamic resources)
 |   +-- src/
-|   |   +-- tools/          # 32 tools: validation, analysis, metrics, audit, sync, vault
+|   |   +-- tools/          # 34 tools: validation, analysis, metrics, audit, sync, vault
 |   |   +-- types/          # Shared types (ValidationResult, AuditFinding, FindingsReport)
 |   |   +-- utils/          # Utilities (rate-limiter, jsonl-reader, gradle-parser, xml-report-reader, finding-dedup, logger)
 |   |   +-- generation/     # Detekt rule parser, emitters, config-emitter
@@ -881,7 +887,7 @@ AndroidCommonDoc/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
 |   +-- copilot-templates/  # 40 Copilot prompt templates (generated from skills)
 |   +-- copilot-agent-templates/ # 4 Copilot agent templates (generated from agent-templates)
-|   +-- agent-templates/    # 7 agent templates: dev-lead, product-strategist, content-creator, landing-page-strategist, platform-auditor, module-lifecycle, feature-domain-specialist
+|   +-- agent-templates/    # 10 agent templates: dev-lead, arch-testing, arch-platform, arch-integration, product-strategist, content-creator, landing-page-strategist, platform-auditor, module-lifecycle, feature-domain-specialist
 |   +-- doc-templates/
 |   |   +-- business/       # 5 business doc templates (PRODUCT_SPEC, MARKETING, PRICING, COMPETITIVE, LANDING_PAGES)
 |   +-- github-workflows/   # CI template + PR template for consumer projects

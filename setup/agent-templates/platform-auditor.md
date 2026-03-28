@@ -55,6 +55,16 @@ Every `expect` declaration has `actual` for all configured targets.
 4. Check error mapper consistency if new error types added
 5. Report findings with severity
 
+## Verify Before Reporting
+
+Before emitting findings:
+1. Re-read every file:line you cite — confirm the violation still exists at that exact location
+2. For import-direction violations: verify the import is real (not in a comment or string)
+3. For cross-cluster leaks: confirm both source and target modules exist in settings.gradle.kts
+4. If you find zero violations: state that explicitly — do not produce an empty report without confirming you ran the checks
+
+**No "looks clean" without evidence.** Either you checked and can cite what you checked, or you didn't finish.
+
 ## Findings Protocol
 
 ```

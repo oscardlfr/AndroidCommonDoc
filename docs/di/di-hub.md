@@ -62,3 +62,4 @@ DI patterns for Kotlin Multiplatform projects — framework-agnostic principles 
 - Never inject Android `Context` into shared ViewModels
 - Test modules replace production bindings — use fakes, not mocks at the DI level
 - For SDKs: use `koinApplication {}` (isolated) instead of `startKoin {}` (global)
+- **Desktop/Compose**: bridge isolated SDK into `GlobalContext.startKoin(app)` so `koinViewModel()` works — see [di-patterns-modules § GlobalContext Bridge](di-patterns-modules.md)

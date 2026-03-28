@@ -60,6 +60,8 @@ delegate to daw-guardian: "Audit changed files in core/data/ for ProcessingMode 
 | Writing code for a well-understood change | **Inline** — agent startup overhead > benefit |
 | Running tests, linting, coverage | **Use L0 skills** (`/test`, `/pre-pr`) — not agents |
 | Cross-cutting concern (privacy, release readiness) | **Delegate** — specialist scans holistically |
+| After any wave of specialist work | **Architect gate** — arch-testing + arch-platform + arch-integration detect, fix, and cross-verify before proceeding |
+| Official skill available for the task | **Use skill** — battle-tested and maintained upstream |
 
 ### Token Economics
 
@@ -123,8 +125,8 @@ Every task type has a verification pattern:
 
 | Task type | Verification |
 |-----------|-------------|
-| Bug fix | Reproduce → fix → rerun repro → pass |
-| Feature | Code → `/test <module>` → delegate audit to specialist → `/pre-pr` |
+| Bug fix | Failing test first → fix → test passes → architect gate → `/pre-pr` |
+| Feature | Code → `/test <module>` → delegate audit to specialist → architect gate → `/pre-pr` |
 | Refactor | `/test-full-parallel` → no regressions |
 | Release | `/pre-release --quick` → `/bump-version` → `/git-flow release` |
 | UI change | Verify in browser/app → delegate to `ui-specialist` |
@@ -152,7 +154,7 @@ L0 defines.  L1/L2 consume.  L2 extends with domain-specific agents.
 - **L1**: Ecosystem library — version authority, shared modules, API contracts
 - **L2**: Application — domain logic, features, platform apps
 
-Each layer has its own CLAUDE.md, dev-lead agent, and project-specific specialists.
+Each layer has its own CLAUDE.md, dev-lead agent, architect reviewers (arch-testing, arch-platform, arch-integration), and project-specific specialists.
 
 ## Release Workflow
 

@@ -214,6 +214,15 @@ Produce a single JSON object. Do NOT wrap it in markdown code fences — output 
 
 When the report path is provided (e.g., `.gsd/audits/audit-{timestamp}.json`), use the Write tool to save it. Otherwise print it to stdout.
 
+## MCP Tools (use when available)
+
+- `validate-doc-structure` — replaces manual frontmatter + line limit checks (Checks 2, 3)
+- `validate-skills` — replaces manual skill asset validation
+- `validate-claude-md` — replaces manual CLAUDE.md template checks
+- `validate-vault` — replaces manual vault integrity checks
+
+Use MCP tools as primary detection. Fall back to manual Grep only for checks MCP tools don't cover (e.g., cross-doc link analysis, token budget calculation).
+
 ## Findings Protocol
 
 When invoked as part of `/full-audit`, emit a structured JSON block after your human-readable report. Place it between markers:

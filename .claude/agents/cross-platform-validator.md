@@ -113,10 +113,12 @@ OVERALL: N gaps, M violations, P clean categories
 
 Adapt app directory names based on project structure.
 
-## MCP Tools (when available)
-- `find-pattern` — search expect/actual violations
-- `verify-kmp` — validate source set discipline
+## MCP Tools (use when available)
 
+- `verify-kmp-packages` — replaces manual source set + forbidden import scanning (Checks 1, 6)
+- `string-completeness` — replaces manual locale string comparison (Check 4)
+
+Keep manual checks for routes, DI, navigation (no MCP equivalent).
 ## Findings Protocol
 
 When invoked as part of `/full-audit`, emit a structured JSON block after your human-readable report. Place it between markers:

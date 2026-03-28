@@ -4,8 +4,8 @@ slug: getting-started-mcp-server
 category: guides
 description: >
   Connect the AndroidCommonDoc MCP server to Claude Desktop for programmatic
-  access to all 17 tools. / Conectar el servidor MCP de AndroidCommonDoc a
-  Claude Desktop para acceso programático a las 17 herramientas.
+  access to all 35 tools. / Conectar el servidor MCP de AndroidCommonDoc a
+  Claude Desktop para acceso programático a las 35 herramientas.
 last_updated: "2026-03-18"
 ---
 
@@ -15,7 +15,7 @@ last_updated: "2026-03-18"
 
 ## English
 
-The MCP server exposes 17 tools over stdio transport. Once connected,
+The MCP server exposes 35 tools over stdio transport. Once connected,
 Claude Desktop can invoke validation, monitoring, and doc-intelligence tools
 directly — no shell commands needed.
 
@@ -72,6 +72,23 @@ cd "$ANDROID_COMMON_DOC/mcp-server" && npm run build
 }
 ```
 
+### Claude Code setup (.mcp.json)
+
+For Claude Code (CLI), add the server to `~/.mcp.json` so every project gets access:
+
+```json
+// ~/.mcp.json (global — all projects get access)
+{
+  "mcpServers": {
+    "androidcommondoc": {
+      "command": "node",
+      "args": ["<path-to>/AndroidCommonDoc/mcp-server/build/index.js"],
+      "env": { "L0_ROOT": "<path-to>/AndroidCommonDoc" }
+    }
+  }
+}
+```
+
 ### Verify the connection
 
 Restart Claude Desktop after editing the config. Open a new conversation and
@@ -81,7 +98,7 @@ look for the tool icon (🔧). Type:
 List all available androidcommondoc tools
 ```
 
-You should see 17 tools grouped by category.
+You should see 35 tools grouped by category.
 
 ### Available tools (17)
 
@@ -95,7 +112,7 @@ You should see 17 tools grouped by category.
 
 ### Rate limiting
 
-The server self-limits to **30 calls/minute** to protect external APIs
+The server self-limits to **45 calls/minute** to protect external APIs
 (GitHub, Maven Central, doc pages). Burst requests return `rate_limit_status`
 info in the response.
 
@@ -103,7 +120,7 @@ info in the response.
 
 ## Castellano
 
-El servidor MCP expone 17 herramientas sobre transporte stdio. Una vez
+El servidor MCP expone 35 herramientas sobre transporte stdio. Una vez
 conectado, Claude Desktop puede invocar herramientas de validación, monitoreo
 e inteligencia documental directamente, sin comandos de shell.
 
@@ -169,7 +186,7 @@ conversación y busca el icono de herramientas (🔧). Escribe:
 Lista todas las herramientas de androidcommondoc disponibles
 ```
 
-Deberías ver 17 herramientas agrupadas por categoría.
+Deberías ver 35 herramientas agrupadas por categoría.
 
 ### Herramientas disponibles (17)
 
@@ -183,7 +200,7 @@ Deberías ver 17 herramientas agrupadas por categoría.
 
 ### Rate limiting
 
-El servidor se autolimita a **30 llamadas/minuto** para proteger las APIs
+El servidor se autolimita a **45 llamadas/minuto** para proteger las APIs
 externas (GitHub, Maven Central, páginas de docs). Las peticiones en ráfaga
 reciben información de `rate_limit_status` en la respuesta.
 

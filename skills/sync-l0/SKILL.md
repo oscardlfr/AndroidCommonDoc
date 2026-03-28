@@ -2,6 +2,8 @@
 name: sync-l0
 description: "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking."
 allowed-tools: [Bash, Read, Write, Glob, Grep]
+copilot: true
+copilot-template-type: behavioral
 ---
 
 ## Usage Examples

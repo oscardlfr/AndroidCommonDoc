@@ -3,6 +3,8 @@ name: sync-vault
 description: "Sync documentation into Obsidian vault with L0/L1/L2 hierarchy. Use when asked to update, initialize, or clean the knowledge vault."
 allowed-tools: [Bash, Read, Grep, Glob]
 disable-model-invocation: true
+copilot: true
+copilot-template-type: behavioral
 ---
 
 ## Usage Examples

@@ -3,6 +3,8 @@ name: monitor-docs
 description: "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdated dependencies or doc freshness."
 allowed-tools: [Bash, Read, Write, Edit, Grep, Glob]
 disable-model-invocation: true
+copilot: true
+copilot-template-type: behavioral
 ---
 
 ## Usage Examples

@@ -1,3 +1,9 @@
+---
+name: work
+description: "Smart task routing — analyzes freeform text and delegates to the right agent or skill."
+copilot: false
+---
+
 # Work Skill
 
 Smart task routing — analyzes freeform text and delegates to the right agent or skill.

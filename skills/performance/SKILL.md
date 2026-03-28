@@ -3,6 +3,8 @@ name: performance
 description: "Web performance optimization patterns (loading, caching, images, fonts). Background knowledge for page speed improvements."
 allowed-tools: [Read, Grep, Glob, Bash]
 user-invocable: false
+copilot: true
+copilot-template-type: behavioral
 ---
 
 # Performance optimization

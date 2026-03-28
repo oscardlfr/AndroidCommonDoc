@@ -1,3 +1,9 @@
+---
+name: review-pr
+description: "Code review of a pull request with structured suggestions."
+copilot: false
+---
+
 # Review PR Skill
 
 Code review of a pull request with structured suggestions.

@@ -4,6 +4,7 @@ description: "Scan SBOM for known CVE vulnerabilities using Trivy. Use when aske
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
 disable-model-invocation: true
+copilot: true
 ---
 
 ## Usage Examples

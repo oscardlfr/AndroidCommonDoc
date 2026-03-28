@@ -32,12 +32,12 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, dev-lead o
 | [capability-detection](capability-detection.md) | Graceful degradation for optional tools in agent definitions |
 | [script-vs-agent-decision](script-vs-agent-decision.md) | Decision framework: when a script is better than an agent |
 | [spec-driven-workflow](spec-driven-workflow.md) | Spec-driven agent workflow: debugger, verifier, advisor, researcher, codebase-mapper |
+| [architect-gate-pattern](multi-agent-patterns.md#architect-gate-pattern) | Verification gate between execution waves (arch-testing, arch-platform, arch-integration) |
 
 ## Key Concepts
 
 - **CLAUDE.md** = workflow instructions (< 80 lines). Contains Agent Roster → triggers agent delegation.
-- **`.claude/agents/`** = specialist definitions. Canonical source. Synced via `/sync-l0`.
-- **`.claude/agents/`** = canonical agent definitions. Used by both Claude Code and GSD/pi.
+- **`.claude/agents/`** = canonical agent definitions. Synced via `/sync-l0`. Used by both Claude Code and GSD/pi.
 - **`.gsd/agents/`** = mirror for GSD/pi users (optional). Synced via `/sync-gsd-agents`. Not needed if using Claude Code only.
 - **dev-lead** = adaptive orchestrator. Inline for simple tasks, delegates for complex ones.
 - **Spec-driven agents** = 5 new agents (debugger, verifier, advisor, researcher, codebase-mapper) for autonomous research, decision-making, and codebase exploration.
@@ -49,3 +49,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, dev-lead o
 - One responsibility per agent — split if doing multiple domains
 - Agents report findings; they don't modify code unless explicitly designed to
 - Script-first: if a regex can do it, don't make an agent for it
+- Architect team gates every wave — mini-orchestrators that detect, fix, cross-verify, then APPROVE/ESCALATE
+- Bug fixes require TDD — failing test first, then fix, then architect verification
+- dev-lead never self-approves — architects resolve issues autonomously, only escalate what they can't fix
+- Official Anthropic skills enhance agents — reference them with capability detection (use when available)
