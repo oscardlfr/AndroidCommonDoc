@@ -1456,3 +1456,26 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 @test "arch: multi-agent-patterns mentions PM in architect gate" {
     grep -q "project-manager" "$L0_ROOT/docs/agents/multi-agent-patterns.md"
 }
+
+@test "arch: PM template forbids Bash+CLI spawning" {
+    grep -q "Agent Tool Only" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "Never spawn agents via Bash" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "arch: all architects require Agent tool (not Bash)" {
+    for agent in arch-testing arch-platform arch-integration; do
+        grep -q "Agent tool only\|Never use Bash" "$L0_ROOT/setup/agent-templates/${agent}.md"
+    done
+}
+
+@test "arch: claude-code-workflow forbids Bash spawning" {
+    grep -q "Agent Tool Only\|Never spawn.*Bash" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+}
+
+@test "arch: /work skill routes to project-manager" {
+    grep -q "project-manager" "$L0_ROOT/skills/work/SKILL.md"
+}
+
+@test "arch: spec-driven-workflow has How to Start Work section" {
+    grep -q "How to Start Work" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+}

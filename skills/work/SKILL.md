@@ -61,17 +61,21 @@ Match `$ARGUMENTS` against these patterns in order. First match wins:
 | `post\|blog\|social\|marketing\|content` | Agent(`content-creator`) * |
 | `landing\|page\|conversion\|copy\|seo` | Agent(`landing-page-strategist`) * |
 | `pricing\|tiers\|monetize` | Agent(`product-strategist`) * |
+| `implement\|feature\|build\|scope\|plan\|execute\|wave` | Agent(`project-manager`) ** |
 
 \* Business agents are opt-in. If the agent doesn't exist in `.claude/agents/`, fall through to Level 2.
+\** `project-manager` is the orchestrator for multi-file work. It assigns to architects, never codes.
 
 ### Level 2 — Frontmatter Discovery (if no Level 1 match)
 
 1. Scan `.claude/agents/*.md` for `intent:` frontmatter
 2. Match keywords in user description against intent arrays
 3. If match found -> suggest that agent
-4. If no match -> check if `dev-lead` agent exists:
-   - If yes: spawn `dev-lead` in worktree
-   - If no: execute the task directly (Claude handles inline)
+4. If no match -> check if `project-manager` agent exists:
+   - If yes: spawn `project-manager` via Agent tool
+   - If no: check if `dev-lead` agent exists (legacy fallback):
+     - If yes: spawn `dev-lead` via Agent tool
+     - If no: execute the task directly (Claude handles inline)
 
 ## Steps
 

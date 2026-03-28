@@ -63,6 +63,12 @@ delegate to daw-guardian: "Audit changed files in core/data/ for ProcessingMode 
 | After any wave of specialist work | **Architect gate** — arch-testing + arch-platform + arch-integration detect, fix, and cross-verify before proceeding |
 | Official skill available for the task | **Use skill** — battle-tested and maintained upstream |
 
+### Agent Tool Only (non-negotiable)
+
+All delegation uses the `Agent` tool. Never spawn agents via Bash + `claude` CLI:
+- CORRECT: `Agent(project-manager, prompt="implement feature X")`
+- WRONG: `Bash("claude --print 'You are project-manager...'")`
+
 ### Token Economics
 
 Every agent pays a startup tax (~3-5K tokens for instructions + file reading). Delegation saves tokens only when:

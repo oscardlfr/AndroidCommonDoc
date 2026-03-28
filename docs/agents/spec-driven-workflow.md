@@ -11,12 +11,24 @@ description: Native Claude Code workflow for spec-driven development without GSD
 
 Native Claude Code workflow using agents, skills, Plan Mode, and worktrees.
 
+## How to Start Work
+
+```bash
+# Option 1: /work routes to project-manager automatically
+/work implement feature X from the spec
+
+# Option 2: Direct PM invocation
+@project-manager implement feature X per SPEC.md
+```
+
+All delegation uses the `Agent` tool. Never Bash + `claude` CLI.
+
 ## The Flow
 
 ```
 1. Human writes SPEC.md / ROADMAP.md (goals + success criteria)
-2. Human asks Claude: "implement feature X from the spec"
-3. Claude enters Plan Mode → decomposes into tasks
+2. Human asks Claude: "/work implement feature X" or "@project-manager ..."
+3. Claude spawns Agent(project-manager) → PM decomposes into tasks
 4. Claude launches project-manager(s) in parallel worktrees:
      Agent(project-manager, worktree, prompt="implement task A per spec...")
      Agent(project-manager, worktree, prompt="implement task B per spec...")
