@@ -75,19 +75,26 @@ You receive:
 - `pptx` — create pitch decks from feature scores
 - `doc-coauthoring` — collaborative roadmap and spec editing
 
+## Team Context
+
+When spawned as a sub-agent by your department lead, you may also communicate with team peers:
+- `SendMessage(to="context-provider", ...)` for product/technical context verification
+- `SendMessage(to="project-manager", ...)` to request dev context directly
+- You receive work as a sub-agent from marketing-lead or product-lead.
+
 ## Cross-Department Interface
 
 ### Exports
 | Requesting dept | You provide |
 |----------------|------------|
-| Development (dev-lead) | Feature priority, ICE score, tier, milestone |
+| Development (project-manager) | Feature priority, ICE score, tier, milestone |
 | Marketing (content-creator) | Which features to highlight, business angle, target audience |
 | Marketing (landing-page-strategist) | Value propositions, competitive positioning, pricing |
 
 ### Imports
 | Source dept | You need | When |
 |-----------|---------|------|
-| Development (dev-lead) | Effort estimate, technical feasibility, current status | When scoring Ease/Confidence |
+| Development (project-manager) | Effort estimate, technical feasibility, current status | When scoring Ease/Confidence |
 
 ### Brief format
 ```

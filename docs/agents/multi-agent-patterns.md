@@ -112,15 +112,47 @@ Orchestrator
 
 **When to use**: Complex workflows where later waves depend on earlier results, or where cheap checks should gate expensive ones.
 
+### Hybrid TeamCreate (Peer Network + Sub-agents On Demand)
+
+Orchestrators and architects as peers. Workers spawned on demand as sub-agents.
+
+```
+PM creates cross-department team:
+┌───────────────────────────────────────────────────────┐
+│ Team peers (SendMessage) — orchestrators + shared     │
+├───────────────────────────────────────────────────────┤
+│ PM ←→ arch-testing ←→ arch-platform ←→ arch-integr.  │
+│  ↕         ↕                                          │
+│ marketing-lead ←→ product-lead                        │
+│ context-provider (read-only), doc-updater (write)     │
+└───────────────────────────────────────────────────────┘
+         │ Agent() sub-agents on demand
+         ├─ arch-testing → test-specialist, ui-specialist
+         ├─ arch-platform → data-layer-specialist, domain-model-specialist
+         ├─ marketing-lead → content-creator, landing-page-strategist
+         └─ product-lead → product-strategist, product-prioritizer
+```
+
+| Agent type | Communication | When created |
+|------------|---------------|--------------|
+| Team peer (lead, architect, shared service) | SendMessage | At team creation |
+| Sub-agent (dev, guardian, specialist) | Agent() return | On demand by peers |
+
+**Key**: Peers need ongoing coordination (cross-verify, cross-dept requests). Sub-agents are workers — they receive task, execute, return. No peer interaction needed.
+
+**Mandatory shared services**: `context-provider` (query BEFORE work) and `doc-updater` (call AFTER work) must be in every team.
+
+**When to use**: Multi-agent workflows across any department. Default topology for all orchestrators.
+
 ### Architect Gate Pattern
 
-Between waves, launch architect mini-orchestrators in parallel. They detect issues using MCP tools, fix them (via specialists or directly), cross-verify each other's work, and re-verify:
+Between waves, architect peers cross-verify via `SendMessage`. They spawn dev sub-agents on demand to fix issues:
 
-- **arch-testing**: TDD compliance, test quality — delegates to `test-specialist`, uses `code-metrics` MCP tool
-- **arch-platform**: KMP patterns, dependency direction — uses `verify-kmp-packages`, `dependency-graph` MCP tools
-- **arch-integration**: compilation, DI wiring — uses `gradle-config-lint`, `setup-check` MCP tools
+- **arch-testing**: TDD compliance, test quality — spawns `test-specialist` (Agent sub-agent), uses `code-metrics` MCP tool
+- **arch-platform**: KMP patterns, dependency direction — spawns `data-layer-specialist`, uses `verify-kmp-packages`, `dependency-graph` MCP tools
+- **arch-integration**: compilation, DI wiring — spawns `ui-specialist`, uses `gradle-config-lint`, `setup-check` MCP tools
 
-Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the orchestrator re-plans (never codes the fix itself). Architects can call each other for cross-verification — e.g., after `arch-platform` fixes an import, it calls `arch-testing` to verify tests still pass.
+Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the PM re-plans (never codes the fix itself). Architects cross-verify via `SendMessage(to="arch-testing", summary="verify tests", message="Run /test on modules I modified")`.
 
 ---
 
@@ -260,18 +292,22 @@ Aggregation
   └─ 3-pass deduplication → consolidated report
 ```
 
-### Example: Architect-Gated Workflow
+### Example: Hybrid TeamCreate Workflow
 
 ```
-project-manager receives: "Add snapshot-export feature"
+PM receives: "Add snapshot-export feature"
 
-1. delegate to researcher: "Map export patterns in codebase"
-2. Synthesize plan from research output
-3. delegate to domain-model-specialist: "Design ExportConfig sealed class"
-4. delegate to dev specialist: "Implement export in core/data/ per plan"
-5. Architect gate: arch-testing + arch-platform + arch-integration
-6. All APPROVE → /pre-pr → pass → Commit
-   Any REJECT → assign fix to dev → re-run architect gate
+1. TeamCreate("wave-1") — spawn: 3 architects + marketing-lead + context-provider + doc-updater
+2. SendMessage(to="context-provider", ...) — get current export patterns, product spec
+3. Agent(researcher, prompt="Map export patterns") — sub-agent research
+4. Synthesize plan from research + context
+5. Architects spawn dev sub-agents:
+   arch-platform → Agent(domain-model-specialist, prompt="Design ExportConfig sealed class")
+   arch-integration → Agent(data-layer-specialist, prompt="Implement export in core/data/")
+6. Architect gate: arch-testing ←→ arch-platform ←→ arch-integration (SendMessage cross-verify)
+7. All APPROVE → SendMessage(to="marketing-lead", ...) for release blog
+8. SendMessage(to="doc-updater", ...) — update CHANGELOG, roadmap
+9. /pre-pr → Commit
 ```
 
 ---

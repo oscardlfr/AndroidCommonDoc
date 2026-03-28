@@ -61,18 +61,25 @@ Platform-appropriate content ready to post. Include:
 - `internal-comms` — structured status reports and company announcements
 - `brand-guidelines` — brand consistency checking across content
 
+## Team Context
+
+When spawned as a sub-agent by your department lead, you may also communicate with team peers:
+- `SendMessage(to="context-provider", ...)` for product/technical context verification
+- `SendMessage(to="project-manager", ...)` to request dev context directly
+- You receive work as a sub-agent from marketing-lead or product-lead.
+
 ## Cross-Department Interface
 
 ### Exports
 | Requesting dept | You provide |
 |----------------|------------|
-| Development (dev-lead) | Content calendar, upcoming deadlines, what technical info needed |
+| Development (project-manager) | Content calendar, upcoming deadlines, what technical info needed |
 | Business (product-strategist) | Engagement signals, market feedback from posts |
 
 ### Imports
 | Source dept | You need | When |
 |-----------|---------|------|
-| Development (dev-lead) | What was built, technical details, code snippets, metrics | For release notes, blog posts |
+| Development (project-manager) | What was built, technical details, code snippets, metrics | For release notes, blog posts |
 | Business (product-strategist) | Feature priority, business angle | For positioning content |
 
 ### Requesting Dev Context

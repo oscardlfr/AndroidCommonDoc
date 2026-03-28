@@ -17,7 +17,7 @@ These are **starting points** — adapt to your project's specific modules, cons
 
 | Template | Purpose |
 |----------|---------|
-| `dev-lead.md` | Development workflow coordinator — plans, executes, delegates, verifies |
+| `project-manager.md` | Development workflow coordinator — plans, executes, delegates, verifies |
 
 ### L1 (Ecosystem Library)
 

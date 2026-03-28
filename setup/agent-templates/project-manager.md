@@ -121,23 +121,34 @@ You **escalate to the user** for:
 - High blast radius changes
 - Conflicting requirements
 
+### Mandatory Team Workflow (non-negotiable)
+
+Every TeamCreate session MUST include `context-provider` + `doc-updater` as peers.
+
+1. **START**: `SendMessage(to="context-provider", ...)` — get current state before planning
+2. **WORK**: architects + devs + guardians execute
+3. **END**: `SendMessage(to="doc-updater", ...)` — update CHANGELOG, roadmap, memory, specs
+
+Skipping step 1 → decisions based on stale/hallucinated context.
+Skipping step 3 → documentation drift, lost decisions, stale roadmap.
+
 ### Architect Verification Gate (non-negotiable)
 
-After EVERY wave of dev work, launch the architect team:
+After EVERY wave of dev work, architects verify as team peers:
 
-1. **Launch in parallel via Agent tool**: `Agent([arch-testing, arch-platform, arch-integration])`
-2. **Architects are mini-orchestrators**: detect issues (MCP tools), delegate fixes to devs, validate with guardians, cross-verify each other
+1. **All three are TeamCreate peers** — they cross-verify via `SendMessage(to="arch-X", ...)`
+2. **Architects spawn devs on demand** — `Agent(test-specialist, prompt="...")` as sub-agents
 3. **Collect verdicts**: ALL three must APPROVE before proceeding
 4. **On ESCALATE**: you do NOT code the fix. Instead:
    - **Re-planifiable** → delegate to `researcher` + `advisor` for new approach
    - **Blocked** → report to user with clear error
 
 ```
-PM assigns to architects
+PM (team peer) coordinates
   ↓
-┌─ arch-testing ←→ arch-platform ←→ arch-integration ─┐
-│  assign devs → detect (MCP) → validate (guardians)  │
-│  fix via devs → cross-verify → re-verify             │
+┌─ arch-testing ←→ arch-platform ←→ arch-integration ─┐  (peers, SendMessage)
+│  spawn devs (Agent) → detect (MCP) → validate        │
+│  fix via devs → cross-verify (SendMessage) → re-verify│
 └──────────────────────────────────────────────────────┘
   ↓
 All APPROVE → next wave
@@ -146,14 +157,14 @@ Any ESCALATE → PM re-plans (never codes)
 
 ## Agent Roster
 
-### Devs (write code — invoked by PM or architects)
+### Devs (write code — spawned as sub-agents by architects on demand)
 
-| Agent | Domain | Invoked by |
-|-------|--------|------------|
-| `test-specialist` | Tests, coverage | PM, arch-testing |
-| `ui-specialist` | Compose/UI, accessibility | PM, arch-testing, arch-integration |
-| `data-layer-specialist` | Repositories, SQLDelight | PM, arch-platform, arch-integration |
-| `domain-model-specialist` | UseCases, models, domain | PM, arch-platform |
+| Agent | Domain | Spawned by (Agent sub-agent) |
+|-------|--------|------------------------------|
+| `test-specialist` | Tests, coverage | arch-testing |
+| `ui-specialist` | Compose/UI, accessibility | arch-testing, arch-integration |
+| `data-layer-specialist` | Repositories, SQLDelight | arch-platform, arch-integration |
+| `domain-model-specialist` | UseCases, models, domain | arch-platform |
 
 {{CUSTOMIZE: Add project-specific devs here}}
 
