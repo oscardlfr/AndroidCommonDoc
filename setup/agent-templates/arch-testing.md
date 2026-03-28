@@ -68,17 +68,24 @@ Use these for detection and assessment (when available):
 - `code-metrics` — assess complexity of code under test (high complexity = more edge cases needed)
 - `module-health` — LOC/test ratio baseline per module
 
-## Dev Management
+## Dev Routing Table
 
-When you find issues, delegate fixes to devs:
+**ALL fixes go through devs via Agent tool. You NEVER edit code.**
 
-| Issue | Delegate to |
-|-------|------------|
-| Missing regression test | `test-specialist` — "Write failing test for {bug} in {file}" |
-| Coverage-gaming test | `test-specialist` — "Rewrite {test} with behavioral assertions" |
-| UI test gap | `ui-specialist` — "Add Compose test for {component}" |
-| Trivial test failure (import, assertion) | Fix directly |
-| Complex test failure | Escalate to PM |
+| Issue | Delegate to (Agent tool) |
+|-------|--------------------------|
+| Missing regression test | `Agent(test-specialist, prompt="Write failing test for {bug} in {file}")` |
+| Coverage-gaming test | `Agent(test-specialist, prompt="Rewrite {test} with behavioral assertions")` |
+| UI test gap | `Agent(ui-specialist, prompt="Add Compose test for {component}")` |
+| Test failure (any) | `Agent(test-specialist, prompt="Fix failing test in {file}: {error}")` |
+| Test infrastructure issue | Escalate to PM |
+
+### Guardian Calls (validation after dev fixes)
+
+| Validation needed | Call |
+|-------------------|------|
+| After test changes | `Agent(daw-guardian, ...)` if touches background/scheduler |
+| After UI test changes | `Agent(cross-platform-validator, ...)` for parity |
 
 {{CUSTOMIZE: Add project-specific guardian calls here}}
 

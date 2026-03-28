@@ -72,19 +72,29 @@ Use these for detection (when available):
 - No hardcoded debug URLs, test credentials, or `BuildConfig.DEBUG`-only paths in production flows
 - No `println()` or `console.log()` in production code (use structured logging)
 
-## Dev Management
+## Dev Routing Table
 
-When you find wiring issues, delegate to devs or fix directly:
+**ALL fixes go through devs via Agent tool. You NEVER edit code.**
 
-| Issue | Delegate to |
-|-------|------------|
-| Missing Koin registration | `data-layer-specialist` or `domain-model-specialist` — "Register in DI" |
-| Orphan UI component | `ui-specialist` — "Wire {component} into navigation" |
-| Missing navigation route | `ui-specialist` — "Add route for {screen}" |
-| Missing `@Serializable` | Fix directly — add annotation |
-| Compilation error (simple import) | Fix directly |
-| Compilation error (design issue) | Escalate to PM |
+| Issue | Delegate to (Agent tool) |
+|-------|--------------------------|
+| Missing Koin registration | `Agent(data-layer-specialist, prompt="Register {class} in Koin module {file}")` |
+| Orphan UI component | `Agent(ui-specialist, prompt="Wire {component} into navigation in {file}")` |
+| Missing navigation route | `Agent(ui-specialist, prompt="Add route for {screen} in {file}")` |
+| Missing `@Serializable` | `Agent(ui-specialist, prompt="Add @Serializable to route {class} in {file}")` |
+| Broken click handler / button | `Agent(ui-specialist, prompt="Fix click handler for {button} in {file}")` |
+| Compilation error (import) | `Agent(data-layer-specialist, prompt="Fix import error in {file}")` |
+| `TODO()` in production | `Agent(domain-model-specialist, prompt="Implement {feature} placeholder in {file}")` |
+| Compilation error (design) | Escalate to PM |
 | Missing feature gate | Escalate to PM — business decision |
+
+### Guardian Calls (validation after dev fixes)
+
+| Validation needed | Call |
+|-------------------|------|
+| After wiring changes | `Agent(freemium-gate-checker, ...)` for tier enforcement |
+| After auth changes | `Agent(firebase-auth-reviewer, ...)` for security |
+| Before release | `Agent(release-guardian-agent, ...)` + `Agent(privacy-auditor, ...)` |
 | `TODO()` in production | Delegate to appropriate dev — "Implement {feature}" |
 
 {{CUSTOMIZE: Add project-specific guardian calls here}}

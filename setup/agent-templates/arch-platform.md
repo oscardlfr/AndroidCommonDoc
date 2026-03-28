@@ -74,19 +74,27 @@ Use these FIRST — they replace manual Grep/Glob:
 - Resources in `src/commonMain/composeResources/` (not custom source sets)
 - `generateResClass = always` for multi-module + composite builds
 
-## Dev Management
+## Dev Routing Table
 
-When you find violations, delegate fixes to devs or fix directly:
+**ALL fixes go through devs via Agent tool. You NEVER edit code.**
 
-| Violation | Delegate to |
-|-----------|------------|
-| Forbidden import in commonMain | Fix directly — move to correct source set |
-| Dependency direction reversed | Fix directly — swap dependency declaration |
-| Duplicate code across source sets | Fix directly — move to jvmMain/appleMain |
-| Domain model violation | `domain-model-specialist` — "Fix sealed pattern in {file}" |
-| Data layer architecture issue | `data-layer-specialist` — "Restructure repository in {file}" |
-| Source set violation (complex) | `data-layer-specialist` — "Refactor producer/consumer split" |
+| Violation | Delegate to (Agent tool) |
+|-----------|--------------------------|
+| Forbidden import in commonMain | `Agent(data-layer-specialist, prompt="Move {import} from commonMain to {correct source set} in {file}")` |
+| Dependency direction reversed | `Agent(data-layer-specialist, prompt="Swap dependency direction in {module} build.gradle.kts")` |
+| Duplicate code across source sets | `Agent(data-layer-specialist, prompt="Consolidate to jvmMain/appleMain in {file}")` |
+| Domain model violation | `Agent(domain-model-specialist, prompt="Fix sealed pattern in {file}")` |
+| Data layer architecture issue | `Agent(data-layer-specialist, prompt="Restructure repository in {file}")` |
+| Encoding/charset issue | `Agent(data-layer-specialist, prompt="Fix UTF-8 handling in {file}")` |
 | Convention plugin missing | Escalate to PM |
+| Five-layer violation | Escalate to PM |
+
+### Guardian Calls (validation after dev fixes)
+
+| Validation needed | Call |
+|-------------------|------|
+| After source set changes | `Agent(producer-consumer-validator, ...)` |
+| After domain model changes | `Agent(version-checker, ...)` for alignment |
 | Five-layer violation | Escalate to PM |
 
 {{CUSTOMIZE: Add project-specific guardian calls here}}
