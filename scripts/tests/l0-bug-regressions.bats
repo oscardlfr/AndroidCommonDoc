@@ -330,3 +330,16 @@ if violations:
 @test "regression: change-detector reuses cached result" {
     grep -q "urlCache.has\|urlCache.get" mcp-server/src/monitoring/change-detector.ts
 }
+
+# ---------------------------------------------------------------------------
+# Architecture v2: PM + Architects + Devs + Guardians
+# ---------------------------------------------------------------------------
+
+@test "regression: dev-lead.md template does NOT exist (renamed)" {
+    [ ! -f "setup/agent-templates/dev-lead.md" ]
+}
+
+@test "regression: no dev-lead references in L0 agent docs" {
+    # Agent docs should reference project-manager, not dev-lead as orchestrator
+    ! grep -q "dev-lead.*orchestrat\|dev-lead.*codes inline" docs/agents/claude-code-workflow.md
+}

@@ -1404,3 +1404,55 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "53 canonical" "$README"
     # 50 commands verified via sync table
 }
+
+# ============================================================
+# Section 7.1: Multi-Agent Architecture Tests
+# ============================================================
+
+@test "arch: dev-lead.md does NOT exist (renamed to project-manager)" {
+    [ ! -f "$L0_ROOT/setup/agent-templates/dev-lead.md" ]
+}
+
+@test "arch: PM does NOT contain 'execute implementation code' or 'codes inline'" {
+    ! grep -q "execute implementation code" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    ! grep -q "codes inline" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    ! grep -q "Write feature code" "$L0_ROOT/setup/agent-templates/project-manager.md" || grep -q "MUST delegate" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "arch: PM assigns to architects (not devs directly)" {
+    grep -q "assigns.*architects" "$L0_ROOT/setup/agent-templates/project-manager.md" || grep -q "assign.*work.*architects" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "arch: all architects have CUSTOMIZE markers for project guardians" {
+    for agent in arch-testing arch-platform arch-integration; do
+        grep -q "CUSTOMIZE" "$L0_ROOT/setup/agent-templates/${agent}.md"
+    done
+}
+
+@test "arch: all architects reference Escalate to PM (not dev-lead)" {
+    for agent in arch-testing arch-platform arch-integration; do
+        grep -q "Escalate to PM" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        ! grep -q "Escalate to dev-lead" "$L0_ROOT/setup/agent-templates/${agent}.md"
+    done
+}
+
+@test "arch: agents-hub references project-manager not dev-lead as orchestrator" {
+    grep -q "project-manager" "$L0_ROOT/docs/agents/agents-hub.md"
+}
+
+@test "arch: claude-code-workflow PM model has no codes inline" {
+    grep -q "Project Manager" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    ! grep -q "Codes inline" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+}
+
+@test "arch: spec-driven-workflow shows PM assigns to architects" {
+    grep -q "project-manager" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+}
+
+@test "arch: claude-md-template examples use project-manager" {
+    grep -q "project-manager" "$L0_ROOT/docs/agents/claude-md-template.md"
+}
+
+@test "arch: multi-agent-patterns mentions PM in architect gate" {
+    grep -q "project-manager" "$L0_ROOT/docs/agents/multi-agent-patterns.md"
+}
