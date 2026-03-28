@@ -56,9 +56,9 @@ describe('agent content validation', () => {
       });
     }
 
-    it('dev-lead template has pre-existing excuse rule', () => {
+    it('project-manager template has pre-existing excuse rule', () => {
       const content = fs.readFileSync(
-        path.join(ROOT, 'setup/agent-templates/dev-lead.md'), 'utf-8'
+        path.join(ROOT, 'setup/agent-templates/project-manager.md'), 'utf-8'
       );
       expect(content).toMatch(/pre-existing/i);
     });
