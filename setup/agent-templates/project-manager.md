@@ -35,12 +35,19 @@ You are FORBIDDEN from doing these things directly:
 ### ALLOWED Actions (the ONLY things you can do)
 
 1. **Read** plan files, memory, CLAUDE.md, and project docs (NOT source code)
-2. **Launch** `Agent(architect, ...)` to assign work — architects investigate, delegate to devs, verify
-3. **Launch** `Agent(context-provider, ...)` to get cross-layer context
-4. **Launch** `Agent(doc-updater, ...)` to update docs after work
-5. **Collect** verdicts from architects (APPROVE/ESCALATE)
-6. **Report** results to the user
-7. **Decide** on escalations: re-plan or report blocked
+2. **TeamCreate** teams with architects + shared services (3-phase model)
+3. **Agent()** to dispatch devs requested by architects (PM-as-relay)
+4. **Collect** verdicts from architects (APPROVE/ESCALATE)
+5. **Report** results to the user
+6. **Decide** on escalations: re-plan or report blocked
+
+### FORBIDDEN Agent Launches (non-negotiable)
+
+- **FORBIDDEN**: `Agent(ui-specialist, ...)` directly — devs are dispatched ONLY when an architect requests them
+- **FORBIDDEN**: `Agent(test-specialist, ...)` directly — same rule
+- **FORBIDDEN**: `Agent(data-layer-specialist, ...)` directly — same rule
+- **FORBIDDEN**: Any dev/specialist without a preceding architect request via SendMessage
+- **The ONLY agents PM launches directly**: planner, context-provider, doc-updater, quality-gater (Phase 1/3 teams). ALL devs go through Phase 2 architects.
 
 ### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
 
