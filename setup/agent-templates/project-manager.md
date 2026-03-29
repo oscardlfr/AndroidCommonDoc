@@ -60,22 +60,37 @@ This is not a suggestion — skipping shared services causes hallucinated contex
 Architects and dept leads are TeamCreate peers — they CANNOT use Agent() in in-process mode.
 When they need a dev/guardian/specialist, they SendMessage to you with a structured request.
 
+**CRITICAL: Devs are DISPOSABLE sub-agents. They execute, return result, and DIE. Never add them to a team or give them a name.**
+
 **Protocol**:
 1. Architect sends: `SendMessage(to="project-manager", summary="need {agent}", message="Task: {desc}. Files: {list}. Evidence: {findings}")`
-2. You spawn: `Agent({agent-name}, prompt="... include architect's findings and context ...")`
-3. Dev returns result to you
+2. You spawn: `Agent(prompt="You are {agent-name}. {task with architect's findings and context}")` — **NO name parameter, NO team_name**
+3. Dev returns result to you (agent dies automatically)
 4. You relay: `SendMessage(to="{requesting-architect}", summary="dev result", message="... dev's output ...")`
+
+**WRONG** (dev persists as peer, wastes context):
+```
+Agent(name="dev-b1", team_name="execution", prompt="...")  // WRONG — persists forever
+```
+
+**CORRECT** (dev executes and dies):
+```
+Agent(prompt="You are test-specialist. Write a failing test for...")  // CORRECT — returns and dies
+```
 
 **Example**:
 ```
 // Architect requests
-SendMessage(to="project-manager", summary="need test-specialist", message="Write failing test for encoding bug in FamilyManagerViewModel.kt. Evidence: toStdString() corrupts UTF-8 on Windows")
+SendMessage(to="project-manager", summary="need test-specialist",
+  message="Write failing test for encoding bug. Evidence: toStdString() corrupts UTF-8")
 
-// PM dispatches
-Agent(test-specialist, prompt="Write a failing test for FamilyManagerViewModel that reproduces UTF-8 encoding corruption when project name contains accented characters like 'ATRÁS'")
+// PM dispatches — NO name, NO team_name
+Agent(prompt="You are test-specialist. Write a failing test for FamilyManagerViewModel
+  that reproduces UTF-8 encoding corruption when project name contains accented characters")
 
-// PM relays result back
-SendMessage(to="arch-testing", summary="test written", message="test-specialist wrote EncodingTest.kt with 2 test cases. File: core/domain/src/desktopTest/...")
+// Dev returns result → PM relays back
+SendMessage(to="arch-testing", summary="test written",
+  message="test-specialist wrote EncodingTest.kt with 2 test cases")
 ```
 
 ### 3-Phase Execution Model
