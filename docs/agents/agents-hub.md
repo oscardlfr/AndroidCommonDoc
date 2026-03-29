@@ -27,20 +27,25 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, project-ma
 |----------|-------------|
 | [claude-md-template](claude-md-template.md) | Boris Cherny-style CLAUDE.md template — the 4-pillar structure for all projects |
 | [claude-code-workflow](claude-code-workflow.md) | Project Manager adaptive model, skill usage, verification, release workflow |
-| [multi-agent-patterns](multi-agent-patterns.md) | Topology (chain/fan-out/orchestrator), data handoff, failure handling, cost control |
+| [multi-agent-patterns](multi-agent-patterns.md) | Topology (chain/fan-out/orchestrator), agent design rules, failure handling, cost control |
+| [team-topology](team-topology.md) | 3-phase team model: Planning Team → Execution Team → Quality Gate Team |
+| [data-handoff-patterns](data-handoff-patterns.md) | Structured markers, severity convention, prose fallback, test gaming detection |
 | [agent-consumption-guide](agent-consumption-guide.md) | How agents load and use pattern docs (frontmatter, assumes_read, hub scanning) |
 | [capability-detection](capability-detection.md) | Graceful degradation for optional tools in agent definitions |
 | [script-vs-agent-decision](script-vs-agent-decision.md) | Decision framework: when a script is better than an agent |
-| [spec-driven-workflow](spec-driven-workflow.md) | Spec-driven agent workflow: debugger, verifier, advisor, researcher, codebase-mapper |
-| [architect-gate-pattern](multi-agent-patterns.md#architect-gate-pattern) | Verification gate between execution waves (arch-testing, arch-platform, arch-integration) |
+| [spec-driven-workflow](spec-driven-workflow.md) | Spec-driven agent workflow with 3-phase teams and multi-session departments |
+| [quality-gate-protocol](quality-gate-protocol.md) | Sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) |
+| [context-rotation-guide](context-rotation-guide.md) | Context management: rotation strategies, PM-as-relay, team dissolution |
 
 ## Key Concepts
 
+- **3-Phase Model** = Planning Team → Execution Team → Quality Gate Team. Each temporary, dissolved after completion.
 - **CLAUDE.md** = workflow instructions (< 80 lines). Contains Agent Roster → triggers agent delegation.
-- **`.claude/agents/`** = canonical agent definitions. Synced via `/sync-l0`. Used by both Claude Code and GSD/pi.
-- **`.gsd/agents/`** = mirror for GSD/pi users (optional). Synced via `/sync-gsd-agents`. Not needed if using Claude Code only.
-- **project-manager** = orchestrator. NEVER codes — assigns all code tasks to dev specialists, launches architect gates.
-- **Spec-driven agents** = 5 new agents (debugger, verifier, advisor, researcher, codebase-mapper) for autonomous research, decision-making, and codebase exploration.
+- **`.claude/agents/`** = canonical agent definitions. Synced via `/sync-l0`.
+- **project-manager** = orchestrator. NEVER codes — orchestrates 3-phase teams, dispatches devs via relay.
+- **quality-gater** = PM-facing verification peer. Runs gate protocol after architects APPROVE.
+- **planner** = Planning Team peer. Produces structured plans before execution.
+- **Spec-driven agents** = debugger, verifier, advisor, researcher, codebase-mapper for autonomous work.
 - **Skills** = token-efficient script wrappers. Always prefer over manual agent work.
 
 ## Rules

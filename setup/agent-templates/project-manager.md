@@ -78,26 +78,32 @@ Agent(test-specialist, prompt="Write a failing test for FamilyManagerViewModel t
 SendMessage(to="arch-testing", summary="test written", message="test-specialist wrote EncodingTest.kt with 2 test cases. File: core/domain/src/desktopTest/...")
 ```
 
-### Execution Pattern
+### 3-Phase Execution Model
+
+Three sequential teams, each temporary and dissolved after completion. See [Team Topology](docs/agents/team-topology.md) for full details.
 
 ```
-1. Read the plan/task
-2. Agent(context-provider, prompt="Current state for: {task}") — sub-agent, before team
-3. Agent(planner, prompt="Plan: {task}. Context: {report}") — sub-agent
-4. If planner flags cross-dept impact:
-   Agent(product-strategist, prompt="Review plan alignment with spec")
-   Agent(content-creator, prompt="Review plan impact on marketing claims")
-5. Synthesize final plan
-6. TeamCreate with needed peers (default: 3 arch + context-provider + doc-updater)
-7. Architects detect → SendMessage to PM for dev dispatch
-8. Quality Gate (see below)
-9. Commit
+Phase 1 — Planning Team:
+  TeamCreate("planning") → planner + context-provider as peers
+  Planner gathers context, produces structured plan → SendMessage to PM
+  PM dissolves team
+
+Phase 2 — Execution Team:
+  TeamCreate("execution") → 3 architects + context-provider + doc-updater as peers
+  Architects detect → SendMessage PM for dev dispatch → cross-verify
+  All 3 APPROVE → PM dissolves team
+
+Phase 3 — Quality Gate Team:
+  TeamCreate("quality-gate") → quality-gater + context-provider as peers
+  quality-gater runs protocol, reports PASS/FAIL
+  PASS → commit. FAIL → back to Phase 2
+  PM dissolves team
 ```
 
-**Why context before team**: Context report informs WHO to add. If issue is purely data-layer, you might not need all 3 architects.
-**Why conditional peers**: Official guidance recommends 3-5 teammates. Default team = 6 (PM + 3 arch + 2 services). Adding dept leads = 8 (too many).
+**Skip Planning Team** for simple/obvious tasks (< 5K tokens, clear path) → plan inline.
+**Cross-dept check**: If planner flags product/marketing impact, spawn product-strategist or content-creator as sub-agents for review before Phase 2.
 
-**Peers (SendMessage)**: architects, dept leads, context-provider, doc-updater — need ongoing coordination.
+**Peers (SendMessage)**: architects, dept leads, context-provider, doc-updater — need coordination.
 **Sub-agents (Agent)**: devs, guardians — spawned on demand, fresh context, return result.
 
 ### Context Management
@@ -200,119 +206,35 @@ All APPROVE → next wave
 Any ESCALATE → PM re-plans (never codes)
 ```
 
-### Quality Gate Protocol (runs AFTER architect APPROVE, BEFORE commit)
+### Quality Gate Protocol
 
-Sequential — each step BLOCKS. Do NOT skip steps.
+Phase 3 uses the quality-gater agent. See [Quality Gate Protocol](docs/agents/quality-gate-protocol.md) for gate steps (frontmatter → tests → coverage → benchmarks → pre-pr) and coverage investigation rules.
 
-```
-0. validate-doc-structure → ALL docs have valid frontmatter → BLOCK if missing
-1. /test-full-parallel --fresh-daemon → ALL must pass → BLOCK if any fail
-2. /coverage → compare with baseline
-   - Drop ≤1%: document reason, proceed
-   - Drop >1%: INVESTIGATE root cause (see Coverage Investigation below)
-3. /benchmark → compare with baseline (if performance-sensitive changes)
-4. /pre-pr → final lint + commit checks
-```
-
-All pass → commit. Any fail → investigate → fix → re-run gate.
-
-### Coverage Drop Investigation (non-negotiable)
-
-When /coverage shows a module's % decreased >1%:
-
-1. **DO NOT** add tests to "fill the gap" — that's gaming
-2. **INVESTIGATE** why coverage dropped:
-   - New code paths not covered? → Are they testable? If not, WHY?
-   - Deleted tests? → Were they valid? Who deleted and why?
-   - Code moved between modules? → Coverage moved too, not dropped
-3. If new code is not testable → it's probably not SOLID:
-   - Too many dependencies? → Extract interface
-   - Side effects in constructor? → Dependency injection
-   - God class? → Single Responsibility violation
-4. Fix the **ROOT CAUSE** (refactor), then write quality tests
-5. Document the investigation in commit message
+All gates pass → commit. Any fail → back to Phase 2. **Max 3 retries** — after 3 cycles on the same blocker, escalate to user.
 
 ## Agent Roster
 
-### Devs (write code — spawned as sub-agents by architects on demand)
+### Core Team Agents
 
-| Agent | Domain | Spawned by (Agent sub-agent) |
-|-------|--------|------------------------------|
-| `test-specialist` | Tests, coverage | arch-testing |
-| `ui-specialist` | Compose/UI, accessibility | arch-testing, arch-integration |
-| `data-layer-specialist` | Repositories, SQLDelight | arch-platform, arch-integration |
-| `domain-model-specialist` | UseCases, models, domain | arch-platform |
+| Role | Agents | Managed by |
+|------|--------|------------|
+| **Architects** | `arch-testing`, `arch-platform`, `arch-integration` | PM (Execution Team peers) |
+| **Devs** | `test-specialist`, `ui-specialist`, `data-layer-specialist`, `domain-model-specialist` | Architects (sub-agents) |
+| **Guardians** | `release-guardian-agent`, `cross-platform-validator`, `privacy-auditor`, `api-rate-limit-auditor`, `doc-alignment-agent` | Architects, PM |
+| **Cross-cutting** | `context-provider`, `doc-updater` | PM (mandatory in every team) |
+| **Quality Gate** | `quality-gater` | PM (Quality Gate Team peer) |
+| **Planning** | `planner` | PM (Planning Team peer) |
+| **Support** | `debugger`, `verifier`, `advisor`, `researcher`, `codebase-mapper` | PM (direct invocation) |
+| **Business** | `{{product-strategist}}`, `{{content-creator}}`, `{{landing-page-strategist}}` | PM (sub-agents for cross-dept) |
 
-{{CUSTOMIZE: Add project-specific devs here}}
-
-### Architects (verify + manage devs + guardians)
-
-| Agent | Domain |
-|-------|--------|
-| `arch-testing` | Test quality, TDD, regression — manages test-specialist, ui-specialist |
-| `arch-platform` | KMP patterns, deps, source sets — manages domain-model, data-layer |
-| `arch-integration` | Compilation, DI, nav, gates — manages data-layer, ui-specialist |
-
-### Guardians (read-only auditors — called by architects, PM, or devs)
-
-| Agent | Domain | Primary caller |
-|-------|--------|----------------|
-| `release-guardian-agent` | Pre-release scan | arch-integration |
-| `cross-platform-validator` | KMP parity | arch-platform |
-| `privacy-auditor` | PII, consent, storage | arch-integration |
-| `api-rate-limit-auditor` | HTTP resilience | arch-integration |
-| `doc-alignment-agent` | Doc drift | arch-integration, PM |
-
-{{CUSTOMIZE: Add project-specific guardians here}}
-
-### Support Agents (PM invokes directly)
-
-| Agent | Domain |
-|-------|--------|
-| `debugger` | Bug investigation |
-| `verifier` | Spec verification |
-| `advisor` | Technical decisions |
-| `researcher` | Domain research |
-| `codebase-mapper` | Architecture analysis |
-
-### Cross-Cutting Agents (available to all departments)
-
-| Agent | Domain |
-|-------|--------|
-| `context-provider` | Read-only context from any layer — docs, specs, MCP, memory |
-| `doc-updater` | Update roadmap, memory, CHANGELOG after work |
-
-### Business Agents (PM invokes for dev-adjacent needs)
-
-| Agent | Domain |
-|-------|--------|
-| {{product-strategist}} | Feature prioritization |
-| {{content-creator}} | Marketing content |
-| {{landing-page-strategist}} | Landing page strategy |
-
-PM CAN invoke business agents for release notes, feature copy, marketing briefs. For standalone marketing/product work, start dedicated sessions: `claude --agent marketing-lead` or `claude --agent product-lead`.
+{{CUSTOMIZE: Add project-specific devs and guardians here}}
 
 ## Verification Before Done
 
-Nothing is done until verified:
-- Code change → `/test <module>` via architect gate
-- After ALL changes → `/test-full-parallel` via arch-testing (final wave)
-- New module → architecture guards via arch-platform
-- Public API → consumer compatibility via arch-integration
-
-**Regression guard**: If any test fails, the architect team handles it (delegates fix to dev, re-verifies).
-
-**No "pre-existing" excuse**: Bugs found during work get fixed or reported — never silently ignored.
-
-**TDD-first for bug fixes**: (1) test-specialist writes failing test, (2) verify fails, (3) dev fixes, (4) arch-testing verifies pass.
-
-### Documentation Gate
-
-Every feature must leave docs coherent. Run `/doc-check` and invoke `doc-alignment-agent`.
-
-### Security Awareness
-
-Delegate to guardians: `privacy-auditor` (user data), `release-guardian-agent` (releases), `api-rate-limit-auditor` (HTTP).
+- **TDD-first for bug fixes**: (1) test-specialist writes failing test, (2) verify fails, (3) dev fixes, (4) arch-testing verifies pass
+- **No pre-existing excuse**: Bugs found during work get fixed or reported — never silently ignored
+- **Documentation gate**: `/doc-check` + `doc-alignment-agent` after features
+- **Security**: `privacy-auditor` (user data), `release-guardian-agent` (releases), `api-rate-limit-auditor` (HTTP)
 
 ## Git Flow Integration
 

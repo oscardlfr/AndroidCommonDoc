@@ -17,7 +17,20 @@ These are **starting points** — adapt to your project's specific modules, cons
 
 | Template | Purpose |
 |----------|---------|
-| `project-manager.md` | Development workflow coordinator — plans, executes, delegates, verifies |
+| `project-manager.md` | 3-phase orchestrator — Planning Team → Execution Team → Quality Gate Team |
+| `planner.md` | Planning Team peer — produces structured execution plans alongside context-provider |
+| `quality-gater.md` | Quality Gate Team peer — runs sequential verification (tests, coverage, pre-pr) |
+| `context-provider.md` | Mandatory peer in every team — read-only cross-layer context |
+| `doc-updater.md` | Mandatory peer in every team — updates docs, CHANGELOG, memory after work |
+| `doc-migrator.md` | Sporadic team agent — migrates docs to L0 patterns (hubs, splits, frontmatter) |
+
+### Architects (Execution Team peers)
+
+| Template | Purpose |
+|----------|---------|
+| `arch-testing.md` | Test quality, TDD, regression — manages test-specialist, ui-specialist |
+| `arch-platform.md` | KMP patterns, deps, source sets — manages domain-model, data-layer |
+| `arch-integration.md` | Compilation, DI, nav, gates — manages ui-specialist, data-layer |
 
 ### L1 (Ecosystem Library)
 
@@ -33,6 +46,14 @@ These are **starting points** — adapt to your project's specific modules, cons
 | `feature-domain-specialist.md` | Domain-specific architecture auditor (customize per domain) |
 | `product-strategist.md` | ICE-scored feature prioritization and milestone planning |
 | `content-creator.md` | Build-in-public marketing content (Reddit, Twitter, changelogs) |
+
+### Business Leads (L2 session-level orchestrators)
+
+| Template | Purpose |
+|----------|---------|
+| `product-lead.md` | Product orchestrator — manages specs, pricing, roadmap |
+| `marketing-lead.md` | Marketing orchestrator — campaigns, content, landing pages |
+| `landing-page-strategist.md` | Landing page copy, structure, CTAs, SEO strategy |
 
 ## Conventions
 

@@ -116,35 +116,18 @@ Orchestrator
 
 Orchestrators and architects as peers. Workers spawned on demand as sub-agents.
 
-```
-PM creates cross-department team:
-┌───────────────────────────────────────────────────────┐
-│ Team peers (SendMessage) — orchestrators + shared     │
-├───────────────────────────────────────────────────────┤
-│ PM ←→ arch-testing ←→ arch-platform ←→ arch-integr.  │
-│  ↕         ↕                                          │
-│ marketing-lead ←→ product-lead                        │
-│ context-provider (read-only), doc-updater (write)     │
-└───────────────────────────────────────────────────────┘
-         │ Agent() sub-agents on demand
-         ├─ arch-testing → test-specialist, ui-specialist
-         ├─ arch-platform → data-layer-specialist, domain-model-specialist
-         ├─ marketing-lead → content-creator, landing-page-strategist
-         └─ product-lead → product-strategist, product-prioritizer
-```
-
 | Agent type | Communication | When created |
 |------------|---------------|--------------|
 | Team peer (lead, architect, shared service) | SendMessage | At team creation |
 | Sub-agent (dev, guardian, specialist) | Agent() return | On demand by peers |
 
-**Key**: Peers need ongoing coordination (cross-verify, cross-dept requests). Sub-agents are workers — they receive task, execute, return. No peer interaction needed.
+**Key**: Peers need ongoing coordination (cross-verify, cross-dept requests). Sub-agents are workers — they receive task, execute, return.
 
-**Mandatory shared services**: `context-provider` (query BEFORE work) and `doc-updater` (call AFTER work) must be in every team.
+**Mandatory shared services**: `context-provider` and `doc-updater` must be in every team.
 
-**When to use**: Multi-agent workflows across any department. Default topology for all orchestrators.
+**3-Phase Model**: The default team topology uses 3 sequential teams (Planning → Execution → Quality Gate), each temporary and dissolved after completion. See [Team Topology](team-topology.md) for the full model.
 
-**Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies, PM-as-relay, and anti-patterns.
+**Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies and PM-as-relay pattern.
 
 ### Architect Gate Pattern
 
@@ -196,40 +179,9 @@ It does NOT inherit the parent's conversation history, open files, or tool state
 
 ---
 
-## Data Handoff Patterns
+## Data Handoff
 
-### Structured Markers (Agent → Aggregator)
-
-```markdown
-<!-- FINDINGS_START -->
-[
-  {"severity": "HIGH", "file": "AuthViewModel.kt", "line": 42, "title": "CancellationException swallowed", "category": "error-handling"},
-  {"severity": "MEDIUM", "file": "LoginScreen.kt", "line": 18, "title": "Missing contentDescription", "category": "accessibility"}
-]
-<!-- FINDINGS_END -->
-```
-
-Aggregator extracts JSON between markers. Everything outside markers is human-readable narrative.
-
-### Severity Convention
-
-| Level | Meaning | Blocks release? |
-|-------|---------|-----------------|
-| `BLOCKER` | Broken functionality, data loss risk | Yes |
-| `HIGH` | Security issue, crash risk | Yes |
-| `MEDIUM` | Code smell, missing coverage, pattern violation | No |
-| `LOW` | Style, naming, minor improvement | No |
-| `INFO` | Observation, context for other findings | No |
-
-### Prose Fallback (Agent → Human)
-
-When an agent produces unstructured output, the orchestrator falls back to line-pattern parsing:
-
-- `[BLOCKER]`, `[CRITICAL]`, `[ERROR]`, `[FAIL]` → HIGH+
-- `[WARNING]`, `[WARN]` → MEDIUM
-- `[OK]`, `[PASS]` → skip
-
-Always prefer structured markers. Prose fallback exists for resilience, not as a design target.
+See [Data Handoff Patterns](data-handoff-patterns.md) for structured markers, severity conventions, and prose fallback.
 
 ---
 
@@ -294,24 +246,6 @@ Aggregation
   └─ 3-pass deduplication → consolidated report
 ```
 
-### Example: Hybrid TeamCreate Workflow
-
-```
-PM receives: "Add snapshot-export feature"
-
-1. TeamCreate("wave-1") — spawn: 3 architects + marketing-lead + context-provider + doc-updater
-2. SendMessage(to="context-provider", ...) — get current export patterns, product spec
-3. Agent(researcher, prompt="Map export patterns") — sub-agent research
-4. Synthesize plan from research + context
-5. Architects spawn dev sub-agents:
-   arch-platform → Agent(domain-model-specialist, prompt="Design ExportConfig sealed class")
-   arch-integration → Agent(data-layer-specialist, prompt="Implement export in core/data/")
-6. Architect gate: arch-testing ←→ arch-platform ←→ arch-integration (SendMessage cross-verify)
-7. All APPROVE → SendMessage(to="marketing-lead", ...) for release blog
-8. SendMessage(to="doc-updater", ...) — update CHANGELOG, roadmap
-9. /pre-pr → Commit
-```
-
 ---
 
 ## Creating a New Multi-Agent Workflow
@@ -329,6 +263,8 @@ PM receives: "Add snapshot-export feature"
 
 ## Related Docs
 
+- [Team Topology](team-topology.md) — 3-phase team model (Planning → Execution → Quality Gate)
+- [Data Handoff Patterns](data-handoff-patterns.md) — structured markers, severity, prose fallback
 - [Claude Code Workflow](claude-code-workflow.md) — single-agent skill and workflow patterns
 - [Agent Consumption Guide](agent-consumption-guide.md) — how agents load and use documentation
 - [Script vs Agent Decision](script-vs-agent-decision.md) — when to use a script instead of an agent

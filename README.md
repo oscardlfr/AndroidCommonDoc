@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 32 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 35 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 19 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
@@ -25,12 +25,13 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
-- **MCP server** with 34 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
+- **MCP server** with 35 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
 - **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, and architecture guards
-- **20 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper). Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
+- **20 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
+- **19 agent templates** for the 3-phase team model -- project-manager, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, plus business and domain specialist templates. Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
 
 Install once, use across all your projects.
 
@@ -520,84 +521,133 @@ Skills primarily useful when working on AndroidCommonDoc (L0) itself:
 
 ---
 
+## 3-Phase Team Model
+
+Every non-trivial task flows through three sequential teams, each temporary and dissolved after its phase completes. This prevents context bloat and ensures structured verification.
+
+```
+Phase 1 — Planning Team          Phase 2 — Execution Team           Phase 3 — Quality Gate Team
+┌─────────────────────┐          ┌──────────────────────────┐       ┌───────────────────────┐
+│ planner              │          │ arch-testing              │       │ quality-gater          │
+│ context-provider     │  ──→    │ arch-platform             │  ──→ │ context-provider       │
+│                      │          │ arch-integration          │       │                        │
+│ Output: exec plan    │          │ context-provider          │       │ Output: PASS / FAIL    │
+└─────────────────────┘          │ doc-updater               │       └───────────────────────┘
+                                 │                            │       FAIL → back to Phase 2
+                                 │ PM dispatches devs on      │       (max 3 retries → user)
+                                 │ demand via Agent() relay   │
+                                 └──────────────────────────┘
+```
+
+**Project Manager** orchestrates all 3 phases. PM NEVER writes code — assigns to architects, who manage devs and guardians.
+
+### Multi-Session Departments
+
+Different work types run in separate Claude Code sessions with dedicated leads:
+
+| Session | Command | Lead | Team |
+|---------|---------|------|------|
+| Development | `claude --agent project-manager` | PM | architects, devs, guardians |
+| Marketing | `claude --agent marketing-lead` | ML | content-creator, landing-page-strategist |
+| Product | `claude --agent product-lead` | PL | product-strategist |
+
+All departments share context via `context-provider` and sync documentation via `doc-updater`.
+
+### Agent Categories
+
+| Category | Role | Examples |
+|----------|------|---------|
+| **Orchestrators** | Plan and delegate, NEVER code | project-manager, marketing-lead, product-lead |
+| **Architects** | Verify and manage devs (Read-only + SendMessage) | arch-testing, arch-platform, arch-integration |
+| **Devs** | Write code (spawned on demand as sub-agents) | test-specialist, ui-specialist, data-layer-specialist |
+| **Guardians** | Read-only auditors | release-guardian, cross-platform-validator, privacy-auditor |
+| **Shared Services** | Mandatory in every team | context-provider, doc-updater |
+| **Sporadic** | Created on demand, dissolved after | doc-migrator, quality-gater, planner |
+
+See [Team Topology](docs/agents/team-topology.md) for full details.
+
+---
+
 ## Agents
 
-20 specialized agents in `.claude/agents/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in its YAML frontmatter, enabling **extensible routing** -- `/work` reads frontmatter at runtime and dispatches tasks to the best-matching agent automatically. To add a new agent, create a markdown file with domain+intent frontmatter; no registration step needed.
+20 specialized agents in `.claude/agents/` + 19 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
 
-**6 audit-only agents** (read-only). **2 audit+implement agents** (can write code). **5 quality gate agents** (internal). **2 orchestrators**. **5 spec-driven agents** (debugger, verifier, advisor, researcher, codebase-mapper).
+### Production Agents (synced via /sync-l0)
 
-### Domain Agents
+| Agent | Category | What It Does |
+|-------|----------|-------------|
+| `test-specialist` | dev | Test compliance, coverage gaps, **test generation** |
+| `ui-specialist` | dev | Compose accessibility, Material3 — **audits and implements fixes** |
+| `api-rate-limit-auditor` | guardian | HTTP rate limiting, retry backoff, timeouts |
+| `beta-readiness-agent` | guardian | Feature completeness and beta criteria |
+| `cross-platform-validator` | guardian | Platform parity (Android, iOS, Desktop) |
+| `doc-alignment-agent` | guardian | Documentation accuracy vs implementation |
+| `privacy-auditor` | guardian | PII in logs, analytics consent, encrypted storage |
+| `release-guardian-agent` | guardian | Release checklist — debug flags, secrets, ProGuard |
+| `full-audit-orchestrator` | orchestrator | `/full-audit` — wave execution, 3-pass dedup |
+| `quality-gate-orchestrator` | orchestrator | L0 internal quality gates (script-parity, template-sync) |
+| `debugger` | spec-driven | Scientific bug investigation — `/debug` |
+| `verifier` | spec-driven | Goal-backward verification — `/verify` |
+| `advisor` | spec-driven | Technical decision comparison — `/decide` |
+| `researcher` | spec-driven | Ad-hoc research — `/research` |
+| `codebase-mapper` | spec-driven | Architecture analysis — `/map-codebase` |
+| `doc-code-drift-detector` | quality-gate | Pattern doc vs `versions-manifest.json` |
+| `l0-coherence-auditor` | quality-gate | L0/L1/L2 coherence (9 checks) |
+| `script-parity-validator` | quality-gate | PS1 ↔ SH behavior parity |
+| `skill-script-alignment` | quality-gate | Skills reference correct scripts |
+| `template-sync-validator` | quality-gate | Claude commands ↔ Copilot prompts sync |
 
-These agents are materialized to your `.claude/agents/` via `/sync-l0`. Claude Code delegates to them automatically when the task matches their description.
+### Agent Templates (for L1/L2 projects)
 
-| Agent | Mode | What It Does |
-|-------|------|-------------|
-| `api-rate-limit-auditor` | audit | HTTP client rate limiting, retry backoff, timeouts, concurrency |
-| `beta-readiness-agent` | audit | Feature completeness, stability, and beta criteria |
-| `cross-platform-validator` | audit | Platform parity across Android, iOS, and Desktop targets |
-| `doc-alignment-agent` | audit | Documentation accuracy against actual implementation |
-| `privacy-auditor` | audit | PII in logs, analytics consent, encrypted storage, data retention |
-| `release-guardian-agent` | audit | Release checklist -- debug flags, secrets, build config, hardcoded URLs, ProGuard |
-| `test-specialist` | **audit+impl** | Test pattern compliance, coverage gaps, **and test generation** |
-| `ui-specialist` | **audit+impl** | Compose UI accessibility, Material3, design system — **audits and implements fixes** |
+19 templates in `setup/agent-templates/` — copy to your project's `.claude/agents/` and customize.
 
-### Orchestrators
+**Team Core (used in every 3-phase workflow):**
 
-| Agent | What It Does |
-|-------|-------------|
-| `full-audit-orchestrator` | Orchestrates `/full-audit` -- wave execution, finding collection, 3-pass dedup, consolidated report |
-| `quality-gate-orchestrator` | Unified pass/fail report across all gates with token cost |
+| Template | Phase | Role |
+|----------|-------|------|
+| `project-manager` | All | 3-phase orchestrator — NEVER codes |
+| `planner` | Planning | Produces structured execution plans |
+| `quality-gater` | Quality Gate | Runs sequential verification gates |
+| `context-provider` | All | Read-only cross-layer context (mandatory in every team) |
+| `doc-updater` | All | Updates docs, CHANGELOG, memory after work (mandatory) |
+| `doc-migrator` | Sporadic | Migrates docs to L0 patterns (hubs, splits, frontmatter) |
 
-### Quality Gate Agents
+**Architects (Execution Team peers):**
 
-These agents verify internal consistency. Invoked by `quality-gate-orchestrator`.
+| Template | Domain |
+|----------|--------|
+| `arch-testing` | Test quality, TDD — manages test-specialist, ui-specialist |
+| `arch-platform` | KMP patterns, deps — manages domain-model, data-layer specialists |
+| `arch-integration` | Compilation, DI, nav — manages ui-specialist, data-layer |
 
-| Agent | What It Verifies |
-|-------|-----------------|
-| `doc-code-drift-detector` | Pattern doc version references match `versions-manifest.json` |
-| `l0-coherence-auditor` | Full L0/L1/L2 coherence audit (9 checks incl. Context7 + Jina) |
-| `script-parity-validator` | PS1 and SH scripts produce equivalent behavior |
-| `skill-script-alignment` | Skills reference correct scripts and parameters |
-| `template-sync-validator` | Claude commands and Copilot prompts are semantically equivalent |
+**Business (L2 session-level leads):**
+
+| Template | Role |
+|----------|------|
+| `product-lead` | Product orchestrator — specs, pricing, roadmap |
+| `marketing-lead` | Marketing orchestrator — campaigns, content |
+| `product-strategist` | Feature prioritization (ICE scoring) |
+| `content-creator` | Developer marketing content |
+| `landing-page-strategist` | Landing page copy, CTAs, SEO |
+
+**Domain Specialists (L1/L2 customizable):**
+
+| Template | Role |
+|----------|------|
+| `platform-auditor` | Cross-module architecture coherence |
+| `module-lifecycle` | Module creation and deprecation checklists |
+| `feature-domain-specialist` | Domain-specific auditor (customize per domain) |
 
 ### Model Tier Strategy
 
-Agents don't have hardcoded models -- the active profile determines which model each agent uses. Switch profiles with `/set-model-profile`:
+Switch profiles with `/set-model-profile`:
 
-| Profile | Default | Strategy | Use Case |
-|---------|---------|----------|----------|
-| `budget` | haiku | All haiku | Quick checks, cost-conscious iterations |
-| `balanced` | sonnet | Haiku for static, Sonnet for reasoning | Day-to-day development (default) |
-| `advanced` | sonnet | Opus for orchestrators + deep analysis, Sonnet for rest | Serious work needing high-quality planning |
-| `quality` | opus | All opus | Critical audits, pre-release, production issues |
-
-**Balanced profile** (default) assignment:
-
-| Tier | Use Case | Agents |
-|------|----------|--------|
-| **haiku** | Static comparison, grep-like checks | script-parity, skill-script-alignment, doc-code-drift, l0-coherence, release-guardian, api-rate-limit, template-sync |
-| **sonnet** | Cross-file reasoning, semantic analysis | quality-gate, beta-readiness, cross-platform, doc-alignment, test-specialist, ui-specialist, privacy-auditor, full-audit-orchestrator |
-
-**Advanced profile** upgrades orchestrators and deep-analysis agents to opus while keeping validators on sonnet.
-
-### Agent Templates
-
-10 reusable agent templates in `setup/agent-templates/` for bootstrapping domain-specific agents in L1/L2 projects:
-
-| Template | Purpose |
-|----------|---------|
-| `project-manager` | Pure orchestrator: NEVER codes — assigns to devs, launches architect gates |
-| `arch-testing` | Test quality verification gate (TDD, regression, test quality) |
-| `arch-platform` | Architecture verification gate (KMP patterns, dependency direction) |
-| `arch-integration` | Integration verification gate (compilation, DI wiring, navigation) |
-| `product-strategist` | Product vision, roadmap, feature prioritization |
-| `content-creator` | Marketing copy, blog posts, documentation |
-| `landing-page-strategist` | Landing page structure, copy, conversion optimization |
-| `platform-auditor` | Platform-specific compliance and best practices |
-| `module-lifecycle` | Module creation, deprecation, migration planning |
-| `feature-domain-specialist` | Deep expertise in a single feature domain |
-
-The first 4 (project-manager + 3 architects) form the orchestration + verification layer. The remaining 6 cover business and technical domain specialization.
+| Profile | Strategy | Use Case |
+|---------|----------|----------|
+| `budget` | All haiku | Quick checks, cost-conscious |
+| `balanced` | Haiku static + Sonnet reasoning | Day-to-day (default) |
+| `advanced` | Opus orchestrators + Sonnet validators | Serious planning |
+| `quality` | All opus | Critical audits, pre-release |
 
 ---
 
@@ -640,7 +690,7 @@ This eliminates the "agent explores for 5 minutes before planning" problem. The 
 
 ## MCP Server
 
-34 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
+35 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
 **21 tools** work in any project. **14 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
 
@@ -791,7 +841,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-15 domain hubs, 88+ sub-docs, 16 guides, 8 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
+15 domain hubs, 88+ sub-docs, 16 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
 
 | Hub | Covers | Platform |
 |-----|--------|----------|
@@ -801,7 +851,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | [DI](docs/di/di-hub.md) | Koin module declarations, test configuration | Android + KMP |
 | [Error Handling](docs/error-handling/error-handling-hub.md) | Result type, DomainException hierarchy, CancellationException | Android + KMP |
 | [Gradle](docs/gradle/gradle-hub.md) | Convention plugins (KMP + Android-only), version catalogs, Kover | Android + KMP |
-| [Agents](docs/agents/agents-hub.md) | CLAUDE.md Boris Cherny template, project-manager workflow, multi-agent patterns, agent consumption, capability detection | All |
+| [Agents](docs/agents/agents-hub.md) | 3-phase team model, multi-agent patterns, team topology, data handoff, quality gate protocol, agent consumption | All |
 | [Guides](docs/guides/guides-hub.md) | Getting started, Detekt config/migration/baseline, convention plugin chain, doc template | Android + KMP |
 | [Navigation](docs/navigation/navigation-hub.md) | Navigation3, state-driven nav, deep links | Android + KMP |
 | [Offline-First](docs/offline-first/offline-first-hub.md) | Local-first data, sync strategies, conflict resolution | Android + KMP |
@@ -866,14 +916,14 @@ AndroidCommonDoc/
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
 +-- mcp-server/             # MCP server (34 tools, 3 prompts, dynamic resources)
 |   +-- src/
-|   |   +-- tools/          # 34 tools: validation, analysis, metrics, audit, sync, vault
+|   |   +-- tools/          # 35 tools: validation, analysis, metrics, audit, sync, vault
 |   |   +-- types/          # Shared types (ValidationResult, AuditFinding, FindingsReport)
 |   |   +-- utils/          # Utilities (rate-limiter, jsonl-reader, gradle-parser, xml-report-reader, finding-dedup, logger)
 |   |   +-- generation/     # Detekt rule parser, emitters, config-emitter
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
 |   |   +-- cli/            # CLI entrypoint for CI monitoring
-|   +-- tests/              # 89 test files -- vitest unit + integration (1202 tests)
+|   +-- tests/              # 90 test files -- vitest unit + integration (1331 tests)
 +-- detekt-rules/
 |   +-- src/main/kotlin/    # 17 hand-written AST-only Detekt rules
 |   +-- src/main/resources/
@@ -887,7 +937,7 @@ AndroidCommonDoc/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
 |   +-- copilot-templates/  # 40 Copilot prompt templates (generated from skills)
 |   +-- copilot-agent-templates/ # 4 Copilot agent templates (generated from agent-templates)
-|   +-- agent-templates/    # 10 agent templates: project-manager, arch-testing, arch-platform, arch-integration, product-strategist, content-creator, landing-page-strategist, platform-auditor, module-lifecycle, feature-domain-specialist
+|   +-- agent-templates/    # 19 agent templates: PM, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, business leads, domain specialists
 |   +-- doc-templates/
 |   |   +-- business/       # 5 business doc templates (PRODUCT_SPEC, MARKETING, PRICING, COMPETITIVE, LANDING_PAGES)
 |   +-- github-workflows/   # CI template + PR template for consumer projects
@@ -909,7 +959,7 @@ AndroidCommonDoc/
 |   +-- reusable-architecture-guards.yml     # workflow_call: Konsist guards
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
-+-- docs/                   # 15 hub docs, 88+ sub-docs, 16 guides, 8 agent workflow docs
++-- docs/                   # 15 hub docs, 88+ sub-docs, 16 guides, 12 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/

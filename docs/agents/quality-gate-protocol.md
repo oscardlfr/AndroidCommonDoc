@@ -104,8 +104,15 @@ arch-testing detects these via grep on new/modified test files.
 
 ---
 
+## Agent Template
+
+The `quality-gater` agent template (`setup/agent-templates/quality-gater.md`) implements this protocol as a team peer in the Quality Gate Team. It runs alongside context-provider after all architects APPROVE.
+
+Distinct from `quality-gate-orchestrator` (L0 internal validator for toolkit consistency — script-parity, template-sync).
+
 ## Related Docs
 
+- [Team Topology](team-topology.md) — 3-phase model where Quality Gate is Phase 3
 - [Multi-Agent Patterns](multi-agent-patterns.md) — orchestration and architect gates
 - [Context Rotation Guide](context-rotation-guide.md) — context management for long sessions
 - [Claude Code Workflow](claude-code-workflow.md) — single-agent patterns
