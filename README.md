@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 38 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 19 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 38 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
@@ -18,10 +18,10 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custo
 
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
-- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 24 cross-platform pairs + 7 Bash-only utilities
-- **AI agent skills** for Claude Code and GitHub Copilot -- 53 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
+- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 25 cross-platform pairs + 6 Bash-only utilities
+- **AI agent skills** for Claude Code and GitHub Copilot -- 56 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
-- **Detekt rules** that enforce architecture patterns at build time -- 17 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
+- **Detekt rules** that enforce architecture patterns at build time -- 19 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
@@ -291,7 +291,7 @@ Findings are persisted to `.androidcommondoc/findings-log.jsonl` with resolution
 
 ## Detekt Architecture Rules
 
-17 hand-written AST-only rules (no type resolution, no bindingContext) that enforce the most impactful architecture patterns at build time. Organized by category:
+19 hand-written AST-only rules (no type resolution, no bindingContext) that enforce the most impactful architecture patterns at build time. Organized by category:
 
 ### State & Exposure
 
@@ -967,7 +967,7 @@ AndroidCommonDoc/
 |   +-- hooks/              # Real-time Detekt enforcement hooks
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
-|   +-- */SKILL.md          # 53 canonical skill definitions
+|   +-- */SKILL.md          # 56 canonical skill definitions
 |   +-- registry.json       # L0 registry (123 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
@@ -1000,7 +1000,7 @@ AndroidCommonDoc/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
 |   +-- copilot-templates/  # 40 Copilot prompt templates (generated from skills)
 |   +-- copilot-agent-templates/ # 4 Copilot agent templates (generated from agent-templates)
-|   +-- agent-templates/    # 19 agent templates: PM, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, business leads, domain specialists
+|   +-- agent-templates/    # 17 agent templates: PM, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, business leads, domain specialists
 |   +-- doc-templates/
 |   |   +-- business/       # 5 business doc templates (PRODUCT_SPEC, MARKETING, PRICING, COMPETITIVE, LANDING_PAGES)
 |   +-- github-workflows/   # CI template + PR template for consumer projects

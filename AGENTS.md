@@ -47,7 +47,7 @@ node mcp-server/build/cli/monitor-sources.js --project-root /path/to/l1 --layer 
 7. **Navigation:** State-driven -- never Channel-based.
 8. **No platform deps in ViewModels:** No `Context`, `Resources`, `UIKit` imports.
 
-## Available Skills (53)
+## Available Skills (56)
 
 Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-specific files.
 
@@ -95,6 +95,9 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `generate-rules` | Generate Detekt rules from pattern doc frontmatter |
 | `ingest-content` | Fetch external content and match against pattern doc metadata |
 | `doc-reorganize` | Reorganize docs/ into domain-based subdirectories |
+| `kdoc-audit` | Audit KDoc coverage on public Kotlin APIs — regressions, undocumented symbols |
+| `kdoc-migrate` | Full-project KDoc migration, module by module, pattern-informed |
+| `generate-api-docs` | Optional: Dokka + transformer → docs/api/ with YAML frontmatter |
 
 ### Ecosystem & Vault
 
@@ -191,7 +194,7 @@ Automated consistency verification via `.claude/agents/`:
 | `doc-code-drift-detector` | Pattern doc version references match versions-manifest.json |
 | `quality-gate-orchestrator` | Unified pass/fail report across all gates with token cost |
 
-## Pattern Docs (13 categories, 54 sub-docs)
+## Pattern Docs (15 categories, 88+ sub-docs)
 
 Detailed pattern guidance in `docs/`, with YAML frontmatter (scope, sources, targets) for registry scanning:
 

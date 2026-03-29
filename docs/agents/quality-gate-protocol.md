@@ -74,6 +74,12 @@ Any fail → investigate → fix → re-run
 - Must pass
 - **BLOCK** on any failure
 
+### Step 4.5: Production File Verification
+- Run `git diff --stat` on the branch
+- Verify production files (.kt in src/main/, src/commonMain/) appear in the diff
+- **BLOCK** if dev task was "fix code" but ONLY test files were modified (test gaming)
+- **Why**: Devs that adapt tests to pass instead of fixing production code defeat TDD
+
 ### Step 5: Compose UI Tests (MANDATORY for UI changes)
 - If any Compose/UI code changed: verify Compose tests EXIST for every modified screen
 - Tests must assert: component renders, correct items, selection behavior, scroll visible

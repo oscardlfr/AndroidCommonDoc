@@ -36,7 +36,7 @@ Phase 2 — Execution Team
 
 Phase 3 — Quality Gate Team (temporary)
   quality-gater + context-provider as peers
-  Runs: frontmatter → tests → coverage → benchmarks → pre-pr
+  Runs: frontmatter → KDoc → tests → coverage → benchmarks → pre-pr → prod-files → UI tests
   PASS → commit. FAIL → back to Phase 2
   ↓ team dissolved
 ```
@@ -94,7 +94,7 @@ Phase 3 — Quality Gate Team (temporary)
 
 **Flow**:
 1. PM creates team: `TeamCreate("quality-gate")`
-2. quality-gater runs protocol: validate-doc-structure → tests → coverage → benchmarks → pre-pr
+2. quality-gater runs protocol (see [quality-gate-protocol](quality-gate-protocol.md)): frontmatter → KDoc coverage → tests → coverage → benchmarks → pre-pr → production-file verification → Compose UI tests
 3. quality-gater SendMessages structured PASS/FAIL report to PM (includes retry count)
 4. PASS → PM commits, dissolves team
 5. FAIL → PM dissolves team, re-enters Phase 2 with failure context

@@ -48,7 +48,7 @@ All delegation uses the `Agent` tool. Never Bash + `claude` CLI.
      All 3 APPROVE → team dissolved
 
    Phase 3 — Quality Gate Team (quality-gater + context-provider):
-     quality-gater runs: frontmatter → tests → coverage → benchmarks → pre-pr
+     quality-gater runs: frontmatter → KDoc → tests → coverage → benchmarks → pre-pr → prod-files → UI tests
      PASS → PM commits. FAIL → back to Phase 2
 
 4. For parallel worktrees, each PM runs its own 3-phase cycle
