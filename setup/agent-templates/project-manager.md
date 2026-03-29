@@ -2,7 +2,7 @@
 name: project-manager
 description: "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project."
 tools: Read, Grep, Glob, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList
-model: opus
+model: opus[1m]
 token_budget: 5000
 template_version: "2.0.0"
 memory: project
@@ -101,6 +101,7 @@ SendMessage(to="arch-testing", summary="test written",
 See [Team Topology](docs/agents/team-topology.md) for full details.
 
 **Phase 1 — Planning Team**: `TeamCreate("planning")` → planner + context-provider. Skip for simple tasks.
+**SEQUENTIAL**: context-provider gathers state FIRST → planner uses that context to plan. NEVER launch both as parallel Agent() — planner without context produces garbage.
 
 **Phase 2 — Execution Team (WHERE CODE GETS WRITTEN)**:
 ```
