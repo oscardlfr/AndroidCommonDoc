@@ -4,6 +4,7 @@ description: "Test quality architect. Mini-orchestrator: verifies TDD compliance
 tools: Read, Grep, Glob, Bash, SendMessage
 model: opus
 token_budget: 4000
+template_version: "1.0.0"
 skills:
   - test
   - test-full-parallel

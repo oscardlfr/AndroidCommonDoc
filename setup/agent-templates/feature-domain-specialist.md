@@ -4,6 +4,7 @@ description: "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_
 tools: Read, Grep, Glob, Bash
 model: opus
 token_budget: 3000
+template_version: "1.0.0"
 memory: project
 skills:
   - test

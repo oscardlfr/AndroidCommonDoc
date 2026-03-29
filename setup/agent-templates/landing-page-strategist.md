@@ -4,6 +4,7 @@ description: "Designs landing page copy, structure, and conversion flow. Use whe
 tools: Read, Grep, Glob, WebSearch, SendMessage
 model: sonnet
 token_budget: 3000
+template_version: "1.0.0"
 domain: marketing
 intent: [landing, page, conversion, copy, seo, cta]
 ---

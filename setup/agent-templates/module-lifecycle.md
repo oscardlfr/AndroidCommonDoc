@@ -4,6 +4,7 @@ description: "Guides new module creation and module deprecation in {{PROJECT_NAM
 tools: Read, Grep, Glob, Bash, Write
 model: opus
 token_budget: 2000
+template_version: "1.0.0"
 memory: project
 skills:
   - verify-kmp

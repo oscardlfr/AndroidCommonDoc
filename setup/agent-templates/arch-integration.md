@@ -4,6 +4,7 @@ description: "Integration architect. Mini-orchestrator: verifies compilation, DI
 tools: Read, Grep, Glob, Bash, SendMessage
 model: opus
 token_budget: 4000
+template_version: "1.0.0"
 skills:
   - test
   - extract-errors

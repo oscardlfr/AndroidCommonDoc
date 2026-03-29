@@ -4,6 +4,7 @@ description: "Audits cross-module coherence across domain clusters in {{PROJECT_
 tools: Read, Grep, Glob, Bash
 model: opus
 token_budget: 2000
+template_version: "1.0.0"
 memory: project
 skills:
   - verify-kmp

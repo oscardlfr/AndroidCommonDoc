@@ -4,6 +4,7 @@ description: "Documentation updater. Updates roadmap, memory, CHANGELOG, specs a
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: sonnet
 token_budget: 2000
+template_version: "1.0.0"
 skills:
   - audit-docs
   - readme-audit

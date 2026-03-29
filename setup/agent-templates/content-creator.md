@@ -4,6 +4,7 @@ description: "Drafts developer-focused content for build-in-public marketing. Cr
 tools: Read, Grep, Glob, WebSearch, SendMessage
 model: sonnet
 token_budget: 3000
+template_version: "1.0.0"
 domain: marketing
 intent: [post, blog, social, changelog, marketing, content]
 ---

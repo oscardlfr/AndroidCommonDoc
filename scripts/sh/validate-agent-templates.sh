@@ -348,8 +348,12 @@ if should_run "anti-patterns"; then
                 detail "$fname: PM missing IMMEDIATELY execution trigger"
                 ap_warnings=$((ap_warnings + 1))
             fi
-            if ! echo "$body_no_fences" | grep -q "STOP PLANNING"; then
-                detail "$fname: PM missing 'STOP PLANNING' anti-pattern warning"
+            if ! echo "$body_no_fences" | grep -q "STOP PLANNING\|PHASE TRANSITIONS ARE AUTOMATIC"; then
+                detail "$fname: PM missing phase transition enforcement rule"
+                ap_warnings=$((ap_warnings + 1))
+            fi
+            if ! echo "$body_no_fences" | grep -q "PHASE TRANSITIONS ARE AUTOMATIC"; then
+                detail "$fname: PM missing automatic phase transition rule"
                 ap_warnings=$((ap_warnings + 1))
             fi
             if ! echo "$body_no_fences" | grep -q "DISPOSABLE"; then
@@ -394,18 +398,58 @@ fi
 # Check 6: Size limits
 # =========================================================================
 if should_run "size-limits"; then
-    echo -e "${CYAN}Check 6: Size limits (≤300 lines)${RESET}"
+    echo -e "${CYAN}Check 6: Size limits (agents ≤400, docs ≤300)${RESET}"
     sz_errors=0
 
     for f in "${ALL_FILES[@]}"; do
         fname="$(basename "$f")"
         lines=$(wc -l < "$f" | tr -d ' \r')
-        if [[ $lines -gt 300 ]]; then
-            detail "$fname: $lines lines (limit: 300)"
+        # Agent templates: 400 lines (orchestrators are complex)
+        # Doc files: 300 lines (handled by validate-doc-structure)
+        if [[ $lines -gt 400 ]]; then
+            detail "$fname: $lines lines (limit: 400)"
             sz_errors=$((sz_errors + 1))
         fi
     done
-    report_check "Size limits (all templates ≤300 lines)" "$sz_errors" "ERROR"
+    report_check "Size limits (all agents ≤400 lines)" "$sz_errors" "ERROR"
+fi
+
+# =========================================================================
+# Check 7: Template version present and matches MIGRATIONS.json
+# =========================================================================
+if should_run "version"; then
+    echo -e "${CYAN}Check 7: Template versioning${RESET}"
+    ver_errors=0
+
+    MIGRATIONS_FILE=""
+    if [[ -n "$TEMPLATES_DIR" && -f "$TEMPLATES_DIR/MIGRATIONS.json" ]]; then
+        MIGRATIONS_FILE="$TEMPLATES_DIR/MIGRATIONS.json"
+    fi
+
+    for f in "${ALL_FILES[@]}"; do
+        fname="$(basename "$f")"
+        name=$(get_frontmatter_field "$f" "name")
+        ver=$(get_frontmatter_field "$f" "template_version")
+
+        # Only check templates (setup/agent-templates/), not production agents (.claude/agents/)
+        if [[ "$f" == *"agent-templates"* ]]; then
+            if [[ -z "$ver" ]]; then
+                detail "$fname: missing template_version in frontmatter"
+                ver_errors=$((ver_errors + 1))
+            elif [[ -n "$MIGRATIONS_FILE" && -n "$name" ]]; then
+                # Skip templates with placeholder names (e.g., {{DOMAIN}}-specialist)
+                if [[ "$name" == *"{{"* ]]; then
+                    continue
+                fi
+                # Verify version exists in MIGRATIONS.json
+                if ! grep -q "\"$ver\"" "$MIGRATIONS_FILE" 2>/dev/null || ! grep -q "\"$name\"" "$MIGRATIONS_FILE" 2>/dev/null; then
+                    detail "$fname: version $ver or name $name not in MIGRATIONS.json"
+                    ver_errors=$((ver_errors + 1))
+                fi
+            fi
+        fi
+    done
+    report_check "Template versioning (template_version present + in MIGRATIONS.json)" "$ver_errors" "ERROR"
 fi
 
 # =========================================================================

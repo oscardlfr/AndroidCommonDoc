@@ -4,6 +4,7 @@ description: "Platform architecture architect. Mini-orchestrator: verifies KMP p
 tools: Read, Grep, Glob, Bash, SendMessage
 model: opus
 token_budget: 4000
+template_version: "1.0.0"
 skills:
   - verify-kmp
   - validate-patterns

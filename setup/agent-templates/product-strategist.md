@@ -4,6 +4,7 @@ description: "Analyzes feature ideas against business goals using ICE scoring. P
 tools: Read, Grep, Glob, WebSearch, WebFetch, SendMessage
 model: sonnet
 token_budget: 3000
+template_version: "1.0.0"
 domain: business
 intent: [prioritize, roadmap, features, scoring, backlog, pricing, tiers]
 ---
