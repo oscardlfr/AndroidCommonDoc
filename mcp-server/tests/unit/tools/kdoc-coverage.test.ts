@@ -359,7 +359,7 @@ describe("analyzeFile", () => {
     expect(result.undocumented[0].name).toBe("length");
   });
 
-  it("skips data class constructor properties", () => {
+  it("skips data class constructor properties (single line)", () => {
     const result = analyzeFile("Test.kt", [
       "/** Configuration data class. */",
       "data class Config(val name: String, val size: Int, var mutable: Boolean)",
@@ -367,6 +367,40 @@ describe("analyzeFile", () => {
     // Only the class counts, NOT the constructor val/var params
     expect(result.total).toBe(1);
     expect(result.documented).toBe(1);
+  });
+
+  it("skips data class constructor properties (multiline)", () => {
+    const result = analyzeFile("Test.kt", [
+      "/**",
+      " * Resource was not found.",
+      " * @param resourceType The type of resource",
+      " * @param resourceId The identifier of the resource",
+      " */",
+      "data class NotFound(",
+      "    val resourceType: String,",
+      "    val resourceId: String",
+      ") : DomainException()",
+    ].join("\n"));
+    // Only the class counts, NOT the multiline constructor params
+    expect(result.total).toBe(1);
+    expect(result.documented).toBe(1);
+  });
+
+  it("skips data class with @property documented properties", () => {
+    const result = analyzeFile("Test.kt", [
+      "/**",
+      " * Version information for a library module.",
+      " * @property major Major version number",
+      " * @property minor Minor version number",
+      " */",
+      "data class VersionInfo(",
+      "    val major: Int,",
+      "    val minor: Int",
+      ")",
+    ].join("\n"));
+    expect(result.total).toBe(1);
+    expect(result.documented).toBe(1);
+    expect(result.undocumented).toHaveLength(0);
   });
 
   it("skips const val declarations", () => {

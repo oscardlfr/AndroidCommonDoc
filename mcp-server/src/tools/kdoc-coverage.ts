@@ -190,6 +190,10 @@ export function analyzeFile(
   const scopeStack: Array<"file" | "class" | "function"> = ["file"];
   let braceDepth = 0;
 
+  // Track data class constructor parentheses: properties inside are constructor params.
+  let insideDataClassConstructor = false;
+  let dataClassParenDepth = 0;
+
   /** Regex to detect lines that open a class/interface/object/enum scope. */
   const CLASS_OPENER = /\b(class|interface|object|enum)\s+\w+/;
   /** Regex to detect lines that open a function scope. */
@@ -226,30 +230,44 @@ export function analyzeFile(
     if (commentMap[i]) continue;
 
     const trimmed = line.trim();
-    // Current scope BEFORE this line's braces were processed
-    // We need the scope at the point of the declaration
+
+    // Track data class constructor parentheses for multiline constructors
+    if (DATA_CLASS_RE.test(trimmed)) {
+      insideDataClassConstructor = true;
+      dataClassParenDepth = 0;
+    }
+    if (insideDataClassConstructor) {
+      for (const ch of trimmed) {
+        if (ch === "(") dataClassParenDepth++;
+        else if (ch === ")") {
+          dataClassParenDepth--;
+          if (dataClassParenDepth <= 0) {
+            insideDataClassConstructor = false;
+            dataClassParenDepth = 0;
+          }
+        }
+      }
+    }
+
     const currentScope = scopeStack[scopeStack.length - 1] ?? "file";
 
     if (NON_PUBLIC_MODIFIERS.test(trimmed)) continue;
     if (OVERRIDE_RE.test(trimmed)) continue;
     if (ACTUAL_RE.test(trimmed)) continue;
-    if (CONST_RE.test(trimmed)) continue; // const val = self-documenting constant
+    if (CONST_RE.test(trimmed)) continue;
     if (trimmed.startsWith("//")) continue;
-
-    // Data class constructor properties: val/var inside `data class X(val a, val b)`
-    // are documented by the class-level KDoc, not individually.
-    const isDataClassLine = DATA_CLASS_RE.test(trimmed);
 
     for (const { re, type } of DECLARATION_PATTERNS) {
       const match = re.exec(trimmed);
       if (match) {
-        // Skip local variables: val/var inside function bodies are not public API
+        // Skip local variables: val/var inside function bodies
         if (type === "property" && currentScope === "function") {
           break;
         }
 
-        // Skip data class constructor properties (documented by class KDoc)
-        if (type === "property" && isDataClassLine) {
+        // Skip data class constructor properties — single-line or multiline
+        // (documented by class KDoc via @param/@property tags)
+        if (type === "property" && (DATA_CLASS_RE.test(trimmed) || insideDataClassConstructor)) {
           break;
         }
 
