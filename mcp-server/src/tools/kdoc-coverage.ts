@@ -94,12 +94,14 @@ const ACTUAL_RE = /\bactual\b/;
  */
 const DECLARATION_PATTERNS: Array<{ re: RegExp; type: SymbolType }> = [
   { re: /\benum\s+class\s+(\w+)/, type: "enum" },
-  { re: /\bfun\s+(\w+)\s*[\(<]/, type: "function" },
+  // Function: handles regular `fun name(`, extension `fun Type.name(`,
+  // generic `fun <T> name(`, and generic receiver `fun <T> List<T>.name(`
+  { re: /\bfun\s+(?:<[^>]+>\s+)?(?:[\w<>,\s]+\.)?(\w+)\s*\(/, type: "function" },
   { re: /\bclass\s+(\w+)/, type: "class" },
   { re: /\binterface\s+(\w+)/, type: "interface" },
   { re: /\bobject\s+(\w+)/, type: "object" },
-  { re: /\bval\s+(\w+)\s*[:=]/, type: "property" },
-  { re: /\bvar\s+(\w+)\s*[:=]/, type: "property" },
+  { re: /\bval\s+(?:\w+\.)*(\w+)\s*[:=]/, type: "property" },
+  { re: /\bvar\s+(?:\w+\.)*(\w+)\s*[:=]/, type: "property" },
 ];
 
 /**
@@ -174,31 +176,51 @@ export function analyzeFile(
   let documented = 0;
   const undocumented: UndocumentedSymbol[] = [];
 
-  // Track brace depth to distinguish top-level/class-level from local scope.
-  // Depth 0 = top-level, 1 = class body, 2+ = function body (local variables).
-  // Properties (val/var) at depth 2+ are local — skip them.
+  // Scope tracking: stack of scope types to distinguish class body from function body.
+  // "file" = top-level, "class" = class/interface/object/enum body, "function" = function body.
+  // Properties (val/var) inside "function" scope are local variables — skip them.
+  const scopeStack: Array<"file" | "class" | "function"> = ["file"];
   let braceDepth = 0;
 
+  /** Regex to detect lines that open a class/interface/object/enum scope. */
+  const CLASS_OPENER = /\b(class|interface|object|enum)\s+\w+/;
+  /** Regex to detect lines that open a function scope. */
+  const FUN_OPENER = /\bfun\s+/;
+
   for (let i = 0; i < lines.length; i++) {
-    if (commentMap[i]) {
-      // Still track braces inside comments for depth accuracy
-      for (const ch of lines[i]) {
-        if (ch === "{") braceDepth++;
-        else if (ch === "}") braceDepth = Math.max(0, braceDepth - 1);
-      }
-      continue;
-    }
-
     const line = lines[i];
-    const trimmed = line.trim();
 
-    // Update brace depth BEFORE checking declarations
-    // (so the declaration is evaluated at the correct depth)
-    let depthBeforeLine = braceDepth;
+    // Track braces and scope for ALL lines (including comments)
     for (const ch of line) {
-      if (ch === "{") braceDepth++;
-      else if (ch === "}") braceDepth = Math.max(0, braceDepth - 1);
+      if (ch === "{") {
+        braceDepth++;
+        // Determine what scope this brace opens (check the line content)
+        if (!commentMap[i]) {
+          const trimmedLine = line.trim();
+          if (CLASS_OPENER.test(trimmedLine)) {
+            scopeStack.push("class");
+          } else if (FUN_OPENER.test(trimmedLine)) {
+            scopeStack.push("function");
+          } else {
+            // Lambda, init block, etc. — inherit parent scope type
+            const parent = scopeStack[scopeStack.length - 1] ?? "file";
+            scopeStack.push(parent === "class" ? "function" : parent);
+          }
+        } else {
+          scopeStack.push(scopeStack[scopeStack.length - 1] ?? "file");
+        }
+      } else if (ch === "}") {
+        braceDepth = Math.max(0, braceDepth - 1);
+        if (scopeStack.length > 1) scopeStack.pop();
+      }
     }
+
+    if (commentMap[i]) continue;
+
+    const trimmed = line.trim();
+    // Current scope BEFORE this line's braces were processed
+    // We need the scope at the point of the declaration
+    const currentScope = scopeStack[scopeStack.length - 1] ?? "file";
 
     if (NON_PUBLIC_MODIFIERS.test(trimmed)) continue;
     if (OVERRIDE_RE.test(trimmed)) continue;
@@ -208,8 +230,8 @@ export function analyzeFile(
     for (const { re, type } of DECLARATION_PATTERNS) {
       const match = re.exec(trimmed);
       if (match) {
-        // Skip local variables: val/var at depth 2+ are inside function bodies
-        if ((type === "property") && depthBeforeLine >= 2) {
+        // Skip local variables: val/var inside function bodies are not public API
+        if (type === "property" && currentScope === "function") {
           break;
         }
 

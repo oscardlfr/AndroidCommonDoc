@@ -123,7 +123,7 @@ describe('kdoc-coverage tool', () => {
   });
 
   it('detects public functions', () => {
-    expect(content).toContain("fun\\s+(\\w+)");
+    expect(content).toContain("fun\\s+");
   });
 
   it('detects classes and interfaces', () => {
@@ -314,8 +314,8 @@ describe('quality-gater template', () => {
     expect(content).toContain('0.5 KDoc Coverage');
   });
 
-  it('template version bumped to 1.2.0', () => {
-    expect(content).toContain('template_version: "1.2.0"');
+  it('template version bumped to 1.3.0', () => {
+    expect(content).toContain('template_version: "1.3.0"');
   });
 });
 

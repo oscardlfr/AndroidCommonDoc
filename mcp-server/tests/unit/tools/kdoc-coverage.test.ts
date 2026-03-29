@@ -287,6 +287,39 @@ describe("analyzeFile", () => {
     ].join("\n"));
     expect(result.total).toBe(2);
   });
+
+  it("skips local val/var inside top-level functions (depth 1)", () => {
+    // Top-level function (no enclosing class) — body is at depth 1
+    const result = analyzeFile("Test.kt", [
+      "fun calculateNext(): Long {",
+      "    val epochMillis = System.currentTimeMillis()",
+      "    val calendar = Calendar.getInstance()",
+      "    return epochMillis + 1000",
+      "}",
+    ].join("\n"));
+    // Only the function counts, NOT the 2 local vals
+    expect(result.total).toBe(1);
+    expect(result.undocumented[0].name).toBe("calculateNext");
+  });
+
+  it("extracts correct name for extension functions", () => {
+    const result = analyzeFile("Test.kt", "fun ByteArray.encode(): String = \"\"");
+    expect(result.total).toBe(1);
+    expect(result.undocumented[0].name).toBe("encode");
+    expect(result.undocumented[0].type).toBe("function");
+  });
+
+  it("extracts correct name for generic functions", () => {
+    const result = analyzeFile("Test.kt", "fun <T> List<T>.first(): T = get(0)");
+    expect(result.total).toBe(1);
+    expect(result.undocumented[0].name).toBe("first");
+  });
+
+  it("extracts correct name for extension properties", () => {
+    const result = analyzeFile("Test.kt", "val String.length: Int = 0");
+    expect(result.total).toBe(1);
+    expect(result.undocumented[0].name).toBe("length");
+  });
 });
 
 // ── Integration tests: MCP tool ──────────────────────────────────────────────
