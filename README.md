@@ -888,7 +888,21 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 | `/kdoc-migrate` | Full-project KDoc migration, module by module |
 | `/generate-api-docs` | Optional: Dokka + transformer → docs/api/ |
 
+**Quality gate steps** (doc-related):
+| Step | What | Action |
+|------|------|--------|
+| 0 | Frontmatter validation | BLOCK if docs/ missing required fields |
+| 0.5 | KDoc coverage | BLOCK if new public APIs lack KDoc, WARN if module < 80% |
+| 4.5 | Production file verification | BLOCK if dev task was "fix code" but only test files changed |
+
+**Agent behavioral enforcement**:
+- **Architects**: TRIVIAL/NON-TRIVIAL threshold table — max 1-2 line edits (import/annotation). KDoc, tests, DI = delegate to dev via PM.
+- **Devs**: dispatch prompt rule (4) — "MUST modify production files, test-only = REJECTED". Reports modified files in final message.
+- **doc-updater**: pre-write validation via `validate-doc-update` MCP tool. Rejects duplicates (Jaccard > 70%), anti-patterns, oversized docs. Communicates with context-provider before writing.
+
 **Remediation flows**: missing KDoc → quality gate FAIL → PM re-enters Phase 2 → architect routes to dev specialist → dev adds pattern-informed KDoc → quality gate re-runs. doc-updater rejects duplicates/anti-patterns back to PM. Generated docs (`docs/api/`) protected from manual edits via `generated: true` frontmatter.
+
+**Dokka pipeline** (optional): `scripts/sh/dokka-to-docs.sh` transforms Dokka Markdown → `docs/api/` with YAML frontmatter. Exits gracefully if Dokka not configured. Convention plugin template in `setup/templates/build-logic/`.
 
 ### Doc Hubs
 
@@ -972,7 +986,7 @@ AndroidCommonDoc/
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
 |   |   +-- cli/            # CLI entrypoint for CI monitoring
-|   +-- tests/              # 94 test files -- vitest unit + integration (1475 tests)
+|   +-- tests/              # 95 test files -- vitest unit + integration (1482 tests)
 +-- detekt-rules/
 |   +-- src/main/kotlin/    # 17 hand-written AST-only Detekt rules
 |   +-- src/main/resources/
@@ -992,8 +1006,10 @@ AndroidCommonDoc/
 |   +-- github-workflows/   # CI template + PR template for consumer projects
 |   +-- templates/
 |   |   +-- workflows/
-|   |       +-- l0-auto-sync.yml  # Downstream auto-sync workflow template
-|   |       +-- release.yml       # Git Flow + Conventional Commits release template
+|   |   |   +-- l0-auto-sync.yml  # Downstream auto-sync workflow template
+|   |   |   +-- release.yml       # Git Flow + Conventional Commits release template
+|   |   +-- build-logic/
+|   |       +-- dokka-convention.gradle.kts.template  # Optional Dokka convention plugin for KDoc → docs/api/
 +-- .github/workflows/
 |   +-- l0-ci.yml                            # L0 unified CI (all checks on push/PR)
 |   +-- l0-sync-dispatch.yml                # Dispatch l0-sync events to downstream repos on push
