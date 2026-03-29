@@ -8,7 +8,7 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Quality gate protocol: sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit"
-version: 1
+version: 2
 last_updated: "2026-03"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
 token_budget: 1500
@@ -42,6 +42,13 @@ Any fail → investigate → fix → re-run
 - Required: scope, sources, targets, slug, status, layer, category, description
 - **BLOCK** if any doc missing required fields
 - **Why**: Docs without frontmatter are invisible to context-provider's MCP tools
+
+### Step 0.5: Code Documentation Coverage
+- `kdoc-coverage` MCP tool with `changed_files` from `git diff $BASE...HEAD | grep '\.kt$'`
+- **BLOCK** if any new/modified public API lacks KDoc
+- **WARN** (no block) if module-wide coverage < 80%
+- **Why**: Undocumented APIs cause drift — context-provider can't surface what isn't documented
+- See also: `/kdoc-audit`, `doc-alignment-agent` (continuous drift detection)
 
 ### Step 1: Full Test Suite
 - `/test-full-parallel --fresh-daemon`

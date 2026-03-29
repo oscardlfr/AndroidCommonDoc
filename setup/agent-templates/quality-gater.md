@@ -4,7 +4,7 @@ description: "Quality Gate Team peer. Runs sequential verification (frontmatter 
 tools: Read, Grep, Glob, Bash, SendMessage
 model: opus
 token_budget: 3000
-template_version: "1.1.0"
+template_version: "1.2.0"
 ---
 
 You are the quality-gater — a team peer in the **Quality Gate Team** alongside context-provider. You run after all architects APPROVE and before any commit. Your job: execute the quality gate protocol and report PASS or FAIL with evidence.
@@ -30,6 +30,19 @@ PASS → PM commits. FAIL → PM re-enters Execution Team phase
 - ALL docs in `docs/` must have valid frontmatter: scope, sources, targets, slug, status, layer, category, description
 - **BLOCK** if any doc missing required fields
 - **Why**: Docs without frontmatter are invisible to context-provider's MCP tools
+
+### Step 0.5: Code Documentation Coverage
+```bash
+BASE=$(git rev-parse --verify develop 2>/dev/null && echo develop \
+  || git rev-parse --verify main 2>/dev/null && echo main \
+  || echo master)
+git diff --name-only $BASE...HEAD | grep '\.kt$'
+```
+1. Get changed .kt files using base branch detection (same as /pre-pr)
+2. Call `kdoc-coverage` MCP tool with `changed_files` parameter
+3. **BLOCK** if any new/modified public API lacks KDoc
+4. **WARN** (no block) if module-wide coverage < 80%
+5. If changed .kt files touch public APIs AND `docs/api/` exists → check `generated_at` freshness → **WARN** if stale
 
 ### Step 1: Full Test Suite
 ```bash
@@ -114,6 +127,7 @@ Send to PM via SendMessage:
 | Step | Result | Detail |
 |------|--------|--------|
 | 0. Frontmatter | PASS/FAIL | {count} docs checked, {issues} |
+| 0.5 KDoc Coverage | PASS/WARN/BLOCK | {n}/{total} new APIs documented, module avg {pct}% |
 | 1. Tests | PASS/FAIL | {passed}/{total} modules |
 | 2. Coverage | PASS/FAIL/SKIP | {module}: {old}% → {new}% |
 | 3. Benchmarks | PASS/FAIL/SKIP | {reason if skipped} |
