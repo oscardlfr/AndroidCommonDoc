@@ -104,10 +104,11 @@ const DECLARATION_PATTERNS: Array<{ re: RegExp; type: SymbolType }> = [
   { re: /\bvar\s+(?:\w+\.)*(\w+)\s*[:=]/, type: "property" },
 ];
 
-/**
- * Build a map of which lines are inside block comments (not KDoc).
- * Simple heuristic tracking slash-star ... star-slash nesting.
- */
+// Build a map of which lines are inside ANY block comment (including KDoc).
+// KDoc content MUST be marked as comment — otherwise the declaration parser
+// matches keywords in KDoc text (e.g., "class" in descriptive text or code
+// examples). The hasKDoc function searches backward independently, so marking
+// KDoc lines as comments does not affect KDoc detection.
 function buildCommentMap(lines: string[]): boolean[] {
   const inComment: boolean[] = new Array(lines.length).fill(false);
   let inside = false;
@@ -120,7 +121,8 @@ function buildCommentMap(lines: string[]): boolean[] {
         inside = false;
       }
     } else {
-      if (line.includes("/*") && !line.includes("/**")) {
+      // Mark ALL block comments including KDoc (/**)
+      if (line.includes("/*")) {
         inside = true;
         inComment[i] = true;
         if (line.includes("*/")) inside = false;

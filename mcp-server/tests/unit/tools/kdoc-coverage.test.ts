@@ -235,6 +235,44 @@ describe("analyzeFile", () => {
     expect(result.undocumented[0].name).toBe("realFunction");
   });
 
+  it("skips declarations inside KDoc content (Bug 2 fix)", () => {
+    const result = analyzeFile("Test.kt", [
+      "/**",
+      " * Logger for tracking events in the application.",
+      " *",
+      " * Example usage:",
+      " * ```kotlin",
+      " * class MyRepository {",
+      " *   fun fetchData(): Result<Data> {",
+      " *     val result = api.get()",
+      " *   }",
+      " * }",
+      " * ```",
+      " */",
+      "interface EventLogger {",
+      "  fun log(event: String)",
+      "}",
+    ].join("\n"));
+    // Only interface + function count, NOT the class/fun/val inside KDoc
+    expect(result.total).toBe(2);
+    expect(result.undocumented.map(u => u.name).sort()).toEqual(["log"]); // interface has KDoc
+    expect(result.documented).toBe(1); // EventLogger has KDoc
+  });
+
+  it("skips keywords in KDoc descriptive text", () => {
+    const result = analyzeFile("Test.kt", [
+      "/**",
+      " * Sealed class representing the result of an operation",
+      " * which can be either Success or Failure.",
+      " */",
+      "sealed interface Result<out T>",
+    ].join("\n"));
+    // Only the sealed interface counts, not "class" or "interface" in KDoc text
+    expect(result.total).toBe(1);
+    expect(result.documented).toBe(1);
+    expect(result.undocumented).toHaveLength(0);
+  });
+
   it("reports correct line numbers (1-based)", () => {
     const result = analyzeFile("Test.kt", [
       "package com.example",
