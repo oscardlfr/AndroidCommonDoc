@@ -174,11 +174,31 @@ export function analyzeFile(
   let documented = 0;
   const undocumented: UndocumentedSymbol[] = [];
 
+  // Track brace depth to distinguish top-level/class-level from local scope.
+  // Depth 0 = top-level, 1 = class body, 2+ = function body (local variables).
+  // Properties (val/var) at depth 2+ are local — skip them.
+  let braceDepth = 0;
+
   for (let i = 0; i < lines.length; i++) {
-    if (commentMap[i]) continue;
+    if (commentMap[i]) {
+      // Still track braces inside comments for depth accuracy
+      for (const ch of lines[i]) {
+        if (ch === "{") braceDepth++;
+        else if (ch === "}") braceDepth = Math.max(0, braceDepth - 1);
+      }
+      continue;
+    }
 
     const line = lines[i];
     const trimmed = line.trim();
+
+    // Update brace depth BEFORE checking declarations
+    // (so the declaration is evaluated at the correct depth)
+    let depthBeforeLine = braceDepth;
+    for (const ch of line) {
+      if (ch === "{") braceDepth++;
+      else if (ch === "}") braceDepth = Math.max(0, braceDepth - 1);
+    }
 
     if (NON_PUBLIC_MODIFIERS.test(trimmed)) continue;
     if (OVERRIDE_RE.test(trimmed)) continue;
@@ -188,6 +208,11 @@ export function analyzeFile(
     for (const { re, type } of DECLARATION_PATTERNS) {
       const match = re.exec(trimmed);
       if (match) {
+        // Skip local variables: val/var at depth 2+ are inside function bodies
+        if ((type === "property") && depthBeforeLine >= 2) {
+          break;
+        }
+
         total++;
         if (hasKDoc(lines, i)) {
           documented++;

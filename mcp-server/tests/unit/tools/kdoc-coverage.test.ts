@@ -252,6 +252,41 @@ describe("analyzeFile", () => {
     expect(result.total).toBe(0);
     expect(result.documented).toBe(0);
   });
+
+  it("skips local val/var inside function bodies (false positive fix)", () => {
+    const result = analyzeFile("Test.kt", [
+      "class Converter {",
+      "  fun encode(data: ByteArray): String {",
+      "    val buffer = StringBuilder()",
+      "    var index = 0",
+      "    val result = process(buffer)",
+      "    return result.toString()",
+      "  }",
+      "}",
+    ].join("\n"));
+    // Only class + function should count, NOT the 3 local val/var
+    expect(result.total).toBe(2);
+    expect(result.undocumented.map(u => u.name)).toEqual(["Converter", "encode"]);
+  });
+
+  it("counts class-level val/var (depth 1) as public API", () => {
+    const result = analyzeFile("Test.kt", [
+      "class Config {",
+      "  val timeout: Long = 5000",
+      "  var retries: Int = 3",
+      "}",
+    ].join("\n"));
+    // class + 2 properties = 3 public APIs
+    expect(result.total).toBe(3);
+  });
+
+  it("counts top-level val/var (depth 0) as public API", () => {
+    const result = analyzeFile("Test.kt", [
+      "val DEFAULT_TIMEOUT: Long = 5000",
+      "fun helper(): Unit = Unit",
+    ].join("\n"));
+    expect(result.total).toBe(2);
+  });
 });
 
 // ── Integration tests: MCP tool ──────────────────────────────────────────────
