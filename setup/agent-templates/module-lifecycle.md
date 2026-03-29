@@ -3,6 +3,8 @@ name: module-lifecycle
 description: "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules."
 tools: Read, Grep, Glob, Bash, Write
 model: opus
+token_budget: 2000
+template_version: "1.0.0"
 memory: project
 skills:
   - verify-kmp

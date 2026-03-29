@@ -3,6 +3,8 @@ name: "{{DOMAIN}}-specialist"
 description: "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}."
 tools: Read, Grep, Glob, Bash
 model: opus
+token_budget: 3000
+template_version: "1.0.0"
 memory: project
 skills:
   - test

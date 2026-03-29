@@ -127,11 +127,18 @@ Sub-docs follow the standalone format with one addition: the `parent` frontmatte
 
 ## Size Limits
 
+When content grows, **split into hub + sub-docs**. Never compress, never extend past limits.
+
 | Scope | Limit | Action |
 |-------|-------|--------|
-| Section (H2) | 150 lines | Split into sub-sections or extract to sub-doc |
-| Standalone doc | 300 lines | Warn: consider splitting into hub + sub-docs |
-| Absolute max | 500 lines | Error: must split |
+| Hub doc | 100 lines | Navigation + glossary ONLY. Zero implementation detail |
+| Sub-doc | 300 lines | One focused topic. At 250+ lines → plan your split |
+| Section (H2) | 150 lines | Extract to sub-doc if approaching limit |
+| Absolute max | 500 lines | MUST split — no exceptions |
+
+**Agent templates follow the same limits.** If a template exceeds 300 lines, extract domain knowledge, routing tables, and protocols into `.claude/docs/` sub-docs and reference them.
+
+Splitting is the design pattern, not a constraint to work around. If you need more space, create a hub and organize sub-docs — don't fight the limit.
 
 ---
 
@@ -149,7 +156,7 @@ Sub-docs follow the standalone format with one addition: the `parent` frontmatte
 ### DON'T
 
 - Don't create docs without frontmatter -- the MCP registry will skip them
-- Don't exceed 500 lines -- split into hub + sub-docs instead
+- Don't exceed 300 lines for any sub-doc or template -- split into hub + sub-docs proactively
 - Don't duplicate content across docs -- cross-reference with Related Patterns
 - Don't include project-specific code in L0 docs -- L0 is framework-agnostic
 - Don't use L1/L2 project names in L0 doc content (frontmatter `project` field is fine)

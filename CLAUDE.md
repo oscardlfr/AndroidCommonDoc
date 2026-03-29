@@ -44,9 +44,11 @@
 ### No console.log in MCP server
 - Use `logger` utility (stderr only) — `console.log` corrupts stdio transport
 
-### Doc size limits
-- Hub docs **≤100 lines**, sub-docs **≤300 lines**, absolute max 500
-- If growing beyond: split it, don't extend it
+### Doc size limits (MUST split, never extend)
+- Hub docs **≤100 lines**: navigation + glossary only, zero implementation detail
+- Sub-docs **≤300 lines**: one focused topic. At 250+ → plan your split
+- Agent templates **≤400 lines** — orchestrators are more complex than docs. Extract domain knowledge into `.claude/docs/` sub-docs if approaching limit
+- Splitting is the design pattern. Never compress content to fit — create hub + sub-docs
 
 ### Pattern docs need YAML frontmatter
 - Every doc: `scope`, `sources`, `targets`, `category`, `slug`

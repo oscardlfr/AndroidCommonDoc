@@ -19,7 +19,7 @@ jobs:
     if: github.event_name == 'pull_request'
     uses: ./.github/workflows/reusable-commit-lint.yml
     with:
-      valid_scopes: "core,data,ui,feature,ci,deps,release,docs,detekt,mcp,skills,scripts,agents,archive,di,guides"
+      valid_scopes: "core,data,ui,feature,ci,deps,release,docs,detekt,mcp,skills,scripts,agents,archive,di,guides,tests"
 
   readme-audit:
     name: README Audit

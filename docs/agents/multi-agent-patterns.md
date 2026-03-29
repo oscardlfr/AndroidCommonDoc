@@ -112,15 +112,32 @@ Orchestrator
 
 **When to use**: Complex workflows where later waves depend on earlier results, or where cheap checks should gate expensive ones.
 
+### Hybrid TeamCreate (Peer Network + Sub-agents On Demand)
+
+Orchestrators and architects as peers. Workers spawned on demand as sub-agents.
+
+| Agent type | Communication | When created |
+|------------|---------------|--------------|
+| Team peer (lead, architect, shared service) | SendMessage | At team creation |
+| Sub-agent (dev, guardian, specialist) | Agent() return | On demand by peers |
+
+**Key**: Peers need ongoing coordination (cross-verify, cross-dept requests). Sub-agents are workers — they receive task, execute, return.
+
+**Mandatory shared services**: `context-provider` and `doc-updater` must be in every team.
+
+**3-Phase Model**: The default team topology uses 3 sequential teams (Planning → Execution → Quality Gate), each temporary and dissolved after completion. See [Team Topology](team-topology.md) for the full model.
+
+**Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies and PM-as-relay pattern.
+
 ### Architect Gate Pattern
 
-Between waves, launch architect mini-orchestrators in parallel. They detect issues using MCP tools, fix them (via specialists or directly), cross-verify each other's work, and re-verify:
+Between waves, architect peers cross-verify via `SendMessage`. They request dev work through PM (architects can't use Agent in in-process mode):
 
-- **arch-testing**: TDD compliance, test quality — delegates to `test-specialist`, uses `code-metrics` MCP tool
-- **arch-platform**: KMP patterns, dependency direction — uses `verify-kmp-packages`, `dependency-graph` MCP tools
-- **arch-integration**: compilation, DI wiring — uses `gradle-config-lint`, `setup-check` MCP tools
+- **arch-testing**: TDD compliance, test quality — requests `test-specialist` via PM, uses `code-metrics` MCP tool
+- **arch-platform**: KMP patterns, dependency direction — requests `data-layer-specialist` via PM, uses `verify-kmp-packages`, `dependency-graph` MCP tools
+- **arch-integration**: compilation, DI wiring — requests `ui-specialist` via PM, uses `gradle-config-lint`, `setup-check` MCP tools
 
-Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the orchestrator re-plans (never codes the fix itself). Architects can call each other for cross-verification — e.g., after `arch-platform` fixes an import, it calls `arch-testing` to verify tests still pass.
+Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the PM re-plans (never codes the fix itself). Architects cross-verify via `SendMessage(to="arch-testing", summary="verify tests", message="Run /test on modules I modified")`. Dev dispatch goes through PM — see [Context Rotation Guide](context-rotation-guide.md) for the PM-as-relay pattern.
 
 ---
 
@@ -162,40 +179,9 @@ It does NOT inherit the parent's conversation history, open files, or tool state
 
 ---
 
-## Data Handoff Patterns
+## Data Handoff
 
-### Structured Markers (Agent → Aggregator)
-
-```markdown
-<!-- FINDINGS_START -->
-[
-  {"severity": "HIGH", "file": "AuthViewModel.kt", "line": 42, "title": "CancellationException swallowed", "category": "error-handling"},
-  {"severity": "MEDIUM", "file": "LoginScreen.kt", "line": 18, "title": "Missing contentDescription", "category": "accessibility"}
-]
-<!-- FINDINGS_END -->
-```
-
-Aggregator extracts JSON between markers. Everything outside markers is human-readable narrative.
-
-### Severity Convention
-
-| Level | Meaning | Blocks release? |
-|-------|---------|-----------------|
-| `BLOCKER` | Broken functionality, data loss risk | Yes |
-| `HIGH` | Security issue, crash risk | Yes |
-| `MEDIUM` | Code smell, missing coverage, pattern violation | No |
-| `LOW` | Style, naming, minor improvement | No |
-| `INFO` | Observation, context for other findings | No |
-
-### Prose Fallback (Agent → Human)
-
-When an agent produces unstructured output, the orchestrator falls back to line-pattern parsing:
-
-- `[BLOCKER]`, `[CRITICAL]`, `[ERROR]`, `[FAIL]` → HIGH+
-- `[WARNING]`, `[WARN]` → MEDIUM
-- `[OK]`, `[PASS]` → skip
-
-Always prefer structured markers. Prose fallback exists for resilience, not as a design target.
+See [Data Handoff Patterns](data-handoff-patterns.md) for structured markers, severity conventions, and prose fallback.
 
 ---
 
@@ -260,20 +246,6 @@ Aggregation
   └─ 3-pass deduplication → consolidated report
 ```
 
-### Example: Architect-Gated Workflow
-
-```
-project-manager receives: "Add snapshot-export feature"
-
-1. delegate to researcher: "Map export patterns in codebase"
-2. Synthesize plan from research output
-3. delegate to domain-model-specialist: "Design ExportConfig sealed class"
-4. delegate to dev specialist: "Implement export in core/data/ per plan"
-5. Architect gate: arch-testing + arch-platform + arch-integration
-6. All APPROVE → /pre-pr → pass → Commit
-   Any REJECT → assign fix to dev → re-run architect gate
-```
-
 ---
 
 ## Creating a New Multi-Agent Workflow
@@ -291,7 +263,11 @@ project-manager receives: "Add snapshot-export feature"
 
 ## Related Docs
 
+- [Team Topology](team-topology.md) — 3-phase team model (Planning → Execution → Quality Gate)
+- [Data Handoff Patterns](data-handoff-patterns.md) — structured markers, severity, prose fallback
 - [Claude Code Workflow](claude-code-workflow.md) — single-agent skill and workflow patterns
 - [Agent Consumption Guide](agent-consumption-guide.md) — how agents load and use documentation
 - [Script vs Agent Decision](script-vs-agent-decision.md) — when to use a script instead of an agent
 - [Capability Detection](capability-detection.md) — graceful degradation for optional tools
+- [Context Rotation Guide](context-rotation-guide.md) — context window management for TeamCreate teams
+- [Quality Gate Protocol](quality-gate-protocol.md) — sequential verification before commit

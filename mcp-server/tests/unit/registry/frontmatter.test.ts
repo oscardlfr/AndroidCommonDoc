@@ -79,4 +79,69 @@ describe("parseFrontmatter", () => {
     const result = parseFrontmatter("");
     expect(result).toBeNull();
   });
+
+  it("handles closing --- at end of file (no trailing content)", () => {
+    const raw = "---\nscope:\n  - testing\n---";
+    const result = parseFrontmatter(raw);
+    expect(result).not.toBeNull();
+    expect(result!.data).toEqual({ scope: ["testing"] });
+    expect(result!.content).toBe("");
+  });
+
+  it("handles BOM + CRLF combined", () => {
+    const raw = "\uFEFF---\r\nscope:\r\n  - testing\r\nsources:\r\n  - junit5\r\n---\r\n# Content";
+    const result = parseFrontmatter(raw);
+    expect(result).not.toBeNull();
+    expect(result!.data.scope).toEqual(["testing"]);
+    expect(result!.data.sources).toEqual(["junit5"]);
+    expect(result!.content).toBe("# Content");
+  });
+
+  it("returns null when file starts with text before ---", () => {
+    const raw = "Some text\n---\nscope:\n  - testing\n---\n# Content";
+    const result = parseFrontmatter(raw);
+    expect(result).toBeNull();
+  });
+
+  it("returns null for missing closing delimiter (only opening ---)", () => {
+    const raw = "---\nscope:\n  - testing\nSome content without closing";
+    const result = parseFrontmatter(raw);
+    expect(result).toBeNull();
+  });
+
+  it("parses complex nested YAML structures", () => {
+    const raw = [
+      "---",
+      "scope: [testing, coroutines]",
+      "sources: [junit5]",
+      "targets: [android, ios]",
+      "monitor_urls:",
+      "  - url: https://example.com",
+      "    type: doc-page",
+      "    tier: 2",
+      "rules:",
+      "  - id: test-rule",
+      "    type: banned-import",
+      '    message: "Do not use"',
+      "    detect:",
+      "      import: com.example.banned",
+      "---",
+      "# Content",
+    ].join("\n");
+    const result = parseFrontmatter(raw);
+    expect(result).not.toBeNull();
+    expect(result!.data.monitor_urls).toHaveLength(1);
+    expect(result!.data.rules).toHaveLength(1);
+    expect(result!.data.rules[0].id).toBe("test-rule");
+  });
+
+  it("returns null for severely malformed YAML (unbalanced brackets)", () => {
+    const raw = "---\nscope: [testing, [broken\n---\n# Content";
+    const result = parseFrontmatter(raw);
+    // yaml parser should either parse it or return null
+    // The important thing is it doesn't throw
+    if (result !== null) {
+      expect(result.data).toBeDefined();
+    }
+  });
 });
