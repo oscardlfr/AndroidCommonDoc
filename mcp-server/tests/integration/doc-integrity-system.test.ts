@@ -275,8 +275,8 @@ describe('doc-updater template', () => {
     expect(content).toContain('generated: true');
   });
 
-  it('template version bumped to 1.1.0', () => {
-    expect(content).toContain('template_version: "1.1.0"');
+  it('template version bumped to 2.0.0', () => {
+    expect(content).toContain('template_version: "2.0.0"');
   });
 });
 
@@ -285,37 +285,28 @@ describe('doc-updater template', () => {
 describe('quality-gater template', () => {
   const content = readFile(path.join(TEMPLATES_DIR, 'quality-gater.md'));
 
-  it('has Step 0.5: Code Documentation Coverage', () => {
-    expect(content).toContain('Step 0.5');
-    expect(content).toContain('Code Documentation Coverage');
+  it('has dynamic rule discovery (Step 1)', () => {
+    expect(content).toContain('Project Rule Discovery');
   });
 
-  it('references kdoc-coverage MCP tool', () => {
+  it('references /pre-pr as primary enforcement', () => {
+    expect(content).toContain('/pre-pr');
+  });
+
+  it('has KDoc coverage step', () => {
     expect(content).toContain('kdoc-coverage');
   });
 
-  it('uses base branch detection (same as /pre-pr)', () => {
-    expect(content).toContain('develop');
-    expect(content).toContain('main');
-    expect(content).toContain('master');
+  it('has production file verification', () => {
+    expect(content).toContain('Production File Verification');
   });
 
-  it('BLOCKs on missing KDoc for new APIs', () => {
-    expect(content).toContain('BLOCK');
-    expect(content).toContain('new/modified public API lacks KDoc');
+  it('has project rule cross-check', () => {
+    expect(content).toContain('Project Rule Cross-Check');
   });
 
-  it('WARNs on module-wide coverage < 80%', () => {
-    expect(content).toContain('WARN');
-    expect(content).toContain('80%');
-  });
-
-  it('report table includes Step 0.5', () => {
-    expect(content).toContain('0.5 KDoc Coverage');
-  });
-
-  it('template version bumped to 1.3.0', () => {
-    expect(content).toContain('template_version: "1.3.0"');
+  it('template version 2.0.0', () => {
+    expect(content).toContain('template_version: "2.0.0"');
   });
 });
 
@@ -324,21 +315,20 @@ describe('quality-gater template', () => {
 describe('quality-gate-protocol doc', () => {
   const content = readFile(path.join(DOCS_DIR, 'quality-gate-protocol.md'));
 
-  it('has Step 0.5 reference', () => {
-    expect(content).toContain('Step 0.5');
-    expect(content).toContain('Code Documentation Coverage');
+  it('has dynamic rule discovery', () => {
+    expect(content).toContain('Project Rule Discovery');
   });
 
-  it('references kdoc-coverage tool', () => {
-    expect(content).toContain('kdoc-coverage');
+  it('references /pre-pr as primary enforcement', () => {
+    expect(content).toContain('/pre-pr');
   });
 
-  it('references /kdoc-audit skill', () => {
-    expect(content).toContain('kdoc-audit');
+  it('has KDoc coverage step', () => {
+    expect(content).toContain('KDoc');
   });
 
-  it('references doc-alignment-agent', () => {
-    expect(content).toContain('doc-alignment-agent');
+  it('has production file verification', () => {
+    expect(content).toContain('Production File Verification');
   });
 
   it('version bumped to 2', () => {
@@ -435,10 +425,10 @@ describe('cross-references', () => {
     expect(content).toContain('generate-api-docs');
   });
 
-  it('quality-gate-protocol references kdoc-audit and doc-alignment-agent', () => {
+  it('quality-gate-protocol references dynamic rule discovery', () => {
     const content = readFile(path.join(DOCS_DIR, 'quality-gate-protocol.md'));
-    expect(content).toContain('kdoc-audit');
-    expect(content).toContain('doc-alignment-agent');
+    expect(content).toContain('Project Rule Discovery');
+    expect(content).toContain('/pre-pr');
   });
 
   it('validate-doc-update imports from doc-scoring', () => {

@@ -414,6 +414,18 @@ describe("analyzeFile", () => {
     expect(result.undocumented[0].name).toBe("process");
   });
 
+  it("skips declarations inside string literals", () => {
+    const result = analyzeFile("Test.kt", [
+      'val script = "class WindowsHelloAuth { fun check(): Boolean }"',
+      'val desc = "Exception hierarchies must be sealed interface"',
+      "fun realFunction(): Unit = Unit",
+    ].join("\n"));
+    // val script + val desc + fun realFunction count. class/fun inside strings DON'T.
+    expect(result.total).toBe(3);
+    expect(result.undocumented.every(u => u.name !== "WindowsHelloAuth")).toBe(true);
+    expect(result.undocumented.every(u => u.name !== "check")).toBe(true);
+  });
+
   it("skips const val in companion object", () => {
     const result = analyzeFile("Test.kt", [
       "class Config {",

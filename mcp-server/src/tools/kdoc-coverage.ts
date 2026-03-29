@@ -264,8 +264,12 @@ export function analyzeFile(
     if (CONST_RE.test(trimmed)) continue;
     if (trimmed.startsWith("//")) continue;
 
+    // Strip string literal content to prevent false matches on code inside strings.
+    // e.g., val script = "class WindowsHelloAuth { ... }" — "class" is inside a string.
+    const stripped = trimmed.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/"""[\s\S]*?"""/g, '""');
+
     for (const { re, type } of DECLARATION_PATTERNS) {
-      const match = re.exec(trimmed);
+      const match = re.exec(stripped);
       if (match) {
         // Skip local variables: val/var inside function bodies
         if (type === "property" && currentScope === "function") {
@@ -274,11 +278,14 @@ export function analyzeFile(
 
         // Skip data class constructor properties — single-line or multiline
         // (documented by class KDoc via @param/@property tags)
-        if (type === "property" && (DATA_CLASS_RE.test(trimmed) || insideDataClassConstructor)) {
+        if (type === "property" && (DATA_CLASS_RE.test(stripped) || insideDataClassConstructor)) {
           break;
         }
 
         total++;
+        // Re-match on original trimmed line for accurate name extraction
+        const nameMatch = re.exec(trimmed);
+        const symbolName = nameMatch ? nameMatch[1] : match[1];
         if (hasKDoc(lines, i)) {
           documented++;
         } else {
@@ -286,7 +293,7 @@ export function analyzeFile(
             file: relativePath,
             line: i + 1,
             type,
-            name: match[1],
+            name: symbolName,
           });
         }
         break;
