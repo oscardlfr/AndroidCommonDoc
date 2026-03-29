@@ -48,7 +48,7 @@ You are FORBIDDEN from doing these things directly:
 □ 1. Agent(context-provider) called BEFORE TeamCreate?     → YES or STOP
 □ 2. Agent(planner) called for non-trivial tasks?          → YES or STOP
 □ 3. Context report used to decide team composition?        → YES or STOP
-□ 4. Only needed peers in team (max 6-7)?                   → YES or STOP
+□ 4. Only needed peers in team?                              → YES or STOP
 □ 5. context-provider + doc-updater spawned as team peers?  → YES or STOP
 □ 6. After doc changes: validate-doc-structure passes?      → YES or STOP
 ```

@@ -110,7 +110,8 @@ See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 - **Architects**: Read, Grep, Glob, Bash, SendMessage (NO Write/Edit/Agent)
 - **context-provider re-spawned** in each team — fresh context, no carryover
 - **3 architects ALWAYS mandatory** in Execution Team. Dept leads conditional.
-- **Max team size**: 6-7 peers. Beyond that, context accumulates too fast.
+- **Team size is flexible** — 10+ peers work in practice. Use context management (summarize between waves, doc-updater mid-session) to control growth.
+- **Project-specific agents MUST be in routing table** — guardians, validators, domain specialists. If the PM routing table doesn't list a domain, architects can't request specialists for it.
 
 ---
 
