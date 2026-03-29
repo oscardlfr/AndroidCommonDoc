@@ -67,6 +67,13 @@ Any fail → investigate → fix → re-run
 - Must pass
 - **BLOCK** on any failure
 
+### Step 5: Compose UI Tests (MANDATORY for UI changes)
+- If any Compose/UI code changed: verify Compose tests EXIST for every modified screen
+- Tests must assert: component renders, correct items, selection behavior, scroll visible
+- TDD enforced: failing Compose test first (RED), then fix (GREEN)
+- **BLOCK** if Compose tests missing or failing
+- Claude Code cannot visually inspect apps — all verification via automated Compose tests
+
 ---
 
 ## Coverage Investigation Protocol

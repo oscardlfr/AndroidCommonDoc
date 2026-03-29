@@ -237,7 +237,7 @@ if should_run "role-keywords"; then
                 check_keywords "$f" "SendMessage" "Execution Plan" "Planning Team"
                 ;;
             quality-gater)
-                check_keywords "$f" "SendMessage" "PASS" "FAIL" "Step 0" "Step 1" "Step 2"
+                check_keywords "$f" "SendMessage" "PASS" "FAIL" "Step 0" "Step 1" "Step 2" "Visual Verification"
                 ;;
             arch-testing|arch-platform|arch-integration)
                 check_keywords "$f" "SendMessage" "APPROVE" "ESCALATE"

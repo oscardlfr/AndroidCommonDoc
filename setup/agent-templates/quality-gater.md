@@ -63,6 +63,26 @@ PASS → PM commits. FAIL → PM re-enters Execution Team phase
 - Commit-lint + architecture guards + lint
 - **BLOCK** on any failure
 
+### Step 5: Compose UI Tests (MANDATORY for UI changes)
+
+If ANY changed file touches Compose/UI code (*.kt in ui/, compose/, screen/, designsystem/):
+
+1. **Verify Compose tests EXIST** for every modified screen — **BLOCK** if missing
+2. **Run Compose tests**: `composeTestRule` assertions that verify:
+   - Component renders (`onNodeWithTag/Text/ContentDescription` exists)
+   - Correct items displayed (right data, right count, right type)
+   - Selection behavior works (long press → checkboxes appear → BottomActionBar shows)
+   - Scroll components visible and functional
+   - No hardcoded data in dynamic lists
+3. **BLOCK** if any Compose test fails or is missing
+
+**TDD enforcement**: For UI bugs, the sequence MUST be:
+1. Write failing Compose test that reproduces the bug (RED)
+2. Dev implements fix (GREEN)
+3. Verify test passes + no regressions
+
+**Claude Code CANNOT visually inspect a running app.** All UI verification MUST be via automated Compose tests. "It compiles" is not verification. "Tests pass" is only verification if the tests actually assert what the user sees.
+
 ## Coverage Drop Investigation
 
 When coverage drops >1%, report these findings to PM:
