@@ -36,11 +36,13 @@ PASS → PM commits. FAIL → PM re-enters Execution Team phase
 BASE=$(git rev-parse --verify develop 2>/dev/null && echo develop \
   || git rev-parse --verify main 2>/dev/null && echo main \
   || echo master)
-git diff --name-only $BASE...HEAD | grep '\.kt$'
+CHANGED=$(git diff --name-only $BASE...HEAD | grep '\.kt$' | paste -sd, -)
+# CLI — works without MCP access:
+node "$ANDROID_COMMON_DOC/mcp-server/build/cli/kdoc-coverage.js" "$(pwd)" --changed-files "$CHANGED" --format json
 ```
 1. Get changed .kt files using base branch detection (same as /pre-pr)
-2. Call `kdoc-coverage` MCP tool with `changed_files` parameter
-3. **BLOCK** if any new/modified public API lacks KDoc
+2. Run `kdoc-coverage` CLI via Bash (does NOT require MCP tools — works for all agents)
+3. **BLOCK** if any new/modified public API lacks KDoc (exit code 1 = gaps found)
 4. **WARN** (no block) if module-wide coverage < 80%
 5. If changed .kt files touch public APIs AND `docs/api/` exists → check `generated_at` freshness → **WARN** if stale
 
