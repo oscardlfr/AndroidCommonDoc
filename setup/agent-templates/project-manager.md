@@ -1,7 +1,7 @@
 ---
 name: project-manager
 description: "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project."
-tools: Read, Grep, Glob, Bash, Agent, TeamCreate, SendMessage, TaskCreate, TaskList
+tools: Read, Grep, Glob, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList
 model: opus
 token_budget: 5000
 template_version: "2.0.0"
