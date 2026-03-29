@@ -40,6 +40,8 @@ if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
 
 const projectRoot = path.resolve(args[0]);
 let moduleName: string | undefined;
+// Default: build/dokka/html (Dokka HTML output for KMP)
+// Falls back to build/dokka if html/ subdir doesn't exist
 let inputDir = path.join(projectRoot, "build", "dokka");
 let outputDir = path.join(projectRoot, "docs", "api");
 let dryRun = false;
@@ -86,6 +88,11 @@ if (validateOnly) {
 }
 
 // ── Check Dokka output exists ───────────────────────────────────────────────
+
+// Auto-detect: build/dokka/html/ (Dokka HTML) or build/dokka/ (Dokka GFM/Markdown)
+if (existsSync(path.join(inputDir, "html"))) {
+  inputDir = path.join(inputDir, "html");
+}
 
 if (!existsSync(inputDir)) {
   console.log(JSON.stringify({
@@ -148,25 +155,38 @@ for (const mod of moduleDirs) {
   const modSlug = toKebab(mod);
   const modOutput = path.join(outputDir, modSlug);
 
-  // Collect .md files
-  const mdFiles: string[] = [];
-  function walkMd(dir: string): void {
+  // Collect doc files (.md or .html — Dokka produces HTML for KMP, Markdown for JVM-only)
+  const docFiles: string[] = [];
+  function walkDocs(dir: string): void {
     try {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) walkMd(full);
-        else if (entry.name.endsWith(".md")) mdFiles.push(full);
+        if (entry.isDirectory()) {
+          // Skip scripts/, styles/, images/ (Dokka support files)
+          if (!["scripts", "styles", "images"].includes(entry.name)) walkDocs(full);
+        } else if (entry.name.endsWith(".html") && entry.name !== "navigation.html" && entry.name !== "index.html") {
+          docFiles.push(full);
+        } else if (entry.name.endsWith(".md")) {
+          docFiles.push(full);
+        }
       }
     } catch { /* skip */ }
   }
-  walkMd(modDir);
+  walkDocs(modDir);
 
-  if (mdFiles.length === 0) continue;
+  // Also include module index.html as the hub source
+  const moduleIndex = path.join(modDir, "index.html");
+  if (existsSync(moduleIndex) && docFiles.length === 0) {
+    // Module only has index — still process it
+    docFiles.push(moduleIndex);
+  }
+
+  if (docFiles.length === 0) continue;
 
   if (dryRun) {
-    console.log(`[dry-run] ${mod}: ${mdFiles.length} docs would be generated`);
+    console.log(`[dry-run] ${mod}: ${docFiles.length} docs would be generated`);
     modulesProcessed++;
-    docsGenerated += mdFiles.length + 1;
+    docsGenerated += docFiles.length + 1;
     continue;
   }
 
@@ -180,10 +200,38 @@ for (const mod of moduleDirs) {
   const hubLines = [hubContent];
 
   // Sub-docs
-  for (const mdFile of mdFiles) {
-    const filename = path.basename(mdFile, ".md");
+  for (const docFile of docFiles) {
+    const ext = path.extname(docFile);
+    const filename = path.basename(docFile, ext);
     const slug = toKebab(filename);
-    let rawContent = readFileSync(mdFile, "utf-8");
+    let rawContent = readFileSync(docFile, "utf-8");
+
+    // Convert HTML to simplified Markdown if needed
+    if (ext === ".html") {
+      // Strip HTML tags but keep text content
+      rawContent = rawContent
+        .replace(/<script[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[\s\S]*?<\/style>/gi, "")
+        .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+        .replace(/<header[\s\S]*?<\/header>/gi, "")
+        .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+        .replace(/<h1[^>]*>(.*?)<\/h1>/gi, "# $1\n")
+        .replace(/<h2[^>]*>(.*?)<\/h2>/gi, "## $1\n")
+        .replace(/<h3[^>]*>(.*?)<\/h3>/gi, "### $1\n")
+        .replace(/<h4[^>]*>(.*?)<\/h4>/gi, "#### $1\n")
+        .replace(/<code[^>]*>(.*?)<\/code>/gi, "`$1`")
+        .replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, "```\n$1\n```\n")
+        .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, "[$2]($1)")
+        .replace(/<li[^>]*>(.*?)<\/li>/gi, "- $1\n")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, "$1\n\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/\n{3,}/g, "\n\n");
+    }
 
     // Strip existing frontmatter
     rawContent = rawContent.replace(/^---[\s\S]*?---\n?/, "");
