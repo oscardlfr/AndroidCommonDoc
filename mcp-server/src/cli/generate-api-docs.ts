@@ -108,8 +108,14 @@ const generatedAt = new Date().toISOString();
 let modulesProcessed = 0;
 let docsGenerated = 0;
 
+// For module dirs: convert CamelCase to kebab (core-common stays core-common)
 function toKebab(name: string): string {
   return name.replace(/([A-Z])/g, "-$1").toLowerCase().replace(/^-/, "").replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/-$/, "");
+}
+
+// For doc files: preserve Dokka filename as-is, only sanitize for filesystem
+function toDocSlug(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/-+/g, "-").replace(/-$/, "");
 }
 
 function generateFrontmatter(slug: string, mod: string, description: string, isHub: boolean): string {
@@ -203,7 +209,7 @@ for (const mod of moduleDirs) {
   for (const docFile of docFiles) {
     const ext = path.extname(docFile);
     const filename = path.basename(docFile, ext);
-    const slug = toKebab(filename);
+    const slug = toDocSlug(filename);
     let rawContent = readFileSync(docFile, "utf-8");
 
     // Convert HTML to simplified Markdown if needed
