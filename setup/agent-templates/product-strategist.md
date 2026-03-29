@@ -1,7 +1,7 @@
 ---
 name: product-strategist
 description: "Analyzes feature ideas against business goals using ICE scoring. Produces prioritized backlog with rationale. Customize {{PRODUCT_NAME}} and business constraints for your project."
-tools: Read, Grep, Glob, WebSearch, WebFetch
+tools: Read, Grep, Glob, WebSearch, WebFetch, SendMessage
 model: sonnet
 token_budget: 3000
 domain: business

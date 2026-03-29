@@ -1,7 +1,7 @@
 ---
 name: context-provider
 description: "Cross-layer context agent. Reads docs, specs, MCP tools, memory across projects. Provides context to any department. Read-only — never modifies files."
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, SendMessage
 model: opus
 token_budget: 2000
 ---

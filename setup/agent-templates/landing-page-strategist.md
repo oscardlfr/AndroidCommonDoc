@@ -1,7 +1,7 @@
 ---
 name: landing-page-strategist
 description: "Designs landing page copy, structure, and conversion flow. Use when planning public-facing web presence, optimizing CTAs, or improving SEO for product pages."
-tools: Read, Grep, Glob, WebSearch
+tools: Read, Grep, Glob, WebSearch, SendMessage
 model: sonnet
 token_budget: 3000
 domain: marketing
