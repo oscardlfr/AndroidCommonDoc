@@ -24,6 +24,7 @@ import { registerValidateDocStructureTool } from "./validate-doc-structure.js";
 import { registerValidateSkillsTool } from "./validate-skills.js";
 import { registerValidateClaudeMdTool } from "./validate-claude-md.js";
 import { registerValidateVaultTool } from "./validate-vault.js";
+import { registerValidateAgentsTool } from "./validate-agents.js";
 import { registerAuditReport } from "./audit-report.js";
 import { registerModuleHealthTool } from "./module-health.js";
 import { registerDependencyGraphTool } from "./dependency-graph.js";
@@ -73,6 +74,7 @@ export function registerTools(server: McpServer): void {
   registerValidateSkillsTool(server, rateLimiter);
   registerValidateClaudeMdTool(server, rateLimiter);
   registerValidateVaultTool(server, rateLimiter);
+  registerValidateAgentsTool(server, rateLimiter);
   registerAuditReport(server, rateLimiter);
   registerModuleHealthTool(server, rateLimiter);
   registerDependencyGraphTool(server, rateLimiter);
