@@ -88,6 +88,12 @@ const OVERRIDE_RE = /\boverride\b/;
 /** Matches `actual` keyword for expect/actual KMP declarations. */
 const ACTUAL_RE = /\bactual\b/;
 
+/** Matches `const` modifier — constants are self-documenting, not API contracts. */
+const CONST_RE = /\bconst\b/;
+
+/** Matches `data class` — constructor properties are documented by class KDoc. */
+const DATA_CLASS_RE = /\bdata\s+class\b/;
+
 /**
  * Regexes for public API declarations.
  * Each captures the symbol name in group 1.
@@ -227,13 +233,23 @@ export function analyzeFile(
     if (NON_PUBLIC_MODIFIERS.test(trimmed)) continue;
     if (OVERRIDE_RE.test(trimmed)) continue;
     if (ACTUAL_RE.test(trimmed)) continue;
+    if (CONST_RE.test(trimmed)) continue; // const val = self-documenting constant
     if (trimmed.startsWith("//")) continue;
+
+    // Data class constructor properties: val/var inside `data class X(val a, val b)`
+    // are documented by the class-level KDoc, not individually.
+    const isDataClassLine = DATA_CLASS_RE.test(trimmed);
 
     for (const { re, type } of DECLARATION_PATTERNS) {
       const match = re.exec(trimmed);
       if (match) {
         // Skip local variables: val/var inside function bodies are not public API
         if (type === "property" && currentScope === "function") {
+          break;
+        }
+
+        // Skip data class constructor properties (documented by class KDoc)
+        if (type === "property" && isDataClassLine) {
           break;
         }
 

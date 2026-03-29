@@ -358,6 +358,40 @@ describe("analyzeFile", () => {
     expect(result.total).toBe(1);
     expect(result.undocumented[0].name).toBe("length");
   });
+
+  it("skips data class constructor properties", () => {
+    const result = analyzeFile("Test.kt", [
+      "/** Configuration data class. */",
+      "data class Config(val name: String, val size: Int, var mutable: Boolean)",
+    ].join("\n"));
+    // Only the class counts, NOT the constructor val/var params
+    expect(result.total).toBe(1);
+    expect(result.documented).toBe(1);
+  });
+
+  it("skips const val declarations", () => {
+    const result = analyzeFile("Test.kt", [
+      "const val MAX_SIZE = 100",
+      "const val DEFAULT_NAME = \"test\"",
+      "fun process(): Unit = Unit",
+    ].join("\n"));
+    // Only the function counts, NOT the const vals
+    expect(result.total).toBe(1);
+    expect(result.undocumented[0].name).toBe("process");
+  });
+
+  it("skips const val in companion object", () => {
+    const result = analyzeFile("Test.kt", [
+      "class Config {",
+      "  companion object {",
+      "    const val MAX = 100",
+      "    const val MIN = 0",
+      "  }",
+      "}",
+    ].join("\n"));
+    // Only the class counts
+    expect(result.total).toBe(1);
+  });
 });
 
 // ── Integration tests: MCP tool ──────────────────────────────────────────────
