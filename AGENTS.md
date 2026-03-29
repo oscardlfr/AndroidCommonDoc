@@ -47,7 +47,7 @@ node mcp-server/build/cli/monitor-sources.js --project-root /path/to/l1 --layer 
 7. **Navigation:** State-driven -- never Channel-based.
 8. **No platform deps in ViewModels:** No `Context`, `Resources`, `UIKit` imports.
 
-## Available Skills (42)
+## Available Skills (53)
 
 Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-specific files.
 
@@ -107,6 +107,22 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `setup` | Interactive wizard to configure a project to consume L0 |
 | `set-model-profile` | Switch agent model tier: budget / balanced / advanced / quality |
 
+### Research & Workflow
+
+| Skill | Description |
+|-------|-------------|
+| `debug` | Autonomous bug diagnosis — logs, errors, root cause, fix, verify |
+| `research` | Deep research on a topic using multiple sources and synthesis |
+| `map-codebase` | Map codebase structure, dependencies, and architecture |
+| `verify` | Verify implementation correctness against spec or requirements |
+| `decide` | Decision framework — pros/cons analysis with recommendation |
+| `note` | Capture structured notes and observations during work |
+| `review-pr` | Review pull request for quality, patterns, and correctness |
+| `benchmark` | Performance benchmark with per-platform Gradle config |
+| `init-session` | Project context dashboard — available agents, skills, modules |
+| `resume-work` | CEO/CTO session resume — department status across project |
+| `work` | Smart task routing — delegates to the best agent or skill |
+
 ### Web Development
 
 | Skill | Description |
@@ -118,7 +134,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `seo` | Validate SEO metadata, structure, and discoverability |
 | `web-quality-audit` | Comprehensive web quality audit across all dimensions |
 
-## MCP Tools (32)
+## MCP Tools (35)
 
 Programmatic access via Model Context Protocol server (`mcp-server/`):
 
@@ -156,6 +172,9 @@ Programmatic access via Model Context Protocol server (`mcp-server/`):
 | `skill-usage-analytics` | Track skill invocation patterns |
 | `string-completeness` | Check string resource completeness across locales |
 | `unused-resources` | Find unused resources in the project |
+| `search-docs` | Full-text search across pattern docs and guides |
+| `suggest-docs` | Suggest relevant docs for a given topic or error message |
+| `validate-agents` | Validate agent templates: frontmatter, role keywords, anti-patterns, versioning |
 
 ## Quality Gate Agents (5)
 

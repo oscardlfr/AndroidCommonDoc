@@ -788,7 +788,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Scripts
 
-22 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 5 Bash-only scripts (`check-agent-parity`, `check-detekt-coverage`, `install-git-hooks`, `rehash-registry`, `sync-gsd-agents`).
+22 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 8 Bash-only scripts (`check-agent-parity`, `check-detekt-coverage`, `copilot-parity`, `install-git-hooks`, `rehash-registry`, `run-benchmarks`, `sync-gsd-agents`, `validate-agent-templates`).
 
 ### Core Scripts
 
@@ -826,7 +826,10 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `check-detekt-coverage` | Diagnose Detekt per-module task coverage (KMP source sets) |
 | `readme-audit` | Comprehensive README/doc audit against filesystem (counts, tables, tree, hub links, prose claims) |
 | `rehash-registry` | Recompute SHA-256 hashes in registry.json (CRLF→LF normalized) |
+| `copilot-parity` | Verify Copilot prompt templates match Claude skill definitions |
 | `install-git-hooks` | Install pre-commit (pattern-lint) + commit-msg (conventional commits) git hooks |
+| `run-benchmarks` | Detect and run JVM/Android benchmark suites with Gradle |
+| `validate-agent-templates` | Lint agent templates: frontmatter, role keywords, anti-patterns, versioning (7 checks) |
 
 ### Shared Libraries
 
@@ -910,7 +913,7 @@ AndroidCommonDoc/
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
 |   +-- ps1/                # PowerShell (Windows) -- 22 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 28 scripts (22 cross-platform + 6 utilities)
+|   +-- sh/                 # Bash (macOS/Linux) -- 31 scripts (22 cross-platform + 9 utilities)
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
