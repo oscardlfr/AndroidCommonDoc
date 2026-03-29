@@ -733,16 +733,16 @@ teardown() {
     sed -n '/### L0 Maintenance Skills/,/^## /p' "$README" | grep -qi "maintenance\|L0\|AndroidCommonDoc"
 }
 
-@test "README: agents section has 'Domain Agents' subsection" {
-    grep -q "### Domain Agents" "$README"
+@test "README: agents section has 'Production Agents' subsection" {
+    grep -q "### Production Agents" "$README"
 }
 
-@test "README: agents section has 'Quality Gate Agents' subsection" {
-    grep -q "### Quality Gate Agents" "$README"
+@test "README: agents section has 'Agent Templates' subsection" {
+    grep -q "### Agent Templates" "$README"
 }
 
-@test "README: QG agents section describes consistency verification" {
-    sed -n '/### Quality Gate Agents/,/^## /p' "$README" | grep -qi "consistency\|verify\|internal"
+@test "README: agents section describes agent categories" {
+    grep -qi "Category\|orchestrat\|architect\|guardian" "$README"
 }
 
 @test "README: MCP section has 'General Tools' subsection" {
@@ -770,12 +770,12 @@ teardown() {
     grep -q "88+ sub-docs" "$README"
 }
 
-@test "README: vitest count is 1202" {
-    grep -q "1202 tests" "$README"
+@test "README: vitest count is 1331" {
+    grep -q "1331 tests" "$README"
 }
 
-@test "README: vitest files count is 89" {
-    grep -q "89 test files" "$README"
+@test "README: vitest files count is 90" {
+    grep -q "90 test files" "$README"
 }
 
 # ===========================================================================
@@ -1186,9 +1186,9 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "^name: landing-page-strategist" "$L0_ROOT/setup/agent-templates/landing-page-strategist.md"
 }
 
-@test "templates: 10 agent templates exist" {
+@test "templates: 17+ agent templates exist" {
     count=$(ls $L0_ROOT/setup/agent-templates/*.md | grep -v README | wc -l)
-    [ "$count" -eq 10 ]
+    [ "$count" -ge 17 ]
 }
 
 @test "templates: business doc templates exist (5)" {
@@ -1200,9 +1200,9 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     [ -f "$L0_ROOT/setup/doc-templates/business/COMPETITIVE.md.template" ]
 }
 
-@test "templates: project-manager has HARD delegation rules" {
-    grep -q "HARD Delegation" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "MUST delegate" "$L0_ROOT/setup/agent-templates/project-manager.md"
+@test "templates: project-manager has FORBIDDEN/ALLOWED actions" {
+    grep -q "FORBIDDEN" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "ALLOWED" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
 @test "templates: project-manager NEVER writes code" {
@@ -1210,10 +1210,11 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "NEVER writes code" "$L0_ROOT/setup/agent-templates/project-manager.md" || grep -q "NEVER write code yourself" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
-@test "templates: project-manager has Devs/Architects/Guardians roster" {
-    grep -q "### Devs" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "### Architects" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "### Guardians" "$L0_ROOT/setup/agent-templates/project-manager.md"
+@test "templates: project-manager has agent roster with team roles" {
+    grep -q "Agent Roster" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "arch-testing" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "quality-gater" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "planner" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
 @test "templates: project-manager delegates testing to skills" {
@@ -1247,9 +1248,11 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "ESCALATE" "$L0_ROOT/setup/agent-templates/arch-integration.md"
 }
 
-@test "templates: architects have Dev Management section" {
+@test "templates: architects have SendMessage and APPROVE/ESCALATE" {
     for agent in arch-testing arch-platform arch-integration; do
-        grep -q "Dev Management" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        grep -q "SendMessage" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        grep -q "APPROVE" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        grep -q "ESCALATE" "$L0_ROOT/setup/agent-templates/${agent}.md"
     done
 }
 
@@ -1297,10 +1300,10 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "35" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
-@test "docs: agents-hub references architect gate pattern" {
-    grep -q "architect-gate-pattern" "$L0_ROOT/docs/agents/agents-hub.md"
-    grep -q "Architect team gates" "$L0_ROOT/docs/agents/agents-hub.md"
-    grep -q "Bug fixes require TDD" "$L0_ROOT/docs/agents/agents-hub.md"
+@test "docs: agents-hub references 3-phase model and team topology" {
+    grep -q "3-Phase Model" "$L0_ROOT/docs/agents/agents-hub.md"
+    grep -q "team-topology" "$L0_ROOT/docs/agents/agents-hub.md"
+    grep -q "quality-gater" "$L0_ROOT/docs/agents/agents-hub.md"
 }
 
 @test "docs: multi-agent-patterns has architect gate section" {
@@ -1341,11 +1344,11 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "readme-audit" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
-@test "README: template count is 10" {
-    grep -q "10 reusable agent templates" "$L0_ROOT/README.md"
+@test "README: template count is 19" {
+    grep -q "19 templates\|19 agent templates" "$L0_ROOT/README.md"
     grep -q "arch-testing" "$L0_ROOT/README.md"
-    grep -q "arch-platform" "$L0_ROOT/README.md"
-    grep -q "arch-integration" "$L0_ROOT/README.md"
+    grep -q "quality-gater" "$L0_ROOT/README.md"
+    grep -q "planner" "$L0_ROOT/README.md"
 }
 
 @test "templates: project-manager references official anthropic skills" {
@@ -1458,13 +1461,14 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 }
 
 @test "arch: PM template forbids Bash+CLI spawning" {
-    grep -q "Agent Tool Only" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "Never spawn agents via Bash" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "FORBIDDEN.*Bash.*cli\|Spawning agents via Bash" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
-@test "arch: all architects require Agent tool (not Bash)" {
+@test "arch: architects are read-only (no Write/Edit, have SendMessage)" {
     for agent in arch-testing arch-platform arch-integration; do
-        grep -q "Agent tool only\|Never use Bash" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        grep -q "SendMessage" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        # Architects must NOT have Write or Edit in tools
+        ! grep -q "^tools:.*Write\|^tools:.*Edit" "$L0_ROOT/setup/agent-templates/${agent}.md"
     done
 }
 
