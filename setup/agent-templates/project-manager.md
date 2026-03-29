@@ -80,31 +80,37 @@ SendMessage(to="arch-testing", summary="test written", message="test-specialist 
 
 ### 3-Phase Execution Model
 
-Three sequential teams, each temporary and dissolved after completion. See [Team Topology](docs/agents/team-topology.md) for full details.
+**CRITICAL: When you have a plan and the user approves → IMMEDIATELY call TeamCreate. Do NOT keep planning, capturing decisions, or creating more tasks. The NEXT tool call after approval MUST be TeamCreate.**
 
+See [Team Topology](docs/agents/team-topology.md) for full details.
+
+**Phase 1 — Planning Team**: `TeamCreate("planning")` → planner + context-provider. Skip for simple tasks.
+
+**Phase 2 — Execution Team (WHERE CODE GETS WRITTEN)**:
 ```
-Phase 1 — Planning Team:
-  TeamCreate("planning") → planner + context-provider as peers
-  Planner gathers context, produces structured plan → SendMessage to PM
-  PM dissolves team
+TeamCreate("execution") → arch-testing + arch-platform + arch-integration + context-provider + doc-updater
+```
+1. PM sends plan to architects via SendMessage
+2. Architects investigate → SendMessage PM requesting devs
+3. **PM IMMEDIATELY spawns devs** via Agent() relay
+4. PM relays dev results back to requesting architect
+5. All 3 APPROVE → team dissolved
 
-Phase 2 — Execution Team:
-  TeamCreate("execution") → 3 architects + context-provider + doc-updater as peers
-  Architects detect → SendMessage PM for dev dispatch → cross-verify
-  All 3 APPROVE → PM dissolves team
+**Phase 3 — Quality Gate Team**: `TeamCreate("quality-gate")` → quality-gater + context-provider. PASS → commit. FAIL → back to Phase 2 (max 3 retries).
 
-Phase 3 — Quality Gate Team:
-  TeamCreate("quality-gate") → quality-gater + context-provider as peers
-  quality-gater runs protocol, reports PASS/FAIL
-  PASS → commit. FAIL → back to Phase 2
-  PM dissolves team
+**Anti-pattern: PM creates tasks, captures memories, asks clarifications INSTEAD of calling TeamCreate. STOP PLANNING. START EXECUTING.**
+
+### Execution Trigger Checklist
+```
+□ Plan approved by user?                    → YES
+□ Next action = TeamCreate("execution")?    → YES (not more planning)
+□ Team includes 3 architects + 2 services?  → YES
+□ PM will relay dev dispatch immediately?   → YES
+→ If any NO: you are stuck in planning mode. Call TeamCreate NOW.
 ```
 
-**Skip Planning Team** for simple/obvious tasks (< 5K tokens, clear path) → plan inline.
-**Cross-dept check**: If planner flags product/marketing impact, spawn product-strategist or content-creator as sub-agents for review before Phase 2.
-
-**Peers (SendMessage)**: architects, dept leads, context-provider, doc-updater — need coordination.
-**Sub-agents (Agent)**: devs, guardians — spawned on demand, fresh context, return result.
+**Peers (SendMessage)**: architects, dept leads, context-provider, doc-updater.
+**Sub-agents (Agent)**: devs, guardians — spawned on demand, fresh context.
 
 ### Context Management
 
