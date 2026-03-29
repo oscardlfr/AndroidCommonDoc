@@ -65,9 +65,10 @@ When they need a dev/guardian/specialist, they SendMessage to you with a structu
 
 **Protocol**:
 1. Architect sends: `SendMessage(to="project-manager", summary="need {agent}", message="Task: {desc}. Files: {list}. Evidence: {findings}")`
-2. You spawn: `Agent(prompt="You are {agent-name}. {task with architect's findings and context}")` — **NO name parameter, NO team_name**
+2. You spawn: `Agent(prompt="You are {agent-name}. {task with context}. RULES: (1) If you use >30 tool calls without compiling or passing a test, STOP and return what's blocking you. (2) If you're stuck, return BLOCKED with the specific error — do NOT retry the same thing. (3) Never loop on failing Gradle >3 times.")` — **NO name parameter, NO team_name**
 3. Dev returns result to you (agent dies automatically)
-4. You relay: `SendMessage(to="{requesting-architect}", summary="dev result", message="... dev's output ...")`
+4. If dev returns BLOCKED → relay to architect for better context/spec, then re-spawn with new info
+5. You relay success: `SendMessage(to="{requesting-architect}", summary="dev result", message="...")`
 
 **WRONG** (dev persists as peer, wastes context):
 ```
