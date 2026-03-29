@@ -134,7 +134,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `seo` | Validate SEO metadata, structure, and discoverability |
 | `web-quality-audit` | Comprehensive web quality audit across all dimensions |
 
-## MCP Tools (35)
+## MCP Tools (38)
 
 Programmatic access via Model Context Protocol server (`mcp-server/`):
 
@@ -175,6 +175,9 @@ Programmatic access via Model Context Protocol server (`mcp-server/`):
 | `search-docs` | Full-text search across pattern docs and guides |
 | `suggest-docs` | Suggest relevant docs for a given topic or error message |
 | `validate-agents` | Validate agent templates: frontmatter, role keywords, anti-patterns, versioning |
+| `kdoc-coverage` | Measure KDoc documentation coverage on public Kotlin APIs |
+| `validate-doc-update` | Pre-write validation: duplicate detection, anti-pattern filter, size limits |
+| `check-doc-patterns` | Detect enforceable patterns without Detekt rules and rule-doc drift |
 
 ## Quality Gate Agents (5)
 
