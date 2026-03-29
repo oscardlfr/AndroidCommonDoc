@@ -49,19 +49,31 @@ You are FORBIDDEN from doing these things directly:
 - **FORBIDDEN**: Any dev/specialist without a preceding architect request via SendMessage
 - **The ONLY agents PM launches directly**: planner, context-provider, doc-updater, quality-gater (Phase 1/3 teams). ALL devs go through Phase 2 architects.
 
+### Session Start: Persistent Shared Services
+
+**FIRST thing when session starts** — before ANY planning or TeamCreate:
+
+```
+Agent(name="context-provider", prompt="You are context-provider for this session. Read CLAUDE.md and project state. Stay alive — all agents will SendMessage to you.", run_in_background=true)
+Agent(name="doc-updater", prompt="You are doc-updater for this session. Stay alive — update docs when agents SendMessage you.", run_in_background=true)
+```
+
+These two are **persistent for the entire session**. They are NOT team peers — they live outside teams. All agents reach them via `SendMessage(to="context-provider")` and `SendMessage(to="doc-updater")`.
+
+**Why persistent**: context-provider reads the project ONCE. Quality-gater in Phase 3 can ask "what changed in Phase 2?" and get a real answer because context-provider SAW the Phase 2 messages. Re-spawning loses all cross-phase knowledge.
+
+**Rotation**: for long sessions (5+ waves), spawn a fresh one and kill the old: `Agent(name="context-provider", ...)` replaces the previous.
+
 ### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
 
 ```
-□ 1. Agent(context-provider) called BEFORE TeamCreate?     → YES or STOP
-□ 2. Agent(planner) called for non-trivial tasks?          → YES or STOP
-□ 3. Context report used to decide team composition?        → YES or STOP
-□ 4. Only needed peers in team?                              → YES or STOP
-□ 5. context-provider + doc-updater spawned as team peers?  → YES or STOP
-□ 6. After doc changes: validate-doc-structure passes?      → YES or STOP
+□ 1. context-provider alive and responsive?                  → YES or STOP
+□ 2. doc-updater alive and responsive?                       → YES or STOP
+□ 3. Agent(planner) called for non-trivial tasks?            → YES or STOP
+□ 4. Only needed peers in team (architects, quality-gater)?  → YES or STOP
 ```
 
 **If ANY checkbox is NO → DO NOT proceed. Fix it first.**
-This is not a suggestion — skipping shared services causes hallucinated context and documentation drift.
 
 ### Dev Dispatch (PM is the sole Agent() spawner)
 
@@ -111,25 +123,27 @@ SendMessage(to="arch-testing", summary="test written",
 
 See [Team Topology](docs/agents/team-topology.md) for full details.
 
-**Phase 1 — Planning Team**: `TeamCreate("planning")` → planner + context-provider. Skip for simple tasks.
-**SEQUENTIAL**: context-provider gathers state FIRST → planner uses that context to plan. NEVER launch both as parallel Agent() — planner without context produces garbage.
+**Phase 1 — Planning Team**: `TeamCreate("planning")` → planner only. Skip for simple tasks.
+Planner uses `SendMessage(to="context-provider")` to get project state (context-provider is persistent, not a team peer).
 
 **Phase 2 — Execution Team (WHERE CODE GETS WRITTEN)**:
 ```
-TeamCreate("execution") → arch-testing + arch-platform + arch-integration + context-provider + doc-updater
+TeamCreate("execution") → arch-testing + arch-platform + arch-integration
 ```
 1. PM sends plan to architects via SendMessage
-2. Architects investigate → SendMessage PM requesting devs
-3. **PM IMMEDIATELY spawns devs** via Agent() relay
-4. PM relays dev results back to requesting architect
-5. All 3 APPROVE → **IMMEDIATELY proceed to Phase 3** (do NOT ask user, do NOT commit yet)
+2. Architects use `SendMessage(to="context-provider")` for patterns/rules
+3. Architects investigate → SendMessage PM requesting devs
+4. **PM IMMEDIATELY spawns devs** via Agent() relay
+5. PM relays dev results back to requesting architect
+6. After work: `SendMessage(to="doc-updater")` to update CHANGELOG/docs
+7. All 3 APPROVE → **IMMEDIATELY proceed to Phase 3** (do NOT ask user, do NOT commit yet)
 
 **Phase 3 — Quality Gate Team (MANDATORY before any commit)**:
 ```
-TeamCreate("quality-gate") → quality-gater + context-provider
+TeamCreate("quality-gate") → quality-gater only
 ```
-quality-gater runs 5-step protocol → reports PASS/FAIL → PM commits only on PASS.
-FAIL → back to Phase 2 (max 3 retries).
+quality-gater uses `SendMessage(to="context-provider")` for project rules and Phase 2 context.
+PASS → PM commits. FAIL → back to Phase 2 (max 3 retries).
 
 **PHASE TRANSITIONS ARE AUTOMATIC — never ask the user between phases:**
 ```

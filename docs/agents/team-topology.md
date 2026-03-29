@@ -16,27 +16,47 @@ token_budget: 1500
 
 # Team Topology: 3-Phase Model
 
-Three sequential teams, each temporary and dissolved after its phase completes. Context is freed between phases to prevent bloat.
+Three sequential teams, each temporary and dissolved after its phase completes. Two **persistent shared services** (context-provider, doc-updater) live outside teams for the entire session.
 
 ---
+
+## Persistent Shared Services
+
+context-provider and doc-updater are spawned ONCE at session start and stay alive across all phases:
+
+```
+Session Start
+  PM: Agent(name="context-provider", run_in_background=true)  → reads project ONCE
+  PM: Agent(name="doc-updater", run_in_background=true)       → ready for doc updates
+
+All agents in all phases: SendMessage(to="context-provider") / SendMessage(to="doc-updater")
+```
+
+**Why persistent**: context-provider accumulates cross-phase knowledge. Quality-gater in Phase 3 can ask "what changed in Phase 2?" and get a real answer. Re-spawning per phase loses this.
+
+**Rotation**: for long sessions (5+ waves), PM spawns fresh instances to prevent context window fill.
 
 ## Overview
 
 ```
 Phase 1 — Planning Team (temporary)
-  planner + context-provider as peers
+  planner only (context-provider is persistent, not a peer)
+  planner SendMessage(to="context-provider") for project state
   Output: structured execution plan
   ↓ team dissolved
 
-Phase 2 — Execution Team
-  3 architects + context-provider + doc-updater as peers
+Phase 2 — Execution Team (temporary)
+  3 architects only (shared services are persistent, not peers)
+  architects SendMessage(to="context-provider") for patterns/rules
   PM dispatches devs as sub-agents via relay
+  SendMessage(to="doc-updater") after work
   All 3 architects APPROVE → team dissolved
   ↓ team dissolved
 
 Phase 3 — Quality Gate Team (temporary)
-  quality-gater + context-provider as peers
-  Runs: frontmatter → KDoc → tests → coverage → benchmarks → pre-pr → prod-files → UI tests
+  quality-gater only (context-provider is persistent)
+  quality-gater SendMessage(to="context-provider") for rules + Phase 2 changes
+  Runs: rule discovery → /pre-pr → tests → coverage → KDoc → prod-files → rule cross-check → UI tests
   PASS → commit. FAIL → back to Phase 2
   ↓ team dissolved
 ```
@@ -47,11 +67,11 @@ Phase 3 — Quality Gate Team (temporary)
 
 **Purpose**: Produce a structured execution plan before any code is written.
 
-**Peers**: planner, context-provider
+**Peers**: planner only (context-provider is persistent, not a team peer)
 
 **Flow**:
 1. PM creates team: `TeamCreate("planning")`
-2. Planner SendMessages context-provider for current state
+2. Planner `SendMessage(to="context-provider")` for current state (persistent agent, outside team)
 3. Planner reads architecture docs, specs, MODULE_MAP.md
 4. Planner produces plan with: scope, steps, architect assignments, dependencies, risks
 5. Planner SendMessages plan to PM
@@ -67,22 +87,24 @@ Phase 3 — Quality Gate Team (temporary)
 
 **Purpose**: Implement the plan with architect-verified quality.
 
-**Peers**: arch-testing, arch-platform, arch-integration, context-provider, doc-updater
+**Peers**: arch-testing, arch-platform, arch-integration (shared services are persistent, not peers)
 
 **Flow**:
 1. PM creates team: `TeamCreate("execution")`
 2. PM dispatches plan to architects via SendMessage
-3. Architects detect issues using MCP tools (code-metrics, verify-kmp-packages, dependency-graph, etc.)
-4. Architects request dev work via: `SendMessage(to="project-manager", summary="need {agent}", message="Task: ...")`
-5. PM spawns devs as sub-agents: `Agent({agent-name}, prompt="...")`
-6. PM relays dev results back to requesting architect
-7. Architects cross-verify via `SendMessage(to="arch-X", ...)`
-8. All 3 architects: APPROVE → PM dissolves team
-9. Any ESCALATE → PM re-plans (never codes the fix)
+3. Architects `SendMessage(to="context-provider")` for patterns and project rules
+4. Architects detect issues using MCP tools (code-metrics, verify-kmp-packages, dependency-graph, etc.)
+5. Architects request dev work via: `SendMessage(to="project-manager", summary="need {agent}", message="Task: ...")`
+6. PM spawns devs as sub-agents: `Agent(prompt="You are {agent}. {task}. PROJECT RULES: {rules from context-provider}.", run_in_background=true)`
+7. PM relays dev results back to requesting architect
+8. Architects cross-verify via `SendMessage(to="arch-X", ...)`
+9. After work: `SendMessage(to="doc-updater")` to update CHANGELOG/docs
+10. All 3 architects: APPROVE → PM dissolves team
+11. Any ESCALATE → PM re-plans (never codes the fix)
 
-**Wave pattern**: For large tasks, multiple detect→fix→verify cycles (waves) within the same team. Summarize between waves to manage context.
+**Wave pattern**: For large tasks, multiple detect→fix→verify cycles (waves) within the same team.
 
-**Context management**: Call doc-updater mid-session for long work (5+ waves) to archive decisions to disk.
+**Context management**: context-provider and doc-updater are persistent — no need to archive between waves. For very long sessions (5+ waves), PM rotates them (spawn fresh, kill old).
 
 ---
 
@@ -90,7 +112,7 @@ Phase 3 — Quality Gate Team (temporary)
 
 **Purpose**: Verify quality before commit. Sequential gates, each blocks.
 
-**Peers**: quality-gater, context-provider
+**Peers**: quality-gater only (context-provider is persistent)
 
 **Flow**:
 1. PM creates team: `TeamCreate("quality-gate")`
