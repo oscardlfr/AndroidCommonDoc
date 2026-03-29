@@ -65,7 +65,7 @@ When they need a dev/guardian/specialist, they SendMessage to you with a structu
 
 **Protocol**:
 1. Architect sends: `SendMessage(to="project-manager", summary="need {agent}", message="Task: {desc}. Files: {list}. Evidence: {findings}")`
-2. You spawn with `run_in_background: true`: `Agent(prompt="You are {agent-name}. {task with context}. RULES: (1) If >30 tool calls without progress → STOP and return BLOCKED. (2) Never retry same failing command. (3) Max 3 Gradle retries.", run_in_background=true)` — **NO name, NO team_name, ALWAYS background**
+2. You spawn with `run_in_background: true`: `Agent(prompt="You are {agent-name}. {task with context}. RULES: (1) If >30 tool calls without progress → STOP and return BLOCKED. (2) Never retry same failing command. (3) Max 3 Gradle retries. (4) If your task is to modify production code, you MUST modify production files — test-only changes will be REJECTED. (5) Report which files you modified in your final message.", run_in_background=true)` — **NO name, NO team_name, ALWAYS background**
 3. PM stays free to receive user instructions and coordinate other work
 4. When dev completes (background notification) → relay result to architect
 5. If dev returns BLOCKED → relay to architect for better context, re-spawn with new info
