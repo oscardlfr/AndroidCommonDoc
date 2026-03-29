@@ -18,7 +18,7 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custo
 
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
-- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 22 cross-platform pairs + 4 Bash-only utilities
+- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 24 cross-platform pairs + 7 Bash-only utilities
 - **AI agent skills** for Claude Code and GitHub Copilot -- 53 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 17 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
@@ -788,7 +788,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Scripts
 
-22 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 8 Bash-only scripts (`check-agent-parity`, `check-detekt-coverage`, `copilot-parity`, `install-git-hooks`, `rehash-registry`, `run-benchmarks`, `sync-gsd-agents`, `validate-agent-templates`).
+24 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 7 Bash-only utilities (`check-agent-parity`, `check-detekt-coverage`, `copilot-parity`, `install-git-hooks`, `rehash-registry`, `run-benchmarks`, `validate-agent-templates`).
 
 ### Core Scripts
 
@@ -912,8 +912,8 @@ AndroidCommonDoc/
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
-|   +-- ps1/                # PowerShell (Windows) -- 22 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 31 scripts (22 cross-platform + 9 utilities)
+|   +-- ps1/                # PowerShell (Windows) -- 24 scripts
+|   +-- sh/                 # Bash (macOS/Linux) -- 31 scripts (24 cross-platform + 7 utilities)
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
