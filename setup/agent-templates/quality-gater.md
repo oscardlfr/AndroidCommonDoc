@@ -78,10 +78,19 @@ If ANY changed file touches Compose/UI code (*.kt in ui/, compose/, screen/, des
 
 **TDD enforcement**: For UI bugs, the sequence MUST be:
 1. Write failing Compose test that reproduces the bug (RED)
-2. Dev implements fix (GREEN)
-3. Verify test passes + no regressions
+2. **Verify the test actually FAILS** — if it passes, it's FALSE GREEN (doesn't test the real problem)
+3. Dev implements fix (GREEN)
+4. Verify test passes + no regressions
 
-**Claude Code CANNOT visually inspect a running app.** All UI verification MUST be via automated Compose tests. "It compiles" is not verification. "Tests pass" is only verification if the tests actually assert what the user sees.
+**FALSE GREEN detection**: A test that passes when the UI is broken is WORSE than no test. Tests MUST assert the specific user-visible problem:
+- Wrong component? → assert the correct component tag/text exists
+- Missing selection? → assert long-press triggers checkboxes
+- Missing BottomActionBar? → assert it appears on selection
+- If the test passes before any code change → it's FALSE GREEN → REJECT
+
+**Dev circuit breaker**: If a dev agent uses >50 tool calls without producing a passing test or compilable change → STOP and report blocker to PM. Do NOT burn tokens on infinite retry loops.
+
+**Claude Code CANNOT visually inspect a running app.** All UI verification MUST be via automated Compose tests.
 
 ## Coverage Drop Investigation
 
