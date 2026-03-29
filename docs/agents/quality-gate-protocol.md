@@ -35,57 +35,44 @@ Any fail → investigate → fix → re-run
 
 ---
 
-## Gate Steps (sequential, each blocks)
+## Gate Steps (dynamic — quality-gater discovers rules at runtime)
 
-### Step 0: Frontmatter Validation
-- `validate-doc-structure` on all docs/ files
-- Required: scope, sources, targets, slug, status, layer, category, description
-- **BLOCK** if any doc missing required fields
-- **Why**: Docs without frontmatter are invisible to context-provider's MCP tools
+The quality-gater does NOT use a hardcoded checklist. It discovers each project's rules by reading CLAUDE.md, asking context-provider, and running `/pre-pr` (the project's own validation pipeline).
 
-### Step 0.5: Code Documentation Coverage
-- `kdoc-coverage` MCP tool with `changed_files` from `git diff $BASE...HEAD | grep '\.kt$'`
-- **BLOCK** if any new/modified public API lacks KDoc
-- **WARN** (no block) if module-wide coverage < 80%
-- **Why**: Undocumented APIs cause drift — context-provider can't surface what isn't documented
-- See also: `/kdoc-audit`, `doc-alignment-agent` (continuous drift detection)
+### Step 1: Project Rule Discovery
+- Read CLAUDE.md → extract hard rules, constraints, patterns
+- Ask context-provider for active Detekt rules and enforcement patterns
+- Build project-specific verification checklist
 
-### Step 1: Full Test Suite
-- `/test-full-parallel --fresh-daemon`
-- ALL modules must pass
-- No "pre-existing failure" exceptions
+### Step 2: Full Validation Pipeline (`/pre-pr`)
+- **PRIMARY enforcement step** — runs Detekt, lint-resources, commit-lint, architecture guards
+- All checks are project-configured, not hardcoded
 - **BLOCK** on any failure
 
-### Step 2: Coverage Baseline
-- `/coverage` on touched modules
-- Compare with baseline
-- **Drop ≤1%**: Document reason, proceed
-- **Drop >1%**: INVESTIGATE (see Coverage Investigation Protocol)
-- **BLOCK** until investigation complete
-
-### Step 3: Benchmarks (conditional)
-- `/benchmark` if performance-sensitive changes
-- Compare with baseline
-- **Regression >10%**: INVESTIGATE
-- Skip if no performance-relevant code changed
-
-### Step 4: Pre-PR
-- `/pre-pr` — commit-lint + architecture guards + lint
-- Must pass
+### Step 3: Test Suite
+- `/test-full-parallel --fresh-daemon` — all modules must pass
 - **BLOCK** on any failure
 
-### Step 4.5: Production File Verification
-- Run `git diff --stat` on the branch
-- Verify production files (.kt in src/main/, src/commonMain/) appear in the diff
-- **BLOCK** if dev task was "fix code" but ONLY test files were modified (test gaming)
-- **Why**: Devs that adapt tests to pass instead of fixing production code defeat TDD
+### Step 4: Coverage Baseline
+- `/coverage` on touched modules — drop >1% → INVESTIGATE → **BLOCK**
 
-### Step 5: Compose UI Tests (MANDATORY for UI changes)
-- If any Compose/UI code changed: verify Compose tests EXIST for every modified screen
-- Tests must assert: component renders, correct items, selection behavior, scroll visible
-- TDD enforced: failing Compose test first (RED), then fix (GREEN)
-- **BLOCK** if Compose tests missing or failing
-- Claude Code cannot visually inspect apps — all verification via automated Compose tests
+### Step 5: KDoc Coverage (if .kt files changed)
+- `kdoc-coverage` CLI on changed files
+- **BLOCK** if new public APIs lack KDoc
+
+### Step 6: Production File Verification
+- `git diff --stat` — **BLOCK** if only test files modified on code tasks (test gaming)
+
+### Step 7: Project Rule Cross-Check
+- For EACH hard rule from Step 1: verify it was checked by an automated step or manual grep
+- **BLOCK** if any rule not verified
+- Report: which rules verified, how, result
+
+### Step 8: Compose UI Tests (if UI code changed)
+- Verify correct shared components used (not just "something renders")
+- Verify no hardcoded strings (must use Compose multiplatform string resources)
+- TDD enforced: RED test first, then GREEN
+- **BLOCK** if tests missing, failing, or FALSE GREEN
 
 ---
 
