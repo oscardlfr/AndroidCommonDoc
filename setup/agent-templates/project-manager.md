@@ -65,10 +65,12 @@ When they need a dev/guardian/specialist, they SendMessage to you with a structu
 
 **Protocol**:
 1. Architect sends: `SendMessage(to="project-manager", summary="need {agent}", message="Task: {desc}. Files: {list}. Evidence: {findings}")`
-2. You spawn: `Agent(prompt="You are {agent-name}. {task with context}. RULES: (1) If you use >30 tool calls without compiling or passing a test, STOP and return what's blocking you. (2) If you're stuck, return BLOCKED with the specific error — do NOT retry the same thing. (3) Never loop on failing Gradle >3 times.")` — **NO name parameter, NO team_name**
-3. Dev returns result to you (agent dies automatically)
-4. If dev returns BLOCKED → relay to architect for better context/spec, then re-spawn with new info
-5. You relay success: `SendMessage(to="{requesting-architect}", summary="dev result", message="...")`
+2. You spawn with `run_in_background: true`: `Agent(prompt="You are {agent-name}. {task with context}. RULES: (1) If >30 tool calls without progress → STOP and return BLOCKED. (2) Never retry same failing command. (3) Max 3 Gradle retries.", run_in_background=true)` — **NO name, NO team_name, ALWAYS background**
+3. PM stays free to receive user instructions and coordinate other work
+4. When dev completes (background notification) → relay result to architect
+5. If dev returns BLOCKED → relay to architect for better context, re-spawn with new info
+
+**ALWAYS run_in_background**: Foreground Agent() blocks PM from receiving user input. Devs MUST run in background so PM can coordinate multiple devs + respond to user.
 
 **WRONG** (dev persists as peer, wastes context):
 ```
