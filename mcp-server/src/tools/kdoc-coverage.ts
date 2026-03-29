@@ -199,27 +199,34 @@ export function analyzeFile(
   /** Regex to detect lines that open a function scope. */
   const FUN_OPENER = /\bfun\s+/;
 
+  // For multiline signatures: remember if we saw a class/fun keyword
+  // before finding its opening brace (possibly on a later line).
+  let pendingScopeType: "class" | "function" | null = null;
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+
+    // Detect class/fun keywords on this line (even if { comes later on a different line)
+    if (!commentMap[i]) {
+      const trimmedLine = line.trim();
+      if (CLASS_OPENER.test(trimmedLine)) {
+        pendingScopeType = "class";
+      } else if (FUN_OPENER.test(trimmedLine)) {
+        pendingScopeType = "function";
+      }
+    }
 
     // Track braces and scope for ALL lines (including comments)
     for (const ch of line) {
       if (ch === "{") {
         braceDepth++;
-        // Determine what scope this brace opens (check the line content)
-        if (!commentMap[i]) {
-          const trimmedLine = line.trim();
-          if (CLASS_OPENER.test(trimmedLine)) {
-            scopeStack.push("class");
-          } else if (FUN_OPENER.test(trimmedLine)) {
-            scopeStack.push("function");
-          } else {
-            // Lambda, init block, etc. — inherit parent scope type
-            const parent = scopeStack[scopeStack.length - 1] ?? "file";
-            scopeStack.push(parent === "class" ? "function" : parent);
-          }
+        if (pendingScopeType) {
+          scopeStack.push(pendingScopeType);
+          pendingScopeType = null;
         } else {
-          scopeStack.push(scopeStack[scopeStack.length - 1] ?? "file");
+          // Lambda, init block, etc. — inherit parent scope type
+          const parent = scopeStack[scopeStack.length - 1] ?? "file";
+          scopeStack.push(parent === "class" ? "function" : parent);
         }
       } else if (ch === "}") {
         braceDepth = Math.max(0, braceDepth - 1);
