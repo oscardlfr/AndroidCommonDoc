@@ -5,4 +5,10 @@ description: "Audit KDoc coverage on public Kotlin APIs. Reports undocumented sy
 tools: ["codebase", "terminal"]
 ---
 
-Read the skill file at skills/kdoc-audit/SKILL.md and follow all instructions.
+## Instructions
+
+Read the skill file at skills/kdoc-audit/SKILL.md and follow all instructions within it.
+
+## Implementation
+
+This skill delegates to the SKILL.md file which contains the full pipeline definition, parameters, and behavior specification.
