@@ -118,7 +118,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 |------|-------------|-------|
 | Skills | `.claude/skills/*/SKILL.md` | 53 |
 | Agents | `.claude/agents/*.md` | 20 |
-| Commands | `.claude/commands/*.md` | 50 |
+| Commands | `.claude/commands/*.md` | 51 |
 | **Total** | | **123 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
@@ -824,6 +824,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `sync-gsd-agents` | Generate GSD subagent wrappers from .claude/agents/ |
 | `check-agent-parity` | Verify parity between .claude/agents/ and GSD subagents |
 | `check-detekt-coverage` | Diagnose Detekt per-module task coverage (KMP source sets) |
+| `dokka-to-docs` | Transform Dokka HTML/Markdown output into docs/api/ with YAML frontmatter (optional) |
 | `readme-audit` | Comprehensive README/doc audit against filesystem (counts, tables, tree, hub links, prose claims) |
 | `rehash-registry` | Recompute SHA-256 hashes in registry.json (CRLF→LF normalized) |
 | `copilot-parity` | Verify Copilot prompt templates match Claude skill definitions |
@@ -962,7 +963,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 50 Claude Code slash commands
+|   +-- commands/           # 51 Claude Code slash commands
 |   +-- agents/             # 20 specialized agents
 |   +-- hooks/              # Real-time Detekt enforcement hooks
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
