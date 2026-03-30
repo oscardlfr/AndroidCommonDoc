@@ -130,9 +130,10 @@ See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 
 - **PM is sole Agent() spawner** — teammates can't use Agent() in in-process mode (#31977)
 - **Architects**: Read, Grep, Glob, Bash, SendMessage (NO Write/Edit/Agent)
-- **context-provider re-spawned** in each team — fresh context, no carryover
+- **context-provider + doc-updater are persistent** — spawned once at session start, NOT team peers. All agents use SendMessage. Rotated for long sessions (5+ waves).
 - **3 architects ALWAYS mandatory** in Execution Team. Dept leads conditional.
-- **Team size is flexible** — 10+ peers work in practice. Use context management (summarize between waves, doc-updater mid-session) to control growth.
+- **Teams are lean** — only phase-specific agents as peers. Shared services live outside. Less context bloat, faster transitions.
+- **PM FORBIDDEN from launching devs directly** — all devs dispatched only when an architect requests via SendMessage.
 - **Project-specific agents MUST be in routing table** — guardians, validators, domain specialists. If the PM routing table doesn't list a domain, architects can't request specialists for it.
 
 ---

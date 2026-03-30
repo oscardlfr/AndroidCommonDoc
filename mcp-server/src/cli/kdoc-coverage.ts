@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * CLI entrypoint for kdoc-coverage.
  *
