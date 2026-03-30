@@ -116,10 +116,10 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 | What | Destination | Count |
 |------|-------------|-------|
-| Skills | `.claude/skills/*/SKILL.md` | 53 |
+| Skills | `.claude/skills/*/SKILL.md` | 57 |
 | Agents | `.claude/agents/*.md` | 20 |
 | Commands | `.claude/commands/*.md` | 51 |
-| **Total** | | **123 entries** |
+| **Total** | | **128 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
