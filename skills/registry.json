@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-03-27T17:45:44.459Z",
+  "generated": "2026-03-30T19:54:33.504Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -20,7 +20,9 @@
           "Grep",
           "Glob",
           "Bash"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -44,7 +46,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -62,7 +65,9 @@
         "allowed-tools": [
           "mcp__androidcommondoc__audit-report"
         ],
-        "disable-model-invocation": false
+        "disable-model-invocation": false,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -85,7 +90,9 @@
           "Agent",
           "Write"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -106,7 +113,9 @@
           "Glob",
           "Write",
           "Bash"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -128,7 +137,9 @@
           "Edit",
           "Grep",
           "Glob"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -152,7 +163,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -173,7 +185,9 @@
           "Glob",
           "Bash"
         ],
-        "user-invocable": false
+        "user-invocable": false,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -194,7 +208,8 @@
           "Grep",
           "Glob",
           "Edit"
-        ]
+        ],
+        "copilot": true
       }
     },
     {
@@ -215,7 +230,9 @@
           "Glob",
           "Bash"
         ],
-        "user-invocable": false
+        "user-invocable": false,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -239,7 +256,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -263,30 +281,62 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
       "name": "debug",
       "type": "skill",
       "path": "skills/debug/SKILL.md",
-      "description": "",
+      "description": "Systematic bug investigation using the `debugger` agent.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:322eb380f3c5187fd5892933775d9e8a8b6927715a26223bdfd32f62d1fc023e",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "debug",
+        "description": "Systematic bug investigation using the `debugger` agent.",
+        "copilot": false
+      }
     },
     {
       "name": "decide",
       "type": "skill",
       "path": "skills/decide/SKILL.md",
-      "description": "",
+      "description": "Technical decision analysis using the `advisor` agent.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:c383968160b3ece08190718bd51edacb268df125f51e8ff6dab931de5a44a86a",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "decide",
+        "description": "Technical decision analysis using the `advisor` agent.",
+        "copilot": false
+      }
+    },
+    {
+      "name": "doc-integrity",
+      "type": "skill",
+      "path": "skills/doc-integrity/SKILL.md",
+      "description": "Unified documentation integrity audit. Runs kdoc-coverage, check-doc-patterns, docs/api freshness, and audit-docs in sequence. Produces a single report with coverage, drifts, and structure issues.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:cb032c2005f01f09ad9dc3ff7805de85cc147990a2100cb7204b937a1e647f01",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "doc-integrity",
+        "description": "Unified documentation integrity audit. Runs kdoc-coverage, check-doc-patterns, docs/api freshness, and audit-docs in sequence. Produces a single report with coverage, drifts, and structure issues.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
+      }
     },
     {
       "name": "doc-reorganize",
@@ -308,7 +358,9 @@
           "Grep",
           "Glob"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -332,7 +384,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -354,7 +407,33 @@
           "Glob",
           "Agent",
           "Write"
-        ]
+        ],
+        "copilot": false
+      }
+    },
+    {
+      "name": "generate-api-docs",
+      "type": "skill",
+      "path": "skills/generate-api-docs/SKILL.md",
+      "description": "Optional: Run Dokka + transformer to generate docs/api/ from KDoc in source code. Produces YAML-frontmatter docs consumable by context-provider and search-docs.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:e920629010c175c1e3f29d0bfd7c4283d863068eeb58311162e43b860037f261",
+      "dependencies": [
+        "scripts/sh/dokka-to-docs.sh"
+      ],
+      "frontmatter": {
+        "name": "generate-api-docs",
+        "description": "Optional: Run Dokka + transformer to generate docs/api/ from KDoc in source code. Produces YAML-frontmatter docs consumable by context-provider and search-docs.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -377,7 +456,9 @@
           "Grep",
           "Glob"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -395,7 +476,9 @@
         "allowed-tools": [
           "Bash",
           "Read"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -418,19 +501,74 @@
           "Grep",
           "Glob"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
       "name": "init-session",
       "type": "skill",
       "path": "skills/init-session/SKILL.md",
-      "description": "",
+      "description": "Show project context — available agents, skills, modules, and business docs.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:6558a34ba3c2b4fc8b253d744041e8523c6b1846b0a8b0616a9a464e51753319",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "init-session",
+        "description": "Show project context — available agents, skills, modules, and business docs.",
+        "copilot": false
+      }
+    },
+    {
+      "name": "kdoc-audit",
+      "type": "skill",
+      "path": "skills/kdoc-audit/SKILL.md",
+      "description": "Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-module coverage, and regression warnings vs baseline.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:b109dba6e967e0806e9dd9f4bc15575dbf9d8089af9a0a7076833e3de6ce3345",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "kdoc-audit",
+        "description": "Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-module coverage, and regression warnings vs baseline.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
+      }
+    },
+    {
+      "name": "kdoc-migrate",
+      "type": "skill",
+      "path": "skills/kdoc-migrate/SKILL.md",
+      "description": "Full-project KDoc migration orchestrator. Adds KDoc to all undocumented public APIs, module by module, informed by pattern docs.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:6a84e9e31a2f8a2edbc6ed97752a1bf8ed6aff04113d01fca6877cbc540272e9",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "kdoc-migrate",
+        "description": "Full-project KDoc migration orchestrator. Adds KDoc to all undocumented public APIs, module by module, informed by pattern docs.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Write",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Agent"
+        ],
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
+      }
     },
     {
       "name": "lint-resources",
@@ -452,19 +590,24 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
       "name": "map-codebase",
       "type": "skill",
       "path": "skills/map-codebase/SKILL.md",
-      "description": "",
+      "description": "Structured codebase analysis using the `codebase-mapper` agent.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:4ec302d6f491cfc9666757503aec137126210ef234af27b72e324380b49863b0",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "map-codebase",
+        "description": "Structured codebase analysis using the `codebase-mapper` agent.",
+        "copilot": false
+      }
     },
     {
       "name": "monitor-docs",
@@ -486,19 +629,25 @@
           "Grep",
           "Glob"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
       "name": "note",
       "type": "skill",
       "path": "skills/note/SKILL.md",
-      "description": "",
+      "description": "Zero-friction idea capture to project memory.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:c91afc3a49114c672fef6dfcb846491874d58bca6df3cae9dd42512aaf283d1e",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "note",
+        "description": "Zero-friction idea capture to project memory.",
+        "copilot": false
+      }
     },
     {
       "name": "performance",
@@ -518,7 +667,9 @@
           "Glob",
           "Bash"
         ],
-        "user-invocable": false
+        "user-invocable": false,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -540,7 +691,9 @@
           "Read",
           "Grep",
           "Glob"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -564,41 +717,54 @@
           "Write"
         ],
         "disable-model-invocation": false,
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
       "name": "research",
       "type": "skill",
       "path": "skills/research/SKILL.md",
-      "description": "",
+      "description": "Ad-hoc technical research before implementation.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:ba1261c8a3283a00f1298a81cd140f00d4a85530090a39c2489eb7ae2a20e8b5",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "research",
+        "description": "Ad-hoc technical research before implementation.",
+        "copilot": false
+      }
     },
     {
       "name": "resume-work",
       "type": "skill",
       "path": "skills/resume-work/SKILL.md",
-      "description": "",
+      "description": "Resume session with a CEO/CTO dashboard — shows status by department from last session.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:1ffede156a88836c4e6a55c336251a8827da6ebc0d5187c9605f0d51336f72fc",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "resume-work",
+        "description": "Resume session with a CEO/CTO dashboard — shows status by department from last session.",
+        "copilot": false
+      }
     },
     {
       "name": "review-pr",
       "type": "skill",
       "path": "skills/review-pr/SKILL.md",
-      "description": "",
+      "description": "Code review of a pull request with structured suggestions.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:9cada6ce977a4efb8fdb9f2d5efb93458e7c3add2d1e3c799227a16cd6a6090c",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "review-pr",
+        "description": "Code review of a pull request with structured suggestions.",
+        "copilot": false
+      }
     },
     {
       "name": "run",
@@ -621,7 +787,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -646,7 +813,8 @@
           "Glob"
         ],
         "l0_requires": "ANDROID_COMMON_DOC",
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true
       }
     },
     {
@@ -671,7 +839,8 @@
           "Glob"
         ],
         "l0_requires": "ANDROID_COMMON_DOC",
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true
       }
     },
     {
@@ -696,7 +865,8 @@
           "Glob"
         ],
         "l0_requires": "ANDROID_COMMON_DOC",
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true
       }
     },
     {
@@ -717,19 +887,25 @@
           "Glob",
           "Bash"
         ],
-        "user-invocable": false
+        "user-invocable": false,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
       "name": "set-model-profile",
       "type": "skill",
       "path": "skills/set-model-profile/SKILL.md",
-      "description": "",
+      "description": "> Switch the model tier used by all AndroidCommonDoc agents.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:25bf80ddd894847dea2c91b7dfde93f674d80e9e13dcf6d7fbc9914043bdec8d",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "set-model-profile",
+        "description": "> Switch the model tier used by all AndroidCommonDoc agents.",
+        "copilot": false
+      }
     },
     {
       "name": "setup",
@@ -757,7 +933,9 @@
           "Glob"
         ],
         "l0_requires": "ANDROID_COMMON_DOC",
-        "category": "guides"
+        "category": "guides",
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -780,7 +958,8 @@
           "Bash",
           "Read"
         ],
-        "category": "ecosystem"
+        "category": "ecosystem",
+        "copilot": false
       }
     },
     {
@@ -804,7 +983,8 @@
           "Read",
           "Glob"
         ],
-        "category": "guides"
+        "category": "guides",
+        "copilot": false
       }
     },
     {
@@ -825,7 +1005,9 @@
           "Write",
           "Glob",
           "Grep"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -846,7 +1028,9 @@
           "Grep",
           "Glob"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -870,7 +1054,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -896,7 +1081,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -920,7 +1106,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -944,7 +1131,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -968,7 +1156,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -987,7 +1176,9 @@
           "Read",
           "Grep",
           "Glob"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -1008,19 +1199,25 @@
           "Grep",
           "Glob"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
       "name": "verify",
       "type": "skill",
       "path": "skills/verify/SKILL.md",
-      "description": "",
+      "description": "Goal-backward verification using the `verifier` agent.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:f464a6000edcf214309ad0e4b891c1184b60de22f2e1bb923c47b2e46f01cefd",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "verify",
+        "description": "Goal-backward verification using the `verifier` agent.",
+        "copilot": false
+      }
     },
     {
       "name": "verify-kmp",
@@ -1043,7 +1240,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -1063,19 +1261,25 @@
           "Grep",
           "Glob",
           "Bash"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
       "name": "work",
       "type": "skill",
       "path": "skills/work/SKILL.md",
-      "description": "",
+      "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:4f9e6c81f7d64fe84e7b1e2faaafcfdd9b85fa81c7a8d0a66ca87bfe81aa5f7d",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "work",
+        "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
+        "copilot": false
+      }
     },
     {
       "name": "advisor",
@@ -1503,14 +1707,14 @@
       "name": "template-sync-validator",
       "type": "agent",
       "path": ".claude/agents/template-sync-validator.md",
-      "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Checks every command has a wrapper template and a Copilot prompt.",
+      "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Respects the copilot frontmatter field in skills/*/SKILL.md to determine expected coverage.",
       "category": "architecture",
       "tier": "extended",
       "hash": "sha256:277cf9e3bc03aa1d3d549769167b9a91bc7a274da864d0cabc6489c2074db92b",
       "dependencies": [],
       "frontmatter": {
         "name": "template-sync-validator",
-        "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Checks every command has a wrapper template and a Copilot prompt.",
+        "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Respects the copilot frontmatter field in skills/*/SKILL.md to determine expected coverage.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
         "domain": "audit",
@@ -1747,6 +1951,19 @@
       "hash": "sha256:b0acad13daa63b863cb9faeb0124d86df88d7514cff8ee931da04ab9f5dae296",
       "dependencies": [],
       "frontmatter": {}
+    },
+    {
+      "name": "doc-integrity",
+      "type": "command",
+      "path": ".claude/commands/doc-integrity.md",
+      "description": "Unified documentation integrity audit — coverage, patterns, freshness, structure.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:1d863435a0221335df4d27939b4c44dd1caf5decabada86c03df5d99d575370d",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Unified documentation integrity audit — coverage, patterns, freshness, structure."
+      }
     },
     {
       "name": "doc-update",
@@ -1998,6 +2215,19 @@
       }
     },
     {
+      "name": "security-review",
+      "type": "command",
+      "path": ".claude/commands/security-review.md",
+      "description": "AI-powered security review of changed files. Scans for injection, auth flaws, PII exposure, crypto weaknesses, and more.",
+      "category": "security",
+      "tier": "core",
+      "hash": "sha256:158818f3fc9929698416af3247d6f8504f4130fa613d580a2cad3d5af16174d8",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "AI-powered security review of changed files. Scans for injection, auth flaws, PII exposure, crypto weaknesses, and more."
+      }
+    },
+    {
       "name": "set-model-profile",
       "type": "command",
       "path": ".claude/commands/set-model-profile.md",
@@ -2007,19 +2237,6 @@
       "hash": "sha256:2a9cfe1c4c4d430bbfad74e08bd502ff47058a1f3a490943e6c7b005d0727f1b",
       "dependencies": [],
       "frontmatter": {}
-    },
-    {
-      "name": "security-review",
-      "type": "command",
-      "path": ".claude/commands/security-review.md",
-      "description": "AI-powered security review of changed files. Scans for injection, auth flaws, PII exposure, crypto weaknesses, and more.",
-      "category": "domain",
-      "tier": "extended",
-      "hash": "sha256:158818f3fc9929698416af3247d6f8504f4130fa613d580a2cad3d5af16174d8",
-      "dependencies": [],
-      "frontmatter": {
-        "description": "AI-powered security review of changed files. Scans for injection, auth flaws, PII exposure, crypto weaknesses, and more."
-      }
     },
     {
       "name": "setup",
