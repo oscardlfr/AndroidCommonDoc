@@ -15,6 +15,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { analyzeFile } from "../tools/kdoc-coverage.js";
 import { parseSettingsModules } from "../utils/gradle-parser.js";
+import { readKDocState, writeKDocState, createEmptyState, updateCoverage } from "../utils/kdoc-state.js";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -185,6 +186,17 @@ async function main(): Promise<void> {
       if (allUndoc.length > 30) {
         console.log(`- ... and ${allUndoc.length - 30} more`);
       }
+    }
+  }
+
+  // Persist to kdoc-state.json
+  if (!changedSet) {
+    try {
+      const state = readKDocState(projectRoot) ?? createEmptyState();
+      updateCoverage(state, results);
+      writeKDocState(projectRoot, state);
+    } catch {
+      // Non-fatal — state persistence is best-effort
     }
   }
 

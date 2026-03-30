@@ -21,6 +21,7 @@ import {
   existsSync,
 } from "node:fs";
 import path from "node:path";
+import { readKDocState, writeKDocState, createEmptyState, updateDocsApi } from "../utils/kdoc-state.js";
 
 // ── Args ────────────────────────────────────────────────────────────────────
 
@@ -261,6 +262,17 @@ for (const mod of moduleDirs) {
   writeFileSync(path.join(outputDir, `${modSlug}-hub.md`), hubLines.join("\n"), "utf-8");
   modulesProcessed++;
   docsGenerated++; // hub
+}
+
+// Persist to kdoc-state.json
+if (!dryRun && modulesProcessed > 0) {
+  try {
+    const state = readKDocState(projectRoot) ?? createEmptyState();
+    updateDocsApi(state, moduleDirs);
+    writeKDocState(projectRoot, state);
+  } catch {
+    // Non-fatal
+  }
 }
 
 console.log(JSON.stringify({

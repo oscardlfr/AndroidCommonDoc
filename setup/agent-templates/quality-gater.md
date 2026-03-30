@@ -58,7 +58,9 @@ This runs the project's complete validation suite dynamically:
 - No "pre-existing failure" exceptions
 - **BLOCK** on any failure
 
-### Step 4: Coverage Baseline
+### Step 4: Coverage Baseline (if .kt files changed)
+
+**Skip if**: no .kt files in diff. Document "SKIP: no Kotlin changes".
 
 ```bash
 /coverage
@@ -68,6 +70,8 @@ This runs the project's complete validation suite dynamically:
 
 ### Step 5: KDoc Coverage (if .kt files changed)
 
+**Skip if**: no .kt files in diff.
+
 ```bash
 BASE=$(git rev-parse --verify develop 2>/dev/null && echo develop \
   || git rev-parse --verify main 2>/dev/null && echo main \
@@ -75,18 +79,30 @@ BASE=$(git rev-parse --verify develop 2>/dev/null && echo develop \
 CHANGED=$(git diff --name-only $BASE...HEAD | grep '\.kt$' | paste -sd, -)
 node "$ANDROID_COMMON_DOC/mcp-server/build/cli/kdoc-coverage.js" "$(pwd)" --changed-files "$CHANGED" --format json
 ```
-- **BLOCK** if new public APIs lack KDoc
+- **BLOCK** if new public APIs lack KDoc (exit code 1)
 - **WARN** if module coverage < 80%
+- Check `kdoc-state.json` for regression vs baseline
 
-### Step 6: Production File Verification
+### Step 6: Production File Verification (if task = code changes)
+
+**Skip if**: task was docs-only or config-only.
 
 ```bash
 git diff --stat $BASE...HEAD
 ```
-- If task was "fix/implement production code": **BLOCK** if only test files modified
-- Devs that only touch tests are gaming verification
+- **BLOCK** if only test files modified on code tasks (test gaming)
 
-### Step 7: Project Rule Cross-Check
+### Step 7: docs/api/ Freshness (if .kt files changed AND docs/api/ exists)
+
+**Skip if**: no .kt changes OR no docs/api/ directory.
+
+```bash
+node "$ANDROID_COMMON_DOC/mcp-server/build/cli/generate-api-docs.js" "$(pwd)" --validate-only
+```
+- **WARN** if docs/api/ is stale for modified modules (doc-updater should have regenerated in Phase 2)
+- Check `kdoc-state.json` docs_api.generated_at
+
+### Step 8: Project Rule Cross-Check
 
 Go back to the checklist from Step 1. For EACH hard rule discovered:
 
@@ -102,7 +118,9 @@ Examples of project rules that need manual verification:
 
 **BLOCK** if any hard rule is violated.
 
-### Step 8: Compose UI Tests (if UI code changed)
+### Step 9: Compose UI Tests (if Compose code changed)
+
+**Skip if**: no Compose/UI files in diff.
 
 If changed files touch Compose/UI code:
 
@@ -130,11 +148,12 @@ If changed files touch Compose/UI code:
 | 1. Rule Discovery | DONE | {n} hard rules found in CLAUDE.md |
 | 2. /pre-pr | PASS/FAIL | {Detekt, lint-resources, commit-lint results} |
 | 3. Tests | PASS/FAIL | {passed}/{total} modules |
-| 4. Coverage | PASS/FAIL/SKIP | {module}: {old}% → {new}% |
-| 5. KDoc | PASS/WARN/BLOCK | {n}/{total} new APIs documented |
-| 6. Prod Files | PASS/BLOCK | {n} production files in diff |
-| 7. Rule Cross-Check | PASS/FAIL | {n}/{total} rules verified |
-| 8. UI Tests | PASS/FAIL/SKIP | {details} |
+| 4. Coverage | PASS/FAIL/SKIP | {module}: {old}% → {new}% (skip if no .kt) |
+| 5. KDoc | PASS/WARN/SKIP | {n}/{total} APIs documented (skip if no .kt) |
+| 6. Prod Files | PASS/BLOCK/SKIP | {n} production files (skip if docs-only) |
+| 7. docs/api/ | PASS/WARN/SKIP | fresh/stale (skip if no docs/api/) |
+| 8. Rule Cross-Check | PASS/FAIL | {n}/{total} rules verified |
+| 9. UI Tests | PASS/FAIL/SKIP | {details} (skip if no Compose) |
 
 ### Blocking Issues (if FAIL)
 - {step}: {issue} — {suggested action}

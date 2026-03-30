@@ -179,15 +179,16 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/^tools:.*SendMessage/m);
   });
 
-  it('has dynamic 8-step protocol', () => {
+  it('has dynamic 9-step protocol', () => {
     expect(content).toMatch(/Step 1.*Rule Discovery/i);
     expect(content).toMatch(/Step 2.*Validation Pipeline/i);
     expect(content).toMatch(/Step 3.*Test/i);
     expect(content).toMatch(/Step 4.*Coverage/i);
     expect(content).toMatch(/Step 5.*KDoc/i);
     expect(content).toMatch(/Step 6.*Production/i);
-    expect(content).toMatch(/Step 7.*Cross-Check/i);
-    expect(content).toMatch(/Step 8.*Compose/i);
+    expect(content).toMatch(/Step 7.*Freshness/i);
+    expect(content).toMatch(/Step 8.*Cross-Check/i);
+    expect(content).toMatch(/Step 9.*Compose/i);
   });
 
   it('reports PASS or FAIL', () => {
