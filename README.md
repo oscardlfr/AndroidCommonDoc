@@ -986,7 +986,7 @@ AndroidCommonDoc/
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
 |   |   +-- cli/            # CLI entrypoint for CI monitoring
-|   +-- tests/              # 95 test files -- vitest unit + integration (1482 tests)
+|   +-- tests/              # 95 test files -- vitest unit + integration (1504 tests)
 +-- detekt-rules/
 |   +-- src/main/kotlin/    # 17 hand-written AST-only Detekt rules
 |   +-- src/main/resources/

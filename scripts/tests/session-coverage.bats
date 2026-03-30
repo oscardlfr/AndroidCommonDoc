@@ -770,12 +770,12 @@ teardown() {
     grep -q "88+ sub-docs" "$README"
 }
 
-@test "README: vitest count is 1331" {
-    grep -q "1331 tests" "$README"
+@test "README: vitest count is 1504" {
+    grep -q "1504 tests" "$README"
 }
 
-@test "README: vitest files count is 90" {
-    grep -q "90 test files" "$README"
+@test "README: vitest files count is 95" {
+    grep -q "95 test files" "$README"
 }
 
 # ===========================================================================
