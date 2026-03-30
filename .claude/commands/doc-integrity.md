@@ -4,10 +4,6 @@ description: Unified documentation integrity audit — coverage, patterns, fresh
 
 Run the doc-integrity pipeline.
 
-Read the skill file and follow all instructions:
-
-```
-$SKILL_DIR/doc-integrity/SKILL.md
-```
+Read the skill file at skills/doc-integrity/SKILL.md and follow all instructions.
 
 Arguments: $ARGUMENTS
