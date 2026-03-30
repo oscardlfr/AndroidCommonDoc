@@ -179,12 +179,16 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/^tools:.*SendMessage/m);
   });
 
-  it('has all 5 protocol steps', () => {
-    expect(content).toMatch(/Step 0.*Frontmatter/i);
-    expect(content).toMatch(/Step 1.*Test/i);
-    expect(content).toMatch(/Step 2.*Coverage/i);
-    expect(content).toMatch(/Step 3.*Benchmark/i);
-    expect(content).toMatch(/Step 4.*Pre-PR/i);
+  it('has dynamic 9-step protocol', () => {
+    expect(content).toMatch(/Step 1.*Rule Discovery/i);
+    expect(content).toMatch(/Step 2.*Validation Pipeline/i);
+    expect(content).toMatch(/Step 3.*Test/i);
+    expect(content).toMatch(/Step 4.*Coverage/i);
+    expect(content).toMatch(/Step 5.*KDoc/i);
+    expect(content).toMatch(/Step 6.*Production/i);
+    expect(content).toMatch(/Step 7.*Freshness/i);
+    expect(content).toMatch(/Step 8.*Cross-Check/i);
+    expect(content).toMatch(/Step 9.*Compose/i);
   });
 
   it('reports PASS or FAIL', () => {
@@ -209,8 +213,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/L0 internal validator/i);
   });
 
-  it('has coverage investigation guidance', () => {
-    expect(content).toMatch(/Coverage Drop/i);
+  it('has coverage step', () => {
+    expect(content).toMatch(/Coverage Baseline/i);
     expect(content).toMatch(/root cause/i);
   });
 });

@@ -47,7 +47,7 @@ node mcp-server/build/cli/monitor-sources.js --project-root /path/to/l1 --layer 
 7. **Navigation:** State-driven -- never Channel-based.
 8. **No platform deps in ViewModels:** No `Context`, `Resources`, `UIKit` imports.
 
-## Available Skills (53)
+## Available Skills (57)
 
 Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-specific files.
 
@@ -95,6 +95,10 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `generate-rules` | Generate Detekt rules from pattern doc frontmatter |
 | `ingest-content` | Fetch external content and match against pattern doc metadata |
 | `doc-reorganize` | Reorganize docs/ into domain-based subdirectories |
+| `kdoc-audit` | Audit KDoc coverage on public Kotlin APIs — regressions, undocumented symbols |
+| `kdoc-migrate` | Full-project KDoc migration, module by module, pattern-informed |
+| `generate-api-docs` | Optional: Dokka + transformer → docs/api/ with YAML frontmatter |
+| `doc-integrity` | Unified 5-step doc audit: coverage, patterns, freshness, structure |
 
 ### Ecosystem & Vault
 
@@ -134,7 +138,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `seo` | Validate SEO metadata, structure, and discoverability |
 | `web-quality-audit` | Comprehensive web quality audit across all dimensions |
 
-## MCP Tools (35)
+## MCP Tools (38)
 
 Programmatic access via Model Context Protocol server (`mcp-server/`):
 
@@ -175,6 +179,9 @@ Programmatic access via Model Context Protocol server (`mcp-server/`):
 | `search-docs` | Full-text search across pattern docs and guides |
 | `suggest-docs` | Suggest relevant docs for a given topic or error message |
 | `validate-agents` | Validate agent templates: frontmatter, role keywords, anti-patterns, versioning |
+| `kdoc-coverage` | Measure KDoc documentation coverage on public Kotlin APIs |
+| `validate-doc-update` | Pre-write validation: duplicate detection, anti-pattern filter, size limits |
+| `check-doc-patterns` | Detect enforceable patterns without Detekt rules and rule-doc drift |
 
 ## Quality Gate Agents (5)
 
@@ -188,7 +195,7 @@ Automated consistency verification via `.claude/agents/`:
 | `doc-code-drift-detector` | Pattern doc version references match versions-manifest.json |
 | `quality-gate-orchestrator` | Unified pass/fail report across all gates with token cost |
 
-## Pattern Docs (13 categories, 54 sub-docs)
+## Pattern Docs (15 categories, 88+ sub-docs)
 
 Detailed pattern guidance in `docs/`, with YAML frontmatter (scope, sources, targets) for registry scanning:
 

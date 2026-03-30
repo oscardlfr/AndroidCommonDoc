@@ -30,6 +30,7 @@ const SKIP_DIRS = new Set(["archive", "images", ".git", "node_modules"]);
  */
 export const APPROVED_CATEGORIES = new Set([
   "agents",
+  "api",
   "architecture",
   "compose",
   "data",
@@ -58,6 +59,7 @@ export const APPROVED_CATEGORIES = new Set([
  * legacy subdirectory name and the unified category.
  */
 export const SUBDIR_TO_CATEGORIES: Record<string, string[]> = {
+  api: ["api"],
   architecture: ["architecture", "data", "ui"],
   compose: ["architecture"],
   di: ["architecture"],

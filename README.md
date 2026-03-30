@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 35 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 19 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 38 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
@@ -18,14 +18,14 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custo
 
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
-- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 24 cross-platform pairs + 7 Bash-only utilities
-- **AI agent skills** for Claude Code and GitHub Copilot -- 53 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
+- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 25 cross-platform pairs + 6 Bash-only utilities
+- **AI agent skills** for Claude Code and GitHub Copilot -- 56 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
-- **Detekt rules** that enforce architecture patterns at build time -- 17 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
+- **Detekt rules** that enforce architecture patterns at build time -- 19 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
-- **MCP server** with 35 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
+- **MCP server** with 38 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
@@ -116,10 +116,10 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 | What | Destination | Count |
 |------|-------------|-------|
-| Skills | `.claude/skills/*/SKILL.md` | 53 |
+| Skills | `.claude/skills/*/SKILL.md` | 57 |
 | Agents | `.claude/agents/*.md` | 20 |
-| Commands | `.claude/commands/*.md` | 50 |
-| **Total** | | **123 entries** |
+| Commands | `.claude/commands/*.md` | 51 |
+| **Total** | | **128 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -291,7 +291,7 @@ Findings are persisted to `.androidcommondoc/findings-log.jsonl` with resolution
 
 ## Detekt Architecture Rules
 
-17 hand-written AST-only rules (no type resolution, no bindingContext) that enforce the most impactful architecture patterns at build time. Organized by category:
+19 hand-written AST-only rules (no type resolution, no bindingContext) that enforce the most impactful architecture patterns at build time. Organized by category:
 
 ### State & Exposure
 
@@ -690,9 +690,9 @@ This eliminates the "agent explores for 5 minutes before planning" problem. The 
 
 ## MCP Server
 
-35 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
+38 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
-**21 tools** work in any project. **14 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
+**24 tools** work in any project. **14 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
 
 ### General Tools
 
@@ -824,6 +824,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `sync-gsd-agents` | Generate GSD subagent wrappers from .claude/agents/ |
 | `check-agent-parity` | Verify parity between .claude/agents/ and GSD subagents |
 | `check-detekt-coverage` | Diagnose Detekt per-module task coverage (KMP source sets) |
+| `dokka-to-docs` | Transform Dokka HTML/Markdown output into docs/api/ with YAML frontmatter (optional) |
 | `readme-audit` | Comprehensive README/doc audit against filesystem (counts, tables, tree, hub links, prose claims) |
 | `rehash-registry` | Recompute SHA-256 hashes in registry.json (CRLF→LF normalized) |
 | `copilot-parity` | Verify Copilot prompt templates match Claude skill definitions |
@@ -844,7 +845,67 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-15 domain hubs, 88+ sub-docs, 16 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation.
+15 domain hubs, 88+ sub-docs, 16 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+
+### Doc Integrity System
+
+4-layer system ensuring documentation quality, code-doc alignment, and zero duplication:
+
+```
+Layer 0: MIGRATION (/kdoc-migrate)
+  Brings existing projects from 0% → baseline KDoc coverage
+  Module-by-module, pattern-informed — no stubs
+
+Layer 0.5: PUBLICATION (Dokka pipeline, optional)
+  KDoc in .kt → Dokka → transformer → docs/api/ with frontmatter
+  Makes KDoc searchable by context-provider and search-docs
+
+Layer 1: PREVENTION (doc-updater smart protocol)
+  Pre-write validation via validate-doc-update MCP tool
+  Duplicate detection (Jaccard similarity), anti-pattern filter,
+  size limit pre-check, context-provider cross-doc coherence
+
+Layer 2: MEASUREMENT (kdoc-coverage MCP tool)
+  Public API scanning → coverage % per module
+  Changed-file focus for quality gate, baselines in audit-log.jsonl
+
+Layer 3: ENFORCEMENT (quality gate Step 0.5)
+  BLOCK if new public APIs lack KDoc
+  WARN if module coverage < 80%
+  check-doc-patterns detects Detekt rule candidates
+```
+
+**MCP tools** (3 new):
+| Tool | Purpose |
+|------|---------|
+| `kdoc-coverage` | Measure KDoc coverage on public Kotlin APIs |
+| `validate-doc-update` | Pre-write validation: duplicates, anti-patterns, coherence, size |
+| `check-doc-patterns` | Detect enforceable patterns without Detekt rules, rule drift |
+
+**Skills** (3 new):
+| Skill | Purpose |
+|-------|---------|
+| `/kdoc-audit` | Audit KDoc coverage, regressions, undocumented APIs |
+| `/kdoc-migrate` | Full-project KDoc migration, module by module |
+| `/generate-api-docs` | Optional: Dokka + transformer → docs/api/ |
+
+**Quality gate steps** (doc-related):
+| Step | What | Action |
+|------|------|--------|
+| 0 | Frontmatter validation | BLOCK if docs/ missing required fields |
+| 0.5 | KDoc coverage | BLOCK if new public APIs lack KDoc, WARN if module < 80% |
+| 4.5 | Production file verification | BLOCK if dev task was "fix code" but only test files changed |
+
+**Agent behavioral enforcement**:
+- **Architects**: TRIVIAL/NON-TRIVIAL threshold table — max 1-2 line edits (import/annotation). KDoc, tests, DI = delegate to dev via PM.
+- **Devs**: dispatch prompt rule (4) — "MUST modify production files, test-only = REJECTED". Reports modified files in final message.
+- **doc-updater**: pre-write validation via `validate-doc-update` MCP tool. Rejects duplicates (Jaccard > 70%), anti-patterns, oversized docs. Communicates with context-provider before writing.
+
+**Remediation flows**: missing KDoc → quality gate FAIL → PM re-enters Phase 2 → architect routes to dev specialist → dev adds pattern-informed KDoc → quality gate re-runs. doc-updater rejects duplicates/anti-patterns back to PM. Generated docs (`docs/api/`) protected from manual edits via `generated: true` frontmatter.
+
+**Dokka pipeline** (optional): `scripts/sh/dokka-to-docs.sh` transforms Dokka Markdown → `docs/api/` with YAML frontmatter. Exits gracefully if Dokka not configured. Convention plugin template in `setup/templates/build-logic/`.
+
+### Doc Hubs
 
 | Hub | Covers | Platform |
 |-----|--------|----------|
@@ -902,31 +963,31 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 50 Claude Code slash commands
+|   +-- commands/           # 51 Claude Code slash commands
 |   +-- agents/             # 20 specialized agents
 |   +-- hooks/              # Real-time Detekt enforcement hooks
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
-|   +-- */SKILL.md          # 53 canonical skill definitions
+|   +-- */SKILL.md          # 56 canonical skill definitions
 |   +-- registry.json       # L0 registry (123 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
 |   +-- ps1/                # PowerShell (Windows) -- 24 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 31 scripts (24 cross-platform + 7 utilities)
+|   +-- sh/                 # Bash (macOS/Linux) -- 32 scripts (25 cross-platform + 7 utilities)
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
 +-- mcp-server/             # MCP server (34 tools, 3 prompts, dynamic resources)
 |   +-- src/
-|   |   +-- tools/          # 35 tools: validation, analysis, metrics, audit, sync, vault
+|   |   +-- tools/          # 38 tools: validation, analysis, metrics, audit, sync, vault, doc integrity
 |   |   +-- types/          # Shared types (ValidationResult, AuditFinding, FindingsReport)
-|   |   +-- utils/          # Utilities (rate-limiter, jsonl-reader, gradle-parser, xml-report-reader, finding-dedup, logger)
+|   |   +-- utils/          # Utilities (rate-limiter, jsonl-reader, gradle-parser, xml-report-reader, finding-dedup, logger, doc-scoring)
 |   |   +-- generation/     # Detekt rule parser, emitters, config-emitter
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
 |   |   +-- cli/            # CLI entrypoint for CI monitoring
-|   +-- tests/              # 90 test files -- vitest unit + integration (1331 tests)
+|   +-- tests/              # 95 test files -- vitest unit + integration (1504 tests)
 +-- detekt-rules/
 |   +-- src/main/kotlin/    # 17 hand-written AST-only Detekt rules
 |   +-- src/main/resources/
@@ -940,14 +1001,16 @@ AndroidCommonDoc/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
 |   +-- copilot-templates/  # 40 Copilot prompt templates (generated from skills)
 |   +-- copilot-agent-templates/ # 4 Copilot agent templates (generated from agent-templates)
-|   +-- agent-templates/    # 19 agent templates: PM, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, business leads, domain specialists
+|   +-- agent-templates/    # 17 agent templates: PM, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, business leads, domain specialists
 |   +-- doc-templates/
 |   |   +-- business/       # 5 business doc templates (PRODUCT_SPEC, MARKETING, PRICING, COMPETITIVE, LANDING_PAGES)
 |   +-- github-workflows/   # CI template + PR template for consumer projects
 |   +-- templates/
 |   |   +-- workflows/
-|   |       +-- l0-auto-sync.yml  # Downstream auto-sync workflow template
-|   |       +-- release.yml       # Git Flow + Conventional Commits release template
+|   |   |   +-- l0-auto-sync.yml  # Downstream auto-sync workflow template
+|   |   |   +-- release.yml       # Git Flow + Conventional Commits release template
+|   |   +-- build-logic/
+|   |       +-- dokka-convention.gradle.kts.template  # Optional Dokka convention plugin for KDoc → docs/api/
 +-- .github/workflows/
 |   +-- l0-ci.yml                            # L0 unified CI (all checks on push/PR)
 |   +-- l0-sync-dispatch.yml                # Dispatch l0-sync events to downstream repos on push

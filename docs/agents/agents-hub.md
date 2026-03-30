@@ -40,11 +40,13 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, project-ma
 ## Key Concepts
 
 - **3-Phase Model** = Planning Team → Execution Team → Quality Gate Team. Each temporary, dissolved after completion.
+- **Persistent shared services** = context-provider + doc-updater spawned ONCE at session start, live across all phases. NOT team peers.
 - **CLAUDE.md** = workflow instructions (< 80 lines). Contains Agent Roster → triggers agent delegation.
 - **`.claude/agents/`** = canonical agent definitions. Synced via `/sync-l0`.
-- **project-manager** = orchestrator. NEVER codes — orchestrates 3-phase teams, dispatches devs via relay.
-- **quality-gater** = PM-facing verification peer. Runs gate protocol after architects APPROVE.
-- **planner** = Planning Team peer. Produces structured plans before execution.
+- **project-manager** = orchestrator. NEVER codes — orchestrates 3-phase teams, dispatches devs via relay. FORBIDDEN from launching devs directly.
+- **quality-gater** = dynamic rule discovery. Reads CLAUDE.md for project rules, runs `/pre-pr`, cross-checks every rule.
+- **planner** = Planning Team peer. Uses `SendMessage(to="context-provider")` for project state.
+- **Doc Integrity** = `/doc-integrity` pipeline: kdoc-coverage → check-doc-patterns → docs/api freshness → audit-docs. State in `kdoc-state.json`.
 - **Spec-driven agents** = debugger, verifier, advisor, researcher, codebase-mapper for autonomous work.
 - **Skills** = token-efficient script wrappers. Always prefer over manual agent work.
 

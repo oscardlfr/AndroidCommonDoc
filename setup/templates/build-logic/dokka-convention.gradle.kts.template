@@ -1,0 +1,55 @@
+/**
+ * Dokka Convention Plugin Template
+ *
+ * Apply to your build-logic/ to enable KDoc → Markdown generation.
+ * Copy to: build-logic/convention/src/main/kotlin/dokka-convention.gradle.kts
+ *
+ * Prerequisites:
+ *   1. Add dokka to build-logic/convention/build.gradle.kts:
+ *      implementation("org.jetbrains.dokka:dokka-gradle-plugin:2.0.0")
+ *
+ *   2. Add to settings.gradle.kts pluginManagement:
+ *      id("org.jetbrains.dokka") version "2.0.0" apply false
+ *
+ * Usage:
+ *   ./gradlew dokkaGenerate          # all modules
+ *   ./gradlew :core-domain:dokkaGenerate  # single module
+ *
+ * After running Dokka:
+ *   scripts/sh/dokka-to-docs.sh <project_root>
+ *   # or
+ *   /generate-api-docs
+ *
+ * This is OPTIONAL — the doc integrity system works without Dokka.
+ * Dokka adds the "publication" layer: KDoc → docs/api/ → searchable by agents.
+ */
+
+plugins {
+    id("org.jetbrains.dokka")
+}
+
+dokka {
+    dokkaSourceSets.configureEach {
+        // Include KDoc from all source sets
+        sourceRoots.from(file("src/commonMain/kotlin"))
+        sourceRoots.from(file("src/jvmMain/kotlin"))
+
+        // Skip internal/private APIs
+        perPackageOption {
+            matchingRegex.set(".*\\.internal.*")
+            suppress.set(true)
+        }
+
+        // Link to external documentation
+        externalDocumentationLinks {
+            create("kotlinx-coroutines") {
+                url.set(java.net.URI("https://kotlinlang.org/api/kotlinx.coroutines/"))
+            }
+        }
+    }
+
+    // Output as Markdown (consumed by dokka-to-docs.sh transformer)
+    pluginsConfiguration {
+        // Dokka 2.0 uses GFM format by default for markdown
+    }
+}

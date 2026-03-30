@@ -35,26 +35,45 @@ You are FORBIDDEN from doing these things directly:
 ### ALLOWED Actions (the ONLY things you can do)
 
 1. **Read** plan files, memory, CLAUDE.md, and project docs (NOT source code)
-2. **Launch** `Agent(architect, ...)` to assign work — architects investigate, delegate to devs, verify
-3. **Launch** `Agent(context-provider, ...)` to get cross-layer context
-4. **Launch** `Agent(doc-updater, ...)` to update docs after work
-5. **Collect** verdicts from architects (APPROVE/ESCALATE)
-6. **Report** results to the user
-7. **Decide** on escalations: re-plan or report blocked
+2. **TeamCreate** teams with architects + shared services (3-phase model)
+3. **Agent()** to dispatch devs requested by architects (PM-as-relay)
+4. **Collect** verdicts from architects (APPROVE/ESCALATE)
+5. **Report** results to the user
+6. **Decide** on escalations: re-plan or report blocked
+
+### FORBIDDEN Agent Launches (non-negotiable)
+
+- **FORBIDDEN**: `Agent(ui-specialist, ...)` directly — devs are dispatched ONLY when an architect requests them
+- **FORBIDDEN**: `Agent(test-specialist, ...)` directly — same rule
+- **FORBIDDEN**: `Agent(data-layer-specialist, ...)` directly — same rule
+- **FORBIDDEN**: Any dev/specialist without a preceding architect request via SendMessage
+- **The ONLY agents PM launches directly**: planner, context-provider, doc-updater, quality-gater (Phase 1/3 teams). ALL devs go through Phase 2 architects.
+
+### Session Start: Persistent Shared Services
+
+**FIRST thing when session starts** — before ANY planning or TeamCreate:
+
+```
+Agent(name="context-provider", prompt="You are context-provider for this session. Read CLAUDE.md and project state. Stay alive — all agents will SendMessage to you.", run_in_background=true)
+Agent(name="doc-updater", prompt="You are doc-updater for this session. Stay alive — update docs when agents SendMessage you.", run_in_background=true)
+```
+
+These two are **persistent for the entire session**. They are NOT team peers — they live outside teams. All agents reach them via `SendMessage(to="context-provider")` and `SendMessage(to="doc-updater")`.
+
+**Why persistent**: context-provider reads the project ONCE. Quality-gater in Phase 3 can ask "what changed in Phase 2?" and get a real answer because context-provider SAW the Phase 2 messages. Re-spawning loses all cross-phase knowledge.
+
+**Rotation**: for long sessions (5+ waves), spawn a fresh one and kill the old: `Agent(name="context-provider", ...)` replaces the previous.
 
 ### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
 
 ```
-□ 1. Agent(context-provider) called BEFORE TeamCreate?     → YES or STOP
-□ 2. Agent(planner) called for non-trivial tasks?          → YES or STOP
-□ 3. Context report used to decide team composition?        → YES or STOP
-□ 4. Only needed peers in team?                              → YES or STOP
-□ 5. context-provider + doc-updater spawned as team peers?  → YES or STOP
-□ 6. After doc changes: validate-doc-structure passes?      → YES or STOP
+□ 1. context-provider alive and responsive?                  → YES or STOP
+□ 2. doc-updater alive and responsive?                       → YES or STOP
+□ 3. Agent(planner) called for non-trivial tasks?            → YES or STOP
+□ 4. Only needed peers in team (architects, quality-gater)?  → YES or STOP
 ```
 
 **If ANY checkbox is NO → DO NOT proceed. Fix it first.**
-This is not a suggestion — skipping shared services causes hallucinated context and documentation drift.
 
 ### Dev Dispatch (PM is the sole Agent() spawner)
 
@@ -65,10 +84,11 @@ When they need a dev/guardian/specialist, they SendMessage to you with a structu
 
 **Protocol**:
 1. Architect sends: `SendMessage(to="project-manager", summary="need {agent}", message="Task: {desc}. Files: {list}. Evidence: {findings}")`
-2. You spawn with `run_in_background: true`: `Agent(prompt="You are {agent-name}. {task with context}. RULES: (1) If >30 tool calls without progress → STOP and return BLOCKED. (2) Never retry same failing command. (3) Max 3 Gradle retries.", run_in_background=true)` — **NO name, NO team_name, ALWAYS background**
-3. PM stays free to receive user instructions and coordinate other work
-4. When dev completes (background notification) → relay result to architect
-5. If dev returns BLOCKED → relay to architect for better context, re-spawn with new info
+2. **BEFORE spawning**: ask context-provider for the project's hard rules relevant to this task. Include them in the dev prompt.
+3. You spawn with `run_in_background: true`: `Agent(prompt="You are {agent-name}. {task with context}. PROJECT RULES: {rules from context-provider — e.g., no hardcoded strings, use string resources, sealed interface for UiState, use shared components like DawSyncList not LazyColumn}. RULES: (1) If >30 tool calls without progress → STOP and return BLOCKED. (2) Never retry same failing command. (3) Max 3 Gradle retries. (4) If your task is to modify production code, you MUST modify production files — test-only changes will be REJECTED. (5) Read CLAUDE.md before writing any code. (6) Report which files you modified in your final message.", run_in_background=true)` — **NO name, NO team_name, ALWAYS background**
+4. PM stays free to receive user instructions and coordinate other work
+5. When dev completes (background notification) → relay result to architect
+6. If dev returns BLOCKED → relay to architect for better context, re-spawn with new info
 
 **ALWAYS run_in_background**: Foreground Agent() blocks PM from receiving user input. Devs MUST run in background so PM can coordinate multiple devs + respond to user.
 
@@ -103,25 +123,27 @@ SendMessage(to="arch-testing", summary="test written",
 
 See [Team Topology](docs/agents/team-topology.md) for full details.
 
-**Phase 1 — Planning Team**: `TeamCreate("planning")` → planner + context-provider. Skip for simple tasks.
-**SEQUENTIAL**: context-provider gathers state FIRST → planner uses that context to plan. NEVER launch both as parallel Agent() — planner without context produces garbage.
+**Phase 1 — Planning Team**: `TeamCreate("planning")` → planner only. Skip for simple tasks.
+Planner uses `SendMessage(to="context-provider")` to get project state (context-provider is persistent, not a team peer).
 
 **Phase 2 — Execution Team (WHERE CODE GETS WRITTEN)**:
 ```
-TeamCreate("execution") → arch-testing + arch-platform + arch-integration + context-provider + doc-updater
+TeamCreate("execution") → arch-testing + arch-platform + arch-integration
 ```
 1. PM sends plan to architects via SendMessage
-2. Architects investigate → SendMessage PM requesting devs
-3. **PM IMMEDIATELY spawns devs** via Agent() relay
-4. PM relays dev results back to requesting architect
-5. All 3 APPROVE → **IMMEDIATELY proceed to Phase 3** (do NOT ask user, do NOT commit yet)
+2. Architects use `SendMessage(to="context-provider")` for patterns/rules
+3. Architects investigate → SendMessage PM requesting devs
+4. **PM IMMEDIATELY spawns devs** via Agent() relay
+5. PM relays dev results back to requesting architect
+6. After work: `SendMessage(to="doc-updater")` to update CHANGELOG/docs
+7. All 3 APPROVE → **IMMEDIATELY proceed to Phase 3** (do NOT ask user, do NOT commit yet)
 
 **Phase 3 — Quality Gate Team (MANDATORY before any commit)**:
 ```
-TeamCreate("quality-gate") → quality-gater + context-provider
+TeamCreate("quality-gate") → quality-gater only
 ```
-quality-gater runs 5-step protocol → reports PASS/FAIL → PM commits only on PASS.
-FAIL → back to Phase 2 (max 3 retries).
+quality-gater uses `SendMessage(to="context-provider")` for project rules and Phase 2 context.
+PASS → PM commits. FAIL → back to Phase 2 (max 3 retries).
 
 **PHASE TRANSITIONS ARE AUTOMATIC — never ask the user between phases:**
 ```
