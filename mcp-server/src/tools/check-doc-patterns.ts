@@ -245,6 +245,17 @@ function checkRuleAlignment(
 
     const rules = parseRuleDefinitions(fm.data);
     for (const rule of rules) {
+      // Hand-written rules with source_rule are aligned by definition —
+      // they don't need a generated file, they point to an existing impl.
+      if (rule.hand_written === true && typeof rule.source_rule === "string" && rule.source_rule.length > 0) {
+        alignments.push({
+          rule: rule.id,
+          status: "aligned",
+          details: `Hand-written rule: ${rule.source_rule}`,
+        });
+        continue;
+      }
+
       // Check if generated file exists
       const expectedFile = path.join(generatedDir, `${rule.id}.kt`);
       let ruleExists = false;
@@ -269,7 +280,9 @@ function checkRuleAlignment(
         alignments.push({
           rule: rule.id,
           status: "drifted",
-          details: "Rule defined in doc but no generated file found",
+          details: rule.hand_written
+            ? "Hand-written rule missing source_rule field linking to implementation"
+            : "Rule defined in doc but no generated file found",
         });
       } else {
         alignments.push({

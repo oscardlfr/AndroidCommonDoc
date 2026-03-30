@@ -973,7 +973,7 @@ AndroidCommonDoc/
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
 |   +-- ps1/                # PowerShell (Windows) -- 24 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 31 scripts (24 cross-platform + 7 utilities)
+|   +-- sh/                 # Bash (macOS/Linux) -- 32 scripts (25 cross-platform + 7 utilities)
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)

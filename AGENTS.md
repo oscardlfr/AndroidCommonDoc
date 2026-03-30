@@ -47,7 +47,7 @@ node mcp-server/build/cli/monitor-sources.js --project-root /path/to/l1 --layer 
 7. **Navigation:** State-driven -- never Channel-based.
 8. **No platform deps in ViewModels:** No `Context`, `Resources`, `UIKit` imports.
 
-## Available Skills (56)
+## Available Skills (57)
 
 Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-specific files.
 
@@ -98,6 +98,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `kdoc-audit` | Audit KDoc coverage on public Kotlin APIs — regressions, undocumented symbols |
 | `kdoc-migrate` | Full-project KDoc migration, module by module, pattern-informed |
 | `generate-api-docs` | Optional: Dokka + transformer → docs/api/ with YAML frontmatter |
+| `doc-integrity` | Unified 5-step doc audit: coverage, patterns, freshness, structure |
 
 ### Ecosystem & Vault
 
