@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 38 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 24 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 39 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
@@ -19,19 +19,19 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 19 custo
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
 - **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 25 cross-platform pairs + 6 Bash-only utilities
-- **AI agent skills** for Claude Code and GitHub Copilot -- 56 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
+- **AI agent skills** for Claude Code and GitHub Copilot -- 58 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
-- **Detekt rules** that enforce architecture patterns at build time -- 19 hand-written AST-only rules covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, and navigation contracts
+- **Detekt rules** that enforce architecture patterns at build time -- 20 hand-written + 4 generated AST-only rules (24 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, and security patterns
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
-- **MCP server** with 38 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
+- **MCP server** with 39 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
 - **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, and architecture guards
 - **20 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
-- **19 agent templates** for the 3-phase team model -- project-manager, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, plus business and domain specialist templates. Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
+- **17 agent templates** for the 3-phase team model -- project-manager, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, plus business and domain specialist templates. Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
 
 Install once, use across all your projects.
 
@@ -116,10 +116,10 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 | What | Destination | Count |
 |------|-------------|-------|
-| Skills | `.claude/skills/*/SKILL.md` | 57 |
+| Skills | `.claude/skills/*/SKILL.md` | 58 |
 | Agents | `.claude/agents/*.md` | 20 |
-| Commands | `.claude/commands/*.md` | 51 |
-| **Total** | | **128 entries** |
+| Commands | `.claude/commands/*.md` | 52 |
+| **Total** | | **130 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -127,7 +127,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 123 L0 entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 130 L0 entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -291,7 +291,7 @@ Findings are persisted to `.androidcommondoc/findings-log.jsonl` with resolution
 
 ## Detekt Architecture Rules
 
-19 hand-written AST-only rules (no type resolution, no bindingContext) that enforce the most impactful architecture patterns at build time. Organized by category:
+20 hand-written + 4 generated AST-only rules (24 total, no type resolution, no bindingContext) that enforce the most impactful architecture patterns at build time. Organized by category:
 
 ### State & Exposure
 
@@ -334,15 +334,42 @@ Findings are persisted to `.androidcommondoc/findings-log.jsonl` with resolution
 | `NoSystemCurrentTimeMillisRule` | `System.currentTimeMillis()` -- use `Clock.System.now().toEpochMilliseconds()` |
 | `NoJavaTimeInCommonMainRule` | `java.time.*`, `java.security.*`, `java.text.*` in commonMain source sets |
 
+### Security & Quality
+
+| Rule | What It Catches |
+|------|----------------|
+| `NoHardcodedCredentialsRule` | Hardcoded passwords, API keys, tokens in source code |
+| `NoSuppressAnnotationsRule` | `@Suppress` annotations that hide warnings instead of fixing them |
+| `RequireRunCatchingCancellableRule` | `runCatching` in coroutine context -- use `runCatchingCancellable` instead |
+
 ### Testing Patterns
 
 | Rule | What It Catches |
 |------|----------------|
 | `NoTurbineRule` | `app.cash.turbine` imports -- use `backgroundScope.launch` + `flow.toList()` |
 
+### Warning Enforcement
+
+Three layers prevent `@Suppress` gaming (devs hiding warnings instead of fixing them):
+
+1. **Detekt rule** (`NoSuppressAnnotationsRule`): blocks `@Suppress` annotations whose reason is not in the allowlist. Default allowlist covers legitimate KMP interop (`UNCHECKED_CAST`, `DEPRECATION`, `unused`, `OPT_IN_USAGE`, `EagerInitialization`). Projects extend via `allowedSuppressions` in `detekt.yml`.
+2. **`/pre-pr` Step 5.5**: diff-based detection — scans the PR diff for NEW `@Suppress` annotations introduced by this change, blocking even if the Detekt rule was not configured.
+3. **`quality-gater` Step 2.5**: blocks deprecation warnings and outdated dependency warnings that agents might otherwise ignore.
+
+This three-layer approach catches suppressions at build time (Detekt), at PR time (diff scan), and at quality gate time (deliberation), closing the loop on warning evasion.
+
+### Generated Rules (from pattern doc frontmatter)
+
+| Rule | What It Catches |
+|------|----------------|
+| `NoCustomCryptoRule` | Custom cryptographic implementations -- use platform-provided crypto |
+| `NoDefaultDispatcherInTestsRule` | `Dispatchers.Default` in test code -- inject test dispatchers |
+| `NoMocksInCommonTestsRule` | Mockito/MockK in commonTest -- use pure-Kotlin fakes |
+| `NoPlatformStorageInCommonRule` | Platform storage APIs (`SharedPreferences`, `NSUserDefaults`) in commonMain |
+
 ### L0/L1 Config Hierarchy
 
-L0 ships `detekt-l0-base.yml` with all 19 rules `active: true`. The convention plugin loads both files automatically -- `detekt-l0-base.yml` as base, `config.yml` as L1 override (last file wins per key):
+L0 ships `detekt-l0-base.yml` with all 24 rules `active: true`. The convention plugin loads both files automatically -- `detekt-l0-base.yml` as base, `config.yml` as L1 override (last file wins per key):
 
 ```bash
 # Manual equivalent of what the plugin does:
@@ -368,7 +395,7 @@ plugins {
 }
 
 androidCommonDoc {
-    detektRules.set(true)       // default: true  -- 17 architecture rules
+    detektRules.set(true)       // default: true  -- 24 architecture rules
     composeRules.set(true)      // default: true  -- Compose best practices
     testConfig.set(true)        // default: true  -- useJUnitPlatform, maxParallelForks=1
     formattingRules.set(false)  // default: false -- ktlint formatting (opt-in)
@@ -407,7 +434,7 @@ Real-time pattern enforcement and context injection during AI-assisted developme
 
 ## Skills Reference
 
-53 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
+58 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
@@ -450,6 +477,7 @@ These are the skills that get materialized to your `.claude/skills/` directory v
 
 | Skill | What it does | Platform |
 |-------|-------------|----------|
+| `/check-outdated` | Check dependency versions against Maven Central (TOML parser, cached) | Android + KMP |
 | `/sbom` | Generate CycloneDX Software Bill of Materials | Android + KMP |
 | `/sbom-analyze` | Analyze SBOM dependencies, licenses, and transitive tree | Android + KMP |
 | `/sbom-scan` | Scan SBOM for known CVEs using Trivy | Android + KMP |
@@ -541,6 +569,19 @@ Phase 1 — Planning Team          Phase 2 — Execution Team           Phase 3 
 
 **Project Manager** orchestrates all 3 phases. PM NEVER writes code — assigns to architects, who manage devs and guardians.
 
+### Agent Topology
+
+5 persistent session agents (spawned once, live until rotation):
+- `context-provider` — reads project state, answers queries from all agents
+- `doc-updater` — updates docs when agents request changes
+- `arch-testing` — verifies test quality, TDD compliance, coverage
+- `arch-platform` — verifies KMP patterns, source sets, expect/actual
+- `arch-integration` — verifies DI wiring, navigation, compilation
+
+Dev agents are disposable senior engineers — spawned by PM on architect request, execute, return result, die. They compile + Detekt before reporting done.
+
+Quality gate: `quality-gater` deliberates with all 3 persistent architects (Step 1.5) before running automated checks (`/pre-pr`, tests, coverage). This prevents false positives and catches gaps that automated tooling alone would miss — an architect might know a test passes but coverage is shallow, or that an integration was deferred.
+
 ### Multi-Session Departments
 
 Different work types run in separate Claude Code sessions with dedicated leads:
@@ -570,7 +611,7 @@ See [Team Topology](docs/agents/team-topology.md) for full details.
 
 ## Agents
 
-20 specialized agents in `.claude/agents/` + 19 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
+20 specialized agents in `.claude/agents/` + 17 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
 
 ### Production Agents (synced via /sync-l0)
 
@@ -599,7 +640,7 @@ See [Team Topology](docs/agents/team-topology.md) for full details.
 
 ### Agent Templates (for L1/L2 projects)
 
-19 templates in `setup/agent-templates/` — copy to your project's `.claude/agents/` and customize.
+17 templates in `setup/agent-templates/` — copy to your project's `.claude/agents/` and customize.
 
 **Team Core (used in every 3-phase workflow):**
 
@@ -690,9 +731,9 @@ This eliminates the "agent explores for 5 minutes before planning" problem. The 
 
 ## MCP Server
 
-38 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
+39 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
-**24 tools** work in any project. **14 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
+**22 tools** work in any project. **17 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
 
 ### General Tools
 
@@ -716,6 +757,8 @@ This eliminates the "agent explores for 5 minutes before planning" problem. The 
 | `unused-resources` | Analysis | Detect orphan strings/drawables not referenced in source code |
 | `validate-all` | Validation | Run all validation scripts with structured output |
 | `verify-kmp` | Validation | Validate KMP source sets and imports |
+| `check-outdated` | Dependency | Check `libs.versions.toml` against Maven Central for outdated dependencies |
+| `kdoc-coverage` | Documentation | Measure KDoc coverage on public Kotlin APIs per module |
 | `rate-limit-status` | Utility | Show current MCP rate-limit counters and reset time |
 | `search-docs` | Doc Intelligence | Full-text search across pattern docs and guides |
 | `suggest-docs` | Doc Intelligence | Suggest relevant docs for a given topic or error message |
@@ -738,6 +781,9 @@ These tools operate on AndroidCommonDoc's own documentation, vault, and toolkit 
 | `validate-claude-md` | Validation | Validate CLAUDE.md ecosystem: template structure, canonical coverage |
 | `validate-doc-structure` | Validation | Validate documentation structure and frontmatter completeness |
 | `validate-skills` | Validation | Validate skills registry, frontmatter, and downstream sync |
+| `validate-agents` | Validation | Validate agent frontmatter, tool restrictions, and role consistency |
+| `validate-doc-update` | Validation | Pre-write validation: duplicates, anti-patterns, coherence, size |
+| `check-doc-patterns` | Analysis | Detect enforceable patterns without Detekt rules, rule drift |
 | `validate-vault` | Validation | Validate vault content and wikilink integrity |
 | `vault-status` | Vault | Check vault sync status and statistics |
 
@@ -788,7 +834,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Scripts
 
-24 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 7 Bash-only utilities (`check-agent-parity`, `check-detekt-coverage`, `copilot-parity`, `install-git-hooks`, `rehash-registry`, `run-benchmarks`, `validate-agent-templates`).
+25 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 7 Bash-only utilities (`check-agent-parity`, `check-detekt-coverage`, `copilot-parity`, `install-git-hooks`, `rehash-registry`, `run-benchmarks`, `validate-agent-templates`).
 
 ### Core Scripts
 
@@ -936,7 +982,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (123 entries,    |   |
+                   |  | SKILL.md |    | (130 entries,    |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -951,7 +997,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 |.json     |       |  +--------------+    +---------------+  |
 +----------+       |  | detekt-      |    | build-logic/  |  |
                    |  | rules/       |--->| convention    |  |
-                   |  | (19 rules)   |    | plugin        |  |
+                   |  | (24 rules)   |    | plugin        |  |
                    |  +--------------+    +---------------+  |
                    +-----------------------------------------+
 ```
@@ -963,33 +1009,33 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 51 Claude Code slash commands
+|   +-- commands/           # 52 Claude Code slash commands
 |   +-- agents/             # 20 specialized agents
 |   +-- hooks/              # Real-time Detekt enforcement hooks
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
-|   +-- */SKILL.md          # 56 canonical skill definitions
-|   +-- registry.json       # L0 registry (123 entries, SHA-256 hashes)
+|   +-- */SKILL.md          # 58 canonical skill definitions
+|   +-- registry.json       # L0 registry (130 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
-|   +-- ps1/                # PowerShell (Windows) -- 24 scripts
+|   +-- ps1/                # PowerShell (Windows) -- 25 scripts
 |   +-- sh/                 # Bash (macOS/Linux) -- 32 scripts (25 cross-platform + 7 utilities)
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
-+-- mcp-server/             # MCP server (34 tools, 3 prompts, dynamic resources)
++-- mcp-server/             # MCP server (39 tools, 3 prompts, dynamic resources)
 |   +-- src/
-|   |   +-- tools/          # 38 tools: validation, analysis, metrics, audit, sync, vault, doc integrity
+|   |   +-- tools/          # 39 tools: validation, analysis, metrics, audit, sync, vault, doc integrity
 |   |   +-- types/          # Shared types (ValidationResult, AuditFinding, FindingsReport)
 |   |   +-- utils/          # Utilities (rate-limiter, jsonl-reader, gradle-parser, xml-report-reader, finding-dedup, logger, doc-scoring)
 |   |   +-- generation/     # Detekt rule parser, emitters, config-emitter
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
 |   |   +-- cli/            # CLI entrypoint for CI monitoring
-|   +-- tests/              # 95 test files -- vitest unit + integration (1504 tests)
+|   +-- tests/              # 97 test files -- vitest unit + integration (1546 tests)
 +-- detekt-rules/
-|   +-- src/main/kotlin/    # 17 hand-written AST-only Detekt rules
+|   +-- src/main/kotlin/    # 20 hand-written + 4 generated AST-only Detekt rules (24 total)
 |   +-- src/main/resources/
 |       +-- config/
 |           +-- detekt-l0-base.yml  # Distributable baseline (all rules active)
@@ -999,7 +1045,7 @@ AndroidCommonDoc/
 +-- konsist-tests/          # Konsist architecture verification tests
 +-- setup/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
-|   +-- copilot-templates/  # 40 Copilot prompt templates (generated from skills)
+|   +-- copilot-templates/  # 46 Copilot prompt templates (generated from skills)
 |   +-- copilot-agent-templates/ # 4 Copilot agent templates (generated from agent-templates)
 |   +-- agent-templates/    # 17 agent templates: PM, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, business leads, domain specialists
 |   +-- doc-templates/
@@ -1166,6 +1212,19 @@ See [layer-topology.md](docs/architecture/layer-topology.md#auto-sync) for the f
 ```
 
 The sync engine compares SHA-256 hashes and only updates changed files. Works identically for flat and chain topologies — chain mode syncs from all sources in manifest order (L0 → L1). User selections (`exclude_skills`, `exclude_categories`, `l2_specific`) are never overwritten.
+
+### Sync Conflict Detection
+
+`/sync-l0` detects local edits before overwriting to protect downstream customizations:
+
+1. Reads the local file and hashes its content (stripping L0 metadata headers)
+2. Compares the local hash against the manifest hash (what L0 wrote last sync)
+3. If they match — safe to update (file was not edited locally)
+4. If they differ — **CONFLICT**: file was edited locally, skipped with a warning
+5. `--force` overrides all conflicts and resets to the L0 version
+6. `l2_specific` in the manifest lists project-owned agents/skills that sync **never** touches, even with `--force`
+
+This means teams can safely customize synced skills without losing edits on the next sync cycle. Conflicts are reported with file paths so developers know exactly which files need manual reconciliation.
 
 See [layer-topology.md](docs/architecture/layer-topology.md) for auto-sync setup details.
 

@@ -113,7 +113,7 @@ export async function collectAllRules(
   docsDir: string,
 ): Promise<Array<{ slug: string; rule: RuleDefinition }>> {
   const mdFiles = await collectMdFiles(docsDir);
-  const results: Array<{ slug: string; rule: RuleDefinition }> = [];
+  const seen = new Map<string, { slug: string; rule: RuleDefinition }>();
 
   for (const filepath of mdFiles) {
     let raw: string;
@@ -133,11 +133,28 @@ export async function collectAllRules(
     const rules = parseRuleDefinitions(parsed.data);
 
     for (const rule of rules) {
-      results.push({ slug, rule });
+      const existing = seen.get(rule.id);
+      if (existing) {
+        // Keep the entry with the more complete detect block
+        const existingKeys = Object.keys(existing.rule.detect).length;
+        const newKeys = Object.keys(rule.detect).length;
+        if (newKeys > existingKeys) {
+          logger.warn(
+            `Rule collector: duplicate rule '${rule.id}' in '${slug}' supersedes '${existing.slug}' (more complete detect block)`,
+          );
+          seen.set(rule.id, { slug, rule });
+        } else {
+          logger.warn(
+            `Rule collector: duplicate rule '${rule.id}' in '${slug}' skipped (already seen in '${existing.slug}')`,
+          );
+        }
+      } else {
+        seen.set(rule.id, { slug, rule });
+      }
     }
   }
 
-  return results;
+  return Array.from(seen.values());
 }
 
 /**

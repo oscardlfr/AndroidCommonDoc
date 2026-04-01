@@ -14,7 +14,6 @@ copilot: true
 /test-full --module-filter "core-oauth*,core-error-oauth"
 /test-full --test-type androidUnit
 /test-full --skip-tests --min-lines 5
-/test-full --max-failures 3
 /test-full --benchmark
 /test-full --benchmark --benchmark-config main
 ```
@@ -25,7 +24,6 @@ Uses parameters from `params.json`:
 - `include-shared` -- Include shared library modules in test execution and report.
 - `test-type` -- Test type: `common`, `desktop`, `androidUnit`, `all` (default: auto-detect).
 - `module-filter` -- Filter modules by pattern (wildcards supported, default: `*`).
-- `max-failures` -- Stop after N test failures (default: 0 = run all).
 - `min-missed-lines` -- Only show classes with >= N missed lines (default: 0).
 - `skip-tests` -- Skip test execution, use existing coverage data.
 - `coverage-tool` -- Coverage tool: `jacoco`, `kover`, `auto`, `none`.
@@ -66,7 +64,6 @@ $argList = "$ARGUMENTS" -split '\s+' | Where-Object { $_ }
 $includeShared = $false
 $testType = ""
 $moduleFilter = "*"
-$maxFailures = 0
 $minLines = 0
 $skipTests = $false
 $coverageTool = ""
@@ -81,8 +78,6 @@ for ($i = 0; $i -lt $argList.Count; $i++) {
         $testType = $argList[$i + 1]; $i++
     } elseif ($arg -eq "--module-filter" -and $i + 1 -lt $argList.Count) {
         $moduleFilter = $argList[$i + 1]; $i++
-    } elseif ($arg -eq "--max-failures" -and $i + 1 -lt $argList.Count) {
-        $maxFailures = [int]$argList[$i + 1]; $i++
     } elseif ($arg -eq "--min-lines" -and $i + 1 -lt $argList.Count) {
         $minLines = [int]$argList[$i + 1]; $i++
     } elseif ($arg -eq "--skip-tests") {
@@ -99,7 +94,6 @@ for ($i = 0; $i -lt $argList.Count; $i++) {
 $params = @{
     ProjectRoot = (Get-Location).Path
     ModuleFilter = $moduleFilter
-    MaxFailures = $maxFailures
     MinMissedLines = $minLines
 }
 
@@ -122,7 +116,7 @@ if ($benchmark) { $params.Benchmark = $true; $params.BenchmarkConfig = $benchmar
 
 **On failure:**
 - Test failure details per module
-- Execution stops after `max-failures` threshold (if set)
+- Gradle build output for diagnosis
 
 ## Cross-References
 

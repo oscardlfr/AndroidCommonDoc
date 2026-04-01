@@ -130,6 +130,78 @@ describe("emitRule", () => {
     });
   });
 
+  describe("banned-import with banned_import_prefixes array", () => {
+    const rule: RuleDefinition = {
+      id: "no-mocks-in-common-tests",
+      type: "banned-import",
+      message: "Use pure Kotlin fakes in commonTest, not Mockito or MockK",
+      detect: {
+        banned_import_prefixes: ["io.mockk", "org.mockito"],
+        prefer: "pure Kotlin fake class",
+      },
+    };
+
+    it("generates || chain for multiple prefixes", () => {
+      const result = emitRule(rule)!;
+      expect(result).toContain('startsWith("io.mockk")');
+      expect(result).toContain('startsWith("org.mockito")');
+      expect(result).toContain("||");
+    });
+
+    it("still uses visitImportDirective pattern", () => {
+      const result = emitRule(rule)!;
+      expect(result).toContain("visitImportDirective");
+      expect(result).toContain("importedFqName?.asString()");
+    });
+  });
+
+  describe("banned-import with single-element prefixes array", () => {
+    it("does not emit || for single prefix", () => {
+      const rule: RuleDefinition = {
+        id: "no-java-time",
+        type: "banned-import",
+        message: "Use kotlin.time",
+        detect: {
+          banned_import_prefixes: ["java.time"],
+          prefer: "kotlin.time",
+        },
+      };
+      const result = emitRule(rule)!;
+      expect(result).toContain('startsWith("java.time")');
+      expect(result).not.toContain("||");
+    });
+  });
+
+  describe("banned-usage with banned_expression field", () => {
+    it("falls back to banned_expression when banned_initializer is missing", () => {
+      const rule: RuleDefinition = {
+        id: "no-default-dispatcher",
+        type: "banned-usage",
+        message: "Do not use Dispatchers.Default in tests",
+        detect: {
+          banned_expression: "Dispatchers.Default",
+          prefer: "injected testDispatcher",
+        },
+      };
+      const result = emitRule(rule)!;
+      expect(result).toContain('Dispatchers.Default"');
+      expect(result).toContain("visitClass");
+    });
+  });
+
+  describe("banned-import with missing detect fields", () => {
+    it("returns null when detect has no banned prefixes at all", () => {
+      const rule: RuleDefinition = {
+        id: "broken-rule",
+        type: "banned-import",
+        message: "test",
+        detect: { prefer: "y" },
+      };
+      const result = emitRule(rule);
+      expect(result).toBeNull();
+    });
+  });
+
   describe("class naming", () => {
     it("converts kebab-case rule id to PascalCase class name with Rule suffix", () => {
       const rule: RuleDefinition = {

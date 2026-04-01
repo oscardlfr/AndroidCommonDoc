@@ -23,6 +23,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { readKDocState, writeKDocState, createEmptyState, updateDocsApi } from "../utils/kdoc-state.js";
+import { decodeDokkaName, toDocSlug } from "../utils/dokka-slugs.js";
 
 // ── Args ────────────────────────────────────────────────────────────────────
 
@@ -113,11 +114,6 @@ let docsGenerated = 0;
 // For module dirs: convert CamelCase to kebab (core-common stays core-common)
 function toKebab(name: string): string {
   return name.replace(/([A-Z])/g, "-$1").toLowerCase().replace(/^-/, "").replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/-$/, "");
-}
-
-// For doc files: preserve Dokka filename as-is, only sanitize for filesystem
-function toDocSlug(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/-+/g, "-").replace(/-$/, "");
 }
 
 function generateFrontmatter(slug: string, mod: string, description: string, isHub: boolean): string {
@@ -229,7 +225,8 @@ for (const mod of moduleDirs) {
         .replace(/<h4[^>]*>(.*?)<\/h4>/gi, "#### $1\n")
         .replace(/<code[^>]*>(.*?)<\/code>/gi, "`$1`")
         .replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, "```\n$1\n```\n")
-        .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, "[$2]($1)")
+        .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, (_m, href: string, text: string) =>
+          `[${text}](${decodeDokkaName(href)})`)
         .replace(/<li[^>]*>(.*?)<\/li>/gi, "- $1\n")
         .replace(/<br\s*\/?>/gi, "\n")
         .replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, "$1\n\n")
@@ -244,8 +241,8 @@ for (const mod of moduleDirs) {
     // Strip existing frontmatter
     rawContent = rawContent.replace(/^---[\s\S]*?---\n?/, "");
 
-    // First heading as description
-    const heading = rawContent.match(/^#\s+(.+)$/m)?.[1] ?? filename;
+    // First heading as description (decode filename fallback for Dokka URL-encoding)
+    const heading = rawContent.match(/^#\s+(.+)$/m)?.[1] ?? decodeDokkaName(filename);
 
     // Truncate
     const lines = rawContent.split("\n");

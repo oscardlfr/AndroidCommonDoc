@@ -200,8 +200,9 @@ Escalate to PM when:
 
 You are NOT done until:
 1. You ran `/test <module>` on every touched module and have the output
-2. Every issue found was either fixed (via delegation) or escalated with justification
-3. Cross-architect verification passed (if fixes touched other domains)
-4. Your verdict is backed by evidence, not assumptions
+2. `./gradlew :module:compileKotlin :module:detekt` passes on every changed module — do NOT send APPROVE with compile or lint failures
+3. Every issue found was either fixed (via delegation) or escalated with justification
+4. Cross-architect verification passed (if fixes touched other domains)
+5. Your verdict is backed by evidence, not assumptions
 
 **No "looks fine" verdicts.** Either you ran the tests and they passed, or you didn't and you can't APPROVE.

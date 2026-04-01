@@ -10,6 +10,7 @@
  */
 
 import type { RuleDefinition } from "../registry/types.js";
+import { logger } from "../utils/logger.js";
 
 /** Default generated rules package. */
 const DEFAULT_GENERATED_PACKAGE = "com.androidcommondoc.detekt.rules.generated";
@@ -25,15 +26,37 @@ function toPascalCase(kebab: string): string {
 }
 
 /**
+ * Resolve the banned import prefixes from a rule's detect block.
+ * Same logic as kotlin-emitter's resolveBannedImportPrefixes.
+ */
+function resolveBannedImportPrefixes(detect: Record<string, unknown>): string[] | null {
+  const prefixes = detect.banned_import_prefixes;
+  if (Array.isArray(prefixes) && prefixes.length > 0) {
+    return prefixes.filter((p): p is string => typeof p === "string");
+  }
+  const single = detect.banned_import;
+  if (typeof single === "string") {
+    return [single];
+  }
+  return null;
+}
+
+/**
  * Generate a banned-import test class.
+ * Uses the first banned prefix for the violating test case.
  */
 function emitBannedImportTest(
   className: string,
   rule: RuleDefinition,
   pkg: string = DEFAULT_GENERATED_PACKAGE,
 ): string {
-  const banned = rule.detect.banned_import as string;
-  const prefer = rule.detect.prefer as string;
+  const prefixes = resolveBannedImportPrefixes(rule.detect);
+  if (!prefixes || prefixes.length === 0) {
+    logger.warn(`Test emitter: banned-import rule '${rule.id}' has no banned prefixes — skipping`);
+    return "";
+  }
+  const banned = prefixes[0];
+  const prefer = (rule.detect.prefer as string) ?? "com.example.compliant";
 
   return `package ${pkg}
 
@@ -125,6 +148,19 @@ class ${className}Test {
 }
 
 /**
+ * Resolve the banned initializer/expression from a rule's detect block.
+ * Same logic as kotlin-emitter's resolveBannedInitializer.
+ */
+function resolveBannedInitializer(detect: Record<string, unknown>): string | null {
+  const init = detect.banned_initializer;
+  if (typeof init === "string") return init;
+  if (Array.isArray(init) && init.length > 0 && typeof init[0] === "string") return init[0];
+  const expr = detect.banned_expression;
+  if (typeof expr === "string") return expr;
+  return null;
+}
+
+/**
  * Generate a banned-usage test class.
  */
 function emitBannedUsageTest(
@@ -132,8 +168,12 @@ function emitBannedUsageTest(
   rule: RuleDefinition,
   pkg: string = DEFAULT_GENERATED_PACKAGE,
 ): string {
-  const bannedInit = rule.detect.banned_initializer as string;
-  const prefer = rule.detect.prefer as string;
+  const bannedInit = resolveBannedInitializer(rule.detect);
+  if (!bannedInit) {
+    logger.warn(`Test emitter: banned-usage rule '${rule.id}' has no banned initializer/expression — skipping`);
+    return "";
+  }
+  const prefer = (rule.detect.prefer as string) ?? "the recommended alternative";
   const inClassExtending = rule.detect.in_class_extending as
     | string
     | undefined;
@@ -191,14 +231,19 @@ export function emitRuleTest(rule: RuleDefinition, pkg: string = DEFAULT_GENERAT
 
   const className = toPascalCase(rule.id) + "Rule";
 
+  let result: string | null;
   switch (rule.type) {
     case "banned-import":
-      return emitBannedImportTest(className, rule, pkg);
+      result = emitBannedImportTest(className, rule, pkg);
+      break;
     case "prefer-construct":
-      return emitPreferConstructTest(className, rule, pkg);
+      result = emitPreferConstructTest(className, rule, pkg);
+      break;
     case "banned-usage":
-      return emitBannedUsageTest(className, rule, pkg);
+      result = emitBannedUsageTest(className, rule, pkg);
+      break;
     default:
-      return null;
+      result = null;
   }
+  return result === "" ? null : result;
 }

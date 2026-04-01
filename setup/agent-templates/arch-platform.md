@@ -191,8 +191,10 @@ Escalate to PM when:
 
 You are NOT done until:
 1. MCP tools ran and you have structured output
-2. Every violation was either fixed or escalated with justification
-3. Cross-architect verification passed after your fixes
-4. Re-verification with MCP tools shows clean results
+2. `./gradlew :module:compileKotlin :module:detekt` passes on every changed module — do NOT send APPROVE with compile or lint failures
+3. Before approving refactors: grep call sites, expect/actual pairs, and test references for every renamed/changed symbol
+4. Every violation was either fixed or escalated with justification
+5. Cross-architect verification passed after your fixes
+6. Re-verification with MCP tools shows clean results
 
 **No "already fixed" claims without MCP tool output as evidence.**

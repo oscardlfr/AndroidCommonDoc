@@ -18,6 +18,7 @@
  */
 
 import { readFile, writeFile, mkdir, unlink, access } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { execSync } from "node:child_process";
 import path from "node:path";
 import {
@@ -38,7 +39,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Possible sync actions for a single entry */
-export type SyncAction = "add" | "update" | "remove" | "unchanged";
+export type SyncAction = "add" | "update" | "remove" | "unchanged" | "conflict";
 
 /** A single entry in the computed sync plan */
 export interface SyncPlanEntry {
@@ -53,6 +54,8 @@ export interface SyncReport {
   updated: number;
   removed: number;
   unchanged: number;
+  /** Number of files with local edits that would be overwritten (use --force to override) */
+  conflicts: number;
   skippedRemoves: number;
   errors: string[];
   warnings: string[];
@@ -63,13 +66,15 @@ export interface SyncReport {
   l0Commit?: string;
   /** Files that were removed (paths) */
   removedPaths: string[];
+  /** Files with local edits that were not overwritten (dest paths) */
+  conflictPaths: string[];
 }
 
 /** Options for sync behavior */
 export interface SyncOptions {
   /** If true, orphaned files are removed. Default: false (additive only) */
   prune?: boolean;
-  /** If true, allows removing >5 files in a single sync. Default: false */
+  /** If true, allows removing >5 files and overrides local edit conflicts. Default: false */
   force?: boolean;
   /** If true, no filesystem changes — only compute the plan */
   dryRun?: boolean;
@@ -150,6 +155,38 @@ function isL2Specific(
 }
 
 // ---------------------------------------------------------------------------
+// Local edit detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Strip L0 sync metadata from file content so that only user-authored
+ * content contributes to the hash comparison.
+ *
+ * Removes:
+ * - YAML frontmatter fields: l0_source, l0_hash, l0_synced
+ * - HTML comment L0-SYNC headers (used for command files)
+ */
+export function stripL0Metadata(content: string): string {
+  return content
+    // Strip YAML frontmatter L0 fields
+    .replace(/^l0_source:.*\n/gm, "")
+    .replace(/^l0_hash:.*\n/gm, "")
+    .replace(/^l0_synced:.*\n/gm, "")
+    // Strip HTML comment L0 headers for commands
+    .replace(/<!--\s*L0-SYNC[\s\S]*?-->\n?/g, "");
+}
+
+/**
+ * Hash content after stripping L0 metadata — produces a sha256:-prefixed
+ * string comparable to registry hashes.
+ */
+function hashContent(content: string): string {
+  const stripped = stripL0Metadata(content);
+  const hash = createHash("sha256").update(stripped).digest("hex");
+  return `sha256:${hash}`;
+}
+
+// ---------------------------------------------------------------------------
 // Diff computation
 // ---------------------------------------------------------------------------
 
@@ -159,14 +196,25 @@ function isL2Specific(
  * For each resolved entry:
  * - No checksum in manifest = "add" (new file)
  * - Matching checksum = "unchanged" (up to date)
- * - Different checksum = "update" (file changed at L0)
+ * - Different checksum = check local file:
+ *   - Local file hash matches manifest hash → safe "update"
+ *   - Local file hash differs from manifest hash → "conflict" (local edits)
+ *   - Local file missing → "add" (treat as new)
+ *   - force=true → always "update" regardless of local edits
  *
  * Entries in manifest.checksums but NOT in resolved = "remove" (orphaned)
+ *
+ * @param resolved - Registry entries to sync
+ * @param manifest - Current manifest with checksums
+ * @param projectRoot - Root of the downstream project (for reading local files)
+ * @param force - When true, treat conflicts as updates (skip local edit check)
  */
-export function computeSyncActions(
+export async function computeSyncActions(
   resolved: SkillRegistryEntry[],
   manifest: Manifest,
-): SyncPlanEntry[] {
+  projectRoot?: string,
+  force?: boolean,
+): Promise<SyncPlanEntry[]> {
   const actions: SyncPlanEntry[] = [];
 
   // Use dest paths as the canonical key — checksums are keyed by dest path
@@ -185,7 +233,20 @@ export function computeSyncActions(
       // Hash matches - unchanged
       actions.push({ registryEntry: entry, action: "unchanged", currentHash });
     } else {
-      // Hash differs - update needed
+      // L0 hash differs from manifest — update needed, but check for local edits
+      if (!force && projectRoot) {
+        const localAction = await detectLocalEdit(projectRoot, dest, currentHash);
+        if (localAction === "conflict") {
+          actions.push({ registryEntry: entry, action: "conflict", currentHash });
+          continue;
+        }
+        if (localAction === "add") {
+          // File was deleted locally — treat as add
+          actions.push({ registryEntry: entry, action: "add" });
+          continue;
+        }
+      }
+      // Safe to update (local matches manifest, or force=true, or no projectRoot)
       actions.push({ registryEntry: entry, action: "update", currentHash });
     }
   }
@@ -216,6 +277,41 @@ export function computeSyncActions(
   }
 
   return actions;
+}
+
+/**
+ * Detect whether the local file at `dest` has been edited since last sync.
+ *
+ * Reads the local file, strips L0 metadata, hashes it, and compares against
+ * the manifest checksum (`currentHash`). This tells us whether the *consumer*
+ * modified the file vs the sync engine writing it.
+ *
+ * @returns "update" if local file matches manifest (safe to overwrite),
+ *          "conflict" if local file was edited,
+ *          "add" if local file doesn't exist (was deleted locally).
+ */
+async function detectLocalEdit(
+  projectRoot: string,
+  dest: string,
+  currentHash: string,
+): Promise<"update" | "conflict" | "add"> {
+  const destFilePath = path.join(projectRoot, dest);
+  let localContent: string;
+  try {
+    localContent = await readFile(destFilePath, "utf-8");
+  } catch {
+    // File doesn't exist locally — treat as add
+    return "add";
+  }
+
+  const localHash = hashContent(localContent);
+  if (localHash === currentHash) {
+    // Local file matches what we last synced — safe to update
+    return "update";
+  }
+
+  // Local file was modified — conflict
+  return "conflict";
 }
 
 /**
@@ -666,13 +762,14 @@ export async function syncMultiSource(
 
   // Use existing sync plan + action computation
   const resolved = resolveSyncPlan(mergedRegistry, manifest);
-  const actions = computeSyncActions(resolved, manifest);
+  const actions = await computeSyncActions(resolved, manifest, projectRoot, force);
 
   const report: MultiSourceSyncReport = {
     added: 0,
     updated: 0,
     removed: 0,
     unchanged: 0,
+    conflicts: 0,
     skippedRemoves: 0,
     errors: [],
     warnings: [],
@@ -680,6 +777,7 @@ export async function syncMultiSource(
     actions,
     l0Commit: getGitCommit(resolvedPaths[orderedSources[0].layer] ?? ""),
     removedPaths: [],
+    conflictPaths: [],
     sourceCount: orderedSources.length,
     sourceCounts,
     overrides,
@@ -791,16 +889,39 @@ export async function syncMultiSource(
         break;
       }
 
+      case "conflict": {
+        const dest = destPath(registryEntry.path);
+        report.conflicts++;
+        report.conflictPaths.push(dest);
+        break;
+      }
+
       case "unchanged":
         report.unchanged++;
         break;
     }
   }
 
+  // Warn about conflicts
+  if (report.conflicts > 0) {
+    report.warnings.push(
+      `${report.conflicts} file(s) have local edits and were NOT overwritten. ` +
+      `Use --force to overwrite: ${report.conflictPaths.join(", ")}`,
+    );
+  }
+
   if (!dryRun) {
+    // Conflicted entries keep their old checksum (file wasn't updated)
+    const conflictDests = new Set(report.conflictPaths);
     const newChecksums: Record<string, string> = {};
     for (const entry of resolved) {
-      newChecksums[destPath(entry.path)] = entry.hash;
+      const dest = destPath(entry.path);
+      if (conflictDests.has(dest)) {
+        const oldHash = manifest.checksums[dest];
+        if (oldHash) newChecksums[dest] = oldHash;
+      } else {
+        newChecksums[dest] = entry.hash;
+      }
     }
 
     manifest.checksums = newChecksums;
@@ -983,13 +1104,14 @@ export async function syncL0(
 
   // Resolve what to sync and compute actions
   const resolved = resolveSyncPlan(registry, manifest);
-  const actions = computeSyncActions(resolved, manifest);
+  const actions = await computeSyncActions(resolved, manifest, projectRoot, force);
 
   const report: SyncReport = {
     added: 0,
     updated: 0,
     removed: 0,
     unchanged: 0,
+    conflicts: 0,
     skippedRemoves: 0,
     errors: [],
     warnings: [],
@@ -997,6 +1119,7 @@ export async function syncL0(
     actions,
     l0Commit: getGitCommit(l0Root),
     removedPaths: [],
+    conflictPaths: [],
   };
 
   // ── Fix #1 + #5: Count removes and apply threshold ────────────────────
@@ -1097,17 +1220,41 @@ export async function syncL0(
         break;
       }
 
+      case "conflict": {
+        const dest = destPath(registryEntry.path);
+        report.conflicts++;
+        report.conflictPaths.push(dest);
+        break;
+      }
+
       case "unchanged":
         report.unchanged++;
         break;
     }
   }
 
+  // Warn about conflicts
+  if (report.conflicts > 0) {
+    report.warnings.push(
+      `${report.conflicts} file(s) have local edits and were NOT overwritten. ` +
+      `Use --force to overwrite: ${report.conflictPaths.join(", ")}`,
+    );
+  }
+
   if (!dryRun) {
     // Update manifest checksums keyed by dest path
+    // Conflicted entries keep their old checksum (file wasn't updated)
+    const conflictDests = new Set(report.conflictPaths);
     const newChecksums: Record<string, string> = {};
     for (const entry of resolved) {
-      newChecksums[destPath(entry.path)] = entry.hash;
+      const dest = destPath(entry.path);
+      if (conflictDests.has(dest)) {
+        // Preserve old manifest checksum — file was not overwritten
+        const oldHash = manifest.checksums[dest];
+        if (oldHash) newChecksums[dest] = oldHash;
+      } else {
+        newChecksums[dest] = entry.hash;
+      }
     }
 
     manifest.checksums = newChecksums;

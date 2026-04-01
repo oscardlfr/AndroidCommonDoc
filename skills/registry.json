@@ -191,6 +191,28 @@
       }
     },
     {
+      "name": "check-outdated",
+      "type": "skill",
+      "path": "skills/check-outdated/SKILL.md",
+      "description": "Check libs.versions.toml against Maven Central for outdated dependencies. Caches results in kdoc-state.json.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:244304e50507111b2c7861efe5730f0a88ee750c2a5b4fd895c70a5d209477ed",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "check-outdated",
+        "description": "Check libs.versions.toml against Maven Central for outdated dependencies. Caches results in kdoc-state.json.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
+      }
+    },
+    {
       "name": "commit-lint",
       "type": "skill",
       "path": "skills/commit-lint/SKILL.md",
@@ -679,7 +701,7 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:51792cbeaa67caf73f0199d59dfe52d0e5fb07cd57f997183050c45e7a3afaab",
+      "hash": "sha256:52aebe665c5a3c4ede3f80040f78ddb0980cd4462a9c5dc8f3b064363365e0fb",
       "dependencies": [
         "scripts/sh/rehash-registry.sh"
       ],
@@ -1117,7 +1139,7 @@
       "description": "Run all tests sequentially with full coverage report. Use when asked to run the complete test suite or generate a full coverage report.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:a0dba98f0fd2f1813fd09e012d541367e483c34e301f036ad3ee23f0440cdd25",
+      "hash": "sha256:e277b2080045334cc490e0e0a348b6fd92e63331106362def177466f2ab576c2",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -1890,6 +1912,19 @@
       "hash": "sha256:b143fd8a124720a4c590a939573e415edfff91597fb22ba1bf747790b8a5d8d8",
       "dependencies": [],
       "frontmatter": {}
+    },
+    {
+      "name": "check-outdated",
+      "type": "command",
+      "path": ".claude/commands/check-outdated.md",
+      "description": "Check dependency versions against Maven Central (TOML parser, kdoc-state v2 cache).",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:c30da015fb0991a6a73dcbb0a253126ab9b795e0895cc2d12b60f8786a9ab172",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Check dependency versions against Maven Central (TOML parser, kdoc-state v2 cache)."
+      }
     },
     {
       "name": "commit-lint",

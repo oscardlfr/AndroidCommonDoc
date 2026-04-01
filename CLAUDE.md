@@ -73,6 +73,7 @@
 - `/validate-patterns` — code vs pattern compliance
 - `/sync-l0` — propagate skills/agents/commands to L1/L2
 - `/generate-rules` — emit Detekt rules from doc frontmatter
+- `/check-outdated` — check dependency versions against Maven Central (TOML parser, kdoc-state v2 cache)
 - `/debug` — systematic bug investigation via debugger agent
 - `/research` — ad-hoc technical research via researcher agent
 - `/map-codebase` — structured codebase analysis via codebase-mapper agent
@@ -95,4 +96,5 @@
 - Spec-driven workflow → `docs/agents/spec-driven-workflow.md`
 - Agent templates → `setup/agent-templates/` (project-manager, product-strategist, content-creator, landing-page-strategist)
 - Business doc templates → `setup/doc-templates/business/` (PRODUCT_SPEC, MARKETING, PRICING, LANDING_PAGES, COMPETITIVE)
-- MCP tools → 35 tools via ~/.mcp.json (architects and specialists use these automatically)
+- MCP tools → 39 tools via ~/.mcp.json (architects and specialists use these automatically)
+- Dependency freshness → `check-outdated` MCP tool (TOML parser, Maven Central, kdoc-state v2 cache)

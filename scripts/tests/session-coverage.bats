@@ -758,8 +758,8 @@ teardown() {
 }
 
 @test "README: 'What gets synced' lists consumer counts" {
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "57"
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "51"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "58"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "52"
 }
 
 @test "README: 'What gets synced' clarifies what is NOT synced" {
@@ -770,12 +770,12 @@ teardown() {
     grep -q "88+ sub-docs" "$README"
 }
 
-@test "README: vitest count is 1504" {
-    grep -q "1504 tests" "$README"
+@test "README: vitest count is 1546" {
+    grep -q "1546 tests" "$README"
 }
 
-@test "README: vitest files count is 95" {
-    grep -q "95 test files" "$README"
+@test "README: vitest files count is 97" {
+    grep -q "97 test files" "$README"
 }
 
 # ===========================================================================
@@ -1079,9 +1079,9 @@ teardown() {
     grep -q "^slug: spec-driven-workflow" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
-@test "README: counts match 20 agents, 53 skills" {
+@test "README: counts match 20 agents, 58 skills" {
     grep -q "20 specialized agents" "$README"
-    grep -q "53 canonical" "$README"
+    grep -q "58 canonical" "$README"
 }
 
 @test "CLAUDE.md: lists all new agents in delegation table" {
@@ -1344,8 +1344,8 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "readme-audit" "$L0_ROOT/setup/agent-templates/project-manager.md"
 }
 
-@test "README: template count is 19" {
-    grep -q "19 templates\|19 agent templates" "$L0_ROOT/README.md"
+@test "README: template count is 17" {
+    grep -q "17 templates\|17 agent templates" "$L0_ROOT/README.md"
     grep -q "arch-testing" "$L0_ROOT/README.md"
     grep -q "quality-gater" "$L0_ROOT/README.md"
     grep -q "planner" "$L0_ROOT/README.md"
@@ -1402,10 +1402,10 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "doc-templates" "$README" || grep -q "PRODUCT_SPEC" "$README"
 }
 
-@test "README: counts match 20 agents, 53 skills, 50 commands" {
+@test "README: counts match 20 agents, 58 skills, 52 commands" {
     grep -q "20 specialized agents" "$README"
-    grep -q "53 canonical" "$README"
-    # 50 commands verified via sync table
+    grep -q "58 canonical" "$README"
+    # 52 commands verified via sync table
 }
 
 # ============================================================

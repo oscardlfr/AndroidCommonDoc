@@ -47,7 +47,7 @@ node mcp-server/build/cli/monitor-sources.js --project-root /path/to/l1 --layer 
 7. **Navigation:** State-driven -- never Channel-based.
 8. **No platform deps in ViewModels:** No `Context`, `Resources`, `UIKit` imports.
 
-## Available Skills (57)
+## Available Skills (58)
 
 Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-specific files.
 
@@ -76,6 +76,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `sync-versions` | Check version alignment between KMP projects |
 | `validate-patterns` | Validate code against AndroidCommonDoc pattern standards |
 | `audit-l0` | Run coherence audit on any L0/L1/L2 layer root |
+| `check-outdated` | Check libs.versions.toml against Maven Central for outdated dependencies |
 | `sbom` | Generate CycloneDX SBOM for project deliverables |
 | `sbom-scan` | Scan SBOM for known CVE vulnerabilities using Trivy |
 | `sbom-analyze` | Analyze SBOM for dependency statistics, licenses, and concerns |
@@ -138,7 +139,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `seo` | Validate SEO metadata, structure, and discoverability |
 | `web-quality-audit` | Comprehensive web quality audit across all dimensions |
 
-## MCP Tools (38)
+## MCP Tools (39)
 
 Programmatic access via Model Context Protocol server (`mcp-server/`):
 
@@ -182,6 +183,7 @@ Programmatic access via Model Context Protocol server (`mcp-server/`):
 | `kdoc-coverage` | Measure KDoc documentation coverage on public Kotlin APIs |
 | `validate-doc-update` | Pre-write validation: duplicate detection, anti-pattern filter, size limits |
 | `check-doc-patterns` | Detect enforceable patterns without Detekt rules and rule-doc drift |
+| `check-outdated` | Check libs.versions.toml against Maven Central for outdated dependencies |
 
 ## Quality Gate Agents (5)
 

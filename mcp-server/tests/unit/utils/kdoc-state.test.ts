@@ -29,7 +29,7 @@ afterEach(() => {
 describe("createEmptyState", () => {
   it("creates valid initial state", () => {
     const state = createEmptyState();
-    expect(state.schema_version).toBe(1);
+    expect(state.schema_version).toBe(2);
     expect(state.coverage.overall_pct).toBe(0);
     expect(state.coverage.per_module).toEqual({});
     expect(state.docs_api.modules_generated).toEqual([]);

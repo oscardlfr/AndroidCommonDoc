@@ -64,8 +64,8 @@ describe('tool registration', () => {
     expect(indexContent).toContain('registerCheckDocPatternsTool');
   });
 
-  it('registers 38 tools', () => {
-    expect(indexContent).toMatch(/Registered 38 tools/);
+  it('registers 39 tools', () => {
+    expect(indexContent).toMatch(/Registered 39 tools/);
   });
 });
 
@@ -305,8 +305,12 @@ describe('quality-gater template', () => {
     expect(content).toContain('Project Rule Cross-Check');
   });
 
-  it('template version 2.0.0', () => {
-    expect(content).toContain('template_version: "2.0.0"');
+  it('template version 2.1.0', () => {
+    expect(content).toContain('template_version: "2.1.0"');
+  });
+
+  it('has architect deliberation step', () => {
+    expect(content).toContain('Architect Deliberation');
   });
 });
 
@@ -331,8 +335,12 @@ describe('quality-gate-protocol doc', () => {
     expect(content).toContain('Production File Verification');
   });
 
-  it('version bumped to 2', () => {
-    expect(content).toContain('version: 2');
+  it('version bumped to 3', () => {
+    expect(content).toContain('version: 3');
+  });
+
+  it('has architect deliberation step', () => {
+    expect(content).toContain('Architect Deliberation');
   });
 });
 

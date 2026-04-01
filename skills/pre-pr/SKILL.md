@@ -80,6 +80,33 @@ git diff "$MERGE_BASE..HEAD" -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
 Any GlobalScope or Thread.sleep match → ERROR (blocks).
 Dispatchers match → WARNING (reports but doesn't block).
 
+### Step 5.5 — Warning & suppress audit
+
+```bash
+# New @Suppress annotations in diff → ERROR (not a valid fix)
+SUPPRESS_HITS=$(git diff "$MERGE_BASE..HEAD" -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
+  | grep -cP '@Suppress\(|@SuppressWarnings\(|@file:Suppress' || true)
+
+if [ "$SUPPRESS_HITS" -gt 0 ]; then
+  echo "ERROR: $SUPPRESS_HITS new @Suppress annotation(s) found. Fix the root cause instead."
+  git diff "$MERGE_BASE..HEAD" -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
+    | grep -P '@Suppress\(|@SuppressWarnings\(|@file:Suppress'
+fi
+```
+
+New `@Suppress` → ERROR (blocks). Suppressing warnings is not a valid fix strategy. Fix the underlying issue.
+
+```bash
+# Gradle deprecation/outdated warnings (if not --skip-build)
+if [ -z "$SKIP_BUILD" ]; then
+  ./gradlew build --warning-mode all 2>&1 \
+    | grep -iE "deprecated|A newer version of .+ is available" | head -20
+fi
+```
+
+Gradle deprecation warnings → WARNING (reports, dev must acknowledge).
+"A newer version" warnings → WARNING (reports for visibility).
+
 ### Step 6 — Registry hash freshness
 
 ```bash
@@ -112,6 +139,7 @@ Report per-module pass/fail. Show failing test names on failure.
 ║ Lint resources       ✅ PASS / ❌ FAIL  ║
 ║ Architecture guards  ✅ PASS / ❌ FAIL  ║
 ║ KMP safety           ✅ PASS / ❌ FAIL  ║
+║ Warning audit        ✅ PASS / ❌ FAIL  ║
 ║ Registry hashes      ✅ PASS / ❌ FAIL  ║
 ║ Build + Tests        ✅ PASS / ❌ FAIL  ║
 ╠══════════════════════════════════════════╣
@@ -129,6 +157,7 @@ If any fail: list specific violations and stop.
 3. **Architecture violations block** — fix in the PR, no bypasses
 4. **GlobalScope / Thread.sleep block** — hard failures, not warnings
 5. **Never open a PR with known failures** — fix locally first
+6. **@Suppress annotations block** — never suppress warnings to pass checks. Fix the root cause.
 
 ## Cross-References
 

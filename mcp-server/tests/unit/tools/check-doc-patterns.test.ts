@@ -33,10 +33,11 @@ const TEST_ROOT = path.join(os.tmpdir(), "check-doc-patterns-test-" + process.pi
 const PROJECT_ROOT = path.join(TEST_ROOT, "project");
 const DOCS_DIR = path.join(PROJECT_ROOT, "docs");
 const DETEKT_DIR = path.join(PROJECT_ROOT, "detekt-rules");
-const GENERATED_DIR = path.join(
+const RULES_DIR = path.join(
   DETEKT_DIR, "src", "main", "kotlin",
-  "com", "androidcommondoc", "detekt", "rules", "generated",
+  "com", "androidcommondoc", "detekt", "rules",
 );
+const GENERATED_DIR = path.join(RULES_DIR, "generated");
 
 function ensureClean(): void {
   if (existsSync(TEST_ROOT)) {
@@ -56,6 +57,10 @@ function writeRule(fileName: string, content: string): void {
   writeFileSync(path.join(GENERATED_DIR, fileName), content, "utf-8");
 }
 
+function writeHandWrittenRule(fileName: string, content: string): void {
+  writeFileSync(path.join(RULES_DIR, fileName), content, "utf-8");
+}
+
 function fm(fields: Record<string, unknown>): string {
   const lines = ["---"];
   for (const [k, v] of Object.entries(fields)) {
@@ -63,11 +68,18 @@ function fm(fields: Record<string, unknown>): string {
       lines.push(`${k}:`);
       for (const item of v) {
         if (typeof item === "object") {
-          lines.push(`  - id: ${(item as Record<string, unknown>).id}`);
-          lines.push(`    type: ${(item as Record<string, unknown>).type}`);
-          lines.push(`    message: "${(item as Record<string, unknown>).message}"`);
+          const obj = item as Record<string, unknown>;
+          lines.push(`  - id: ${obj.id}`);
+          lines.push(`    type: ${obj.type}`);
+          lines.push(`    message: "${obj.message}"`);
           lines.push(`    detect:`);
-          lines.push(`      pattern: "${((item as Record<string, unknown>).detect as Record<string, unknown>)?.pattern}"`);
+          lines.push(`      pattern: "${(obj.detect as Record<string, unknown>)?.pattern}"`);
+          if (obj.hand_written === true) {
+            lines.push(`    hand_written: true`);
+          }
+          if (typeof obj.source_rule === "string") {
+            lines.push(`    source_rule: ${obj.source_rule}`);
+          }
         } else {
           lines.push(`  - ${item}`);
         }
@@ -256,6 +268,119 @@ describe("rule alignment", () => {
     const alignment = json.rule_doc_alignment as Array<{ rule: string; status: string }>;
 
     expect(alignment.some((a) => a.rule === "MissingRule" && a.status === "drifted")).toBe(true);
+  });
+
+  it("reports aligned when hand-written source_rule file exists", async () => {
+    writeDoc("testing/hand-written-exists.md", fm({
+      slug: "hand-written-exists",
+      category: "testing",
+      rules: [
+        { id: "SealedUiState", type: "banned-usage", message: "Use sealed interface", detect: { pattern: "data class.*UiState" }, hand_written: true, source_rule: "SealedUiStateRule.kt" },
+      ],
+    }) + "# Hand-written\n");
+
+    writeHandWrittenRule("SealedUiStateRule.kt", [
+      "package com.androidcommondoc.detekt.rules",
+      "class SealedUiStateRule : Rule() {}",
+    ].join("\n"));
+
+    const output = await callTool();
+    const json = extractJson(output);
+    const alignment = json.rule_doc_alignment as Array<{ rule: string; status: string; details?: string }>;
+
+    const entry = alignment.find((a) => a.rule === "SealedUiState");
+    expect(entry).toBeDefined();
+    expect(entry!.status).toBe("aligned");
+    expect(entry!.details).toContain("Hand-written rule:");
+  });
+
+  it("reports drifted when hand-written source_rule file is missing", async () => {
+    writeDoc("testing/hand-written-missing.md", fm({
+      slug: "hand-written-missing",
+      category: "testing",
+      rules: [
+        { id: "GhostRule", type: "banned-usage", message: "Ghost", detect: { pattern: "ghost" }, hand_written: true, source_rule: "GhostRule.kt" },
+      ],
+    }) + "# Ghost\n");
+
+    // No GhostRule.kt in the hand-written rules directory
+
+    const output = await callTool();
+    const json = extractJson(output);
+    const alignment = json.rule_doc_alignment as Array<{ rule: string; status: string; details?: string }>;
+
+    const entry = alignment.find((a) => a.rule === "GhostRule");
+    expect(entry).toBeDefined();
+    expect(entry!.status).toBe("drifted");
+    expect(entry!.details).toContain("Hand-written source_rule not found");
+  });
+});
+
+describe("API cross-refs", () => {
+  it("returns empty array when docs/api/ does not exist", async () => {
+    // No docs/api/ directory created — default fixture has no api dir
+    writeDoc("testing/coroutine-patterns.md", fm({
+      slug: "coroutine-patterns",
+      category: "testing",
+    }) + "# Coroutines\nYou MUST rethrow CancellationException.\nYou MUST use Result<T> for all operations.\n");
+
+    const output = await callTool();
+    const json = extractJson(output);
+    const crossRefs = json.api_cross_refs as Array<Record<string, unknown>>;
+
+    expect(crossRefs).toEqual([]);
+  });
+
+  it("finds symbol when present in API docs", async () => {
+    // Create docs/api/ with generated content mentioning the symbol
+    const apiDir = path.join(DOCS_DIR, "api");
+    mkdirSync(apiDir, { recursive: true });
+    writeFileSync(path.join(apiDir, "core-result.md"), [
+      "---",
+      "generated: true",
+      "---",
+      "# Result",
+      "class Result<T> { fun getOrNull(): T? }",
+      "class CancellationException : Exception()",
+    ].join("\n"), "utf-8");
+
+    writeDoc("testing/coroutine-patterns.md", fm({
+      slug: "coroutine-patterns",
+      category: "testing",
+    }) + "# Coroutines\nYou MUST rethrow CancellationException in catch blocks.\nYou MUST use Result<T> for all operations.\n");
+
+    const output = await callTool();
+    const json = extractJson(output);
+    const crossRefs = json.api_cross_refs as Array<{ referenced_symbol: string; found_in_api: boolean }>;
+
+    const cancellation = crossRefs.find((r) => r.referenced_symbol === "CancellationException");
+    expect(cancellation).toBeDefined();
+    expect(cancellation!.found_in_api).toBe(true);
+  });
+
+  it("reports missing when symbol not in API docs", async () => {
+    const apiDir = path.join(DOCS_DIR, "api");
+    mkdirSync(apiDir, { recursive: true });
+    writeFileSync(path.join(apiDir, "core-result.md"), [
+      "---",
+      "generated: true",
+      "---",
+      "# Result",
+      "class Result<T> { fun getOrNull(): T? }",
+    ].join("\n"), "utf-8");
+
+    writeDoc("testing/scope-rules.md", fm({
+      slug: "scope-rules",
+      category: "testing",
+    }) + "# Scopes\nYou MUST NEVER use GlobalScope in production code.\n");
+
+    const output = await callTool();
+    const json = extractJson(output);
+    const crossRefs = json.api_cross_refs as Array<{ referenced_symbol: string; found_in_api: boolean }>;
+
+    const globalScope = crossRefs.find((r) => r.referenced_symbol === "GlobalScope");
+    expect(globalScope).toBeDefined();
+    expect(globalScope!.found_in_api).toBe(false);
   });
 });
 

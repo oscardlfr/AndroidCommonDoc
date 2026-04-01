@@ -94,6 +94,14 @@ const CONST_RE = /\bconst\b/;
 /** Matches `data class` — constructor properties are documented by class KDoc. */
 const DATA_CLASS_RE = /\bdata\s+class\b/;
 
+/** Kotlin keywords that can never be a declaration name (rejects `class as`, etc.). */
+const KOTLIN_KEYWORDS = new Set([
+  "as", "break", "class", "continue", "do", "else", "false", "for", "fun",
+  "if", "in", "interface", "is", "null", "object", "package", "return",
+  "super", "this", "throw", "true", "try", "typealias", "typeof", "val",
+  "var", "when", "while",
+]);
+
 /**
  * Regexes for public API declarations.
  * Each captures the symbol name in group 1.
@@ -194,6 +202,9 @@ export function analyzeFile(
   let insideDataClassConstructor = false;
   let dataClassParenDepth = 0;
 
+  // Track multi-line triple-quoted strings (""" ... """)
+  let insideTripleQuote = false;
+
   /** Regex to detect lines that open a class/interface/object/enum scope. */
   const CLASS_OPENER = /\b(class|interface|object|enum)\s+\w+/;
   /** Regex to detect lines that open a function scope. */
@@ -205,13 +216,29 @@ export function analyzeFile(
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    const trimmedForQuote = line.trim();
+
+    // Track multi-line triple-quoted strings BEFORE brace/scope tracking.
+    // Braces inside raw strings (e.g., C# code in PowerShell) must not corrupt scope.
+    if (insideTripleQuote) {
+      if (trimmedForQuote.includes('"""')) {
+        insideTripleQuote = false;
+      }
+      continue;
+    }
+    // Check if this line opens a triple-quoted string that doesn't close on the same line.
+    // Count occurrences of """ — odd count means we enter a multi-line raw string.
+    const tripleQuoteMatches = trimmedForQuote.match(/"""/g);
+    if (tripleQuoteMatches && tripleQuoteMatches.length % 2 !== 0) {
+      insideTripleQuote = true;
+      // This line still has the val/var declaration — continue to pattern matching below
+    }
 
     // Detect class/fun keywords on this line (even if { comes later on a different line)
     if (!commentMap[i]) {
-      const trimmedLine = line.trim();
-      if (CLASS_OPENER.test(trimmedLine)) {
+      if (CLASS_OPENER.test(trimmedForQuote)) {
         pendingScopeType = "class";
-      } else if (FUN_OPENER.test(trimmedLine)) {
+      } else if (FUN_OPENER.test(trimmedForQuote)) {
         pendingScopeType = "function";
       }
     }
@@ -266,11 +293,18 @@ export function analyzeFile(
 
     // Strip string literal content to prevent false matches on code inside strings.
     // e.g., val script = "class WindowsHelloAuth { ... }" — "class" is inside a string.
-    const stripped = trimmed.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/"""[\s\S]*?"""/g, '""');
+    // Order matters: strip triple-quotes FIRST so """ isn't partially consumed by the
+    // double-quote regex.
+    const stripped = trimmed.replace(/"""[^]*?"""/g, '""').replace(/"(?:[^"\\]|\\.)*"/g, '""');
 
     for (const { re, type } of DECLARATION_PATTERNS) {
       const match = re.exec(stripped);
       if (match) {
+        // Reject Kotlin keywords as declaration names (e.g., `class as KClass<T>`)
+        if (match[1] && KOTLIN_KEYWORDS.has(match[1])) {
+          break;
+        }
+
         // Skip local variables: val/var inside function bodies
         if (type === "property" && currentScope === "function") {
           break;

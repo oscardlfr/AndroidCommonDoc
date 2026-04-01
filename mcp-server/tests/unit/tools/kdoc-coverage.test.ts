@@ -438,6 +438,79 @@ describe("analyzeFile", () => {
     // Only the class counts
     expect(result.total).toBe(1);
   });
+
+  it("does not match Kotlin keyword 'as' as a class name (cast expression)", () => {
+    const result = analyzeFile("Test.kt", [
+      "class Converter {",
+      "  fun convert(body: Any): String {",
+      "    val kClass = body::class as KClass<Any>",
+      "    return kClass.simpleName ?: \"\"",
+      "  }",
+      "}",
+    ].join("\n"));
+    // class Converter + fun convert only — `class as` is NOT a declaration
+    expect(result.total).toBe(2);
+    expect(result.undocumented.every(u => u.name !== "as")).toBe(true);
+  });
+
+  it("skips declarations inside multi-line triple-quoted strings", () => {
+    const result = analyzeFile("Test.kt", [
+      "class ScriptRunner {",
+      '  fun run() {',
+      '    val script = """',
+      '      public class WindowsHelloCheck {',
+      '        public static bool IsAvailable() {',
+      '          return true;',
+      '        }',
+      '      }',
+      '    """.trimIndent()',
+      "  }",
+      "}",
+    ].join("\n"));
+    // Only class ScriptRunner + fun run — C# class inside triple-quoted string is NOT counted
+    expect(result.total).toBe(2);
+    expect(result.undocumented.every(u => u.name !== "WindowsHelloCheck")).toBe(true);
+    expect(result.undocumented.every(u => u.name !== "IsAvailable")).toBe(true);
+  });
+
+  it("skips multiple triple-quoted strings with class-like content", () => {
+    const result = analyzeFile("Test.kt", [
+      "class PowerShellRunner {",
+      '  fun checkAvailability(): Boolean {',
+      '    val checkScript = """',
+      '      public class WindowsHelloCheck {',
+      '        public static bool IsAvailable() { return true; }',
+      '      }',
+      '    """.trimIndent()',
+      "    return execute(checkScript)",
+      "  }",
+      "",
+      '  fun authenticate(): String {',
+      '    val authScript = """',
+      '      public class WindowsHelloAuth {',
+      '        public static string Authenticate() { return "ok"; }',
+      '      }',
+      '    """.trimIndent()',
+      "    return execute(authScript)",
+      "  }",
+      "}",
+    ].join("\n"));
+    // class PowerShellRunner + 2 functions = 3. C# classes inside strings are NOT counted
+    expect(result.total).toBe(3);
+    expect(result.undocumented.every(u => u.name !== "WindowsHelloCheck")).toBe(true);
+    expect(result.undocumented.every(u => u.name !== "WindowsHelloAuth")).toBe(true);
+  });
+
+  it("handles triple-quoted string on same line (no multi-line)", () => {
+    const result = analyzeFile("Test.kt", [
+      'val code = """class Fake { fun m(): Int = 1 }"""',
+      "fun realFn(): Unit = Unit",
+    ].join("\n"));
+    // val code + fun realFn only — class/fun inside same-line triple-quotes are stripped
+    expect(result.total).toBe(2);
+    expect(result.undocumented.every(u => u.name !== "Fake")).toBe(true);
+    expect(result.undocumented.every(u => u.name !== "m")).toBe(true);
+  });
 });
 
 // ── Integration tests: MCP tool ──────────────────────────────────────────────

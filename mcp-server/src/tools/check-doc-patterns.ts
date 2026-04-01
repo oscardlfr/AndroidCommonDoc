@@ -35,10 +35,18 @@ interface RuleAlignment {
   details?: string;
 }
 
+interface ApiCrossRef {
+  pattern_doc: string;
+  statement: string;
+  referenced_symbol: string;
+  found_in_api: boolean;
+}
+
 interface CheckResult {
   new_rule_candidates: RuleCandidate[];
   orphaned_rules: OrphanedRule[];
   rule_doc_alignment: RuleAlignment[];
+  api_cross_refs: ApiCrossRef[];
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -245,14 +253,35 @@ function checkRuleAlignment(
 
     const rules = parseRuleDefinitions(fm.data);
     for (const rule of rules) {
-      // Hand-written rules with source_rule are aligned by definition —
-      // they don't need a generated file, they point to an existing impl.
+      // Hand-written rules with source_rule — verify the file actually exists
+      // in the hand-written rules directory (not generated/).
       if (rule.hand_written === true && typeof rule.source_rule === "string" && rule.source_rule.length > 0) {
-        alignments.push({
-          rule: rule.id,
-          status: "aligned",
-          details: `Hand-written rule: ${rule.source_rule}`,
-        });
+        const handWrittenDir = path.join(
+          detektDir, "src", "main", "kotlin",
+          "com", "androidcommondoc", "detekt", "rules",
+        );
+        const sourceFile = path.join(handWrittenDir, rule.source_rule);
+        let sourceExists = false;
+        try {
+          statSync(sourceFile);
+          sourceExists = true;
+        } catch {
+          // source_rule file not found
+        }
+
+        if (sourceExists) {
+          alignments.push({
+            rule: rule.id,
+            status: "aligned",
+            details: `Hand-written rule: ${rule.source_rule}`,
+          });
+        } else {
+          alignments.push({
+            rule: rule.id,
+            status: "drifted",
+            details: `Hand-written source_rule not found: ${rule.source_rule}`,
+          });
+        }
         continue;
       }
 
@@ -296,6 +325,77 @@ function checkRuleAlignment(
   return alignments;
 }
 
+/**
+ * Extract symbol references from normative statements in pattern docs
+ * and check whether those symbols appear in generated API docs.
+ *
+ * Graceful no-op: returns [] if apiDir does not exist.
+ */
+function crossRefApiDocs(docsDir: string, apiDir: string): ApiCrossRef[] {
+  const refs: ApiCrossRef[] = [];
+
+  // Graceful no-op when docs/api/ doesn't exist
+  let apiContent: string;
+  try {
+    const apiFiles = walkMdFiles(apiDir);
+    if (apiFiles.length === 0) return refs;
+    apiContent = apiFiles
+      .map((f) => {
+        try { return readFileSync(f, "utf-8"); } catch { return ""; }
+      })
+      .join("\n");
+  } catch {
+    return refs;
+  }
+
+  const NORMATIVE_LINE_RE = /^.*\b(MUST|NEVER|ALWAYS|FORBIDDEN|REQUIRED)\b.*$/gm;
+  const SYMBOL_RE = /\b([A-Z][a-zA-Z0-9]*(?:<[A-Z][a-zA-Z0-9]*>)?)\b/g;
+  const SKIP_WORDS = new Set([
+    "The", "This", "Each", "Use", "See", "Any", "All", "NOT",
+    "MUST", "NEVER", "ALWAYS", "FORBIDDEN", "REQUIRED",
+  ]);
+
+  for (const filepath of walkMdFiles(docsDir)) {
+    let content: string;
+    try {
+      content = readFileSync(filepath, "utf-8");
+    } catch {
+      continue;
+    }
+
+    const fm = parseFrontmatter(content);
+    if (!fm) continue;
+    if (fm.data.generated === true) continue;
+
+    const body = fm.content;
+    const seen = new Set<string>();
+    let lineMatch: RegExpExecArray | null;
+
+    while ((lineMatch = NORMATIVE_LINE_RE.exec(body)) !== null) {
+      const line = lineMatch[0].trim();
+      let symMatch: RegExpExecArray | null;
+
+      while ((symMatch = SYMBOL_RE.exec(line)) !== null) {
+        const symbol = symMatch[1];
+        if (SKIP_WORDS.has(symbol)) continue;
+
+        const key = `${path.basename(filepath)}:${symbol}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        refs.push({
+          pattern_doc: path.basename(filepath),
+          statement: line,
+          referenced_symbol: symbol,
+          found_in_api: apiContent.includes(symbol),
+        });
+      }
+    }
+  }
+
+  return refs;
+}
+
 // ── Tool registration ───────────────────────────────────────────────────────
 
 export function registerCheckDocPatternsTool(
@@ -320,14 +420,18 @@ export function registerCheckDocPatternsTool(
         const docsDir = path.join(root, "docs");
         const detektDir = path.join(root, "detekt-rules");
 
+        const apiDir = path.join(docsDir, "api");
+
         const newCandidates = findRuleCandidates(docsDir);
         const orphaned = findOrphanedRules(docsDir, detektDir);
         const alignment = checkRuleAlignment(docsDir, detektDir);
+        const apiCrossRefs = crossRefApiDocs(docsDir, apiDir);
 
         const result: CheckResult = {
           new_rule_candidates: newCandidates,
           orphaned_rules: orphaned,
           rule_doc_alignment: alignment,
+          api_cross_refs: apiCrossRefs,
         };
 
         const summary = [
@@ -336,6 +440,7 @@ export function registerCheckDocPatternsTool(
           `- **New rule candidates**: ${newCandidates.length} docs with normative language but no rules:`,
           `- **Orphaned rules**: ${orphaned.length} generated rules without source doc`,
           `- **Alignment**: ${alignment.filter((a) => a.status === "aligned").length} aligned, ${alignment.filter((a) => a.status === "drifted").length} drifted`,
+          `- **API cross-refs**: ${apiCrossRefs.filter((r) => r.found_in_api).length} found, ${apiCrossRefs.filter((r) => !r.found_in_api).length} missing`,
         ];
 
         if (newCandidates.length > 0) {
@@ -357,6 +462,14 @@ export function registerCheckDocPatternsTool(
           summary.push("", "### Drifted Rules");
           for (const d of drifted) {
             summary.push(`- **${d.rule}**: ${d.details}`);
+          }
+        }
+
+        const missingApi = apiCrossRefs.filter((r) => !r.found_in_api);
+        if (missingApi.length > 0) {
+          summary.push("", "### API Cross-Ref Gaps");
+          for (const m of missingApi) {
+            summary.push(`- **${m.referenced_symbol}** (${m.pattern_doc}): "${m.statement}"`);
           }
         }
 
