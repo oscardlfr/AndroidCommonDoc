@@ -701,7 +701,7 @@ Next steps:
 
 ## Cross-References / Referencias cruzadas
 
-- Skill: `/sync-l0` — Step 4 delegates here
+- Command: `/sync-l0` — Step 4 invokes this (CLI-direct, self-contained)
 - Skill: `/pre-pr` — run after setup to validate PR-readiness
 - Script: `setup/setup-toolkit.sh` — Steps 1 delegates here
 - Script: `setup/install-guard-tests.sh` — Step 5 delegates here
