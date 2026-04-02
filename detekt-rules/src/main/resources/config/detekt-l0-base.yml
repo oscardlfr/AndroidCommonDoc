@@ -111,3 +111,19 @@ AndroidCommonDoc:
   # Turbine is forbidden — use backgroundScope.launch + flow.toList()
   NoTurbineRule:
     active: true
+
+  # ── Code quality ────────────────────────────────────────────────────
+  # @Suppress annotations hide warnings — fix the root cause instead
+  # Only suppressions in allowedSuppressions are permitted (KMP interop, etc.)
+  # Projects can extend via their detekt.yml override
+  NoSuppressAnnotationsRule:
+    active: true
+    allowedSuppressions:
+      - UNCHECKED_CAST
+      - USELESS_CAST
+      - USELESS_IS_CHECK
+      - unused
+      - UNUSED_PARAMETER
+      - DEPRECATION
+      - OPT_IN_USAGE
+      - EagerInitialization

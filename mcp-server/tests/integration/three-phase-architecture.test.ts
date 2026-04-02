@@ -66,9 +66,9 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toMatch(/planner.*context-provider/i);
   });
 
-  it('describes Execution Team phase', () => {
-    expect(content).toMatch(/Execution Team/);
-    expect(content).toMatch(/3 architects/i);
+  it('describes Execution phase with persistent architects', () => {
+    expect(content).toMatch(/Execution/);
+    expect(content).toMatch(/architect/i);
   });
 
   it('describes Quality Gate Team phase', () => {
@@ -92,8 +92,28 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toMatch(/NEVER.*write.*code|NEVER.*codes/i);
   });
 
-  it('has pre-flight checklist', () => {
+  it('has pre-flight checklist with 5 persistent agents', () => {
     expect(content).toMatch(/Pre-Flight Checklist/i);
+    expect(content).toContain('arch-testing alive');
+    expect(content).toContain('arch-platform alive');
+    expect(content).toContain('arch-integration alive');
+  });
+
+  it('spawns 5 persistent agents at session start', () => {
+    expect(content).toContain('Agent(name="context-provider"');
+    expect(content).toContain('Agent(name="doc-updater"');
+    expect(content).toContain('Agent(name="arch-testing"');
+    expect(content).toContain('Agent(name="arch-platform"');
+    expect(content).toContain('Agent(name="arch-integration"');
+  });
+
+  it('Phase 2 uses SendMessage not TeamCreate for architects', () => {
+    expect(content).toContain('No TeamCreate needed');
+    expect(content).toContain('SendMessage(to="arch-testing"');
+  });
+
+  it('template version 3.0.0', () => {
+    expect(content).toContain('template_version: "3.0.0"');
   });
 
   it('has dev dispatch protocol', () => {

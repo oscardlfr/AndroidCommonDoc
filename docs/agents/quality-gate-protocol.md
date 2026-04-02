@@ -8,15 +8,15 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Quality gate protocol: sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit"
-version: 2
-last_updated: "2026-03"
+version: 3
+last_updated: "2026-04"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
 token_budget: 1500
 ---
 
 # Quality Gate Protocol
 
-Sequential verification that runs AFTER all 3 architects APPROVE and BEFORE commit. Each step blocks — failures must be investigated, not bypassed.
+Sequential verification that runs AFTER all 3 architects APPROVE and BEFORE commit. Starts with architect deliberation for Phase 2 context, then automated gates. Each step blocks -- failures must be investigated, not bypassed.
 
 ---
 
@@ -28,6 +28,8 @@ Architects detect → PM dispatches devs → devs implement → architects verif
 All 3 architects: APPROVE
   ↓
 Quality Gate (this protocol)
+  Step 0: Architect Deliberation (consult persistent architects)
+  Steps 1-8: Automated checks (informed by deliberation)
   ↓
 All pass → commit
 Any fail → investigate → fix → re-run
@@ -35,19 +37,44 @@ Any fail → investigate → fix → re-run
 
 ---
 
-## Gate Steps (dynamic — quality-gater discovers rules at runtime)
+## Step 0: Architect Deliberation
 
-The quality-gater does NOT use a hardcoded checklist. It discovers each project's rules by reading CLAUDE.md, asking context-provider, and running `/pre-pr` (the project's own validation pipeline).
+**Before any automated check**, the quality-gater consults all 3 persistent architects who participated in Phase 2. They hold execution context that no automated tool can infer.
+
+| Architect | quality-gater asks | Example insight |
+|-----------|-------------------|-----------------|
+| arch-testing | What was tested? Known coverage gaps? Deferred tests? | "Module X has a new use case but the test is a stub -- flag it" |
+| arch-platform | Source set changes? Platform boundary risks? Gradle config changes? | "We added an androidMain expect/actual -- verify no jvmMain duplicate" |
+| arch-integration | Cross-module impacts? DI wiring? API contract changes? | "New repo interface -- confirm Koin module registered in all targets" |
+
+The quality-gater records deliberation findings and uses them to:
+- **Prioritize** which automated steps need extra scrutiny
+- **Avoid false positives** (e.g., coverage drop is expected because code moved between modules)
+- **Catch gaps** that pass automated checks but fail in practice (e.g., shallow tests, missing DI wiring)
+
+Deliberation is **mandatory**. Skipping it voids the gate.
+
+---
+
+## Gate Steps (dynamic -- quality-gater discovers rules at runtime)
+
+The quality-gater does NOT use a hardcoded checklist. It discovers each project's rules by reading CLAUDE.md, asking context-provider, and running `/pre-pr` (the project's own validation pipeline). Architect deliberation from Step 0 informs which areas need extra attention.
 
 ### Step 1: Project Rule Discovery
-- Read CLAUDE.md → extract hard rules, constraints, patterns
+- Read CLAUDE.md -- extract hard rules, constraints, patterns
 - Ask context-provider for active Detekt rules and enforcement patterns
+- Cross-reference with architect deliberation findings from Step 0
 - Build project-specific verification checklist
 
 ### Step 2: Full Validation Pipeline (`/pre-pr`)
 - **PRIMARY enforcement step** — runs Detekt, lint-resources, commit-lint, architecture guards
 - All checks are project-configured, not hardcoded
 - **BLOCK** on any failure
+
+### Step 2.5: Warning Enforcement
+- Verify `NoSuppressAnnotationsRule` is active — `@Suppress` annotations are banned
+- Warnings must be fixed at the root cause, not suppressed
+- **BLOCK** if any `@Suppress` annotations found in changed files
 
 ### Step 3: Test Suite
 - `/test-full-parallel --fresh-daemon` — all modules must pass
@@ -113,9 +140,9 @@ arch-testing detects these via grep on new/modified test files.
 
 ## Agent Template
 
-The `quality-gater` agent template (`setup/agent-templates/quality-gater.md`) implements this protocol as a team peer in the Quality Gate Team. It runs alongside context-provider after all architects APPROVE.
+The `quality-gater` agent template (`setup/agent-templates/quality-gater.md`) implements this protocol. It consults the 3 persistent architects (Step 0) and context-provider before running automated gates (Steps 1-8).
 
-Distinct from `quality-gate-orchestrator` (L0 internal validator for toolkit consistency — script-parity, template-sync).
+Distinct from `quality-gate-orchestrator` (L0 internal validator for toolkit consistency -- script-parity, template-sync).
 
 ## Related Docs
 

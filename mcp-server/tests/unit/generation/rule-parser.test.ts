@@ -306,4 +306,92 @@ describe("collectAllRules", () => {
     const results = await collectAllRules(tmpDir);
     expect(results).toEqual([]);
   });
+
+  it("deduplicates rules with the same ID across multiple docs", async () => {
+    const doc1 = [
+      "---",
+      "scope: [testing]",
+      "sources: [junit]",
+      "targets: [android]",
+      "rules:",
+      "  - id: no-mocks-in-common-tests",
+      "    type: banned-import",
+      '    message: "Use fakes not mocks"',
+      "    detect:",
+      "      banned_import_prefixes:",
+      '        - "io.mockk"',
+      '        - "org.mockito"',
+      '      prefer: "pure Kotlin fake class"',
+      "---",
+      "# Testing Hub",
+    ].join("\n");
+
+    const doc2 = [
+      "---",
+      "scope: [testing]",
+      "sources: [junit]",
+      "targets: [android]",
+      "rules:",
+      "  - id: no-mocks-in-common-tests",
+      "    type: banned-import",
+      '    message: "Use fakes not mocks"',
+      "    detect:",
+      "      banned_import_prefixes:",
+      '        - "io.mockk"',
+      "---",
+      "# Testing Patterns",
+    ].join("\n");
+
+    await fs.writeFile(path.join(tmpDir, "testing-hub.md"), doc1);
+    await fs.writeFile(path.join(tmpDir, "testing-patterns.md"), doc2);
+
+    const results = await collectAllRules(tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].rule.id).toBe("no-mocks-in-common-tests");
+  });
+
+  it("keeps the entry with more complete detect block on duplicate", async () => {
+    // doc1 has fewer detect keys (less complete)
+    const doc1 = [
+      "---",
+      "scope: [testing]",
+      "sources: [junit]",
+      "targets: [android]",
+      "rules:",
+      "  - id: shared-rule",
+      "    type: banned-import",
+      '    message: "test"',
+      "    detect:",
+      '      banned_import: "com.bad"',
+      "---",
+      "# Doc1",
+    ].join("\n");
+
+    // doc2 has more detect keys (more complete)
+    const doc2 = [
+      "---",
+      "scope: [testing]",
+      "sources: [junit]",
+      "targets: [android]",
+      "rules:",
+      "  - id: shared-rule",
+      "    type: banned-import",
+      '    message: "test"',
+      "    detect:",
+      "      banned_import_prefixes:",
+      '        - "com.bad"',
+      '        - "com.worse"',
+      '      prefer: "com.good"',
+      "---",
+      "# Doc2",
+    ].join("\n");
+
+    await fs.writeFile(path.join(tmpDir, "aaa-doc1.md"), doc1);
+    await fs.writeFile(path.join(tmpDir, "bbb-doc2.md"), doc2);
+
+    const results = await collectAllRules(tmpDir);
+    expect(results).toHaveLength(1);
+    // The more complete detect block (doc2 with 2 keys) should win
+    expect(results[0].rule.detect).toHaveProperty("banned_import_prefixes");
+  });
 });

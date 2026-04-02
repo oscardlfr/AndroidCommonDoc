@@ -28,6 +28,20 @@ export interface PatternAlignmentState {
   last_checked: string;
 }
 
+export interface DependencyState {
+  last_checked: string;
+  cache_ttl_hours: number;
+  total_libraries: number;
+  outdated_count: number;
+  outdated: Array<{
+    alias: string;
+    group: string;
+    artifact: string;
+    current: string;
+    latest: string;
+  }>;
+}
+
 export interface KDocState {
   schema_version: number;
   last_audit: string;
@@ -39,6 +53,7 @@ export interface KDocState {
   };
   docs_api: DocsApiState;
   pattern_alignment: PatternAlignmentState;
+  dependencies: DependencyState | null;
 }
 
 // ── Paths ───────────────────────────────────────────────────────────────────
@@ -53,7 +68,13 @@ export function readKDocState(projectRoot: string): KDocState | null {
   const fp = statePath(projectRoot);
   if (!existsSync(fp)) return null;
   try {
-    return JSON.parse(readFileSync(fp, "utf-8")) as KDocState;
+    const raw = JSON.parse(readFileSync(fp, "utf-8")) as Record<string, unknown>;
+    // Migrate v1 → v2: add dependencies field if missing
+    if (!("dependencies" in raw)) {
+      (raw as Record<string, unknown>).dependencies = null;
+      (raw as Record<string, unknown>).schema_version = 2;
+    }
+    return raw as unknown as KDocState;
   } catch {
     return null;
   }
@@ -116,10 +137,18 @@ export function updatePatternAlignment(
   state.pattern_alignment.last_checked = new Date().toISOString();
 }
 
+/** Update dependencies section from check-outdated results. */
+export function updateDependencies(
+  state: KDocState,
+  data: DependencyState,
+): void {
+  state.dependencies = data;
+}
+
 /** Create empty initial state. */
 export function createEmptyState(): KDocState {
   return {
-    schema_version: 1,
+    schema_version: 2,
     last_audit: new Date().toISOString(),
     coverage: {
       overall_pct: 0,
@@ -135,5 +164,6 @@ export function createEmptyState(): KDocState {
       drifts: 0,
       last_checked: "",
     },
+    dependencies: null,
   };
 }

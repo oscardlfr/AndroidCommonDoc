@@ -24,7 +24,6 @@ $argList = "$ARGUMENTS" -split '\s+' | Where-Object { $_ }
 $includeShared = $false
 $testType = ""
 $moduleFilter = "*"
-$maxFailures = 0
 $minLines = 0
 $skipTests = $false
 $coverageTool = ""
@@ -39,8 +38,6 @@ for ($i = 0; $i -lt $argList.Count; $i++) {
         $testType = $argList[$i + 1]; $i++
     } elseif ($arg -eq "--module-filter" -and $i + 1 -lt $argList.Count) {
         $moduleFilter = $argList[$i + 1]; $i++
-    } elseif ($arg -eq "--max-failures" -and $i + 1 -lt $argList.Count) {
-        $maxFailures = [int]$argList[$i + 1]; $i++
     } elseif ($arg -eq "--min-lines" -and $i + 1 -lt $argList.Count) {
         $minLines = [int]$argList[$i + 1]; $i++
     } elseif ($arg -eq "--skip-tests") {
@@ -57,7 +54,6 @@ for ($i = 0; $i -lt $argList.Count; $i++) {
 $params = @{
     ProjectRoot = (Get-Location).Path
     ModuleFilter = $moduleFilter
-    MaxFailures = $maxFailures
     MinMissedLines = $minLines
 }
 

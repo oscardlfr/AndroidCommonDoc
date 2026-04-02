@@ -13,6 +13,7 @@ import {
   destPath,
   resolveL0Source,
   getGitCommit,
+  stripL0Metadata,
   type SyncPlanEntry,
   type SyncReport,
   type SyncOptions,
@@ -202,48 +203,49 @@ describe("computeSyncActions", () => {
   const skillB = makeEntry({ name: "coverage", type: "skill", hash: "sha256:coveragehash" });
   const commandC = makeEntry({ name: "run", type: "command", hash: "sha256:runhash" });
 
-  it("marks entries with no checksum as 'add'", () => {
+  it("marks entries with no checksum as 'add'", async () => {
     const manifest = makeManifest({ checksums: {} });
-    const actions = computeSyncActions([skillA], manifest);
+    const actions = await computeSyncActions([skillA], manifest);
     expect(actions).toHaveLength(1);
     expect(actions[0].action).toBe("add");
   });
 
-  it("marks entries with matching checksum as 'unchanged' (checksums keyed by dest path)", () => {
+  it("marks entries with matching checksum as 'unchanged' (checksums keyed by dest path)", async () => {
     // Checksums use dest path (.claude/skills/) not source path (skills/)
     const manifest = makeManifest({
       checksums: { ".claude/skills/test/SKILL.md": "sha256:testhash" },
     });
-    const actions = computeSyncActions([skillA], manifest);
+    const actions = await computeSyncActions([skillA], manifest);
     expect(actions).toHaveLength(1);
     expect(actions[0].action).toBe("unchanged");
   });
 
-  it("marks entries with different checksum as 'update' (checksums keyed by dest path)", () => {
+  it("marks entries with different checksum as 'update' (no projectRoot = no conflict check)", async () => {
     const manifest = makeManifest({
       checksums: { ".claude/skills/test/SKILL.md": "sha256:oldhash" },
     });
-    const actions = computeSyncActions([skillA], manifest);
+    // Without projectRoot, conflict detection is skipped → plain "update"
+    const actions = await computeSyncActions([skillA], manifest);
     expect(actions).toHaveLength(1);
     expect(actions[0].action).toBe("update");
     expect(actions[0].currentHash).toBe("sha256:oldhash");
   });
 
-  it("marks checksummed entries not in resolved as 'remove' (orphaned)", () => {
+  it("marks checksummed entries not in resolved as 'remove' (orphaned)", async () => {
     const manifest = makeManifest({
       checksums: {
         ".claude/skills/test/SKILL.md": "sha256:testhash",
         ".claude/commands/old-tool.md": "sha256:oldhash",
       },
     });
-    const actions = computeSyncActions([skillA], manifest);
+    const actions = await computeSyncActions([skillA], manifest);
     // skillA = unchanged, old-tool = remove
     const removeActions = actions.filter((a) => a.action === "remove");
     expect(removeActions).toHaveLength(1);
     expect(removeActions[0].registryEntry.path).toBe(".claude/commands/old-tool.md");
   });
 
-  it("regression: skills with source-path checksums (skills/) are treated as 'add', not 'unchanged'", () => {
+  it("regression: skills with source-path checksums (skills/) are treated as 'add', not 'unchanged'", async () => {
     // Before the fix: checksums were written with source paths (skills/test/SKILL.md)
     // computeSyncActions would look up by dest path (.claude/skills/test/SKILL.md) → miss
     // → mark as "add" even though file was already synced
@@ -252,7 +254,7 @@ describe("computeSyncActions", () => {
     const manifest = makeManifest({
       checksums: { "skills/test/SKILL.md": "sha256:testhash" },
     });
-    const actions = computeSyncActions([skillA], manifest);
+    const actions = await computeSyncActions([skillA], manifest);
     // Source-path checksum is not found under dest-path key → treated as "add"
     // The old source-path entry appears as orphan → "remove"
     const addActions = actions.filter((a) => a.action === "add");
@@ -264,7 +266,7 @@ describe("computeSyncActions", () => {
     expect(removeActions[0].registryEntry.path).toBe("skills/test/SKILL.md");
   });
 
-  it("regression: skills with dest-path checksums are NOT marked as orphans (the MyApp bug)", () => {
+  it("regression: skills with dest-path checksums are NOT marked as orphans (the MyApp bug)", async () => {
     // The MyApp incident: manifest had .claude/skills/ keys, engine built resolvedPaths
     // from source paths (skills/), orphan detector saw .claude/skills/ keys as unknown → delete
     // Fix: resolvedDestPaths uses destPath(entry.path), matching .claude/skills/ keys correctly
@@ -274,7 +276,7 @@ describe("computeSyncActions", () => {
         ".claude/skills/coverage/SKILL.md": "sha256:coveragehash",
       },
     });
-    const actions = computeSyncActions([skillA, skillB], manifest);
+    const actions = await computeSyncActions([skillA, skillB], manifest);
     const removeActions = actions.filter((a) => a.action === "remove");
     // Neither skill should be marked for removal
     expect(removeActions).toHaveLength(0);
@@ -567,11 +569,13 @@ Run instructions
     expect(typeof report.updated).toBe("number");
     expect(typeof report.removed).toBe("number");
     expect(typeof report.unchanged).toBe("number");
+    expect(typeof report.conflicts).toBe("number");
     expect(typeof report.skippedRemoves).toBe("number");
     expect(report.errors).toEqual([]);
     expect(report.warnings).toBeInstanceOf(Array);
     expect(report.missing).toEqual([]);
     expect(report.removedPaths).toBeInstanceOf(Array);
+    expect(report.conflictPaths).toBeInstanceOf(Array);
     expect(report.actions).toBeInstanceOf(Array);
   });
 
@@ -1041,6 +1045,298 @@ describe("syncL0 manifest preservation", () => {
     // These should be DIFFERENT (updated by sync)
     expect(updated.last_synced).not.toBe(manifest.last_synced);
     expect(Object.keys(updated.checksums).length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// stripL0Metadata
+// ---------------------------------------------------------------------------
+
+describe("stripL0Metadata", () => {
+  it("strips YAML frontmatter l0_ fields", () => {
+    const input = `---
+name: test
+l0_source: /path/to/l0
+l0_hash: sha256:abc123
+l0_synced: 2026-03-15T12:00:00Z
+description: "A skill"
+---
+
+# Body`;
+    const result = stripL0Metadata(input);
+    expect(result).not.toContain("l0_source:");
+    expect(result).not.toContain("l0_hash:");
+    expect(result).not.toContain("l0_synced:");
+    expect(result).toContain("name: test");
+    expect(result).toContain("description: \"A skill\"");
+    expect(result).toContain("# Body");
+  });
+
+  it("strips HTML comment L0-SYNC headers", () => {
+    const input = `<!-- L0-SYNC
+  l0_source: /path/to/l0
+  l0_hash: sha256:abc123
+  l0_synced: 2026-03-15T12:00:00Z
+-->
+# /run - Run the project
+
+Instructions`;
+    const result = stripL0Metadata(input);
+    expect(result).not.toContain("L0-SYNC");
+    expect(result).not.toContain("l0_source:");
+    expect(result).toContain("# /run - Run the project");
+    expect(result).toContain("Instructions");
+  });
+
+  it("returns content unchanged when no L0 metadata present", () => {
+    const input = `---
+name: test
+---
+
+# Body`;
+    expect(stripL0Metadata(input)).toBe(input);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Conflict detection (local edit protection)
+// ---------------------------------------------------------------------------
+
+describe("computeSyncActions conflict detection", () => {
+  let projectRoot: string;
+
+  beforeEach(async () => {
+    projectRoot = await mkdtemp(join(tmpdir(), "sync-conflict-"));
+  });
+
+  afterEach(async () => {
+    await rm(projectRoot, { recursive: true, force: true });
+  });
+
+  it("local file matches manifest hash → safe 'update'", async () => {
+    // Simulate: L0 updated the skill (new registry hash), but local file
+    // is untouched since last sync (local content hashes to manifest checksum)
+    const { createHash } = await import("node:crypto");
+
+    // The "original" source content (what was synced last time)
+    const originalSource = `---
+name: test
+description: "Run tests"
+---
+
+# Test skill body
+`;
+    // Materialized version (with L0 metadata injected)
+    const materialized = `---
+name: test
+description: "Run tests"
+l0_source: /path/to/l0
+l0_hash: sha256:oldhash
+l0_synced: 2026-03-15T12:00:00Z
+---
+
+# Test skill body
+`;
+    // Hash of the original source (what the manifest stores)
+    const manifestHash = `sha256:${createHash("sha256").update(originalSource).digest("hex")}`;
+
+    // Write the materialized file to the project
+    await mkdir(join(projectRoot, ".claude", "skills", "test"), { recursive: true });
+    await writeFile(
+      join(projectRoot, ".claude", "skills", "test", "SKILL.md"),
+      materialized,
+    );
+
+    const entry = makeEntry({ name: "test", type: "skill", hash: "sha256:newhash" });
+    const manifest = makeManifest({
+      checksums: { ".claude/skills/test/SKILL.md": manifestHash },
+    });
+
+    // stripL0Metadata(materialized) should produce the original source
+    // so its hash should match manifestHash → safe update
+    const actions = await computeSyncActions([entry], manifest, projectRoot);
+    expect(actions).toHaveLength(1);
+    expect(actions[0].action).toBe("update");
+  });
+
+  it("local file differs from manifest hash → 'conflict'", async () => {
+    const { createHash } = await import("node:crypto");
+
+    const originalSource = `---
+name: test
+description: "Run tests"
+---
+
+# Test skill body
+`;
+    const manifestHash = `sha256:${createHash("sha256").update(originalSource).digest("hex")}`;
+
+    // User edited the file locally (added a line)
+    const editedContent = `---
+name: test
+description: "Run tests"
+l0_source: /path/to/l0
+l0_hash: sha256:oldhash
+l0_synced: 2026-03-15T12:00:00Z
+---
+
+# Test skill body
+
+## My custom additions
+Some local notes
+`;
+
+    await mkdir(join(projectRoot, ".claude", "skills", "test"), { recursive: true });
+    await writeFile(
+      join(projectRoot, ".claude", "skills", "test", "SKILL.md"),
+      editedContent,
+    );
+
+    const entry = makeEntry({ name: "test", type: "skill", hash: "sha256:newhash" });
+    const manifest = makeManifest({
+      checksums: { ".claude/skills/test/SKILL.md": manifestHash },
+    });
+
+    const actions = await computeSyncActions([entry], manifest, projectRoot);
+    expect(actions).toHaveLength(1);
+    expect(actions[0].action).toBe("conflict");
+  });
+
+  it("--force overrides conflict → 'update'", async () => {
+    const { createHash } = await import("node:crypto");
+
+    const originalSource = `---
+name: test
+description: "Run tests"
+---
+
+# Test skill body
+`;
+    const manifestHash = `sha256:${createHash("sha256").update(originalSource).digest("hex")}`;
+
+    // User edited the file
+    const editedContent = `---
+name: test
+description: "Run tests"
+l0_source: /path/to/l0
+l0_hash: sha256:oldhash
+l0_synced: 2026-03-15T12:00:00Z
+---
+
+# Test skill body - EDITED
+`;
+
+    await mkdir(join(projectRoot, ".claude", "skills", "test"), { recursive: true });
+    await writeFile(
+      join(projectRoot, ".claude", "skills", "test", "SKILL.md"),
+      editedContent,
+    );
+
+    const entry = makeEntry({ name: "test", type: "skill", hash: "sha256:newhash" });
+    const manifest = makeManifest({
+      checksums: { ".claude/skills/test/SKILL.md": manifestHash },
+    });
+
+    // force=true → skip conflict detection → plain "update"
+    const actions = await computeSyncActions([entry], manifest, projectRoot, true);
+    expect(actions).toHaveLength(1);
+    expect(actions[0].action).toBe("update");
+  });
+
+  it("no local file (deleted) → 'add' (not conflict)", async () => {
+    // File doesn't exist on disk — user deleted it
+    const entry = makeEntry({ name: "test", type: "skill", hash: "sha256:newhash" });
+    const manifest = makeManifest({
+      checksums: { ".claude/skills/test/SKILL.md": "sha256:oldhash" },
+    });
+
+    const actions = await computeSyncActions([entry], manifest, projectRoot);
+    expect(actions).toHaveLength(1);
+    expect(actions[0].action).toBe("add");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// syncL0 conflict integration
+// ---------------------------------------------------------------------------
+
+describe("syncL0 conflict integration", () => {
+  let projectRoot: string;
+  let l0Root: string;
+
+  beforeEach(async () => {
+    projectRoot = await mkdtemp(join(tmpdir(), "sync-conflict-int-"));
+    l0Root = await mkdtemp(join(tmpdir(), "sync-conflict-l0-"));
+
+    await mkdir(join(l0Root, "skills", "test"), { recursive: true });
+    await writeFile(
+      join(l0Root, "skills", "test", "SKILL.md"),
+      `---\nname: test\ndescription: "Run tests"\n---\n\n# Test skill body\n`,
+    );
+  });
+
+  afterEach(async () => {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(l0Root, { recursive: true, force: true });
+  });
+
+  it("reports conflicts and preserves locally edited files", async () => {
+    // First sync: populate files + checksums
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
+    await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify(manifest, null, 2));
+    await syncL0(projectRoot, l0Root);
+
+    // User edits the synced file
+    const skillPath = join(projectRoot, ".claude", "skills", "test", "SKILL.md");
+    const synced = await readFile(skillPath, "utf-8");
+    await writeFile(skillPath, synced + "\n## My local notes\n");
+
+    // L0 updates the source
+    await writeFile(
+      join(l0Root, "skills", "test", "SKILL.md"),
+      `---\nname: test\ndescription: "Run tests v2"\n---\n\n# Test skill body v2\n`,
+    );
+
+    // Second sync should detect conflict
+    const report = await syncL0(projectRoot, l0Root);
+
+    expect(report.conflicts).toBe(1);
+    expect(report.conflictPaths).toContain(".claude/skills/test/SKILL.md");
+    expect(report.warnings.some(w => w.includes("local edits"))).toBe(true);
+
+    // The file should NOT have been overwritten — local edits preserved
+    const afterSync = await readFile(skillPath, "utf-8");
+    expect(afterSync).toContain("My local notes");
+  });
+
+  it("force flag overrides conflicts in full sync", async () => {
+    // First sync
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
+    await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify(manifest, null, 2));
+    await syncL0(projectRoot, l0Root);
+
+    // User edits the synced file
+    const skillPath = join(projectRoot, ".claude", "skills", "test", "SKILL.md");
+    const synced = await readFile(skillPath, "utf-8");
+    await writeFile(skillPath, synced + "\n## My local notes\n");
+
+    // L0 updates the source
+    await writeFile(
+      join(l0Root, "skills", "test", "SKILL.md"),
+      `---\nname: test\ndescription: "Run tests v2"\n---\n\n# Test skill body v2\n`,
+    );
+
+    // Force sync should overwrite
+    const report = await syncL0(projectRoot, l0Root, { force: true });
+
+    expect(report.conflicts).toBe(0);
+    expect(report.conflictPaths).toHaveLength(0);
+    expect(report.updated).toBeGreaterThan(0);
+
+    // The file SHOULD have been overwritten
+    const afterSync = await readFile(skillPath, "utf-8");
+    expect(afterSync).not.toContain("My local notes");
+    expect(afterSync).toContain("Test skill body v2");
   });
 });
 

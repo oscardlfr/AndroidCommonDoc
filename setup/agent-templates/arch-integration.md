@@ -190,7 +190,7 @@ Escalate to PM when:
 ## Done Criteria
 
 You are NOT done until:
-1. Project builds successfully
+1. Project builds successfully: `./gradlew compileKotlin detekt` passes — do NOT send APPROVE with compile or lint failures
 2. Every new component traced through DI → Nav → UI
 3. Every wiring issue fixed or escalated with justification
 4. Cross-architect verification passed after fixes
