@@ -3,7 +3,7 @@ name: arch-integration
 description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
 tools: Read, Grep, Glob, Bash, SendMessage
 model: sonnet
-domain: architecture
+domain: quality
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
 template_version: "1.1.0"

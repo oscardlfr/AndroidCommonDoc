@@ -1079,8 +1079,8 @@ teardown() {
     grep -q "^slug: spec-driven-workflow" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
-@test "README: counts match 20 agents, 58 skills" {
-    grep -q "20 specialized agents" "$README"
+@test "README: counts match 37 agents, 58 skills" {
+    grep -q "37 specialized agents" "$README"
     grep -q "58 canonical" "$README"
 }
 
@@ -1162,13 +1162,13 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     done
 }
 
-@test "agents: all 20 agents have domain frontmatter" {
+@test "agents: all 37 agents have domain frontmatter" {
     for agent in $L0_ROOT/.claude/agents/*.md; do
         grep -q "^domain:" "$agent" || { echo "MISSING domain: $agent"; return 1; }
     done
 }
 
-@test "agents: all 20 agents have intent frontmatter" {
+@test "agents: all 37 agents have intent frontmatter" {
     for agent in $L0_ROOT/.claude/agents/*.md; do
         grep -q "^intent:" "$agent" || { echo "MISSING intent: $agent"; return 1; }
     done
@@ -1402,8 +1402,8 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "doc-templates" "$README" || grep -q "PRODUCT_SPEC" "$README"
 }
 
-@test "README: counts match 20 agents, 58 skills, 52 commands" {
-    grep -q "20 specialized agents" "$README"
+@test "README: counts match 37 agents, 58 skills, 52 commands" {
+    grep -q "37 specialized agents" "$README"
     grep -q "58 canonical" "$README"
     # 52 commands verified via sync table
 }

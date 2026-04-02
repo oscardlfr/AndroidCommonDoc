@@ -54,6 +54,12 @@
 - Every doc: `scope`, `sources`, `targets`, `category`, `slug`
 - Cross-references use relative paths — no absolute paths between subdirectories
 
+### Agent templates: dual-location (MUST keep in sync)
+- `setup/agent-templates/` is the SOURCE for agent templates (PM, quality-gater, architects, etc.)
+- `.claude/agents/` contains COPIES that the registry scans and `/sync-l0` distributes
+- When editing a template: ALWAYS update `setup/agent-templates/X.md` first, then copy to `.claude/agents/X.md`
+- Regenerate registry after any template change: `node mcp-server/build/cli/generate-registry.js`
+
 ### Vault sync is fragile
 - Run `validate-vault` before every sync (0 duplicates, 0 homogeneity errors)
 - Vault files: `lowercase-kebab-case` — uppercase causes ghost nodes in Obsidian
