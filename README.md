@@ -30,7 +30,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
 - **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, architecture guards, and dependency freshness
-- **20 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
+- **37 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
 - **17 agent templates** for the 3-phase team model -- project-manager, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, plus business and domain specialist templates. Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
 
 Install once, use across all your projects.
@@ -117,9 +117,9 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 | What | Destination | Count |
 |------|-------------|-------|
 | Skills | `.claude/skills/*/SKILL.md` | 58 |
-| Agents | `.claude/agents/*.md` | 20 |
+| Agents | `.claude/agents/*.md` | 37 |
 | Commands | `.claude/commands/*.md` | 52 |
-| **Total** | | **130 entries** |
+| **Total** | | **147 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -127,7 +127,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 130 L0 entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 147 L0 entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -613,7 +613,7 @@ See [Team Topology](docs/agents/team-topology.md) for full details.
 
 ## Agents
 
-20 specialized agents in `.claude/agents/` + 17 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
+37 specialized agents in `.claude/agents/` + 17 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
 
 ### Production Agents (synced via /sync-l0)
 
@@ -990,7 +990,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (130 entries,    |   |
+                   |  | SKILL.md |    | (147 entries,    |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -1017,13 +1017,13 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 52 Claude Code slash commands
-|   +-- agents/             # 20 specialized agents
+|   +-- commands/           # 54 Claude Code slash commands
+|   +-- agents/             # 37 specialized agents
 |   +-- hooks/              # Real-time enforcement hooks (8 hooks: Detekt, README, registry, quality-gate, doc-freshness, agent-delegation, plan-context)
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
 |   +-- */SKILL.md          # 58 canonical skill definitions
-|   +-- registry.json       # L0 registry (130 entries, SHA-256 hashes)
+|   +-- registry.json       # L0 registry (147 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/

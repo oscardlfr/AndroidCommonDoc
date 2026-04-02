@@ -3,7 +3,7 @@ name: arch-platform
 description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
 tools: Read, Grep, Glob, Bash, SendMessage
 model: sonnet
-domain: architecture
+domain: quality
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
 template_version: "1.1.0"

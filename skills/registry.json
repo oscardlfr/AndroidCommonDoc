@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generated": "2026-03-30T19:54:33.504Z",
-  "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
+  "generated": "2026-04-02T10:56:49.728Z",
+  "l0_root": "C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc",
   "entries": [
     {
       "name": "accessibility",
@@ -1016,7 +1016,7 @@
       "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:6c5f923b65df1de97fb6907e21e361ed43ac249208e65c7c266eb2cd6b9eb020",
+      "hash": "sha256:097042f426825c2eaa6bb8c3430416fd90e65f0a3cb3a11f547ab2cec7fee595",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
@@ -1355,6 +1355,95 @@
       }
     },
     {
+      "name": "arch-integration",
+      "type": "agent",
+      "path": ".claude/agents/arch-integration.md",
+      "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:a07dc72d3454faed2c5b27688350206734ef4ccb52933675acd13bfdf3d8b3b2",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "arch-integration",
+        "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "architecture",
+        "intent": [
+          "integration",
+          "wiring",
+          "DI",
+          "navigation",
+          "compilation"
+        ],
+        "token_budget": 4000,
+        "template_version": "1.1.0",
+        "skills": [
+          "test",
+          "extract-errors"
+        ]
+      }
+    },
+    {
+      "name": "arch-platform",
+      "type": "agent",
+      "path": ".claude/agents/arch-platform.md",
+      "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:d1b0f7eaf52a87c3a927c0c61faf410330e2efa5f21358a72dbf0bd7ea44210c",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "arch-platform",
+        "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "architecture",
+        "intent": [
+          "platform",
+          "KMP",
+          "source-sets",
+          "encoding"
+        ],
+        "token_budget": 4000,
+        "template_version": "1.1.0",
+        "skills": [
+          "verify-kmp",
+          "validate-patterns"
+        ]
+      }
+    },
+    {
+      "name": "arch-testing",
+      "type": "agent",
+      "path": ".claude/agents/arch-testing.md",
+      "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:3fb1ac86b6946958bf5afcbc6c7d133dc778a2c37bca15cd186a1b44065bc740",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "arch-testing",
+        "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "architecture",
+        "intent": [
+          "testing",
+          "TDD",
+          "coverage",
+          "test-quality"
+        ],
+        "token_budget": 4000,
+        "template_version": "1.1.0",
+        "skills": [
+          "test",
+          "test-full-parallel",
+          "coverage"
+        ]
+      }
+    },
+    {
       "name": "beta-readiness-agent",
       "type": "agent",
       "path": ".claude/agents/beta-readiness-agent.md",
@@ -1407,6 +1496,58 @@
         "skills": [
           "map-codebase"
         ]
+      }
+    },
+    {
+      "name": "content-creator",
+      "type": "agent",
+      "path": ".claude/agents/content-creator.md",
+      "description": "Drafts developer-focused content for build-in-public marketing. Creates posts for Reddit, Twitter/X, forums, and changelogs. Customize {{PRODUCT_NAME}} and tone for your project.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:5979279e0a97c1c7246b5b751450f70821376c5c2792e7c18bba7ebce7e8c53f",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "content-creator",
+        "description": "Drafts developer-focused content for build-in-public marketing. Creates posts for Reddit, Twitter/X, forums, and changelogs. Customize {{PRODUCT_NAME}} and tone for your project.",
+        "tools": "Read, Grep, Glob, WebSearch, SendMessage",
+        "model": "sonnet",
+        "token_budget": 3000,
+        "template_version": "1.0.0",
+        "domain": "marketing",
+        "intent": [
+          "post",
+          "blog",
+          "social",
+          "changelog",
+          "marketing",
+          "content"
+        ]
+      }
+    },
+    {
+      "name": "context-provider",
+      "type": "agent",
+      "path": ".claude/agents/context-provider.md",
+      "description": "Cross-layer context agent. Reads docs, specs, MCP tools, memory across projects. Provides context to any department. Read-only — never modifies files.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:c317883b7fdfdbdfaed229135da7186d9f4c55db4f03e50e24c3990e105da5f8",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "context-provider",
+        "description": "Cross-layer context agent. Reads docs, specs, MCP tools, memory across projects. Provides context to any department. Read-only — never modifies files.",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "infrastructure",
+        "intent": [
+          "context",
+          "rules",
+          "patterns",
+          "state"
+        ],
+        "token_budget": 2000,
+        "template_version": "2.0.0"
       }
     },
     {
@@ -1522,6 +1663,91 @@
       }
     },
     {
+      "name": "doc-migrator",
+      "type": "agent",
+      "path": ".claude/agents/doc-migrator.md",
+      "description": "Sporadic team agent for migrating project docs to L0 patterns. Triggered by QG frontmatter failures, doc-alignment drift, or manual /audit-docs. Creates hubs, splits oversized docs, adds frontmatter, fixes references.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:1f35c4e173c7f491f6b7853f8f14b18892b92aff703e88f9bd88ae81ab100eca",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "doc-migrator",
+        "description": "Sporadic team agent for migrating project docs to L0 patterns. Triggered by QG frontmatter failures, doc-alignment drift, or manual /audit-docs. Creates hubs, splits oversized docs, adds frontmatter, fixes references.",
+        "tools": "Read, Grep, Glob, Bash, Write, Edit, SendMessage",
+        "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "docs",
+          "migrate",
+          "frontmatter",
+          "split",
+          "hub"
+        ],
+        "token_budget": 4000,
+        "template_version": "1.1.0"
+      }
+    },
+    {
+      "name": "doc-updater",
+      "type": "agent",
+      "path": ".claude/agents/doc-updater.md",
+      "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Follows L0 patterns (frontmatter, line limits, hub structure).",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:ac2cffb2aa20d1f19d460a59d1b6e7a1192efb9e54c3af7ebde792e27b58a1d4",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "doc-updater",
+        "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Follows L0 patterns (frontmatter, line limits, hub structure).",
+        "tools": "Read, Write, Edit, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "docs",
+          "changelog",
+          "memory",
+          "roadmap"
+        ],
+        "token_budget": 2000,
+        "template_version": "2.0.0",
+        "skills": [
+          "audit-docs",
+          "readme-audit",
+          "commit-lint"
+        ]
+      }
+    },
+    {
+      "name": "feature-domain-specialist",
+      "type": "agent",
+      "path": ".claude/agents/feature-domain-specialist.md",
+      "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:d42a4d9f5715b701ec5b4e40d2160797b8eea0b113c74644937eaab7b4bfc2fe",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "{{DOMAIN}}-specialist",
+        "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
+        "tools": "Read, Grep, Glob, Bash",
+        "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "domain",
+          "architecture",
+          "compliance"
+        ],
+        "token_budget": 3000,
+        "template_version": "1.0.0",
+        "memory": "project",
+        "skills": [
+          "test",
+          "validate-patterns"
+        ]
+      }
+    },
+    {
       "name": "full-audit-orchestrator",
       "type": "agent",
       "path": ".claude/agents/full-audit-orchestrator.md",
@@ -1575,6 +1801,143 @@
       }
     },
     {
+      "name": "landing-page-strategist",
+      "type": "agent",
+      "path": ".claude/agents/landing-page-strategist.md",
+      "description": "Designs landing page copy, structure, and conversion flow. Use when planning public-facing web presence, optimizing CTAs, or improving SEO for product pages.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:d24e88b7557e37c39b472711e7e65171cbc01c08b1bd14b023d4211693de959e",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "landing-page-strategist",
+        "description": "Designs landing page copy, structure, and conversion flow. Use when planning public-facing web presence, optimizing CTAs, or improving SEO for product pages.",
+        "tools": "Read, Grep, Glob, WebSearch, SendMessage",
+        "model": "sonnet",
+        "token_budget": 3000,
+        "template_version": "1.0.0",
+        "domain": "marketing",
+        "intent": [
+          "landing",
+          "page",
+          "conversion",
+          "copy",
+          "seo",
+          "cta"
+        ]
+      }
+    },
+    {
+      "name": "marketing-lead",
+      "type": "agent",
+      "path": ".claude/agents/marketing-lead.md",
+      "description": "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:36e1ea7df2f15e7483632b35dcc525e1a6c7c620f45a6f4d8bb76ec9b27146ae",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "marketing-lead",
+        "description": "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists.",
+        "tools": "Read, Grep, Glob, Bash, TeamCreate, SendMessage, TaskCreate, TaskList",
+        "model": "sonnet",
+        "domain": "marketing",
+        "intent": [
+          "campaign",
+          "content",
+          "marketing",
+          "launch"
+        ],
+        "token_budget": 5000,
+        "template_version": "1.0.0"
+      }
+    },
+    {
+      "name": "module-lifecycle",
+      "type": "agent",
+      "path": ".claude/agents/module-lifecycle.md",
+      "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:36707a25b16caff372b8020374394b3c057b6557fc28f3c662edb86163f17008",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "module-lifecycle",
+        "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
+        "tools": "Read, Grep, Glob, Bash, Write",
+        "model": "sonnet",
+        "domain": "infrastructure",
+        "intent": [
+          "module",
+          "create",
+          "deprecate",
+          "lifecycle"
+        ],
+        "token_budget": 2000,
+        "template_version": "1.0.0",
+        "memory": "project",
+        "skills": [
+          "verify-kmp",
+          "test"
+        ]
+      }
+    },
+    {
+      "name": "planner",
+      "type": "agent",
+      "path": ".claude/agents/planner.md",
+      "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:db06627d51354d53587f990e7f50898935f313144b283e72fc15e36efe272b89",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "planner",
+        "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "plan",
+          "scope",
+          "breakdown",
+          "estimate"
+        ],
+        "token_budget": 4000,
+        "template_version": "1.1.0"
+      }
+    },
+    {
+      "name": "platform-auditor",
+      "type": "agent",
+      "path": ".claude/agents/platform-auditor.md",
+      "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:de2adfed088431a66de1bce92fcd86579350330666ea27648e4a0fb97e53dc66",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "platform-auditor",
+        "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
+        "tools": "Read, Grep, Glob, Bash",
+        "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "coherence",
+          "cross-module",
+          "architecture",
+          "audit"
+        ],
+        "token_budget": 2000,
+        "template_version": "1.0.0",
+        "memory": "project",
+        "skills": [
+          "verify-kmp",
+          "validate-patterns"
+        ]
+      }
+    },
+    {
       "name": "privacy-auditor",
       "type": "agent",
       "path": ".claude/agents/privacy-auditor.md",
@@ -1603,6 +1966,93 @@
       }
     },
     {
+      "name": "product-lead",
+      "type": "agent",
+      "path": ".claude/agents/product-lead.md",
+      "description": "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:470baae6c8d42323c3eff0025ec72790aff44ba212c89271566e48ffced69fb2",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "product-lead",
+        "description": "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code.",
+        "tools": "Read, Grep, Glob, Bash, TeamCreate, SendMessage, TaskCreate, TaskList",
+        "model": "sonnet",
+        "domain": "business",
+        "intent": [
+          "product",
+          "spec",
+          "pricing",
+          "roadmap",
+          "prioritize"
+        ],
+        "token_budget": 5000,
+        "template_version": "1.0.0"
+      }
+    },
+    {
+      "name": "product-strategist",
+      "type": "agent",
+      "path": ".claude/agents/product-strategist.md",
+      "description": "Analyzes feature ideas against business goals using ICE scoring. Produces prioritized backlog with rationale. Customize {{PRODUCT_NAME}} and business constraints for your project.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:02361c38a8bc1351d5884e46f4ae2f8d7fed76a867d01bb2491c3ce59e077fc4",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "product-strategist",
+        "description": "Analyzes feature ideas against business goals using ICE scoring. Produces prioritized backlog with rationale. Customize {{PRODUCT_NAME}} and business constraints for your project.",
+        "tools": "Read, Grep, Glob, WebSearch, WebFetch, SendMessage",
+        "model": "sonnet",
+        "token_budget": 3000,
+        "template_version": "1.0.0",
+        "domain": "business",
+        "intent": [
+          "prioritize",
+          "roadmap",
+          "features",
+          "scoring",
+          "backlog",
+          "pricing",
+          "tiers"
+        ]
+      }
+    },
+    {
+      "name": "project-manager",
+      "type": "agent",
+      "path": ".claude/agents/project-manager.md",
+      "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:3ed6a62c29271cb097be7e65ac513a21d63f1f9a2a4d900a30a3148095cd135c",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "project-manager",
+        "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
+        "tools": "Read, Grep, Glob, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList",
+        "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "orchestrate",
+          "plan",
+          "assign",
+          "escalate",
+          "coordinate"
+        ],
+        "token_budget": 5000,
+        "template_version": "3.0.0",
+        "memory": "project",
+        "skills": [
+          "pre-pr",
+          "commit-lint",
+          "git-flow",
+          "extract-errors"
+        ]
+      }
+    },
+    {
       "name": "quality-gate-orchestrator",
       "type": "agent",
       "path": ".claude/agents/quality-gate-orchestrator.md",
@@ -1623,6 +2073,32 @@
           "validators"
         ],
         "memory": "project"
+      }
+    },
+    {
+      "name": "quality-gater",
+      "type": "agent",
+      "path": ".claude/agents/quality-gater.md",
+      "description": "Quality Gate Team peer. Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:d9cb9e4822e09c76de6975f5da2d4d6cd2e34231c87d785c42df0ce75239c8ab",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "quality-gater",
+        "description": "Quality Gate Team peer. Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "gate",
+          "verify",
+          "pre-pr",
+          "coverage",
+          "detekt"
+        ],
+        "token_budget": 3000,
+        "template_version": "2.1.0"
       }
     },
     {

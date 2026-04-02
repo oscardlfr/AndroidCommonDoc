@@ -3,7 +3,7 @@ name: arch-testing
 description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
 tools: Read, Grep, Glob, Bash, SendMessage
 model: sonnet
-domain: architecture
+domain: quality
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
 template_version: "1.1.0"

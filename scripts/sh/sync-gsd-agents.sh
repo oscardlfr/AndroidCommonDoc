@@ -168,7 +168,9 @@ tools: ${gsd_tools}
 
 ${body}"
 
-    dest_file="$GSD_AGENTS_DIR/${name}.md"
+    # Use source filename (not name: field) so parity check matches
+    source_basename=$(basename "$agent_file")
+    dest_file="$GSD_AGENTS_DIR/${source_basename}"
 
     # Compare with existing
     if [[ -f "$dest_file" ]]; then
