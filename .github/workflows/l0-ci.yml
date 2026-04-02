@@ -25,6 +25,19 @@ jobs:
     name: README Audit
     uses: ./.github/workflows/readme-audit.yml
 
+  check-outdated:
+    name: Check Outdated
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - run: cd mcp-server && npm ci && npm run build
+      - name: Check dependency freshness
+        run: node mcp-server/build/cli/check-outdated.js . --format summary || true
+
   agent-parity:
     name: Agent Parity
     uses: ./.github/workflows/reusable-agent-parity.yml
@@ -191,6 +204,7 @@ jobs:
     needs:
       - commit-lint
       - readme-audit
+      - check-outdated
       - agent-parity
       - copilot-parity
       - shell-tests
@@ -201,7 +215,7 @@ jobs:
     steps:
       - name: Check results
         run: |
-          # commit-lint only runs on PRs — treat skipped as pass
+          # commit-lint and check-outdated only run on PRs — treat skipped as pass
           results=(
             "${{ needs.readme-audit.result }}"
             "${{ needs.agent-parity.result }}"
@@ -214,6 +228,11 @@ jobs:
           commit_lint="${{ needs.commit-lint.result }}"
           if [[ "$commit_lint" != "success" && "$commit_lint" != "skipped" ]]; then
             echo "❌ commit-lint: $commit_lint"
+            exit 1
+          fi
+          check_outdated="${{ needs.check-outdated.result }}"
+          if [[ "$check_outdated" != "success" && "$check_outdated" != "skipped" ]]; then
+            echo "❌ check-outdated: $check_outdated"
             exit 1
           fi
           for r in "${results[@]}"; do

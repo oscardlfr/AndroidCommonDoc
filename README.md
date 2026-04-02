@@ -29,7 +29,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
-- **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, and architecture guards
+- **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, architecture guards, and dependency freshness
 - **20 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
 - **17 agent templates** for the 3-phase team model -- project-manager, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, plus business and domain specialist templates. Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
 
@@ -266,7 +266,7 @@ The `/full-audit` skill consolidates all quality checks into a single deduplicat
 
 ### How it works
 
-1. **Wave 1 (Fast Static)** -- `commit-lint`, `lint-resources`, `verify-kmp`, `pattern-lint`, `module-health`, `dependency-graph`, `unused-resources`, `gradle-config-lint`, `string-completeness` (free, parallel)
+1. **Wave 1 (Fast Static)** -- `commit-lint`, `lint-resources`, `verify-kmp`, `pattern-lint`, `module-health`, `dependency-graph`, `unused-resources`, `gradle-config-lint`, `string-completeness`, `check-outdated` (free, parallel)
 2. **Wave 2 (Architecture)** -- `release-guardian`, `quality-gate-orchestrator`, `cross-platform-validator`, `ui-specialist`, `pattern-coverage`, `l0-diff`, `api-surface-diff`, `migration-validator`, `compose-preview-audit`, `proguard-validator` (agent + MCP tools)
 3. **Wave 3 (Testing & Security)** -- `coverage`, `test-specialist`, `sbom-scan`, `sync-versions`, `code-metrics` (may need Gradle)
 4. **Wave 4 (Deep, `--deep` only)** -- `beta-readiness`, `test-full`, `privacy-auditor`, `api-rate-limit-auditor`
@@ -350,13 +350,14 @@ Findings are persisted to `.androidcommondoc/findings-log.jsonl` with resolution
 
 ### Warning Enforcement
 
-Three layers prevent `@Suppress` gaming (devs hiding warnings instead of fixing them):
+Four layers prevent `@Suppress` gaming and enforce quality discipline:
 
 1. **Detekt rule** (`NoSuppressAnnotationsRule`): blocks `@Suppress` annotations whose reason is not in the allowlist. Default allowlist covers legitimate KMP interop (`UNCHECKED_CAST`, `DEPRECATION`, `unused`, `OPT_IN_USAGE`, `EagerInitialization`). Projects extend via `allowedSuppressions` in `detekt.yml`.
 2. **`/pre-pr` Step 5.5**: diff-based detection — scans the PR diff for NEW `@Suppress` annotations introduced by this change, blocking even if the Detekt rule was not configured.
-3. **`quality-gater` Step 2.5**: blocks deprecation warnings and outdated dependency warnings that agents might otherwise ignore.
+3. **`/pre-pr` Step 5.7**: dependency freshness check — runs `check-outdated` CLI and blocks on critical version drift.
+4. **`quality-gater` Step 2.5**: blocks deprecation warnings and outdated dependency warnings that agents might otherwise ignore. **Step 10** writes a PASS stamp (30 min expiry) consumed by the `quality-gate-pre-commit` hook — commits are blocked unless the gate passed recently.
 
-This three-layer approach catches suppressions at build time (Detekt), at PR time (diff scan), and at quality gate time (deliberation), closing the loop on warning evasion.
+This four-layer approach catches suppressions at build time (Detekt), dependency drift and diff issues at PR time, and quality-gate stamp enforcement at commit time.
 
 ### Generated Rules (from pattern doc frontmatter)
 
@@ -429,6 +430,7 @@ Real-time pattern enforcement and context injection during AI-assisted developme
 | `agent-delegation-reminder.js` | Task start | Nudges the agent to delegate to specialized agents instead of doing everything inline |
 | `readme-pre-commit.sh` | PreToolUse (git commit) | Validates README counts match filesystem before commit |
 | `registry-pre-commit.sh` | PreToolUse (git commit) | Validates registry.json hashes before commit |
+| `quality-gate-pre-commit.sh` | PreToolUse (git commit) | Blocks commit unless a fresh quality-gate PASS stamp exists (30 min expiry) |
 
 ---
 
@@ -791,7 +793,7 @@ These tools operate on AndroidCommonDoc's own documentation, vault, and toolkit 
 
 ## Reusable CI Workflows
 
-7 `workflow_call` workflows any Android or KMP project can reference:
+8 `workflow_call` workflows any Android or KMP project can reference:
 
 ```yaml
 jobs:
@@ -826,6 +828,12 @@ jobs:
 
   agent-parity:
     uses: <org>/AndroidCommonDoc/.github/workflows/reusable-agent-parity.yml@master
+
+  check-outdated:
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-check-outdated.yml@master
+    with:
+      project_root: "."
+      fail_on_outdated: false   # non-blocking by default
 ```
 
 See `setup/github-workflows/ci-template.yml` for a full consumer project template.
@@ -1011,7 +1019,7 @@ AndroidCommonDoc/
 +-- .claude/
 |   +-- commands/           # 52 Claude Code slash commands
 |   +-- agents/             # 20 specialized agents
-|   +-- hooks/              # Real-time Detekt enforcement hooks
+|   +-- hooks/              # Real-time enforcement hooks (8 hooks: Detekt, README, registry, quality-gate, doc-freshness, agent-delegation, plan-context)
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
 |   +-- */SKILL.md          # 58 canonical skill definitions
@@ -1032,8 +1040,8 @@ AndroidCommonDoc/
 |   |   +-- generation/     # Detekt rule parser, emitters, config-emitter
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
-|   |   +-- cli/            # CLI entrypoint for CI monitoring
-|   +-- tests/              # 97 test files -- vitest unit + integration (1546 tests)
+|   |   +-- cli/            # CLI entrypoints: check-outdated (dependency freshness, exit 0/1/2), CI monitoring
+|   +-- tests/              # 97 test files -- vitest unit + integration (1599 tests)
 +-- detekt-rules/
 |   +-- src/main/kotlin/    # 20 hand-written + 4 generated AST-only Detekt rules (24 total)
 |   +-- src/main/resources/
@@ -1071,6 +1079,7 @@ AndroidCommonDoc/
 |   +-- reusable-architecture-guards.yml     # workflow_call: Konsist guards
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
+|   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
 +-- docs/                   # 15 hub docs, 88+ sub-docs, 16 guides, 12 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/

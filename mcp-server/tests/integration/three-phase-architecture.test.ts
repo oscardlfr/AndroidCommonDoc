@@ -547,3 +547,48 @@ describe('doc-template.md — hub/split rule enforcement', () => {
     expect(content).toMatch(/[Aa]gent templates.*same limits|templates.*300 lines/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 16. Quality-gater stamp enforcement (Step 10 + hook)
+// ---------------------------------------------------------------------------
+describe('quality-gater template — stamp enforcement', () => {
+  const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'quality-gater.md'), 'utf-8');
+
+  it('has Step 10 (stamp writer)', () => {
+    expect(content).toMatch(/Step 10.*stamp/i);
+  });
+
+  it('mentions .androidcommondoc/quality-gate.stamp', () => {
+    expect(content).toContain('.androidcommondoc/quality-gate.stamp');
+  });
+
+  it('stamp is conditional on PASS', () => {
+    expect(content).toMatch(/If ALL steps passed/i);
+    expect(content).toMatch(/If ANY step FAILED.*do NOT/i);
+  });
+
+  it('stamp contains verdict, timestamp, and steps_passed', () => {
+    expect(content).toContain('"verdict":"PASS"');
+    expect(content).toContain('"timestamp"');
+    expect(content).toContain('"steps_passed"');
+  });
+
+  it('Step 10 appears in report table', () => {
+    expect(content).toMatch(/\| 10\. Stamp/);
+  });
+
+  it('quality-gate hook file exists', () => {
+    const hookPath = path.join(ROOT, '.claude/hooks/quality-gate-pre-commit.sh');
+    expect(fs.existsSync(hookPath)).toBe(true);
+  });
+
+  it('quality-gate hook is registered in settings.json', () => {
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(ROOT, '.claude/settings.json'), 'utf-8')
+    );
+    const preToolUse = settings.hooks?.PreToolUse ?? [];
+    const bashHooks = preToolUse.find((h: any) => h.matcher === 'Bash');
+    const hookCommands = bashHooks?.hooks?.map((h: any) => h.command) ?? [];
+    expect(hookCommands.some((c: string) => c.includes('quality-gate-pre-commit.sh'))).toBe(true);
+  });
+});

@@ -107,6 +107,17 @@ fi
 Gradle deprecation warnings → WARNING (reports, dev must acknowledge).
 "A newer version" warnings → WARNING (reports for visibility).
 
+### Step 5.7 — Dependency freshness
+
+```bash
+if [ -f "gradle/libs.versions.toml" ]; then
+  node "$ANDROID_COMMON_DOC/mcp-server/build/cli/check-outdated.js" "$(pwd)" --format summary
+fi
+```
+
+Outdated critical deps (major/minor bumps) --> WARNING (reports for visibility).
+Does NOT block -- version updates are a separate task, not a PR gate.
+
 ### Step 6 — Registry hash freshness
 
 ```bash
@@ -140,6 +151,7 @@ Report per-module pass/fail. Show failing test names on failure.
 ║ Architecture guards  ✅ PASS / ❌ FAIL  ║
 ║ KMP safety           ✅ PASS / ❌ FAIL  ║
 ║ Warning audit        ✅ PASS / ❌ FAIL  ║
+║ Dep freshness        ⚠️ INFO / ⏭️ SKIP  ║
 ║ Registry hashes      ✅ PASS / ❌ FAIL  ║
 ║ Build + Tests        ✅ PASS / ❌ FAIL  ║
 ╠══════════════════════════════════════════╣

@@ -285,7 +285,7 @@ export interface CheckOutdatedResult {
   from_cache: boolean;
 }
 
-function buildResult(
+export function buildResult(
   mavenResults: MavenResult[],
   fromCache: boolean,
 ): CheckOutdatedResult {
@@ -323,7 +323,7 @@ function buildResult(
   };
 }
 
-function formatSummary(result: CheckOutdatedResult): string {
+export function formatSummary(result: CheckOutdatedResult): string {
   const lines: string[] = [];
   lines.push(
     `Dependency check: ${result.status} (${result.outdated_count} outdated / ${result.total_libraries} total)`,

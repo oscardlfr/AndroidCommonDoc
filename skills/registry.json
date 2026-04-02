@@ -701,7 +701,7 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:52aebe665c5a3c4ede3f80040f78ddb0980cd4462a9c5dc8f3b064363365e0fb",
+      "hash": "sha256:35719bb2d0fa13c24c2ebb605f62218bebcfab625acc75bc2ef8a458d9f699bb",
       "dependencies": [
         "scripts/sh/rehash-registry.sh"
       ],

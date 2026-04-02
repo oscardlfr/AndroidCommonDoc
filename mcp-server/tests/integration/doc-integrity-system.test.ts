@@ -450,6 +450,32 @@ describe('cross-references', () => {
   });
 });
 
+// ── 14.5. /pre-pr Step 5.7 — check-outdated ─────────────────────────────────
+
+describe('/pre-pr has Step 5.7 referencing check-outdated', () => {
+  const content = readFile(path.join(SKILLS_DIR, 'pre-pr/SKILL.md'));
+
+  it('has Step 5.7 heading', () => {
+    expect(content).toContain('Step 5.7');
+  });
+
+  it('Step 5.7 references Dependency freshness', () => {
+    expect(content).toContain('Dependency freshness');
+  });
+
+  it('Step 5.7 references check-outdated CLI', () => {
+    expect(content).toContain('check-outdated.js');
+  });
+
+  it('Step 5.7 checks for libs.versions.toml existence', () => {
+    expect(content).toContain('libs.versions.toml');
+  });
+
+  it('Dep freshness appears in summary table', () => {
+    expect(content).toContain('Dep freshness');
+  });
+});
+
 // ── 15. Test file coverage ───────────────────────────────────────────────────
 
 describe('test files exist for all new components', () => {
