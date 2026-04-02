@@ -170,6 +170,20 @@ If changed files touch Compose/UI code:
 3. **TDD**: failing test FIRST (RED), then fix (GREEN)
 4. **FALSE GREEN**: test passes before code change → REJECT
 
+### Step 10: Write quality-gate stamp (if PASS)
+
+If ALL steps passed:
+```bash
+mkdir -p .androidcommondoc
+cat > .androidcommondoc/quality-gate.stamp << STAMP
+{"verdict":"PASS","timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","steps_passed":9}
+STAMP
+```
+
+If ANY step FAILED: do NOT write or update the stamp. The pre-commit hook will block the commit.
+
+**The stamp is your PASS/FAIL signal to the enforcement layer.** Without it, no commit is possible.
+
 ## Report Format
 
 ```
@@ -194,6 +208,7 @@ If changed files touch Compose/UI code:
 | 7. docs/api/ | PASS/WARN/SKIP | fresh/stale (skip if no docs/api/) |
 | 8. Rule Cross-Check | PASS/FAIL | {n}/{total} rules verified |
 | 9. UI Tests | PASS/FAIL/SKIP | {details} (skip if no Compose) |
+| 10. Stamp | WRITTEN/SKIPPED | .androidcommondoc/quality-gate.stamp |
 
 ### Blocking Issues (if FAIL)
 - {step}: {issue} — {suggested action}
