@@ -204,17 +204,17 @@ Escalate to PM when:
 
 ```
 // WRONG — pipe buffers output, background task never reports "done", agent hangs
-Bash("scripts/sh/gradle-run.sh :module:test | tail -20", run_in_background=true)
-Bash("scripts/sh/gradle-run.sh :module:test | grep FAILED", run_in_background=true)
+Bash("/test module | tail -20", run_in_background=true)
+Bash("/test module | grep FAILED", run_in_background=true)
 
-// CORRECT — use project scripts without pipe; filter in a follow-up call if needed
-Bash("scripts/sh/gradle-run.sh :module:test", run_in_background=true)
-// Then in a separate call: Bash("rtk grep FAILED build/test-results/")
+// CORRECT — invoke the skill without pipe; it already applies RTK filtering
+/test module
+/test-full-parallel
 ```
 
-**Rule**: pipe operators (`| tail`, `| head`, `| grep`, `| tee`) on long-running commands BUFFER the output stream. The background task notification never fires. The agent hangs indefinitely.
+**Rule**: pipe operators (`| tail`, `| head`, `| grep`, `| tee`) on skill/script invocations BUFFER the output stream. The background task notification never fires. The agent hangs indefinitely.
 
-**Also**: always use project scripts (`scripts/sh/gradle-run.sh`, `/test`, `/test-full-parallel`) — **never raw `./gradlew`**. Scripts apply RTK filtering and save 80-90% tokens.
+**Also**: always use L0 skills (`/test`, `/test-full-parallel`, `/coverage`) — **never raw `./gradlew` or scripts directly**. Skills handle RTK filtering, output formatting, and 80-90% token savings.
 
 ## Done Criteria
 

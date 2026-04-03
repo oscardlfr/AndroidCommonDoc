@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-03T14:38:05.511Z",
+  "generated": "2026-04-03T14:38:59.598Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1420,7 +1420,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:2d981361ce597d0efcec3cc71f3c0a2236be08e9430e69dfb4d763f3e382669c",
+      "hash": "sha256:715bde47ce72723cbf171ae16f9ec6103cea2a775a5d71c3d60e8612f6e06f59",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
