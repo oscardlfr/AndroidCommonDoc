@@ -18,7 +18,7 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 24 custo
 
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
-- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 25 cross-platform pairs + 6 Bash-only utilities
+- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 25 cross-platform pairs + 7 Bash-only utilities
 - **AI agent skills** for Claude Code and GitHub Copilot -- 58 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 20 hand-written + 4 generated AST-only rules (24 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, and security patterns
@@ -842,7 +842,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Scripts
 
-25 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 7 Bash-only utilities (`check-agent-parity`, `check-detekt-coverage`, `copilot-parity`, `install-git-hooks`, `rehash-registry`, `run-benchmarks`, `validate-agent-templates`).
+25 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 7 Bash-only utilities (`check-agent-parity`, `check-detekt-coverage`, `install-git-hooks`, `readme-audit`, `rehash-registry`, `sync-gsd-agents`, `validate-agent-templates`).
 
 ### Core Scripts
 
@@ -899,7 +899,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-15 domain hubs, 88+ sub-docs, 16 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+15 domain hubs, 88+ sub-docs, 17 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1017,7 +1017,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 54 Claude Code slash commands
+|   +-- commands/           # 52 Claude Code slash commands
 |   +-- agents/             # 37 specialized agents
 |   +-- hooks/              # Real-time enforcement hooks (8 hooks: Detekt, README, registry, quality-gate, doc-freshness, agent-delegation, plan-context)
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
@@ -1041,7 +1041,7 @@ AndroidCommonDoc/
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
 |   |   +-- cli/            # CLI entrypoints: check-outdated (dependency freshness, exit 0/1/2), CI monitoring
-|   +-- tests/              # 97 test files -- vitest unit + integration (1599 tests)
+|   +-- tests/              # 99 test files -- vitest unit + integration (1634 tests)
 +-- detekt-rules/
 |   +-- src/main/kotlin/    # 20 hand-written + 4 generated AST-only Detekt rules (24 total)
 |   +-- src/main/resources/
@@ -1053,7 +1053,7 @@ AndroidCommonDoc/
 +-- konsist-tests/          # Konsist architecture verification tests
 +-- setup/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
-|   +-- copilot-templates/  # 46 Copilot prompt templates (generated from skills)
+|   +-- copilot-templates/  # 44 Copilot prompt templates (generated from skills)
 |   +-- copilot-agent-templates/ # 4 Copilot agent templates (generated from agent-templates)
 |   +-- agent-templates/    # 17 agent templates: PM, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, business leads, domain specialists
 |   +-- doc-templates/
@@ -1080,7 +1080,7 @@ AndroidCommonDoc/
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
-+-- docs/                   # 15 hub docs, 88+ sub-docs, 16 guides, 12 agent workflow docs
++-- docs/                   # 15 hub docs, 88+ sub-docs, 17 guides, 12 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/
