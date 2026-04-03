@@ -7,8 +7,8 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "3-phase team model with 5 persistent agents. Planning → Execution → Quality Gate. Phases are lightweight — persistent agents carry context across all three."
-version: 2
+description: "3-phase team model with 5 session team peers. Planning → Execution → Quality Gate. Phases are lightweight — session team peers carry context across all three."
+version: 3
 last_updated: "2026-04"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
 token_budget: 1500
@@ -20,19 +20,20 @@ Three sequential phases, each lightweight. Five **persistent agents** live outsi
 
 ---
 
-## Persistent Agents (5)
+## Session Team Peers (5)
 
-All five are spawned ONCE at session start and stay alive across all phases:
+All five are added to the session team ONCE at session start and stay alive across all phases:
 
 ```
 Session Start
-  PM: Agent(name="context-provider", run_in_background=true)   → reads project ONCE
-  PM: Agent(name="doc-updater", run_in_background=true)        → ready for doc updates
-  PM: Agent(name="arch-testing", run_in_background=true)       → testing domain
-  PM: Agent(name="arch-platform", run_in_background=true)      → platform domain
-  PM: Agent(name="arch-integration", run_in_background=true)   → integration domain
+  PM: TeamCreate("session")
+  PM: Agent(name="context-provider", team_name="session", run_in_background=true)   → reads project ONCE
+  PM: Agent(name="doc-updater", team_name="session", run_in_background=true)        → ready for doc updates
+  PM: Agent(name="arch-testing", team_name="session", run_in_background=true)       → testing domain
+  PM: Agent(name="arch-platform", team_name="session", run_in_background=true)      → platform domain
+  PM: Agent(name="arch-integration", team_name="session", run_in_background=true)   → integration domain
 
-All agents in all phases: SendMessage(to="<agent-name>")
+All agents in all phases: SendMessage(to="<agent-name>")  ← team peers always reachable
 ```
 
 | Agent | Role | Used in |
@@ -43,18 +44,18 @@ All agents in all phases: SendMessage(to="<agent-name>")
 | arch-platform | Source sets, Gradle, platform boundaries | Phase 2, 3 |
 | arch-integration | Cross-module deps, DI, API contracts | Phase 2, 3 |
 
-**Why persistent**: architects accumulate Phase 2 execution context. Quality-gater in Phase 3 can ask "what changed?" and get a real answer from the agents who did the work. Re-spawning per phase loses this.
+**Why TeamCreate**: team peers don't go "idle" the same way as background agents — no idle/dead confusion, no re-spawning with "v2" suffixes. Quality-gater in Phase 3 joins the same team and can SendMessage directly to architects. Context is preserved across all phases.
 
-**Rotation**: for long sessions (5+ waves), PM spawns fresh instances to prevent context window fill.
+**Context rotation**: for very long sessions (7+ waves), re-spawn with SAME name AND SAME team_name: `Agent(name="arch-platform", team_name="session", ...)` — replaces the old peer in-team. Never use a "v2" suffix.
 
-### Why Persistent Architects
+### Why Session Team Peers
 
-Previously, architects were created per Phase 2 and destroyed at phase end. This caused three problems:
-- **Quality-gater couldn't ask architects about Phase 2 decisions** — the agents that made those decisions no longer existed by Phase 3
-- **PM bypassed architects for "simple" tasks** — no TeamCreate overhead tempted PM to skip architectural review
-- **Cross-phase context was lost** — each phase started from scratch, repeating project discovery
+Previously, architects were background agents (`run_in_background=true`, no team). After each turn they went "idle" — the PM confused idle with dead, leading to re-spawns with "v2" suffixes and lost cross-phase context.
 
-Now architects persist like context-provider. Quality-gater Step 1.5 consults them before reporting, and PM sends work directly via SendMessage instead of creating teams.
+Now all 5 are `TeamCreate("session")` peers. Three advantages:
+- **No idle/dead confusion** — team peers are always reachable via SendMessage, no "v2" re-spawning
+- **Quality-gater has direct access** — joins the session team in Phase 3, SendMessages architects directly
+- **Cross-phase context preserved** — architects accumulate Phase 2 knowledge, quality-gater Step 1.5 can ask "what changed?" and get a real answer
 
 ## Overview
 
@@ -131,7 +132,7 @@ Phase 3 — Quality Gate (temporary quality-gater)
 **Temporary agent**: quality-gater (spawned, then dismissed after PASS/FAIL)
 
 **Flow**:
-1. PM spawns quality-gater: `Agent(name="quality-gater", ...)`
+1. PM adds quality-gater to session team: `Agent(name="quality-gater", team_name="session", ...)`
 2. **Architect Deliberation** -- quality-gater consults all 3 persistent architects:
    - `SendMessage(to="arch-testing")` -- what was tested, known gaps, coverage concerns
    - `SendMessage(to="arch-platform")` -- source set changes, platform boundary risks
@@ -152,8 +153,8 @@ See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 
 - **PM is sole Agent() spawner** -- teammates can't use Agent() in in-process mode (#31977)
 - **Architects**: Read, Grep, Glob, Bash, SendMessage (NO Write/Edit/Agent)
-- **5 persistent agents** -- spawned once at session start: context-provider, doc-updater, arch-testing, arch-platform, arch-integration. Rotated for long sessions (5+ waves).
-- **No TeamCreate for Phase 2** -- architects are already alive. PM sends plan via SendMessage. Eliminates team creation/dissolution overhead.
+- **5 session team peers** -- added to `TeamCreate("session")` at start: context-provider, doc-updater, arch-testing, arch-platform, arch-integration. For very long sessions (7+ waves), re-spawn with same name AND same team_name.
+- **No new TeamCreate for Phase 2** -- architects are already in the session team. PM sends plan via SendMessage. No additional team creation needed.
 - **Phase 3 deliberation is mandatory** -- quality-gater MUST consult all 3 architects before running automated checks. Skipping deliberation voids the gate.
 - **PM FORBIDDEN from launching devs directly** -- all devs dispatched only when an architect requests via SendMessage.
 - **Project-specific agents MUST be in routing table** -- guardians, validators, domain specialists. If the PM routing table doesn't list a domain, architects can't request specialists for it.

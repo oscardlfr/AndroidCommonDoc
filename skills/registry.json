@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-03T13:39:25.044Z",
+  "generated": "2026-04-03T14:29:05.172Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -2026,7 +2026,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:89e160e31f65a0fb696d19e3d64e0db8e28909c47b92516a80aa73054062fb91",
+      "hash": "sha256:b7ac30cd385c3987f6ad8f8d8870f817ba594246ff1cc770148c0ee7a1deea2b",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
@@ -2042,7 +2042,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "3.0.0",
+        "template_version": "4.0.0",
         "memory": "project",
         "skills": [
           "pre-pr",

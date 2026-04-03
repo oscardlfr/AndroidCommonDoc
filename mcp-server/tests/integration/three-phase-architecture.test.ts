@@ -71,8 +71,8 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toMatch(/architect/i);
   });
 
-  it('describes Quality Gate Team phase', () => {
-    expect(content).toMatch(/Quality Gate Team/);
+  it('describes Quality Gate phase', () => {
+    expect(content).toMatch(/Quality Gate/);
     expect(content).toMatch(/quality-gater/);
   });
 
@@ -92,28 +92,28 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toMatch(/NEVER.*write.*code|NEVER.*codes/i);
   });
 
-  it('has pre-flight checklist with 5 persistent agents', () => {
+  it('has pre-flight checklist with session team setup', () => {
     expect(content).toMatch(/Pre-Flight Checklist/i);
-    expect(content).toContain('arch-testing alive');
-    expect(content).toContain('arch-platform alive');
-    expect(content).toContain('arch-integration alive');
+    expect(content).toContain('TeamCreate("session")');
+    expect(content).toContain('added to session team');
   });
 
-  it('spawns 5 persistent agents at session start', () => {
+  it('spawns 5 session team agents at session start', () => {
     expect(content).toContain('Agent(name="context-provider"');
     expect(content).toContain('Agent(name="doc-updater"');
     expect(content).toContain('Agent(name="arch-testing"');
     expect(content).toContain('Agent(name="arch-platform"');
     expect(content).toContain('Agent(name="arch-integration"');
+    expect(content).toContain('team_name="session"');
   });
 
   it('Phase 2 uses SendMessage not TeamCreate for architects', () => {
-    expect(content).toContain('No TeamCreate needed');
+    expect(content).toContain('session team peers');
     expect(content).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 3.0.0', () => {
-    expect(content).toContain('template_version: "3.0.0"');
+  it('template version 4.0.0', () => {
+    expect(content).toContain('template_version: "4.0.0"');
   });
 
   it('has dev dispatch protocol', () => {
