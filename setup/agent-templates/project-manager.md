@@ -138,7 +138,7 @@ SendMessage(to="arch-testing", summary="test written",
 
 See [Team Topology](docs/agents/team-topology.md) for full details.
 
-**Phase 1 — Planning Team**: `TeamCreate("planning")` → planner only. Skip for simple tasks.
+**Phase 1 — Planning Team**: `TeamCreate("planning-{project-slug}")` → planner only. Skip for simple tasks.
 Planner uses `SendMessage(to="context-provider")` to get project state (context-provider is a session team peer).
 
 **Plan delivery**: Planner writes the plan to `.planning/PLAN.md` (not via SendMessage — large messages get truncated to idle notification summaries). After planner notifies via SendMessage, PM reads the plan with `Read(".planning/PLAN.md")`.
