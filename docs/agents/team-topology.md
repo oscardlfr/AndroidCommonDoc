@@ -16,7 +16,7 @@ token_budget: 1500
 
 # Team Topology: 3-Phase Model
 
-Three sequential phases, each lightweight. Five **persistent agents** live outside phases for the entire session, carrying context across all three.
+Three sequential phases, each lightweight. Five **session team peers** live in the `session` team for the entire session, carrying context across all three.
 
 ---
 
@@ -105,7 +105,7 @@ Phase 3 — Quality Gate (temporary quality-gater)
 
 **Purpose**: Implement the plan with architect-verified quality.
 
-**No TeamCreate** -- architects are already alive as persistent agents. PM sends work directly via SendMessage.
+**No TeamCreate** -- architects are already session team peers. PM sends work directly via SendMessage.
 
 **Flow**:
 1. PM `SendMessage(to="arch-testing/platform/integration")` with plan assignments
@@ -121,7 +121,7 @@ Phase 3 — Quality Gate (temporary quality-gater)
 
 **Wave pattern**: For large tasks, multiple detect/fix/verify cycles (waves). Persistent architects retain full context between waves.
 
-**Context management**: All 5 persistent agents carry context across waves automatically. For very long sessions (5+ waves), PM rotates them (spawn fresh, kill old).
+**Context management**: All 5 session team peers carry context across waves automatically. For very long sessions (5+ waves), re-spawn with same name AND same team_name: `Agent(name="arch-platform", team_name="session", ...)` — replaces the old peer in the team.
 
 ---
 

@@ -146,6 +146,54 @@ describe('project-manager template — 3-phase model', () => {
   it('has SendMessage tool in frontmatter', () => {
     expect(content).toMatch(/^tools:.*SendMessage/m);
   });
+
+  it('quality-gater joins session team in Phase 3', () => {
+    expect(content).toContain('Agent(name="quality-gater", team_name="session"');
+  });
+
+  it('has HARD GATE with session team message', () => {
+    expect(content).toContain('creating session team first');
+  });
+
+  it('rotation uses SAME name AND SAME team_name', () => {
+    expect(content).toContain('SAME name AND SAME team_name');
+  });
+
+  it('anti-pattern arch-X-v2 is documented with correction', () => {
+    expect(content).toContain('arch-X-v2');
+    expect(content).toContain('SAME name AND SAME team_name');
+  });
+
+  it('has Session Team Setup section', () => {
+    expect(content).toMatch(/Session Team Setup/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3b. Arch-Testing — Bash safety rules and version
+// ---------------------------------------------------------------------------
+describe('arch-testing template — Bash safety and version', () => {
+  const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
+
+  it('template version 1.2.0', () => {
+    expect(archContent).toContain('template_version: "1.2.0"');
+  });
+
+  it('has Bash Safety Rules section', () => {
+    expect(archContent).toMatch(/Bash Safety Rules/i);
+  });
+
+  it('explains pipe buffering causes agent hang', () => {
+    expect(archContent).toMatch(/BUFFER.*stdout|pipe.*buffer/i);
+  });
+
+  it('bans gradle-run wrapper scripts by name', () => {
+    expect(archContent).toContain('gradle-run.ps1');
+  });
+
+  it('instructs to use declared skills not raw gradlew', () => {
+    expect(archContent).toMatch(/use the declared skills|Never.*gradlew.*directly/i);
+  });
 });
 
 // ---------------------------------------------------------------------------
