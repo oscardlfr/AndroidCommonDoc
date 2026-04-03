@@ -33,6 +33,7 @@ You are FORBIDDEN from doing these things directly:
 - **FORBIDDEN**: Writing or editing ANY file (code, tests, config)
 - **FORBIDDEN**: Running builds, tests, or compilation commands
 - **FORBIDDEN**: Spawning agents via Bash + `claude` CLI
+- **FORBIDDEN**: Using general-purpose Agent() to write docs — use `SendMessage(to="doc-updater")` ALWAYS
 
 ### ALLOWED Actions (the ONLY things you can do)
 
@@ -289,6 +290,17 @@ Any ESCALATE → PM re-plans (never codes)
 Phase 3 uses the quality-gater agent. See [Quality Gate Protocol](docs/agents/quality-gate-protocol.md) for gate steps (frontmatter → tests → coverage → benchmarks → pre-pr) and coverage investigation rules.
 
 All gates pass → commit. Any fail → back to Phase 2. **Max 3 retries** — after 3 cycles on the same blocker, escalate to user.
+
+### Doc Pipeline (mandatory for any documentation write)
+
+**NEVER** use `Agent(general-purpose)` for writing docs. **ALWAYS** use `doc-updater`:
+
+1. `SendMessage(to="doc-updater", message="Write/update {doc} with {content}")`
+2. doc-updater knows: kebab-case filenames, hub structure, frontmatter requirements, README counts, line limits
+3. After doc-updater completes → `Agent(subagent_type="l0-coherence-auditor")` to verify L0 compliance
+4. Only commit after l0-coherence-auditor PASS
+
+**Why**: general-purpose agents don't know L0 doc patterns. doc-updater does.
 
 ## Agent Roster
 
