@@ -27,7 +27,7 @@ All five are added to the session team ONCE at session start and stay alive acro
 ```
 Session Start
   PM: TeamCreate("session")
-  PM: Agent(name="context-provider", team_name="session", run_in_background=true)   → reads project ONCE
+  PM: Agent(name="context-provider", team_name="session", run_in_background=true)   → on-demand oracle (loads on query)
   PM: Agent(name="doc-updater", team_name="session", run_in_background=true)        → ready for doc updates
   PM: Agent(name="arch-testing", team_name="session", run_in_background=true)       → testing domain
   PM: Agent(name="arch-platform", team_name="session", run_in_background=true)      → platform domain
@@ -38,13 +38,13 @@ All agents in all phases: SendMessage(to="<agent-name>")  ← team peers always 
 
 | Agent | Role | Used in |
 |-------|------|---------|
-| context-provider | Project state, patterns, rules | All phases |
+| context-provider | On-demand oracle: patterns, docs, rules (loads on query, not eagerly) | All phases |
 | doc-updater | CHANGELOG, docs, KDoc | Phase 2, 3 |
 | arch-testing | Test strategy, coverage, test gaming | Phase 2, 3 |
 | arch-platform | Source sets, Gradle, platform boundaries | Phase 2, 3 |
 | arch-integration | Cross-module deps, DI, API contracts | Phase 2, 3 |
 
-**Why TeamCreate**: team peers don't go "idle" the same way as background agents — no idle/dead confusion, no re-spawning with "v2" suffixes. Quality-gater in Phase 3 joins the same team and can SendMessage directly to architects. Context is preserved across all phases.
+**Why TeamCreate**: team peers don't go "idle" the same way as background agents — no idle/dead confusion, no re-spawning with "v2" suffixes. **context-provider is an on-demand oracle** — agents SendMessage it with specific queries and it loads relevant files on demand (not eagerly), keeping setup cost low. Quality-gater in Phase 3 joins the same team and can SendMessage directly to architects. Context is preserved across all phases.
 
 **Context rotation**: for very long sessions (7+ waves), re-spawn with SAME name AND SAME team_name: `Agent(name="arch-platform", team_name="session", ...)` — replaces the old peer in-team. Never use a "v2" suffix.
 

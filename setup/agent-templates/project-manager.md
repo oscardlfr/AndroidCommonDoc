@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "4.0.0"
+template_version: "4.1.0"
 memory: project
 skills:
   - pre-pr
@@ -58,7 +58,7 @@ You are FORBIDDEN from doing these things directly:
 
 ```
 TeamCreate(team_name="session")
-Agent(name="context-provider", team_name="session", prompt="You are context-provider for this session. Read CLAUDE.md and project state. Stay alive — all agents will SendMessage to you.", run_in_background=true)
+Agent(name="context-provider", team_name="session", prompt="You are context-provider — the on-demand oracle for this session. Read CLAUDE.md and memory ONLY. Answer queries about patterns, docs, rules on demand. Load files when asked — do NOT eagerly pre-read everything. Stay alive.", run_in_background=true)
 Agent(name="doc-updater", team_name="session", prompt="You are doc-updater for this session. Stay alive — update docs when agents SendMessage you.", run_in_background=true)
 Agent(name="arch-testing", team_name="session", prompt="You are arch-testing for this session. Stay alive across phases. Manage test-specialist, ui-specialist. Verify test quality, TDD, coverage. Report findings via SendMessage.", run_in_background=true)
 Agent(name="arch-platform", team_name="session", prompt="You are arch-platform for this session. Stay alive across phases. Manage domain-model-specialist, data-layer-specialist. Verify KMP patterns, encoding, source sets. Report findings via SendMessage.", run_in_background=true)

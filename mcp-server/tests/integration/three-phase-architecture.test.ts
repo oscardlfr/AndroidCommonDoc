@@ -113,7 +113,7 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('template version 4.0.0', () => {
-    expect(content).toContain('template_version: "4.0.0"');
+    expect(content).toContain('template_version: "4.1.0"');
   });
 
   it('has dev dispatch protocol', () => {
@@ -176,7 +176,7 @@ describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
   it('template version 1.2.0', () => {
-    expect(archContent).toContain('template_version: "1.2.0"');
+    expect(archContent).toContain('template_version: "1.3.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -193,6 +193,38 @@ describe('arch-testing template — Bash safety and version', () => {
 
   it('instructs to use declared skills not raw gradlew', () => {
     expect(archContent).toMatch(/use the declared skills|Never.*gradlew.*directly/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3c. Arch-Platform + Arch-Integration — Caller Grep Rule
+// ---------------------------------------------------------------------------
+describe('arch-platform + arch-integration — caller grep rule', () => {
+  const platformContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
+  const integrationContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
+
+  it('arch-platform has Caller Grep Rule section', () => {
+    expect(platformContent).toMatch(/Caller Grep Rule/i);
+  });
+
+  it('arch-platform grep rule covers production AND test callers', () => {
+    expect(platformContent).toMatch(/production AND test|prod.*test.*callers/i);
+  });
+
+  it('arch-integration has Caller Grep Rule section', () => {
+    expect(integrationContent).toMatch(/Caller Grep Rule/i);
+  });
+
+  it('arch-integration grep rule covers production AND test callers', () => {
+    expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
+  });
+
+  it('arch-platform has template version 1.2.0', () => {
+    expect(platformContent).toContain('template_version: "1.2.0"');
+  });
+
+  it('arch-integration has template version 1.2.0', () => {
+    expect(integrationContent).toContain('template_version: "1.2.0"');
   });
 });
 
@@ -284,6 +316,26 @@ describe('quality-gater template — gate protocol', () => {
   it('has coverage step', () => {
     expect(content).toMatch(/Coverage Baseline/i);
     expect(content).toMatch(/root cause/i);
+  });
+
+  it('Step 1.5 is domain-routed — not broadcast', () => {
+    expect(content).toMatch(/domain-routed/i);
+  });
+
+  it('routes test-only files to arch-testing only', () => {
+    expect(content).toMatch(/Only test.*files.*arch-testing/i);
+  });
+
+  it('routes platform files to arch-platform only', () => {
+    expect(content).toMatch(/platform.*arch-platform|arch-platform.*platform/i);
+  });
+
+  it('defines cross-cutting as broadcast condition', () => {
+    expect(content).toMatch(/[Cc]ross-cutting/);
+  });
+
+  it('has template version 2.2.0', () => {
+    expect(content).toContain('template_version: "2.2.0"');
   });
 });
 
@@ -638,5 +690,63 @@ describe('quality-gater template — stamp enforcement', () => {
     const bashHooks = preToolUse.find((h: any) => h.matcher === 'Bash');
     const hookCommands = bashHooks?.hooks?.map((h: any) => h.command) ?? [];
     expect(hookCommands.some((c: string) => c.includes('quality-gate-pre-commit.sh'))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 17. Context-Provider Oracle Protocol
+// ---------------------------------------------------------------------------
+describe('context-provider template — oracle protocol', () => {
+  const cpContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'context-provider.md'), 'utf-8');
+
+  it('description describes on-demand oracle role', () => {
+    expect(cpContent).toMatch(/[Oo]n-demand.*oracle|oracle.*on-demand/i);
+  });
+
+  it('has Oracle Protocol section', () => {
+    expect(cpContent).toMatch(/Oracle Protocol/i);
+  });
+
+  it('instructs to NOT eagerly pre-read docs', () => {
+    expect(cpContent).toMatch(/NOT eagerly pre-read|do NOT eagerly/i);
+  });
+
+  it('has template version 2.1.0', () => {
+    expect(cpContent).toContain('template_version: "2.1.0"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 18. Architect PRE-TASK Protocol
+// ---------------------------------------------------------------------------
+describe('architect templates — PRE-TASK protocol', () => {
+  const platformContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
+  const integrationContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
+  const testingContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
+  const plannerContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'planner.md'), 'utf-8');
+
+  it('arch-platform has PRE-TASK Protocol section', () => {
+    expect(platformContent).toMatch(/PRE-TASK Protocol/i);
+  });
+
+  it('arch-integration has PRE-TASK Protocol section', () => {
+    expect(integrationContent).toMatch(/PRE-TASK Protocol/i);
+  });
+
+  it('arch-testing has PRE-TASK Protocol section', () => {
+    expect(testingContent).toMatch(/PRE-TASK Protocol/i);
+  });
+
+  it('planner has mandatory context-provider query for existing docs', () => {
+    expect(plannerContent).toMatch(/MANDATORY|mandatory/);
+    expect(plannerContent).toMatch(/context-provider/);
+  });
+
+  it('planner version 1.2.0', () => {
+    expect(plannerContent).toContain('template_version: "1.2.0"');
+  });
+
+  it('arch-testing version 1.3.0', () => {
+    expect(testingContent).toContain('template_version: "1.3.0"');
   });
 });

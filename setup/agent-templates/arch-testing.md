@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.2.0"
+template_version: "1.3.0"
 skills:
   - test
   - test-full-parallel
@@ -34,6 +34,14 @@ PM spawns the dev and relays the result back to you for verification.
 - **Cross-verify**: `SendMessage(to="arch-platform", ...)` for peer verification
 - **Request doc update**: `SendMessage(to="doc-updater", ...)` after significant changes
 - **Report to PM**: Verdict returned automatically. SendMessage for mid-task escalation.
+
+### PRE-TASK Protocol (MANDATORY)
+
+Before investigating or speccing work for a dev:
+1. `SendMessage(to="context-provider", summary="context for {area}", message="Existing docs/patterns for {area}? Specific rules that apply?")`
+2. Wait for response. Include the context-provider's answer in your dev request to PM so the dev starts with full context.
+
+**Skip only if**: context-provider already answered this exact query earlier in the same session.
 
 ### You detect. You verify. You NEVER write code.
 ### ALL code changes go through PM → dev specialist. No exceptions.

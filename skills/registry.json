@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-03T14:43:06.115Z",
+  "generated": "2026-04-03T21:24:23.254Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1361,14 +1361,14 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a07dc72d3454faed2c5b27688350206734ef4ccb52933675acd13bfdf3d8b3b2",
+      "hash": "sha256:119d36c7871e0afa59b1ac83720cb7708a6b4521c275f22bc86057cd62f78c60",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
         "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
         "tools": "Read, Grep, Glob, Bash, SendMessage",
         "model": "sonnet",
-        "domain": "quality",
+        "domain": "architecture",
         "intent": [
           "integration",
           "wiring",
@@ -1377,7 +1377,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.1.0",
+        "template_version": "1.2.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1391,14 +1391,14 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d1b0f7eaf52a87c3a927c0c61faf410330e2efa5f21358a72dbf0bd7ea44210c",
+      "hash": "sha256:ea9aca291e31b367bae5a0135e511bc7cfd13c26e3995cd0b981aaab834b1c38",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
         "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
         "tools": "Read, Grep, Glob, Bash, SendMessage",
         "model": "sonnet",
-        "domain": "quality",
+        "domain": "architecture",
         "intent": [
           "platform",
           "KMP",
@@ -1406,7 +1406,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.1.0",
+        "template_version": "1.2.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1420,7 +1420,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:7c9a5df6aae7362c27c38332039b2caf9f1de234e432ba361e14093b4f5ce002",
+      "hash": "sha256:294f6d28e42e236269ad55b110775a846541af06fb0abddaaa0aa3cda78633a9",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1435,7 +1435,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.2.0",
+        "template_version": "1.3.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -1529,14 +1529,14 @@
       "name": "context-provider",
       "type": "agent",
       "path": ".claude/agents/context-provider.md",
-      "description": "Cross-layer context agent. Reads docs, specs, MCP tools, memory across projects. Provides context to any department. Read-only — never modifies files.",
+      "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c317883b7fdfdbdfaed229135da7186d9f4c55db4f03e50e24c3990e105da5f8",
+      "hash": "sha256:91a6c5ede06ca39f9d3ab884915c37759222c727816adce5d2448ceb74c69f5e",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
-        "description": "Cross-layer context agent. Reads docs, specs, MCP tools, memory across projects. Provides context to any department. Read-only — never modifies files.",
+        "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
         "tools": "Read, Grep, Glob, Bash, SendMessage",
         "model": "sonnet",
         "domain": "infrastructure",
@@ -1547,7 +1547,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "2.0.0"
+        "template_version": "2.1.0"
       }
     },
     {
@@ -1889,7 +1889,7 @@
       "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:db06627d51354d53587f990e7f50898935f313144b283e72fc15e36efe272b89",
+      "hash": "sha256:d13f21fcbfd07c540e8b544b405b3477adf8dab410cc974a745480c0bbcfdd30",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -1904,7 +1904,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.1.0"
+        "template_version": "1.2.0"
       }
     },
     {
@@ -2026,7 +2026,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b7ac30cd385c3987f6ad8f8d8870f817ba594246ff1cc770148c0ee7a1deea2b",
+      "hash": "sha256:624eb8d0c26ac0740c7ed0ef32b77690192f36bb4f632f8a3ee02ba59ec12ee6",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
@@ -2042,7 +2042,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "4.0.0",
+        "template_version": "4.1.0",
         "memory": "project",
         "skills": [
           "pre-pr",
@@ -2082,7 +2082,7 @@
       "description": "Quality Gate Team peer. Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d9cb9e4822e09c76de6975f5da2d4d6cd2e34231c87d785c42df0ce75239c8ab",
+      "hash": "sha256:572fc793fc10b84e7f477574fb48ebbbbafa898c06e4fdc3925bbe9dab47fc31",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2098,7 +2098,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.1.0"
+        "template_version": "2.2.0"
       }
     },
     {
