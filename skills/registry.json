@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-03T22:00:30.435Z",
+  "generated": "2026-04-03T22:37:39.136Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1532,7 +1532,7 @@
       "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:33b47049ca69b5f22058700e346250c5ac87226605ab1dcd21530d6efa217c34",
+      "hash": "sha256:fc2413f2185e04db0a8a619ed3e2e90266770c746d4b2413692f016f07649931",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -1695,7 +1695,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:37a333fdb8f0c627617b5b1becda698b64cd999b4e06b9402a780f119f0495fc",
+      "hash": "sha256:86a774f148d5245144d47b9e659564440e7bae747e7aaced610e8dd6140ef509",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -1889,12 +1889,12 @@
       "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d13f21fcbfd07c540e8b544b405b3477adf8dab410cc974a745480c0bbcfdd30",
+      "hash": "sha256:7f94905ab1353c7b67188f9fef8428b327603083b876b78d6d379099a284de17",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
         "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
-        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "tools": "Read, Write, Grep, Glob, Bash, SendMessage",
         "model": "sonnet",
         "domain": "development",
         "intent": [
@@ -1904,7 +1904,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.2.0"
+        "template_version": "1.3.0"
       }
     },
     {
@@ -2026,7 +2026,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:624eb8d0c26ac0740c7ed0ef32b77690192f36bb4f632f8a3ee02ba59ec12ee6",
+      "hash": "sha256:d1ad1c5bdaff8e1355814c39f468decf60484c09194f709813c03c3c60e14c5e",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
@@ -2042,7 +2042,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "4.1.0",
+        "template_version": "4.2.0",
         "memory": "project",
         "skills": [
           "pre-pr",

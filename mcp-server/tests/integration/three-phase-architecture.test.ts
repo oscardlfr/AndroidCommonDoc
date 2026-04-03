@@ -94,7 +94,7 @@ describe('project-manager template — 3-phase model', () => {
 
   it('has pre-flight checklist with session team setup', () => {
     expect(content).toMatch(/Pre-Flight Checklist/i);
-    expect(content).toContain('TeamCreate("session")');
+    expect(content).toContain('TeamCreate("session-{project-slug}")');
     expect(content).toContain('added to session team');
   });
 
@@ -104,7 +104,7 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toContain('Agent(name="arch-testing"');
     expect(content).toContain('Agent(name="arch-platform"');
     expect(content).toContain('Agent(name="arch-integration"');
-    expect(content).toContain('team_name="session"');
+    expect(content).toContain('team_name="session-{project-slug}"');
   });
 
   it('Phase 2 uses SendMessage not TeamCreate for architects', () => {
@@ -112,8 +112,8 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 4.0.0', () => {
-    expect(content).toContain('template_version: "4.1.0"');
+  it('template version 4.2.0', () => {
+    expect(content).toContain('template_version: "4.2.0"');
   });
 
   it('has dev dispatch protocol', () => {
@@ -148,7 +148,7 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('quality-gater joins session team in Phase 3', () => {
-    expect(content).toContain('Agent(name="quality-gater", team_name="session"');
+    expect(content).toContain('Agent(name="quality-gater", team_name="session-{project-slug}"');
   });
 
   it('has HARD GATE with session team message', () => {
@@ -166,6 +166,14 @@ describe('project-manager template — 3-phase model', () => {
 
   it('has Session Team Setup section', () => {
     expect(content).toMatch(/Session Team Setup/);
+  });
+
+  it('references .planning/PLAN.md for plan file delivery', () => {
+    expect(content).toContain('.planning/PLAN.md');
+  });
+
+  it('PM reads plan via Read(".planning/PLAN.md") after planner notifies', () => {
+    expect(content).toMatch(/Read\(["']\.planning\/PLAN\.md["']\)/);
   });
 });
 
@@ -261,6 +269,14 @@ describe('planner template — peer role', () => {
 
   it('flags cross-department impact', () => {
     expect(content).toMatch(/Cross-Department Impact/i);
+  });
+
+  it('writes plan to .planning/PLAN.md file', () => {
+    expect(content).toContain('.planning/PLAN.md');
+  });
+
+  it('notifies PM via SendMessage after writing plan file', () => {
+    expect(content).toMatch(/SendMessage.*project-manager.*plan.*ready|SendMessage.*project-manager.*PLAN\.md/i);
   });
 });
 
@@ -742,8 +758,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.2.0', () => {
-    expect(plannerContent).toContain('template_version: "1.2.0"');
+  it('planner version 1.3.0', () => {
+    expect(plannerContent).toContain('template_version: "1.3.0"');
   });
 
   it('arch-testing version 1.3.0', () => {

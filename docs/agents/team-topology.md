@@ -16,7 +16,7 @@ token_budget: 1500
 
 # Team Topology: 3-Phase Model
 
-Three sequential phases, each lightweight. Five **session team peers** live in the `session` team for the entire session, carrying context across all three.
+Three sequential phases, each lightweight. Five **session team peers** live in the `session-{project-slug}` team for the entire session, carrying context across all three. The project slug is derived from the project directory name (lowercased, hyphens replacing spaces -- e.g., `DawSync` becomes `daw-sync`).
 
 ---
 
@@ -26,12 +26,12 @@ All five are added to the session team ONCE at session start and stay alive acro
 
 ```
 Session Start
-  PM: TeamCreate("session")
-  PM: Agent(name="context-provider", team_name="session", run_in_background=true)   → on-demand oracle (loads on query)
-  PM: Agent(name="doc-updater", team_name="session", run_in_background=true)        → ready for doc updates
-  PM: Agent(name="arch-testing", team_name="session", run_in_background=true)       → testing domain
-  PM: Agent(name="arch-platform", team_name="session", run_in_background=true)      → platform domain
-  PM: Agent(name="arch-integration", team_name="session", run_in_background=true)   → integration domain
+  PM: TeamCreate("session-{project-slug}")
+  PM: Agent(name="context-provider", team_name="session-{project-slug}", run_in_background=true)   → on-demand oracle (loads on query)
+  PM: Agent(name="doc-updater", team_name="session-{project-slug}", run_in_background=true)        → ready for doc updates
+  PM: Agent(name="arch-testing", team_name="session-{project-slug}", run_in_background=true)       → testing domain
+  PM: Agent(name="arch-platform", team_name="session-{project-slug}", run_in_background=true)      → platform domain
+  PM: Agent(name="arch-integration", team_name="session-{project-slug}", run_in_background=true)   → integration domain
 
 All agents in all phases: SendMessage(to="<agent-name>")  ← team peers always reachable
 ```
@@ -46,13 +46,13 @@ All agents in all phases: SendMessage(to="<agent-name>")  ← team peers always 
 
 **Why TeamCreate**: team peers don't go "idle" the same way as background agents — no idle/dead confusion, no re-spawning with "v2" suffixes. **context-provider is an on-demand oracle** — agents SendMessage it with specific queries and it loads relevant files on demand (not eagerly), keeping setup cost low. Quality-gater in Phase 3 joins the same team and can SendMessage directly to architects. Context is preserved across all phases.
 
-**Context rotation**: for very long sessions (7+ waves), re-spawn with SAME name AND SAME team_name: `Agent(name="arch-platform", team_name="session", ...)` — replaces the old peer in-team. Never use a "v2" suffix.
+**Context rotation**: for very long sessions (7+ waves), re-spawn with SAME name AND SAME team_name: `Agent(name="arch-platform", team_name="session-{project-slug}", ...)` — replaces the old peer in-team. Never use a "v2" suffix.
 
 ### Why Session Team Peers
 
 Previously, architects were background agents (`run_in_background=true`, no team). After each turn they went "idle" — the PM confused idle with dead, leading to re-spawns with "v2" suffixes and lost cross-phase context.
 
-Now all 5 are `TeamCreate("session")` peers. Three advantages:
+Now all 5 are `TeamCreate("session-{project-slug}")` peers. Three advantages:
 - **No idle/dead confusion** — team peers are always reachable via SendMessage, no "v2" re-spawning
 - **Quality-gater has direct access** — joins the session team in Phase 3, SendMessages architects directly
 - **Cross-phase context preserved** — architects accumulate Phase 2 knowledge, quality-gater Step 1.5 can ask "what changed?" and get a real answer
@@ -92,8 +92,9 @@ Phase 3 — Quality Gate (temporary quality-gater)
 2. Planner `SendMessage(to="context-provider")` for current state
 3. Planner reads architecture docs, specs, MODULE_MAP.md
 4. Planner produces plan with: scope, steps, architect assignments, dependencies, risks
-5. Planner SendMessages plan to PM
-6. PM dismisses planner
+5. Planner writes plan to `.planning/PLAN.md`
+6. Planner SendMessages path only to PM: `"Plan ready: .planning/PLAN.md"`
+7. PM reads plan from disk, dismisses planner
 
 **Cross-department check**: If planner flags product/marketing impact, PM spawns product-strategist or content-creator as sub-agents for review before proceeding.
 
@@ -121,7 +122,7 @@ Phase 3 — Quality Gate (temporary quality-gater)
 
 **Wave pattern**: For large tasks, multiple detect/fix/verify cycles (waves). Persistent architects retain full context between waves.
 
-**Context management**: All 5 session team peers carry context across waves automatically. For very long sessions (5+ waves), re-spawn with same name AND same team_name: `Agent(name="arch-platform", team_name="session", ...)` — replaces the old peer in the team.
+**Context management**: All 5 session team peers carry context across waves automatically. For very long sessions (5+ waves), re-spawn with same name AND same team_name: `Agent(name="arch-platform", team_name="session-{project-slug}", ...)` — replaces the old peer in the team.
 
 ---
 
@@ -132,7 +133,7 @@ Phase 3 — Quality Gate (temporary quality-gater)
 **Temporary agent**: quality-gater (spawned, then dismissed after PASS/FAIL)
 
 **Flow**:
-1. PM adds quality-gater to session team: `Agent(name="quality-gater", team_name="session", ...)`
+1. PM adds quality-gater to session team: `Agent(name="quality-gater", team_name="session-{project-slug}", ...)`
 2. **Architect Deliberation** -- quality-gater consults all 3 persistent architects:
    - `SendMessage(to="arch-testing")` -- what was tested, known gaps, coverage concerns
    - `SendMessage(to="arch-platform")` -- source set changes, platform boundary risks
@@ -153,7 +154,7 @@ See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 
 - **PM is sole Agent() spawner** -- teammates can't use Agent() in in-process mode (#31977)
 - **Architects**: Read, Grep, Glob, Bash, SendMessage (NO Write/Edit/Agent)
-- **5 session team peers** -- added to `TeamCreate("session")` at start: context-provider, doc-updater, arch-testing, arch-platform, arch-integration. For very long sessions (7+ waves), re-spawn with same name AND same team_name.
+- **5 session team peers** -- added to `TeamCreate("session-{project-slug}")` at start: context-provider, doc-updater, arch-testing, arch-platform, arch-integration. For very long sessions (7+ waves), re-spawn with same name AND same team_name.
 - **No new TeamCreate for Phase 2** -- architects are already in the session team. PM sends plan via SendMessage. No additional team creation needed.
 - **Phase 3 deliberation is mandatory** -- quality-gater MUST consult all 3 architects before running automated checks. Skipping deliberation voids the gate.
 - **PM FORBIDDEN from launching devs directly** -- all devs dispatched only when an architect requests via SendMessage.
