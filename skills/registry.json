@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-03T14:29:05.172Z",
+  "generated": "2026-04-03T14:35:05.729Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1420,14 +1420,14 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:3fb1ac86b6946958bf5afcbc6c7d133dc778a2c37bca15cd186a1b44065bc740",
+      "hash": "sha256:7b1adc692611d560339dd37d7319ccb8b512ee5e658a64c66270e0f675c02ab9",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
         "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
         "tools": "Read, Grep, Glob, Bash, SendMessage",
         "model": "sonnet",
-        "domain": "quality",
+        "domain": "architecture",
         "intent": [
           "testing",
           "TDD",
@@ -1435,7 +1435,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.1.0",
+        "template_version": "1.2.0",
         "skills": [
           "test",
           "test-full-parallel",

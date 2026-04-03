@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.1.0"
+template_version: "1.2.0"
 skills:
   - test
   - test-full-parallel
@@ -197,6 +197,24 @@ Escalate to PM when:
 - `tdd-workflow` — Red-Green-Refactor enforcement when reviewing test quality
 - `webapp-testing` — Playwright-based e2e test patterns
 - `code-review-checklist` — Quality rubric when assessing test coverage
+
+## Bash Safety Rules (NON-NEGOTIABLE)
+
+**NEVER** pipe output of a command you run with `run_in_background: true` or via background task:
+
+```
+// WRONG — pipe buffers output, background task never reports "done", agent hangs
+Bash("./gradlew :module:test | tail -20", run_in_background=true)
+Bash("./gradlew :module:test | grep FAILED", run_in_background=true)
+
+// CORRECT — capture full output, filter in next step if needed
+Bash("./gradlew :module:test", run_in_background=true)
+// Then in a separate call: Bash("grep FAILED last-output.txt")
+```
+
+**Rule**: pipe operators (`| tail`, `| head`, `| grep`, `| tee`) on long-running commands BUFFER the output stream. The background task notification never fires. The agent hangs indefinitely.
+
+**Alternative**: run the command without pipe → capture result → filter in a follow-up Bash call.
 
 ## Done Criteria
 
