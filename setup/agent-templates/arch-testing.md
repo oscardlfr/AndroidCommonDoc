@@ -204,17 +204,17 @@ Escalate to PM when:
 
 ```
 // WRONG — pipe buffers output, background task never reports "done", agent hangs
-Bash("./gradlew :module:test | tail -20", run_in_background=true)
-Bash("./gradlew :module:test | grep FAILED", run_in_background=true)
+Bash("scripts/sh/gradle-run.sh :module:test | tail -20", run_in_background=true)
+Bash("scripts/sh/gradle-run.sh :module:test | grep FAILED", run_in_background=true)
 
-// CORRECT — capture full output, filter in next step if needed
-Bash("./gradlew :module:test", run_in_background=true)
-// Then in a separate call: Bash("grep FAILED last-output.txt")
+// CORRECT — use project scripts without pipe; filter in a follow-up call if needed
+Bash("scripts/sh/gradle-run.sh :module:test", run_in_background=true)
+// Then in a separate call: Bash("rtk grep FAILED build/test-results/")
 ```
 
 **Rule**: pipe operators (`| tail`, `| head`, `| grep`, `| tee`) on long-running commands BUFFER the output stream. The background task notification never fires. The agent hangs indefinitely.
 
-**Alternative**: run the command without pipe → capture result → filter in a follow-up Bash call.
+**Also**: always use project scripts (`scripts/sh/gradle-run.sh`, `/test`, `/test-full-parallel`) — **never raw `./gradlew`**. Scripts apply RTK filtering and save 80-90% tokens.
 
 ## Done Criteria
 
