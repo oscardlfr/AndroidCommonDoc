@@ -711,8 +711,8 @@ describe('context-provider template — oracle protocol', () => {
     expect(cpContent).toMatch(/NOT eagerly pre-read|do NOT eagerly/i);
   });
 
-  it('has template version 2.1.0', () => {
-    expect(cpContent).toContain('template_version: "2.1.0"');
+  it('has template version 2.2.0', () => {
+    expect(cpContent).toContain('template_version: "2.2.0"');
   });
 });
 

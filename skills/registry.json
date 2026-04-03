@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-03T21:24:23.254Z",
+  "generated": "2026-04-03T22:00:30.435Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1532,7 +1532,7 @@
       "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:91a6c5ede06ca39f9d3ab884915c37759222c727816adce5d2448ceb74c69f5e",
+      "hash": "sha256:33b47049ca69b5f22058700e346250c5ac87226605ab1dcd21530d6efa217c34",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -1547,7 +1547,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "2.1.0"
+        "template_version": "2.2.0"
       }
     },
     {
@@ -1695,7 +1695,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:ac2cffb2aa20d1f19d460a59d1b6e7a1192efb9e54c3af7ebde792e27b58a1d4",
+      "hash": "sha256:37a333fdb8f0c627617b5b1becda698b64cd999b4e06b9402a780f119f0495fc",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -1710,7 +1710,7 @@
           "roadmap"
         ],
         "token_budget": 2000,
-        "template_version": "2.0.0",
+        "template_version": "2.1.0",
         "skills": [
           "audit-docs",
           "readme-audit",
