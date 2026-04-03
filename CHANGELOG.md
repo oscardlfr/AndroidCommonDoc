@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Changed
+- **PM template v4.2.0**: `TeamCreate("session-{project-slug}")` replaces `TeamCreate("session")` — prevents agent suffix collisions (-2/-3) when multiple Claude Code sessions run simultaneously
+- **PM template v4.2.0**: `TeamCreate("planning-{project-slug}")` replaces `TeamCreate("planning")` — same collision fix for planning phase teams
+- **Planner template v1.3.0**: writes plan to `.planning/PLAN.md` instead of SendMessage — bypasses message delivery size limitation for large plans
+- **context-provider and doc-updater templates**: session team references updated to use project slug (commits: c93d9d3, cd4b6c8 L0; 78db5607 L1; ca5ae701 L2)
+
+---
+
 ### Added
 - **Ecosystem initialization skills**: `/work` (smart task routing), `/init-session` (project awareness), `/resume` (CEO/CTO dashboard)
 - **Business layer**: `landing-page-strategist` agent template, 5 business doc templates (PRODUCT_SPEC, MARKETING, PRICING, LANDING_PAGES, COMPETITIVE)
