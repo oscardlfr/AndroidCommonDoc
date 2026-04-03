@@ -203,24 +203,25 @@ Escalate to PM when:
 **NEVER** pipe output of a command you run with `run_in_background: true` or via background task:
 
 ```
-// WRONG — pipe buffers output, background task never reports "done", agent hangs
-Bash("/test module | tail -20", run_in_background=true)
-Bash("/test module | grep FAILED", run_in_background=true)
+// WRONG — piping output of a long-running Bash command buffers stdout, agent hangs
+Bash("./gradlew :module:test | tail -20", run_in_background=true)
+Bash("./gradlew :module:test | grep FAILED", run_in_background=true)
 
-// CORRECT — invoke the skill without pipe; it already applies RTK filtering
-/test module
-/test-full-parallel
+// CORRECT — use the declared skills directly (no pipe, no gradlew, no wrapper scripts)
+/test :module:name          ← skill handles output, RTK filtering, token savings
+/test-full-parallel         ← for full suite
+/coverage                   ← for coverage check
 ```
 
-**Rule**: pipe operators (`| tail`, `| head`, `| grep`, `| tee`) on skill/script invocations BUFFER the output stream. The background task notification never fires. The agent hangs indefinitely.
+**Rule**: pipe operators (`| tail`, `| head`, `| grep`, `| tee`) BUFFER the stdout stream → background task notification never fires → agent hangs indefinitely.
 
-**Also**: always use L0 skills (`/test`, `/test-full-parallel`, `/coverage`) — **never raw `./gradlew` or scripts directly**. Skills handle RTK filtering, output formatting, and 80-90% token savings.
+**Also**: skills (`/test`, `/test-full-parallel`, `/coverage`) are declared in your frontmatter for a reason — use them. **Never `./gradlew` directly, never wrapper scripts (`gradle-run.ps1`, `gradle-run.sh`).** These break when env vars are missing.
 
 ## Done Criteria
 
 You are NOT done until:
 1. You ran `/test <module>` on every touched module and have the output
-2. `./gradlew :module:compileKotlin :module:detekt` passes on every changed module — do NOT send APPROVE with compile or lint failures
+2. `/pre-pr` passes (or at minimum compile + Detekt clean) on every changed module — do NOT send APPROVE with compile or lint failures
 3. Every issue found was either fixed (via delegation) or escalated with justification
 4. Cross-architect verification passed (if fixes touched other domains)
 5. Your verdict is backed by evidence, not assumptions
