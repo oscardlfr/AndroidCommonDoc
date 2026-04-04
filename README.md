@@ -553,17 +553,21 @@ Skills primarily useful when working on AndroidCommonDoc (L0) itself:
 
 ## 3-Phase Team Model
 
-Every non-trivial task flows through three sequential teams, each temporary and dissolved after its phase completes. This prevents context bloat and ensures structured verification.
+Every non-trivial task flows through three sequential phases. Five **session team peers** in `session-{project-slug}` carry context across all three phases. Planner and quality-gater are temporary; the 5 core peers persist.
 
 ```
-Phase 1 — Planning Team          Phase 2 — Execution Team           Phase 3 — Quality Gate Team
+Session start: TeamCreate("session-{project-slug}")
+  context-provider, doc-updater, arch-testing, arch-platform, arch-integration
+
+Phase 1 — Planning               Phase 2 — Execution                Phase 3 — Quality Gate
 ┌─────────────────────┐          ┌──────────────────────────┐       ┌───────────────────────┐
-│ planner              │          │ arch-testing              │       │ quality-gater          │
-│ context-provider     │  ──→    │ arch-platform             │  ──→ │ context-provider       │
-│                      │          │ arch-integration          │       │                        │
-│ Output: exec plan    │          │ context-provider          │       │ Output: PASS / FAIL    │
-└─────────────────────┘          │ doc-updater               │       └───────────────────────┘
-                                 │                            │       FAIL → back to Phase 2
+│ planner (temporary)  │          │ Session team peers:       │       │ quality-gater joins    │
+│ SendMessage to       │  ──→    │   arch-testing            │  ──→ │   session team         │
+│   context-provider   │          │   arch-platform           │       │ Consults architects    │
+│                      │          │   arch-integration        │       │                        │
+│ Output: .planning/   │          │   context-provider        │       │ Output: PASS / FAIL    │
+│   PLAN.md            │          │   doc-updater             │       └───────────────────────┘
+└─────────────────────┘          │                            │       FAIL → back to Phase 2
                                  │ PM dispatches devs on      │       (max 3 retries → user)
                                  │ demand via Agent() relay   │
                                  └──────────────────────────┘
@@ -655,7 +659,7 @@ See [Team Topology](docs/agents/team-topology.md) for full details.
 | `doc-updater` | All | Updates docs, CHANGELOG, memory after work (mandatory) |
 | `doc-migrator` | Sporadic | Migrates docs to L0 patterns (hubs, splits, frontmatter) |
 
-**Architects (Execution Team peers):**
+**Architects (session team peers):**
 
 | Template | Domain |
 |----------|--------|

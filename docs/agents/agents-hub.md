@@ -28,7 +28,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, project-ma
 | [claude-md-template](claude-md-template.md) | Boris Cherny-style CLAUDE.md template — the 4-pillar structure for all projects |
 | [claude-code-workflow](claude-code-workflow.md) | Project Manager adaptive model, skill usage, verification, release workflow |
 | [multi-agent-patterns](multi-agent-patterns.md) | Topology (chain/fan-out/orchestrator), agent design rules, failure handling, cost control |
-| [team-topology](team-topology.md) | 3-phase team model: Planning Team → Execution Team → Quality Gate Team |
+| [team-topology](team-topology.md) | 3-phase model with 5 session team peers in `session-{project-slug}` — Planning → Execution → Quality Gate |
 | [data-handoff-patterns](data-handoff-patterns.md) | Structured markers, severity convention, prose fallback, test gaming detection |
 | [agent-consumption-guide](agent-consumption-guide.md) | How agents load and use pattern docs (frontmatter, assumes_read, hub scanning) |
 | [capability-detection](capability-detection.md) | Graceful degradation for optional tools in agent definitions |
@@ -39,13 +39,13 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, project-ma
 
 ## Key Concepts
 
-- **3-Phase Model** = Planning Team → Execution Team → Quality Gate Team. Each temporary, dissolved after completion.
-- **Persistent shared services** = context-provider + doc-updater spawned ONCE at session start, live across all phases. NOT team peers.
+- **3-Phase Model** = Planning → Execution → Quality Gate. Five **session team peers** in `session-{project-slug}` carry context across all three phases. Planner and quality-gater are temporary; the 5 core peers persist.
+- **Session team peers** = context-provider, doc-updater, arch-testing, arch-platform, arch-integration — added to `TeamCreate("session-{project-slug}")` at session start, alive for the entire session.
 - **CLAUDE.md** = workflow instructions (< 80 lines). Contains Agent Roster → triggers agent delegation.
 - **`.claude/agents/`** = canonical agent definitions. Synced via `/sync-l0`.
 - **project-manager** = orchestrator. NEVER codes — orchestrates 3-phase teams, dispatches devs via relay. FORBIDDEN from launching devs directly.
 - **quality-gater** = dynamic rule discovery. Reads CLAUDE.md for project rules, runs `/pre-pr`, cross-checks every rule.
-- **planner** = Planning Team peer. Uses `SendMessage(to="context-provider")` for project state.
+- **planner** = temporary agent in `planning-{project-slug}` team. Uses `SendMessage(to="context-provider")` for project state. Writes plan to `.planning/PLAN.md`.
 - **Doc Integrity** = `/doc-integrity` pipeline: kdoc-coverage → check-doc-patterns → docs/api freshness → audit-docs. State in `kdoc-state.json`.
 - **Spec-driven agents** = debugger, verifier, advisor, researcher, codebase-mapper for autonomous work.
 - **Skills** = token-efficient script wrappers. Always prefer over manual agent work.

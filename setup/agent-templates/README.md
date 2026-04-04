@@ -17,14 +17,14 @@ These are **starting points** — adapt to your project's specific modules, cons
 
 | Template | Purpose |
 |----------|---------|
-| `project-manager.md` | 3-phase orchestrator — Planning Team → Execution Team → Quality Gate Team |
-| `planner.md` | Planning Team peer — produces structured execution plans alongside context-provider |
-| `quality-gater.md` | Quality Gate Team peer — runs sequential verification (tests, coverage, pre-pr) |
-| `context-provider.md` | Mandatory peer in every team — read-only cross-layer context |
-| `doc-updater.md` | Mandatory peer in every team — updates docs, CHANGELOG, memory after work |
+| `project-manager.md` | 3-phase orchestrator — session team peers + temporary planner/quality-gater |
+| `planner.md` | Temporary planning peer — produces structured plans, writes to `.planning/PLAN.md` |
+| `quality-gater.md` | Session team peer (Phase 3) — runs sequential verification (tests, coverage, pre-pr) |
+| `context-provider.md` | Session team peer — read-only cross-layer context oracle |
+| `doc-updater.md` | Session team peer — updates docs, CHANGELOG, memory after work |
 | `doc-migrator.md` | Sporadic team agent — migrates docs to L0 patterns (hubs, splits, frontmatter) |
 
-### Architects (Execution Team peers)
+### Architects (session team peers)
 
 | Template | Purpose |
 |----------|---------|

@@ -62,15 +62,25 @@ Wave 3 summary: Fixed 4 encoding issues in data layer (arch-platform).
 Remaining: 1 ESCALATED issue — navigation restructuring needs design decision.
 ```
 
-### 3. Dissolve and Recreate Team
+### 3. Re-Spawn Session Team Peers
 
-If the task changes scope (e.g., from bug fixes to new feature), create a NEW TeamCreate team:
+For very long sessions (7+ waves), re-spawn with **SAME name AND SAME team_name** to replace the old peer in-team:
+
+```
+Agent(name="arch-platform", team_name="session-{project-slug}", prompt="...", run_in_background=true)
+```
+
+This replaces the old `arch-platform` in the team with a fresh context window. **Never** use a "v2" suffix — `arch-platform-v2` creates a second peer instead of replacing the first.
+
+### 4. Dissolve and Recreate Team
+
+If the task changes scope entirely (e.g., from bug fixes to new feature), create a NEW session team:
 1. `SendMessage(to="doc-updater", ...)` — archive current team's findings
 2. Dissolve current team
-3. `Agent(context-provider, prompt="Current state after wave 5")` — fresh context
-4. `TeamCreate(team_name="wave-6-feature")` — new team, clean slate
+3. `TeamCreate(team_name="session-{project-slug}")` — new session team, clean slate
+4. Re-add all 5 session team peers with fresh context
 
-### 4. Sub-Agent Over Peer When Possible
+### 5. Sub-Agent Over Peer When Possible
 
 If an agent only needs to do **one task and return**, use Agent() (fresh context) instead of adding to team (accumulated context).
 
@@ -79,7 +89,7 @@ If an agent only needs to do **one task and return**, use Agent() (fresh context
 Agent(researcher, prompt="Map export patterns in codebase. Context: {context-provider report}")
 
 // BAD: researcher as team peer, accumulates all team messages
-Agent(name="researcher", team_name="wave-1", prompt="...")
+Agent(name="researcher", team_name="session-{project-slug}", prompt="...")
 ```
 
 ---
@@ -137,9 +147,10 @@ When relaying findings between agents (architect → PM → architect), use stru
 
 ## Conditional Team Composition
 
-Default team (5-6 peers, within recommended 3-5 range + services):
+Default session team (5 peers in `session-{project-slug}`, within recommended 3-5 range + services):
 ```
-PM + arch-testing + arch-platform + arch-integration + context-provider + doc-updater
+TeamCreate("session-{project-slug}")
+  + context-provider + doc-updater + arch-testing + arch-platform + arch-integration
 ```
 
 Add ONLY when in scope:
@@ -156,7 +167,7 @@ Add ONLY when in scope:
 
 | Anti-pattern | Why it's bad | Fix |
 |-------------|-------------|-----|
-| 10+ waves in same team | Context grows to 60K+ tokens | Dissolve/recreate at 5 waves |
+| 10+ waves in same team | Context grows to 60K+ tokens | Re-spawn peers with same name/team_name at 7 waves, or dissolve/recreate at 10 |
 | Devs as team peers | Accumulate context for work they don't need | Always sub-agents via PM |
 | PM reading full verdicts | Verdict prose bloats PM context | Architects: 3-line summary first, details on request |
 | Not calling doc-updater between waves | Findings lost if session crashes | Archive to disk every 3-5 waves |

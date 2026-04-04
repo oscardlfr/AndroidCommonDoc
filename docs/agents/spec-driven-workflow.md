@@ -38,16 +38,20 @@ All delegation uses the `Agent` tool. Never Bash + `claude` CLI.
 ```
 1. Human writes SPEC.md / ROADMAP.md (goals + success criteria)
 2. Human asks Claude: "/work implement feature X" or "@project-manager ..."
-3. PM orchestrates 3 sequential teams per task:
+3. PM orchestrates 3 sequential phases per task:
 
-   Phase 1 — Planning Team (planner + context-provider):
-     planner gathers context, produces structured plan → PM collects
+   Session start: PM creates TeamCreate("session-{project-slug}") with 5 peers:
+     context-provider, doc-updater, arch-testing, arch-platform, arch-integration
 
-   Phase 2 — Execution Team (3 architects + context-provider + doc-updater):
-     Architects detect → PM dispatches devs → architects cross-verify
-     All 3 APPROVE → team dissolved
+   Phase 1 — Planning (temporary planner):
+     planner SendMessage(to="context-provider"), writes plan to .planning/PLAN.md
+     PM reads plan, dismisses planner
 
-   Phase 3 — Quality Gate Team (quality-gater + context-provider):
+   Phase 2 — Execution (session team peers — no new TeamCreate):
+     Architects detect → PM dispatches devs (sub-agents) → architects cross-verify
+     All 3 APPROVE → proceed to Phase 3
+
+   Phase 3 — Quality Gate (temporary quality-gater joins session team):
      quality-gater runs: frontmatter → KDoc → tests → coverage → benchmarks → pre-pr → prod-files → UI tests
      PASS → PM commits. FAIL → back to Phase 2
 

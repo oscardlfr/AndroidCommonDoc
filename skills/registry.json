@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-03T22:46:57.802Z",
+  "generated": "2026-04-04T09:10:50.037Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -2079,14 +2079,14 @@
       "name": "quality-gater",
       "type": "agent",
       "path": ".claude/agents/quality-gater.md",
-      "description": "Quality Gate Team peer. Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
+      "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:572fc793fc10b84e7f477574fb48ebbbbafa898c06e4fdc3925bbe9dab47fc31",
+      "hash": "sha256:4efdfc2a412e7c2c0c147c073c3f35e1ed6e1d22d19dc32ee8848a0421760e90",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
-        "description": "Quality Gate Team peer. Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
+        "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
         "tools": "Read, Grep, Glob, Bash, SendMessage",
         "model": "sonnet",
         "domain": "quality",

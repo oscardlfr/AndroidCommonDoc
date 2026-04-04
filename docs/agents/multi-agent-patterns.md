@@ -123,9 +123,9 @@ Orchestrators and architects as peers. Workers spawned on demand as sub-agents.
 
 **Key**: Peers need ongoing coordination (cross-verify, cross-dept requests). Sub-agents are workers — they receive task, execute, return.
 
-**Persistent shared services**: `context-provider` and `doc-updater` are spawned ONCE at session start, NOT as team peers. All agents reach them via `SendMessage(to="context-provider")`. See [Team Topology](team-topology.md).
+**Session team peers**: `context-provider`, `doc-updater`, and all 3 architects are added to `TeamCreate("session-{project-slug}")` at session start and stay alive across all phases. All agents reach them via `SendMessage(to="context-provider")`. See [Team Topology](team-topology.md).
 
-**3-Phase Model**: The default team topology uses 3 sequential teams (Planning → Execution → Quality Gate), each temporary and dissolved after completion. See [Team Topology](team-topology.md) for the full model.
+**3-Phase Model**: The default topology uses 3 sequential phases (Planning → Execution → Quality Gate) with 5 persistent session team peers carrying context across all three. Planner (Phase 1) and quality-gater (Phase 3) are temporary. See [Team Topology](team-topology.md) for the full model.
 
 **Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies and PM-as-relay pattern.
 

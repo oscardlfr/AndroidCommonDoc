@@ -85,11 +85,11 @@ Phase 3 — Quality Gate (temporary quality-gater)
 
 **Purpose**: Produce a structured execution plan before any code is written.
 
-**Temporary agent**: planner (spawned, then dismissed after plan delivered)
+**Temporary team**: `TeamCreate("planning-{project-slug}")` with planner only (dismissed after plan delivered).
 
 **Flow**:
-1. PM spawns planner: `Agent(name="planner", ...)`
-2. Planner `SendMessage(to="context-provider")` for current state
+1. PM creates planning team and spawns planner: `TeamCreate("planning-{project-slug}")`, `Agent(name="planner", ...)`
+2. Planner `SendMessage(to="context-provider")` for current state (context-provider is a session team peer, reachable by name)
 3. Planner reads architecture docs, specs, MODULE_MAP.md
 4. Planner produces plan with: scope, steps, architect assignments, dependencies, risks
 5. Planner writes plan to `.planning/PLAN.md`
@@ -169,7 +169,7 @@ See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 | Non-trivial task (3+ files, multiple domains) | 3-phase |
 | Simple bug fix (1-2 files, clear path) | Single agent, no team |
 | Cross-department impact | 3-phase + dept lead sub-agents |
-| Urgent hotfix | Skip Planning Team, minimal Execution + Quality Gate |
+| Urgent hotfix | Skip planning phase, minimal execution + quality gate |
 
 ---
 

@@ -286,9 +286,9 @@ describe('planner template — peer role', () => {
 describe('quality-gater template — gate protocol', () => {
   const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'quality-gater.md'), 'utf-8');
 
-  it('describes itself as Quality Gate Team peer', () => {
-    expect(content).toMatch(/Quality Gate Team/);
-    expect(content).toMatch(/team peer/i);
+  it('describes itself as session team peer in Phase 3', () => {
+    expect(content).toMatch(/session team peer/i);
+    expect(content).toMatch(/Phase 3/);
   });
 
   it('has SendMessage in tools', () => {
