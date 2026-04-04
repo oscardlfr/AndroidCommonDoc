@@ -77,7 +77,7 @@ Write unit tests for every use case:
 - **Input validation**: boundary values, null/empty inputs, invalid states
 - Use `FakeRepository` — NOT Mockito mocks
 - All coroutine tests use `runTest {}` (never `runBlocking`)
-- Inject `UnconfinedTestDispatcher` into use case constructor
+- Inject `testDispatcher` (from `runTest` scope) into use case constructor — never hardcode `Dispatchers.*`
 
 Write unit tests for every domain model:
 - Equality contracts (reflexive, symmetric, transitive)

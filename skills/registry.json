@@ -1756,7 +1756,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4b8d2db2342b7a704a59ec4a04fdb6a2fbbe060fb6203b4b42911e1425fc0e4e",
+      "hash": "sha256:a1aefd3bcaaefd06a96a951a95906b513e8ae7049194d5c8fee1f57e43e96df1",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2292,7 +2292,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:792256367dd42a5819abbe931d04e10298821ff57164670938125abb38d28e0c",
+      "hash": "sha256:390f2a29d320b325a2681a9a34b348440e013de6501e9360c12da0da12ebecf3",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
