@@ -20,6 +20,9 @@ import com.androidcommondoc.detekt.rules.generated.NoDefaultDispatcherInTestsRul
 import com.androidcommondoc.detekt.rules.generated.NoMocksInCommonTestsRule
 import com.androidcommondoc.detekt.rules.generated.NoPlatformStorageInCommonRule
 import com.androidcommondoc.detekt.rules.NoTurbineRule
+import com.androidcommondoc.detekt.rules.NoUnconfinedTestDispatcherForClassScopeRule
+import com.androidcommondoc.detekt.rules.RequireAdvanceUntilIdleAfterStartObservingRule
+import com.androidcommondoc.detekt.rules.RequireConstantIdsRule
 import com.androidcommondoc.detekt.rules.PreferKotlinTimeClockRule
 import com.androidcommondoc.detekt.rules.RequireRunCatchingCancellableRule
 import com.androidcommondoc.detekt.rules.SealedUiStateRule
@@ -58,10 +61,13 @@ class AndroidCommonDocRuleSetProvider : RuleSetProvider {
             ::NoJavaTimeInCommonMainRule,
             // ── Testing patterns ────────────────────────────────────────────────
             ::NoTurbineRule,
+            ::NoUnconfinedTestDispatcherForClassScopeRule,
+            ::RequireAdvanceUntilIdleAfterStartObservingRule,
             // ── Security ────────────────────────────────────────────────────────
             ::NoHardcodedCredentialsRule,
             ::RequireRunCatchingCancellableRule,
             // ── Code quality ────────────────────────────────────────────────────
+            ::RequireConstantIdsRule,
             ::NoSuppressAnnotationsRule,
             // ── Generated rules ────────────────────────────────────────────────
             ::NoCustomCryptoRule,

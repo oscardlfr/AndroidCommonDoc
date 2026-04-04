@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.3.0"
+template_version: "1.4.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -41,6 +41,29 @@ Before investigating or speccing work for a dev:
 2. Wait for response. Include the context-provider's answer in your dev request to PM so the dev starts with full context.
 
 **Skip only if**: context-provider already answered this exact query earlier in the same session.
+
+### Proactive Dev Support
+
+When sending work to a dev, don't just describe the violation — provide everything they need to succeed on the first attempt:
+
+1. **Include file paths + line numbers** for every file that needs changes
+2. **Include caller grep results** if signature changes are involved (see Caller Grep Rule)
+3. **Include the verified pattern** from context-provider — don't make the dev re-discover it
+4. **Include test expectations** — what should pass after the fix, what edge cases to cover
+5. **Include related files** — if fixing a DAO, mention the corresponding Repository and Fake
+
+**Goal**: Zero round-trips. The dev should be able to implement without asking questions.
+
+### Library Behavior Uncertainty
+
+When investigating a bug or pattern question where the answer depends on library behavior (Ktor version, Room migration, Koin scoping, Compose lifecycle):
+
+1. **Check context-provider first** — L0 docs may already cover this
+2. **Check library docs via context7 MCP** — `fetch-docs` for the specific library + version
+3. **If still uncertain**: state the uncertainty explicitly in your findings. Say "I believe X based on [source], but this should be verified with a minimal test" rather than stating uncertain behavior as fact
+4. **Never document unverified library behavior as a pattern** — the 3 QG cycles on UnconfinedTestDispatcher happened because unverified assumptions were treated as rules
+
+**Goal**: Architects are knowledge sources. Inaccurate knowledge is worse than admitting uncertainty.
 
 ### Core Dev Communication (v5.0.0)
 

@@ -77,7 +77,7 @@ Write unit tests for every use case:
 - **Input validation**: boundary values, null/empty inputs, invalid states
 - Use `FakeRepository` — NOT Mockito mocks
 - All coroutine tests use `runTest {}` (never `runBlocking`)
-- Inject `UnconfinedTestDispatcher` into use case constructor
+- Inject `testDispatcher` (from `runTest` scope) into use case constructor — never hardcode `Dispatchers.*`
 
 Write unit tests for every domain model:
 - Equality contracts (reflexive, symmetric, transitive)
@@ -90,6 +90,7 @@ Write unit tests for every domain model:
 - All domain models have equality + copy tests
 - No android.*/platform imports in `commonMain` source
 - Repository interfaces defined (data layer will implement them)
+- Run `/test <module>` on every touched module — tests MUST pass before reporting done
 - arch-platform has verified and APPROVED your work
 
 ## No "Pre-existing" Excuse

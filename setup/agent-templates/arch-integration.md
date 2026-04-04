@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
-template_version: "1.3.0"
+template_version: "1.4.0"
 skills:
   - test
   - extract-errors
@@ -41,6 +41,17 @@ Before investigating or speccing work for a dev:
 2. Wait for response. Include the context-provider's answer in your dev request to PM so the dev starts with full context.
 
 **Skip only if**: context-provider already answered this exact query earlier in the same session.
+
+### Proactive Dev Support
+
+When your core dev has an active task, CHECK IN proactively — do not wait for them to ask.
+Midway check-ins prevent wasted work from misunderstood requirements.
+
+### Library Behavior Uncertainty
+
+If a library's behavior is unclear (e.g., DI wiring, navigation API):
+ALWAYS SendMessage(to="context-provider") to check Context7 BEFORE attempting empirical fixes.
+Empirical workarounds that bypass library semantics create fragile tests.
 
 ### Core Dev Communication (v5.0.0)
 

@@ -234,7 +234,7 @@ describe('check-doc-patterns tool', () => {
 describe('category system', () => {
   const content = readFile(path.join(MCP_TOOLS_DIR, 'validate-doc-structure.ts'));
 
-  it('APPROVED_CATEGORIES includes "api" (19 total)', () => {
+  it('APPROVED_CATEGORIES includes "api" (20 total)', () => {
     expect(content).toContain('"api"');
   });
 

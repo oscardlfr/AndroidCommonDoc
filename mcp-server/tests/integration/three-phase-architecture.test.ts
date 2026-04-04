@@ -211,8 +211,8 @@ describe('project-manager template — 3-phase model', () => {
 describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
-  it('template version 1.4.0', () => {
-    expect(archContent).toContain('template_version: "1.4.0"');
+  it('template version 1.5.0', () => {
+    expect(archContent).toContain('template_version: "1.5.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -255,12 +255,12 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
   });
 
-  it('arch-platform has template version 1.3.0', () => {
-    expect(platformContent).toContain('template_version: "1.3.0"');
+  it('arch-platform has template version 1.4.0', () => {
+    expect(platformContent).toContain('template_version: "1.4.0"');
   });
 
-  it('arch-integration has template version 1.3.0', () => {
-    expect(integrationContent).toContain('template_version: "1.3.0"');
+  it('arch-integration has template version 1.4.0', () => {
+    expect(integrationContent).toContain('template_version: "1.4.0"');
   });
 });
 
@@ -812,8 +812,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toContain('template_version: "1.4.0"');
   });
 
-  it('arch-testing version 1.4.0', () => {
-    expect(testingContent).toContain('template_version: "1.4.0"');
+  it('arch-testing version 1.5.0', () => {
+    expect(testingContent).toContain('template_version: "1.5.0"');
   });
 });
 

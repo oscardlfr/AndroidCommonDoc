@@ -5,9 +5,11 @@ import dev.detekt.api.Entity
 import dev.detekt.api.Finding
 import dev.detekt.api.Rule
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
+
 import org.jetbrains.kotlin.psi.psiUtil.collectDescendantsOfType
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 
@@ -50,6 +52,13 @@ class NoHardcodedStringsInViewModelRule(config: Config) : Rule(
                 if (parentText.contains("TAG") || parentText.contains("LOG_TAG")) continue
                 // Skip strings passed directly to Log.* calls
                 if (parentText.startsWith("Log.") || parentText.contains("Timber.")) continue
+            }
+
+            // Skip strings inside StringResource(...) or UiText.StringResource(...)
+            val enclosingCall = template.getParentOfType<KtCallExpression>(strict = true)
+            if (enclosingCall != null) {
+                val calleeName = enclosingCall.calleeExpression?.text ?: ""
+                if (calleeName == "StringResource" || calleeName.endsWith(".StringResource")) continue
             }
 
             report(

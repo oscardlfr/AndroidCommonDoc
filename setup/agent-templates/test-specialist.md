@@ -96,8 +96,8 @@ Ask yourself: "If I broke the implementation, would this test catch it?" If no, 
 - All coroutine tests use `runTest {}` (never `runBlocking`)
 - Fakes over mocks (`FakeRepository`, `FakeClock`, `FakeDataSource`)
 - No Turbine — use `.first()`, `.take(n)`, `backgroundScope` collection
-- StateFlow subscribers created BEFORE actions with `UnconfinedTestDispatcher`
-- `testDispatcher` injected into UseCases (not `Dispatchers.Default`)
+- StateFlow subscribers created BEFORE actions with `UnconfinedTestDispatcher(testScheduler)` in backgroundScope
+- `testDispatcher` injected into ViewModels and UseCases — never hardcode `Dispatchers.*` (exception: benchmarks)
 - Test names: `methodName_condition_expectedResult` or descriptive backtick names
 - Each test has isolated database (`TestDatabaseFactory` with `IN_MEMORY`)
 

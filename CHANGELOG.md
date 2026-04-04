@@ -9,6 +9,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **Dev dispatch model v5.0.0**: anonymous disposable devs replaced by persistent named layer devs as session team peers
 
 ### Added
+- docs/testing/testing-patterns-dispatcher-scopes.md — Path A (stateIn/VM) vs Path B (startObserving/infrastructure) disambiguation, verified via Context7 + nowinandroid + androidify
+- Detekt rule: NoUnconfinedTestDispatcherForClassScopeRule — flags UnconfinedTestDispatcher() without testScheduler as constructor arg
+- Detekt rule: RequireAdvanceUntilIdleAfterStartObservingRule — flags test functions with startObserving() but no advanceUntilIdle()
+- Detekt rule: RequireConstantIdsRule — enforces id parameters use constants, not string literals
+- Architect templates: Proactive Dev Support + Library Behavior Uncertainty sections (arch-testing v1.5.0, arch-platform v1.4.0, arch-integration v1.4.0)
+
+### Changed
+- CLAUDE.md: testing section lean pointer to dispatcher-scopes sub-doc + expanded testDispatcher injection rule
+- testing-patterns.md: v4 — Path A/B in Key Rules + Quick Reference, new sub-doc reference
+- NoHardcodedStringsInViewModelRule: added StringResource/UiText.StringResource exclusions, removed id exclusion
+
+### Fixed
+- NoHardcodedStringsInViewModelRule false positives on StringResource("key") patterns
+
+### Added
 - **Context7 MCP** as first-class external context source in context-provider v2.4.0
 - **Planner v1.4.0 research step**: external library docs via context-provider + Context7
 - **Doc-updater feedback loop**: undocumented Context7 patterns get documented automatically
