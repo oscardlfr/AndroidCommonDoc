@@ -22,6 +22,7 @@ If no options provided, research and propose 2-4 viable alternatives.
 
 1. **Understand the question** — What are we optimizing for?
 2. **Research options** — Use codebase context, web search, documentation
+   - For library/framework decisions: use Context7 (`resolve-library-id` then `get-library-docs`) to fetch latest docs for each option before comparing. Training data may be stale.
 3. **Compare on dimensions** — Performance, complexity, maintenance, ecosystem, cost
 4. **Identify risks** — What could go wrong with each option?
 5. **Recommend** — Pick one with clear rationale

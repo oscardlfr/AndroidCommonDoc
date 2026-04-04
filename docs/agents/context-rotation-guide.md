@@ -30,6 +30,8 @@ How to manage context window growth in TeamCreate teams. Covers signals, rotatio
 
 **Key insight**: Peers are expensive (context grows). Sub-agents are cheap (context is temporary). Use sub-agents for workers, peers only for coordinators.
 
+> **Context7 queries are stateless**: each `resolve-library-id` / `get-library-docs` call is independent. They do not accumulate context in the context-provider window beyond the response text. Context7 lookups do not contribute to context pressure and do not need to be factored into rotation thresholds.
+
 ---
 
 ## Signals: When Context Is Growing Too Large

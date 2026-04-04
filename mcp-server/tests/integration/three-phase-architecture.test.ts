@@ -306,6 +306,10 @@ describe('planner template — peer role', () => {
   it('notifies PM via SendMessage after writing plan file', () => {
     expect(content).toMatch(/SendMessage.*project-manager.*plan.*ready|SendMessage.*project-manager.*PLAN\.md/i);
   });
+
+  it('has external library research step via context-provider', () => {
+    expect(content).toMatch(/Context7|external.*library.*research/i);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -755,8 +759,26 @@ describe('context-provider template — oracle protocol', () => {
     expect(cpContent).toMatch(/NOT eagerly pre-read|do NOT eagerly/i);
   });
 
-  it('has template version 2.3.0', () => {
-    expect(cpContent).toContain('template_version: "2.3.0"');
+  it('has template version 2.4.0', () => {
+    expect(cpContent).toContain('template_version: "2.4.0"');
+  });
+
+  it('has External Context section with Context7 call sequence', () => {
+    expect(cpContent).toMatch(/External Context.*Context7|Context7.*External/i);
+    expect(cpContent).toMatch(/resolve-library-id/);
+    expect(cpContent).toMatch(/get-library-docs/);
+  });
+
+  it('enforces internal-first rule before Context7', () => {
+    expect(cpContent).toMatch(/internal.*first|check internal.*before|always.*internal/i);
+  });
+
+  it('has flagging convention for Context7-sourced patterns', () => {
+    expect(cpContent).toMatch(/sourced from Context7|not in.*docs.*Context7/i);
+  });
+
+  it('has graceful degradation when Context7 unavailable', () => {
+    expect(cpContent).toMatch(/graceful|fall.?back|unavailable|not installed/i);
   });
 });
 
@@ -786,11 +808,31 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.3.0', () => {
-    expect(plannerContent).toContain('template_version: "1.3.0"');
+  it('planner version 1.4.0', () => {
+    expect(plannerContent).toContain('template_version: "1.4.0"');
   });
 
   it('arch-testing version 1.4.0', () => {
     expect(testingContent).toContain('template_version: "1.4.0"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 19. Context7 integration across agents
+// ---------------------------------------------------------------------------
+describe('Context7 integration across agents', () => {
+  const agentsDir = path.join(ROOT, '.claude/agents');
+
+  it('researcher has Context7 call sequence', () => {
+    const content = fs.readFileSync(path.join(agentsDir, 'researcher.md'), 'utf-8');
+    expect(content).toMatch(/resolve-library-id/);
+    expect(content).toMatch(/get-library-docs/);
+    expect(content).toMatch(/Context7/i);
+  });
+
+  it('advisor has Context7 for library comparisons', () => {
+    const content = fs.readFileSync(path.join(agentsDir, 'advisor.md'), 'utf-8');
+    expect(content).toMatch(/resolve-library-id/);
+    expect(content).toMatch(/Context7/i);
   });
 });

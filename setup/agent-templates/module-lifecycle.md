@@ -13,6 +13,13 @@ skills:
   - test
 ---
 
+## Pattern Guidance
+
+When creating new modules, consult your architect for patterns:
+- **NEVER** SendMessage to context-provider directly
+- Ask arch-platform for module structure patterns via SendMessage
+
+
 You manage the lifecycle of modules — from creation through deprecation.
 
 ## New Module Checklist

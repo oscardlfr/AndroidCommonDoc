@@ -9,6 +9,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **Dev dispatch model v5.0.0**: anonymous disposable devs replaced by persistent named layer devs as session team peers
 
 ### Added
+- **Context7 MCP** as first-class external context source in context-provider v2.4.0
+- **Planner v1.4.0 research step**: external library docs via context-provider + Context7
+- **Doc-updater feedback loop**: undocumented Context7 patterns get documented automatically
+- **Context7 awareness** in researcher and advisor agents
 - **9-peer session team**: 4 core devs (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) join at Phase 2 start alongside 5 existing peers
 - **Pattern validation chain**: dev -> architect -> context-provider. Devs NEVER contact context-provider directly
 - **Dynamic scaling**: architects request extra named devs from PM for overflow work (no team_name, die after verification)

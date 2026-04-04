@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-04T12:02:00.358Z",
+  "generated": "2026-04-04T14:52:44.356Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1310,7 +1310,7 @@
       "description": "Researches a single technical decision and returns a structured comparison table with recommendation. Use when choosing between approaches, libraries, or architectures.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c6949553188577a876b24c41e5d49b6e7a02b5abdbce1df28c168d01dad8a59c",
+      "hash": "sha256:f43277f65e0ad4bd0c59afab92f3653d0b5bdb1a05286cc13370502afa446f40",
       "dependencies": [],
       "frontmatter": {
         "name": "advisor",
@@ -1361,7 +1361,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ca9c824c1c6ebed556053ae75e69c7c3fa9689ed7ae6757fc0a3a6908d4a747a",
+      "hash": "sha256:6f99542092d151bdddcd17b4262117fd78aad850b9b9c13b29770a88e13b127d",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1391,7 +1391,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d2c65b2414e9b2b3ab676e1efcae12b093281d70da256fa856cd8b78a92bcdeb",
+      "hash": "sha256:6ab45a6e17de49e9e3b708bc1c4bdefe02196412e0204d61ee2ce81ba8bcbc02",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1420,7 +1420,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:fc360b3e5e3f7df76fd5615d3dd16f2eca5485162d0c3f85bbbe42b981aa4cbf",
+      "hash": "sha256:89df9c993ebb69d16e1a8468b8f0e9370c124b6c190eb01af142dde88e725ef7",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1532,7 +1532,7 @@
       "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:37d96f8b1c7298571151cf8d7b4aa1629b2233653c8af68a86153fcbf46bc559",
+      "hash": "sha256:049cafd7186fffddcdc898c044eff1715d93d9711d1b5148aa0a5840b259dcb0",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -1547,7 +1547,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "2.3.0"
+        "template_version": "2.4.0"
       }
     },
     {
@@ -1588,7 +1588,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:0198e4cf9203fb6bbc8ee596828798bdcaa3b9e17b9bf9b5a95c82f01d38ad8a",
+      "hash": "sha256:42d71e92ea0d30c34d208e17b656a9f2139be491eb2983e2ed6af8c2557657e5",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -1605,7 +1605,11 @@
         ],
         "token_budget": 3000,
         "template_version": "1.0.0",
-        "memory": "project"
+        "memory": "project",
+        "skills": [
+          "test",
+          "validate-patterns"
+        ]
       }
     },
     {
@@ -1752,7 +1756,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4f4407b6a7715b4f38e040e49bef5d1c8a31ff5e4930f59cb3a63c0a3e995e17",
+      "hash": "sha256:3b6f1c33f24b6baa6a2cc58c6b34e23636cdf04d0e3cb1dafdea3271e456c824",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -1768,7 +1772,11 @@
         ],
         "token_budget": 3000,
         "template_version": "1.0.0",
-        "memory": "project"
+        "memory": "project",
+        "skills": [
+          "test",
+          "validate-patterns"
+        ]
       }
     },
     {
@@ -1778,7 +1786,7 @@
       "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d42a4d9f5715b701ec5b4e40d2160797b8eea0b113c74644937eaab7b4bfc2fe",
+      "hash": "sha256:645b3f79492d44fcd550a9a3ae32850e0199b7ff6f793d83b0b8cc2d8c3885f9",
       "dependencies": [],
       "frontmatter": {
         "name": "{{DOMAIN}}-specialist",
@@ -1912,7 +1920,7 @@
       "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:36707a25b16caff372b8020374394b3c057b6557fc28f3c662edb86163f17008",
+      "hash": "sha256:6017cfe5c4a088eb8c6f54d0e5d34e50f44634937a6656f7c10063f87172d3b4",
       "dependencies": [],
       "frontmatter": {
         "name": "module-lifecycle",
@@ -1942,7 +1950,7 @@
       "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7f94905ab1353c7b67188f9fef8428b327603083b876b78d6d379099a284de17",
+      "hash": "sha256:9dd37f7ed09343a5361e745231bb627f34771aa4b3e9cbc7ffef156c7a8ab635",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -1957,7 +1965,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.3.0"
+        "template_version": "1.4.0"
       }
     },
     {
@@ -2079,7 +2087,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f7447c09ce42e78d650c0718fcfd8e3ad234e3fc0c661cd450660a32df380c06",
+      "hash": "sha256:c617378cdc3f8ad6ba9c2d4172b1429cc7c0e3600e0812c36993eda4ec2c287d",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
@@ -2135,7 +2143,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4efdfc2a412e7c2c0c147c073c3f35e1ed6e1d22d19dc32ee8848a0421760e90",
+      "hash": "sha256:29d072080cf3a56d3e263e1b373e109a791610af76e42093ceade5d10dbecf84",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2189,7 +2197,7 @@
       "description": "Ad-hoc technical research on any topic. Use before implementation to gather context, evaluate options, or understand a domain.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b8412aff5aae99a55036e826abdd766a1eb08c959f808446af302768451bbed2",
+      "hash": "sha256:5177def422340437c4c864c06b8a29b0c47095e1d43b5755eabfa91fb449ac16",
       "dependencies": [],
       "frontmatter": {
         "name": "researcher",
@@ -2321,7 +2329,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:c3edd932284f46c2f9d1b93810a1a6a9905198a7f58a5f181b5b5859e6dd6ab7",
+      "hash": "sha256:6c659da91fe47359c012dc5379ed328c2cc9a9f7b059a0efd18617a09dcdc3e5",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
