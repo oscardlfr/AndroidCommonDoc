@@ -5,6 +5,7 @@ tools: Read, Grep, Glob, Bash
 model: sonnet
 domain: audit
 intent: [quality-gate, consistency, validators]
+token_budget: 3000
 memory: project
 ---
 

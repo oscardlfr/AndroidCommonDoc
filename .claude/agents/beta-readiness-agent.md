@@ -5,6 +5,7 @@ tools: Read, Grep, Glob
 model: sonnet
 domain: quality
 intent: [beta, readiness, launch, onboarding]
+token_budget: 3000
 memory: project
 skills:
   - pre-release

@@ -5,6 +5,7 @@ tools: Read, Grep, Glob, Bash, Agent, Write
 model: sonnet
 domain: audit
 intent: [full-audit, quality-gate, wave]
+token_budget: 4000
 memory: project
 ---
 

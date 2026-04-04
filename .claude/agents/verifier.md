@@ -4,6 +4,7 @@ description: Goal-backward verification — checks if code achieves stated goals
 tools: Read, Bash, Grep, Glob
 domain: quality
 intent: [verify, spec, criteria, goal, check]
+token_budget: 2000
 model: sonnet
 skills:
   - verify

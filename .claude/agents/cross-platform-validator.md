@@ -5,6 +5,7 @@ tools: Read, Grep, Glob
 model: sonnet
 domain: quality
 intent: [platform, expect-actual, sourceset, kmp]
+token_budget: 2500
 memory: project
 optional_capabilities:
   - context7

@@ -5,6 +5,7 @@ tools: Read, Grep, Glob
 model: haiku
 domain: audit
 intent: [drift, doc-code, pattern]
+token_budget: 2000
 memory: project
 ---
 

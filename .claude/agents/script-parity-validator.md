@@ -5,6 +5,7 @@ tools: Read, Grep, Glob
 model: haiku
 domain: audit
 intent: [parity, ps1, sh, script]
+token_budget: 2000
 memory: project
 ---
 

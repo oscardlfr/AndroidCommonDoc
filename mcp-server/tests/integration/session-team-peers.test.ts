@@ -152,3 +152,16 @@ describe('dev template dual-location — also in .claude/agents/', () => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// 9. team-topology broadcast workaround documentation
+// ---------------------------------------------------------------------------
+describe('team-topology broadcast workaround documentation', () => {
+  it('team-topology documents SendMessage broadcast workaround', () => {
+    const content = fs.readFileSync(
+      path.join(ROOT, 'docs/agents/team-topology.md'), 'utf-8'
+    );
+    expect(content).toContain('SendMessage(to="*")');
+    expect(content).toMatch(/workaround|individual messages/i);
+  });
+});
