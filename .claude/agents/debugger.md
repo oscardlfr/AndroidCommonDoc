@@ -5,6 +5,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch
 model: sonnet
 domain: development
 intent: [bug, error, fix, broken, crash, exception]
+token_budget: 2500
 skills:
   - test
   - extract-errors

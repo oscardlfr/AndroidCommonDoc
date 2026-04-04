@@ -5,6 +5,7 @@ tools: Read, Grep, Glob
 model: haiku
 domain: infrastructure
 intent: [release, publish, deploy, secrets]
+token_budget: 2000
 memory: project
 skills:
   - sbom

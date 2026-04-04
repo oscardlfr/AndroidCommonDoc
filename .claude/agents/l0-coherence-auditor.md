@@ -5,6 +5,7 @@ tools: Read, Grep, Glob
 model: haiku
 domain: audit
 intent: [coherence, l0, hub, frontmatter]
+token_budget: 3000
 memory: project
 optional_capabilities:
   - mcp-gsd

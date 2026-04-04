@@ -219,6 +219,23 @@ See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 
 ---
 
+## Known Platform Limitations
+
+### SendMessage(to="*") broadcast bug
+
+`SendMessage(to="*")` returns "Not in a team context" even when `TeamCreate` has been called and the team is active.
+
+**Workaround**: Send individual messages to each target instead of broadcast:
+
+```
+// Instead of: SendMessage(to="*", message="Phase 2 complete")
+SendMessage(to="arch-testing", message="Phase 2 complete")
+SendMessage(to="arch-platform", message="Phase 2 complete")
+SendMessage(to="arch-integration", message="Phase 2 complete")
+```
+
+This applies to all broadcast scenarios: PM notifying architects, quality-gater polling specialists, etc.
+
 ## Related Docs
 
 - [Multi-Agent Patterns](multi-agent-patterns.md) — topology overview, agent design rules, failure handling

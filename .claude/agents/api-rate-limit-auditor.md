@@ -5,6 +5,7 @@ tools: Read, Grep, Glob
 model: haiku
 domain: security
 intent: [rate-limit, retry, timeout, http]
+token_budget: 2000
 memory: project
 skills:
   - validate-patterns

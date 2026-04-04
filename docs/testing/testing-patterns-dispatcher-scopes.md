@@ -19,7 +19,7 @@ rules:
     detect:
       in_source_set: commonTest
       banned_pattern: "CoroutineScope(UnconfinedTestDispatcher())"
-      prefer: "backgroundScope or TestScope(UnconfinedTestDispatcher()) with shared scheduler"
+      prefer: "backgroundScope (Path B/StateFlow) or CoroutineScope(UnconfinedTestDispatcher(testScheduler)) (Path B2/SharedFlow) — always pass testScheduler explicitly"
     hand_written: true
 ---
 
@@ -170,6 +170,46 @@ fun `nudge fires after delay`() = runTest {
 }
 ```
 
+## Path B2: SharedFlow-Emitting Infrastructure (no replay)
+
+For infrastructure classes that emit via `MutableSharedFlow(replay = 0)`. The subscriber MUST be
+active BEFORE the emission — unlike StateFlow, there is no replay buffer to catch late subscribers.
+
+### Why NOT backgroundScope for SharedFlow CUT?
+
+`backgroundScope` uses `StandardTestDispatcher`, which **queues** coroutine launches. When the
+CUT emits to a SharedFlow, the subscriber launched via `backgroundScope` has not started yet
+(it's queued). The emission is lost — SharedFlow has no replay.
+
+### CUT scope: UnconfinedTestDispatcher(testScheduler)
+
+```kotlin
+@Test
+fun `shared event is received`() = runTest {
+    // CUT scope — UnconfinedTestDispatcher so subscriber is IMMEDIATELY active
+    val cutScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+    val eventBus = EventBus(scope = cutScope)
+
+    val events = mutableListOf<Event>()
+    backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+        eventBus.events.collect { events.add(it) }
+    }
+
+    eventBus.emit(Event.Started)
+    advanceUntilIdle()
+
+    assertEquals(listOf(Event.Started), events)
+    cutScope.cancel()  // cleanup
+}
+```
+
+### Decision: Path B vs Path B2
+
+| CUT exposes... | CUT scope | Why |
+|----------------|-----------|-----|
+| `StateFlow` (replay = 1) | `backgroundScope` (Standard) | Replay — late subscriber gets last value |
+| `SharedFlow` (replay = 0) | `CoroutineScope(UnconfinedTestDispatcher(testScheduler))` | No replay — subscriber must be active before emit |
+
 ---
 
 ## Universal Rules (both paths)
@@ -195,6 +235,23 @@ val controller = MyController(scope = scope)
 ```
 
 This is the #1 cause of broken timer tests. The standalone scope has its own scheduler — `advanceTimeBy()` from the test's TestScope has no effect on it.
+
+### BANNED: runTest(UnconfinedTestDispatcher())
+
+NEVER pass `UnconfinedTestDispatcher` as the `runTest` parameter. This changes the **test body**
+scheduler — `advanceUntilIdle()` and `advanceTimeBy()` become no-ops on the test body itself.
+The test body scheduler must always be `StandardTestDispatcher` (the `runTest` default).
+
+```kotlin
+// BANNED — test body scheduler changed, time control broken
+runTest(UnconfinedTestDispatcher()) { ... }
+
+// CORRECT — only the CUT scope uses UnconfinedTestDispatcher
+runTest {
+    val cutScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+    ...
+}
+```
 
 ### Behavioral difference (NOT time difference)
 

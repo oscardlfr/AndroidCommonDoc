@@ -37,6 +37,11 @@ PM dissolves Planning Team, moves to Execution Team
    - (c) Cross-project state and recent relevant changes
    Include context-provider's response in your plan output so architects start with full context.
    - (d) **External library research**: If the task involves a specific library or framework, ask context-provider to check Context7 for that library — any recent API changes or migration notes relevant to this task? Context-provider will use `resolve-library-id` then `get-library-docs`. Include external findings in the plan Context section.
+1.5. **Verify existing state (MANDATORY)**: Before writing ANY plan step:
+   - Grep/Read the codebase for each planned deliverable — does it already exist?
+   - Do NOT plan work that already exists — mark as "ALREADY DONE: {path}"
+   - For template/doc changes: read current content first to verify the change is needed
+   - Lesson: Sprint 2 planned 7 steps; 5 were pre-built. Verification prevents wasted waves.
 2. **Read architecture**: MODULE_MAP.md, CLAUDE.md, relevant docs
 3. **Read specs**: PRODUCT_SPEC.md, MARKETING docs (if task has product/marketing impact)
 4. **Identify scope**: Which modules, files, and patterns are affected

@@ -57,6 +57,7 @@ This document defines standard patterns for testing in Kotlin Multiplatform proj
 - Pure-Kotlin fakes over mocks (fakes work in commonTest across all KMP targets)
 - **Path A** (VM/stateIn): `UnconfinedTestDispatcher` for everything, collect in `backgroundScope` BEFORE actions
 - **Path B** (infrastructure/startObserving): `backgroundScope` (StandardTestDispatcher) for CUT scope, `advanceUntilIdle()` after start
+- **Path B2** (SharedFlow/no-replay): CoroutineScope(UnconfinedTestDispatcher(testScheduler)) for subscriber, no backgroundScope
 - See [testing-patterns-dispatcher-scopes](testing-patterns-dispatcher-scopes.md) for decision tree and code examples
 - Test schedulers via `triggerNow()`, NEVER test infinite loops directly
 - Inject `testDispatcher` into UseCases (not `Dispatchers.Default`)
