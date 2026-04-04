@@ -768,6 +768,18 @@ describe('context-provider template — oracle protocol', () => {
     expect(cpContent).toMatch(/resolve-library-id/);
     expect(cpContent).toMatch(/get-library-docs/);
   });
+
+  it('enforces internal-first rule before Context7', () => {
+    expect(cpContent).toMatch(/internal.*first|check internal.*before|always.*internal/i);
+  });
+
+  it('has flagging convention for Context7-sourced patterns', () => {
+    expect(cpContent).toMatch(/sourced from Context7|not in.*docs.*Context7/i);
+  });
+
+  it('has graceful degradation when Context7 unavailable', () => {
+    expect(cpContent).toMatch(/graceful|fall.?back|unavailable|not installed/i);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -802,5 +814,25 @@ describe('architect templates — PRE-TASK protocol', () => {
 
   it('arch-testing version 1.4.0', () => {
     expect(testingContent).toContain('template_version: "1.4.0"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 19. Context7 integration across agents
+// ---------------------------------------------------------------------------
+describe('Context7 integration across agents', () => {
+  const agentsDir = path.join(ROOT, '.claude/agents');
+
+  it('researcher has Context7 call sequence', () => {
+    const content = fs.readFileSync(path.join(agentsDir, 'researcher.md'), 'utf-8');
+    expect(content).toMatch(/resolve-library-id/);
+    expect(content).toMatch(/get-library-docs/);
+    expect(content).toMatch(/Context7/i);
+  });
+
+  it('advisor has Context7 for library comparisons', () => {
+    const content = fs.readFileSync(path.join(agentsDir, 'advisor.md'), 'utf-8');
+    expect(content).toMatch(/resolve-library-id/);
+    expect(content).toMatch(/Context7/i);
   });
 });
