@@ -72,6 +72,7 @@ Standard patterns for testing Kotlin Multiplatform projects.
 | [testing-patterns-coverage](testing-patterns-coverage.md) | Coverage — Kover config, thresholds, platform tests |
 | [testing-patterns-schedulers](testing-patterns-schedulers.md) | Scheduler testing — advancing time, virtual clocks |
 | [testing-patterns-benchmarks](testing-patterns-benchmarks.md) | Benchmark patterns — dispatcher selection, androidx vs kotlinx-benchmark |
+| [testing-patterns-dispatcher-scopes](testing-patterns-dispatcher-scopes.md) | Dispatcher scopes — Path A (stateIn/VM) vs Path B (startObserving), shared testScheduler |
 
 ## Key Rules
 

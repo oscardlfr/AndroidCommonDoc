@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 24 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 39 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 27 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 39 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
@@ -21,7 +21,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 25 cross-platform pairs + 7 Bash-only utilities
 - **AI agent skills** for Claude Code and GitHub Copilot -- 58 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
-- **Detekt rules** that enforce architecture patterns at build time -- 20 hand-written + 4 generated AST-only rules (24 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, and security patterns
+- **Detekt rules** that enforce architecture patterns at build time -- 23 hand-written + 4 generated AST-only rules (27 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, security patterns, and testing anti-patterns
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
@@ -291,7 +291,7 @@ Findings are persisted to `.androidcommondoc/findings-log.jsonl` with resolution
 
 ## Detekt Architecture Rules
 
-20 hand-written + 4 generated AST-only rules (24 total, no type resolution, no bindingContext) that enforce the most impactful architecture patterns at build time. Organized by category:
+23 hand-written + 4 generated AST-only rules (27 total, no type resolution, no bindingContext) that enforce the most impactful architecture patterns at build time. Organized by category:
 
 ### State & Exposure
 
@@ -347,6 +347,9 @@ Findings are persisted to `.androidcommondoc/findings-log.jsonl` with resolution
 | Rule | What It Catches |
 |------|----------------|
 | `NoTurbineRule` | `app.cash.turbine` imports -- use `backgroundScope.launch` + `flow.toList()` |
+| `NoUnconfinedTestDispatcherForClassScopeRule` | `UnconfinedTestDispatcher()` without `testScheduler` param -- creates isolated scheduler, breaks virtual time |
+| `RequireAdvanceUntilIdleAfterStartObservingRule` | Test functions with `startObserving()` but no `advanceUntilIdle()` -- Path B requires draining queued launches |
+| `RequireConstantIdsRule` | String literal `id` parameters -- use named constants for type safety |
 
 ### Warning Enforcement
 
@@ -370,7 +373,7 @@ This four-layer approach catches suppressions at build time (Detekt), dependency
 
 ### L0/L1 Config Hierarchy
 
-L0 ships `detekt-l0-base.yml` with all 24 rules `active: true`. The convention plugin loads both files automatically -- `detekt-l0-base.yml` as base, `config.yml` as L1 override (last file wins per key):
+L0 ships `detekt-l0-base.yml` with all 27 rules `active: true`. The convention plugin loads both files automatically -- `detekt-l0-base.yml` as base, `config.yml` as L1 override (last file wins per key):
 
 ```bash
 # Manual equivalent of what the plugin does:
@@ -396,7 +399,7 @@ plugins {
 }
 
 androidCommonDoc {
-    detektRules.set(true)       // default: true  -- 24 architecture rules
+    detektRules.set(true)       // default: true  -- 27 architecture rules
     composeRules.set(true)      // default: true  -- Compose best practices
     testConfig.set(true)        // default: true  -- useJUnitPlatform, maxParallelForks=1
     formattingRules.set(false)  // default: false -- ktlint formatting (opt-in)
@@ -990,7 +993,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 | [Resources](docs/resources/resources-hub.md) | Memory, lifecycle, and platform resource handling | Android + KMP |
 | [Security](docs/security/security-hub.md) | Encryption, key management, biometric auth, platform crypto | Android + KMP |
 | [Storage](docs/storage/storage-hub.md) | Key-value, relational, secure, cache — thin module architecture | Android + KMP |
-| [Testing](docs/testing/testing-hub.md) | runTest, fakes, coroutine dispatchers, coverage strategy | Android + KMP |
+| [Testing](docs/testing/testing-hub.md) | runTest, fakes, coroutine dispatchers, dispatcher scopes (Path A/B), coverage, benchmarks | Android + KMP |
 | [UI](docs/ui/ui-hub.md) | Sealed UiState, StateFlow, events, navigation, Compose screen structure | Android + KMP |
 
 ---
@@ -1019,7 +1022,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 |.json     |       |  +--------------+    +---------------+  |
 +----------+       |  | detekt-      |    | build-logic/  |  |
                    |  | rules/       |--->| convention    |  |
-                   |  | (24 rules)   |    | plugin        |  |
+                   |  | (27 rules)   |    | plugin        |  |
                    |  +--------------+    +---------------+  |
                    +-----------------------------------------+
 ```
@@ -1057,7 +1060,7 @@ AndroidCommonDoc/
 |   |   +-- cli/            # CLI entrypoints: check-outdated (dependency freshness, exit 0/1/2), CI monitoring
 |   +-- tests/              # 99 test files -- vitest unit + integration (1634 tests)
 +-- detekt-rules/
-|   +-- src/main/kotlin/    # 20 hand-written + 4 generated AST-only Detekt rules (24 total)
+|   +-- src/main/kotlin/    # 23 hand-written + 4 generated AST-only Detekt rules (27 total)
 |   +-- src/main/resources/
 |       +-- config/
 |           +-- detekt-l0-base.yml  # Distributable baseline (all rules active)
