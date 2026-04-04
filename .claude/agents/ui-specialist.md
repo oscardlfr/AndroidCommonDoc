@@ -3,10 +3,13 @@ name: ui-specialist
 description: "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations."
 tools: Read, Grep, Glob, Bash, Write
 model: sonnet
+domain: development
+intent: [compose, ui, accessibility, material3]
 memory: project
 skills:
   - accessibility
   - lint-resources
+  - validate-patterns
 ---
 
 Review and fix Compose UI code for KMP project patterns.
@@ -66,6 +69,17 @@ If you discover a bug during your task — whether you caused it or not — you 
 - **Easy fix (< 15 min)**: fix it now, include in your commit
 - **Hard fix**: report it in your Summary as a pending item with severity, file, and reproduction steps
 - **NEVER** dismiss a bug as "pre-existing" and move on silently. This is a professional project — leaving known broken behavior unreported is unacceptable.
+
+## MCP Tools (when available)
+- `compose-preview-audit` — validate @Preview coverage
+- `unused-resources` — detect unused strings/colors/drawables
+- `string-completeness` — validate string completeness across languages
+
+## Official Skills (use when available)
+- `frontend-design` — use for layout and component composition recommendations
+- `uiux-design` — use for interaction patterns and accessibility standards
+- `uiux-design-system` — use for design token and component library validation
+- `webapp-testing` — use for visual regression testing patterns
 
 ## Findings Protocol
 

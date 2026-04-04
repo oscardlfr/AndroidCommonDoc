@@ -14,62 +14,15 @@ import type { RegistryEntry } from "../registry/types.js";
 import type { RateLimiter } from "../utils/rate-limiter.js";
 import { checkRateLimit } from "../utils/rate-limit-guard.js";
 import { logger } from "../utils/logger.js";
-
-/**
- * Tokenize a query string into individual search tokens.
- * Splits on spaces and commas, lowercases all tokens, removes empty strings.
- */
-function tokenize(query: string): string[] {
-  return query
-    .toLowerCase()
-    .split(/[\s,]+/)
-    .filter((t) => t.length > 0);
-}
+import {
+  tokenize,
+  scoreEntry,
+} from "../utils/doc-scoring.js";
 
 interface ScoredEntry {
   entry: RegistryEntry;
   score: number;
   content: string;
-}
-
-/**
- * Score a registry entry against query tokens.
- * Weights: slug (3x), description (2x), scope+targets (2x), content body (1x).
- */
-function scoreEntry(
-  entry: RegistryEntry,
-  tokens: string[],
-  content: string,
-): number {
-  let score = 0;
-  const slugLower = entry.slug.toLowerCase();
-  const descLower = (entry.metadata.description ?? "").toLowerCase();
-  const scopeTargets = [
-    ...entry.metadata.scope,
-    ...entry.metadata.targets,
-  ].map((v) => v.toLowerCase());
-  const contentLower = content.toLowerCase();
-
-  for (const token of tokens) {
-    // Slug match: 3x
-    if (slugLower.includes(token)) {
-      score += 3;
-    }
-    // Description match: 2x
-    if (descLower.includes(token)) {
-      score += 2;
-    }
-    // Scope + targets match: 2x
-    if (scopeTargets.some((field) => field.includes(token))) {
-      score += 2;
-    }
-    // Content body match: 1x
-    if (contentLower.includes(token)) {
-      score += 1;
-    }
-  }
-
-  return score;
 }
 
 /**

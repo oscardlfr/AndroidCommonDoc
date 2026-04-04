@@ -60,7 +60,7 @@ Rules not mentioned in the L1 file inherit L0 defaults (all `active: true`).
 
 ## Rule Catalog
 
-All 13 rules shipped by AndroidCommonDoc. Hand-written rules are AST-only (no type resolution).
+All 18 rules shipped by AndroidCommonDoc. Hand-written rules are AST-only (no type resolution). Generated rules are auto-created from pattern doc frontmatter via `/generate-rules`.
 
 ### State & Exposure
 
@@ -94,6 +94,21 @@ All 13 rules shipped by AndroidCommonDoc. Hand-written rules are AST-only (no ty
 | `NoChannelForUiEventsRule` | `Channel` used for UI events in ViewModel (use `SharedFlow`) | viewmodel-events.md |
 | `NoChannelForNavigationRule` | `Channel` used for navigation events in ViewModel | navigation-patterns.md |
 | `NoMagicNumbersInUseCaseRule` | Numeric literals in UseCase body (extract as named constants) | error-handling-result.md |
+
+### Code Quality
+
+| Rule | Detects | Source doc |
+|------|---------|-----------|
+| `NoSuppressAnnotationsRule` | `@Suppress` annotations hiding warnings instead of fixing root cause | (hand-written) |
+
+### Generated Rules (from pattern doc frontmatter)
+
+| Rule | Detects | Source doc |
+|------|---------|-----------|
+| `NoCustomCryptoRule` | Custom cryptography implementations instead of platform-provided APIs | security patterns |
+| `NoMocksInCommonTestsRule` | Mock frameworks in `commonTest` source set (use pure-Kotlin fakes) | testing-patterns |
+| `NoPlatformStorageInCommonRule` | Platform storage APIs (`SharedPreferences`, `NSUserDefaults`) in `commonMain` | kmp-source-sets |
+| `NoDefaultDispatcherInTestsRule` | `Dispatchers.Default` used in test code (inject test dispatchers) | testing-patterns-coroutines |
 
 ---
 

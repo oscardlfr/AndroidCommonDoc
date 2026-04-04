@@ -1,3 +1,9 @@
+---
+name: research
+description: "Ad-hoc technical research before implementation."
+copilot: false
+---
+
 # Research Skill
 
 Ad-hoc technical research before implementation.

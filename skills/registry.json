@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-03-26T23:07:03.333Z",
+  "generated": "2026-04-04T09:10:50.037Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -10,7 +10,7 @@
       "description": "Audit web accessibility against WCAG 2.1. Use when asked about a11y, WCAG compliance, or screen reader support.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:c88484494c012dfb2ae554a960547d8dd2a9503b26107880bae23e5a63f3d5f9",
+      "hash": "sha256:4a5bdc31e9848fd5864e451b75118b08319021e0eaac15a4f3b7bcc257988876",
       "dependencies": [],
       "frontmatter": {
         "name": "accessibility",
@@ -20,7 +20,9 @@
           "Grep",
           "Glob",
           "Bash"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -30,7 +32,7 @@
       "description": "Run Android instrumented tests with logcat capture. Use when asked to run device/emulator tests or connectedAndroidTest.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:761624437a424c030d27fd1682cd554ab4222a8fc6770cbe1b9fdcce723e9b07",
+      "hash": "sha256:1ab6d0efd553a45bd6aed02fec94eda36e3aecbd67bca43071e84c7afd2d430b",
       "dependencies": [
         "scripts/sh/run-android-tests.sh",
         "scripts/ps1/run-android-tests.ps1"
@@ -44,7 +46,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -54,7 +57,7 @@
       "description": "Generate a quality audit report from .androidcommondoc/audit-log.jsonl. Produces a manager-friendly trend table (coverage, Detekt, tests, CVEs) with traffic lights and period deltas. Zero extra Gradle runs — reads from data already written by scripts.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4011211f2629df023a9404a799302d23423f50685859121008f94a2fc36860f6",
+      "hash": "sha256:cb027cc61f747974c0583ed6e83a091f8460feb3940082f3c28f2ad960ae7bf1",
       "dependencies": [],
       "frontmatter": {
         "name": "audit",
@@ -62,7 +65,9 @@
         "allowed-tools": [
           "mcp__androidcommondoc__audit-report"
         ],
-        "disable-model-invocation": false
+        "disable-model-invocation": false,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -72,7 +77,7 @@
       "description": "Unified documentation audit — validates structure (sizes, frontmatter), coherence (links, refs), and upstream content (API assertions, deprecation scan). Waves 1+2 are local ($0). Wave 3 requires --with-upstream.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:e3308b7cda11a613021193f1fd43b47700978a5a703aeec15c9ccc00296aa6dc",
+      "hash": "sha256:eb77ab9cdc95444c0d81891eccdd62d4a237c30f668a37b5bad2afd5175b60be",
       "dependencies": [],
       "frontmatter": {
         "name": "audit-docs",
@@ -85,7 +90,9 @@
           "Agent",
           "Write"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -95,7 +102,7 @@
       "description": "Run coherence audit on any L0/L1/L2 layer root. Checks hub doc presence, line limits, frontmatter completeness, .planning/ references, monitor_urls coverage, and detekt_rules coverage. Use when validating ecosystem-wide doc health.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:64b0510c8aaa1530b97d45e30d8baacc64fc2c5a87b81259868cf8840d9e2f0d",
+      "hash": "sha256:a78a339f778a0bc2bd3979073156cfcc968c9e0bfc685df536e01c75483da4e8",
       "dependencies": [],
       "frontmatter": {
         "name": "audit-l0",
@@ -106,7 +113,9 @@
           "Glob",
           "Write",
           "Bash"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -116,7 +125,7 @@
       "description": "Generate tests for uncovered code paths. Use when asked to increase coverage or auto-generate tests for a module.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:8e9695dda3cc91ee095fc1b3d297900976fdc1f701223bc34abc5a030b6ace02",
+      "hash": "sha256:35af89c3339913abdf190faad46032ea25a75a8a04ff975793f9ad2ad1308df7",
       "dependencies": [],
       "frontmatter": {
         "name": "auto-cover",
@@ -128,7 +137,9 @@
           "Edit",
           "Grep",
           "Glob"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -138,7 +149,7 @@
       "description": "Run benchmarks across modules and show agent-friendly results summary. Detects available platforms and devices.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:25b7d11a1407479db0a65e4c73a5d83d39580ceb17d9919d3871bc120ccd8c63",
+      "hash": "sha256:1e70c62cbae55a3b0ca0ba7c951a160c69b1cc1ab472c40b0c8b5c9abd03e409",
       "dependencies": [
         "scripts/sh/run-benchmarks.sh",
         "scripts/ps1/run-benchmarks.ps1"
@@ -152,7 +163,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -162,7 +174,7 @@
       "description": "Web security, compatibility, and code quality patterns. Background knowledge for CSP, HTTPS, deprecated APIs, and modern standards.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:c33ea5087cd518bd9848bda75a50a932633d9a5e97684d6e6ffd424a891dbd7c",
+      "hash": "sha256:a590e5f15cb2d73580d8937c6179ea89f05c9c50848c18ac5d8c6f9d21399bc2",
       "dependencies": [],
       "frontmatter": {
         "name": "best-practices",
@@ -173,7 +185,31 @@
           "Glob",
           "Bash"
         ],
-        "user-invocable": false
+        "user-invocable": false,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
+      }
+    },
+    {
+      "name": "check-outdated",
+      "type": "skill",
+      "path": "skills/check-outdated/SKILL.md",
+      "description": "Check libs.versions.toml against Maven Central for outdated dependencies. Caches results in kdoc-state.json.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:244304e50507111b2c7861efe5730f0a88ee750c2a5b4fd895c70a5d209477ed",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "check-outdated",
+        "description": "Check libs.versions.toml against Maven Central for outdated dependencies. Caches results in kdoc-state.json.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -183,7 +219,7 @@
       "description": "Validate and fix commit messages against Conventional Commits v1.0.0. Use when writing commits, reviewing commit history, or enforcing commit conventions.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:5977bd980abbea5aac17391f791c237a74650036c786ae4260bacc3be960e1a5",
+      "hash": "sha256:bd9ec9942093e2eb5117445c37bc61018e55bf254642d082f67a8f582bd3bed7",
       "dependencies": [],
       "frontmatter": {
         "name": "commit-lint",
@@ -194,7 +230,8 @@
           "Grep",
           "Glob",
           "Edit"
-        ]
+        ],
+        "copilot": true
       }
     },
     {
@@ -204,7 +241,7 @@
       "description": "LCP, INP, and CLS optimization reference. Background knowledge for Core Web Vitals thresholds and fixes.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:78e699e55d6ecdf573acea7c85e203a4c2e91dbdd10610b0e043a9af461577da",
+      "hash": "sha256:ed44551a663f0b46a16d74664e919fc2f2e66be0ed672ebad4b1ada398b25af0",
       "dependencies": [],
       "frontmatter": {
         "name": "core-web-vitals",
@@ -215,7 +252,9 @@
           "Glob",
           "Bash"
         ],
-        "user-invocable": false
+        "user-invocable": false,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -225,7 +264,7 @@
       "description": "Analyze test coverage gaps from existing data without running tests. Use when asked to check coverage or find untested code.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:6639dd43f227dc2aea7cfa4267935c485f7f8f8816f0e8f6d3f0fece84ef8aaf",
+      "hash": "sha256:0a79d5ecb3db693ded9b17b02ed26b584a15554c596eb30c59c06f2d6af639a3",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -239,7 +278,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -249,7 +289,7 @@
       "description": "Generate comprehensive coverage report across all modules. Use when asked for full project coverage overview or metrics.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:b22500616914ef88d14ee4a8dfd2322a8b9b19ad7781afc3481600fa7217ff15",
+      "hash": "sha256:f40cd8d161837404d204796a8a601cdb4eb9caaeab97e5aabaab9476fe823392",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -263,30 +303,62 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
       "name": "debug",
       "type": "skill",
       "path": "skills/debug/SKILL.md",
-      "description": "",
+      "description": "Systematic bug investigation using the `debugger` agent.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c667b3621d8de8c7a93900e1bde5286eb63078eea2effbfe0d1f0f2609f09f5e",
+      "hash": "sha256:322eb380f3c5187fd5892933775d9e8a8b6927715a26223bdfd32f62d1fc023e",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "debug",
+        "description": "Systematic bug investigation using the `debugger` agent.",
+        "copilot": false
+      }
     },
     {
       "name": "decide",
       "type": "skill",
       "path": "skills/decide/SKILL.md",
-      "description": "",
+      "description": "Technical decision analysis using the `advisor` agent.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:dd09f4c9f54187e597135cfeffe5b12e6a7da2ea311759be28a2f595c2b5ee46",
+      "hash": "sha256:c383968160b3ece08190718bd51edacb268df125f51e8ff6dab931de5a44a86a",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "decide",
+        "description": "Technical decision analysis using the `advisor` agent.",
+        "copilot": false
+      }
+    },
+    {
+      "name": "doc-integrity",
+      "type": "skill",
+      "path": "skills/doc-integrity/SKILL.md",
+      "description": "Unified documentation integrity audit. Runs kdoc-coverage, check-doc-patterns, docs/api freshness, and audit-docs in sequence. Produces a single report with coverage, drifts, and structure issues.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:cb032c2005f01f09ad9dc3ff7805de85cc147990a2100cb7204b937a1e647f01",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "doc-integrity",
+        "description": "Unified documentation integrity audit. Runs kdoc-coverage, check-doc-patterns, docs/api freshness, and audit-docs in sequence. Produces a single report with coverage, drifts, and structure issues.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
+      }
     },
     {
       "name": "doc-reorganize",
@@ -295,7 +367,7 @@
       "description": "Reorganize docs/ into category subdirectories using frontmatter. Use when asked to restructure or reorganize documentation.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:9ecf5dbf8ed435792fd258a62eef00d6937cea237e75810d029f5e72dcb0f29d",
+      "hash": "sha256:e1dd14936ab2f6036145c1ee6818e53fcf943f48ae2c08abce8230d17877273a",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-reorganize",
@@ -308,7 +380,9 @@
           "Grep",
           "Glob"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -318,7 +392,7 @@
       "description": "Extract structured build and test errors from Gradle output. Use when a build or test fails and you need actionable error details.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2c648ce399237dfac7a166b24d607b595da45b6d66941bb772ba8477c65199c2",
+      "hash": "sha256:950482b60ab11b2c2d51078e18a7360ab092b80079a3ec7e1d321c763095de66",
       "dependencies": [
         "scripts/sh/ai-error-extractor.sh",
         "scripts/ps1/ai-error-extractor.ps1"
@@ -332,7 +406,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -342,7 +417,7 @@
       "description": "Run a unified audit across all quality dimensions — architecture, code quality, testing, security, docs, and release readiness. Consolidates findings from multiple agents and scripts into a single deduplicated report.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:979bf15d247a8d6542fa4a00b2e3012157b8bbe77d931b628fa859e647c217d4",
+      "hash": "sha256:09461d9d93a25f45b9ecf7fa72b87f406e12c9dbe87630df12265835560a0273",
       "dependencies": [],
       "frontmatter": {
         "name": "full-audit",
@@ -354,7 +429,33 @@
           "Glob",
           "Agent",
           "Write"
-        ]
+        ],
+        "copilot": false
+      }
+    },
+    {
+      "name": "generate-api-docs",
+      "type": "skill",
+      "path": "skills/generate-api-docs/SKILL.md",
+      "description": "Optional: Run Dokka + transformer to generate docs/api/ from KDoc in source code. Produces YAML-frontmatter docs consumable by context-provider and search-docs.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:e920629010c175c1e3f29d0bfd7c4283d863068eeb58311162e43b860037f261",
+      "dependencies": [
+        "scripts/sh/dokka-to-docs.sh"
+      ],
+      "frontmatter": {
+        "name": "generate-api-docs",
+        "description": "Optional: Run Dokka + transformer to generate docs/api/ from KDoc in source code. Produces YAML-frontmatter docs consumable by context-provider and search-docs.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -364,7 +465,7 @@
       "description": "Generate Detekt custom rules from pattern doc frontmatter. Use when asked to create or update lint rules from documentation.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:194aaf4ea4c32f0279d341f5cf78d364ea6d17923248a65654ba88cbbdd1f146",
+      "hash": "sha256:aacba92c84e9e5f2023c25549344ba81ccff2027dfa7f939de1d0a1eb19b3985",
       "dependencies": [],
       "frontmatter": {
         "name": "generate-rules",
@@ -377,7 +478,9 @@
           "Grep",
           "Glob"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -387,7 +490,7 @@
       "description": "Git Flow branch management — start feature/release/hotfix branches, merge tracks, and manage releases. Generic implementation of the Git Flow model (feature/* → develop, release/* → master). Use when setting up branches, merging completed work, or creating releases.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:cf07d5f30b8aabdf9416d35a07e72ec71448d06d7f86f20b063125381999675c",
+      "hash": "sha256:86f402880086b0b47fbe0b62fea5659f875bf6c681e5e5ace5e0bc1c66d97b86",
       "dependencies": [],
       "frontmatter": {
         "name": "git-flow",
@@ -395,7 +498,9 @@
         "allowed-tools": [
           "Bash",
           "Read"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -405,7 +510,7 @@
       "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:42d9d07479b576668fb2d19f85147e3139daf40292de3255a74f27ce06fc0957",
+      "hash": "sha256:0f2b0566bf431feba5ef49d44af0bfdf22f6ae1c60805584c939997e4e818633",
       "dependencies": [],
       "frontmatter": {
         "name": "ingest-content",
@@ -418,7 +523,73 @@
           "Grep",
           "Glob"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
+      }
+    },
+    {
+      "name": "init-session",
+      "type": "skill",
+      "path": "skills/init-session/SKILL.md",
+      "description": "Show project context — available agents, skills, modules, and business docs.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:6558a34ba3c2b4fc8b253d744041e8523c6b1846b0a8b0616a9a464e51753319",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "init-session",
+        "description": "Show project context — available agents, skills, modules, and business docs.",
+        "copilot": false
+      }
+    },
+    {
+      "name": "kdoc-audit",
+      "type": "skill",
+      "path": "skills/kdoc-audit/SKILL.md",
+      "description": "Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-module coverage, and regression warnings vs baseline.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:b109dba6e967e0806e9dd9f4bc15575dbf9d8089af9a0a7076833e3de6ce3345",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "kdoc-audit",
+        "description": "Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-module coverage, and regression warnings vs baseline.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
+      }
+    },
+    {
+      "name": "kdoc-migrate",
+      "type": "skill",
+      "path": "skills/kdoc-migrate/SKILL.md",
+      "description": "Full-project KDoc migration orchestrator. Adds KDoc to all undocumented public APIs, module by module, informed by pattern docs.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:6a84e9e31a2f8a2edbc6ed97752a1bf8ed6aff04113d01fca6877cbc540272e9",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "kdoc-migrate",
+        "description": "Full-project KDoc migration orchestrator. Adds KDoc to all undocumented public APIs, module by module, informed by pattern docs.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Write",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Agent"
+        ],
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -428,7 +599,7 @@
       "description": "Validate string resource naming conventions (snake_case, prefixes, duplicates, Swift sync). Use when checking resource files or before merging UI changes.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:744cab12372749d4ac6819e9e34dd7b9e20da77eedcc6d7235278bd90a302e9c",
+      "hash": "sha256:9ed74a68c292c3ce7c118f38da9ef2463067a376dfa9877ada184adc2558a529",
       "dependencies": [
         "scripts/sh/lint-resources.sh"
       ],
@@ -441,19 +612,24 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
       "name": "map-codebase",
       "type": "skill",
       "path": "skills/map-codebase/SKILL.md",
-      "description": "",
+      "description": "Structured codebase analysis using the `codebase-mapper` agent.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:bc328603697093fac5b90ae2c23564e235d5cf5a9c792b35f0fc8b1f7c09b115",
+      "hash": "sha256:4ec302d6f491cfc9666757503aec137126210ef234af27b72e324380b49863b0",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "map-codebase",
+        "description": "Structured codebase analysis using the `codebase-mapper` agent.",
+        "copilot": false
+      }
     },
     {
       "name": "monitor-docs",
@@ -462,7 +638,7 @@
       "description": "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdated dependencies or doc freshness.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:8b2bbf3fbaac95ba78e364a51733325d9d2d09c119e1c35e0f0bf2a8ff4033a0",
+      "hash": "sha256:0e41920e269fbfdebd5192dd8ebfcd0f251188d48695a89d6609b210f14aaa2b",
       "dependencies": [],
       "frontmatter": {
         "name": "monitor-docs",
@@ -475,19 +651,25 @@
           "Grep",
           "Glob"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
       "name": "note",
       "type": "skill",
       "path": "skills/note/SKILL.md",
-      "description": "",
+      "description": "Zero-friction idea capture to project memory.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b02719e1617652df4788a5aa9d2107d7e16b5cd564752488d64277c13176d1ed",
+      "hash": "sha256:c91afc3a49114c672fef6dfcb846491874d58bca6df3cae9dd42512aaf283d1e",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "note",
+        "description": "Zero-friction idea capture to project memory.",
+        "copilot": false
+      }
     },
     {
       "name": "performance",
@@ -496,7 +678,7 @@
       "description": "Web performance optimization patterns (loading, caching, images, fonts). Background knowledge for page speed improvements.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:de4f1c083beb650f64808f350ee48ae626d72ca7ae68f949396f49765378010b",
+      "hash": "sha256:36c27d00b83486d39c9f30fd26eb4f317c4c6b28761603175fd1cbd3df07ff83",
       "dependencies": [],
       "frontmatter": {
         "name": "performance",
@@ -507,7 +689,9 @@
           "Glob",
           "Bash"
         ],
-        "user-invocable": false
+        "user-invocable": false,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -517,7 +701,7 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d74bcb07763011829a8e149d7e68b882974e9db4afac5b099fd7675860291651",
+      "hash": "sha256:35719bb2d0fa13c24c2ebb605f62218bebcfab625acc75bc2ef8a458d9f699bb",
       "dependencies": [
         "scripts/sh/rehash-registry.sh"
       ],
@@ -529,7 +713,9 @@
           "Read",
           "Grep",
           "Glob"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -539,7 +725,7 @@
       "description": "Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use before closing a milestone or when documentation feels stale.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:76cada6b1a6c1e4b2845a6e5512957b26dfcdfc197e5593731741a597bc31879",
+      "hash": "sha256:82825c46bec372c10525484fc871268eddeb900be3b1d5e037905dd3a8fae124",
       "dependencies": [
         "scripts/sh/readme-audit.sh"
       ],
@@ -553,30 +739,54 @@
           "Write"
         ],
         "disable-model-invocation": false,
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
       "name": "research",
       "type": "skill",
       "path": "skills/research/SKILL.md",
-      "description": "",
+      "description": "Ad-hoc technical research before implementation.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f497f74867a4b3bfe6adde528be9684a2271c7379c25836894299d52afefd7f8",
+      "hash": "sha256:ba1261c8a3283a00f1298a81cd140f00d4a85530090a39c2489eb7ae2a20e8b5",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "research",
+        "description": "Ad-hoc technical research before implementation.",
+        "copilot": false
+      }
+    },
+    {
+      "name": "resume-work",
+      "type": "skill",
+      "path": "skills/resume-work/SKILL.md",
+      "description": "Resume session with a CEO/CTO dashboard — shows status by department from last session.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:1ffede156a88836c4e6a55c336251a8827da6ebc0d5187c9605f0d51336f72fc",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "resume-work",
+        "description": "Resume session with a CEO/CTO dashboard — shows status by department from last session.",
+        "copilot": false
+      }
     },
     {
       "name": "review-pr",
       "type": "skill",
       "path": "skills/review-pr/SKILL.md",
-      "description": "",
+      "description": "Code review of a pull request with structured suggestions.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d7980e6a4068cd72d3065d1630fb8ea271d708fba48f9ef9cc6274fed3ddb2c4",
+      "hash": "sha256:9cada6ce977a4efb8fdb9f2d5efb93458e7c3add2d1e3c799227a16cd6a6090c",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "review-pr",
+        "description": "Code review of a pull request with structured suggestions.",
+        "copilot": false
+      }
     },
     {
       "name": "run",
@@ -585,7 +795,7 @@
       "description": "Build, install, and run app with debug logging. Use when asked to launch, run, or deploy the app on a device or desktop.",
       "category": "build",
       "tier": "core",
-      "hash": "sha256:2e8fe1e036a759ef99478de20feb1856d9614b4de505f2f89c3a351f5101b3af",
+      "hash": "sha256:942ea852fe3fe5a989b93a45bdf882cdc7dbbff2fbef9b9992bcb559dbc78272",
       "dependencies": [
         "scripts/sh/build-run-app.sh",
         "scripts/ps1/build-run-app.ps1"
@@ -599,7 +809,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -609,7 +820,7 @@
       "description": "Generate CycloneDX SBOM for project modules. Use when asked to produce a software bill of materials.",
       "category": "security",
       "tier": "core",
-      "hash": "sha256:e6ad4df605fdc2b481144751cfba939f260c0c30e523c9f115a0fdefce08b39e",
+      "hash": "sha256:e6dc76956317e84530d30fdd551d2781e515a5f2a6c1c27b51817e8ba87da115",
       "dependencies": [
         "scripts/sh/generate-sbom.sh",
         "scripts/ps1/generate-sbom.ps1"
@@ -624,7 +835,8 @@
           "Glob"
         ],
         "l0_requires": "ANDROID_COMMON_DOC",
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true
       }
     },
     {
@@ -634,7 +846,7 @@
       "description": "Analyze SBOM for dependency statistics, licenses, and concerns. Use when asked to review dependency licenses or SBOM contents.",
       "category": "security",
       "tier": "core",
-      "hash": "sha256:a66326cbc6792016946d573d6b984d01e55789167145f119fea91069c5001d28",
+      "hash": "sha256:ba2f1c2f623217f0b7a542d4fadbc52f991d77ff42bcbf1a871b1beb5c014344",
       "dependencies": [
         "scripts/sh/analyze-sbom.sh",
         "scripts/ps1/analyze-sbom.ps1"
@@ -649,7 +861,8 @@
           "Glob"
         ],
         "l0_requires": "ANDROID_COMMON_DOC",
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true
       }
     },
     {
@@ -659,7 +872,7 @@
       "description": "Scan SBOM for known CVE vulnerabilities using Trivy. Use when asked to check for security vulnerabilities in dependencies.",
       "category": "security",
       "tier": "core",
-      "hash": "sha256:8a749927d2997177cd6b297acb4395d95e5cf8a7bd36abd305f312f6bbf88dde",
+      "hash": "sha256:f6123666cc9666f062a4085e0f3e3b3d8437d0b4ddc38d7fa18e6ebe8210e5fc",
       "dependencies": [
         "scripts/sh/scan-sbom.sh",
         "scripts/ps1/scan-sbom.ps1"
@@ -674,7 +887,8 @@
           "Glob"
         ],
         "l0_requires": "ANDROID_COMMON_DOC",
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true
       }
     },
     {
@@ -684,7 +898,7 @@
       "description": "SEO optimization patterns (meta tags, structured data, crawlability). Background knowledge for search engine visibility.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:658dea9d477b5c77081652810c4847ccc314c4a1400ec321920a1bfab1b8e1ce",
+      "hash": "sha256:b2d6869a12038f99d96bcc01504c57c204492ed5f8cc2bee54d305426d5a6fe9",
       "dependencies": [],
       "frontmatter": {
         "name": "seo",
@@ -695,19 +909,25 @@
           "Glob",
           "Bash"
         ],
-        "user-invocable": false
+        "user-invocable": false,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
       "name": "set-model-profile",
       "type": "skill",
       "path": "skills/set-model-profile/SKILL.md",
-      "description": "",
+      "description": "> Switch the model tier used by all AndroidCommonDoc agents.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:3b6de70b4278e458b6dedd102ebcb439fc347f5a4d99245ef05eba50967a3309",
+      "hash": "sha256:25bf80ddd894847dea2c91b7dfde93f674d80e9e13dcf6d7fbc9914043bdec8d",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "set-model-profile",
+        "description": "> Switch the model tier used by all AndroidCommonDoc agents.",
+        "copilot": false
+      }
     },
     {
       "name": "setup",
@@ -716,7 +936,7 @@
       "description": "Interactive wizard to fully configure a new or existing project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Creates l0-manifest.json, syncs selected assets, and verifies the result. Bilingual output (EN + ES).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:ff6750420ce7744ce6ed140084cc1e31be83a0984bb70bcc239e5e5f364a3a74",
+      "hash": "sha256:3d1daf43f9310db15f63988270dd4545575aa36c77237fc218ede8c549ea5a28",
       "dependencies": [
         "scripts/sh/sync-gsd-skills.sh",
         "scripts/sh/sync-gsd-agents.sh",
@@ -735,7 +955,9 @@
           "Glob"
         ],
         "l0_requires": "ANDROID_COMMON_DOC",
-        "category": "guides"
+        "category": "guides",
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -745,7 +967,7 @@
       "description": "Sync .claude/agents/ to GSD subagent system and verify parity. Use when GSD subagent can't find an agent that exists in .claude/agents/, or after adding/modifying agents.",
       "category": "ecosystem",
       "tier": "extended",
-      "hash": "sha256:5471687d090453772f46b75efb1f694480c010626ecb6d56ba143ec5bdf91668",
+      "hash": "sha256:c0040e17baeb5b9b8ea299657d6de36b6fdbe9acb70731e1dbefe64a705d5f2c",
       "dependencies": [
         "scripts/sh/sync-gsd-agents.sh",
         "scripts/sh/check-agent-parity.sh"
@@ -758,7 +980,8 @@
           "Bash",
           "Read"
         ],
-        "category": "ecosystem"
+        "category": "ecosystem",
+        "copilot": false
       }
     },
     {
@@ -768,7 +991,7 @@
       "description": "Sync skills from Claude Code marketplace, L0, and L0 agents to GSD-2 user-level directory. Opt-in only -- never runs automatically unless explicitly enabled.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:e135d532432b9f45682ddcdbe6141a9e4de2de530f721fda6e4fe43a17e86d60",
+      "hash": "sha256:b5e931dae7f69d5f0a9c37616cf8316022f9bd6223babedde3b12032f5da194c",
       "dependencies": [
         "scripts/sh/sync-gsd-skills.sh",
         "scripts/ps1/sync-gsd-skills.ps1"
@@ -782,7 +1005,8 @@
           "Read",
           "Glob"
         ],
-        "category": "guides"
+        "category": "guides",
+        "copilot": false
       }
     },
     {
@@ -792,7 +1016,7 @@
       "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:b1f454344315b1bd045d57791a474a14e03a1315da11f2330fa9a8b620722fe3",
+      "hash": "sha256:097042f426825c2eaa6bb8c3430416fd90e65f0a3cb3a11f547ab2cec7fee595",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
@@ -803,7 +1027,9 @@
           "Write",
           "Glob",
           "Grep"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -813,7 +1039,7 @@
       "description": "Sync documentation into Obsidian vault with L0/L1/L2 hierarchy. Use when asked to update, initialize, or clean the knowledge vault.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:d5724ca34a4c7ec29f127c1103e91faa1d392a438bebdfb526e3b365f7e901e8",
+      "hash": "sha256:83baad080d5345d78d198a5d7d1d2522b4d70a3fe77305648819f9fdfcf32fe7",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-vault",
@@ -824,7 +1050,9 @@
           "Grep",
           "Glob"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -834,7 +1062,7 @@
       "description": "Check version catalog alignment between KMP projects. Use when asked to verify dependency versions match the source of truth.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:10e7fe96f3655eddeb799f6b3a377a223dd1dfac92757ae2ed03014632d53936",
+      "hash": "sha256:a3e2620a55da209f65eb45c261d0c38a6dc5b2fc827eadbd6f95697777319f05",
       "dependencies": [
         "scripts/sh/check-version-sync.sh",
         "scripts/ps1/check-version-sync.ps1"
@@ -848,7 +1076,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -858,7 +1087,7 @@
       "description": "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:c65456ea4658639f1ca858aa1dc0df870940156e900d6cd806b00a08bd3a16bb",
+      "hash": "sha256:7cc08a917c0648f467a84a72122e76fc8b9447baced3e38861cf17da0c8a0a7e",
       "dependencies": [
         "scripts/sh/gradle-run.sh",
         "scripts/sh/ai-error-extractor.sh",
@@ -874,7 +1103,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -884,7 +1114,7 @@
       "description": "Run tests only on modules with uncommitted changes. Use when asked to test changed files or run a quick pre-commit check.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:68cd52ee092ec6ef435d3fd9339295b5f19f854b203347880dda6bd945fd8d86",
+      "hash": "sha256:cfc00dce0fc644c52dca228a64c55e879b81a1b1529110adda5f769c6154b02e",
       "dependencies": [
         "scripts/sh/run-changed-modules-tests.sh",
         "scripts/ps1/run-changed-modules-tests.ps1"
@@ -898,7 +1128,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -908,7 +1139,7 @@
       "description": "Run all tests sequentially with full coverage report. Use when asked to run the complete test suite or generate a full coverage report.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:6ed935216c7158eccf07ebaf4895070ffc1fb553dcd069943cbc778d1217731a",
+      "hash": "sha256:e277b2080045334cc490e0e0a348b6fd92e63331106362def177466f2ab576c2",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -922,7 +1153,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -932,7 +1164,7 @@
       "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:fdcdea4a60aaf7524027ec16a5c0ffaa92be133780fde2d1e9cd07ca4b0e37eb",
+      "hash": "sha256:bce49652463a7da61167003e722a1bae207de410a7eeb8b3cbd8a9b208281218",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -946,7 +1178,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -956,7 +1189,7 @@
       "description": "Validate code against pattern standards (ViewModel, UI, coroutines, DI, error handling, navigation). Use when asked to check code quality or pattern compliance.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:a117fccbf1170f63c470cbc9eb78cd67e2cdb73c52cb1aa9ad07e96b2e606254",
+      "hash": "sha256:86645cfa37b437efbd2cdaf602817dbee7ad1e13992ab8024dc8729908ca8246",
       "dependencies": [],
       "frontmatter": {
         "name": "validate-patterns",
@@ -965,7 +1198,9 @@
           "Read",
           "Grep",
           "Glob"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
@@ -975,7 +1210,7 @@
       "description": "Validate pattern docs against upstream official documentation. Runs Layer 1 deterministic assertions (api_present, deprecation_scan, etc.) from validate_upstream frontmatter. Use when checking if docs are still accurate.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:14bcd2145b59435ff105f333e3657c70a039d4e9dd7eb25d2d77baed80f73424",
+      "hash": "sha256:05671ca268a0548d474c4636917bff8a086df0c478dbab05f4d2fd7e94c8d4e4",
       "dependencies": [],
       "frontmatter": {
         "name": "validate-upstream",
@@ -986,19 +1221,25 @@
           "Grep",
           "Glob"
         ],
-        "disable-model-invocation": true
+        "disable-model-invocation": true,
+        "copilot": true,
+        "copilot-template-type": "behavioral"
       }
     },
     {
       "name": "verify",
       "type": "skill",
       "path": "skills/verify/SKILL.md",
-      "description": "",
+      "description": "Goal-backward verification using the `verifier` agent.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4daf1c917f60f0d3fca8207e7f88882aef7ee58c8a412b180f253355fb6963c5",
+      "hash": "sha256:f464a6000edcf214309ad0e4b891c1184b60de22f2e1bb923c47b2e46f01cefd",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "name": "verify",
+        "description": "Goal-backward verification using the `verifier` agent.",
+        "copilot": false
+      }
     },
     {
       "name": "verify-kmp",
@@ -1007,7 +1248,7 @@
       "description": "Validate KMP source set organization and forbidden imports. Use when asked to check architecture or source set correctness.",
       "category": "build",
       "tier": "core",
-      "hash": "sha256:25af955dcc3641baf86101e8109a265907f6a80b002cb6d5a5ca7d85911e17da",
+      "hash": "sha256:e26fd19a905b4a5adc64ac434dd4955645ab4252cc803f68d469937c9e5af756",
       "dependencies": [
         "scripts/sh/verify-kmp-packages.sh",
         "scripts/ps1/verify-kmp-packages.ps1"
@@ -1021,7 +1262,8 @@
           "Grep",
           "Glob"
         ],
-        "l0_requires": "ANDROID_COMMON_DOC"
+        "l0_requires": "ANDROID_COMMON_DOC",
+        "copilot": true
       }
     },
     {
@@ -1031,7 +1273,7 @@
       "description": "Run comprehensive web quality audit (performance, a11y, SEO, best practices). Use when asked to audit a website or run Lighthouse.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:d3c6bcd8e178668a0791e33c3fb740e98bb4d13fb2306d024701fd64512d6bdb",
+      "hash": "sha256:00639b054785713f340a016857e6d5ec1215d55c88be817a11783a86fe7142a8",
       "dependencies": [],
       "frontmatter": {
         "name": "web-quality-audit",
@@ -1041,7 +1283,24 @@
           "Grep",
           "Glob",
           "Bash"
-        ]
+        ],
+        "copilot": true,
+        "copilot-template-type": "behavioral"
+      }
+    },
+    {
+      "name": "work",
+      "type": "skill",
+      "path": "skills/work/SKILL.md",
+      "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:4f9e6c81f7d64fe84e7b1e2faaafcfdd9b85fa81c7a8d0a66ca87bfe81aa5f7d",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "work",
+        "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
+        "copilot": false
       }
     },
     {
@@ -1051,13 +1310,21 @@
       "description": "Researches a single technical decision and returns a structured comparison table with recommendation. Use when choosing between approaches, libraries, or architectures.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b7b86fbd6f0151fa3d3a01520055733a9577b4baca08ad4e47bd506bb0f4ea78",
+      "hash": "sha256:c6949553188577a876b24c41e5d49b6e7a02b5abdbce1df28c168d01dad8a59c",
       "dependencies": [],
       "frontmatter": {
         "name": "advisor",
         "description": "Researches a single technical decision and returns a structured comparison table with recommendation. Use when choosing between approaches, libraries, or architectures.",
         "tools": "Read, Grep, Glob, WebSearch, WebFetch",
-        "model": "sonnet"
+        "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "decide",
+          "choose",
+          "compare",
+          "tradeoff",
+          "library"
+        ]
       }
     },
     {
@@ -1067,14 +1334,113 @@
       "description": "Scans HTTP clients for rate limit handling, retry-after headers, exponential backoff, and timeout configuration. Use when auditing API integration robustness.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:83ca6fe045464699bb536404f087ac71fc5ece934445278eee7c8069ce0091de",
+      "hash": "sha256:a561873b2034ba6b8a794db526f2adf7f5b0074c889c193039a7ecb7f66f7151",
       "dependencies": [],
       "frontmatter": {
         "name": "api-rate-limit-auditor",
         "description": "Scans HTTP clients for rate limit handling, retry-after headers, exponential backoff, and timeout configuration. Use when auditing API integration robustness.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
-        "memory": "project"
+        "domain": "security",
+        "intent": [
+          "rate-limit",
+          "retry",
+          "timeout",
+          "http"
+        ],
+        "memory": "project",
+        "skills": [
+          "validate-patterns"
+        ]
+      }
+    },
+    {
+      "name": "arch-integration",
+      "type": "agent",
+      "path": ".claude/agents/arch-integration.md",
+      "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:119d36c7871e0afa59b1ac83720cb7708a6b4521c275f22bc86057cd62f78c60",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "arch-integration",
+        "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "architecture",
+        "intent": [
+          "integration",
+          "wiring",
+          "DI",
+          "navigation",
+          "compilation"
+        ],
+        "token_budget": 4000,
+        "template_version": "1.2.0",
+        "skills": [
+          "test",
+          "extract-errors"
+        ]
+      }
+    },
+    {
+      "name": "arch-platform",
+      "type": "agent",
+      "path": ".claude/agents/arch-platform.md",
+      "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:ea9aca291e31b367bae5a0135e511bc7cfd13c26e3995cd0b981aaab834b1c38",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "arch-platform",
+        "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "architecture",
+        "intent": [
+          "platform",
+          "KMP",
+          "source-sets",
+          "encoding"
+        ],
+        "token_budget": 4000,
+        "template_version": "1.2.0",
+        "skills": [
+          "verify-kmp",
+          "validate-patterns"
+        ]
+      }
+    },
+    {
+      "name": "arch-testing",
+      "type": "agent",
+      "path": ".claude/agents/arch-testing.md",
+      "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:294f6d28e42e236269ad55b110775a846541af06fb0abddaaa0aa3cda78633a9",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "arch-testing",
+        "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "architecture",
+        "intent": [
+          "testing",
+          "TDD",
+          "coverage",
+          "test-quality"
+        ],
+        "token_budget": 4000,
+        "template_version": "1.3.0",
+        "skills": [
+          "test",
+          "test-full-parallel",
+          "coverage"
+        ]
       }
     },
     {
@@ -1084,14 +1450,25 @@
       "description": "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:e8aeca5d78018f7c0574abcd3463e4e0a57ec616d6f1b89c8ca9c4ba1aa9b029",
+      "hash": "sha256:1b5da370bb14651c98cf1bdf5c3b8d87e47ceaba683344992f58140d4fdc300f",
       "dependencies": [],
       "frontmatter": {
         "name": "beta-readiness-agent",
         "description": "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.",
         "tools": "Read, Grep, Glob",
         "model": "sonnet",
-        "memory": "project"
+        "domain": "quality",
+        "intent": [
+          "beta",
+          "readiness",
+          "launch",
+          "onboarding"
+        ],
+        "memory": "project",
+        "skills": [
+          "pre-release",
+          "test-full-parallel"
+        ]
       }
     },
     {
@@ -1101,13 +1478,76 @@
       "description": "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:79702cb706b03c7576d3c9b68f75d2a4abcb5ad5e747c0f0d385c32db9cc99b4",
+      "hash": "sha256:dd827e7e834d6d8bd72f7aa30d47f4b8ea151123a86a5806c3077642ab105c82",
       "dependencies": [],
       "frontmatter": {
         "name": "codebase-mapper",
         "description": "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area).",
         "tools": "Read, Grep, Glob, Bash, Write",
-        "model": "sonnet"
+        "model": "sonnet",
+        "domain": "infrastructure",
+        "intent": [
+          "map",
+          "architecture",
+          "modules",
+          "structure",
+          "inventory"
+        ],
+        "skills": [
+          "map-codebase"
+        ]
+      }
+    },
+    {
+      "name": "content-creator",
+      "type": "agent",
+      "path": ".claude/agents/content-creator.md",
+      "description": "Drafts developer-focused content for build-in-public marketing. Creates posts for Reddit, Twitter/X, forums, and changelogs. Customize {{PRODUCT_NAME}} and tone for your project.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:5979279e0a97c1c7246b5b751450f70821376c5c2792e7c18bba7ebce7e8c53f",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "content-creator",
+        "description": "Drafts developer-focused content for build-in-public marketing. Creates posts for Reddit, Twitter/X, forums, and changelogs. Customize {{PRODUCT_NAME}} and tone for your project.",
+        "tools": "Read, Grep, Glob, WebSearch, SendMessage",
+        "model": "sonnet",
+        "token_budget": 3000,
+        "template_version": "1.0.0",
+        "domain": "marketing",
+        "intent": [
+          "post",
+          "blog",
+          "social",
+          "changelog",
+          "marketing",
+          "content"
+        ]
+      }
+    },
+    {
+      "name": "context-provider",
+      "type": "agent",
+      "path": ".claude/agents/context-provider.md",
+      "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:fc2413f2185e04db0a8a619ed3e2e90266770c746d4b2413692f016f07649931",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "context-provider",
+        "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "infrastructure",
+        "intent": [
+          "context",
+          "rules",
+          "patterns",
+          "state"
+        ],
+        "token_budget": 2000,
+        "template_version": "2.2.0"
       }
     },
     {
@@ -1117,17 +1557,27 @@
       "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:dd72c2060ed2397ea6c2f70d51ff833523732aa7b82ef5a603d70d02cef9c254",
+      "hash": "sha256:6805388d360cc824e1c1b1a6d4b42f7dd15b3b6fb01845b33f74da5f308d0de0",
       "dependencies": [],
       "frontmatter": {
         "name": "cross-platform-validator",
         "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
         "tools": "Read, Grep, Glob",
         "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "platform",
+          "expect-actual",
+          "sourceset",
+          "kmp"
+        ],
         "memory": "project",
         "optional_capabilities": [
           "context7",
           "jina"
+        ],
+        "skills": [
+          "verify-kmp"
         ]
       }
     },
@@ -1138,15 +1588,25 @@
       "description": "Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:90456c0ad9f45e5271c81a8456691004962805770aeb7834db954072095cb859",
+      "hash": "sha256:b4882bf85735cba460123fa7f7fe0c4c61e2e887e35d623a41c149b187071fae",
       "dependencies": [],
       "frontmatter": {
         "name": "debugger",
         "description": "Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis.",
         "tools": "Read, Write, Edit, Bash, Grep, Glob, WebSearch",
         "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "bug",
+          "error",
+          "fix",
+          "broken",
+          "crash",
+          "exception"
+        ],
         "skills": [
-          "test"
+          "test",
+          "extract-errors"
         ]
       }
     },
@@ -1157,17 +1617,25 @@
       "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:f58d71e2c7dc27eb6bd383e07179a0eb00127e984257fa2f1038cca333c6bcaf",
+      "hash": "sha256:bfb3665d9fcccabe78a493c13fec9680c195fba2b14dfa1dae97318e21523b47",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-alignment-agent",
         "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
         "tools": "Read, Grep, Glob",
         "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "docs",
+          "drift",
+          "alignment",
+          "stale"
+        ],
         "memory": "project",
         "skills": [
+          "audit-docs",
           "validate-patterns",
-          "doc-reorganize"
+          "readme-audit"
         ]
       }
     },
@@ -1178,14 +1646,105 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Detects drift between docs/*.md pattern documentation and what scripts/skills actually implement. Flags outdated patterns, missing validations, and version mismatches.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:b95edeaf3f98925f0ec7118d38a3ca9a0720075804ddc36674ba4b52c1ada7e4",
+      "hash": "sha256:8e29819fbaa88f611639e93bdc6a4f1fcb3c28a258b6c71dc3c223ede49bcc41",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-code-drift-detector",
         "description": "Internal validator -- invoked by quality-gate-orchestrator. Detects drift between docs/*.md pattern documentation and what scripts/skills actually implement. Flags outdated patterns, missing validations, and version mismatches.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "audit",
+        "intent": [
+          "drift",
+          "doc-code",
+          "pattern"
+        ],
         "memory": "project"
+      }
+    },
+    {
+      "name": "doc-migrator",
+      "type": "agent",
+      "path": ".claude/agents/doc-migrator.md",
+      "description": "Sporadic team agent for migrating project docs to L0 patterns. Triggered by QG frontmatter failures, doc-alignment drift, or manual /audit-docs. Creates hubs, splits oversized docs, adds frontmatter, fixes references.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:1f35c4e173c7f491f6b7853f8f14b18892b92aff703e88f9bd88ae81ab100eca",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "doc-migrator",
+        "description": "Sporadic team agent for migrating project docs to L0 patterns. Triggered by QG frontmatter failures, doc-alignment drift, or manual /audit-docs. Creates hubs, splits oversized docs, adds frontmatter, fixes references.",
+        "tools": "Read, Grep, Glob, Bash, Write, Edit, SendMessage",
+        "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "docs",
+          "migrate",
+          "frontmatter",
+          "split",
+          "hub"
+        ],
+        "token_budget": 4000,
+        "template_version": "1.1.0"
+      }
+    },
+    {
+      "name": "doc-updater",
+      "type": "agent",
+      "path": ".claude/agents/doc-updater.md",
+      "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Follows L0 patterns (frontmatter, line limits, hub structure).",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:86a774f148d5245144d47b9e659564440e7bae747e7aaced610e8dd6140ef509",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "doc-updater",
+        "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Follows L0 patterns (frontmatter, line limits, hub structure).",
+        "tools": "Read, Write, Edit, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "docs",
+          "changelog",
+          "memory",
+          "roadmap"
+        ],
+        "token_budget": 2000,
+        "template_version": "2.1.0",
+        "skills": [
+          "audit-docs",
+          "readme-audit",
+          "commit-lint"
+        ]
+      }
+    },
+    {
+      "name": "feature-domain-specialist",
+      "type": "agent",
+      "path": ".claude/agents/feature-domain-specialist.md",
+      "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:d42a4d9f5715b701ec5b4e40d2160797b8eea0b113c74644937eaab7b4bfc2fe",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "{{DOMAIN}}-specialist",
+        "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
+        "tools": "Read, Grep, Glob, Bash",
+        "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "domain",
+          "architecture",
+          "compliance"
+        ],
+        "token_budget": 3000,
+        "template_version": "1.0.0",
+        "memory": "project",
+        "skills": [
+          "test",
+          "validate-patterns"
+        ]
       }
     },
     {
@@ -1195,13 +1754,19 @@
       "description": "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:60258fcfd6039e834a74d521c9334f2c6193bfefae6b6570e179dafb6a953555",
+      "hash": "sha256:e38aa50d5dec8532e3093f8c478cef086e823da2edc1d8f4bbfd088f1c1cdd12",
       "dependencies": [],
       "frontmatter": {
         "name": "full-audit-orchestrator",
         "description": "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking.",
         "tools": "Read, Grep, Glob, Bash, Agent, Write",
         "model": "sonnet",
+        "domain": "audit",
+        "intent": [
+          "full-audit",
+          "quality-gate",
+          "wave"
+        ],
         "memory": "project"
       }
     },
@@ -1212,13 +1777,20 @@
       "description": "Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1d6ad8777614cf4230dd2209c14bdaf921f1c1598cecb86d20ae68371cbe75d8",
+      "hash": "sha256:49bae57d3c3e8c6de2969d4e9a51628c4a933dfd677b0a4519e8dc77b0203c05",
       "dependencies": [],
       "frontmatter": {
         "name": "l0-coherence-auditor",
         "description": "Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "audit",
+        "intent": [
+          "coherence",
+          "l0",
+          "hub",
+          "frontmatter"
+        ],
         "memory": "project",
         "optional_capabilities": [
           "mcp-gsd",
@@ -1229,20 +1801,255 @@
       }
     },
     {
+      "name": "landing-page-strategist",
+      "type": "agent",
+      "path": ".claude/agents/landing-page-strategist.md",
+      "description": "Designs landing page copy, structure, and conversion flow. Use when planning public-facing web presence, optimizing CTAs, or improving SEO for product pages.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:d24e88b7557e37c39b472711e7e65171cbc01c08b1bd14b023d4211693de959e",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "landing-page-strategist",
+        "description": "Designs landing page copy, structure, and conversion flow. Use when planning public-facing web presence, optimizing CTAs, or improving SEO for product pages.",
+        "tools": "Read, Grep, Glob, WebSearch, SendMessage",
+        "model": "sonnet",
+        "token_budget": 3000,
+        "template_version": "1.0.0",
+        "domain": "marketing",
+        "intent": [
+          "landing",
+          "page",
+          "conversion",
+          "copy",
+          "seo",
+          "cta"
+        ]
+      }
+    },
+    {
+      "name": "marketing-lead",
+      "type": "agent",
+      "path": ".claude/agents/marketing-lead.md",
+      "description": "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:36e1ea7df2f15e7483632b35dcc525e1a6c7c620f45a6f4d8bb76ec9b27146ae",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "marketing-lead",
+        "description": "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists.",
+        "tools": "Read, Grep, Glob, Bash, TeamCreate, SendMessage, TaskCreate, TaskList",
+        "model": "sonnet",
+        "domain": "marketing",
+        "intent": [
+          "campaign",
+          "content",
+          "marketing",
+          "launch"
+        ],
+        "token_budget": 5000,
+        "template_version": "1.0.0"
+      }
+    },
+    {
+      "name": "module-lifecycle",
+      "type": "agent",
+      "path": ".claude/agents/module-lifecycle.md",
+      "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:36707a25b16caff372b8020374394b3c057b6557fc28f3c662edb86163f17008",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "module-lifecycle",
+        "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
+        "tools": "Read, Grep, Glob, Bash, Write",
+        "model": "sonnet",
+        "domain": "infrastructure",
+        "intent": [
+          "module",
+          "create",
+          "deprecate",
+          "lifecycle"
+        ],
+        "token_budget": 2000,
+        "template_version": "1.0.0",
+        "memory": "project",
+        "skills": [
+          "verify-kmp",
+          "test"
+        ]
+      }
+    },
+    {
+      "name": "planner",
+      "type": "agent",
+      "path": ".claude/agents/planner.md",
+      "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:7f94905ab1353c7b67188f9fef8428b327603083b876b78d6d379099a284de17",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "planner",
+        "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
+        "tools": "Read, Write, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "plan",
+          "scope",
+          "breakdown",
+          "estimate"
+        ],
+        "token_budget": 4000,
+        "template_version": "1.3.0"
+      }
+    },
+    {
+      "name": "platform-auditor",
+      "type": "agent",
+      "path": ".claude/agents/platform-auditor.md",
+      "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:de2adfed088431a66de1bce92fcd86579350330666ea27648e4a0fb97e53dc66",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "platform-auditor",
+        "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
+        "tools": "Read, Grep, Glob, Bash",
+        "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "coherence",
+          "cross-module",
+          "architecture",
+          "audit"
+        ],
+        "token_budget": 2000,
+        "template_version": "1.0.0",
+        "memory": "project",
+        "skills": [
+          "verify-kmp",
+          "validate-patterns"
+        ]
+      }
+    },
+    {
       "name": "privacy-auditor",
       "type": "agent",
       "path": ".claude/agents/privacy-auditor.md",
       "description": "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:746539da9d5255d41ded390550b2a77c4b74c2299883c339aba9c605097aa647",
+      "hash": "sha256:c7fb55efa407e324f270ab5246dd445a9804a86903166fb0c71f900e914001f0",
       "dependencies": [],
       "frontmatter": {
         "name": "privacy-auditor",
         "description": "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits.",
         "tools": "Read, Grep, Glob",
         "model": "sonnet",
-        "memory": "project"
+        "domain": "security",
+        "intent": [
+          "privacy",
+          "pii",
+          "gdpr",
+          "data",
+          "analytics"
+        ],
+        "memory": "project",
+        "skills": [
+          "validate-patterns"
+        ]
+      }
+    },
+    {
+      "name": "product-lead",
+      "type": "agent",
+      "path": ".claude/agents/product-lead.md",
+      "description": "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:470baae6c8d42323c3eff0025ec72790aff44ba212c89271566e48ffced69fb2",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "product-lead",
+        "description": "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code.",
+        "tools": "Read, Grep, Glob, Bash, TeamCreate, SendMessage, TaskCreate, TaskList",
+        "model": "sonnet",
+        "domain": "business",
+        "intent": [
+          "product",
+          "spec",
+          "pricing",
+          "roadmap",
+          "prioritize"
+        ],
+        "token_budget": 5000,
+        "template_version": "1.0.0"
+      }
+    },
+    {
+      "name": "product-strategist",
+      "type": "agent",
+      "path": ".claude/agents/product-strategist.md",
+      "description": "Analyzes feature ideas against business goals using ICE scoring. Produces prioritized backlog with rationale. Customize {{PRODUCT_NAME}} and business constraints for your project.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:02361c38a8bc1351d5884e46f4ae2f8d7fed76a867d01bb2491c3ce59e077fc4",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "product-strategist",
+        "description": "Analyzes feature ideas against business goals using ICE scoring. Produces prioritized backlog with rationale. Customize {{PRODUCT_NAME}} and business constraints for your project.",
+        "tools": "Read, Grep, Glob, WebSearch, WebFetch, SendMessage",
+        "model": "sonnet",
+        "token_budget": 3000,
+        "template_version": "1.0.0",
+        "domain": "business",
+        "intent": [
+          "prioritize",
+          "roadmap",
+          "features",
+          "scoring",
+          "backlog",
+          "pricing",
+          "tiers"
+        ]
+      }
+    },
+    {
+      "name": "project-manager",
+      "type": "agent",
+      "path": ".claude/agents/project-manager.md",
+      "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:d2a3fda1b73522a07975d7cbe86d9151b6f17bccf06234b190a627ec83d761e7",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "project-manager",
+        "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
+        "tools": "Read, Grep, Glob, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList",
+        "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "orchestrate",
+          "plan",
+          "assign",
+          "escalate",
+          "coordinate"
+        ],
+        "token_budget": 5000,
+        "template_version": "4.2.0",
+        "memory": "project",
+        "skills": [
+          "pre-pr",
+          "commit-lint",
+          "git-flow",
+          "extract-errors"
+        ]
       }
     },
     {
@@ -1252,14 +2059,46 @@
       "description": "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:86081978e3987ec71dbafbd4e0b9c37d5d14091e8a2cfa88f76fe4a13b0cd2c2",
+      "hash": "sha256:03cc967af7770371122cc03f927b37f1ea33009e61efe8d6552142de90e90912",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gate-orchestrator",
         "description": "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement.",
         "tools": "Read, Grep, Glob, Bash",
         "model": "sonnet",
+        "domain": "audit",
+        "intent": [
+          "quality-gate",
+          "consistency",
+          "validators"
+        ],
         "memory": "project"
+      }
+    },
+    {
+      "name": "quality-gater",
+      "type": "agent",
+      "path": ".claude/agents/quality-gater.md",
+      "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:4efdfc2a412e7c2c0c147c073c3f35e1ed6e1d22d19dc32ee8848a0421760e90",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "quality-gater",
+        "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "model": "sonnet",
+        "domain": "quality",
+        "intent": [
+          "gate",
+          "verify",
+          "pre-pr",
+          "coverage",
+          "detekt"
+        ],
+        "token_budget": 3000,
+        "template_version": "2.2.0"
       }
     },
     {
@@ -1269,13 +2108,20 @@
       "description": "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:2908cec55349c9aa557b6efd13cfb620d5cb447175fa4ffc90c2fbd62f5e39e9",
+      "hash": "sha256:049e2dab2be9501b0ead703251ad7202dcf4cca17e01bc7552b8e5af1abc5086",
       "dependencies": [],
       "frontmatter": {
         "name": "release-guardian-agent",
         "description": "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "infrastructure",
+        "intent": [
+          "release",
+          "publish",
+          "deploy",
+          "secrets"
+        ],
         "memory": "project",
         "skills": [
           "sbom",
@@ -1290,13 +2136,21 @@
       "description": "Ad-hoc technical research on any topic. Use before implementation to gather context, evaluate options, or understand a domain.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f3e2a50efba2e336ee06f0f6f5be8079d954c6952fe2256470c0c0d0ea9db92f",
+      "hash": "sha256:b8412aff5aae99a55036e826abdd766a1eb08c959f808446af302768451bbed2",
       "dependencies": [],
       "frontmatter": {
         "name": "researcher",
         "description": "Ad-hoc technical research on any topic. Use before implementation to gather context, evaluate options, or understand a domain.",
         "tools": "Read, Grep, Glob, WebSearch, WebFetch",
-        "model": "sonnet"
+        "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "research",
+          "investigate",
+          "explore",
+          "domain",
+          "learn"
+        ]
       }
     },
     {
@@ -1306,13 +2160,20 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that PowerShell and Bash script pairs are functionally equivalent. Checks flags, output format, and exit codes between scripts/ps1/ and scripts/sh/.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:a8349229b5da288c062448647e4b1e1a0b46d420276f6b97176a82e4ab3e88b9",
+      "hash": "sha256:8076c30532e7ec190d8ee05f4772163b7f2adb08b5cfe767faba59c6d84843d8",
       "dependencies": [],
       "frontmatter": {
         "name": "script-parity-validator",
         "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that PowerShell and Bash script pairs are functionally equivalent. Checks flags, output format, and exit codes between scripts/ps1/ and scripts/sh/.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "audit",
+        "intent": [
+          "parity",
+          "ps1",
+          "sh",
+          "script"
+        ],
         "memory": "project"
       }
     },
@@ -1323,13 +2184,20 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:1b9d7840e030dce10d30644dbaa0709ed502512d7fcf8c50ed0877f83a496a61",
+      "hash": "sha256:9ab922ea2815cbaeced38d279402fee1b8f373b643dc184becb511c615a1f238",
       "dependencies": [],
       "frontmatter": {
         "name": "skill-script-alignment",
         "description": "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "audit",
+        "intent": [
+          "skill",
+          "script",
+          "alignment",
+          "command"
+        ],
         "memory": "project"
       }
     },
@@ -1337,16 +2205,22 @@
       "name": "template-sync-validator",
       "type": "agent",
       "path": ".claude/agents/template-sync-validator.md",
-      "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Checks every command has a wrapper template and a Copilot prompt.",
+      "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Respects the copilot frontmatter field in skills/*/SKILL.md to determine expected coverage.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:ec4ac20d9dac3b25da2d17e6957966043e43f8a436e23949f6ed83b43872e6f8",
+      "hash": "sha256:277cf9e3bc03aa1d3d549769167b9a91bc7a274da864d0cabc6489c2074db92b",
       "dependencies": [],
       "frontmatter": {
         "name": "template-sync-validator",
-        "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Checks every command has a wrapper template and a Copilot prompt.",
+        "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Respects the copilot frontmatter field in skills/*/SKILL.md to determine expected coverage.",
         "tools": "Read, Grep, Glob",
         "model": "haiku",
+        "domain": "audit",
+        "intent": [
+          "template",
+          "sync",
+          "copilot"
+        ],
         "memory": "project"
       }
     },
@@ -1357,13 +2231,20 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:0ffb6f8dd2869c7d7e787d99ead50c8b31caf961354afbb4035077d6d860704a",
+      "hash": "sha256:7b9e6e4400a578c75489621db2aec7b5fbc941cbf0b2b2359adb49972a07c4dd",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
         "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
         "tools": "Read, Grep, Glob, Bash, Write",
         "model": "sonnet",
+        "domain": "testing",
+        "intent": [
+          "test",
+          "coverage",
+          "quality",
+          "tdd"
+        ],
         "memory": "project",
         "skills": [
           "test",
@@ -1385,17 +2266,25 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:882f86d21d44f9f6dd0b500aefd81652f2d020d322365696bd14add58c23de05",
+      "hash": "sha256:f17dcc87dcf5b213fae6265e01c17ffa39a4b0562caccb2c9be8749138a11aea",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
         "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
         "tools": "Read, Grep, Glob, Bash, Write",
         "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "compose",
+          "ui",
+          "accessibility",
+          "material3"
+        ],
         "memory": "project",
         "skills": [
           "accessibility",
-          "lint-resources"
+          "lint-resources",
+          "validate-patterns"
         ]
       }
     },
@@ -1406,13 +2295,39 @@
       "description": "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e20c7f43e5bfd27fef02586d201d8ec89bcd1c8ead3ef9c37bd1116caad9bf30",
+      "hash": "sha256:8a1d6bd93025cd07dacba2cb6e4ddb00f503634b23c2f643ab76251a65d6540e",
       "dependencies": [],
       "frontmatter": {
         "name": "verifier",
         "description": "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.",
         "tools": "Read, Bash, Grep, Glob",
-        "model": "sonnet"
+        "domain": "quality",
+        "intent": [
+          "verify",
+          "spec",
+          "criteria",
+          "goal",
+          "check"
+        ],
+        "model": "sonnet",
+        "skills": [
+          "verify",
+          "test",
+          "validate-patterns"
+        ]
+      }
+    },
+    {
+      "name": "audit-docs",
+      "type": "command",
+      "path": ".claude/commands/audit-docs.md",
+      "description": "Audit documentation structure, coherence, and upstream validity.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:d74ca5f84bbcf837fb2510d218cac595c3b959a487a71404dd15e26a7266001c",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Audit documentation structure, coherence, and upstream validity."
       }
     },
     {
@@ -1426,6 +2341,19 @@
       "dependencies": [],
       "frontmatter": {
         "description": "Generate a quality audit report with trend data — coverage, Detekt, tests, CVEs."
+      }
+    },
+    {
+      "name": "benchmark",
+      "type": "command",
+      "path": ".claude/commands/benchmark.md",
+      "description": "Run benchmark suites with JVM/Android detection.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:dfa8a5f49fe8d154febcfba52c5cf50fa2056795f9ed44789f82fbfb6bc2e251",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Run benchmark suites with JVM/Android detection."
       }
     },
     {
@@ -1462,6 +2390,19 @@
       "frontmatter": {}
     },
     {
+      "name": "check-outdated",
+      "type": "command",
+      "path": ".claude/commands/check-outdated.md",
+      "description": "Check dependency versions against Maven Central (TOML parser, kdoc-state v2 cache).",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:c30da015fb0991a6a73dcbb0a253126ab9b795e0895cc2d12b60f8786a9ab172",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Check dependency versions against Maven Central (TOML parser, kdoc-state v2 cache)."
+      }
+    },
+    {
       "name": "commit-lint",
       "type": "command",
       "path": ".claude/commands/commit-lint.md",
@@ -1471,6 +2412,19 @@
       "hash": "sha256:7dbb319833eb97d006f8293168128a5f87b1299c0bdb7f2ff3530813cb43479b",
       "dependencies": [],
       "frontmatter": {}
+    },
+    {
+      "name": "coverage",
+      "type": "command",
+      "path": ".claude/commands/coverage.md",
+      "description": "Analyze test coverage gaps without running tests.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:ac688adc0595aa56298e4eba9caa639eb2a3908ee8adb93dae6d46a6d44a3663",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Analyze test coverage gaps without running tests."
+      }
     },
     {
       "name": "debug",
@@ -1510,6 +2464,19 @@
       "frontmatter": {}
     },
     {
+      "name": "doc-integrity",
+      "type": "command",
+      "path": ".claude/commands/doc-integrity.md",
+      "description": "Unified documentation integrity audit — coverage, patterns, freshness, structure.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:1d863435a0221335df4d27939b4c44dd1caf5decabada86c03df5d99d575370d",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Unified documentation integrity audit — coverage, patterns, freshness, structure."
+      }
+    },
+    {
       "name": "doc-update",
       "type": "command",
       "path": ".claude/commands/doc-update.md",
@@ -1519,6 +2486,19 @@
       "hash": "sha256:a96ed0d4932c1c723942523a990a4447ab3a135996273ce0f9712f39e50cd5fb",
       "dependencies": [],
       "frontmatter": {}
+    },
+    {
+      "name": "extract-errors",
+      "type": "command",
+      "path": ".claude/commands/extract-errors.md",
+      "description": "Extract and format build/test errors from Gradle output.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:aa67f0f8f67ae87cadeeb640d274c45596a7695e083ad9fbd4c2c047979c2d86",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Extract and format build/test errors from Gradle output."
+      }
     },
     {
       "name": "feature-audit",
@@ -1545,6 +2525,19 @@
       }
     },
     {
+      "name": "generate-rules",
+      "type": "command",
+      "path": ".claude/commands/generate-rules.md",
+      "description": "Generate Detekt rules from pattern doc frontmatter.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:5158c7b6a316bbf932e459002ecd7d707a4b22534215d8c01a202bb10cbcd94a",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Generate Detekt rules from pattern doc frontmatter."
+      }
+    },
+    {
       "name": "git-flow",
       "type": "command",
       "path": ".claude/commands/git-flow.md",
@@ -1554,6 +2547,19 @@
       "hash": "sha256:8fbe025698b4b450863c1cd4929f27646c26c266519e3850e1f51148daff8201",
       "dependencies": [],
       "frontmatter": {}
+    },
+    {
+      "name": "init-session",
+      "type": "command",
+      "path": ".claude/commands/init-session.md",
+      "description": "Show project context — available agents, skills, modules, and business docs.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:2dfdc04c30ff4654ef36e1d4f3d6afd6d2af2aca4cdf36894302478cd6b58230",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Show project context — available agents, skills, modules, and business docs."
+      }
     },
     {
       "name": "lint-resources",
@@ -1694,6 +2700,19 @@
       }
     },
     {
+      "name": "resume-work",
+      "type": "command",
+      "path": ".claude/commands/resume-work.md",
+      "description": "Resume session with CEO/CTO dashboard — shows status by department from last session.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:67b8c9a173096f59e4ebff7069cdedab1ead0b8f9162e30144db88eb6e9dcdac",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Resume session with CEO/CTO dashboard — shows status by department from last session."
+      }
+    },
+    {
       "name": "review-pr",
       "type": "command",
       "path": ".claude/commands/review-pr.md",
@@ -1704,6 +2723,19 @@
       "dependencies": [],
       "frontmatter": {
         "description": "Code review of a pull request with structured suggestions."
+      }
+    },
+    {
+      "name": "security-review",
+      "type": "command",
+      "path": ".claude/commands/security-review.md",
+      "description": "AI-powered security review of changed files. Scans for injection, auth flaws, PII exposure, crypto weaknesses, and more.",
+      "category": "security",
+      "tier": "core",
+      "hash": "sha256:158818f3fc9929698416af3247d6f8504f4130fa613d580a2cad3d5af16174d8",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "AI-powered security review of changed files. Scans for injection, auth flaws, PII exposure, crypto weaknesses, and more."
       }
     },
     {
@@ -1771,6 +2803,19 @@
       "frontmatter": {}
     },
     {
+      "name": "sync-l0",
+      "type": "command",
+      "path": ".claude/commands/sync-l0.md",
+      "description": "Propagate L0 skills, agents, and commands to consuming projects.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:d68fe8172ff9eab51ba35ca6477132986c717f83ead585d4d3009f3fd19bcd5d",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Propagate L0 skills, agents, and commands to consuming projects."
+      }
+    },
+    {
       "name": "sync-roadmap",
       "type": "command",
       "path": ".claude/commands/sync-roadmap.md",
@@ -1793,6 +2838,45 @@
       "frontmatter": {}
     },
     {
+      "name": "test-changed",
+      "type": "command",
+      "path": ".claude/commands/test-changed.md",
+      "description": "Run tests only for modules with uncommitted changes.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:29ec7e52cba8818774ba6cead8dd218cb1db5271d1b75d02b09bc4655825fb77",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Run tests only for modules with uncommitted changes."
+      }
+    },
+    {
+      "name": "test-full-parallel",
+      "type": "command",
+      "path": ".claude/commands/test-full-parallel.md",
+      "description": "Run full test suite in parallel across all modules.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:122fa8c2b447d174d133805ecf67f209b1ea061c31fe87af9c0057ac42fd6019",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Run full test suite in parallel across all modules."
+      }
+    },
+    {
+      "name": "test",
+      "type": "command",
+      "path": ".claude/commands/test.md",
+      "description": "Run tests for a specific module or all modules.",
+      "category": "testing",
+      "tier": "core",
+      "hash": "sha256:54f00e8066b582c8d02f6d9d08e1b8de964f9c047ffee3a5f62c41ddd993d8db",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Run tests for a specific module or all modules."
+      }
+    },
+    {
       "name": "unlock-tests",
       "type": "command",
       "path": ".claude/commands/unlock-tests.md",
@@ -1802,6 +2886,45 @@
       "hash": "sha256:375d773cfa92764b863487c5cb4d5be3205a84350ce4e415e6406ce894eda03b",
       "dependencies": [],
       "frontmatter": {}
+    },
+    {
+      "name": "validate-patterns",
+      "type": "command",
+      "path": ".claude/commands/validate-patterns.md",
+      "description": "Check code compliance with L0 pattern conventions.",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:e0a10b2c9a225428406291d7b6d1d960785d642ef45fb813367751ac2672e4fd",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Check code compliance with L0 pattern conventions."
+      }
+    },
+    {
+      "name": "validate-upstream",
+      "type": "command",
+      "path": ".claude/commands/validate-upstream.md",
+      "description": "Run upstream validation assertions against live documentation.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:3dab4ec7edddbc4b1bb7e9d507834da39e76e3bd3e7df41251c82ce74f59e256",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Run upstream validation assertions against live documentation."
+      }
+    },
+    {
+      "name": "verify-kmp",
+      "type": "command",
+      "path": ".claude/commands/verify-kmp.md",
+      "description": "Validate KMP source set discipline and imports.",
+      "category": "build",
+      "tier": "core",
+      "hash": "sha256:d2cc0a8d0511dbfe8bfaed7a025d95f848c77471abd2dbaec445a46c7d65b693",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Validate KMP source set discipline and imports."
+      }
     },
     {
       "name": "verify-migrations",
@@ -1825,6 +2948,19 @@
       "dependencies": [],
       "frontmatter": {
         "description": "Goal-backward verification — check if code achieves stated goals."
+      }
+    },
+    {
+      "name": "work",
+      "type": "command",
+      "path": ".claude/commands/work.md",
+      "description": "Smart task routing — analyzes your request and delegates to the right agent or skill.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:beaeeadf0bf014d1149958a272bd3fbac4198e131ee8799d2b30ac8fd270f0c0",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Smart task routing — analyzes your request and delegates to the right agent or skill."
       }
     }
   ]

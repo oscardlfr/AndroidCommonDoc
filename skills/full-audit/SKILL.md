@@ -8,6 +8,7 @@ allowed-tools:
   - Glob
   - Agent
   - Write
+copilot: false
 ---
 
 # /full-audit

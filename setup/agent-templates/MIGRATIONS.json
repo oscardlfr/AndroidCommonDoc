@@ -1,0 +1,153 @@
+{
+  "$schema": "Agent template migration registry. Used by sync-l0 to detect breaking changes and guide consumers through upgrades.",
+  "templates": {
+    "project-manager": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial PM template — flat dispatch model, architect gates"
+      },
+      "1.1.0": {
+        "date": "2026-03-28",
+        "breaking": false,
+        "note": "Added pre-flight checklist, context management, token budgets"
+      },
+      "2.0.0": {
+        "date": "2026-03-29",
+        "breaking": true,
+        "note": "3-phase model replaces flat dispatch. DISPOSABLE dev rule. Execution trigger.",
+        "required_keywords": ["TeamCreate", "IMMEDIATELY", "DISPOSABLE", "STOP PLANNING"],
+        "migration_hint": "PM now orchestrates 3 sequential teams (Planning → Execution → Quality Gate). Devs must be spawned as anonymous Agent(prompt=...) without name/team_name. Run /sync-l0 to get the updated template."
+      }
+    },
+    "planner": {
+      "1.0.0": {
+        "date": "2026-03-28",
+        "breaking": false,
+        "note": "Initial planner as sub-agent spawned by PM"
+      },
+      "1.1.0": {
+        "date": "2026-03-29",
+        "breaking": true,
+        "note": "Planner is now a Planning Team PEER (not sub-agent). Uses SendMessage.",
+        "required_keywords": ["Planning Team", "SendMessage", "team peer"],
+        "migration_hint": "Planner must have SendMessage in tools and describe itself as 'team peer', not 'sub-agent spawned by PM'."
+      }
+    },
+    "quality-gater": {
+      "1.0.0": {
+        "date": "2026-03-29",
+        "breaking": false,
+        "note": "Initial quality-gater — 5-step sequential protocol, PASS/FAIL report"
+      },
+      "1.1.0": {
+        "date": "2026-03-29",
+        "breaking": false,
+        "note": "Added retry limit (max 3) to prevent infinite QG→Phase2 loops"
+      }
+    },
+    "doc-migrator": {
+      "1.0.0": {
+        "date": "2026-03-29",
+        "breaking": false,
+        "note": "Initial doc-migrator — 3 modes (Full Migration, Gap Fill, Realignment)"
+      },
+      "1.1.0": {
+        "date": "2026-03-29",
+        "breaking": false,
+        "note": "Added script-first validation requirement"
+      }
+    },
+    "arch-testing": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial architect — read-only, SendMessage, APPROVE/ESCALATE"
+      }
+    },
+    "arch-platform": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial architect — read-only, SendMessage, APPROVE/ESCALATE"
+      }
+    },
+    "arch-integration": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial architect — read-only, SendMessage, APPROVE/ESCALATE"
+      }
+    },
+    "context-provider": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial context-provider — mandatory read-only peer in every team"
+      }
+    },
+    "doc-updater": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial doc-updater — mandatory peer, updates docs after work"
+      }
+    },
+    "product-strategist": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial product-strategist — ICE scoring, backlog prioritization"
+      }
+    },
+    "content-creator": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial content-creator — build-in-public marketing content"
+      }
+    },
+    "landing-page-strategist": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial landing-page-strategist — page copy, CTAs, SEO"
+      }
+    },
+    "marketing-lead": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial marketing-lead — campaign orchestrator"
+      }
+    },
+    "product-lead": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial product-lead — product orchestrator"
+      }
+    },
+    "platform-auditor": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial platform-auditor — cross-module coherence"
+      }
+    },
+    "module-lifecycle": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial module-lifecycle — creation and deprecation checklists"
+      }
+    },
+    "feature-domain-specialist": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial feature-domain-specialist — customizable per-domain auditor"
+      }
+    }
+  }
+}

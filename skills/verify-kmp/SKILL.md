@@ -3,6 +3,7 @@ name: verify-kmp
 description: "Validate KMP source set organization and forbidden imports. Use when asked to check architecture or source set correctness."
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
+copilot: true
 ---
 
 ## Usage Examples

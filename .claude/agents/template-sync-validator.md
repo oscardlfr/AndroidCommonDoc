@@ -1,12 +1,28 @@
 ---
 name: template-sync-validator
-description: "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Checks every command has a wrapper template and a Copilot prompt."
+description: "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Respects the copilot frontmatter field in skills/*/SKILL.md to determine expected coverage."
 tools: Read, Grep, Glob
 model: haiku
+domain: audit
+intent: [template, sync, copilot]
 memory: project
 ---
 
-You validate synchronization between Claude Code commands, wrapper templates, and Copilot prompt templates -- including cross-surface parameter drift detection (QUAL-02). Follow these steps in order, collecting findings as you go, then produce the structured report at the end.
+You validate synchronization between Claude Code commands, wrapper templates, and Copilot prompt templates -- including cross-surface parameter drift detection (QUAL-02). You are **copilot-frontmatter-aware**: the `copilot:` field in `skills/*/SKILL.md` is the source of truth for which skills should have Copilot templates.
+
+Follow these steps in order, collecting findings as you go, then produce the structured report at the end.
+
+## Step 0: COPILOT FRONTMATTER Check
+
+1. Use Glob to list all `skills/*/SKILL.md` files.
+2. For each, use Read to extract the `copilot:` frontmatter field.
+3. Report:
+   - `[MISSING] skills/{name}/SKILL.md has no 'copilot:' frontmatter field` if the field is absent
+   - `[OK] {name} -- copilot: {value}` for skills with the field (only when verbose)
+
+Build two lists for subsequent steps:
+- `copilot_true`: skills where `copilot: true`
+- `copilot_false`: skills where `copilot: false`
 
 ## Step 1: COVERAGE Check
 
@@ -14,10 +30,12 @@ You validate synchronization between Claude Code commands, wrapper templates, an
 2. For each command name, verify:
    - `setup/templates/wrapper-{name}.md` exists (use Glob or Read)
    - `setup/copilot-templates/{name}.prompt.md` exists (use Glob or Read)
-3. Report:
+3. **Copilot-aware logic**: Only flag a missing Copilot prompt if the corresponding skill has `copilot: true` in the `copilot_true` list. Skills with `copilot: false` are expected to NOT have a Copilot prompt.
+4. Report:
    - `[MISSING] /{name} has no wrapper template` if wrapper is absent
-   - `[MISSING] /{name} has no copilot prompt template` if Copilot prompt is absent
+   - `[MISSING] /{name} has no copilot prompt template` if Copilot prompt is absent AND skill is in `copilot_true`
    - `[OK] /{name} -- both templates present` if both exist
+   - `[OK] /{name} -- wrapper present, copilot: false (no prompt expected)` if wrapper exists and skill is in `copilot_false`
 
 ## Step 2: WRAPPER CONTENT Check
 
@@ -39,16 +57,20 @@ For each wrapper template that exists in `setup/templates/wrapper-{name}.md`:
 For each Copilot prompt that exists in `setup/copilot-templates/{name}.prompt.md`:
 
 1. Use Read to open the Copilot prompt file.
-2. Check that the prompt describes the same behavior as the Claude command:
-   - Read the corresponding `.claude/commands/{name}.md` for its behavior description
-   - Compare key behavioral claims
-3. Check script path references in the Copilot prompt:
-   - Use Grep to find script paths (e.g., `scripts/sh/`, `scripts/ps1/`)
+2. Determine the template type:
+   - **Scripted**: contains `## Implementation` with code blocks
+   - **Behavioral**: contains `## Instructions` with instruction text
+3. For **scripted** templates:
+   - Check script path references using Grep to find `scripts/sh/`, `scripts/ps1/` paths
    - Verify each referenced script path exists using Glob
-4. Report:
-   - `[STALE] {name}.prompt.md references {script-path} (file not found or renamed)` for incorrect script paths
-   - `[STALE] {name}.prompt.md describes {behavior} but command does {other-behavior}` for behavior mismatches
-   - `[OK] {name}.prompt.md -- script paths correct` for accurate prompts
+   - Check that code blocks are non-empty
+   - Report: `[STALE] {name}.prompt.md references {script-path} (file not found)` for broken paths
+   - Report: `[EMPTY] {name}.prompt.md -- code blocks are empty` for empty implementations
+4. For **behavioral** templates:
+   - Verify the `## Instructions` section has substantive content (not empty)
+   - Report: `[EMPTY] {name}.prompt.md -- instructions section is empty` for empty behavioral templates
+5. Report:
+   - `[OK] {name}.prompt.md -- content valid` for correct prompts
 
 ## Step 4: COPILOT INSTRUCTIONS Check
 
@@ -70,10 +92,14 @@ For each Copilot prompt that exists in `setup/copilot-templates/{name}.prompt.md
 1. Use Glob to list all `setup/templates/wrapper-*.md` files.
 2. For each wrapper, extract the command name and check if `.claude/commands/{name}.md` exists.
 3. Use Glob to list all `setup/copilot-templates/*.prompt.md` files.
-4. For each prompt, extract the command name and check if `.claude/commands/{name}.md` exists.
+4. For each prompt, extract the command name and:
+   - Check if `.claude/commands/{name}.md` exists
+   - Check if the corresponding skill has `copilot: true` (from the `copilot_true` list)
+   - If the skill has `copilot: false`, flag the template as orphaned (should have been cleaned)
 5. Report:
    - `[ORPHAN] setup/templates/wrapper-{name}.md -- no matching command` for orphaned wrappers
    - `[ORPHAN] setup/copilot-templates/{name}.prompt.md -- no matching command` for orphaned prompts
+   - `[ORPHAN] setup/copilot-templates/{name}.prompt.md -- skill has copilot: false` for prompts that should be removed
    - `[OK] No orphaned wrapper templates` / `[OK] No orphaned copilot prompts` if all match
 
 ## Step 6: CROSS-SURFACE Check (QUAL-02)
@@ -81,7 +107,7 @@ For each Copilot prompt that exists in `setup/copilot-templates/{name}.prompt.md
 This step detects parameter naming drift across the three surfaces: Claude commands, Copilot prompts, and the canonical params.json.
 
 1. Use Read to load `skills/params.json`. Parse the `parameters` object to get canonical parameter names and their `mapping` entries for `ps1`, `sh`, and `copilot`.
-2. For each skill that has both a Claude command and a Copilot prompt:
+2. For each skill that has both a Claude command and a Copilot prompt (only skills in `copilot_true`):
 
    **Claude surface extraction:**
    a. Read `.claude/commands/{name}.md`
@@ -116,6 +142,9 @@ Produce the structured report matching this exact format:
 ```
 Template Sync Report -- N issues
 
+FRONTMATTER:
+  [MISSING] skills/foo/SKILL.md has no 'copilot:' frontmatter field
+
 COVERAGE:
   [MISSING] /extract-errors has no copilot prompt template
   [OK] /test -- both templates present
@@ -126,7 +155,8 @@ WRAPPER CONTENT:
 
 COPILOT CONTENT:
   [STALE] test.prompt.md references scripts/sh/run-tests.sh (renamed to gradle-run.sh)
-  [OK] verify-kmp.prompt.md -- script paths correct
+  [EMPTY] foo.prompt.md -- code blocks are empty
+  [OK] verify-kmp.prompt.md -- content valid
 
 COPILOT INSTRUCTIONS:
   [MISSING] copilot-instructions.md doesn't list /coverage-full
@@ -134,13 +164,14 @@ COPILOT INSTRUCTIONS:
 
 ORPHANED:
   [ORPHAN] setup/templates/wrapper-old-command.md -- no matching command
+  [ORPHAN] bar.prompt.md -- skill has copilot: false
   [OK] No orphaned copilot prompts
 
 CROSS-SURFACE:
   [CROSS-SURFACE] /test: param "test-type" is --test-type in Claude but ${input:testType} in Copilot -- forms aligned per params.json
   [OK] /run -- all parameters aligned across Claude/Copilot/canonical
 
-OVERALL: N missing, M stale, P orphaned, Q cross-surface drifts, R clean
+OVERALL: N missing, M stale, P orphaned, Q empty, R cross-surface drifts, S clean
 ```
 
 Use em-dash (--) as separator in output lines. Count totals for the OVERALL line across all sections.
@@ -153,6 +184,7 @@ Use em-dash (--) as separator in output lines. Count totals for the OVERALL line
 - `setup/copilot-templates/instructions/` -- Copilot instruction files
 - `docs/` -- pattern documentation referenced by instructions
 - `skills/params.json` -- canonical parameter source for cross-surface comparison
+- `skills/*/SKILL.md` -- `copilot:` frontmatter determines expected template coverage
 
 ## Findings Protocol
 
@@ -185,6 +217,7 @@ Map your existing labels to the canonical scale:
 | MISSING     | MEDIUM       |
 | STALE       | LOW          |
 | ORPHANED    | LOW          |
+| EMPTY       | MEDIUM       |
 | OK          | (no finding) |
 
 ### Category

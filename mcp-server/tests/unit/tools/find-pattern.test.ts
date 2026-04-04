@@ -182,6 +182,95 @@ describe("find-pattern tool", () => {
     }
   });
 
+  it("returns L0-only patterns when no project specified", async () => {
+    const result = await client.callTool({
+      name: "find-pattern",
+      arguments: { query: "testing" },
+    });
+
+    const parsed = JSON.parse(
+      (result.content[0] as { type: "text"; text: string }).text,
+    ) as FindPatternResult;
+
+    expect(parsed.project_filter).toBeNull();
+    // All entries should be L0 when no project is specified
+    for (const match of parsed.matches) {
+      expect(match.layer).toBe("L0");
+    }
+  });
+
+  it("deduplicates by slug:layer (one per slug per layer)", async () => {
+    const result = await client.callTool({
+      name: "find-pattern",
+      arguments: { query: "testing" },
+    });
+
+    const parsed = JSON.parse(
+      (result.content[0] as { type: "text"; text: string }).text,
+    ) as FindPatternResult;
+
+    // Check that no slug+layer combination appears more than once
+    const seen = new Set<string>();
+    for (const match of parsed.matches) {
+      const key = `${match.slug}:${match.layer}`;
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
+    }
+  });
+
+  it("returns empty for empty/whitespace-only query", async () => {
+    const result = await client.callTool({
+      name: "find-pattern",
+      arguments: { query: "   " },
+    });
+
+    const parsed = JSON.parse(
+      (result.content[0] as { type: "text"; text: string }).text,
+    ) as FindPatternResult;
+
+    expect(parsed.matches).toHaveLength(0);
+    expect(parsed.total).toBe(0);
+  });
+
+  it("token matching is substring-based on scope/sources/targets", async () => {
+    // "test" should match entries with "testing" in scope (substring match)
+    const result = await client.callTool({
+      name: "find-pattern",
+      arguments: { query: "test" },
+    });
+
+    const parsed = JSON.parse(
+      (result.content[0] as { type: "text"; text: string }).text,
+    ) as FindPatternResult;
+
+    expect(parsed.matches.length).toBeGreaterThan(0);
+    // At least one match should have a field containing "test" as substring
+    const allFields = parsed.matches.flatMap((m) => [
+      ...m.scope,
+      ...m.sources,
+      ...m.targets,
+    ]);
+    expect(
+      allFields.some((f) => f.toLowerCase().includes("test")),
+    ).toBe(true);
+  });
+
+  it("graceful fallback when unknown project specified", async () => {
+    const result = await client.callTool({
+      name: "find-pattern",
+      arguments: { query: "testing", project: "nonexistent-project-xyz" },
+    });
+
+    const parsed = JSON.parse(
+      (result.content[0] as { type: "text"; text: string }).text,
+    ) as FindPatternResult;
+
+    // Should still return L0 results as fallback
+    expect(parsed.project_filter).toBe("nonexistent-project-xyz");
+    // Should not error — graceful fallback to L0
+    expect((parsed as Record<string, unknown>).status).toBeUndefined();
+  });
+
   // --- Category filter tests (Phase 14.1) ---
 
   it("filters results by category='testing' returning only matching entries", async () => {

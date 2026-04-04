@@ -56,9 +56,9 @@ describe('agent content validation', () => {
       });
     }
 
-    it('dev-lead template has pre-existing excuse rule', () => {
+    it('project-manager template has pre-existing excuse rule', () => {
       const content = fs.readFileSync(
-        path.join(ROOT, 'setup/agent-templates/dev-lead.md'), 'utf-8'
+        path.join(ROOT, 'setup/agent-templates/project-manager.md'), 'utf-8'
       );
       expect(content).toMatch(/pre-existing/i);
     });
@@ -67,12 +67,12 @@ describe('agent content validation', () => {
   describe('test-specialist — quality over coverage', () => {
     const content = fs.readFileSync(path.join(agentDir, 'test-specialist.md'), 'utf-8');
 
-    it('has quality over coverage principle', () => {
-      expect(content).toMatch(/Quality Over Coverage/i);
+    it('has quality auditor identity', () => {
+      expect(content).toMatch(/Quality Auditor/i);
     });
 
     it('forbids coverage gaming', () => {
-      expect(content).toMatch(/NEVER write tests just to hit a coverage number/i);
+      expect(content).toMatch(/Coverage is a side effect, not a goal/i);
     });
 
     it('requires e2e for Model layer', () => {
@@ -119,6 +119,25 @@ describe('agent content validation', () => {
     it('requires implementing fixes not just reporting', () => {
       expect(content).toMatch(/Implement fixes/i);
     });
+  });
+});
+
+describe('v1.4.0 spec-driven agents', () => {
+  const agentsDir = path.join(ROOT, '.claude/agents');
+  const newAgents = ["advisor", "codebase-mapper", "debugger", "researcher", "verifier"];
+
+  for (const agent of newAgents) {
+    it(`${agent} has no GSD references`, () => {
+      const content = fs.readFileSync(path.join(agentsDir, `${agent}.md`), 'utf-8');
+      expect(content).not.toContain('.planning/');
+      expect(content).not.toContain('.gsd/');
+      expect(content).not.toContain('gsd-tools');
+    });
+  }
+
+  it('debugger references /test skill', () => {
+    const content = fs.readFileSync(path.join(agentsDir, 'debugger.md'), 'utf-8');
+    expect(content).toContain('test');
   });
 });
 
@@ -196,6 +215,37 @@ describe('pattern-lint cancellation-rethrow check', () => {
     const cancellationSection = content.split('cancellation-rethrow')[1]?.split('Check 2')[0] || '';
     expect(cancellationSection).toContain('while IFS=');
     expect(cancellationSection).not.toMatch(/wc -l.*tr -d/);
+  });
+});
+
+describe("v1.5.0 extensible routing", () => {
+  const agentsDir = path.join(ROOT, ".claude", "agents");
+
+  it("all agents have domain frontmatter", () => {
+    const agents = fs.readdirSync(agentsDir).filter(f => f.endsWith(".md"));
+    const missing: string[] = [];
+    for (const agent of agents) {
+      const content = fs.readFileSync(path.join(agentsDir, agent), "utf8");
+      if (!content.match(/^domain:/m)) missing.push(agent);
+    }
+    expect(missing, `Agents missing domain: ${missing.join(", ")}`).toHaveLength(0);
+  });
+
+  it("all agents have intent frontmatter", () => {
+    const agents = fs.readdirSync(agentsDir).filter(f => f.endsWith(".md"));
+    const missing: string[] = [];
+    for (const agent of agents) {
+      const content = fs.readFileSync(path.join(agentsDir, agent), "utf8");
+      if (!content.match(/^intent:/m)) missing.push(agent);
+    }
+    expect(missing, `Agents missing intent: ${missing.join(", ")}`).toHaveLength(0);
+  });
+
+  it("test-specialist has script-first execution rules", () => {
+    const content = fs.readFileSync(path.join(agentsDir, "test-specialist.md"), "utf8");
+    expect(content).toContain("NEVER run");
+    expect(content).toContain("/test");
+    expect(content).toContain("/benchmark");
   });
 });
 

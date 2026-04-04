@@ -3,10 +3,14 @@ name: cross-platform-validator
 description: Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.
 tools: Read, Grep, Glob
 model: sonnet
+domain: quality
+intent: [platform, expect-actual, sourceset, kmp]
 memory: project
 optional_capabilities:
   - context7
   - jina
+skills:
+  - verify-kmp
 ---
 
 ## Optional Capabilities
@@ -109,6 +113,12 @@ OVERALL: N gaps, M violations, P clean categories
 
 Adapt app directory names based on project structure.
 
+## MCP Tools (use when available)
+
+- `verify-kmp-packages` — replaces manual source set + forbidden import scanning (Checks 1, 6)
+- `string-completeness` — replaces manual locale string comparison (Check 4)
+
+Keep manual checks for routes, DI, navigation (no MCP equivalent).
 ## Findings Protocol
 
 When invoked as part of `/full-audit`, emit a structured JSON block after your human-readable report. Place it between markers:

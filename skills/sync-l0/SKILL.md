@@ -2,6 +2,8 @@
 name: sync-l0
 description: "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking."
 allowed-tools: [Bash, Read, Write, Glob, Grep]
+copilot: true
+copilot-template-type: behavioral
 ---
 
 ## Usage Examples
@@ -93,6 +95,15 @@ The `l0-manifest.json` controls what gets synced:
 - **include-all** (default): Syncs everything except items in `exclude_*` lists and `exclude_categories`
 - **explicit**: Only syncs entries already present in `checksums` (opt-in mode)
 - **l2_specific**: Lists project-owned files that sync will never touch
+
+## Agent Templates
+
+Agent templates (`setup/agent-templates/`) are the authoritative source for PM, quality-gater, architects, and other team agents. These are also materialized in `.claude/agents/` so the registry scanner picks them up and `/sync-l0` distributes them to consumers.
+
+When editing a template:
+1. Edit `setup/agent-templates/<name>.md`
+2. Copy to `.claude/agents/<name>.md`
+3. Regenerate registry: `node mcp-server/build/cli/generate-registry.js`
 
 ## Safety
 

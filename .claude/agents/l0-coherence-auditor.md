@@ -3,6 +3,8 @@ name: l0-coherence-auditor
 description: Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks.
 tools: Read, Grep, Glob
 model: haiku
+domain: audit
+intent: [coherence, l0, hub, frontmatter]
 memory: project
 optional_capabilities:
   - mcp-gsd
@@ -211,6 +213,15 @@ Produce a single JSON object. Do NOT wrap it in markdown code fences — output 
 9. Output the JSON
 
 When the report path is provided (e.g., `.gsd/audits/audit-{timestamp}.json`), use the Write tool to save it. Otherwise print it to stdout.
+
+## MCP Tools (use when available)
+
+- `validate-doc-structure` — replaces manual frontmatter + line limit checks (Checks 2, 3)
+- `validate-skills` — replaces manual skill asset validation
+- `validate-claude-md` — replaces manual CLAUDE.md template checks
+- `validate-vault` — replaces manual vault integrity checks
+
+Use MCP tools as primary detection. Fall back to manual Grep only for checks MCP tools don't cover (e.g., cross-doc link analysis, token budget calculation).
 
 ## Findings Protocol
 

@@ -1,3 +1,9 @@
+---
+name: note
+description: "Zero-friction idea capture to project memory."
+copilot: false
+---
+
 # Note Skill
 
 Zero-friction idea capture to project memory.

@@ -3,6 +3,8 @@ name: release-guardian-agent
 description: Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.
 tools: Read, Grep, Glob
 model: haiku
+domain: infrastructure
+intent: [release, publish, deploy, secrets]
 memory: project
 skills:
   - sbom
@@ -87,6 +89,17 @@ Severity levels:
 - **BLOCKER**: Must fix before release (crashes, security, debug artifacts)
 - **WARNING**: Should review but may be intentional
 - **OK**: Category is clean
+
+## MCP Tools (use when available)
+
+- `proguard-validator` — validates ProGuard/R8 rules reference existing classes
+- `unused-resources` — detects orphan strings/drawables to clean before release
+
+Keep manual checks for debug flags, secrets, dev URLs, disabled security (no MCP equivalent).
+
+## Official Skills (use when available)
+- `changelog-generator` — automate CHANGELOG.md from git history before release
+- `/security-review` — run AI-powered security scan on changed files before publish
 
 ## Findings Protocol
 

@@ -11,7 +11,7 @@
 #  - auto-sync single-quote fix
 # =============================================================================
 
-L0_ROOT="$BATS_TEST_DIRNAME/../.."
+L0_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 SH_DIR="$L0_ROOT/scripts/sh"
 PS1_DIR="$L0_ROOT/scripts/ps1"
 SH_LIB="$SH_DIR/lib/coverage-detect.sh"
@@ -51,8 +51,10 @@ teardown() {
     grep -q "function Get-CoverageGradleTask" "$PS1_LIB"
 }
 
-@test "parity: Get-KoverTaskFallbacks exists in PS1" {
-    grep -q "function Get-KoverTaskFallbacks" "$PS1_LIB"
+@test "parity: PS1 kover does NOT use --rerun-tasks as argument" {
+    # --rerun-tasks removed: core-storage-secure fails on re-execution
+    count=$(grep -c '^\s.*\+= "--rerun-tasks"' "$PS1_DIR/run-parallel-coverage-suite.ps1" || true)
+    [ "$count" -eq 0 ]
 }
 
 @test "parity: Get-CoverageXmlPath exists in PS1" {
@@ -96,8 +98,9 @@ teardown() {
     grep -q "ExcludeCoverage" "$PS1_DIR/run-changed-modules-tests.ps1"
 }
 
-@test "parity: PS1 run-parallel has kover fallback retry (Get-KoverTaskFallbacks)" {
-    grep -q "Get-KoverTaskFallbacks" "$PS1_DIR/run-parallel-coverage-suite.ps1"
+@test "parity: PS1 run-parallel has kover batch (no --rerun-tasks as arg)" {
+    count=$(grep -c '^\s.*\+= "--rerun-tasks"' "$PS1_DIR/run-parallel-coverage-suite.ps1" || true)
+    [ "$count" -eq 0 ]
 }
 
 @test "parity: PS1 run-parallel has partial-success retry (missingCov)" {
@@ -730,16 +733,16 @@ teardown() {
     sed -n '/### L0 Maintenance Skills/,/^## /p' "$README" | grep -qi "maintenance\|L0\|AndroidCommonDoc"
 }
 
-@test "README: agents section has 'Domain Agents' subsection" {
-    grep -q "### Domain Agents" "$README"
+@test "README: agents section has 'Production Agents' subsection" {
+    grep -q "### Production Agents" "$README"
 }
 
-@test "README: agents section has 'Quality Gate Agents' subsection" {
-    grep -q "### Quality Gate Agents" "$README"
+@test "README: agents section has 'Agent Templates' subsection" {
+    grep -q "### Agent Templates" "$README"
 }
 
-@test "README: QG agents section describes consistency verification" {
-    sed -n '/### Quality Gate Agents/,/^## /p' "$README" | grep -qi "consistency\|verify\|internal"
+@test "README: agents section describes agent categories" {
+    grep -qi "Category\|orchestrat\|architect\|guardian" "$README"
 }
 
 @test "README: MCP section has 'General Tools' subsection" {
@@ -755,8 +758,8 @@ teardown() {
 }
 
 @test "README: 'What gets synced' lists consumer counts" {
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "50"
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "34"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "58"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "52"
 }
 
 @test "README: 'What gets synced' clarifies what is NOT synced" {
@@ -767,12 +770,12 @@ teardown() {
     grep -q "88+ sub-docs" "$README"
 }
 
-@test "README: vitest count is 1173" {
-    grep -q "1173 tests" "$README"
+@test "README: vitest count is 1634" {
+    grep -q "1634 tests" "$README"
 }
 
-@test "README: vitest files count is 85" {
-    grep -q "85 test files" "$README"
+@test "README: vitest files count is 99" {
+    grep -q "99 test files" "$README"
 }
 
 # ===========================================================================
@@ -1013,4 +1016,591 @@ teardown() {
 
 @test "monitor-docs skill: shows L1 usage example" {
     grep -q "layer L1" skills/monitor-docs/SKILL.md
+}
+
+# ===========================================================================
+# v1.4.0 Agent Ecosystem Tests
+# ===========================================================================
+
+@test "agents: all 5 new agents exist" {
+    for agent in advisor codebase-mapper debugger researcher verifier; do
+        [ -f "$L0_ROOT/.claude/agents/$agent.md" ]
+    done
+}
+
+@test "agents: new agents have valid frontmatter (name + model)" {
+    for agent in advisor codebase-mapper debugger researcher verifier; do
+        grep -q "^name:" "$L0_ROOT/.claude/agents/$agent.md"
+        grep -q "^model:" "$L0_ROOT/.claude/agents/$agent.md"
+    done
+}
+
+@test "skills: all 7 new skills exist" {
+    for skill in debug research map-codebase verify decide note review-pr; do
+        [ -f "$L0_ROOT/skills/$skill/SKILL.md" ]
+    done
+}
+
+@test "skills: all 7 new commands exist" {
+    for cmd in debug research map-codebase verify decide note review-pr; do
+        [ -f "$L0_ROOT/.claude/commands/$cmd.md" ]
+    done
+}
+
+@test "skills: agent-invoking skills reference correct agents" {
+    grep -q 'subagent_type="debugger"' "$L0_ROOT/skills/debug/SKILL.md"
+    grep -q 'subagent_type="researcher"' "$L0_ROOT/skills/research/SKILL.md"
+    grep -q 'subagent_type="codebase-mapper"' "$L0_ROOT/skills/map-codebase/SKILL.md"
+    grep -q 'subagent_type="verifier"' "$L0_ROOT/skills/verify/SKILL.md"
+    grep -q 'subagent_type="advisor"' "$L0_ROOT/skills/decide/SKILL.md"
+}
+
+@test "agents: test-specialist knows benchmark skill" {
+    grep -q "benchmark" "$L0_ROOT/.claude/agents/test-specialist.md"
+}
+
+@test "agents: ui-specialist knows lint-resources skill" {
+    grep -q "lint-resources" "$L0_ROOT/.claude/agents/ui-specialist.md"
+}
+
+@test "hooks: 3 new hooks exist" {
+    [ -f "$L0_ROOT/.claude/hooks/plan-context.js" ]
+    [ -f "$L0_ROOT/.claude/hooks/doc-freshness-alert.js" ]
+    [ -f "$L0_ROOT/.claude/hooks/agent-delegation-reminder.js" ]
+}
+
+@test "templates: product-strategist and content-creator exist" {
+    [ -f "$L0_ROOT/setup/agent-templates/product-strategist.md" ]
+    [ -f "$L0_ROOT/setup/agent-templates/content-creator.md" ]
+}
+
+@test "docs: spec-driven-workflow exists with frontmatter" {
+    [ -f "$L0_ROOT/docs/agents/spec-driven-workflow.md" ]
+    grep -q "^slug: spec-driven-workflow" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+}
+
+@test "README: counts match 37 agents, 58 skills" {
+    grep -q "37 specialized agents" "$README"
+    grep -q "58 canonical" "$README"
+}
+
+@test "CLAUDE.md: lists all new agents in delegation table" {
+    for agent in debugger verifier advisor researcher codebase-mapper; do
+        grep -q "$agent" "$L0_ROOT/CLAUDE.md"
+    done
+}
+
+@test "CLAUDE.md: lists all new skills in commands section" {
+    for skill in debug research map-codebase verify decide note review-pr benchmark; do
+        grep -q "/$skill" "$L0_ROOT/CLAUDE.md"
+    done
+}
+
+@test "model-profiles: debugger is opus in advanced" {
+    python3 -c "
+import json, os, re
+path = '$L0_ROOT/.claude/model-profiles.json'
+# Normalize MSYS /c/ paths to C:/ for Windows Python compatibility
+if not os.path.exists(path):
+    path = re.sub(r'^/([a-zA-Z])/', lambda m: m.group(1).upper() + ':/', path)
+d = json.load(open(path))
+assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugger not opus in advanced'
+"
+}
+
+@test "benchmark: SKILL.md exists with runner reference" {
+    [ -f "$L0_ROOT/skills/benchmark/SKILL.md" ]
+    [ -f "$L0_ROOT/scripts/sh/run-benchmarks.sh" ]
+    [ -f "$L0_ROOT/scripts/ps1/run-benchmarks.ps1" ]
+}
+
+@test "benchmark: detection libraries exist" {
+    [ -f "$L0_ROOT/scripts/sh/lib/benchmark-detect.sh" ]
+    [ -f "$L0_ROOT/scripts/ps1/lib/Benchmark-Detect.ps1" ]
+}
+
+# ===========================================================================
+# === v1.5.0 Ecosystem Initialization + Business Layer Tests ===
+# ===========================================================================
+
+@test "skills: /work skill exists" {
+    [ -f "$L0_ROOT/skills/work/SKILL.md" ]
+    [ -f "$L0_ROOT/.claude/commands/work.md" ]
+}
+
+@test "skills: /init-session skill exists" {
+    [ -f "$L0_ROOT/skills/init-session/SKILL.md" ]
+    [ -f "$L0_ROOT/.claude/commands/init-session.md" ]
+}
+
+@test "skills: /resume-work skill exists" {
+    [ -f "$L0_ROOT/skills/resume-work/SKILL.md" ]
+    [ -f "$L0_ROOT/.claude/commands/resume-work.md" ]
+}
+
+@test "skills: /work SKILL.md has routing rules" {
+    grep -q "bug.*error.*fix" "$L0_ROOT/skills/work/SKILL.md"
+    grep -q "product-strategist" "$L0_ROOT/skills/work/SKILL.md"
+    grep -q "content-creator" "$L0_ROOT/skills/work/SKILL.md"
+    grep -q "Level 2.*Frontmatter Discovery" "$L0_ROOT/skills/work/SKILL.md"
+}
+
+@test "skills: /work notes business agents are opt-in" {
+    grep -q "opt-in" "$L0_ROOT/skills/work/SKILL.md"
+    grep -q "verify.*exists" "$L0_ROOT/skills/work/SKILL.md" || grep -q "fall through" "$L0_ROOT/skills/work/SKILL.md"
+}
+
+@test "skills: 12 new command stubs exist" {
+    for cmd in test test-full-parallel test-changed coverage benchmark extract-errors verify-kmp validate-patterns sync-l0 audit-docs validate-upstream generate-rules; do
+        [ -f "$L0_ROOT/.claude/commands/$cmd.md" ]
+    done
+}
+
+@test "skills: command stubs have description frontmatter" {
+    for cmd in test coverage benchmark verify-kmp validate-patterns sync-l0 audit-docs work init-session resume-work; do
+        grep -q "^description:" "$L0_ROOT/.claude/commands/$cmd.md"
+    done
+}
+
+@test "agents: all 37 agents have domain frontmatter" {
+    for agent in $L0_ROOT/.claude/agents/*.md; do
+        grep -q "^domain:" "$agent" || { echo "MISSING domain: $agent"; return 1; }
+    done
+}
+
+@test "agents: all 37 agents have intent frontmatter" {
+    for agent in $L0_ROOT/.claude/agents/*.md; do
+        grep -q "^intent:" "$agent" || { echo "MISSING intent: $agent"; return 1; }
+    done
+}
+
+@test "agents: domain values are valid" {
+    for agent in $L0_ROOT/.claude/agents/*.md; do
+        domain=$(grep "^domain:" "$agent" | head -1 | sed 's/domain: *//')
+        echo "$domain" | grep -qE "^(development|testing|security|quality|audit|business|marketing|infrastructure|architecture)$" || { echo "INVALID domain '$domain' in $agent"; return 1; }
+    done
+}
+
+@test "templates: landing-page-strategist exists" {
+    [ -f "$L0_ROOT/setup/agent-templates/landing-page-strategist.md" ]
+    grep -q "^name: landing-page-strategist" "$L0_ROOT/setup/agent-templates/landing-page-strategist.md"
+}
+
+@test "templates: 17+ agent templates exist" {
+    count=$(ls $L0_ROOT/setup/agent-templates/*.md | grep -v README | wc -l)
+    [ "$count" -ge 17 ]
+}
+
+@test "templates: business doc templates exist (5)" {
+    [ -d "$L0_ROOT/setup/doc-templates/business" ]
+    [ -f "$L0_ROOT/setup/doc-templates/business/PRODUCT_SPEC.md.template" ]
+    [ -f "$L0_ROOT/setup/doc-templates/business/MARKETING.md.template" ]
+    [ -f "$L0_ROOT/setup/doc-templates/business/PRICING.md.template" ]
+    [ -f "$L0_ROOT/setup/doc-templates/business/LANDING_PAGES.md.template" ]
+    [ -f "$L0_ROOT/setup/doc-templates/business/COMPETITIVE.md.template" ]
+}
+
+@test "templates: project-manager has FORBIDDEN/ALLOWED actions" {
+    grep -q "FORBIDDEN" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "ALLOWED" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "templates: project-manager NEVER writes code" {
+    grep -q "NEVER write code" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "NEVER writes code" "$L0_ROOT/setup/agent-templates/project-manager.md" || grep -q "NEVER write code yourself" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "templates: project-manager has agent roster with team roles" {
+    grep -q "Agent Roster" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "arch-testing" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "quality-gater" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "planner" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "templates: project-manager delegates testing to skills" {
+    grep -q "/test" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "/test-full-parallel" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "templates: arch-testing is mini-orchestrator with MCP tools" {
+    [ -f "$L0_ROOT/setup/agent-templates/arch-testing.md" ]
+    grep -q "mini-orchestrator" "$L0_ROOT/setup/agent-templates/arch-testing.md"
+    grep -q "Agent" "$L0_ROOT/setup/agent-templates/arch-testing.md"
+    grep -q "code-metrics" "$L0_ROOT/setup/agent-templates/arch-testing.md"
+    grep -q "Cross-Architect" "$L0_ROOT/setup/agent-templates/arch-testing.md"
+    grep -q "ESCALATE" "$L0_ROOT/setup/agent-templates/arch-testing.md"
+}
+
+@test "templates: arch-platform is mini-orchestrator with MCP tools" {
+    [ -f "$L0_ROOT/setup/agent-templates/arch-platform.md" ]
+    grep -q "mini-orchestrator" "$L0_ROOT/setup/agent-templates/arch-platform.md"
+    grep -q "verify-kmp-packages" "$L0_ROOT/setup/agent-templates/arch-platform.md"
+    grep -q "dependency-graph" "$L0_ROOT/setup/agent-templates/arch-platform.md"
+    grep -q "Cross-Architect" "$L0_ROOT/setup/agent-templates/arch-platform.md"
+    grep -q "ESCALATE" "$L0_ROOT/setup/agent-templates/arch-platform.md"
+}
+
+@test "templates: arch-integration is mini-orchestrator with MCP tools" {
+    [ -f "$L0_ROOT/setup/agent-templates/arch-integration.md" ]
+    grep -q "mini-orchestrator" "$L0_ROOT/setup/agent-templates/arch-integration.md"
+    grep -q "dependency-graph" "$L0_ROOT/setup/agent-templates/arch-integration.md"
+    grep -q "Cross-Architect" "$L0_ROOT/setup/agent-templates/arch-integration.md"
+    grep -q "ESCALATE" "$L0_ROOT/setup/agent-templates/arch-integration.md"
+}
+
+@test "templates: architects have SendMessage and APPROVE/ESCALATE" {
+    for agent in arch-testing arch-platform arch-integration; do
+        grep -q "SendMessage" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        grep -q "APPROVE" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        grep -q "ESCALATE" "$L0_ROOT/setup/agent-templates/${agent}.md"
+    done
+}
+
+@test "templates: project-manager has architect verification gate" {
+    grep -q "Architect Verification Gate" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "arch-testing" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "arch-platform" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "arch-integration" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "NEVER write code" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "templates: project-manager has planning delegation" {
+    grep -q "Planning Delegation" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "researcher" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "advisor" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "templates: project-manager has TDD-first for bug fixes" {
+    grep -q "TDD-first for bug fixes" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "failing test" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "templates: all architects can delegate and cross-verify" {
+    for agent in arch-testing arch-platform arch-integration; do
+        grep -q "Agent" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        grep -q "APPROVE.*ESCALATE" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        grep -q "Cross-Architect" "$L0_ROOT/setup/agent-templates/${agent}.md"
+    done
+}
+
+@test "agents: l0-coherence-auditor references MCP tools" {
+    grep -q "validate-doc-structure" "$L0_ROOT/.claude/agents/l0-coherence-auditor.md"
+    grep -q "validate-skills" "$L0_ROOT/.claude/agents/l0-coherence-auditor.md"
+    grep -q "validate-claude-md" "$L0_ROOT/.claude/agents/l0-coherence-auditor.md"
+}
+
+@test "agents: cross-platform-validator references MCP tools" {
+    grep -q "verify-kmp-packages" "$L0_ROOT/.claude/agents/cross-platform-validator.md"
+    grep -q "string-completeness" "$L0_ROOT/.claude/agents/cross-platform-validator.md"
+}
+
+@test "templates: project-manager has MCP tools section" {
+    grep -q "MCP Tools" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "verify-kmp-packages" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "35" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "docs: agents-hub references 3-phase model and team topology" {
+    grep -q "3-Phase Model" "$L0_ROOT/docs/agents/agents-hub.md"
+    grep -q "team-topology" "$L0_ROOT/docs/agents/agents-hub.md"
+    grep -q "quality-gater" "$L0_ROOT/docs/agents/agents-hub.md"
+}
+
+@test "docs: multi-agent-patterns has architect gate section" {
+    grep -q "Architect Gate Pattern" "$L0_ROOT/docs/agents/multi-agent-patterns.md"
+    grep -q "Architect gate:" "$L0_ROOT/docs/agents/multi-agent-patterns.md"
+}
+
+@test "docs: spec-driven-workflow lists architect agents" {
+    grep -q "arch-testing" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+    grep -q "arch-platform" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+    grep -q "arch-integration" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+}
+
+@test "agents: debugger has done criteria" {
+    grep -q "Done Criteria" "$L0_ROOT/.claude/agents/debugger.md"
+    grep -q "Never claim.*fixed.*without a passing test" "$L0_ROOT/.claude/agents/debugger.md"
+}
+
+@test "templates: feature-domain-specialist has done criteria" {
+    grep -q "Done Criteria" "$L0_ROOT/setup/agent-templates/feature-domain-specialist.md"
+    grep -q "already fixed.*claims without evidence" "$L0_ROOT/setup/agent-templates/feature-domain-specialist.md"
+}
+
+@test "templates: platform-auditor has verify before reporting" {
+    grep -q "Verify Before Reporting" "$L0_ROOT/setup/agent-templates/platform-auditor.md"
+    grep -q "Re-read every file:line" "$L0_ROOT/setup/agent-templates/platform-auditor.md"
+}
+
+@test "templates: module-lifecycle has done criteria" {
+    grep -q "Done Criteria" "$L0_ROOT/setup/agent-templates/module-lifecycle.md"
+    grep -q "test-full-parallel" "$L0_ROOT/setup/agent-templates/module-lifecycle.md"
+}
+
+@test "templates: project-manager has post-change checklist" {
+    grep -q "Post-Change Checklist" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "automatic" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "audit-docs" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "readme-audit" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "README: template count is 17" {
+    grep -q "17 templates\|17 agent templates" "$L0_ROOT/README.md"
+    grep -q "arch-testing" "$L0_ROOT/README.md"
+    grep -q "quality-gater" "$L0_ROOT/README.md"
+    grep -q "planner" "$L0_ROOT/README.md"
+}
+
+@test "templates: project-manager references official anthropic skills" {
+    grep -q "Official Skills" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "tdd-workflow" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "security-review" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "agents: 12 agents reference official skills" {
+    count=$(grep -rl "Official Skills" "$L0_ROOT/setup/agent-templates/" "$L0_ROOT/.claude/agents/" 2>/dev/null | wc -l)
+    [ "$count" -ge 12 ]
+}
+
+@test "commands: security-review command exists" {
+    [ -f "$L0_ROOT/.claude/commands/security-review.md" ]
+    grep -q "security" "$L0_ROOT/.claude/commands/security-review.md"
+}
+
+@test "setup: wizard W3.5 official skills exists" {
+    grep -q "W3.5" "$L0_ROOT/skills/setup/SKILL.md"
+    grep -q "Official Anthropic Skills" "$L0_ROOT/skills/setup/SKILL.md"
+}
+
+@test "agents: test-specialist has script-first execution section" {
+    grep -q "NEVER run.*gradlew" "$L0_ROOT/.claude/agents/test-specialist.md"
+    grep -q "/test.*module" "$L0_ROOT/.claude/agents/test-specialist.md"
+    grep -q "/benchmark" "$L0_ROOT/.claude/agents/test-specialist.md"
+}
+
+@test "CLAUDE.md: lists /work, /init-session, /resume-work" {
+    grep -q "/work" "$L0_ROOT/CLAUDE.md"
+    grep -q "/init-session" "$L0_ROOT/CLAUDE.md"
+    grep -q "/resume-work" "$L0_ROOT/CLAUDE.md"
+}
+
+@test "CHANGELOG: has ecosystem initialization entry" {
+    grep -q "Ecosystem initialization" "$L0_ROOT/CHANGELOG.md" || grep -q "init-session" "$L0_ROOT/CHANGELOG.md"
+}
+
+@test "README: mentions /work routing" {
+    grep -q "/work" "$README"
+    grep -q "routing" "$README" || grep -q "Entry Points" "$README"
+}
+
+@test "README: mentions MODULE_MAP.md pattern" {
+    grep -q "MODULE_MAP" "$README"
+}
+
+@test "README: mentions business layer" {
+    grep -q "Business" "$README" || grep -q "business" "$README"
+    grep -q "doc-templates" "$README" || grep -q "PRODUCT_SPEC" "$README"
+}
+
+@test "README: counts match 37 agents, 58 skills, 52 commands" {
+    grep -q "37 specialized agents" "$README"
+    grep -q "58 canonical" "$README"
+    # 52 commands verified via sync table
+}
+
+# ============================================================
+# Section 7.1: Multi-Agent Architecture Tests
+# ============================================================
+
+@test "arch: dev-lead.md does NOT exist (renamed to project-manager)" {
+    [ ! -f "$L0_ROOT/setup/agent-templates/dev-lead.md" ]
+}
+
+@test "arch: PM does NOT contain 'execute implementation code' or 'codes inline'" {
+    ! grep -q "execute implementation code" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    ! grep -q "codes inline" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    ! grep -q "Write feature code" "$L0_ROOT/setup/agent-templates/project-manager.md" || grep -q "MUST delegate" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "arch: PM assigns to architects (not devs directly)" {
+    grep -q "assigns.*architects" "$L0_ROOT/setup/agent-templates/project-manager.md" || grep -q "assign.*work.*architects" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "arch: all architects have CUSTOMIZE markers for project guardians" {
+    for agent in arch-testing arch-platform arch-integration; do
+        grep -q "CUSTOMIZE" "$L0_ROOT/setup/agent-templates/${agent}.md"
+    done
+}
+
+@test "arch: all architects reference Escalate to PM (not dev-lead)" {
+    for agent in arch-testing arch-platform arch-integration; do
+        grep -q "Escalate to PM" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        ! grep -q "Escalate to dev-lead" "$L0_ROOT/setup/agent-templates/${agent}.md"
+    done
+}
+
+@test "arch: agents-hub references project-manager not dev-lead as orchestrator" {
+    grep -q "project-manager" "$L0_ROOT/docs/agents/agents-hub.md"
+}
+
+@test "arch: claude-code-workflow PM model has no codes inline" {
+    grep -q "Project Manager" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    ! grep -q "Codes inline" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+}
+
+@test "arch: spec-driven-workflow shows PM assigns to architects" {
+    grep -q "project-manager" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+}
+
+@test "arch: claude-md-template examples use project-manager" {
+    grep -q "project-manager" "$L0_ROOT/docs/agents/claude-md-template.md"
+}
+
+@test "arch: multi-agent-patterns mentions PM in architect gate" {
+    grep -q "project-manager" "$L0_ROOT/docs/agents/multi-agent-patterns.md"
+}
+
+@test "arch: PM template forbids Bash+CLI spawning" {
+    grep -q "FORBIDDEN.*Bash.*cli\|Spawning agents via Bash" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "arch: architects are read-only (no Write/Edit, have SendMessage)" {
+    for agent in arch-testing arch-platform arch-integration; do
+        grep -q "SendMessage" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        # Architects must NOT have Write or Edit in tools
+        ! grep -q "^tools:.*Write\|^tools:.*Edit" "$L0_ROOT/setup/agent-templates/${agent}.md"
+    done
+}
+
+@test "arch: claude-code-workflow forbids Bash spawning" {
+    grep -q "Agent Tool Only\|Never spawn.*Bash" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+}
+
+@test "arch: /work skill routes to project-manager" {
+    grep -q "project-manager" "$L0_ROOT/skills/work/SKILL.md"
+}
+
+@test "arch: spec-driven-workflow has How to Start Work section" {
+    grep -q "How to Start Work" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+}
+
+# ============================================================
+# Section: Multi-Session Department Architecture
+# ============================================================
+
+@test "dept: context-provider template exists" {
+    [ -f "$L0_ROOT/setup/agent-templates/context-provider.md" ]
+    grep -q "Read-only" "$L0_ROOT/setup/agent-templates/context-provider.md"
+    grep -q "search-docs\|find-pattern" "$L0_ROOT/setup/agent-templates/context-provider.md"
+    grep -q "NEVER modify" "$L0_ROOT/setup/agent-templates/context-provider.md"
+}
+
+@test "dept: doc-updater template exists" {
+    [ -f "$L0_ROOT/setup/agent-templates/doc-updater.md" ]
+    grep -q "audit-docs" "$L0_ROOT/setup/agent-templates/doc-updater.md"
+    grep -q "CHANGELOG" "$L0_ROOT/setup/agent-templates/doc-updater.md"
+}
+
+@test "dept: marketing-lead template exists and delegates" {
+    [ -f "$L0_ROOT/setup/agent-templates/marketing-lead.md" ]
+    grep -q "NEVER writes content" "$L0_ROOT/setup/agent-templates/marketing-lead.md"
+    grep -q "content-creator" "$L0_ROOT/setup/agent-templates/marketing-lead.md"
+    grep -q "landing-page-strategist" "$L0_ROOT/setup/agent-templates/marketing-lead.md"
+    grep -q "Agent tool" "$L0_ROOT/setup/agent-templates/marketing-lead.md"
+}
+
+@test "dept: product-lead template exists and delegates" {
+    [ -f "$L0_ROOT/setup/agent-templates/product-lead.md" ]
+    grep -q "NEVER write" "$L0_ROOT/setup/agent-templates/product-lead.md"
+    grep -q "product-strategist" "$L0_ROOT/setup/agent-templates/product-lead.md"
+    grep -q "Agent tool" "$L0_ROOT/setup/agent-templates/product-lead.md"
+}
+
+@test "dept: PM references context-provider and doc-updater" {
+    grep -q "context-provider" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "doc-updater" "$L0_ROOT/setup/agent-templates/project-manager.md"
+}
+
+@test "dept: spec-driven-workflow has multi-session section" {
+    grep -q "Multi-Session" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+    grep -q "marketing-lead" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+    grep -q "product-lead" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+}
+
+@test "dept: agents-hub has session-level rule" {
+    grep -q "session-level" "$L0_ROOT/docs/agents/agents-hub.md"
+    grep -q "context-provider" "$L0_ROOT/docs/agents/agents-hub.md"
+}
+
+# ===========================================================================
+# QG. Quality-gate pre-commit hook tests
+# ===========================================================================
+
+HOOK_SCRIPT="$L0_ROOT/.claude/hooks/quality-gate-pre-commit.sh"
+
+@test "quality-gate hook: file exists and is executable" {
+    [ -f "$HOOK_SCRIPT" ]
+    [ -x "$HOOK_SCRIPT" ]
+}
+
+@test "quality-gate hook: no stamp file returns deny" {
+    STAMP_DIR=$(mktemp -d)
+    result=$(echo '{"tool_input":{"command":"git commit -m test"}}' \
+      | ANDROID_COMMON_DOC="$STAMP_DIR" bash "$HOOK_SCRIPT")
+    echo "$result" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+    echo "$result" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("No quality-gate stamp")'
+    rm -rf "$STAMP_DIR"
+}
+
+@test "quality-gate hook: fresh PASS stamp returns allow" {
+    STAMP_DIR=$(mktemp -d)
+    mkdir -p "$STAMP_DIR/.androidcommondoc"
+    NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    cat > "$STAMP_DIR/.androidcommondoc/quality-gate.stamp" << EOF
+{"verdict":"PASS","timestamp":"$NOW","steps_passed":9}
+EOF
+    result=$(echo '{"tool_input":{"command":"git commit -m test"}}' \
+      | ANDROID_COMMON_DOC="$STAMP_DIR" bash "$HOOK_SCRIPT")
+    echo "$result" | jq -e '.hookSpecificOutput.permissionDecision == "allow"'
+    echo "$result" | jq -e '.hookSpecificOutput.additionalContext | test("Quality gate PASS")'
+    rm -rf "$STAMP_DIR"
+}
+
+@test "quality-gate hook: FAIL verdict returns deny" {
+    STAMP_DIR=$(mktemp -d)
+    mkdir -p "$STAMP_DIR/.androidcommondoc"
+    NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    cat > "$STAMP_DIR/.androidcommondoc/quality-gate.stamp" << EOF
+{"verdict":"FAIL","timestamp":"$NOW","steps_passed":7}
+EOF
+    result=$(echo '{"tool_input":{"command":"git commit -m test"}}' \
+      | ANDROID_COMMON_DOC="$STAMP_DIR" bash "$HOOK_SCRIPT")
+    echo "$result" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+    echo "$result" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("not PASS")'
+    rm -rf "$STAMP_DIR"
+}
+
+@test "quality-gate hook: expired stamp (>30 min) returns deny" {
+    STAMP_DIR=$(mktemp -d)
+    mkdir -p "$STAMP_DIR/.androidcommondoc"
+    OLD=$(date -u -d '60 minutes ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-60M +%Y-%m-%dT%H:%M:%SZ)
+    cat > "$STAMP_DIR/.androidcommondoc/quality-gate.stamp" << EOF
+{"verdict":"PASS","timestamp":"$OLD","steps_passed":9}
+EOF
+    result=$(echo '{"tool_input":{"command":"git commit -m test"}}' \
+      | ANDROID_COMMON_DOC="$STAMP_DIR" bash "$HOOK_SCRIPT")
+    echo "$result" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+    echo "$result" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("expired")'
+    rm -rf "$STAMP_DIR"
+}
+
+@test "quality-gate hook: invalid JSON in stamp returns deny" {
+    STAMP_DIR=$(mktemp -d)
+    mkdir -p "$STAMP_DIR/.androidcommondoc"
+    echo "not valid json at all" > "$STAMP_DIR/.androidcommondoc/quality-gate.stamp"
+    result=$(echo '{"tool_input":{"command":"git commit -m test"}}' \
+      | ANDROID_COMMON_DOC="$STAMP_DIR" bash "$HOOK_SCRIPT")
+    echo "$result" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+    echo "$result" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("invalid JSON")'
+    rm -rf "$STAMP_DIR"
 }

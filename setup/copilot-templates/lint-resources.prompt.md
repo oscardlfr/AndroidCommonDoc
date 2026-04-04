@@ -11,7 +11,9 @@ Validate string resource naming conventions (snake_case, prefixes, duplicates, S
 
 ### macOS / Linux
 ```bash
-bash scripts/sh/lint-resources.sh \
+COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set. See README.md}"
+
+"$COMMON_DOC/scripts/sh/lint-resources.sh" \
   --project-root "$PROJECT_ROOT" \
   --module-path "$MODULE_PATH" \
   --strict \
@@ -22,7 +24,9 @@ bash scripts/sh/lint-resources.sh \
 
 ### Windows (PowerShell)
 ```powershell
-pwsh scripts/ps1/lint-resources.ps1 `
+$commonDoc = if ($env:ANDROID_COMMON_DOC) { $env:ANDROID_COMMON_DOC } else { throw "ANDROID_COMMON_DOC is not set. See README.md" }
+
+& "$commonDoc\scripts\ps1\lint-resources.ps1" `
   -ProjectRoot "$ProjectRoot" `
   -ModulePath "$ModulePath" `
   -StrictMode `

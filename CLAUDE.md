@@ -44,13 +44,21 @@
 ### No console.log in MCP server
 - Use `logger` utility (stderr only) — `console.log` corrupts stdio transport
 
-### Doc size limits
-- Hub docs **≤100 lines**, sub-docs **≤300 lines**, absolute max 500
-- If growing beyond: split it, don't extend it
+### Doc size limits (MUST split, never extend)
+- Hub docs **≤100 lines**: navigation + glossary only, zero implementation detail
+- Sub-docs **≤300 lines**: one focused topic. At 250+ → plan your split
+- Agent templates **≤400 lines** — orchestrators are more complex than docs. Extract domain knowledge into `.claude/docs/` sub-docs if approaching limit
+- Splitting is the design pattern. Never compress content to fit — create hub + sub-docs
 
 ### Pattern docs need YAML frontmatter
 - Every doc: `scope`, `sources`, `targets`, `category`, `slug`
 - Cross-references use relative paths — no absolute paths between subdirectories
+
+### Agent templates: dual-location (MUST keep in sync)
+- `setup/agent-templates/` is the SOURCE for agent templates (PM, quality-gater, architects, etc.)
+- `.claude/agents/` contains COPIES that the registry scans and `/sync-l0` distributes
+- When editing a template: ALWAYS update `setup/agent-templates/X.md` first, then copy to `.claude/agents/X.md`
+- Regenerate registry after any template change: `node mcp-server/build/cli/generate-registry.js`
 
 ### Vault sync is fragile
 - Run `validate-vault` before every sync (0 duplicates, 0 homogeneity errors)
@@ -71,6 +79,7 @@
 - `/validate-patterns` — code vs pattern compliance
 - `/sync-l0` — propagate skills/agents/commands to L1/L2
 - `/generate-rules` — emit Detekt rules from doc frontmatter
+- `/check-outdated` — check dependency versions against Maven Central (TOML parser, kdoc-state v2 cache)
 - `/debug` — systematic bug investigation via debugger agent
 - `/research` — ad-hoc technical research via researcher agent
 - `/map-codebase` — structured codebase analysis via codebase-mapper agent
@@ -79,6 +88,9 @@
 - `/note` — zero-friction idea capture to memory
 - `/review-pr` — code review of a PR with structured suggestions
 - `/benchmark` — run benchmark suites (JVM/Android)
+- `/work` — smart task routing to agents/skills (extensible via frontmatter intent)
+- `/init-session` — show project context and available tools
+- `/resume-work` — CEO/CTO dashboard with department status from last session
 
 ## Doc Consultation
 - Vault sync → `mcp-server/src/vault/` (transformer, moc-generator, wikilink-generator)
@@ -88,4 +100,7 @@
 - Upstream validation → `docs/guides/upstream-validation.md` (validate_upstream frontmatter)
 - Detekt rules → `detekt-rules/` + `docs/guides/detekt-config.md`
 - Spec-driven workflow → `docs/agents/spec-driven-workflow.md`
-- Agent templates → `setup/agent-templates/` (dev-lead, product-strategist, content-creator)
+- Agent templates → `setup/agent-templates/` (project-manager, product-strategist, content-creator, landing-page-strategist)
+- Business doc templates → `setup/doc-templates/business/` (PRODUCT_SPEC, MARKETING, PRICING, LANDING_PAGES, COMPETITIVE)
+- MCP tools → 39 tools via ~/.mcp.json (architects and specialists use these automatically)
+- Dependency freshness → `check-outdated` MCP tool (TOML parser, Maven Central, kdoc-state v2 cache)

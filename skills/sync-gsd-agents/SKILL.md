@@ -4,6 +4,7 @@ description: "Sync .claude/agents/ to GSD subagent system and verify parity. Use
 user-invocable: true
 allowed-tools: [Bash, Read]
 category: ecosystem
+copilot: false
 ---
 
 ## Usage Examples

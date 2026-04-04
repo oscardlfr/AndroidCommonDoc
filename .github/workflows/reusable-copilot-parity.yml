@@ -1,0 +1,56 @@
+name: Copilot Template Parity
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AndroidCommonDoc L0 reusable workflow — skills ↔ copilot-templates parity
+#
+# Verifies that skills/ and setup/copilot-templates/ are in sync based on the
+# copilot frontmatter field in each SKILL.md.
+#
+# Usage from consumer project:
+#
+#   jobs:
+#     copilot-parity:
+#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-copilot-parity.yml@master
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+      androidcommondoc_path:
+        description: 'Path to AndroidCommonDoc toolkit root (for scripts). Empty = auto-clone.'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  copilot-parity:
+    name: Check skills ↔ copilot-templates parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Checkout AndroidCommonDoc (for scripts)
+        if: inputs.androidcommondoc_path == ''
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.repository_owner }}/AndroidCommonDoc
+          path: .androidcommondoc-toolkit
+          sparse-checkout: |
+            scripts/sh/copilot-parity.sh
+            adapters/copilot-adapter.sh
+
+      - name: Resolve script paths
+        id: scripts
+        run: |
+          if [ -n "${{ inputs.androidcommondoc_path }}" ]; then
+            ROOT="${{ inputs.androidcommondoc_path }}"
+          else
+            ROOT=".androidcommondoc-toolkit"
+          fi
+          echo "check=${ROOT}/scripts/sh/copilot-parity.sh" >> "$GITHUB_OUTPUT"
+
+      - name: Check copilot template parity
+        run: |
+          bash "${{ steps.scripts.outputs.check }}" \
+            --project-root "$(pwd)" \
+            --verbose

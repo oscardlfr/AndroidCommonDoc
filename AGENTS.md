@@ -47,7 +47,7 @@ node mcp-server/build/cli/monitor-sources.js --project-root /path/to/l1 --layer 
 7. **Navigation:** State-driven -- never Channel-based.
 8. **No platform deps in ViewModels:** No `Context`, `Resources`, `UIKit` imports.
 
-## Available Skills (42)
+## Available Skills (58)
 
 Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-specific files.
 
@@ -76,6 +76,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `sync-versions` | Check version alignment between KMP projects |
 | `validate-patterns` | Validate code against AndroidCommonDoc pattern standards |
 | `audit-l0` | Run coherence audit on any L0/L1/L2 layer root |
+| `check-outdated` | Check libs.versions.toml against Maven Central for outdated dependencies |
 | `sbom` | Generate CycloneDX SBOM for project deliverables |
 | `sbom-scan` | Scan SBOM for known CVE vulnerabilities using Trivy |
 | `sbom-analyze` | Analyze SBOM for dependency statistics, licenses, and concerns |
@@ -95,6 +96,10 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `generate-rules` | Generate Detekt rules from pattern doc frontmatter |
 | `ingest-content` | Fetch external content and match against pattern doc metadata |
 | `doc-reorganize` | Reorganize docs/ into domain-based subdirectories |
+| `kdoc-audit` | Audit KDoc coverage on public Kotlin APIs — regressions, undocumented symbols |
+| `kdoc-migrate` | Full-project KDoc migration, module by module, pattern-informed |
+| `generate-api-docs` | Optional: Dokka + transformer → docs/api/ with YAML frontmatter |
+| `doc-integrity` | Unified 5-step doc audit: coverage, patterns, freshness, structure |
 
 ### Ecosystem & Vault
 
@@ -107,6 +112,22 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `setup` | Interactive wizard to configure a project to consume L0 |
 | `set-model-profile` | Switch agent model tier: budget / balanced / advanced / quality |
 
+### Research & Workflow
+
+| Skill | Description |
+|-------|-------------|
+| `debug` | Autonomous bug diagnosis — logs, errors, root cause, fix, verify |
+| `research` | Deep research on a topic using multiple sources and synthesis |
+| `map-codebase` | Map codebase structure, dependencies, and architecture |
+| `verify` | Verify implementation correctness against spec or requirements |
+| `decide` | Decision framework — pros/cons analysis with recommendation |
+| `note` | Capture structured notes and observations during work |
+| `review-pr` | Review pull request for quality, patterns, and correctness |
+| `benchmark` | Performance benchmark with per-platform Gradle config |
+| `init-session` | Project context dashboard — available agents, skills, modules |
+| `resume-work` | CEO/CTO session resume — department status across project |
+| `work` | Smart task routing — delegates to the best agent or skill |
+
 ### Web Development
 
 | Skill | Description |
@@ -118,7 +139,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `seo` | Validate SEO metadata, structure, and discoverability |
 | `web-quality-audit` | Comprehensive web quality audit across all dimensions |
 
-## MCP Tools (32)
+## MCP Tools (39)
 
 Programmatic access via Model Context Protocol server (`mcp-server/`):
 
@@ -156,6 +177,13 @@ Programmatic access via Model Context Protocol server (`mcp-server/`):
 | `skill-usage-analytics` | Track skill invocation patterns |
 | `string-completeness` | Check string resource completeness across locales |
 | `unused-resources` | Find unused resources in the project |
+| `search-docs` | Full-text search across pattern docs and guides |
+| `suggest-docs` | Suggest relevant docs for a given topic or error message |
+| `validate-agents` | Validate agent templates: frontmatter, role keywords, anti-patterns, versioning |
+| `kdoc-coverage` | Measure KDoc documentation coverage on public Kotlin APIs |
+| `validate-doc-update` | Pre-write validation: duplicate detection, anti-pattern filter, size limits |
+| `check-doc-patterns` | Detect enforceable patterns without Detekt rules and rule-doc drift |
+| `check-outdated` | Check libs.versions.toml against Maven Central for outdated dependencies |
 
 ## Quality Gate Agents (5)
 
@@ -169,7 +197,7 @@ Automated consistency verification via `.claude/agents/`:
 | `doc-code-drift-detector` | Pattern doc version references match versions-manifest.json |
 | `quality-gate-orchestrator` | Unified pass/fail report across all gates with token cost |
 
-## Pattern Docs (13 categories, 54 sub-docs)
+## Pattern Docs (15 categories, 88+ sub-docs)
 
 Detailed pattern guidance in `docs/`, with YAML frontmatter (scope, sources, targets) for registry scanning:
 

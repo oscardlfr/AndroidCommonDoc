@@ -776,10 +776,11 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
     info "[>] Generating coverage reports..."
 
     # Run main project coverage tasks
-    # --rerun-tasks forces Kover to regenerate XML even when tests are UP-TO-DATE
-    # Without this, cached test results produce stale coverage reports
+    # Do NOT use --rerun-tasks: it forces re-execution of desktopTest dependencies,
+    # and modules like core-storage-secure fail with residual keystore state.
+    # Kover generates XML from UP-TO-DATE test results without issue.
     if [[ "${#COV_TASKS[@]}" -gt 0 ]]; then
-        COV_ARGS=("${COV_TASKS[@]}" "--parallel" "--continue" "--rerun-tasks")
+        COV_ARGS=("${COV_TASKS[@]}" "--parallel" "--continue")
         if [[ "$MAX_WORKERS" -gt 0 ]]; then COV_ARGS+=("--max-workers=$MAX_WORKERS"); fi
 
         COV_EXIT=0
@@ -818,7 +819,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                 if [[ "$MISSING_COV" -gt 0 ]]; then
                     # Batch retry: single invocation for all missing modules
                     warn "  [>] Batch partial: $COV_XML_COUNT ok, $MISSING_COV missing → retrying as single batch..."
-                    if (cd "$PROJECT_ROOT" && ./gradlew "${MISSING_TASKS[@]}" --parallel --continue --rerun-tasks 2>&1) >/dev/null; then
+                    if (cd "$PROJECT_ROOT" && ./gradlew "${MISSING_TASKS[@]}" --parallel --continue 2>&1) >/dev/null; then
                         RECOVERED_COV="$MISSING_COV"
                     else
                         # Count how many were actually recovered
@@ -841,7 +842,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                 warn "  [!] Batch coverage failed (exit $COV_EXIT), 0 reports — retrying full batch without config cache..."
                 COV_OK=0
                 COV_FAIL=0
-                if (cd "$PROJECT_ROOT" && ./gradlew "${COV_TASKS[@]}" --parallel --continue --rerun-tasks --no-configuration-cache 2>&1) >/dev/null; then
+                if (cd "$PROJECT_ROOT" && ./gradlew "${COV_TASKS[@]}" --parallel --continue --no-configuration-cache 2>&1) >/dev/null; then
                     COV_OK="${#COV_TASKS[@]}"
                 else
                     # Count how many XMLs exist now
@@ -878,7 +879,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
             fi
         done
         if [[ -n "$SHARED_LIBS_PATH" && -d "$SHARED_LIBS_PATH" ]]; then
-            COV_ARGS_SHARED=("${COV_TASKS_SHARED[@]}" "--parallel" "--continue" "--rerun-tasks")
+            COV_ARGS_SHARED=("${COV_TASKS_SHARED[@]}" "--parallel" "--continue")
             if [[ "$MAX_WORKERS" -gt 0 ]]; then COV_ARGS_SHARED+=("--max-workers=$MAX_WORKERS"); fi
 
             info "  [>] Generating shared-kmp-libs coverage (${#COV_TASKS_SHARED[@]} modules)..."
@@ -902,7 +903,7 @@ if ! $SKIP_TESTS && [[ "${#ALL_TEST_TASKS[@]}" -gt 0 ]]; then
                     warn "  [!] Batch shared coverage failed (exit $COV_EXIT_SHARED), 0 reports — retrying batch without config cache..."
                     COV_OK_S=0
                     COV_FAIL_S=0
-                    if (cd "$SHARED_LIBS_PATH" && ./gradlew "${COV_TASKS_SHARED[@]}" --parallel --continue --rerun-tasks --no-configuration-cache 2>&1) >/dev/null; then
+                    if (cd "$SHARED_LIBS_PATH" && ./gradlew "${COV_TASKS_SHARED[@]}" --parallel --continue --no-configuration-cache 2>&1) >/dev/null; then
                         COV_OK_S="${#COV_TASKS_SHARED[@]}"
                     else
                         for idx in "${TESTABLE_INDICES[@]}"; do

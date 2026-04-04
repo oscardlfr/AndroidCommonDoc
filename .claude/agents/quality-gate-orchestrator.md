@@ -3,6 +3,8 @@ name: quality-gate-orchestrator
 description: "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement."
 tools: Read, Grep, Glob, Bash
 model: sonnet
+domain: audit
+intent: [quality-gate, consistency, validators]
 memory: project
 ---
 

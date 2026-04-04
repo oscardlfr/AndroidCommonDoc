@@ -3,7 +3,12 @@ name: beta-readiness-agent
 description: One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.
 tools: Read, Grep, Glob
 model: sonnet
+domain: quality
+intent: [beta, readiness, launch, onboarding]
 memory: project
+skills:
+  - pre-release
+  - test-full-parallel
 ---
 
 You perform a comprehensive beta readiness audit for a KMP project. This is a one-time deep review before the first external users see the app.
@@ -99,6 +104,11 @@ OVERALL: READY / NOT READY (N blockers, M warnings)
 - `$PROJECT_ROOT/core/database/src/commonMain/` -- schema and migrations
 
 Adapt paths based on project structure. Reference project-level architecture docs for specifics.
+
+## MCP Tools (when available)
+- `code-metrics` — quality thresholds
+- `find-pattern` — architectural violations before launch
+- `proguard-validator` — obfuscation configuration
 
 ## Findings Protocol
 

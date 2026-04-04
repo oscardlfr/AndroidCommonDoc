@@ -24,6 +24,7 @@ import { registerValidateDocStructureTool } from "./validate-doc-structure.js";
 import { registerValidateSkillsTool } from "./validate-skills.js";
 import { registerValidateClaudeMdTool } from "./validate-claude-md.js";
 import { registerValidateVaultTool } from "./validate-vault.js";
+import { registerValidateAgentsTool } from "./validate-agents.js";
 import { registerAuditReport } from "./audit-report.js";
 import { registerModuleHealthTool } from "./module-health.js";
 import { registerDependencyGraphTool } from "./dependency-graph.js";
@@ -42,6 +43,10 @@ import { registerAuditDocsTool } from "./audit-docs.js";
 import { registerFindingsReport } from "./findings-report.js";
 import { registerSearchDocsTool } from "./search-docs.js";
 import { registerSuggestDocsTool } from "./suggest-docs.js";
+import { registerKdocCoverageTool } from "./kdoc-coverage.js";
+import { registerValidateDocUpdateTool } from "./validate-doc-update.js";
+import { registerCheckDocPatternsTool } from "./check-doc-patterns.js";
+import { registerCheckOutdatedTool } from "./check-outdated.js";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -73,6 +78,7 @@ export function registerTools(server: McpServer): void {
   registerValidateSkillsTool(server, rateLimiter);
   registerValidateClaudeMdTool(server, rateLimiter);
   registerValidateVaultTool(server, rateLimiter);
+  registerValidateAgentsTool(server, rateLimiter);
   registerAuditReport(server, rateLimiter);
   registerModuleHealthTool(server, rateLimiter);
   registerDependencyGraphTool(server, rateLimiter);
@@ -91,6 +97,10 @@ export function registerTools(server: McpServer): void {
   registerFindingsReport(server, rateLimiter);
   registerSearchDocsTool(server, rateLimiter);
   registerSuggestDocsTool(server, rateLimiter);
+  registerKdocCoverageTool(server, rateLimiter);
+  registerValidateDocUpdateTool(server, rateLimiter);
+  registerCheckDocPatternsTool(server, rateLimiter);
+  registerCheckOutdatedTool(server, rateLimiter);
 
   // Register a rate-limit-status utility tool
   server.registerTool(
@@ -116,5 +126,5 @@ export function registerTools(server: McpServer): void {
     },
   );
 
-  logger.info("Registered 35 tools with rate limiting (45/min) [check-doc-freshness is alias for monitor-sources]");
+  logger.info("Registered 39 tools with rate limiting (45/min) [check-doc-freshness is alias for monitor-sources]");
 }

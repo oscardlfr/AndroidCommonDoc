@@ -1,7 +1,7 @@
 ---
 scope: workflow
 sources: [claude-code, agents, skills]
-targets: [CLAUDE.md, dev-lead]
+targets: [CLAUDE.md, project-manager]
 category: agents
 slug: spec-driven-workflow
 description: Native Claude Code workflow for spec-driven development without GSD dependency
@@ -11,27 +11,57 @@ description: Native Claude Code workflow for spec-driven development without GSD
 
 Native Claude Code workflow using agents, skills, Plan Mode, and worktrees.
 
-## The Flow
+## Multi-Session Departments
+
+| Session | Command | Orchestrator |
+|---------|---------|-------------|
+| Development | `claude --agent project-manager` | PM → architects → devs + guardians |
+| Marketing | `claude --agent marketing-lead` | ML → content-creator, landing-page |
+| Product | `claude --agent product-lead` | PL → product-strategist, prioritizer |
+
+All sessions share context via `context-provider` agent and sync documentation via `doc-updater`.
+
+## How to Start Work
+
+```bash
+# Option 1: /work routes to project-manager automatically
+/work implement feature X from the spec
+
+# Option 2: Direct PM invocation
+@project-manager implement feature X per SPEC.md
+```
+
+All delegation uses the `Agent` tool. Never Bash + `claude` CLI.
+
+## The Flow (3-Phase Model)
 
 ```
 1. Human writes SPEC.md / ROADMAP.md (goals + success criteria)
-2. Human asks Claude: "implement feature X from the spec"
-3. Claude enters Plan Mode → decomposes into tasks
-4. Claude launches dev-lead(s) in parallel worktrees:
-     Agent(dev-lead, worktree, prompt="implement task A per spec...")
-     Agent(dev-lead, worktree, prompt="implement task B per spec...")
-5. Each dev-lead:
-     a) Reads CLAUDE.md → knows project rules
-     b) Implements code
-     c) Delegates to test-specialist → audits tests
-     d) Delegates to ui-specialist → audits UI (if applicable)
-     e) Runs /pre-pr → pre-merge validation
-     f) Reports result to Claude
-6. Claude collects results from all dev-leads
-7. Claude launches verifier → "did we meet the spec?"
-8. If PASS → merge worktrees + PR
-9. If FAIL → Claude adjusts and relaunches with gaps
+2. Human asks Claude: "/work implement feature X" or "@project-manager ..."
+3. PM orchestrates 3 sequential phases per task:
+
+   Session start: PM creates TeamCreate("session-{project-slug}") with 5 peers:
+     context-provider, doc-updater, arch-testing, arch-platform, arch-integration
+
+   Phase 1 — Planning (temporary planner):
+     planner SendMessage(to="context-provider"), writes plan to .planning/PLAN.md
+     PM reads plan, dismisses planner
+
+   Phase 2 — Execution (session team peers — no new TeamCreate):
+     Architects detect → PM dispatches devs (sub-agents) → architects cross-verify
+     All 3 APPROVE → proceed to Phase 3
+
+   Phase 3 — Quality Gate (temporary quality-gater joins session team):
+     quality-gater runs: frontmatter → KDoc → tests → coverage → benchmarks → pre-pr → prod-files → UI tests
+     PASS → PM commits. FAIL → back to Phase 2
+
+4. For parallel worktrees, each PM runs its own 3-phase cycle
+5. Claude launches verifier → "did we meet the spec?"
+6. If PASS → merge worktrees + PR
+7. If FAIL → Claude adjusts and relaunches with gaps
 ```
+
+See [Team Topology](team-topology.md) for full details on each phase.
 
 ## Persistence (Native Claude Code)
 
@@ -58,12 +88,17 @@ Native Claude Code workflow using agents, skills, Plan Mode, and worktrees.
 | `ui-specialist` | Compose/UI auditing | CLAUDE.md delegation |
 | `doc-alignment-agent` | Documentation drift detection | CLAUDE.md delegation |
 | `release-guardian-agent` | Pre-release safety scan | CLAUDE.md delegation |
+| `arch-testing` | Test quality verification gate | Architect gate after each wave |
+| `arch-platform` | KMP/architecture verification gate | Architect gate after each wave |
+| `arch-integration` | Wiring/compilation verification gate | Architect gate after each wave |
+
+> Agents use official Anthropic skills when installed (tdd-workflow, webapp-testing, systematic-debugging, etc.). See `/setup --check-skills`.
 
 ### L1/L2 Project-Specific Agents (from templates)
 
 | Template | Layer | Role |
 |----------|-------|------|
-| `dev-lead` | L1/L2 | Feature executor with delegation |
+| `project-manager` | L1/L2 | Orchestrator — assigns code to devs, launches gates |
 | `platform-auditor` | L1 | Cross-module architecture |
 | `module-lifecycle` | L1 | Module creation/deprecation |
 | `product-strategist` | L2 | Feature prioritization (ICE) |

@@ -1,0 +1,103 @@
+name: Reusable — Check Outdated Dependencies
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AndroidCommonDoc L0 reusable workflow — Dependency Freshness Check
+#
+# Reads gradle/libs.versions.toml and compares each library version against
+# Maven Central. Reports outdated dependencies in the PR summary.
+# Non-blocking by default — version updates are a separate task.
+#
+# Usage from consumer project:
+#
+#   jobs:
+#     check-outdated:
+#       uses: <org>/AndroidCommonDoc/.github/workflows/reusable-check-outdated.yml@master
+#       with:
+#         project_root: "."
+#         format: "summary"
+#         max_age: 24
+#         fail_on_outdated: false
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+      project_root:
+        description: "Path to project root containing gradle/libs.versions.toml"
+        type: string
+        default: "."
+      format:
+        description: "Output format: summary or json"
+        type: string
+        default: "summary"
+      max_age:
+        description: "Cache TTL in hours (0 = force refresh)"
+        type: number
+        default: 24
+      fail_on_outdated:
+        description: "Fail the job if outdated dependencies are found"
+        type: boolean
+        default: false
+      node_version:
+        description: "Node.js version"
+        type: string
+        default: "22"
+      l0_ref:
+        description: "AndroidCommonDoc ref to checkout for tooling"
+        type: string
+        default: "master"
+
+jobs:
+  check-outdated:
+    name: "Check Outdated Dependencies"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v5
+
+      - name: Checkout AndroidCommonDoc tooling
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.repository_owner }}/AndroidCommonDoc
+          ref: ${{ inputs.l0_ref }}
+          path: .l0-tooling
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
+          cache-dependency-path: .l0-tooling/mcp-server/package-lock.json
+
+      - name: Install and build MCP server
+        run: cd .l0-tooling/mcp-server && npm ci && npm run build
+
+      - name: Check dependency freshness
+        id: check
+        run: |
+          EXIT_CODE=0
+          node .l0-tooling/mcp-server/build/cli/check-outdated.js \
+            "${{ inputs.project_root }}" \
+            --format "${{ inputs.format }}" \
+            --max-age "${{ inputs.max_age }}" | tee /tmp/check-outdated-output.txt || EXIT_CODE=$?
+
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+          # Write to step summary
+          if [ "$EXIT_CODE" -eq 0 ]; then
+            echo "## All dependencies up to date" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$EXIT_CODE" -eq 1 ]; then
+            echo "## Outdated dependencies found" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/check-outdated-output.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## Dependency check error" >> "$GITHUB_STEP_SUMMARY"
+            echo "Exit code: $EXIT_CODE" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fail on outdated (if configured)
+        if: inputs.fail_on_outdated && steps.check.outputs.exit_code == '1'
+        run: |
+          echo "Outdated dependencies found and fail_on_outdated is true."
+          exit 1

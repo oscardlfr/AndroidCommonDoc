@@ -3,6 +3,39 @@
 All notable changes to AndroidCommonDoc are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
+## [Unreleased]
+
+### Changed
+- **PM template v4.2.0**: `TeamCreate("session-{project-slug}")` replaces `TeamCreate("session")` — prevents agent suffix collisions (-2/-3) when multiple Claude Code sessions run simultaneously
+- **PM template v4.2.0**: `TeamCreate("planning-{project-slug}")` replaces `TeamCreate("planning")` — same collision fix for planning phase teams
+- **Planner template v1.3.0**: writes plan to `.planning/PLAN.md` instead of SendMessage — bypasses message delivery size limitation for large plans
+- **context-provider and doc-updater templates**: session team references updated to use project slug (commits: c93d9d3, cd4b6c8 L0; 78db5607 L1; ca5ae701 L2)
+
+---
+
+### Added
+- **Ecosystem initialization skills**: `/work` (smart task routing), `/init-session` (project awareness), `/resume` (CEO/CTO dashboard)
+- **Business layer**: `landing-page-strategist` agent template, 5 business doc templates (PRODUCT_SPEC, MARKETING, PRICING, LANDING_PAGES, COMPETITIVE)
+- **Extensible routing**: `domain` + `intent` frontmatter on all 20 agents — `/work` discovers agents automatically via intent keywords
+- **CEO/CTO dashboard** (`/resume`): department-based session resume (development, product, marketing) with memory-backed persistence
+
+---
+
+<!-- PR #21 | branch: feature/sync-templates | commit: 736d215 -->
+
+### Changed
+- **`sync-l0` command self-contained** (`.claude/commands/sync-l0.md`): rewritten to read `l0-manifest.json` and invoke the CLI directly — fixes silent hallucination in L2 where `skills/sync-l0/SKILL.md` was missing
+- **L2 manifest exclusions** (`DawSync`, `shared-kmp-libs`): `sync-gsd-agents` and `sync-gsd-skills` added to `exclude_commands` — these are L0-internal and must not propagate to consumers
+- **Stale GSD command files pruned** from `DawSync` and `shared-kmp-libs`
+- **PR #20 templates propagated** to `DawSync` and `shared-kmp-libs` via prune sync: `arch-*`, `quality-gater` v2.1.0, `project-manager` v3.0.0
+- **`skills/setup/SKILL.md:704`**: stale cross-reference fixed — `sync-l0` is now CLI-direct, not skill-delegating
+
+### Fixed
+- **`check-outdated.test.ts:157`**: stale version assertion `koin .toBe("4.1.1")` → `.toMatch(/^\d+\.\d+\.\d+/)` — test no longer hardcodes a specific version
+
+### Backlog
+- `skills/setup/SKILL.md:464` has a pre-existing broken reference to `skills/sync-l0/SKILL.md` in L2 — follow-up fix needed (separate PR)
+
 ## [1.4.0] - 2026-03-26
 
 ### Added

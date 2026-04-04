@@ -20,7 +20,7 @@ monitor_urls:
 
 # Autonomous Multi-Agent Workflow
 
-How to design agent pipelines where specialized agents collaborate on a task. Covers the dev-lead adaptive model, agent invocation, orchestration patterns, data handoff, failure handling, and cost control.
+How to design agent pipelines where specialized agents collaborate on a task. Covers the project-manager model, agent invocation, orchestration patterns, data handoff, failure handling, and cost control.
 
 ---
 
@@ -39,13 +39,13 @@ If one agent can do the job in a single context window, one agent is better. Mul
 
 ---
 
-## The dev-lead Adaptive Model
+## The Project Manager Model
 
-See [claude-code-workflow](claude-code-workflow.md) for the full dev-lead model. Key points:
+See [claude-code-workflow](claude-code-workflow.md) for the full project-manager model. Key points:
 
-- **Simple task** → dev-lead codes inline. Agent overhead > benefit.
-- **Large task / long session** → dev-lead orchestrates, delegates code + audits to agents.
-- **Rule of thumb**: if subtask < 5K tokens, do it inline. Delegate when it saves context or runs in parallel.
+- **PM NEVER codes** — all code is written by dev specialists, PM only orchestrates.
+- **Simple task** → PM assigns to a single dev specialist.
+- **Large task / long session** → PM orchestrates waves of devs + audits to specialists.
 - **CLAUDE.md Agent Roster** is the discovery mechanism. Without it, Claude uses generic agents.
 
 ---
@@ -102,12 +102,42 @@ A coordinator agent dispatches waves of work, collects results, and decides what
 ```
 Orchestrator
   ├─ Wave 1: Scripts (fast, free)     ──→ findings[]
+  │  └─ Architect gate: spot-check findings
   ├─ Wave 2: Agents (focused, paid)   ──→ findings[]
+  │  └─ Architect gate: verify output + run tests
   ├─ Wave 3: Cross-cutting agents     ──→ findings[]
-  └─ Deduplication + Report
+  │  └─ Architect gate: full verification
+  └─ Deduplication + Report (only after all gates pass)
 ```
 
 **When to use**: Complex workflows where later waves depend on earlier results, or where cheap checks should gate expensive ones.
+
+### Hybrid TeamCreate (Peer Network + Sub-agents On Demand)
+
+Orchestrators and architects as peers. Workers spawned on demand as sub-agents.
+
+| Agent type | Communication | When created |
+|------------|---------------|--------------|
+| Team peer (lead, architect, shared service) | SendMessage | At team creation |
+| Sub-agent (dev, guardian, specialist) | Agent() return | On demand by peers |
+
+**Key**: Peers need ongoing coordination (cross-verify, cross-dept requests). Sub-agents are workers — they receive task, execute, return.
+
+**Session team peers**: `context-provider`, `doc-updater`, and all 3 architects are added to `TeamCreate("session-{project-slug}")` at session start and stay alive across all phases. All agents reach them via `SendMessage(to="context-provider")`. See [Team Topology](team-topology.md).
+
+**3-Phase Model**: The default topology uses 3 sequential phases (Planning → Execution → Quality Gate) with 5 persistent session team peers carrying context across all three. Planner (Phase 1) and quality-gater (Phase 3) are temporary. See [Team Topology](team-topology.md) for the full model.
+
+**Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies and PM-as-relay pattern.
+
+### Architect Gate Pattern
+
+Between waves, architect peers cross-verify via `SendMessage`. They request dev work through PM (architects can't use Agent in in-process mode):
+
+- **arch-testing**: TDD compliance, test quality — requests `test-specialist` via PM, uses `code-metrics` MCP tool
+- **arch-platform**: KMP patterns, dependency direction — requests `data-layer-specialist` via PM, uses `verify-kmp-packages`, `dependency-graph` MCP tools
+- **arch-integration**: compilation, DI wiring — requests `ui-specialist` via PM, uses `gradle-config-lint`, `setup-check` MCP tools
+
+Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the PM re-plans (never codes the fix itself). Architects cross-verify via `SendMessage(to="arch-testing", summary="verify tests", message="Run /test on modules I modified")`. Dev dispatch goes through PM — see [Context Rotation Guide](context-rotation-guide.md) for the PM-as-relay pattern.
 
 ---
 
@@ -149,40 +179,9 @@ It does NOT inherit the parent's conversation history, open files, or tool state
 
 ---
 
-## Data Handoff Patterns
+## Data Handoff
 
-### Structured Markers (Agent → Aggregator)
-
-```markdown
-<!-- FINDINGS_START -->
-[
-  {"severity": "HIGH", "file": "AuthViewModel.kt", "line": 42, "title": "CancellationException swallowed", "category": "error-handling"},
-  {"severity": "MEDIUM", "file": "LoginScreen.kt", "line": 18, "title": "Missing contentDescription", "category": "accessibility"}
-]
-<!-- FINDINGS_END -->
-```
-
-Aggregator extracts JSON between markers. Everything outside markers is human-readable narrative.
-
-### Severity Convention
-
-| Level | Meaning | Blocks release? |
-|-------|---------|-----------------|
-| `BLOCKER` | Broken functionality, data loss risk | Yes |
-| `HIGH` | Security issue, crash risk | Yes |
-| `MEDIUM` | Code smell, missing coverage, pattern violation | No |
-| `LOW` | Style, naming, minor improvement | No |
-| `INFO` | Observation, context for other findings | No |
-
-### Prose Fallback (Agent → Human)
-
-When an agent produces unstructured output, the orchestrator falls back to line-pattern parsing:
-
-- `[BLOCKER]`, `[CRITICAL]`, `[ERROR]`, `[FAIL]` → HIGH+
-- `[WARNING]`, `[WARN]` → MEDIUM
-- `[OK]`, `[PASS]` → skip
-
-Always prefer structured markers. Prose fallback exists for resilience, not as a design target.
+See [Data Handoff Patterns](data-handoff-patterns.md) for structured markers, severity conventions, and prose fallback.
 
 ---
 
@@ -238,38 +237,13 @@ The `/full-audit` skill demonstrates the complete pattern:
 
 ```
 Wave 1 (scripts, free, ~10s)
-  ├─ pattern-lint.sh        → grep-based pattern violations
-  ├─ verify-kmp.sh          → source set validation
-  └─ rehash-registry.sh     → registry integrity
-
+  ├─ pattern-lint.sh, verify-kmp.sh, rehash-registry.sh
 Wave 2 (focused agents, ~30s, ~$0.10)
-  ├─ delegate to test-specialist: "Review test coverage in core/"
-  ├─ delegate to ui-specialist: "Audit Compose screens for a11y"
-  └─ delegate to doc-alignment-agent: "Check doc/code drift"
-
+  ├─ test-specialist, ui-specialist, doc-alignment-agent
 Wave 3 (cross-cutting agents, ~60s, ~$0.15)
-  ├─ delegate to cross-platform-validator: "Check feature parity"
-  ├─ delegate to release-guardian-agent: "Scan for release blockers"
-  └─ delegate to privacy-auditor: "Check PII in logs and storage"
-
+  ├─ cross-platform-validator, release-guardian-agent, privacy-auditor
 Aggregation
-  ├─ 3-pass deduplication (exact → proximity → category rollup)
-  └─ Consolidated report with severity counts
-```
-
-### DawSync-Specific Example
-
-```
-dev-lead receives: "Add snapshot-export feature"
-
-1. Plan inline (2K tokens)
-2. delegate to domain-model-specialist: "Design ExportConfig sealed class"
-3. Code inline — implement export in core/data/
-4. delegate to daw-guardian: "Audit export for ProcessingMode violations"
-5. delegate to freemium-gate-checker: "Verify export is gated to STUDIO tier"
-6. /test core:data → pass
-7. /pre-pr → pass
-8. Commit
+  └─ 3-pass deduplication → consolidated report
 ```
 
 ---
@@ -289,7 +263,11 @@ dev-lead receives: "Add snapshot-export feature"
 
 ## Related Docs
 
+- [Team Topology](team-topology.md) — 3-phase team model (Planning → Execution → Quality Gate)
+- [Data Handoff Patterns](data-handoff-patterns.md) — structured markers, severity, prose fallback
 - [Claude Code Workflow](claude-code-workflow.md) — single-agent skill and workflow patterns
 - [Agent Consumption Guide](agent-consumption-guide.md) — how agents load and use documentation
 - [Script vs Agent Decision](script-vs-agent-decision.md) — when to use a script instead of an agent
 - [Capability Detection](capability-detection.md) — graceful degradation for optional tools
+- [Context Rotation Guide](context-rotation-guide.md) — context window management for TeamCreate teams
+- [Quality Gate Protocol](quality-gate-protocol.md) — sequential verification before commit

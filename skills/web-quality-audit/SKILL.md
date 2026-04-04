@@ -2,6 +2,8 @@
 name: web-quality-audit
 description: "Run comprehensive web quality audit (performance, a11y, SEO, best practices). Use when asked to audit a website or run Lighthouse."
 allowed-tools: [Read, Grep, Glob, Bash]
+copilot: true
+copilot-template-type: behavioral
 ---
 
 # Web quality audit

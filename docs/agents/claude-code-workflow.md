@@ -7,7 +7,7 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "How to work with Claude Code in the L0/L1/L2 ecosystem: dev-lead workflow, agent delegation, skills, verification"
+description: "How to work with Claude Code in the L0/L1/L2 ecosystem: project-manager workflow, agent delegation, skills, verification"
 version: "2.0.0"
 last_updated: "2026-03"
 monitor_urls:
@@ -22,20 +22,20 @@ token_budget: 2500
 
 How development works across the L0/L1/L2 ecosystem with Claude Code, specialized agents, and L0 skills.
 
-## The dev-lead Model
+## The Project Manager Model
 
-Every L1/L2 project has a `dev-lead` agent as the primary workflow coordinator. It operates in adaptive mode:
+Every L1/L2 project has a `project-manager` agent as the primary workflow coordinator. PM NEVER writes code — all code is written by dev specialists.
 
-| Task size | dev-lead behavior |
-|-----------|-------------------|
-| **Simple** (bug fix, 1 file) | Codes inline, runs tests, commits |
-| **Medium** (feature, 1-3 files) | Codes inline, delegates audits to specialists |
-| **Large** (5+ files, multi-step) | Orchestrates only — delegates code to worker agent, audits to specialists |
-| **Long session** (3+ features) | Always orchestrates — context too polluted for inline coding |
+| Task size | project-manager behavior |
+|-----------|--------------------------|
+| **Simple** (bug fix, 1 file) | Assigns to dev specialist, reviews result, runs tests |
+| **Medium** (feature, 1-3 files) | Assigns code to dev specialist, delegates audits to domain specialists |
+| **Large** (5+ files, multi-step) | Orchestrates waves — assigns code to dev specialists, audits to domain specialists |
+| **Long session** (3+ features) | Always orchestrates — delegates everything, manages flow only |
 
 ### Escalation Rules
 
-dev-lead is autonomous on technical decisions. It escalates to the user for:
+project-manager is autonomous on technical decisions. It escalates to the user for:
 - **Business decisions** — feature scope, tier assignment, pricing
 - **API contract changes** — breaking changes to shared libraries
 - **Architectural shifts** — new modules, new patterns, dependency additions
@@ -56,17 +56,25 @@ delegate to daw-guardian: "Audit changed files in core/data/ for ProcessingMode 
 |--------|--------|
 | Domain-specific audit (DAW safety, API purity, feature gates) | **Always delegate** — specialist knows the rules |
 | Code review after implementation | **Delegate** to test-specialist or relevant domain agent |
-| Parallel implementation (a11y across modules, test generation) | **Delegate to specialists with Write** — NOT multiple dev-lead copies |
-| Writing code for a well-understood change | **Inline** — agent startup overhead > benefit |
+| Parallel implementation (a11y across modules, test generation) | **Delegate to specialists with Write** — NOT multiple PM copies |
+| Writing code for any change | **Delegate to dev specialist** — PM never writes code |
 | Running tests, linting, coverage | **Use L0 skills** (`/test`, `/pre-pr`) — not agents |
 | Cross-cutting concern (privacy, release readiness) | **Delegate** — specialist scans holistically |
+| After any wave of specialist work | **Architect gate** — arch-testing + arch-platform + arch-integration detect, fix, and cross-verify before proceeding |
+| Official skill available for the task | **Use skill** — battle-tested and maintained upstream |
+
+### Agent Tool Only (non-negotiable)
+
+All delegation uses the `Agent` tool. Never spawn agents via Bash + `claude` CLI:
+- CORRECT: `Agent(project-manager, prompt="implement feature X")`
+- WRONG: `Bash("claude --print 'You are project-manager...'")`
 
 ### Token Economics
 
 Every agent pays a startup tax (~3-5K tokens for instructions + file reading). Delegation saves tokens only when:
 1. It **prevents context growth** in the main window (long sessions)
 2. It **runs in parallel** (fan-out to multiple specialists)
-3. The specialist **knows things the dev-lead doesn't** (domain rules, patterns)
+3. The specialist **knows things the project-manager doesn't** (domain rules, patterns)
 
 Rule of thumb: if the task is < 5K tokens of work, do it inline.
 
@@ -123,8 +131,8 @@ Every task type has a verification pattern:
 
 | Task type | Verification |
 |-----------|-------------|
-| Bug fix | Reproduce → fix → rerun repro → pass |
-| Feature | Code → `/test <module>` → delegate audit to specialist → `/pre-pr` |
+| Bug fix | Failing test first → fix → test passes → architect gate → `/pre-pr` |
+| Feature | Code → `/test <module>` → delegate audit to specialist → architect gate → `/pre-pr` |
 | Refactor | `/test-full-parallel` → no regressions |
 | Release | `/pre-release --quick` → `/bump-version` → `/git-flow release` |
 | UI change | Verify in browser/app → delegate to `ui-specialist` |
@@ -152,7 +160,7 @@ L0 defines.  L1/L2 consume.  L2 extends with domain-specific agents.
 - **L1**: Ecosystem library — version authority, shared modules, API contracts
 - **L2**: Application — domain logic, features, platform apps
 
-Each layer has its own CLAUDE.md, dev-lead agent, and project-specific specialists.
+Each layer has its own CLAUDE.md, project-manager agent, architect reviewers (arch-testing, arch-platform, arch-integration), and project-specific specialists.
 
 ## Release Workflow
 
@@ -165,7 +173,7 @@ Standard across all layers:
 
 ## Related Docs
 
-- [claude-md-template](claude-md-template.md) — Boris Cherny CLAUDE.md structure
+- [claude-md-template](claude-md-template.md) — Boris Cherny CLAUDE.md structure (project-manager in Agent Roster)
 - [autonomous-multi-agent-workflow](multi-agent-patterns.md) — Multi-agent patterns and cost control
 - [agent-consumption-guide](agent-consumption-guide.md) — How agents load and use pattern docs
 - [getting-started](../guides/getting-started.md) — Full L0/L1/L2 setup from scratch

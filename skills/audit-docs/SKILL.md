@@ -3,6 +3,8 @@ name: audit-docs
 description: "Unified documentation audit — validates structure (sizes, frontmatter), coherence (links, refs), and upstream content (API assertions, deprecation scan). Waves 1+2 are local ($0). Wave 3 requires --with-upstream."
 allowed-tools: [Bash, Read, Grep, Glob, Agent, Write]
 disable-model-invocation: true
+copilot: true
+copilot-template-type: behavioral
 ---
 
 ## Usage Examples

@@ -81,3 +81,12 @@ describe("getL1DocsDir", () => {
     );
   });
 });
+
+describe("getAgentsDir", () => {
+  it("returns a path ending with .claude/agents", async () => {
+    process.env.ANDROID_COMMON_DOC = "/toolkit/root";
+    const { getAgentsDir } = await import("../../../src/utils/paths.js");
+    const result = getAgentsDir();
+    expect(result).toBe(path.join("/toolkit/root", ".claude", "agents"));
+  });
+});

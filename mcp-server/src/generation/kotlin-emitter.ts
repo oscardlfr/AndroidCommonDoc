@@ -10,6 +10,7 @@
  */
 
 import type { RuleDefinition } from "../registry/types.js";
+import { logger } from "../utils/logger.js";
 
 /** Default generated rules package. */
 const DEFAULT_GENERATED_PACKAGE = "com.androidcommondoc.detekt.rules.generated";
@@ -27,17 +28,47 @@ function toPascalCase(kebab: string): string {
 }
 
 /**
+ * Resolve the banned import prefixes from a rule's detect block.
+ *
+ * Supports both:
+ * - `banned_import_prefixes: [array]` (canonical frontmatter form)
+ * - `banned_import: "string"` (legacy / single-prefix form)
+ *
+ * Returns null if neither field is present.
+ */
+function resolveBannedImportPrefixes(detect: Record<string, unknown>): string[] | null {
+  const prefixes = detect.banned_import_prefixes;
+  if (Array.isArray(prefixes) && prefixes.length > 0) {
+    return prefixes.filter((p): p is string => typeof p === "string");
+  }
+  const single = detect.banned_import;
+  if (typeof single === "string") {
+    return [single];
+  }
+  return null;
+}
+
+/**
  * Emit a banned-import rule.
  *
- * Uses visitImportDirective to check importedFqName against a banned prefix.
+ * Uses visitImportDirective to check importedFqName against banned prefixes.
+ * Supports multiple prefixes joined with `||`.
  */
 function emitBannedImportRule(
   className: string,
   rule: RuleDefinition,
   pkg: string = DEFAULT_GENERATED_PACKAGE,
 ): string {
-  const banned = rule.detect.banned_import as string;
-  const prefer = rule.detect.prefer as string;
+  const prefixes = resolveBannedImportPrefixes(rule.detect);
+  if (!prefixes || prefixes.length === 0) {
+    logger.warn(`Kotlin emitter: banned-import rule '${rule.id}' has no banned prefixes — skipping`);
+    return "";
+  }
+  const prefer = (rule.detect.prefer as string) ?? "the recommended alternative";
+
+  const condition = prefixes
+    .map((p) => `importPath.startsWith("${p}")`)
+    .join(" ||\n                ");
 
   return `package ${pkg}
 
@@ -54,7 +85,7 @@ class ${className}(config: Config) : Rule(
     override fun visitImportDirective(importDirective: KtImportDirective) {
         super.visitImportDirective(importDirective)
         val importPath = importDirective.importedFqName?.asString() ?: return
-        if (importPath.startsWith("${banned}")) {
+        if (${condition}) {
             report(
                 Finding(
                     Entity.from(importDirective),
@@ -126,6 +157,24 @@ class ${className}(config: Config) : Rule(
 }
 
 /**
+ * Resolve the banned expression/initializer from a rule's detect block.
+ *
+ * Supports:
+ * - `banned_initializer: "string"` or `banned_initializer: [array]`
+ * - `banned_expression: "string"` (alias used in some frontmatter)
+ *
+ * Returns the first string found, or null.
+ */
+function resolveBannedInitializer(detect: Record<string, unknown>): string | null {
+  const init = detect.banned_initializer;
+  if (typeof init === "string") return init;
+  if (Array.isArray(init) && init.length > 0 && typeof init[0] === "string") return init[0];
+  const expr = detect.banned_expression;
+  if (typeof expr === "string") return expr;
+  return null;
+}
+
+/**
  * Emit a banned-usage rule.
  *
  * Uses visitClass to check properties for banned initializer text.
@@ -136,8 +185,12 @@ function emitBannedUsageRule(
   rule: RuleDefinition,
   pkg: string = DEFAULT_GENERATED_PACKAGE,
 ): string {
-  const bannedInit = rule.detect.banned_initializer as string;
-  const prefer = rule.detect.prefer as string;
+  const bannedInit = resolveBannedInitializer(rule.detect);
+  if (!bannedInit) {
+    logger.warn(`Kotlin emitter: banned-usage rule '${rule.id}' has no banned initializer/expression — skipping`);
+    return "";
+  }
+  const prefer = (rule.detect.prefer as string) ?? "the recommended alternative";
   const inClassExtending = rule.detect.in_class_extending as
     | string
     | undefined;
@@ -202,16 +255,22 @@ export function emitRule(rule: RuleDefinition, pkg: string = DEFAULT_GENERATED_P
 
   const className = toPascalCase(rule.id) + "Rule";
 
+  let result: string | null;
   switch (rule.type) {
     case "banned-import":
-      return emitBannedImportRule(className, rule, pkg);
+      result = emitBannedImportRule(className, rule, pkg);
+      break;
     case "prefer-construct":
-      return emitPreferConstructRule(className, rule, pkg);
+      result = emitPreferConstructRule(className, rule, pkg);
+      break;
     case "banned-usage":
-      return emitBannedUsageRule(className, rule, pkg);
+      result = emitBannedUsageRule(className, rule, pkg);
+      break;
     default:
-      return null;
+      result = null;
   }
+  // Empty string means the emitter couldn't resolve required detect fields
+  return result === "" ? null : result;
 }
 
 /**

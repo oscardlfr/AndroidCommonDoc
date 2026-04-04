@@ -1,3 +1,9 @@
+---
+name: debug
+description: "Systematic bug investigation using the `debugger` agent."
+copilot: false
+---
+
 # Debug Skill
 
 Systematic bug investigation using the `debugger` agent.

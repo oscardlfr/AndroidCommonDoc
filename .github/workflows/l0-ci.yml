@@ -19,17 +19,35 @@ jobs:
     if: github.event_name == 'pull_request'
     uses: ./.github/workflows/reusable-commit-lint.yml
     with:
-      valid_scopes: "core,data,ui,feature,ci,deps,release,docs,detekt,mcp,skills,scripts,agents,archive,di,guides"
+      valid_scopes: "core,data,ui,feature,ci,deps,release,docs,detekt,mcp,skills,scripts,agents,archive,di,guides,tests"
+      squash_merge: true
 
   readme-audit:
     name: README Audit
     uses: ./.github/workflows/readme-audit.yml
+
+  check-outdated:
+    name: Check Outdated
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - run: cd mcp-server && npm ci && npm run build
+      - name: Check dependency freshness
+        run: node mcp-server/build/cli/check-outdated.js . --format summary || true
 
   agent-parity:
     name: Agent Parity
     uses: ./.github/workflows/reusable-agent-parity.yml
     with:
       target: project
+
+  copilot-parity:
+    name: Copilot Parity
+    uses: ./.github/workflows/reusable-copilot-parity.yml
 
   # ── Wave 2: Test suites (parallel) ─────────────────────────────────────
 
@@ -187,7 +205,9 @@ jobs:
     needs:
       - commit-lint
       - readme-audit
+      - check-outdated
       - agent-parity
+      - copilot-parity
       - shell-tests
       - detekt-rules
       - mcp-server
@@ -196,10 +216,11 @@ jobs:
     steps:
       - name: Check results
         run: |
-          # commit-lint only runs on PRs — treat skipped as pass
+          # commit-lint and check-outdated only run on PRs — treat skipped as pass
           results=(
             "${{ needs.readme-audit.result }}"
             "${{ needs.agent-parity.result }}"
+            "${{ needs.copilot-parity.result }}"
             "${{ needs.shell-tests.result }}"
             "${{ needs.detekt-rules.result }}"
             "${{ needs.mcp-server.result }}"
@@ -208,6 +229,11 @@ jobs:
           commit_lint="${{ needs.commit-lint.result }}"
           if [[ "$commit_lint" != "success" && "$commit_lint" != "skipped" ]]; then
             echo "❌ commit-lint: $commit_lint"
+            exit 1
+          fi
+          check_outdated="${{ needs.check-outdated.result }}"
+          if [[ "$check_outdated" != "success" && "$check_outdated" != "skipped" ]]; then
+            echo "❌ check-outdated: $check_outdated"
             exit 1
           fi
           for r in "${results[@]}"; do

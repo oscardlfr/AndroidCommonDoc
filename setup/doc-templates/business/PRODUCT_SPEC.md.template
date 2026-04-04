@@ -1,0 +1,31 @@
+# {{PROJECT_NAME}} -- Product Specification
+
+## Vision
+
+{{Describe the long-term vision for the product in 2-3 sentences.}}
+
+## Target Audience
+
+| Segment | Description | Pain Point | How We Help |
+|---------|-------------|------------|-------------|
+| {{segment}} | {{who they are}} | {{what frustrates them}} | {{our solution}} |
+
+## Features
+
+| Feature | Tier | Status | Description |
+|---------|------|--------|-------------|
+| {{feature}} | Free / Pro / Enterprise | Ideated / In Progress / Shipped | {{what it does}} |
+
+## Success Metrics
+
+| Metric | Target | Current | Measurement |
+|--------|--------|---------|-------------|
+| {{metric}} | {{target value}} | {{current value}} | {{how we measure}} |
+
+## Non-Goals
+
+- {{What this product explicitly does NOT do}}
+
+## Open Questions
+
+- {{Unresolved decisions that need input}}

@@ -3,6 +3,7 @@ name: test-full-parallel
 description: "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution."
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
+copilot: true
 ---
 
 ## Usage Examples

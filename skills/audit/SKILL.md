@@ -3,6 +3,8 @@ name: audit
 description: "Generate a quality audit report from .androidcommondoc/audit-log.jsonl. Produces a manager-friendly trend table (coverage, Detekt, tests, CVEs) with traffic lights and period deltas. Zero extra Gradle runs — reads from data already written by scripts."
 allowed-tools: [mcp__androidcommondoc__audit-report]
 disable-model-invocation: false
+copilot: true
+copilot-template-type: behavioral
 ---
 
 ## Usage
