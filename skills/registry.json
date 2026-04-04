@@ -1361,7 +1361,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9d7f7c95945a861a3b813e0943b995b26b2a3cf8055c949a41683e018f6e60d0",
+      "hash": "sha256:ca9c824c1c6ebed556053ae75e69c7c3fa9689ed7ae6757fc0a3a6908d4a747a",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1391,7 +1391,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d61f7d5c92fda21443f200ff9f3198f9ef723ad3f68e1ffc1f06147ebbfb3d24",
+      "hash": "sha256:d2c65b2414e9b2b3ab676e1efcae12b093281d70da256fa856cd8b78a92bcdeb",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1420,7 +1420,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:7e7a3818fae28645dcfa54d35c5bfd37847b566ce661c0c13eedfd1ed446b163",
+      "hash": "sha256:fc360b3e5e3f7df76fd5615d3dd16f2eca5485162d0c3f85bbbe42b981aa4cbf",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1532,7 +1532,7 @@
       "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:723972f407b28407fb083eeba50b18066abcb43a8bfd8076c4aeffa42eef1e97",
+      "hash": "sha256:37d96f8b1c7298571151cf8d7b4aa1629b2233653c8af68a86153fcbf46bc559",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
