@@ -129,7 +129,7 @@ Flag and delegate rewrite to `test-specialist`:
 ### 4. Fake Quality
 - Tests MUST use pure-Kotlin fakes (FakeRepository, FakeClock), not excessive mocking
 - `runTest` required for all coroutine tests
-- StateFlow tests: **Path A** (stateIn) uses `UnconfinedTestDispatcher` everywhere; **Path B** (startObserving) uses `backgroundScope` + `advanceUntilIdle()` after start. See [testing-patterns-dispatcher-scopes](docs/testing/testing-patterns-dispatcher-scopes.md)
+- StateFlow tests: **Path A** (stateIn) uses `UnconfinedTestDispatcher(testScheduler)` for test-side collectors in backgroundScope; **Path B** (startObserving) uses `backgroundScope` + `advanceUntilIdle()` after start. See [testing-patterns-dispatcher-scopes](docs/testing/testing-patterns-dispatcher-scopes.md)
 
 ### 5. Full Suite Gate (final wave only)
 - After the last wave: run `/test-full-parallel`

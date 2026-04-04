@@ -1420,7 +1420,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:be0541ba2f7d87205cce449925bc2934ad94fd179d35d767512d94d19281e4f8",
+      "hash": "sha256:ea3cc0b16f04580f7de222db3c741f8ffd7928b158d1d2063adb2d38dbd0c51d",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -2292,7 +2292,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:390f2a29d320b325a2681a9a34b348440e013de6501e9360c12da0da12ebecf3",
+      "hash": "sha256:a3a146dce8d34e223cb50e08334a2bf4e5961f689751a8ab3f18d67e86926dd2",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
