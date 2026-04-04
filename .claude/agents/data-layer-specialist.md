@@ -8,6 +8,9 @@ intent: [data, repository, database, network, caching]
 token_budget: 3000
 template_version: "1.0.0"
 memory: project
+skills:
+  - test
+  - validate-patterns
 ---
 
 ## Team Identity (Session Team Peer)
@@ -59,7 +62,7 @@ You implement and maintain the data layer of the KMP project:
 ### Source Set Discipline
 - Repository implementations in `commonMain` — pure Kotlin, no android.* imports
 - Platform-specific DataSources in `androidMain`/`desktopMain` only when truly necessary
-- Prefer `jvmMain` for Android+Desktop shared code over duplicating logic
+- ALWAYS use `jvmMain` for Android+Desktop shared code over duplicating logic
 
 ### Dependency Injection
 - Register in Koin module under `di/DataModule.kt` in your module

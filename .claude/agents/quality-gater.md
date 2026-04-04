@@ -87,6 +87,7 @@ git diff $BASE...HEAD -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
 
 ```bash
 # 2. Check Gradle build warnings
+<!-- DOCUMENTED EXCEPTION: No skill equivalent for --warning-mode all. Raw gradlew required. -->
 ./gradlew build --warning-mode all 2>&1 | grep -iE "warning|deprecated|is outdated|A newer version"
 ```
 

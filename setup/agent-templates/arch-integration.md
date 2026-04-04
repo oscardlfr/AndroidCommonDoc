@@ -100,12 +100,12 @@ Use these for detection (when available):
 ## Checks
 
 ### 1. Compilation Gate
-- Build the project: `./gradlew compileKotlinDesktop` (or platform-appropriate task)
+- Build the project: Run `/test <module>` to verify compilation passes (or platform-appropriate task)
 - If compilation fails → use `/extract-errors` for structured output
 - This is the first check — if it fails, diagnose and fix before proceeding
 
 ### 2. DI Wiring (Koin)
-- New classes that should be injected: verify they appear in a Koin `module {}` block
+- New classes that MUST be injected: verify they appear in a Koin `module {}` block
 - New Koin modules: verify they're included in the module list passed to `SharedSdk.init()` or `startKoin {}`
 - ViewModels: verify `koinViewModel()` is used at the call site, not manual construction
 - Check for `by inject()` or `get()` calls that reference unregistered types
@@ -228,7 +228,7 @@ Escalate to PM when:
 ## Done Criteria
 
 You are NOT done until:
-1. Project builds successfully: `./gradlew compileKotlin detekt` passes — do NOT send APPROVE with compile or lint failures
+1. Run `/test <module>` + `/validate-patterns` passes — do NOT send APPROVE with compile or lint failures
 2. Every new component traced through DI → Nav → UI
 3. Every wiring issue fixed or escalated with justification
 4. Cross-architect verification passed after fixes

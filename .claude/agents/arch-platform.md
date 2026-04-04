@@ -229,7 +229,7 @@ Escalate to PM when:
 
 You are NOT done until:
 1. MCP tools ran and you have structured output
-2. `./gradlew :module:compileKotlin :module:detekt` passes on every changed module — do NOT send APPROVE with compile or lint failures
+2. Run `/test <module>` to verify compilation + tests pass. Run `/validate-patterns` for Detekt compliance — do NOT send APPROVE with compile or lint failures
 3. Before approving refactors: grep call sites, expect/actual pairs, and test references for every renamed/changed symbol
 4. Every violation was either fixed or escalated with justification
 5. Cross-architect verification passed after your fixes

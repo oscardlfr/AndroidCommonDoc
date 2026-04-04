@@ -113,7 +113,7 @@ Flag and delegate rewrite to `test-specialist`:
 - If existing tests were modified: verify the modification is justified, not a workaround
 
 ### 4. Fake Quality
-- Tests should use pure-Kotlin fakes (FakeRepository, FakeClock), not excessive mocking
+- Tests MUST use pure-Kotlin fakes (FakeRepository, FakeClock), not excessive mocking
 - `runTest` required for all coroutine tests
 - StateFlow tests: subscribe in backgroundScope with UnconfinedTestDispatcher BEFORE actions
 

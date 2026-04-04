@@ -8,6 +8,9 @@ intent: [domain, model, usecase, business-logic]
 token_budget: 3000
 template_version: "1.0.0"
 memory: project
+skills:
+  - test
+  - validate-patterns
 ---
 
 ## Team Identity (Session Team Peer)
@@ -42,7 +45,7 @@ You implement and maintain the domain layer of the KMP project:
 - Pure Kotlin only — no android.*, java.*, or platform.* imports in `commonMain`
 - Use `data class` for value objects, `sealed interface` for state/result types
 - Model equality must be value-based (data class default or explicit `equals`/`hashCode`)
-- Prefer immutability — `val` fields, `copy()` for mutations
+- ALWAYS use immutability — `val` fields, `copy()` for mutations
 
 ### Use Cases
 - One use case per file, named `VerbNounUseCase` (e.g., `FetchTrackListUseCase`)

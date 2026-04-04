@@ -69,7 +69,7 @@ Review and fix Compose UI code for KMP project patterns.
 - Screen/Content separation: Screen collects state, Content receives it as params
 
 ### 7. Compose Testing
-- Every screen should have Compose tests (`composeTestRule`)
+- Every screen MUST have Compose tests (`composeTestRule`)
 - Tests verify all UiState renders: Loading, Success (empty + data), Error
 - Tests verify user interactions trigger correct callbacks
 - Tests verify semantic nodes for accessibility
