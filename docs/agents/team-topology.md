@@ -165,7 +165,7 @@ Phase 3 — Quality Gate (temporary quality-gater)
 
 **Wave pattern**: For large tasks, multiple detect/fix/verify cycles (waves). Persistent architects retain full context between waves.
 
-**Context management**: All 5 session team peers carry context across waves automatically. For very long sessions (5+ waves), re-spawn with same name AND same team_name: `Agent(name="arch-platform", team_name="session-{project-slug}", ...)` — replaces the old peer in the team.
+**Context management**: All 9 session team peers carry context across waves automatically. For long sessions (5+ waves), re-spawn with same name AND same team_name: `Agent(name="arch-platform", team_name="session-{project-slug}", ...)` — replaces the old peer in the team.
 
 ---
 
