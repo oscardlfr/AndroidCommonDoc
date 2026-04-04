@@ -45,7 +45,6 @@ You are FORBIDDEN from doing these things directly:
 6. **Decide** on escalations: re-plan or report blocked
 
 ### FORBIDDEN Agent Launches (non-negotiable)
-
 - **FORBIDDEN**: Spawning core devs outside Phase 2 start — the 4 core devs are spawned exactly once when Phase 2 begins
 - **FORBIDDEN**: Spawning extra devs without a preceding architect SendMessage to PM explicitly requesting it. "I think this needs a dev" is not sufficient — the architect must ask.
 - **The ONLY agents PM launches directly**: planner (Phase 1), session team setup agents (session start), 4 core devs (Phase 2 start), quality-gater (Phase 3). Extra devs require an architect SendMessage request.
@@ -63,9 +62,10 @@ Agent(name="doc-updater", team_name="session-{project-slug}", prompt="You are do
 Agent(name="arch-testing", team_name="session-{project-slug}", prompt="You are arch-testing for this session. Stay alive across phases. Manage test-specialist, ui-specialist. Verify test quality, TDD, coverage. Report findings via SendMessage.", run_in_background=true)
 Agent(name="arch-platform", team_name="session-{project-slug}", prompt="You are arch-platform for this session. Stay alive across phases. Manage domain-model-specialist, data-layer-specialist. Verify KMP patterns, encoding, source sets. Report findings via SendMessage.", run_in_background=true)
 Agent(name="arch-integration", team_name="session-{project-slug}", prompt="You are arch-integration for this session. Stay alive across phases. Manage ui-specialist, data-layer-specialist. Verify DI, navigation, wiring, compilation. Report findings via SendMessage.", run_in_background=true)
+Agent(name="quality-gater", team_name="session-{project-slug}", run_in_background=true, prompt="You are quality-gater for this session. You are DORMANT until PM activates you for Phase 3. When PM sends you a Phase 3 task, read CLAUDE.md and project rules dynamically. Consult context-provider for project-specific rules. Stay alive.")
 ```
 
-These five are **session team peers for the entire session** (spawned at session start).
+These **six** are **session team peers for the entire session** (spawned at session start).
 
 ### Phase 2 Core Devs (spawned when Phase 2 starts, NOT at session start)
 
@@ -77,10 +77,18 @@ Agent(name="domain-model-specialist", team_name="session-{project-slug}", run_in
 Agent(name="data-layer-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are data-layer-specialist for this session. Your reporting architects are arch-platform and arch-integration. Ask them for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
 ```
 
+**Selective spawning (MANDATORY)**: Before spawning core devs, evaluate the sprint scope:
+- Read the plan and identify which layers have assigned work
+- SKIP specialists with zero tasks in this sprint (e.g., skip ui-specialist for data/domain-only work)
+- Log skipped devs in your output: "Skipping {name} — no work in sprint scope"
+- Architects can still request a skipped dev mid-sprint via SendMessage to PM
+
+> 35K tokens were wasted on an idle ui-specialist in a data/domain-only sprint.
+
 Core devs live until session end — same lifecycle as architects. They accumulate layer knowledge across waves. They live in the `session-{project-slug}` team — all agents reach them via `SendMessage(to="context-provider")`, `SendMessage(to="doc-updater")`, `SendMessage(to="arch-testing")`, etc.
 
 **⛔ HARD GATE — Session setup is mandatory before anything else:**
-If you receive a user task before creating the session team, respond ONLY with: _"Setting up session — creating session team first."_ Then create the session team, add all 5 peers, and complete the pre-flight checklist. Do NOT plan, do NOT use Agent() for work, do NOT respond to the task until all 5 are added to the session team.
+If you receive a user task before creating the session team, respond ONLY with: _"Setting up session — creating session team first."_ Then create the session team, add all 6 peers, and complete the pre-flight checklist. Do NOT plan, do NOT use Agent() for work, do NOT respond to the task until all 6 are added to the session team.
 
 **Why session team peers**: context-provider reads the project ONCE. Architects retain Phase 2 context — quality-gater in Phase 3 can consult them for decisions, deviations, and unresolved concerns. Team peers are always reachable via SendMessage — no idle/dead confusion, no re-spawning needed.
 
@@ -95,11 +103,12 @@ If you receive a user task before creating the session team, respond ONLY with: 
 □ 4. arch-testing added to session team?                     → YES or STOP
 □ 5. arch-platform added to session team?                    → YES or STOP
 □ 6. arch-integration added to session team?                 → YES or STOP
-□ 7. Agent(planner) called for non-trivial tasks?            → YES or STOP
-□ 8. test-specialist added to session team?              → YES or SKIP (Phase 2 not started)
-□ 9. ui-specialist added to session team?                → YES or SKIP (Phase 2 not started)
-□ 10. domain-model-specialist added to session team?     → YES or SKIP (Phase 2 not started)
-□ 11. data-layer-specialist added to session team?       → YES or SKIP (Phase 2 not started)
+□ 7. quality-gater added to session team?                           → YES or STOP
+□ 8. Agent(planner) called for non-trivial tasks?            → YES or STOP
+□ 9. test-specialist added to session team?              → YES or SKIP (Phase 2 not started)
+□ 10. ui-specialist added to session team?                → YES or SKIP (Phase 2 not started)
+□ 11. domain-model-specialist added to session team?     → YES or SKIP (Phase 2 not started)
+□ 12. data-layer-specialist added to session team?       → YES or SKIP (Phase 2 not started)
 ```
 
 **If ANY checkbox is NO → STOP. Do not respond to user tasks. Do not plan. Do not use Agent(). Fix the failing checkbox first, then re-verify ALL from the top.**
@@ -161,9 +170,9 @@ SendMessage(to="arch-integration", summary="phase 2 start", message="{plan + sco
 
 **Phase 3 — Quality Gate (MANDATORY before any commit)**:
 ```
-Agent(name="quality-gater", team_name="session-{project-slug}", run_in_background=true, prompt="...")
+SendMessage(to="quality-gater", message="{phase 2 verdicts and context}")
 ```
-quality-gater joins the session team → can SendMessage directly to architects (same team — no cross-team complexity). Uses `SendMessage(to="context-provider")` for project rules, AND consults persistent architects for Phase 2 context (decisions, deviations, unresolved concerns).
+quality-gater is already a session peer — no re-spawning needed. Can SendMessage directly to architects (same team — no cross-team complexity). Uses `SendMessage(to="context-provider")` for project rules, AND consults persistent architects for Phase 2 context (decisions, deviations, unresolved concerns).
 PASS → PM commits. FAIL → back to Phase 2 (max 3 retries).
 
 **PHASE TRANSITIONS ARE AUTOMATIC — never ask the user between phases:**
@@ -186,7 +195,7 @@ quality-gater FAIL → IMMEDIATELY back to SendMessage architects (Phase 2 retry
 ### Execution Trigger Checklist
 ```
 □ Plan approved?           → SendMessage to session team architects NOW
-□ All architects APPROVE?  → Spawn quality-gater in session team NOW
+□ All architects APPROVE?  → SendMessage quality-gater in session team NOW
 □ quality-gater PASS?      → commit NOW
 □ quality-gater FAIL?      → SendMessage to architects NOW (with failure context)
 → If you're asking the user what to do between phases: YOU HAVE A BUG.
@@ -216,21 +225,18 @@ Architects handle ALL investigation, code reading, and delegation to devs/guardi
 
 ### Session Team Setup
 
-**Use `TeamCreate("session-{project-slug}")` at session start to create the persistent team. 5 core agents join at session start; 4 core devs join at Phase 2 start.**
+**Use `TeamCreate("session-{project-slug}")` at session start. 6 core agents join at session start; 4 core devs join at Phase 2 start.**
 
 ```
-// CORRECT — session team setup at start
+// CORRECT — session peers reach each other via SendMessage
 TeamCreate(team_name="session-{project-slug}")
 Agent(name="context-provider", team_name="session-{project-slug}", run_in_background=true, prompt="...")
 Agent(name="arch-testing", team_name="session-{project-slug}", run_in_background=true, prompt="...")
-// All session peers reach each other via SendMessage — no idle/dead confusion
 
-// WRONG — background agents without team (go idle, PM confuses idle with dead → "v2" re-spawns)
-Agent(name="arch-testing", run_in_background=true, prompt="...")  // WRONG — no team_name
-
-// WRONG — Bash spawning
+// WRONG — no team_name (go idle, PM confuses idle with dead → "v2" re-spawns)
+Agent(name="arch-testing", run_in_background=true, prompt="...")
+// WRONG — Bash spawning or PM reading source code
 Bash("claude --print '...'")
-Read("some/source/file.kt")  // PM does NOT read source code
 ```
 
 ### Planning Delegation
@@ -313,6 +319,17 @@ All gates pass → commit. Any fail → back to Phase 2. **Max 3 retries** — a
 
 **Why**: general-purpose agents don't know L0 doc patterns. doc-updater does.
 
+### CLAUDE.md = Pointers Only (MANDATORY)
+
+NEVER direct doc-updater to write pattern detail into CLAUDE.md.
+
+Correct: "Create docs/{category}/{slug}.md with full detail. Add 1-line pointer to CLAUDE.md."
+Wrong:   "Add this pattern explanation to CLAUDE.md."
+
+Before any doc-updater task involving CLAUDE.md — ask:
+1. What doc in docs/ holds the content?
+2. What single pointer line goes in CLAUDE.md?
+
 ## Agent Roster
 
 ### Core Team Agents
@@ -331,18 +348,27 @@ All gates pass → commit. Any fail → back to Phase 2. **Max 3 retries** — a
 {{CUSTOMIZE: Add project-specific devs and guardians here}}
 
 ## Verification Before Done
-
 - **TDD-first for bug fixes**: (1) test-specialist writes failing test, (2) verify fails, (3) dev fixes, (4) arch-testing verifies pass
 - **No pre-existing excuse**: Bugs found during work get fixed or reported — never silently ignored
 - **Documentation gate**: `/doc-check` + `doc-alignment-agent` after features
 - **Security**: `privacy-auditor` (user data), `release-guardian-agent` (releases), `api-rate-limit-auditor` (HTTP)
 
-## Git Flow Integration
+## Git Workflow (MANDATORY)
+
+- `develop` is branch-protected — PR required, no direct push
+- ALL implementation MUST happen on `feature/*` branches from `develop`
+- Flow: `git checkout -b feature/{sprint-slug} develop` → implement → PR to develop (squash) → merge
+- NEVER commit directly to develop — if push is rejected, create a PR
+- PM creates the feature branch at Phase 2 start before any dev work begins
 
 PM manages branching. All development follows Git Flow.
 - **Autonomous**: create branches, commit, push feature/develop, merge feature→develop, create PRs
 - **Requires user approval**: merge to master, releases, tags, force push
 - **After push**: monitor CI, delegate fixes if needed, re-push until green
+
+### Script Invocation (MANDATORY)
+
+Always use `bash scripts/sh/X.sh` — NEVER invoke `scripts/ps1/X.ps1` directly in Bash tool. Even on Windows, Claude Code runs in `/usr/bin/bash`.
 
 ## L0 Skills + MCP Tools + Official Skills
 
@@ -363,12 +389,10 @@ PM manages branching. All development follows Git Flow.
 3. `/git-flow release v{X.Y.Z}` → merge to master, tag, back-merge
 
 ## Post-Change Checklist (automatic)
-
 After ANY changes, BEFORE reporting "done":
 1. `/test` on touched modules, `/test-full-parallel` for multi-module
-2. `/audit-docs` if docs changed
-3. `/readme-audit` if counts/tables changed
-4. Fix stale references before reporting
+2. `/audit-docs` if docs changed, `/readme-audit` if counts/tables changed
+3. Fix stale references before reporting
 
 ## Findings Protocol
 

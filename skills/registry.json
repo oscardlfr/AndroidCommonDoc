@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generated": "2026-04-04T17:41:24.592Z",
-  "l0_root": "C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc",
+  "generated": "2026-04-04T19:41:27.503Z",
+  "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
       "name": "accessibility",
@@ -149,7 +149,7 @@
       "description": "Run benchmarks across modules and show agent-friendly results summary. Detects available platforms and devices.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1e70c62cbae55a3b0ca0ba7c951a160c69b1cc1ab472c40b0c8b5c9abd03e409",
+      "hash": "sha256:6b2c0de593446ed1d6777cab78db07ab715706012dc3776b8245a7008bf7dd7d",
       "dependencies": [
         "scripts/sh/run-benchmarks.sh",
         "scripts/ps1/run-benchmarks.ps1"
@@ -264,7 +264,7 @@
       "description": "Analyze test coverage gaps from existing data without running tests. Use when asked to check coverage or find untested code.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:0a79d5ecb3db693ded9b17b02ed26b584a15554c596eb30c59c06f2d6af639a3",
+      "hash": "sha256:bbf23c9bb07db4540cce938f77435243e82191b28d0b24c250c354ede80e2819",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -795,7 +795,7 @@
       "description": "Build, install, and run app with debug logging. Use when asked to launch, run, or deploy the app on a device or desktop.",
       "category": "build",
       "tier": "core",
-      "hash": "sha256:942ea852fe3fe5a989b93a45bdf882cdc7dbbff2fbef9b9992bcb559dbc78272",
+      "hash": "sha256:f616143cb1b5e00a738f20c9cc45f0ec6473169ab6cf36f444e61facbf59888c",
       "dependencies": [
         "scripts/sh/build-run-app.sh",
         "scripts/ps1/build-run-app.ps1"
@@ -1087,7 +1087,7 @@
       "description": "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:7cc08a917c0648f467a84a72122e76fc8b9447baced3e38861cf17da0c8a0a7e",
+      "hash": "sha256:949b1b79e9542786b1e03f75cfb6b5c3d2f43c9c8bf082735c118dc95be603fc",
       "dependencies": [
         "scripts/sh/gradle-run.sh",
         "scripts/sh/ai-error-extractor.sh",
@@ -1139,7 +1139,7 @@
       "description": "Run all tests sequentially with full coverage report. Use when asked to run the complete test suite or generate a full coverage report.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:e277b2080045334cc490e0e0a348b6fd92e63331106362def177466f2ab576c2",
+      "hash": "sha256:ead655b738853452d4c4614babfd4350de089cf0301827135a249d8939d220a9",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -1164,7 +1164,7 @@
       "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:bce49652463a7da61167003e722a1bae207de410a7eeb8b3cbd8a9b208281218",
+      "hash": "sha256:033ef032a103d431a3995b872df653aca7f42445411e7e7f220baa6b46c6bb39",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -1310,7 +1310,7 @@
       "description": "Researches a single technical decision and returns a structured comparison table with recommendation. Use when choosing between approaches, libraries, or architectures.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f43277f65e0ad4bd0c59afab92f3653d0b5bdb1a05286cc13370502afa446f40",
+      "hash": "sha256:e9ad52f1e4f1bda65a34533dea1d20569c724f42e73978196713c3a73464d775",
       "dependencies": [],
       "frontmatter": {
         "name": "advisor",
@@ -1532,7 +1532,7 @@
       "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:049cafd7186fffddcdc898c044eff1715d93d9711d1b5148aa0a5840b259dcb0",
+      "hash": "sha256:f357703c93120c6bde911b0413d314d2f291f1caae66a9d791a53d4020d41c1b",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -1588,7 +1588,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:48d55854f1b3509bbb8bb03c8cc4f15638f5231d737fdb86983009b4dffcfbe5",
+      "hash": "sha256:24e188e19b08e11c8a4e34cbd87ece6019eb7a62d943ff891247b7ce677644dd",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -1756,7 +1756,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a1aefd3bcaaefd06a96a951a95906b513e8ae7049194d5c8fee1f57e43e96df1",
+      "hash": "sha256:f4c557da992711151c92872402a9c22da09c944606c427da9d18690b861f33d8",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -1786,7 +1786,7 @@
       "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:645b3f79492d44fcd550a9a3ae32850e0199b7ff6f793d83b0b8cc2d8c3885f9",
+      "hash": "sha256:b54d6a7bf7c82a4aa1cea5d5362a61e9aaab70b4b44c036a399e6e2c5f05df22",
       "dependencies": [],
       "frontmatter": {
         "name": "{{DOMAIN}}-specialist",
@@ -1920,7 +1920,7 @@
       "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6017cfe5c4a088eb8c6f54d0e5d34e50f44634937a6656f7c10063f87172d3b4",
+      "hash": "sha256:025cb7e73fe304e1b4a5bb7a129dcb91482ef0ea0bee0a66884952ff4b4df5cd",
       "dependencies": [],
       "frontmatter": {
         "name": "module-lifecycle",
@@ -1950,7 +1950,7 @@
       "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9dd37f7ed09343a5361e745231bb627f34771aa4b3e9cbc7ffef156c7a8ab635",
+      "hash": "sha256:41af960882ad06e0cf4f6b0e53a5bbf22a772db542e3c8d677e75048eca46fc4",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -2087,7 +2087,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ad6a0b3cd6cae8bc97882616fa3cf475dd8dae07ab1cc5b947a39c424225fd1b",
+      "hash": "sha256:abcabec67e7c3922e0c39e8efe8df58c2fd2914195278e7e1b3de790ba9ff082",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
@@ -2197,7 +2197,7 @@
       "description": "Ad-hoc technical research on any topic. Use before implementation to gather context, evaluate options, or understand a domain.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:5177def422340437c4c864c06b8a29b0c47095e1d43b5755eabfa91fb449ac16",
+      "hash": "sha256:e04ada376cccec649ecd0104e74b5391f32b5309a345f578fd343d4132a58799",
       "dependencies": [],
       "frontmatter": {
         "name": "researcher",
