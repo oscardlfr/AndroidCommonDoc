@@ -770,12 +770,12 @@ teardown() {
     grep -q "88+ sub-docs" "$README"
 }
 
-@test "README: vitest count is 1599" {
-    grep -q "1599 tests" "$README"
+@test "README: vitest count is 1634" {
+    grep -q "1634 tests" "$README"
 }
 
-@test "README: vitest files count is 97" {
-    grep -q "97 test files" "$README"
+@test "README: vitest files count is 99" {
+    grep -q "99 test files" "$README"
 }
 
 # ===========================================================================
@@ -1177,7 +1177,7 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 @test "agents: domain values are valid" {
     for agent in $L0_ROOT/.claude/agents/*.md; do
         domain=$(grep "^domain:" "$agent" | head -1 | sed 's/domain: *//')
-        echo "$domain" | grep -qE "^(development|testing|security|quality|audit|business|marketing|infrastructure)$" || { echo "INVALID domain '$domain' in $agent"; return 1; }
+        echo "$domain" | grep -qE "^(development|testing|security|quality|audit|business|marketing|infrastructure|architecture)$" || { echo "INVALID domain '$domain' in $agent"; return 1; }
     done
 }
 

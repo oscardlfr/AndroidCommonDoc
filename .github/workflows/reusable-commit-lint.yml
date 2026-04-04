@@ -31,6 +31,10 @@ on:
         description: "Maximum subject line length"
         type: number
         default: 100
+      squash_merge:
+        description: "If true, only validate PR title (squash merge — individual commits are discarded)"
+        type: boolean
+        default: false
 
 jobs:
   commit-lint:
@@ -42,13 +46,10 @@ jobs:
           fetch-depth: 0  # full history needed for range checks
 
       - name: Validate commit messages
+        env:
+          SQUASH_MERGE: ${{ inputs.squash_merge }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          BASE="${{ github.event.pull_request.base.sha }}"
-          HEAD="${{ github.event.pull_request.head.sha }}"
-          RANGE="$BASE..$HEAD"
-
-          echo "Validating commits in range: $RANGE"
-
           VALID_TYPES="${{ inputs.valid_types }}"
           VALID_SCOPES="${{ inputs.valid_scopes }}"
           MAX_LEN="${{ inputs.max_subject_length }}"
@@ -66,6 +67,57 @@ jobs:
 
           FULL_PATTERN="^(${TYPE_PATTERN})${SCOPE_PATTERN}!?: .+"
 
+          # Helper: validate a single message
+          validate_msg() {
+            local LABEL="$1" MSG="$2" ERRORS=0
+
+            if ! echo "$MSG" | grep -qP "$FULL_PATTERN"; then
+              echo "::error::[$LABEL] Invalid format: '$MSG'"
+              echo "  Expected: <type>[scope][!]: <description>"
+              echo "  Valid types: $VALID_TYPES"
+              [ -n "$VALID_SCOPES" ] && echo "  Valid scopes: $VALID_SCOPES"
+              ERRORS=$((ERRORS + 1))
+            fi
+
+            DESC=$(echo "$MSG" | sed 's/^[^:]*: //')
+            if echo "$DESC" | grep -qP '^[A-Z]'; then
+              echo "::error::[$LABEL] Description starts with uppercase: '$DESC'"
+              ERRORS=$((ERRORS + 1))
+            fi
+
+            if echo "$DESC" | grep -qP '\.$'; then
+              echo "::error::[$LABEL] Description ends with period: '$DESC'"
+              ERRORS=$((ERRORS + 1))
+            fi
+
+            if [ ${#MSG} -gt "$MAX_LEN" ]; then
+              echo "::warning::[$LABEL] Subject exceeds $MAX_LEN chars (${#MSG}): '$MSG'"
+            fi
+
+            return $ERRORS
+          }
+
+          # ── Squash-merge mode: only validate PR title ──
+          if [ "$SQUASH_MERGE" = "true" ]; then
+            echo "Squash-merge mode: validating PR title only"
+            echo "PR title: '$PR_TITLE'"
+            validate_msg "PR-title" "$PR_TITLE"
+            RC=$?
+            if [ $RC -gt 0 ]; then
+              echo "❌ PR title does not conform to Conventional Commits v1.0.0"
+              exit 1
+            fi
+            echo "✅ PR title conforms to Conventional Commits v1.0.0"
+            exit 0
+          fi
+
+          # ── Normal mode: validate all commits in range ──
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          RANGE="$BASE..$HEAD"
+
+          echo "Validating commits in range: $RANGE"
+
           ERRORS=0
           COMMIT_COUNT=0
 
@@ -75,32 +127,7 @@ jobs:
             HASH=$(echo "$line" | cut -d' ' -f1)
             MSG=$(echo "$line" | cut -d' ' -f2-)
 
-            # Type + format
-            if ! echo "$MSG" | grep -qP "$FULL_PATTERN"; then
-              echo "::error::[$HASH] Invalid format: '$MSG'"
-              echo "  Expected: <type>[scope][!]: <description>"
-              echo "  Valid types: $VALID_TYPES"
-              [ -n "$VALID_SCOPES" ] && echo "  Valid scopes: $VALID_SCOPES"
-              ERRORS=$((ERRORS + 1))
-            fi
-
-            # Description must start lowercase
-            DESC=$(echo "$MSG" | sed 's/^[^:]*: //')
-            if echo "$DESC" | grep -qP '^[A-Z]'; then
-              echo "::error::[$HASH] Description starts with uppercase: '$DESC'"
-              ERRORS=$((ERRORS + 1))
-            fi
-
-            # No trailing period
-            if echo "$DESC" | grep -qP '\.$'; then
-              echo "::error::[$HASH] Description ends with period: '$DESC'"
-              ERRORS=$((ERRORS + 1))
-            fi
-
-            # Subject length
-            if [ ${#MSG} -gt "$MAX_LEN" ]; then
-              echo "::warning::[$HASH] Subject exceeds $MAX_LEN chars (${#MSG}): '$MSG'"
-            fi
+            validate_msg "$HASH" "$MSG" || ERRORS=$((ERRORS + $?))
 
           done < <(git log "$RANGE" --pretty=format:"%h %s")
 
