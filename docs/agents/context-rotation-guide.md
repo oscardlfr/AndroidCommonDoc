@@ -34,7 +34,7 @@ How to manage context window growth in TeamCreate teams. Covers signals, rotatio
 
 ## Signals: When Context Is Growing Too Large
 
-- Team has run **5+ waves** without archiving
+- Team has run **3+ waves** without archiving (9-peer sessions generate context faster)
 - PM summarizes findings in **3+ paragraphs** (should be 1-2 sentences)
 - Architects report patterns **already mentioned** in previous waves
 - Tool calls take noticeably longer (context overhead)
@@ -64,7 +64,7 @@ Remaining: 1 ESCALATED issue — navigation restructuring needs design decision.
 
 ### 3. Re-Spawn Session Team Peers
 
-For very long sessions (7+ waves), re-spawn with **SAME name AND SAME team_name** to replace the old peer in-team:
+For long sessions (**5+ waves** with 9 peers, 7+ waves with 5 peers), re-spawn with **SAME name AND SAME team_name** to replace the old peer in-team:
 
 ```
 Agent(name="arch-platform", team_name="session-{project-slug}", prompt="...", run_in_background=true)
@@ -78,7 +78,7 @@ If the task changes scope entirely (e.g., from bug fixes to new feature), create
 1. `SendMessage(to="doc-updater", ...)` — archive current team's findings
 2. Dissolve current team
 3. `TeamCreate(team_name="session-{project-slug}")` — new session team, clean slate
-4. Re-add all 5 session team peers with fresh context
+4. Re-add all 9 session team peers with fresh context (5 at session start, 4 core devs when Phase 2 resumes)
 
 ### 5. Sub-Agent Over Peer When Possible
 
@@ -134,12 +134,13 @@ When relaying findings between agents (architect → PM → architect), use stru
 
 ## Token Budget Guidelines
 
-| Agent tier | System prompt | Working context | Total capacity |
-|-----------|--------------|----------------|----------------|
-| Orchestrator (PM) | ~5K | ~195K | 200K |
-| Architect | ~4K | ~196K | 200K |
-| Dev specialist | ~3K | ~197K | 200K |
-| Shared service | ~2K | ~198K | 200K |
+| Agent tier | System prompt | Working context | Total capacity | Rotation threshold |
+|-----------|--------------|----------------|----------------|-------------------|
+| Orchestrator (PM) | ~5K | ~195K | 200K | Never (session lifetime) |
+| Architect | ~4K | ~196K | 200K | 7+ waves |
+| Core dev | ~3K | ~197K | 200K | 5+ waves (9-peer) / 7+ waves (5-peer) |
+| Extra dev | ~2K | ~198K | 200K | Dies after architect verification |
+| Shared service | ~2K | ~198K | 200K | 7+ waves |
 
 **Warning signs**: If a template exceeds its system prompt budget, extract sections to reference docs (`.claude/docs/`).
 
@@ -147,10 +148,13 @@ When relaying findings between agents (architect → PM → architect), use stru
 
 ## Conditional Team Composition
 
-Default session team (5 peers in `session-{project-slug}`, within recommended 3-5 range + services):
+Default session team (9 peers in `session-{project-slug}`: 5 at session start + 4 core devs at Phase 2):
 ```
-TeamCreate("session-{project-slug}")
+Session start:
+  TeamCreate("session-{project-slug}")
   + context-provider + doc-updater + arch-testing + arch-platform + arch-integration
+Phase 2 start:
+  + test-specialist + ui-specialist + domain-model-specialist + data-layer-specialist
 ```
 
 Add ONLY when in scope:
@@ -167,8 +171,8 @@ Add ONLY when in scope:
 
 | Anti-pattern | Why it's bad | Fix |
 |-------------|-------------|-----|
-| 10+ waves in same team | Context grows to 60K+ tokens | Re-spawn peers with same name/team_name at 7 waves, or dissolve/recreate at 10 |
-| Devs as team peers | Accumulate context for work they don't need | Always sub-agents via PM |
+| 7+ waves (9-peer) / 10+ waves (5-peer) | Context grows to 60K+ tokens | Re-spawn peers with same name/team_name, or dissolve/recreate |
+| Extra devs as team peers | Extras accumulate context they don't need | Core devs are peers; extras are sub-agents via PM (no team_name) |
 | PM reading full verdicts | Verdict prose bloats PM context | Architects: 3-line summary first, details on request |
 | Not calling doc-updater between waves | Findings lost if session crashes | Archive to disk every 3-5 waves |
 | All dept leads in every team | 8 peers = excessive overhead | Conditional: only when their domain is in scope |

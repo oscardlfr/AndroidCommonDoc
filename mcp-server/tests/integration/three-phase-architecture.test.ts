@@ -92,19 +92,47 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toMatch(/NEVER.*write.*code|NEVER.*codes/i);
   });
 
-  it('has pre-flight checklist with session team setup', () => {
+  it('has pre-flight checklist with session team setup (11 items)', () => {
     expect(content).toMatch(/Pre-Flight Checklist/i);
     expect(content).toContain('TeamCreate("session-{project-slug}")');
     expect(content).toContain('added to session team');
+    // 11 checklist items: 7 core + 4 Phase 2 dev items
+    const checkboxMatches = content.match(/□ \d+\./g);
+    expect(checkboxMatches).not.toBeNull();
+    expect(checkboxMatches!.length).toBeGreaterThanOrEqual(11);
   });
 
-  it('spawns 5 session team agents at session start', () => {
+  it('spawns 9 session team agents (5 at session start, 4 core devs at Phase 2 start)', () => {
+    // Session start peers (5)
     expect(content).toContain('Agent(name="context-provider"');
     expect(content).toContain('Agent(name="doc-updater"');
     expect(content).toContain('Agent(name="arch-testing"');
     expect(content).toContain('Agent(name="arch-platform"');
     expect(content).toContain('Agent(name="arch-integration"');
+    // Phase 2 core devs (4)
+    expect(content).toContain('Agent(name="test-specialist"');
+    expect(content).toContain('Agent(name="ui-specialist"');
+    expect(content).toContain('Agent(name="domain-model-specialist"');
+    expect(content).toContain('Agent(name="data-layer-specialist"');
     expect(content).toContain('team_name="session-{project-slug}"');
+  });
+
+  it('pattern validation chain documented: dev contacts architect, not context-provider', () => {
+    expect(content).toMatch(/dev.*arch.*context-provider|SendMessage.*arch.*pattern/i);
+    expect(content).toMatch(/NEVER.*context-provider.*directly|Dev NEVER contacts context-provider/i);
+  });
+
+  it('anonymous dev threshold for 3-or-fewer file fixes is documented', () => {
+    expect(content).toMatch(/3 or fewer files|3-or-fewer file|≤3 files|3 or fewer/i);
+  });
+
+  it('dynamic scaling model: extra devs named but no team_name', () => {
+    expect(content).toMatch(/extra.*dev|Extra dev/i);
+    expect(content).toMatch(/named but NO team_name|named but no team_name/i);
+  });
+
+  it('background completion → immediately act rule is documented', () => {
+    expect(content).toMatch(/background.*complet.*IMMEDIATELY|IMMEDIATELY.*background/i);
   });
 
   it('Phase 2 uses SendMessage not TeamCreate for architects', () => {
@@ -112,8 +140,8 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 4.2.0', () => {
-    expect(content).toContain('template_version: "4.2.0"');
+  it('template version 5.0.0', () => {
+    expect(content).toContain('template_version: "5.0.0"');
   });
 
   it('has dev dispatch protocol', () => {
@@ -183,8 +211,8 @@ describe('project-manager template — 3-phase model', () => {
 describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
-  it('template version 1.2.0', () => {
-    expect(archContent).toContain('template_version: "1.3.0"');
+  it('template version 1.4.0', () => {
+    expect(archContent).toContain('template_version: "1.4.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -227,12 +255,12 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
   });
 
-  it('arch-platform has template version 1.2.0', () => {
-    expect(platformContent).toContain('template_version: "1.2.0"');
+  it('arch-platform has template version 1.3.0', () => {
+    expect(platformContent).toContain('template_version: "1.3.0"');
   });
 
-  it('arch-integration has template version 1.2.0', () => {
-    expect(integrationContent).toContain('template_version: "1.2.0"');
+  it('arch-integration has template version 1.3.0', () => {
+    expect(integrationContent).toContain('template_version: "1.3.0"');
   });
 });
 
@@ -727,8 +755,8 @@ describe('context-provider template — oracle protocol', () => {
     expect(cpContent).toMatch(/NOT eagerly pre-read|do NOT eagerly/i);
   });
 
-  it('has template version 2.2.0', () => {
-    expect(cpContent).toContain('template_version: "2.2.0"');
+  it('has template version 2.3.0', () => {
+    expect(cpContent).toContain('template_version: "2.3.0"');
   });
 });
 
@@ -762,7 +790,7 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toContain('template_version: "1.3.0"');
   });
 
-  it('arch-testing version 1.3.0', () => {
-    expect(testingContent).toContain('template_version: "1.3.0"');
+  it('arch-testing version 1.4.0', () => {
+    expect(testingContent).toContain('template_version: "1.4.0"');
   });
 });
