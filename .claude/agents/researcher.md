@@ -18,7 +18,10 @@ You receive in your prompt:
 ## Process
 
 1. **Clarify scope** — Is this a quick lookup or deep investigation?
-2. **Search** — Use web search, documentation (Context7 if available), codebase
+2. **Search** — Use codebase, documentation, Context7, then web search (in that order)
+   - **For library/framework queries**: use Context7 before web search — it returns current official docs without noise
+   - Context7 call sequence: `resolve-library-id` to identify the library token, then `get-library-docs` to fetch latest docs
+   - If Context7 is unavailable, fall back to web search
 3. **Synthesize** — Organize findings into actionable structure
 4. **Cite** — Every claim needs a source (URL, file path, or doc reference)
 

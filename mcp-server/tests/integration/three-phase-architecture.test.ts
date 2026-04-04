@@ -306,6 +306,10 @@ describe('planner template — peer role', () => {
   it('notifies PM via SendMessage after writing plan file', () => {
     expect(content).toMatch(/SendMessage.*project-manager.*plan.*ready|SendMessage.*project-manager.*PLAN\.md/i);
   });
+
+  it('has external library research step via context-provider', () => {
+    expect(content).toMatch(/Context7|external.*library.*research/i);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -755,8 +759,14 @@ describe('context-provider template — oracle protocol', () => {
     expect(cpContent).toMatch(/NOT eagerly pre-read|do NOT eagerly/i);
   });
 
-  it('has template version 2.3.0', () => {
-    expect(cpContent).toContain('template_version: "2.3.0"');
+  it('has template version 2.4.0', () => {
+    expect(cpContent).toContain('template_version: "2.4.0"');
+  });
+
+  it('has External Context section with Context7 call sequence', () => {
+    expect(cpContent).toMatch(/External Context.*Context7|Context7.*External/i);
+    expect(cpContent).toMatch(/resolve-library-id/);
+    expect(cpContent).toMatch(/get-library-docs/);
   });
 });
 
@@ -786,8 +796,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.3.0', () => {
-    expect(plannerContent).toContain('template_version: "1.3.0"');
+  it('planner version 1.4.0', () => {
+    expect(plannerContent).toContain('template_version: "1.4.0"');
   });
 
   it('arch-testing version 1.4.0', () => {

@@ -44,7 +44,7 @@ All 9 peers: SendMessage(to="<agent-name>")  ← always reachable
 
 | Agent | Role | Joined | Used in |
 |-------|------|--------|---------|
-| context-provider | On-demand oracle: patterns, docs, rules | Session start | All phases |
+| context-provider | On-demand oracle: patterns, docs, rules, external library docs (Context7) | Session start | All phases |
 | doc-updater | CHANGELOG, docs, KDoc | Session start | Phase 2, 3 |
 | arch-testing | Test strategy, coverage, test gaming | Session start | Phase 2, 3 |
 | arch-platform | Source sets, Gradle, platform boundaries | Session start | Phase 2, 3 |
@@ -88,6 +88,8 @@ context-provider responds -> architect filters -> sends to dev
 ```
 
 This ensures architects validate every pattern before it reaches dev code.
+
+**External context path**: context-provider: internal miss -> Context7 lookup -> architect filters -> dev
 
 ## Dynamic Scaling
 
