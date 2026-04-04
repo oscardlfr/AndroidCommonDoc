@@ -588,6 +588,16 @@ Core dev agents (test-specialist, ui-specialist, domain-model-specialist, data-l
 
 Quality gate: `quality-gater` deliberates with all 3 persistent architects (Step 1.5) before running automated checks (`/pre-pr`, tests, coverage). Pattern validation chain: dev → architect → context-provider ensures architects gate every pattern query.
 
+### Context Provider Flow
+
+```
+Internal: project docs → context-provider → architect → dev
+External: Context7 MCP → context-provider → architect → dev
+Feedback: context-provider flags gap → PM → doc-updater → docs/
+```
+
+Context-provider checks internal sources first (MCP tools, local docs, memory). When internal docs lack coverage for a library or API, it falls back to Context7 MCP (`resolve-library-id` then `get-library-docs`). Any external-sourced answer is flagged for doc-updater to capture into L0 pattern docs, closing the knowledge gap automatically.
+
 ### Multi-Session Departments
 
 Different work types run in separate Claude Code sessions with dedicated leads:
