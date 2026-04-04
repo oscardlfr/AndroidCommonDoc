@@ -119,7 +119,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 | Skills | `.claude/skills/*/SKILL.md` | 58 |
 | Agents | `.claude/agents/*.md` | 37 |
 | Commands | `.claude/commands/*.md` | 52 |
-| **Total** | | **147 entries** |
+| **Total** | | **149 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -127,7 +127,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 147 L0 entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 149 L0 entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -553,40 +553,40 @@ Skills primarily useful when working on AndroidCommonDoc (L0) itself:
 
 ## 3-Phase Team Model
 
-Every non-trivial task flows through three sequential phases. Five **session team peers** in `session-{project-slug}` carry context across all three phases. Planner and quality-gater are temporary; the 5 core peers persist.
+Every non-trivial task flows through three sequential phases. Nine **session team peers** in `session-{project-slug}` carry context across phases: 5 spawned at session start + 4 core layer devs at Phase 2. Planner and quality-gater are temporary.
 
 ```
 Session start: TeamCreate("session-{project-slug}")
   context-provider, doc-updater, arch-testing, arch-platform, arch-integration
+Phase 2 start: +4 core devs
+  test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist
 
 Phase 1 — Planning               Phase 2 — Execution                Phase 3 — Quality Gate
 ┌─────────────────────┐          ┌──────────────────────────┐       ┌───────────────────────┐
-│ planner (temporary)  │          │ Session team peers:       │       │ quality-gater joins    │
-│ SendMessage to       │  ──→    │   arch-testing            │  ──→ │   session team         │
-│   context-provider   │          │   arch-platform           │       │ Consults architects    │
-│                      │          │   arch-integration        │       │                        │
-│ Output: .planning/   │          │   context-provider        │       │ Output: PASS / FAIL    │
-│   PLAN.md            │          │   doc-updater             │       └───────────────────────┘
-└─────────────────────┘          │                            │       FAIL → back to Phase 2
-                                 │ PM dispatches devs on      │       (max 3 retries → user)
-                                 │ demand via Agent() relay   │
-                                 └──────────────────────────┘
+│ planner (temporary)  │          │ 9 session team peers:     │       │ quality-gater joins    │
+│ SendMessage to       │  ──→    │   5 from session start    │  ──→ │   session team         │
+│   context-provider   │          │   +4 core devs (Phase 2)  │       │ Consults architects    │
+│                      │          │ Architects assign devs    │       │   and core devs         │
+│ Output: .planning/   │          │   via SendMessage          │       │ Output: PASS / FAIL    │
+│   PLAN.md            │          │ PM spawns extras on       │       └───────────────────────┘
+└─────────────────────┘          │   architect request       │       FAIL → back to Phase 2
+                                 └──────────────────────────┘       (max 3 retries → user)
 ```
 
 **Project Manager** orchestrates all 3 phases. PM NEVER writes code — assigns to architects, who manage devs and guardians.
 
 ### Agent Topology
 
-5 persistent session agents (spawned once, live until rotation):
+9 persistent session agents (5 at session start + 4 core devs at Phase 2):
 - `context-provider` — reads project state, answers queries from all agents
 - `doc-updater` — updates docs when agents request changes
 - `arch-testing` — verifies test quality, TDD compliance, coverage
 - `arch-platform` — verifies KMP patterns, source sets, expect/actual
 - `arch-integration` — verifies DI wiring, navigation, compilation
 
-Dev agents are disposable senior engineers — spawned by PM on architect request, execute, return result, die. They compile + Detekt before reporting done.
+Core dev agents (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) are persistent session team peers — spawned at Phase 2 start, accumulate layer knowledge across waves. Extra devs are disposable — spawned by PM on architect request, execute, return result, die.
 
-Quality gate: `quality-gater` deliberates with all 3 persistent architects (Step 1.5) before running automated checks (`/pre-pr`, tests, coverage). This prevents false positives and catches gaps that automated tooling alone would miss — an architect might know a test passes but coverage is shallow, or that an integration was deferred.
+Quality gate: `quality-gater` deliberates with all 3 persistent architects (Step 1.5) before running automated checks (`/pre-pr`, tests, coverage). Pattern validation chain: dev → architect → context-provider ensures architects gate every pattern query.
 
 ### Multi-Session Departments
 
@@ -994,7 +994,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (147 entries,    |   |
+                   |  | SKILL.md |    | (149 entries,    |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -1027,7 +1027,7 @@ AndroidCommonDoc/
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
 |   +-- */SKILL.md          # 58 canonical skill definitions
-|   +-- registry.json       # L0 registry (147 entries, SHA-256 hashes)
+|   +-- registry.json       # L0 registry (149 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/

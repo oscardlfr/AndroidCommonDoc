@@ -5,6 +5,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### BREAKING
+- **Dev dispatch model v5.0.0**: anonymous disposable devs replaced by persistent named layer devs as session team peers
+
+### Added
+- **9-peer session team**: 4 core devs (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) join at Phase 2 start alongside 5 existing peers
+- **Pattern validation chain**: dev -> architect -> context-provider. Devs NEVER contact context-provider directly
+- **Dynamic scaling**: architects request extra named devs from PM for overflow work (no team_name, die after verification)
+- **4 new dev templates**: test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist in `setup/agent-templates/` with Team Identity sections
+- **Core Dev Lifecycle**: persistent devs accumulate layer knowledge across waves (~210K tokens saved per session)
+
+### Fixed
+- **DawSync L2 cleanup**: 4 L0-internal agents removed, team topology/memory/placeholders fixed on 5 agents, 3 generic agents enriched
+
 ### Changed
 - **PM template v4.2.0**: `TeamCreate("session-{project-slug}")` replaces `TeamCreate("session")` — prevents agent suffix collisions (-2/-3) when multiple Claude Code sessions run simultaneously
 - **PM template v4.2.0**: `TeamCreate("planning-{project-slug}")` replaces `TeamCreate("planning")` — same collision fix for planning phase teams

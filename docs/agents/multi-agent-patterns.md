@@ -123,21 +123,25 @@ Orchestrators and architects as peers. Workers spawned on demand as sub-agents.
 
 **Key**: Peers need ongoing coordination (cross-verify, cross-dept requests). Sub-agents are workers — they receive task, execute, return.
 
-**Session team peers**: `context-provider`, `doc-updater`, and all 3 architects are added to `TeamCreate("session-{project-slug}")` at session start and stay alive across all phases. All agents reach them via `SendMessage(to="context-provider")`. See [Team Topology](team-topology.md).
+**Session team peers**: `context-provider`, `doc-updater`, and all 3 architects are added at session start; 4 core devs (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) join at Phase 2 start. All 9 stay alive across phases. See [Team Topology](team-topology.md).
 
-**3-Phase Model**: The default topology uses 3 sequential phases (Planning → Execution → Quality Gate) with 5 persistent session team peers carrying context across all three. Planner (Phase 1) and quality-gater (Phase 3) are temporary. See [Team Topology](team-topology.md) for the full model.
+**3-Phase Model**: The default topology uses 3 sequential phases (Planning → Execution → Quality Gate) with 9 persistent session team peers (5 at session start + 4 core devs at Phase 2). Planner and quality-gater are temporary. See [Team Topology](team-topology.md) for the full model.
 
 **Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies and PM-as-relay pattern.
 
 ### Architect Gate Pattern
 
-Between waves, architect peers cross-verify via `SendMessage`. They request dev work through PM (architects can't use Agent in in-process mode):
+Between waves, architect peers cross-verify via `SendMessage`. Core devs are persistent session team peers -- architects assign work directly via SendMessage:
 
-- **arch-testing**: TDD compliance, test quality — requests `test-specialist` via PM, uses `code-metrics` MCP tool
-- **arch-platform**: KMP patterns, dependency direction — requests `data-layer-specialist` via PM, uses `verify-kmp-packages`, `dependency-graph` MCP tools
-- **arch-integration**: compilation, DI wiring — requests `ui-specialist` via PM, uses `gradle-config-lint`, `setup-check` MCP tools
+- **arch-testing**: TDD compliance, test quality — manages `test-specialist`, `ui-specialist` via SendMessage
+- **arch-platform**: KMP patterns, dependency direction — manages `domain-model-specialist`, `data-layer-specialist` via SendMessage
+- **arch-integration**: compilation, DI wiring — manages `ui-specialist`, `data-layer-specialist` via SendMessage
 
-Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the PM re-plans (never codes the fix itself). Architects cross-verify via `SendMessage(to="arch-testing", summary="verify tests", message="Run /test on modules I modified")`. Dev dispatch goes through PM — see [Context Rotation Guide](context-rotation-guide.md) for the PM-as-relay pattern.
+**Pattern validation chain**: devs ask their architect for patterns; architects query context-provider. Devs NEVER contact context-provider directly.
+
+**Dynamic scaling**: when a core dev is busy, architects request extra devs from PM. Extras are named but have no team_name -- they die after architect verification.
+
+Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the PM re-plans (never codes the fix itself).
 
 ---
 
