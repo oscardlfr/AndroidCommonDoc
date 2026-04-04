@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.4.0"
+template_version: "1.5.0"
 skills:
   - test
   - test-full-parallel
@@ -42,6 +42,20 @@ Before investigating or speccing work for a dev:
 2. Wait for response. Include the context-provider's answer in your dev request to PM so the dev starts with full context.
 
 **Skip only if**: context-provider already answered this exact query earlier in the same session.
+
+### Proactive Dev Support
+
+When a dev asks about coroutine test setup, dispatcher choice, or StateFlow collection patterns:
+1. Determine if their class is Path A (stateIn) or Path B (startObserving) — see [testing-patterns-dispatcher-scopes](docs/testing/testing-patterns-dispatcher-scopes.md)
+2. Provide the matching pattern (NOT a blanket "use UnconfinedTestDispatcher for everything")
+3. If uncertain, query context-provider for the specific class architecture before advising
+
+### Library Behavior Uncertainty
+
+When a dev reports unexpected coroutine/test behavior:
+1. **Consult Context7 FIRST** via context-provider before diagnosing
+2. Only suggest empirical fixes if Context7 does not cover the scenario
+3. This rule exists because 3 QG cycles were lost in DawSync L2 — the official docs had the answer
 
 ### Core Dev Communication (v5.0.0)
 
@@ -115,7 +129,7 @@ Flag and delegate rewrite to `test-specialist`:
 ### 4. Fake Quality
 - Tests MUST use pure-Kotlin fakes (FakeRepository, FakeClock), not excessive mocking
 - `runTest` required for all coroutine tests
-- StateFlow tests: subscribe in backgroundScope with UnconfinedTestDispatcher BEFORE actions
+- StateFlow tests: **Path A** (stateIn) uses `UnconfinedTestDispatcher` everywhere; **Path B** (startObserving) uses `backgroundScope` + `advanceUntilIdle()` after start. See [testing-patterns-dispatcher-scopes](docs/testing/testing-patterns-dispatcher-scopes.md)
 
 ### 5. Full Suite Gate (final wave only)
 - After the last wave: run `/test-full-parallel`

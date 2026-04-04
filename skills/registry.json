@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generated": "2026-04-04T14:52:44.356Z",
-  "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
+  "generated": "2026-04-04T17:41:24.592Z",
+  "l0_root": "C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc",
   "entries": [
     {
       "name": "accessibility",
@@ -1361,7 +1361,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6f99542092d151bdddcd17b4262117fd78aad850b9b9c13b29770a88e13b127d",
+      "hash": "sha256:7f30b9b353396f33f2176f9bafabe03a083bed0a5bad7363e18afb6006035aed",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1377,7 +1377,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.3.0",
+        "template_version": "1.4.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1391,7 +1391,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6ab45a6e17de49e9e3b708bc1c4bdefe02196412e0204d61ee2ce81ba8bcbc02",
+      "hash": "sha256:a2d31589fe3b5be24ffb260e12a6f149be4975e7c0e8bcdc6a905fe6db68a930",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1406,7 +1406,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.3.0",
+        "template_version": "1.4.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1420,7 +1420,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:89df9c993ebb69d16e1a8468b8f0e9370c124b6c190eb01af142dde88e725ef7",
+      "hash": "sha256:be0541ba2f7d87205cce449925bc2934ad94fd179d35d767512d94d19281e4f8",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1435,7 +1435,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.4.0",
+        "template_version": "1.5.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -1588,7 +1588,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:42d71e92ea0d30c34d208e17b656a9f2139be491eb2983e2ed6af8c2557657e5",
+      "hash": "sha256:48d55854f1b3509bbb8bb03c8cc4f15638f5231d737fdb86983009b4dffcfbe5",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -1756,7 +1756,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:3b6f1c33f24b6baa6a2cc58c6b34e23636cdf04d0e3cb1dafdea3271e456c824",
+      "hash": "sha256:4b8d2db2342b7a704a59ec4a04fdb6a2fbbe060fb6203b4b42911e1425fc0e4e",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2087,7 +2087,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c617378cdc3f8ad6ba9c2d4172b1429cc7c0e3600e0812c36993eda4ec2c287d",
+      "hash": "sha256:ad6a0b3cd6cae8bc97882616fa3cf475dd8dae07ab1cc5b947a39c424225fd1b",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",

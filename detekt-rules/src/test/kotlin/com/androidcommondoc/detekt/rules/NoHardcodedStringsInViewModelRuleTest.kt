@@ -73,6 +73,46 @@ class NoHardcodedStringsInViewModelRuleTest {
     }
 
     @Test
+    fun `reports hardcoded string used as id argument`() {
+        val code = """
+            class ProfileViewModel : ViewModel() {
+                fun onProfileLoad() {
+                    _state.update { it.copy(id = "user-123") }
+                }
+            }
+        """.trimIndent()
+        val findings = rule.lint(code)
+        assertThat(findings).hasSize(1)
+        assertThat(findings[0].message).contains("StringResource")
+    }
+
+    @Test
+    fun `accepts string inside StringResource`() {
+        val code = """
+            class LoginViewModel : ViewModel() {
+                fun onError() {
+                    _state.update { LoginUiState.Error(StringResource("login_error")) }
+                }
+            }
+        """.trimIndent()
+        val findings = rule.lint(code)
+        assertThat(findings).isEmpty()
+    }
+
+    @Test
+    fun `accepts string inside UiText StringResource`() {
+        val code = """
+            class LoginViewModel : ViewModel() {
+                fun onError() {
+                    _state.update { LoginUiState.Error(UiText.StringResource("login_error")) }
+                }
+            }
+        """.trimIndent()
+        val findings = rule.lint(code)
+        assertThat(findings).isEmpty()
+    }
+
+    @Test
     fun `reports multiple hardcoded strings in same ViewModel`() {
         val code = """
             class OnboardingViewModel : ViewModel() {

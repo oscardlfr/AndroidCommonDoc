@@ -85,6 +85,7 @@ Write integration tests for every repository:
 - Fakes created for all new DataSource interfaces
 - No android.*/platform imports in `commonMain`
 - Koin module registered
+- Run `/test <module>` on every touched module — tests MUST pass before reporting done
 - arch-platform AND arch-integration have verified and APPROVED your work
 
 ## No "Pre-existing" Excuse

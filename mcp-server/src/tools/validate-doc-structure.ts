@@ -25,13 +25,14 @@ import type { PatternMetadata, RegistryEntry } from "../registry/types.js";
 const SKIP_DIRS = new Set(["archive", "images", ".git", "node_modules"]);
 
 /**
- * Approved category vocabulary (9 unified categories).
+ * Approved category vocabulary (20 unified categories).
  * Any category not in this set will be reported as a warning.
  */
 export const APPROVED_CATEGORIES = new Set([
   "agents",
   "api",
   "architecture",
+  "benchmarks",
   "compose",
   "data",
   "di",
@@ -83,6 +84,7 @@ export const SUBDIR_TO_CATEGORIES: Record<string, string[]> = {
   legal: ["product"],
   references: ["product"],
   ui: ["ui"],
+  benchmarks: ["benchmarks"],
 };
 
 /** Result of naming validation on a single file. */

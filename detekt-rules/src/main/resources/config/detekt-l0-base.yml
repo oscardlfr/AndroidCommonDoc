@@ -112,7 +112,19 @@ AndroidCommonDoc:
   NoTurbineRule:
     active: true
 
+  # UnconfinedTestDispatcher must not be injected into the class under test
+  NoUnconfinedTestDispatcherForClassScopeRule:
+    active: true
+
+  # startObserving() in tests requires advanceUntilIdle() or runCurrent()
+  RequireAdvanceUntilIdleAfterStartObservingRule:
+    active: true
+
   # ── Code quality ────────────────────────────────────────────────────
+  # IDs must reference constants, not string literals
+  RequireConstantIdsRule:
+    active: true
+
   # @Suppress annotations hide warnings — fix the root cause instead
   # Only suppressions in allowedSuppressions are permitted (KMP interop, etc.)
   # Projects can extend via their detekt.yml override

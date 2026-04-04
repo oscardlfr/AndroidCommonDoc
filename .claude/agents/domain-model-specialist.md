@@ -90,6 +90,7 @@ Write unit tests for every domain model:
 - All domain models have equality + copy tests
 - No android.*/platform imports in `commonMain` source
 - Repository interfaces defined (data layer will implement them)
+- Run `/test <module>` on every touched module — tests MUST pass before reporting done
 - arch-platform has verified and APPROVED your work
 
 ## No "Pre-existing" Excuse
