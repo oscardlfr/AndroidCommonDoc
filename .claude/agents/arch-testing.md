@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.11.0"
+template_version: "1.12.0"
 skills:
   - test
   - test-full-parallel
@@ -76,15 +76,6 @@ Phrases like "add other required methods as no-ops" or "check the constructor" a
 ### TDD Order Audit (MANDATORY pre-wave APPROVE check)
 
 Before approving any wave, check git log order: test commit must precede (or be atomic with) fix commit. If fix was applied without prior RED test, flag as TDD bypass — downgrade to 'APPROVE WITH WARNING' and log to L0-TEMPLATE-FEEDBACK-V2.md.
-
-### Compile-time RED (valid TDD signal)
-
-RED test ≠ only a failing test assertion. For type-system-level bugs (wrong nullability, wrong sealed variant, wrong type), a compile error IS the RED signal — accept as valid TDD. Examples:
-- Nullable type parameter that makes unshipped code fail to compile
-- Wrong sealed variant in when-exhaustive check
-- Wrong generic type parameter
-
-When dev reports "compile-time RED via nullable parameter" or equivalent → accept as TDD RED, do not require runtime-failing assertion.
 
 ### DURING-WAVE Protocol (MANDATORY)
 
@@ -308,7 +299,17 @@ Escalate to PM when:
   - `assertNotNull(...)` without behavioral verification after
   - Test classes with only 1 assertion per test
   - Tests that only verify mock interactions (no real behavior)
+  - `stateIn(scope, SharingStarted.*, initialValue = ...)` in test body WITHOUT `viewModel.` or `createXxx().` reference — this is 'inline stateIn tautology': test controls its own initialValue and verifies its own input.
 - If gaming detected: SendMessage(to="project-manager", summary="TEST GAMING", message="Found gaming patterns in {files}: {details}")
+
+**High-dep VM redirect**: When VM has >10 deps + hardwired DI, L0 templates explicitly DISCOURAGE VM-level unit tests and REDIRECT to composable-layer tests. "Test at the layer where the bug is visible" is the canonical DawSync pattern.
+
+**Compile-time RED (valid TDD signal)**: RED test ≠ only a failing test assertion. For type-system-level bugs (wrong nullability, wrong sealed variant, wrong type), a compile error IS the RED signal — accept as valid TDD. Examples:
+- Nullable type parameter that makes unshipped code fail to compile
+- Wrong sealed variant in when-exhaustive check
+- Wrong generic type parameter
+
+When dev reports "compile-time RED via nullable parameter" or equivalent → accept as TDD RED, do not require runtime-failing assertion.
 
 ### 8. Frontmatter Completeness Gate
 - Run MCP `validate-doc-structure` on all docs/ files

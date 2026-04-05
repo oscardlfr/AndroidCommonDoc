@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-05T18:25:58.643Z",
+  "generated": "2026-04-05T18:48:21.238Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1379,7 +1379,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.6.0",
+        "template_version": "1.9.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1408,7 +1408,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.6.0",
+        "template_version": "1.9.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1422,7 +1422,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:29738dc04298315ff5df8ee01a151ee21a77f640442b98af96f76a4224d9243d",
+      "hash": "sha256:4a05664b5d9abbff61ee6fc75594990019bec19886569cf79d8009a2b4702b1c",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1437,7 +1437,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.11.0",
+        "template_version": "1.12.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -1593,7 +1593,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b6dca02f3e472394af7eeb69842de41ca1433d20f5a7117a1bae0c15d3cdd794",
+      "hash": "sha256:94b464204ace84cd035c04dba3ac433fa2239853cf1a3ec9c20c19cc981b7abc",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -1609,7 +1609,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.3.0",
+        "template_version": "1.4.0",
         "memory": "project",
         "skills": [
           "test",
@@ -1764,7 +1764,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4fbf9439df11d394ee6cb7a8a85e8c47ced1f7532d461577e178a02b9492d093",
+      "hash": "sha256:8cb8f99e0aaa35c72dea7cbcecd71f40db9b3da1dc21316a5fef018a2b3c590e",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -1779,7 +1779,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.3.0",
+        "template_version": "1.4.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2098,7 +2098,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8af8d3e8d45e2525896d9cd8ebaa670a34412e76e8e569ec7cc89dac3c777b03",
+      "hash": "sha256:2ce8cc73da6edb0f870cd3b164e9e3bda8e8ba1623b19fdd52e4f7a5582d4412",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
@@ -2114,7 +2114,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "5.1.0",
+        "template_version": "5.2.0",
         "memory": "project",
         "skills": [
           "pre-pr",
@@ -2309,7 +2309,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:3efc279fb01be890151d12c67aaa46e04e3b0a09defd67b994cc1174fc925927",
+      "hash": "sha256:f5688b5d757ff4aeb176ed6bacf4a772530f811f6d93a7369c2df0d99408d8fc",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2324,7 +2324,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.4.0",
+        "template_version": "1.5.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2346,7 +2346,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:2b2843a1db8e1786cff133f1ae52a5d1c3b61d485825f94bae56c6c21144bf9d",
+      "hash": "sha256:1c2ebc3a4bac6fcf377542b4f488941e3877dbca274b3c7651edd0bc0a074cbb",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2361,7 +2361,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.4.0",
+        "template_version": "1.5.0",
         "memory": "project",
         "skills": [
           "accessibility",

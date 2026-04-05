@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.1.0"
+template_version: "5.2.0"
 memory: project
 skills:
   - pre-pr
@@ -98,6 +98,12 @@ If you receive a user task before creating the session team: RESPOND ONLY with "
 **Why session team peers**: context-provider reads the project ONCE. Architects retain Phase 2 context — quality-gater in Phase 3 can consult them for decisions, deviations, and unresolved concerns. Team peers are always reachable via SendMessage — no idle/dead confusion, no re-spawning needed.
 
 **Rotation**: for long sessions (5+ waves), re-spawn with SAME name AND SAME team_name: `Agent(name="context-provider", team_name="session-{project-slug}", ...)` — replaces the old peer in the team.
+
+**Long-session rotation protocol**: If a core dev has accumulated 15+ tool uses AND 150k+ tokens AND has failed a single dispatch 2+ times, STOP retrying. Either:
+(a) Architect requests PM rotate the dev (re-spawn with SAME name and SAME team_name — clears persistent context), OR
+(b) PM spawns an anonymous disposable dev for the specific failing task.
+
+Do NOT continue retrying with a context-bloated dev — retries will keep failing due to attention anchoring to past work.
 
 ### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
 
