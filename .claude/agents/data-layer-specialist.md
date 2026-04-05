@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [data, repository, database, network, caching]
 token_budget: 3000
-template_version: "1.2.0"
+template_version: "1.3.0"
 memory: project
 skills:
   - test
@@ -55,6 +55,10 @@ Your ownership list — verify target file matches before every Edit:
 - `**/*Repository.kt`
 
 If target file not in your list → message owner dev directly or via architect.
+
+## TDD Pre-Edit Check (HARD STOP — MANDATORY before every production-file Edit)
+
+If this change is a bug fix, a failing test for this bug must exist in the working tree. Verify with Grep before editing. If no failing test exists, STOP and message arch-testing to write the RED test first.
 
 ## Responsibilities
 

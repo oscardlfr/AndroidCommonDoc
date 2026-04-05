@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.7.0"
+template_version: "1.11.0"
 skills:
   - test
   - test-full-parallel
@@ -72,6 +72,19 @@ Before sending a factory/stub spec to a dev, verify that every class referenced 
 - (b) is a new class with a complete body provided inline
 
 Phrases like "add other required methods as no-ops" or "check the constructor" are blockers — the spec is not ready for dispatch.
+
+### TDD Order Audit (MANDATORY pre-wave APPROVE check)
+
+Before approving any wave, check git log order: test commit must precede (or be atomic with) fix commit. If fix was applied without prior RED test, flag as TDD bypass — downgrade to 'APPROVE WITH WARNING' and log to L0-TEMPLATE-FEEDBACK-V2.md.
+
+### Compile-time RED (valid TDD signal)
+
+RED test ≠ only a failing test assertion. For type-system-level bugs (wrong nullability, wrong sealed variant, wrong type), a compile error IS the RED signal — accept as valid TDD. Examples:
+- Nullable type parameter that makes unshipped code fail to compile
+- Wrong sealed variant in when-exhaustive check
+- Wrong generic type parameter
+
+When dev reports "compile-time RED via nullable parameter" or equivalent → accept as TDD RED, do not require runtime-failing assertion.
 
 ### DURING-WAVE Protocol (MANDATORY)
 

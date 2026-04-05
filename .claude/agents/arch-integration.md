@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
-template_version: "1.6.0"
+template_version: "1.9.0"
 skills:
   - test
   - extract-errors
