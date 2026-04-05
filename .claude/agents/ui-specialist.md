@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [compose, ui, accessibility, material3]
 token_budget: 3000
-template_version: "1.0.0"
+template_version: "1.1.0"
 memory: project
 skills:
   - accessibility
@@ -73,6 +73,8 @@ Review and fix Compose UI code for KMP project patterns.
 - Tests verify all UiState renders: Loading, Success (empty + data), Error
 - Tests verify user interactions trigger correct callbacks
 - Tests verify semantic nodes for accessibility
+- For dispatcher-scope handling in Compose tests (StateFlow subscription timing, UnconfinedTestDispatcher), see `docs/testing/testing-patterns-dispatcher-scopes.md`
+- For fake construction in Compose tests (no MockK), see `docs/testing/testing-patterns-fakes.md`
 
 ## Workflow
 1. Find `.kt` files in UI source sets (Compose screens, components) and design system modules

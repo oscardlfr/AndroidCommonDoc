@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generated": "2026-04-04T19:41:27.503Z",
-  "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
+  "generated": "2026-04-05T11:17:56.506Z",
+  "l0_root": "C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc",
   "entries": [
     {
       "name": "accessibility",
@@ -701,7 +701,7 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:35719bb2d0fa13c24c2ebb605f62218bebcfab625acc75bc2ef8a458d9f699bb",
+      "hash": "sha256:afd54809522bbc2ad9a1264832611581eb8d7ec49b86ecac28519e83ecd107a9",
       "dependencies": [
         "scripts/sh/rehash-registry.sh"
       ],
@@ -1324,7 +1324,8 @@
           "compare",
           "tradeoff",
           "library"
-        ]
+        ],
+        "token_budget": 2000
       }
     },
     {
@@ -1348,6 +1349,7 @@
           "timeout",
           "http"
         ],
+        "token_budget": 2000,
         "memory": "project",
         "skills": [
           "validate-patterns"
@@ -1361,7 +1363,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7f30b9b353396f33f2176f9bafabe03a083bed0a5bad7363e18afb6006035aed",
+      "hash": "sha256:e7e210717decbc8f5a03c3c28a7910ada1e868d468c68639f3d5fced703abef0",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1377,7 +1379,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.4.0",
+        "template_version": "1.6.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1391,7 +1393,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a2d31589fe3b5be24ffb260e12a6f149be4975e7c0e8bcdc6a905fe6db68a930",
+      "hash": "sha256:6f12256645e98daa5da7b6ca40b2af9662841fa38e7f003e14ba838d774fbf51",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1406,7 +1408,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.4.0",
+        "template_version": "1.6.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1420,7 +1422,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:ea3cc0b16f04580f7de222db3c741f8ffd7928b158d1d2063adb2d38dbd0c51d",
+      "hash": "sha256:ecedfb431f5f0d47a6e215f2eceb74faa1e51aff933f081fe35e4a32ea1ec815",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1435,7 +1437,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.5.0",
+        "template_version": "1.7.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -1464,6 +1466,7 @@
           "launch",
           "onboarding"
         ],
+        "token_budget": 3000,
         "memory": "project",
         "skills": [
           "pre-release",
@@ -1493,6 +1496,7 @@
           "structure",
           "inventory"
         ],
+        "token_budget": 2000,
         "skills": [
           "map-codebase"
         ]
@@ -1571,6 +1575,7 @@
           "sourceset",
           "kmp"
         ],
+        "token_budget": 2500,
         "memory": "project",
         "optional_capabilities": [
           "context7",
@@ -1635,6 +1640,7 @@
           "crash",
           "exception"
         ],
+        "token_budget": 2500,
         "skills": [
           "test",
           "extract-errors"
@@ -1662,6 +1668,7 @@
           "alignment",
           "stale"
         ],
+        "token_budget": 2000,
         "memory": "project",
         "skills": [
           "audit-docs",
@@ -1690,6 +1697,7 @@
           "doc-code",
           "pattern"
         ],
+        "token_budget": 2000,
         "memory": "project"
       }
     },
@@ -1828,6 +1836,7 @@
           "quality-gate",
           "wave"
         ],
+        "token_budget": 4000,
         "memory": "project"
       }
     },
@@ -1852,6 +1861,7 @@
           "hub",
           "frontmatter"
         ],
+        "token_budget": 3000,
         "memory": "project",
         "optional_capabilities": [
           "mcp-gsd",
@@ -2020,6 +2030,7 @@
           "data",
           "analytics"
         ],
+        "token_budget": 2000,
         "memory": "project",
         "skills": [
           "validate-patterns"
@@ -2087,7 +2098,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:3345752f6b8095f64054b8eaa8ec9ba6e367beffe974106cca3f980ee142befb",
+      "hash": "sha256:8af8d3e8d45e2525896d9cd8ebaa670a34412e76e8e569ec7cc89dac3c777b03",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
@@ -2103,7 +2114,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "5.0.0",
+        "template_version": "5.1.0",
         "memory": "project",
         "skills": [
           "pre-pr",
@@ -2133,6 +2144,7 @@
           "consistency",
           "validators"
         ],
+        "token_budget": 3000,
         "memory": "project"
       }
     },
@@ -2183,6 +2195,7 @@
           "deploy",
           "secrets"
         ],
+        "token_budget": 2000,
         "memory": "project",
         "skills": [
           "sbom",
@@ -2211,7 +2224,8 @@
           "explore",
           "domain",
           "learn"
-        ]
+        ],
+        "token_budget": 2000
       }
     },
     {
@@ -2235,6 +2249,7 @@
           "sh",
           "script"
         ],
+        "token_budget": 2000,
         "memory": "project"
       }
     },
@@ -2259,6 +2274,7 @@
           "alignment",
           "command"
         ],
+        "token_budget": 2000,
         "memory": "project"
       }
     },
@@ -2282,6 +2298,7 @@
           "sync",
           "copilot"
         ],
+        "token_budget": 2500,
         "memory": "project"
       }
     },
@@ -2292,7 +2309,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:a3a146dce8d34e223cb50e08334a2bf4e5961f689751a8ab3f18d67e86926dd2",
+      "hash": "sha256:3db38cf2690cfbaab7e0582b43c9a17478590d0d9f326c54cb04b1593f444708",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2307,7 +2324,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2329,7 +2346,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:6c659da91fe47359c012dc5379ed328c2cc9a9f7b059a0efd18617a09dcdc3e5",
+      "hash": "sha256:747946145b3dd04c0fb5b8174f18c3cde027789b74e8bcf1b7fffdc7d4f82cb5",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2344,7 +2361,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "memory": "project",
         "skills": [
           "accessibility",
@@ -2374,6 +2391,7 @@
           "goal",
           "check"
         ],
+        "token_budget": 2000,
         "model": "sonnet",
         "skills": [
           "verify",

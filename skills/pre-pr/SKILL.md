@@ -118,6 +118,19 @@ fi
 Outdated critical deps (major/minor bumps) --> WARNING (reports for visibility).
 Does NOT block -- version updates are a separate task, not a PR gate.
 
+### Step 5.8 — Agent template tests
+
+Run Vitest integration tests when agent templates, .claude/agents/, or mcp-server sources changed:
+
+```bash
+if git diff --name-only "$BASE_SHA" HEAD | grep -qE '^(setup/agent-templates/|\.claude/agents/|mcp-server/)'; then
+  cd "$ANDROID_COMMON_DOC/mcp-server" && npm test
+  cd - > /dev/null
+fi
+```
+
+Failures BLOCK the PR. The integration suite enforces Wave 1 template rules (Edit-directly removal, NEVER-you-fix rows, Scope Validation Gate, DURING-WAVE Protocol, Exact Fix Format, Post-Wave Team Integrity, dual-location sync).
+
 ### Step 6 — Registry hash freshness
 
 ```bash
