@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generated": "2026-04-05T11:17:56.506Z",
-  "l0_root": "C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc",
+  "generated": "2026-04-05T14:36:25.032Z",
+  "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
       "name": "accessibility",
@@ -1363,7 +1363,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e7e210717decbc8f5a03c3c28a7910ada1e868d468c68639f3d5fced703abef0",
+      "hash": "sha256:0d1f7b08474bbe604494ff2104cf3c2a07816618befbc1a00f2cc716918a9891",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1393,7 +1393,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6f12256645e98daa5da7b6ca40b2af9662841fa38e7f003e14ba838d774fbf51",
+      "hash": "sha256:cb53b1e31df32c32b183decf76fb6320acf64b8e9f2ab57e4fa768c5266cddab",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1422,7 +1422,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:ecedfb431f5f0d47a6e215f2eceb74faa1e51aff933f081fe35e4a32ea1ec815",
+      "hash": "sha256:e4e8745ae458e08c9cb267090b370d1e317471b2b4abaa6c0e7771c9aba31273",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1536,7 +1536,7 @@
       "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:049cafd7186fffddcdc898c044eff1715d93d9711d1b5148aa0a5840b259dcb0",
+      "hash": "sha256:f357703c93120c6bde911b0413d314d2f291f1caae66a9d791a53d4020d41c1b",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -1593,7 +1593,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:48d55854f1b3509bbb8bb03c8cc4f15638f5231d737fdb86983009b4dffcfbe5",
+      "hash": "sha256:0ff1a0d93872e8f566229a78bba50f3763dd2bedf01263d742055a62de99a027",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -1609,7 +1609,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "memory": "project",
         "skills": [
           "test",
@@ -1764,7 +1764,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a1aefd3bcaaefd06a96a951a95906b513e8ae7049194d5c8fee1f57e43e96df1",
+      "hash": "sha256:7b578e01f5effd89e1173771134b32d2b38707df048221d4fadae99e1febeb12",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -1779,7 +1779,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "memory": "project",
         "skills": [
           "test",
@@ -1794,7 +1794,7 @@
       "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:645b3f79492d44fcd550a9a3ae32850e0199b7ff6f793d83b0b8cc2d8c3885f9",
+      "hash": "sha256:b54d6a7bf7c82a4aa1cea5d5362a61e9aaab70b4b44c036a399e6e2c5f05df22",
       "dependencies": [],
       "frontmatter": {
         "name": "{{DOMAIN}}-specialist",
@@ -1930,7 +1930,7 @@
       "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6017cfe5c4a088eb8c6f54d0e5d34e50f44634937a6656f7c10063f87172d3b4",
+      "hash": "sha256:025cb7e73fe304e1b4a5bb7a129dcb91482ef0ea0bee0a66884952ff4b4df5cd",
       "dependencies": [],
       "frontmatter": {
         "name": "module-lifecycle",
@@ -2309,7 +2309,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:3db38cf2690cfbaab7e0582b43c9a17478590d0d9f326c54cb04b1593f444708",
+      "hash": "sha256:fc6f122af6f12bc24b94ad96307abfc400052a4eef74f1b42ee26bb2ac4f908e",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2324,7 +2324,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.1.0",
+        "template_version": "1.2.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2346,7 +2346,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:747946145b3dd04c0fb5b8174f18c3cde027789b74e8bcf1b7fffdc7d4f82cb5",
+      "hash": "sha256:bea49e0250391486aa19a368b67673e83d784deaa1271fb5c53c0b5be14560af",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2361,7 +2361,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.1.0",
+        "template_version": "1.2.0",
         "memory": "project",
         "skills": [
           "accessibility",
