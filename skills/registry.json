@@ -1536,7 +1536,7 @@
       "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f357703c93120c6bde911b0413d314d2f291f1caae66a9d791a53d4020d41c1b",
+      "hash": "sha256:049cafd7186fffddcdc898c044eff1715d93d9711d1b5148aa0a5840b259dcb0",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -1593,7 +1593,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:0ff1a0d93872e8f566229a78bba50f3763dd2bedf01263d742055a62de99a027",
+      "hash": "sha256:370f1c0fd5a752095e64d7b87ace9259c5da715f6d7a796c52374f051d50f117",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -1764,7 +1764,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7b578e01f5effd89e1173771134b32d2b38707df048221d4fadae99e1febeb12",
+      "hash": "sha256:5067b39f0ab770a6925079ccd3d235a58e892f2266abfb99c8101e3348ac821a",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -1794,7 +1794,7 @@
       "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b54d6a7bf7c82a4aa1cea5d5362a61e9aaab70b4b44c036a399e6e2c5f05df22",
+      "hash": "sha256:645b3f79492d44fcd550a9a3ae32850e0199b7ff6f793d83b0b8cc2d8c3885f9",
       "dependencies": [],
       "frontmatter": {
         "name": "{{DOMAIN}}-specialist",
@@ -1930,7 +1930,7 @@
       "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:025cb7e73fe304e1b4a5bb7a129dcb91482ef0ea0bee0a66884952ff4b4df5cd",
+      "hash": "sha256:6017cfe5c4a088eb8c6f54d0e5d34e50f44634937a6656f7c10063f87172d3b4",
       "dependencies": [],
       "frontmatter": {
         "name": "module-lifecycle",
@@ -2346,7 +2346,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:bea49e0250391486aa19a368b67673e83d784deaa1271fb5c53c0b5be14560af",
+      "hash": "sha256:639c4563a45c4cd0468280f945c855c8b400e916051a5966b3aa063462ba18fa",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
