@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-05T15:41:21.508Z",
+  "generated": "2026-04-05T18:06:59.267Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1363,7 +1363,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b4d6fdac0fc572ad0fb5aced1268aa4ee4e527e2ee01b7a6956c3d61c1ea9b1e",
+      "hash": "sha256:f80ab2192e9ff8cb6804fea73e0232cd7be9ac7fed6a4f740c42acb415bf5314",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1393,7 +1393,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:734f7d8c96e9c24e02fc0e540065b9c0d97cfa58d5ee795e7b33489bf56a42a4",
+      "hash": "sha256:4d3d776405c01fe3f55f710158f59a18269c5fb19721cad634e0efa8d7c0a2a6",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1422,7 +1422,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:b5efad1faca514ebfaf1753ba626a38e51a4c1ca2858eca723267154decab674",
+      "hash": "sha256:e250e97d9cad09b48e2c44a779095a2b721c9a1068a4cf3969f4293426cda4c5",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
