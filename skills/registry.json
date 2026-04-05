@@ -1734,7 +1734,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:86a774f148d5245144d47b9e659564440e7bae747e7aaced610e8dd6140ef509",
+      "hash": "sha256:d3c23b029873adb25f104598f4f067b66f8de54e2b9f07e89b6b995a7f3e77b2",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
