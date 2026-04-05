@@ -140,7 +140,7 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('template version 5.1.0', () => {
-    expect(content).toContain('template_version: "5.2.0"');
+    expect(content).toContain('template_version: "5.3.0"');
   });
 
   it('has dev dispatch protocol', () => {
