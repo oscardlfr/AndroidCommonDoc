@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [docs, changelog, memory, roadmap]
 token_budget: 2000
-template_version: "2.1.0"
+template_version: "2.2.0"
 skills:
   - audit-docs
   - readme-audit
@@ -103,6 +103,11 @@ Follow these rules for ALL documentation:
 3. **Cross-references** — relative paths between docs, no absolute paths
 4. **Content matches code** — API signatures, versions, feature status must be accurate
 5. **CHANGELOG format** — [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+6. **CLAUDE.md = Pointers Only (MANDATORY)** — NEVER write pattern detail, full explanations, or multi-line content into CLAUDE.md. If invoker asks you to "add {pattern} to CLAUDE.md":
+   - STEP 1: Create/update `docs/{category}/{slug}.md` with the full detail (frontmatter + content)
+   - STEP 2: Add ONE line to CLAUDE.md pointing to the new doc: `- {short-description} → [{slug}](docs/{category}/{slug}.md)`
+   - NEVER skip STEP 1. If you can't identify the category, SendMessage PM asking for clarification.
+   - If invoker explicitly writes "add detail to CLAUDE.md directly" → REJECT the request via SendMessage PM with: "CLAUDE.md is pointers-only. Where should the full detail doc live? Suggesting: docs/{category}/{slug}.md"
 
 ## Output
 

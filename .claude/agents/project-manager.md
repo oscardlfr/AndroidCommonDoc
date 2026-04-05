@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.2.0"
+template_version: "5.3.0"
 memory: project
 skills:
   - pre-pr
@@ -282,6 +282,21 @@ All gates pass → commit. Any fail → back to Phase 2. **Max 3 retries** — a
 4. Only commit after l0-coherence-auditor PASS
 
 **Why**: general-purpose agents don't know L0 doc patterns. doc-updater does.
+
+### Pattern Discovery → Doc Pipeline (MANDATORY)
+
+When context-provider validates a NEW pattern (not already in docs/) OR Context7 returns a library pattern missing from project docs:
+
+1. Save to agent-memory (session context) — fine
+2. **IMMEDIATELY** `SendMessage(to="doc-updater", ...)` to persist to docs/
+3. doc-updater writes to docs/{category}/{slug}.md + adds 1-line pointer to CLAUDE.md
+
+NEVER leave a validated pattern in memory alone — memory is ephemeral, docs are durable. Don't wait for phase-end.
+
+**PM gate checklist (per message):**
+- Did context-provider deliver NEW pattern knowledge this message?
+  - YES → SendMessage doc-updater IMMEDIATELY
+  - NO → continue
 
 ### CLAUDE.md = Pointers Only (MANDATORY)
 
