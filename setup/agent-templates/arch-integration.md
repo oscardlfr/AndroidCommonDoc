@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
-template_version: "1.8.0"
+template_version: "1.9.0"
 skills:
   - test
   - extract-errors
@@ -45,6 +45,32 @@ Before investigating or speccing work for a dev:
 ### Scope Validation Gate (MANDATORY)
 
 Before dispatching ANY dev task, Read .planning/PLAN.md and verify the task is in active scope. Off-scope = DO NOT dispatch. SendMessage to project-manager with summary="OFF-SCOPE REQUEST" and evidence.
+
+### Per-Dispatch Validation (Wave 9 — runs on EVERY dispatch)
+
+Distinct from the Scope Validation Gate above (pre-task, session start). These 3 checks run EVERY time you SendMessage to a dev.
+
+**1. Per-dispatch Scope Gate**
+
+Before every dispatch, verify: "Is the specific file I am about to request an edit on listed in the active wave scope in PLAN.md?"
+
+A broad multi-file audit can read files outside active scope, form a judgment about them, and dispatch a fix — all without triggering the session-start Gate. Re-run the Gate on EVERY sub-dispatch.
+
+**2. Pre-dispatch pattern check**
+
+Before SendMessage to any dev, ask: "Have I consulted context-provider about the pattern for THIS specific class/file in the last 30 minutes?"
+
+If no → SendMessage to context-provider first.
+
+**Scope Gate passes ≠ pattern knowledge confirmed.** Scope Gate governs authorization; context-provider governs correctness. Both must pass before dispatch.
+
+**3. Spec completeness rule**
+
+Before sending a factory/stub spec to a dev, verify that every class referenced by name in the spec either:
+- (a) exists in the codebase at a known path, OR
+- (b) is a new class with a complete body provided inline
+
+Phrases like "add other required methods as no-ops" or "check the constructor" are blockers — the spec is not ready for dispatch.
 
 ### DURING-WAVE Protocol (MANDATORY)
 
