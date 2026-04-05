@@ -42,3 +42,17 @@ coverage/
 !skills/coverage/
 .cache/
 tmp/
+
+# ── Session-local planning & feedback (not for sharing) ──
+.planning/
+
+# ── Local agent memory & settings (per-user) ──
+.claude/agent-memory/
+.claude/settings.local.json
+
+# ── Local caches & audit logs ──
+.androidcommondoc/upstream-cache/
+.androidcommondoc/audit-log.jsonl
+
+# ── Crash dumps ──
+*.stackdump
