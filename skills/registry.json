@@ -1536,7 +1536,7 @@
       "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f357703c93120c6bde911b0413d314d2f291f1caae66a9d791a53d4020d41c1b",
+      "hash": "sha256:049cafd7186fffddcdc898c044eff1715d93d9711d1b5148aa0a5840b259dcb0",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -1794,7 +1794,7 @@
       "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b54d6a7bf7c82a4aa1cea5d5362a61e9aaab70b4b44c036a399e6e2c5f05df22",
+      "hash": "sha256:645b3f79492d44fcd550a9a3ae32850e0199b7ff6f793d83b0b8cc2d8c3885f9",
       "dependencies": [],
       "frontmatter": {
         "name": "{{DOMAIN}}-specialist",
@@ -1930,7 +1930,7 @@
       "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:025cb7e73fe304e1b4a5bb7a129dcb91482ef0ea0bee0a66884952ff4b4df5cd",
+      "hash": "sha256:6017cfe5c4a088eb8c6f54d0e5d34e50f44634937a6656f7c10063f87172d3b4",
       "dependencies": [],
       "frontmatter": {
         "name": "module-lifecycle",
