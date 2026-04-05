@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.6.0"
+template_version: "1.9.0"
 skills:
   - verify-kmp
   - validate-patterns
