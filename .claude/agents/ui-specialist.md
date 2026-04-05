@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [compose, ui, accessibility, material3]
 token_budget: 3000
-template_version: "1.4.0"
+template_version: "1.5.0"
 memory: project
 skills:
   - accessibility
@@ -37,6 +37,12 @@ Before each Edit tool call:
 2. Verify target bug is in CURRENT wave assignment (check `.planning/PLAN.md`)
 3. If either check fails → Edit is FORBIDDEN
 4. Ask architect for scope expansion before any edit
+
+## File-Path Confirmation (HARD STOP — MANDATORY on every Edit)
+
+**Pre-Edit file-path confirmation**: Before ANY Edit call, echo the target file path in your response. Compare byte-for-byte against the file path in the original dispatch. If they differ by even one character, STOP — ask architect for clarification. Do NOT 'correct' the path using context or similar files. Use the dispatch path verbatim. If the dispatched file doesn't exist, STOP and report the gap — do NOT redirect to a similar existing file.
+
+**Post-Edit verification echo** (prevents reporting drift): After any Edit call, Read the file you just modified to confirm the change is present. In your task report, state verbatim: 'Edit applied to: <exact-path>. Verified via Read: <grep confirmation or line count delta>.' This catches the case where Edit succeeded but the dev's post-action context drifts to a different (recently-worked-on) file when reporting results.
 
 ## Revert Compliance Protocol (HARD STOP)
 

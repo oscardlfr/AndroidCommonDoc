@@ -140,7 +140,7 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('template version 5.1.0', () => {
-    expect(content).toContain('template_version: "5.1.0"');
+    expect(content).toContain('template_version: "5.2.0"');
   });
 
   it('has dev dispatch protocol', () => {
@@ -226,7 +226,7 @@ describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
   it('template version 1.11.0', () => {
-    expect(archContent).toContain('template_version: "1.11.0"');
+    expect(archContent).toContain('template_version: "1.12.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -827,7 +827,7 @@ describe('architect templates — PRE-TASK protocol', () => {
   });
 
   it('arch-testing version 1.11.0', () => {
-    expect(testingContent).toContain('template_version: "1.11.0"');
+    expect(testingContent).toContain('template_version: "1.12.0"');
   });
 });
 

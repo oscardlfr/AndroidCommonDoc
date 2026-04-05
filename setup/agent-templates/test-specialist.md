@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.4.0"
+template_version: "1.5.0"
 memory: project
 skills:
   - test
@@ -42,6 +42,12 @@ Before each Edit tool call:
 2. Verify target bug is in CURRENT wave assignment (check `.planning/PLAN.md`)
 3. If either check fails → Edit is FORBIDDEN
 4. Ask architect for scope expansion before any edit
+
+## File-Path Confirmation (HARD STOP — MANDATORY on every Edit)
+
+**Pre-Edit file-path confirmation**: Before ANY Edit call, echo the target file path in your response. Compare byte-for-byte against the file path in the original dispatch. If they differ by even one character, STOP — ask architect for clarification. Do NOT 'correct' the path using context or similar files. Use the dispatch path verbatim. If the dispatched file doesn't exist, STOP and report the gap — do NOT redirect to a similar existing file.
+
+**Post-Edit verification echo** (prevents reporting drift): After any Edit call, Read the file you just modified to confirm the change is present. In your task report, state verbatim: 'Edit applied to: <exact-path>. Verified via Read: <grep confirmation or line count delta>.' This catches the case where Edit succeeded but the dev's post-action context drifts to a different (recently-worked-on) file when reporting results.
 
 ## Revert Compliance Protocol (HARD STOP)
 
@@ -112,6 +118,16 @@ Before writing or modifying ANY test, consult the relevant pattern doc. ALL test
 | Benchmarks (JVM/Android, real Dispatchers.Default) | `docs/testing/testing-patterns-benchmarks.md` |
 
 **NEVER invent patterns.** If uncertain which doc applies, SendMessage to arch-testing.
+
+## High-Dep ViewModel Testing (MANDATORY)
+
+For ViewModels with 5+ constructor dependencies: NEVER write a test that constructs a local flow to mirror VM behavior. The test MUST instantiate the VM class directly (via a factory helper with stubs) and read the VM's actual property. If the VM has >5 deps, create a `createMinimal{ViewModelName}()` factory that stubs all non-focal deps with the simplest possible fakes. Do NOT substitute the VM instantiation with a local flow that replays the production logic — this is test gaming.
+
+When VM has >10 deps + hardwired DI, explicitly DISCOURAGE VM-level unit tests and REDIRECT to composable-layer tests. Document "test at the layer where the bug is visible" as canonical pattern.
+
+BUG 4 used **compile-time RED** via nullable type parameter — stronger than runtime RED. TDD discipline preserved structurally. 3-state GREEN tests verify null/false/true rendering post-fix. Accepted as valid TDD pattern for cases where runtime RED is architecturally infeasible (high-dep VMs + hardwired DI).
+
+**L0 implication**: Template explicitly recognizes compile-gate RED as a valid TDD signal. Current template implies RED = a failing test assertion. For type-system-level bugs (wrong nullability, wrong sealed variant, wrong type), a compile error IS the RED signal and should be accepted as such by arch-testing.
 
 ---
 
