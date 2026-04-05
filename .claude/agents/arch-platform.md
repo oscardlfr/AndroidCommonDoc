@@ -94,22 +94,10 @@ PM spawns an extra named dev (no team_name) — it executes, returns result to P
 
 ### Cross-Architect Dev Delegation
 
-When you need work done by a dev that reports to a DIFFERENT architect (e.g., arch-platform requesting work from ui-specialist who reports to arch-testing):
-
-**Option A — Preferred (clean ownership):**
-SendMessage(to="arch-{owner}", summary="delegation request", message="I need {dev-name} to do {task}. Files: {list}. Evidence: {details}. Please dispatch and relay results.")
-The owning architect dispatches to their dev and relays the result back to you.
-
-**Option B — Fast track (with CC):**
-SendMessage(to="{dev-name}", summary="{task}", message="{details}")
-AND simultaneously: SendMessage(to="arch-{owner}", summary="CC: dispatched to {dev-name}", message="I sent {dev-name} task: {task}. Keeping you informed.")
-Use only when the owning architect is idle or the task is time-critical.
-
-**Option C — Last resort:**
-SendMessage(to="project-manager", summary="cross-arch conflict", message="Need {dev-name} (owned by arch-{owner}) for {task} but cannot reach arch-{owner}. Please resolve.")
-Use when Option A and B both fail after 2 attempts.
-
-**Default is Option A.** Bypassing the owning architect creates invisible work and breaks the validation chain.
+When architect X identifies a blocker in architect Y's domain:
+- **Option A (preferred):** SendMessage to architect Y requesting dev dispatch
+- **Option B (fast path):** SendMessage to Y's dev directly, CC architect Y
+- **Option C (LAST RESORT):** Notify PM — only when Y is unresponsive after 2 messages
 
 ### Exact Fix Format (MANDATORY)
 
