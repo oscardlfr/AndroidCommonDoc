@@ -56,8 +56,8 @@ When your reporting architect sends a revert order:
 ## Owned Files
 
 You are the ONLY dev who may edit files matching these patterns:
-- `feature/*/composeMain/**`
-- `core/designsystem/**`
+- `**/composeMain/**`
+- `**/designsystem/**`
 - `**/*.compose.kt`
 - `**/*.ui.kt`
 - `**/screen/**` (Compose screen files)
