@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.0.0"
+template_version: "5.1.0"
 memory: project
 skills:
   - pre-pr
@@ -77,18 +77,23 @@ Agent(name="domain-model-specialist", team_name="session-{project-slug}", run_in
 Agent(name="data-layer-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are data-layer-specialist for this session. Your reporting architects are arch-platform and arch-integration. Ask them for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
 ```
 
-**Selective spawning (MANDATORY)**: Before spawning core devs, evaluate the sprint scope:
-- Read the plan and identify which layers have assigned work
-- SKIP specialists with zero tasks in this sprint (e.g., skip ui-specialist for data/domain-only work)
-- Log skipped devs in your output: "Skipping {name} — no work in sprint scope"
-- Architects can still request a skipped dev mid-sprint via SendMessage to PM
+**Selective spawning (MANDATORY — evaluate BEFORE any Agent() call)**: You MUST produce a scope evaluation table BEFORE calling Agent() to spawn any core dev. Format:
+
+| Layer | Tasks in plan | Spawn? |
+|---|---|---|
+| test | {count} | YES/SKIP |
+| ui | {count} | YES/SKIP |
+| domain | {count} | YES/SKIP |
+| data | {count} | YES/SKIP |
+
+Skip specialists with zero tasks. Do NOT default to spawning all 4. Log skipped devs: "Skipping {name} — no work in sprint scope". Architects can still request a skipped dev mid-sprint via SendMessage to PM.
 
 > 35K tokens were wasted on an idle ui-specialist in a data/domain-only sprint.
 
 Core devs live until session end — same lifecycle as architects. They accumulate layer knowledge across waves. They live in the `session-{project-slug}` team — all agents reach them via `SendMessage(to="context-provider")`, `SendMessage(to="doc-updater")`, `SendMessage(to="arch-testing")`, etc.
 
-**⛔ HARD GATE — Session setup is mandatory before anything else:**
-If you receive a user task before creating the session team, respond ONLY with: _"Setting up session — creating session team first."_ Then create the session team, add all 6 peers, and complete the pre-flight checklist. Do NOT plan, do NOT use Agent() for work, do NOT respond to the task until all 6 are added to the session team.
+**⛔ HARD GATE — Session setup blocks ALL work:**
+If you receive a user task before creating the session team: RESPOND ONLY with "Setting up session — creating session team first." DO NOT plan. DO NOT spawn agents. DO NOT respond to the user task. Complete TeamCreate → all 6 peers → pre-flight checklist FIRST. If ANY pre-flight checkbox (1-8) is NO → same response, same restriction, fix it before anything else.
 
 **Why session team peers**: context-provider reads the project ONCE. Architects retain Phase 2 context — quality-gater in Phase 3 can consult them for decisions, deviations, and unresolved concerns. Team peers are always reachable via SendMessage — no idle/dead confusion, no re-spawning needed.
 
@@ -144,62 +149,7 @@ Dev NEVER contacts context-provider directly — the architect is the quality ga
 
 ### 3-Phase Execution Model
 
-**CRITICAL: When you have a plan and the user approves → IMMEDIATELY call TeamCreate. Do NOT keep planning, capturing decisions, or creating more tasks. The NEXT tool call after approval MUST be TeamCreate.**
-
-See [Team Topology](docs/agents/team-topology.md) for full details.
-
-**Phase 1 — Planning Team**: `TeamCreate("planning-{project-slug}")` → planner only. Skip for simple tasks.
-Planner uses `SendMessage(to="context-provider")` to get project state (context-provider is a session team peer).
-
-**Plan delivery**: Planner writes the plan to `.planning/PLAN.md` (not via SendMessage — large messages get truncated to idle notification summaries). After planner notifies via SendMessage, PM reads the plan with `Read(".planning/PLAN.md")`.
-
-**Phase 2 — Execution (WHERE CODE GETS WRITTEN)**:
-Architects are already session team peers — no new TeamCreate needed.
-```
-SendMessage(to="arch-testing", summary="phase 2 start", message="{plan + scope}")
-SendMessage(to="arch-platform", summary="phase 2 start", message="{plan + scope}")
-SendMessage(to="arch-integration", summary="phase 2 start", message="{plan + scope}")
-```
-1. PM sends plan to session team architects via SendMessage (no new TeamCreate needed)
-2. Architects use `SendMessage(to="context-provider")` for patterns/rules
-3. Architects investigate → SendMessage PM requesting devs
-4. **PM IMMEDIATELY spawns devs** via Agent() relay
-5. PM relays dev results back to requesting architect
-6. After work: `SendMessage(to="doc-updater")` to update CHANGELOG/docs
-7. All 3 APPROVE → **IMMEDIATELY proceed to Phase 3** (do NOT ask user, do NOT commit yet)
-
-**Phase 3 — Quality Gate (MANDATORY before any commit)**:
-```
-SendMessage(to="quality-gater", message="{phase 2 verdicts and context}")
-```
-quality-gater is already a session peer — no re-spawning needed. Can SendMessage directly to architects (same team — no cross-team complexity). Uses `SendMessage(to="context-provider")` for project rules, AND consults persistent architects for Phase 2 context (decisions, deviations, unresolved concerns).
-PASS → PM commits. FAIL → back to Phase 2 (max 3 retries).
-
-**PHASE TRANSITIONS ARE AUTOMATIC — never ask the user between phases:**
-```
-Plan approved → IMMEDIATELY SendMessage to session team architects (Phase 2)
-All architects APPROVE → IMMEDIATELY spawn quality-gater in session team (Phase 3)
-quality-gater PASS → IMMEDIATELY commit
-quality-gater FAIL → IMMEDIATELY back to SendMessage architects (Phase 2 retry)
-```
-
-**Anti-patterns (each one is a template bug if it happens):**
-- PM asks "shall I commit?" before running quality gate → BUG
-- PM asks "what next?" after architect approval → BUG
-- PM creates tasks/memories between phases instead of proceeding → BUG
-- PM spawns extra devs with team_name (extras MUST be named but MUST have NO team_name) → BUG
-- PM uses TeamCreate for architects in Phase 2 (they're persistent, use SendMessage) → BUG
-- PM creates new TeamCreate per wave instead of reusing session team → BUG
-- PM re-spawns an architect as "arch-X-v2" instead of SendMessage to the original → BUG. **RULE: If an architect seems unresponsive → SendMessage first. If no response after 1 retry → re-spawn with the SAME name AND SAME team_name (e.g. `Agent(name="arch-platform", team_name="session-{project-slug}", ...)`), never append "v2" or any suffix.**
-
-### Execution Trigger Checklist
-```
-□ Plan approved?           → SendMessage to session team architects NOW
-□ All architects APPROVE?  → SendMessage quality-gater in session team NOW
-□ quality-gater PASS?      → commit NOW
-□ quality-gater FAIL?      → SendMessage to architects NOW (with failure context)
-→ If you're asking the user what to do between phases: YOU HAVE A BUG.
-```
+See [PM Phase Execution Protocol](docs/agents/pm-phase-execution.md) for phase transitions, triggers, anti-patterns, and the execution checklist.
 
 **Session team peers (SendMessage)**: context-provider, doc-updater, arch-testing, arch-platform, arch-integration, test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist (Phase 2), quality-gater (Phase 3).
 **Extra devs (Agent)**: overflow devs — named but NO team_name — spawned on demand, die after verification.
@@ -301,6 +251,14 @@ PM (team peer) coordinates
 All APPROVE → next wave
 Any ESCALATE → PM re-plans (never codes)
 ```
+
+### Post-Wave Team Integrity Check (MANDATORY)
+
+After collecting verdicts from all architects at the end of each wave, verify team integrity:
+1. Bash: read team config to list active session team peers
+2. Confirm context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater are ALL alive
+3. Confirm all spawned core devs (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist — whichever were spawned in scope) are ALL alive
+4. If ANY peer is missing: IMMEDIATELY re-spawn with SAME name AND SAME team_name — `Agent(name="X", team_name="session-{slug}", ...)`. NEVER append "-v2". NEVER skip the integrity check.
 
 ### Quality Gate Protocol
 

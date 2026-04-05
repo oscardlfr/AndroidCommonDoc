@@ -63,7 +63,6 @@ describe('project-manager template — 3-phase model', () => {
 
   it('describes Planning Team phase', () => {
     expect(content).toMatch(/Planning Team/);
-    expect(content).toMatch(/planner.*context-provider/i);
   });
 
   it('describes Execution phase with persistent architects', () => {
@@ -140,8 +139,8 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 5.0.0', () => {
-    expect(content).toContain('template_version: "5.0.0"');
+  it('template version 5.1.0', () => {
+    expect(content).toContain('template_version: "5.1.0"');
   });
 
   it('has dev dispatch protocol', () => {
@@ -187,13 +186,28 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toContain('SAME name AND SAME team_name');
   });
 
+  it('has Session Team Setup section', () => {
+    expect(content).toMatch(/Session Team Setup/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3a. PM Phase Execution sub-doc (extracted from project-manager.md)
+// ---------------------------------------------------------------------------
+describe('pm-phase-execution sub-doc — extracted phase protocol', () => {
+  const content = fs.readFileSync(
+    path.join(ROOT, 'docs/agents/pm-phase-execution.md'),
+    'utf-8'
+  );
+
+  it('describes Planning Team phase with planner + context-provider', () => {
+    expect(content).toMatch(/Planning Team/);
+    expect(content).toMatch(/planner.*context-provider/i);
+  });
+
   it('anti-pattern arch-X-v2 is documented with correction', () => {
     expect(content).toContain('arch-X-v2');
     expect(content).toContain('SAME name AND SAME team_name');
-  });
-
-  it('has Session Team Setup section', () => {
-    expect(content).toMatch(/Session Team Setup/);
   });
 
   it('references .planning/PLAN.md for plan file delivery', () => {
@@ -211,8 +225,8 @@ describe('project-manager template — 3-phase model', () => {
 describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
-  it('template version 1.5.0', () => {
-    expect(archContent).toContain('template_version: "1.5.0"');
+  it('template version 1.7.0', () => {
+    expect(archContent).toContain('template_version: "1.7.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -255,12 +269,12 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
   });
 
-  it('arch-platform has template version 1.4.0', () => {
-    expect(platformContent).toContain('template_version: "1.4.0"');
+  it('arch-platform has template version 1.6.0', () => {
+    expect(platformContent).toContain('template_version: "1.6.0"');
   });
 
-  it('arch-integration has template version 1.4.0', () => {
-    expect(integrationContent).toContain('template_version: "1.4.0"');
+  it('arch-integration has template version 1.6.0', () => {
+    expect(integrationContent).toContain('template_version: "1.6.0"');
   });
 });
 
@@ -812,8 +826,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toContain('template_version: "1.4.0"');
   });
 
-  it('arch-testing version 1.5.0', () => {
-    expect(testingContent).toContain('template_version: "1.5.0"');
+  it('arch-testing version 1.7.0', () => {
+    expect(testingContent).toContain('template_version: "1.7.0"');
   });
 });
 

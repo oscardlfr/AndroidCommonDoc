@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.0.0"
+template_version: "1.1.0"
 memory: project
 skills:
   - test
@@ -62,7 +62,26 @@ If `monitor-sources` MCP tool is available (`mcp-monitor`):
 
 **Why:** Scripts handle Windows file locks, daemon management, Kover fallbacks, RTK token optimization, and parallel execution. Direct Gradle calls skip all of this and waste tokens on verbose output.
 
-**Only use `./gradlew` directly** as absolute last resort if the skill/script is broken.
+**NEVER use `./gradlew` directly.** If a skill or script appears broken, SendMessage to arch-testing with the failure — do not bypass. Bypassing skills defeats Windows lock handling, Kover fallbacks, and RTK optimization, and masks bugs in the skill layer.
+
+---
+
+## Consult Before Writing Tests (MANDATORY)
+
+Before writing or modifying ANY test, consult the relevant pattern doc. ALL testing patterns live under `docs/testing/`:
+
+| Topic | Doc |
+|-------|-----|
+| Overview & navigation | `docs/testing/testing-hub.md` |
+| General test patterns | `docs/testing/testing-patterns.md` |
+| Coroutines (runTest, flows, Turbine-free) | `docs/testing/testing-patterns-coroutines.md` |
+| Fakes vs mocks (no MockK in commonTest) | `docs/testing/testing-patterns-fakes.md` |
+| Schedulers (testDispatcher injection) | `docs/testing/testing-patterns-schedulers.md` |
+| Dispatcher scopes (StateFlow subscription timing) | `docs/testing/testing-patterns-dispatcher-scopes.md` |
+| Coverage (Kover, meaningful coverage) | `docs/testing/testing-patterns-coverage.md` |
+| Benchmarks (JVM/Android, real Dispatchers.Default) | `docs/testing/testing-patterns-benchmarks.md` |
+
+**NEVER invent patterns.** If uncertain which doc applies, SendMessage to arch-testing.
 
 ---
 
@@ -93,13 +112,16 @@ Ask yourself: "If I broke the implementation, would this test catch it?" If no, 
 ## Test Pyramid — All Layers Required
 
 ### 1. Unit Tests (every module)
-- All coroutine tests use `runTest {}` (never `runBlocking`)
-- Fakes over mocks (`FakeRepository`, `FakeClock`, `FakeDataSource`)
-- No Turbine — use `.first()`, `.take(n)`, `backgroundScope` collection
-- StateFlow subscribers created BEFORE actions with `UnconfinedTestDispatcher(testScheduler)` in backgroundScope
-- `testDispatcher` injected into ViewModels and UseCases — never hardcode `Dispatchers.*` (exception: benchmarks)
-- Test names: `methodName_condition_expectedResult` or descriptive backtick names
-- Each test has isolated database (`TestDatabaseFactory` with `IN_MEMORY`)
+- All coroutine tests MUST use `runTest {}` (never `runBlocking`) — see `docs/testing/testing-patterns-coroutines.md`
+- Fakes over mocks (`FakeRepository`, `FakeClock`, `FakeDataSource`) — see `docs/testing/testing-patterns-fakes.md`
+- No Turbine — two patterns only:
+  - **Path A (terminal assertion)**: `flow.first()` / `flow.take(n).toList()` — when asserting a single snapshot or fixed count
+  - **Path B (continuous observation)**: `backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { flow.collect { states.add(it) } }` — when driving state through multiple transitions
+  - See `docs/testing/testing-patterns-coroutines.md` for selection rules
+- StateFlow subscribers MUST be created BEFORE actions with `UnconfinedTestDispatcher(testScheduler)` in backgroundScope — see `docs/testing/testing-patterns-dispatcher-scopes.md`
+- `testDispatcher` MUST be injected into ViewModels and UseCases — never hardcode `Dispatchers.*` (exception: benchmarks) — see `docs/testing/testing-patterns-schedulers.md`
+- Test names MUST follow: `methodName_condition_expectedResult` or descriptive backtick names
+- Each test MUST have isolated database (`TestDatabaseFactory` with `IN_MEMORY`)
 
 ### 2. Integration / E2E Tests (ALL core modules — MANDATORY)
 - **Model layer**: serialization/deserialization roundtrips (JSON, DB mapping), equality contracts

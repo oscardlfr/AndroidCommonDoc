@@ -636,6 +636,8 @@ See [Team Topology](docs/agents/team-topology.md) for full details.
 
 | Agent | Category | What It Does |
 |-------|----------|-------------|
+| `data-layer-specialist` | dev | Repositories, database, network, caching |
+| `domain-model-specialist` | dev | Domain models, use cases, business logic |
 | `test-specialist` | dev | Test compliance, coverage gaps, **test generation** |
 | `ui-specialist` | dev | Compose accessibility, Material3 — **audits and implements fixes** |
 | `api-rate-limit-auditor` | guardian | HTTP rate limiting, retry backoff, timeouts |
@@ -916,7 +918,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-15 domain hubs, 88+ sub-docs, 17 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+15 domain hubs, 88+ sub-docs, 16 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1097,7 +1099,7 @@ AndroidCommonDoc/
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
-+-- docs/                   # 15 hub docs, 88+ sub-docs, 17 guides, 12 agent workflow docs
++-- docs/                   # 15 hub docs, 88+ sub-docs, 16 guides, 12 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/

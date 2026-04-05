@@ -34,15 +34,22 @@ describe('dev template existence', () => {
 // 2. Each dev template has template_version in frontmatter
 // ---------------------------------------------------------------------------
 describe('dev template structure — template_version in frontmatter', () => {
+  const EXPECTED_VERSIONS: Record<string, string> = {
+    'test-specialist.md': '1.1.0',
+    'ui-specialist.md': '1.1.0',
+    'data-layer-specialist.md': '1.0.0',
+    'domain-model-specialist.md': '1.0.0',
+  };
+
   for (const template of DEV_TEMPLATES) {
     it(`${template} has template_version field`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
       expect(content).toMatch(/^template_version:/m);
     });
 
-    it(`${template} template_version is "1.0.0"`, () => {
+    it(`${template} template_version is "${EXPECTED_VERSIONS[template]}"`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
-      expect(content).toContain('template_version: "1.0.0"');
+      expect(content).toContain(`template_version: "${EXPECTED_VERSIONS[template]}"`);
     });
   }
 });

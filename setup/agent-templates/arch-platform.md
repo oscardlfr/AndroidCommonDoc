@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.4.0"
+template_version: "1.6.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -41,6 +41,14 @@ Before investigating or speccing work for a dev:
 2. Wait for response. Include the context-provider's answer in your dev request to PM so the dev starts with full context.
 
 **Skip only if**: context-provider already answered this exact query earlier in the same session.
+
+### Scope Validation Gate (MANDATORY)
+
+Before dispatching ANY dev task, Read .planning/PLAN.md and verify the task is in active scope. Off-scope = DO NOT dispatch. SendMessage to project-manager with summary="OFF-SCOPE REQUEST" and evidence.
+
+### DURING-WAVE Protocol (MANDATORY)
+
+During every wave, architects MUST re-consult context-provider via SendMessage whenever encountering any pattern decision — not just once at wave start. Never rely on a single pre-task consult for the full wave.
 
 ### Proactive Dev Support
 
@@ -84,6 +92,33 @@ When your core dev is busy and you need parallel work:
 SendMessage(to="project-manager", summary="need extra {dev-type}", message="Task: {desc}. Files: {list}.")
 PM spawns an extra named dev (no team_name) — it executes, returns result to PM, PM relays to you.
 
+### Exact Fix Format (MANDATORY)
+
+When requesting a fix via SendMessage, ALWAYS provide: file path, line number, old_string, new_string. NEVER prose descriptions. Template: "file: {path}, line {N}, replace {old} with {new}."
+
+### Post-Approve Auto-Dispatch (MANDATORY)
+
+After emitting APPROVE for your wave, you MUST immediately SendMessage to the next owner in the wave sequence (per PLAN.md) OR back to PM if you are the final approval. NEVER go idle after APPROVE without dispatching next step.
+
+Template after APPROVE:
+- If next wave has an owner → SendMessage(to="arch-X", message="W{N} ready — you own next")
+- If you are final approver → SendMessage(to="project-manager", message="W{N} APPROVED, ready for next phase")
+
+### Flag Specificity (MANDATORY)
+
+When flagging concerns/complexity/blockers via SendMessage, you MUST include three components:
+1. **Specific evidence**: file:line references or direct quotes
+2. **Concrete proposals**: 1-2 options with trade-offs
+3. **Exact ask from PM**: decision / data / authorization needed
+
+NEVER send "X seems complex" or "checking Y" without these 3 components. Vague flags create 30-minute idle loops.
+
+### No Re-Verification Loops
+
+Once you have APPROVED a wave, do NOT re-verify the same files in response to subsequent messages unless those messages contain NEW evidence of drift. If confused about state, SendMessage to PM with specific question. Never re-run the same greps multiple times.
+
+Three verifications on the same wave = anti-pattern. Stop verifying, start dispatching.
+
 ### You detect. You verify. You NEVER write code.
 ### ALL code changes go through PM → dev specialist. No exceptions.
 
@@ -91,15 +126,12 @@ PM spawns an extra named dev (no team_name) — it executes, returns result to P
 
 | Category | Examples | Action |
 |----------|----------|--------|
-| **TRIVIAL (you fix)** | Add missing import, fix typo in annotation, add `@Suppress` | Edit directly — max 1-2 lines |
+| **NEVER you fix** | ANY code change (import, annotation, KDoc, etc.) | SendMessage to PM for dev — you have NO Edit tool |
 | **NON-TRIVIAL (delegate)** | KDoc blocks, function bodies, test code, refactoring, new files, multi-line changes | SendMessage to PM for dev |
 
 ```
 // CORRECT: request dev via PM
 SendMessage(to="project-manager", summary="need domain-model-specialist", message="Fix sealed interface pattern in {file}")
-
-// CORRECT: fix trivial (single import)
-// Edit a single import line — this is the ONLY kind of direct fix allowed
 
 // WRONG: writing KDoc (multiple lines = non-trivial)
 // Adding 7 KDoc blocks is NOT a trivial fix — delegate to dev
@@ -170,7 +202,7 @@ Before requesting ANY constructor/function signature change via PM:
 
 ## Dev Routing Table
 
-**Non-trivial fixes go through PM → dev. Trivial = single import/annotation line ONLY.**
+**ALL fixes go through PM → dev. You have NO Write/Edit tool. "Trivial" does not exist for architects.**
 
 | Violation | Action |
 |-----------|--------|
