@@ -29,6 +29,11 @@
         "breaking": true,
         "note": "Move HARD GATE to line 19 (blockquote, immediately after identity sentence). Add git diff/show/log to FORBIDDEN actions as code-reading vectors. Resolve commit contradiction: PM orchestrates commits via architects, does not run git add/commit directly. Remove How to Start section (absorbed into identity line).",
         "migration": "L1/L2 projects must run /sync-l0 to pick up HARD GATE repositioning"
+      },
+      "5.7.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Add explicit planner spawn block to Planning Delegation section. Planner joins session team as named peer with subagent_type=Plan, enabling SendMessage to context-provider."
       }
     },
     "planner": {
@@ -200,6 +205,11 @@
         "date": "2026-04-05",
         "breaking": false,
         "note": "BUG-T2/T3/T4/T5/T6 fixes: escape hatch removal, strengthened MUST-language, added cross-refs, 5 surgical edits"
+      },
+      "1.6.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Added mandatory consultation rule: MUST report to arch-testing and wait for APPROVE before reporting done. Added NEVER-no-changes-without-evidence rule."
       }
     },
     "ui-specialist": {
@@ -212,6 +222,35 @@
         "date": "2026-04-05",
         "breaking": false,
         "note": "Strengthened language + additive clarifications, 2 surgical edits"
+      },
+      "1.6.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Added mandatory consultation rule: MUST report to arch-testing and wait for APPROVE before reporting done. Added NEVER-no-changes-without-evidence rule."
+      }
+    },
+    "domain-model-specialist": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial domain-model-specialist — sealed interfaces, data classes, domain patterns"
+      },
+      "1.5.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Added mandatory consultation rule: MUST report to arch-platform and wait for APPROVE before reporting done. Added NEVER-no-changes-without-evidence rule."
+      }
+    },
+    "data-layer-specialist": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial data-layer-specialist — repository patterns, source set placement, encoding"
+      },
+      "1.5.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Added mandatory consultation rule: MUST report to arch-platform AND arch-integration and wait for APPROVE before reporting done. Added NEVER-no-changes-without-evidence rule."
       }
     }
   }

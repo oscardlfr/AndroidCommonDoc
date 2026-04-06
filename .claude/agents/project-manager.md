@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.6.0"
+template_version: "5.7.0"
 memory: project
 skills:
   - pre-pr
@@ -223,15 +223,13 @@ Bash("claude --print '...'")
 
 ### Planning Delegation
 
-**You do NOT plan non-trivial work yourself.** Delegate planning:
+**You do NOT plan non-trivial work yourself.** For non-trivial tasks, spawn planner as a session team peer:
 
-1. **Research** → delegate to `researcher` for domain context, codebase exploration
-2. **Decisions** → delegate to `advisor` if multiple approaches exist
-3. **Synthesis** → you synthesize their outputs into an execution plan
+```
+Agent(name="planner", team_name="session-{project-slug}", subagent_type="Plan", prompt="You are planner for this session. Read the plan context, consult context-provider via SendMessage for current state and patterns. Write structured plan to .planning/ and notify PM when done.", run_in_background=true)
+```
 
 **Exception**: Simple/obvious tasks (< 5K tokens, clear path) → plan inline.
-
-Before any plan: read MODULE_MAP.md (or run `/map-codebase`), check existing modules.
 
 Enter plan mode for 3+ files, new modules, wide blast radius, or API changes.
 

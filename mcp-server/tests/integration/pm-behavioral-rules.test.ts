@@ -337,3 +337,23 @@ describe('dev dispatch correctness', () => {
     expect(content).toMatch(/specialist-2|specialist-3|\{specialist\}-2|named.*team peer/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Group 8: Planner spawning as team peer
+// ---------------------------------------------------------------------------
+
+describe('planner spawning as team peer', () => {
+  it('planner must be spawned with team_name — isolated planner cannot reach context-provider [EXPECT FAIL]', () => {
+    // Bug #6: PM template has no instruction to spawn planner as named team peer.
+    // Planner spawned without team_name is isolated — cannot SendMessage to context-provider.
+    // Template must contain an Agent() call for planner that includes team_name.
+    // Match Agent(name="planner"...) with team_name on the same line (no dotall — prevents cross-line false positives)
+    expect(content).toMatch(/Agent\(name="planner"[^\n]*team_name|Agent\(name='planner'[^\n]*team_name/i);
+  });
+
+  it('planner spawning appears in template body with explicit Agent() call [EXPECT FAIL]', () => {
+    // PM template must contain an Agent() invocation for planner — not just a reference in a table or checklist.
+    // Current template only references planner in checklist (line 124) and topology table (line 341).
+    expect(body).toMatch(/Agent\(name="planner"|Agent\(name='planner'/i);
+  });
+});
