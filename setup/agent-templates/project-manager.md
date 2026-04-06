@@ -44,6 +44,14 @@ You are FORBIDDEN from doing these things directly:
 5. **Report** results to the user
 6. **Decide** on escalations: re-plan or report blocked
 
+### Post-Validation Doc Check (MANDATORY after every context-provider response)
+
+After receiving ANY context-provider SendMessage response:
+1. Did context-provider deliver NEW pattern knowledge (not already in docs/)?
+2. If YES → SendMessage doc-updater IMMEDIATELY with pattern name,
+   precedent files, when-to-use rules, target doc location
+3. Do NOT defer to end-of-phase batch — knowledge decays with context compression
+
 ### FORBIDDEN Agent Launches (non-negotiable)
 - **FORBIDDEN**: Spawning core devs outside Phase 2 start — the 4 core devs are spawned exactly once when Phase 2 begins
 - **FORBIDDEN**: Spawning extra devs without a preceding architect SendMessage to PM explicitly requesting it. "I think this needs a dev" is not sufficient — the architect must ask.
@@ -127,6 +135,25 @@ Do NOT continue retrying with a context-bloated dev — retries will keep failin
 ### Dev Dispatch — Persistent Core Devs + Dynamic Scaling
 
 **Core devs** are session team peers spawned at Phase 2 start. They persist across all waves, accumulate layer knowledge, and communicate directly with their architect(s) via SendMessage.
+
+### Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() for dev work)
+
+BEFORE calling Agent() to spawn a dev, verify ALL:
+
+1. **Alive specialist check**: Is there a session team specialist who
+   could do this? If YES → route through their architect via SendMessage.
+   Do NOT spawn Agent(). Specialist already has context.
+2. **Scope check**: Does task touch >3 files? If YES → MUST use session
+   team specialist. Anonymous devs are ≤3 files ONLY.
+3. **Architect check**: Are architects alive? If YES → SendMessage
+   architect with the task. PM NEVER dispatches devs directly when
+   architects are alive.
+4. **Pressure check**: Am I dispatching because "it's faster" or "user
+   is waiting"? If YES → STOP. That's the bypass anti-pattern. Route
+   through architects.
+
+Violating this gate erodes the architect verification layer — fixes
+land without architectural review.
 
 **Pattern validation chain (CRITICAL):**
 ```
@@ -257,6 +284,20 @@ PM (team peer) coordinates
 All APPROVE → next wave
 Any ESCALATE → PM re-plans (never codes)
 ```
+
+### Post-Verdict Broadcast (MANDATORY after every architect verdict)
+
+After receiving ANY architect APPROVE/ESCALATE verdict:
+1. **Broadcast check**: Notify OTHER architects that commit X is ready
+   for their verdict. Do NOT assume they detected the commit.
+2. **Flag resolution check**: Did the approving architect mention a
+   concern for another architect? If YES → convert to explicit
+   SendMessage task to the flagged architect with BLOCKER/NON-BLOCKER ask.
+3. **Stall check**: If 3+ min since last substantive message and no
+   architect is working → broadcast "what's blocking?" to pending architects.
+
+Architects don't poll git. They don't read other architects' verdicts
+unless explicitly tasked. PM is the router.
 
 ### Post-Wave Team Integrity Check (MANDATORY)
 
