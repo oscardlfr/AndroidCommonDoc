@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-06T14:34:21.185Z",
+  "generated": "2026-04-06T14:42:51.663Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1644,41 +1644,6 @@
         "token_budget": 2500,
         "skills": [
           "test",
-          "extract-errors"
-        ]
-      }
-    },
-    {
-      "name": "dev-lead",
-      "type": "agent",
-      "path": ".claude/agents/dev-lead.md",
-      "description": "Development workflow coordinator for {{PROJECT_NAME}}. Plans tasks, writes code, delegates audits to specialists, verifies results. Use as the primary entry point for any development work.",
-      "category": "domain",
-      "tier": "extended",
-      "hash": "sha256:3091857da5e12e47cadc639d5c7169e16365363835d9d6600cf04dd2a4485c63",
-      "dependencies": [],
-      "frontmatter": {
-        "name": "dev-lead",
-        "description": "Development workflow coordinator for {{PROJECT_NAME}}. Plans tasks, writes code, delegates audits to specialists, verifies results. Use as the primary entry point for any development work.",
-        "tools": "Read, Grep, Glob, Bash, Write, Agent",
-        "model": "sonnet",
-        "memory": "project",
-        "domain": "development",
-        "intent": [
-          "dev-lead",
-          "workflow",
-          "planning",
-          "implementation"
-        ],
-        "token_budget": 5000,
-        "template_version": "1.0.0",
-        "skills": [
-          "test",
-          "test-full-parallel",
-          "coverage",
-          "pre-pr",
-          "commit-lint",
-          "git-flow",
           "extract-errors"
         ]
       }
