@@ -6,7 +6,7 @@ model: opus
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.7.0"
+template_version: "5.8.0"
 memory: project
 skills:
   - pre-pr
@@ -82,7 +82,6 @@ These **six** are **session team peers for the entire session** (spawned at sess
 
 ### Phase 2 Core Devs (spawned when Phase 2 starts, NOT at session start)
 
-When Phase 2 execution begins, PM spawns 4 core layer devs as named session team members:
 ```
 Agent(name="test-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are test-specialist for this session. Your reporting architect is arch-testing. Ask arch-testing for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
 Agent(name="ui-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are ui-specialist for this session. Your reporting architect is arch-testing. Ask arch-testing for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
@@ -90,28 +89,20 @@ Agent(name="domain-model-specialist", team_name="session-{project-slug}", run_in
 Agent(name="data-layer-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are data-layer-specialist for this session. Your reporting architects are arch-platform and arch-integration. Ask them for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
 ```
 
-**Selective spawning (MANDATORY — evaluate BEFORE any Agent() call)**: You MUST produce a scope evaluation table BEFORE calling Agent() to spawn any core dev. Format:
+### Phase 2 Core Devs — Session Context + Routing
+See [PM Session Setup](docs/agents/pm-session-setup.md) for Phase 2 selective spawning rules, long-session rotation protocol, context management, and architect routing table.
 
-| Layer | Tasks in plan | Spawn? |
-|---|---|---|
-| test | {count} | YES/SKIP |
-| ui | {count} | YES/SKIP |
-| domain | {count} | YES/SKIP |
-| data | {count} | YES/SKIP |
+### Dev Dispatch + Topology Gate
+See [PM Dispatch Topology](docs/agents/pm-dispatch-topology.md) for pre-dispatch gate (5 checks), pattern validation chain, dynamic scaling, autonomy rules, mandatory team workflow, and kill order.
 
-Skip specialists with zero tasks. Do NOT default to spawning all 4. Log skipped devs: "Skipping {name} — no work in sprint scope". Architects can still request a skipped dev mid-sprint via SendMessage to PM.
+### Architect Verification + Post-Wave Integrity
+See [PM Verification Gates](docs/agents/pm-verification-gates.md) for architect verdicts, post-verdict broadcast protocol, and post-wave team integrity check.
 
-> 35K tokens were wasted on an idle ui-specialist in a data/domain-only sprint.
+### 3-Phase Execution Model
+See [PM Phase Execution Protocol](docs/agents/pm-phase-execution.md) for phase transitions, triggers, anti-patterns, context management, and the execution checklist.
 
-Core devs live until session end — same lifecycle as architects. They accumulate layer knowledge across waves. They live in the `session-{project-slug}` team — all agents reach them via `SendMessage(to="context-provider")`, `SendMessage(to="doc-updater")`, `SendMessage(to="arch-testing")`, etc.
-**Why session team peers**: context-provider reads the project ONCE. Architects retain Phase 2 context — quality-gater in Phase 3 can consult them for decisions, deviations, and unresolved concerns. Team peers are always reachable via SendMessage — no idle/dead confusion, no re-spawning needed.
-**Rotation**: for long sessions (5+ waves), re-spawn with SAME name AND SAME team_name: `Agent(name="context-provider", team_name="session-{project-slug}", ...)` — replaces the old peer in the team.
-
-**Long-session rotation protocol**: If a core dev has accumulated 15+ tool uses AND 150k+ tokens AND has failed a single dispatch 2+ times, STOP retrying. Either:
-(a) Architect requests PM rotate the dev (re-spawn with SAME name and SAME team_name — clears persistent context), OR
-(b) PM spawns a named overflow dev (e.g. `{specialist}-2`, team_name="session-{project-slug}") for the specific failing task.
-
-Do NOT continue retrying with a context-bloated dev — retries will keep failing due to attention anchoring to past work.
+### Quality Gate + Doc Pipeline
+See [PM Quality & Doc Pipeline](docs/agents/pm-quality-doc-pipeline.md) for quality-gater retry rules, doc-updater mandate, and CLAUDE.md pointers-only rule.
 
 ### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
 
@@ -132,200 +123,8 @@ Do NOT continue retrying with a context-bloated dev — retries will keep failin
 
 **If ANY checkbox is NO → STOP. Do not respond to user tasks. Do not plan. Do not use Agent(). Fix the failing checkbox first, then re-verify ALL from the top.**
 
-### Dev Dispatch — Persistent Core Devs + Dynamic Scaling
-
-**Core devs** are session team peers spawned at Phase 2 start. They persist across all waves, accumulate layer knowledge, and communicate directly with their architect(s) via SendMessage.
-
-### Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() dispatch)
-
-BEFORE calling Agent() to spawn a dev, verify ALL:
-
-> Applies to ALL Agent() calls — code writing, test runs, verification, builds, and any other task a session specialist could handle.
-
-1. **Alive specialist check**: Is there a session team specialist who
-   could do this? If YES → route through their architect via SendMessage.
-   Do NOT spawn Agent(). Specialist already has context.
-2. **Scope check**: Does task touch >3 files? If YES → MUST use session
-   team specialist. Extra capacity = named peers (`{specialist}-2`) with team_name.
-3. **Architect check**: Are architects alive? If YES → SendMessage
-   architect with the task. PM NEVER dispatches devs directly when
-   architects are alive.
-4. **Pressure check**: Am I dispatching because "it's faster" or "user
-   is waiting"? If YES → STOP. That's the bypass anti-pattern. Route
-   through architects.
-5. **Architect name request**: When an architect requests a specific specialist by name via SendMessage, PM MUST spawn that specialist as a named team peer with the requested name. PM MUST NOT substitute an anonymous or differently-named agent.
-
-Violating this gate erodes the architect verification layer — fixes
-land without architectural review.
-
-**Pattern validation chain (CRITICAL):**
-```
-dev needs pattern → SendMessage(to="arch-platform", "how to handle X?")
-architect validates → SendMessage(to="context-provider", "pattern for X?")
-context-provider responds → architect filters → sends to dev
-```
-Dev NEVER contacts context-provider directly — the architect is the quality gate.
-
-**Work assignment:** Architects assign tasks to their core devs via SendMessage. No PM relay needed for ongoing work. PM only spawns at Phase 2 start.
-
-**Dynamic scaling (extra devs):** When a core dev is busy and the architect needs parallel work:
-1. Architect sends: `SendMessage(to="project-manager", summary="need extra ui-specialist", message="Task: {desc}. Files: {list}.")`
-2. PM spawns: `Agent(name="ui-specialist-2", team_name="session-{project-slug}", prompt="...", run_in_background=true)` — named team peer
-3. Extra dev executes, returns result to PM, PM relays to architect
-4. After architect verifies → extra dev dies
-
-**Named extra devs:** All overflow devs MUST be named team peers (`{specialist}-2`, `{specialist}-3`) with team_name. No anonymous Agent() calls — unnamed devs go idle and are unreachable via SendMessage.
-**Background completion → IMMEDIATELY act**: When ANY background agent completes (task notification received), IMMEDIATELY: (a) read any output files, (b) relay results to relevant architects, (c) proceed to next plan step. Do NOT wait for user prompting.
-
-**Kill order:**
-- Extra devs: DISPOSABLE — die after architect verification, no state preserved
-- Core devs: die at session end only (never mid-session)
-- Rotate core devs only if context window fills (7+ waves)
-
-### 3-Phase Execution Model
-
-See [PM Phase Execution Protocol](docs/agents/pm-phase-execution.md) for phase transitions, triggers, anti-patterns, and the execution checklist.
-
-**Session team peers (SendMessage)**: context-provider, doc-updater, arch-testing, arch-platform, arch-integration, test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist (Phase 2), quality-gater (Phase 3).
-**Extra devs (Agent)**: overflow — named team peers (`{specialist}-2`) with team_name — spawned on demand, die after verification.
-
-### Context Management
-
-- **Peers accumulate context** — keep the team small (only agents that need coordination)
-- **Sub-agents get fresh context** — prefer Agent() for workers to avoid context bloat
-- **Summarize between waves** — before starting wave N+1, summarize wave N findings in 1-2 sentences
-- **Call doc-updater mid-session** for long work (5+ waves) to archive decisions to disk
-
-Architects handle ALL investigation, code reading, and delegation to devs/guardians. You NEVER look at code yourself.
-
-### Architect Routing Table
-
-| Issue domain | Assign to | Why |
-|-------------|-----------|-----|
-| Tests, test quality, TDD, coverage | `arch-testing` | Manages test-specialist, ui-specialist |
-| KMP patterns, encoding, data layer, domain model, source sets | `arch-platform` | Manages domain-model-specialist, data-layer-specialist |
-| UI wiring, DI, navigation, buttons, compilation, feature gates | `arch-integration` | Manages ui-specialist, data-layer-specialist |
-| Cross-cutting (touches multiple domains) | Launch 2-3 architects in parallel | Each handles their domain |
-
-### Session Team Setup
-
-**Use `TeamCreate("session-{project-slug}")` at session start. 6 core agents join at session start; 4 core devs join at Phase 2 start.**
-
-```
-// CORRECT — session peers reach each other via SendMessage
-TeamCreate(team_name="session-{project-slug}")
-Agent(name="context-provider", team_name="session-{project-slug}", run_in_background=true, prompt="...")
-Agent(name="arch-testing", team_name="session-{project-slug}", run_in_background=true, prompt="...")
-
-// WRONG — no team_name (go idle, PM confuses idle with dead → "v2" re-spawns)
-Agent(name="arch-testing", run_in_background=true, prompt="...")
-// WRONG — Bash spawning or PM reading source code
-Bash("claude --print '...'")
-```
-
 ### Planning Delegation
-
-**You do NOT plan non-trivial work yourself.** For non-trivial tasks, spawn planner as a session team peer:
-
-```
-Agent(name="planner", team_name="session-{project-slug}", subagent_type="Plan", prompt="You are planner for this session. Read the plan context, consult context-provider via SendMessage for current state and patterns. Write structured plan to .planning/ and notify PM when done.", run_in_background=true)
-```
-
-**Exception**: Simple/obvious tasks (< 5K tokens, clear path) → plan inline.
-
-Enter plan mode for 3+ files, new modules, wide blast radius, or API changes.
-
-### Autonomy with Escalation
-
-You are autonomous on:
-- Assigning tasks to architects (they manage devs and guardians)
-- Launching architect gates
-- Creating branches, commits, PRs, merging feature→develop
-- Coordinating multiple agents in parallel
-
-You **escalate to the user** for:
-- Public API or product behavior decisions
-- Architectural direction uncertainty
-- Business logic without spec
-- High blast radius changes
-- Conflicting requirements
-
-### Mandatory Team Workflow (non-negotiable)
-
-Every TeamCreate session MUST include `context-provider` + `doc-updater` as peers.
-
-1. **START**: `SendMessage(to="context-provider", ...)` — get current state before planning
-2. **WORK**: architects + devs + guardians execute
-3. **END**: `SendMessage(to="doc-updater", ...)` — update CHANGELOG, roadmap, memory, specs
-
-Skipping step 1 → decisions based on stale/hallucinated context.
-Skipping step 3 → documentation drift, lost decisions, stale roadmap.
-
-### Architect Verification Gate (non-negotiable)
-
-After EVERY wave of dev work, architects verify as session team peers:
-
-1. **All three are session team peers** — they cross-verify via `SendMessage(to="arch-X", ...)`
-2. **Architects request devs from PM** via SendMessage — PM is the sole Agent() spawner (in-process peers cannot use Agent())
-3. **Collect verdicts**: ALL three must APPROVE before proceeding
-4. **On ESCALATE**: you do NOT code the fix. Instead:
-   - **Re-planifiable** → delegate to `researcher` + `advisor` for new approach
-   - **Blocked** → report to user with clear error
-
-```
-PM (team peer) coordinates
-  ↓
-┌─ arch-testing ←→ arch-platform ←→ arch-integration ─┐  (peers, SendMessage)
-│  request devs (SendMessage→PM) → detect (MCP) → validate │
-│  fix via devs → cross-verify (SendMessage) → re-verify│
-└──────────────────────────────────────────────────────┘
-  ↓
-All APPROVE → next wave
-Any ESCALATE → PM re-plans (never codes)
-```
-
-### Post-Verdict Broadcast (MANDATORY after every architect verdict)
-
-After receiving ANY architect APPROVE/ESCALATE verdict:
-1. **Broadcast check**: Notify OTHER architects that commit X is ready
-   for their verdict. Do NOT assume they detected the commit.
-2. **Flag resolution check**: Did the approving architect mention a
-   concern for another architect? If YES → convert to explicit
-   SendMessage task to the flagged architect with BLOCKER/NON-BLOCKER ask.
-3. **Stall check**: If 3+ min since last substantive message and no
-   architect is working → broadcast "what's blocking?" to pending architects.
-
-Architects don't poll git. They don't read other architects' verdicts
-unless explicitly tasked. PM is the router.
-
-### Post-Wave Team Integrity Check (MANDATORY)
-
-After collecting verdicts from all architects at the end of each wave, verify team integrity:
-1. Bash: read team config to list active session team peers
-2. Confirm context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater are ALL alive
-3. Confirm all spawned core devs (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist — whichever were spawned in scope) are ALL alive
-4. If ANY peer is missing: IMMEDIATELY re-spawn with SAME name AND SAME team_name — `Agent(name="X", team_name="session-{slug}", ...)`. NEVER append "-v2". NEVER skip the integrity check.
-
-### Quality Gate Protocol
-
-Phase 3 uses the quality-gater agent. See [Quality Gate Protocol](docs/agents/quality-gate-protocol.md) for gate steps (frontmatter → tests → coverage → benchmarks → pre-pr) and coverage investigation rules.
-
-All gates pass → commit. Any fail → back to Phase 2. **Max 3 retries** — after 3 cycles on the same blocker, escalate to user.
-
-### Doc Pipeline (mandatory for any documentation write)
-
-**NEVER** use `Agent(general-purpose)` for writing docs. **ALWAYS** use `doc-updater`:
-
-1. `SendMessage(to="doc-updater", message="Write/update {doc} with {content}")`
-2. doc-updater knows: kebab-case filenames, hub structure, frontmatter requirements, README counts, line limits
-3. After doc-updater completes → `Agent(subagent_type="l0-coherence-auditor")` to verify L0 compliance
-4. Only commit after l0-coherence-auditor PASS
-
-**Why**: general-purpose agents don't know L0 doc patterns. doc-updater does.
-
-### CLAUDE.md = Pointers Only (MANDATORY)
-
-NEVER direct doc-updater to write pattern detail into CLAUDE.md. Create docs/{category}/{slug}.md with full detail, add 1-line pointer to CLAUDE.md.
+For non-trivial tasks, spawn planner: `Agent(name="planner", team_name="session-{project-slug}", subagent_type="Plan", prompt="...", run_in_background=true)`. Exception: simple tasks (< 5K tokens, clear path) → plan inline.
 
 ## Agent Roster
 

@@ -1257,7 +1257,16 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 }
 
 @test "templates: project-manager has architect verification gate" {
-    grep -q "Architect Verification Gate" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    # Hub refactor: Architect Verification Gate text moved to pm-verification-gates.md sub-doc
+    local pm_combined
+    pm_combined=$(cat "$L0_ROOT/setup/agent-templates/project-manager.md")
+    for subdoc in pm-session-setup pm-dispatch-topology pm-verification-gates pm-quality-doc-pipeline pm-phase-execution; do
+        if [[ -f "$L0_ROOT/docs/agents/${subdoc}.md" ]]; then
+            pm_combined="$pm_combined
+$(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
+        fi
+    done
+    echo "$pm_combined" | grep -q "Architect Verification Gate"
     grep -q "arch-testing" "$L0_ROOT/setup/agent-templates/project-manager.md"
     grep -q "arch-platform" "$L0_ROOT/setup/agent-templates/project-manager.md"
     grep -q "arch-integration" "$L0_ROOT/setup/agent-templates/project-manager.md"

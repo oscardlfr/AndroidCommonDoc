@@ -104,10 +104,13 @@ describe('Wave 1 BUG 8: Exact Fix Format MANDATORY section', () => {
 // ---------------------------------------------------------------------------
 // 7. BUG 6: Post-Wave Team Integrity Check in project-manager
 // ---------------------------------------------------------------------------
-describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in project-manager', () => {
-  it('project-manager.md has Post-Wave Team Integrity Check section', () => {
-    const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'project-manager.md'), 'utf-8');
-    expect(content).toMatch(/Post-Wave Team Integrity Check/);
+describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in project-manager or sub-docs', () => {
+  it('Post-Wave Team Integrity Check exists in template or pm-verification-gates sub-doc', () => {
+    const templateContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'project-manager.md'), 'utf-8');
+    const verGatesPath = path.join(ROOT, 'docs/agents/pm-verification-gates.md');
+    const verGatesContent = fs.existsSync(verGatesPath) ? fs.readFileSync(verGatesPath, 'utf-8') : '';
+    const combined = templateContent + '\n' + verGatesContent;
+    expect(combined).toMatch(/Post-Wave Team Integrity Check/);
   });
 });
 
@@ -130,9 +133,9 @@ describe('Wave 1: template_version bumped in architects', () => {
     expect(content).toMatch(/template_version:\s*"1\.9\.0"/);
   });
 
-  it('project-manager.md template_version is "5.7.0"', () => {
+  it('project-manager.md template_version is "5.8.0"', () => {
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'project-manager.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"5\.7\.0"/);
+    expect(content).toMatch(/template_version:\s*"5\.8\.0"/);
   });
 });
 

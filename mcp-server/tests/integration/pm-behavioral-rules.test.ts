@@ -320,21 +320,27 @@ describe('DawSync regression scenarios', () => {
 // ---------------------------------------------------------------------------
 
 describe('dev dispatch correctness', () => {
+  // Dispatch rules may live in PM template OR in pm-dispatch-topology.md sub-doc.
+  // Search both to handle the hub refactor where content moves to sub-docs.
+  const dispatchSubdocPath = path.join(ROOT, 'docs/agents/pm-dispatch-topology.md');
+  const dispatchSubdocContent = fs.existsSync(dispatchSubdocPath)
+    ? fs.readFileSync(dispatchSubdocPath, 'utf-8')
+    : '';
+  const combinedDispatch = content + '\n' + dispatchSubdocContent;
+
   it('architect-requested specialist must be spawned by name — anonymous dev not a valid substitute', () => {
     // When an architect sends PM a named specialist request, PM must honor the name.
-    // Template must contain a rule that architect-requested devs are spawned with the requested name.
     // Regression: PM spawned anonymous Agent() instead of domain-model-specialist when arch-platform requested it.
-    expect(content).toMatch(
+    expect(combinedDispatch).toMatch(
       /architect.*request.*named|architect.*sends.*PM.*name|spawn.*requested.*name|honor.*architect.*name|named.*specialist.*as.*requested/i
     );
   });
 
   it('anonymous devs are eliminated — all devs must be named team peers', () => {
     // Bug #3 fix: anonymous Agent() calls (no name, no team_name) are no longer valid.
-    // Template must NOT contain anonymous dev instructions.
-    expect(content).not.toMatch(/anonymous devs.*≤3|≤3.*file.*anonymous|no name.*no team_name.*disposable/i);
+    expect(combinedDispatch).not.toMatch(/anonymous devs.*≤3|≤3.*file.*anonymous|no name.*no team_name.*disposable/i);
     // Must contain named extra dev pattern instead
-    expect(content).toMatch(/specialist-2|specialist-3|\{specialist\}-2|named.*team peer/i);
+    expect(combinedDispatch).toMatch(/specialist-2|specialist-3|\{specialist\}-2|named.*team peer/i);
   });
 });
 
