@@ -57,6 +57,21 @@ describe('agent template size limits', () => {
 describe('project-manager template — 3-phase model', () => {
   const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'project-manager.md'), 'utf-8');
 
+  // Hub refactor: PM content may be split across sub-docs in docs/agents/
+  const pmSubdocs = [
+    'pm-session-setup.md',
+    'pm-dispatch-topology.md',
+    'pm-verification-gates.md',
+    'pm-quality-doc-pipeline.md',
+  ];
+  const docsAgentsDir = path.join(ROOT, 'docs/agents');
+  const subdocContent = pmSubdocs
+    .map(f => path.join(docsAgentsDir, f))
+    .filter(p => fs.existsSync(p))
+    .map(p => fs.readFileSync(p, 'utf-8'))
+    .join('\n');
+  const combinedPM = content + '\n' + subdocContent;
+
   it('has 3-Phase Execution Model section', () => {
     expect(content).toMatch(/3-Phase Execution Model/i);
   });
@@ -76,7 +91,7 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('has retry limit for quality gate failures', () => {
-    expect(content).toMatch(/3 retries|max.*3.*retr/i);
+    expect(combinedPM).toMatch(/3 retries|max.*3.*retr/i);
   });
 
   it('has FORBIDDEN actions section', () => {
@@ -117,30 +132,30 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('pattern validation chain documented: dev contacts architect, not context-provider', () => {
-    expect(content).toMatch(/dev.*arch.*context-provider|SendMessage.*arch.*pattern/i);
-    expect(content).toMatch(/NEVER.*context-provider.*directly|Dev NEVER contacts context-provider/i);
+    expect(combinedPM).toMatch(/dev.*arch.*context-provider|SendMessage.*arch.*pattern/i);
+    expect(combinedPM).toMatch(/NEVER.*context-provider.*directly|Dev NEVER contacts context-provider/i);
   });
 
   it('named extra dev model is documented — no anonymous Agent() calls', () => {
-    expect(content).toMatch(/No anonymous Agent\(\)|named team peer|named.*team_name/i);
+    expect(combinedPM).toMatch(/No anonymous Agent\(\)|named team peer|named.*team_name/i);
   });
 
   it('dynamic scaling model: extra devs are named team peers with team_name', () => {
-    expect(content).toMatch(/extra.*dev|Extra dev/i);
-    expect(content).toMatch(/named team peer|specialist-2|specialist-3|\{specialist\}-2/i);
+    expect(combinedPM).toMatch(/extra.*dev|Extra dev/i);
+    expect(combinedPM).toMatch(/named team peer|specialist-2|specialist-3|\{specialist\}-2/i);
   });
 
   it('background completion → immediately act rule is documented', () => {
-    expect(content).toMatch(/background.*complet.*IMMEDIATELY|IMMEDIATELY.*background/i);
+    expect(combinedPM).toMatch(/background.*complet.*IMMEDIATELY|IMMEDIATELY.*background/i);
   });
 
   it('Phase 2 uses SendMessage not TeamCreate for architects', () => {
-    expect(content).toContain('session team peers');
-    expect(content).toContain('SendMessage(to="arch-testing"');
+    expect(combinedPM).toContain('session team peers');
+    expect(combinedPM).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 5.7.0', () => {
-    expect(content).toContain('template_version: "5.7.0"');
+  it('template version 5.8.0', () => {
+    expect(content).toContain('template_version: "5.8.0"');
   });
 
   it('has dev dispatch protocol', () => {
@@ -163,7 +178,7 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('references quality gate protocol doc', () => {
-    expect(content).toMatch(/quality-gate-protocol/);
+    expect(combinedPM).toMatch(/quality-gate-protocol/);
   });
 
   it('has TeamCreate tool in frontmatter', () => {
@@ -183,7 +198,7 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('rotation uses SAME name AND SAME team_name', () => {
-    expect(content).toContain('SAME name AND SAME team_name');
+    expect(combinedPM).toContain('SAME name AND SAME team_name');
   });
 
   it('has Session Team Setup section', () => {
@@ -191,13 +206,13 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('topology gate covers ALL agent dispatches, not just dev work', () => {
-    expect(content).toContain('Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() dispatch)')
-    expect(content).not.toContain('Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() for dev work)')
-    expect(content).toContain('Applies to ALL Agent() calls')
+    expect(combinedPM).toContain('Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() dispatch)')
+    expect(combinedPM).not.toContain('Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() for dev work)')
+    expect(combinedPM).toContain('Applies to ALL Agent() calls')
   })
 
   it('topology gate explicitly covers test runs and verification', () => {
-    expect(content).toContain('test runs, verification')
+    expect(combinedPM).toContain('test runs, verification')
   })
 });
 

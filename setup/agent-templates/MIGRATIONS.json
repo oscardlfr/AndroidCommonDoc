@@ -39,6 +39,11 @@
         "date": "2026-04-06",
         "breaking": false,
         "note": "Add explicit planner spawn block to Planning Delegation section. Planner joins session team as named peer with subagent_type=Plan, enabling SendMessage to context-provider."
+      },
+      "5.8.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Hub refactor: extracted PM prose to 4 sub-docs in docs/agents/ (pm-session-setup, pm-dispatch-topology, pm-verification-gates, pm-quality-doc-pipeline). Template slimmed to ~180 lines. No behavioral changes."
       }
     },
     "planner": {

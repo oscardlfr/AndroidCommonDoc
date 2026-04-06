@@ -231,7 +231,7 @@ if should_run "role-keywords"; then
         name=$(get_frontmatter_field "$f" "name")
         case "$name" in
             project-manager)
-                check_keywords "$f" "TeamCreate" "SendMessage" "FORBIDDEN" "ALLOWED" "IMMEDIATELY" "DISPOSABLE"
+                check_keywords "$f" "TeamCreate" "SendMessage" "FORBIDDEN" "ALLOWED" "IMMEDIATELY"
                 ;;
             planner)
                 check_keywords "$f" "SendMessage" "Execution Plan" "Planning Team"
@@ -344,19 +344,30 @@ if should_run "anti-patterns"; then
 
         # PM-specific: must have execution trigger
         if [[ "$name" == "project-manager" ]]; then
-            if ! echo "$body_no_fences" | grep -q "IMMEDIATELY"; then
+            # Hub refactor: PM content may be split across sub-docs in docs/agents/
+            # Build combined body: template + all pm-*.md sub-docs
+            pm_combined="$body_no_fences"
+            pm_docs_dir="$(dirname "$(dirname "$f")")/docs/agents"
+            for subdoc in pm-session-setup pm-dispatch-topology pm-verification-gates pm-quality-doc-pipeline pm-phase-execution; do
+                subdoc_path="$pm_docs_dir/${subdoc}.md"
+                if [[ -f "$subdoc_path" ]]; then
+                    pm_combined="$pm_combined
+$(cat "$subdoc_path")"
+                fi
+            done
+            if ! echo "$pm_combined" | grep -q "IMMEDIATELY"; then
                 detail "$fname: PM missing IMMEDIATELY execution trigger"
                 ap_warnings=$((ap_warnings + 1))
             fi
-            if ! echo "$body_no_fences" | grep -q "STOP PLANNING\|PHASE TRANSITIONS ARE AUTOMATIC"; then
+            if ! echo "$pm_combined" | grep -q "STOP PLANNING\|PHASE TRANSITIONS ARE AUTOMATIC"; then
                 detail "$fname: PM missing phase transition enforcement rule"
                 ap_warnings=$((ap_warnings + 1))
             fi
-            if ! echo "$body_no_fences" | grep -q "PHASE TRANSITIONS ARE AUTOMATIC"; then
+            if ! echo "$pm_combined" | grep -q "PHASE TRANSITIONS ARE AUTOMATIC"; then
                 detail "$fname: PM missing automatic phase transition rule"
                 ap_warnings=$((ap_warnings + 1))
             fi
-            if ! echo "$body_no_fences" | grep -q "DISPOSABLE"; then
+            if ! echo "$pm_combined" | grep -q "DISPOSABLE"; then
                 detail "$fname: PM missing DISPOSABLE dev rule"
                 ap_warnings=$((ap_warnings + 1))
             fi
