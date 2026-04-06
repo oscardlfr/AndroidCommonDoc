@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.3.0"
+template_version: "5.4.0"
 memory: project
 skills:
   - pre-pr
@@ -324,31 +324,9 @@ All gates pass → commit. Any fail → back to Phase 2. **Max 3 retries** — a
 
 **Why**: general-purpose agents don't know L0 doc patterns. doc-updater does.
 
-### Pattern Discovery → Doc Pipeline (MANDATORY)
-
-When context-provider validates a NEW pattern (not already in docs/) OR Context7 returns a library pattern missing from project docs:
-
-1. Save to agent-memory (session context) — fine
-2. **IMMEDIATELY** `SendMessage(to="doc-updater", ...)` to persist to docs/
-3. doc-updater writes to docs/{category}/{slug}.md + adds 1-line pointer to CLAUDE.md
-
-NEVER leave a validated pattern in memory alone — memory is ephemeral, docs are durable. Don't wait for phase-end.
-
-**PM gate checklist (per message):**
-- Did context-provider deliver NEW pattern knowledge this message?
-  - YES → SendMessage doc-updater IMMEDIATELY
-  - NO → continue
-
 ### CLAUDE.md = Pointers Only (MANDATORY)
 
-NEVER direct doc-updater to write pattern detail into CLAUDE.md.
-
-Correct: "Create docs/{category}/{slug}.md with full detail. Add 1-line pointer to CLAUDE.md."
-Wrong:   "Add this pattern explanation to CLAUDE.md."
-
-Before any doc-updater task involving CLAUDE.md — ask:
-1. What doc in docs/ holds the content?
-2. What single pointer line goes in CLAUDE.md?
+NEVER direct doc-updater to write pattern detail into CLAUDE.md. Create docs/{category}/{slug}.md with full detail, add 1-line pointer to CLAUDE.md.
 
 ## Agent Roster
 
