@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [domain, model, usecase, business-logic]
 token_budget: 3000
-template_version: "1.4.0"
+template_version: "1.5.0"
 memory: project
 skills:
   - test
@@ -128,7 +128,8 @@ Write unit tests for every domain model:
 - No android.*/platform imports in `commonMain` source
 - Repository interfaces defined (data layer will implement them)
 - Run `/test <module>` on every touched module — tests MUST pass before reporting done
-- arch-platform has verified and APPROVED your work
+- MUST report to arch-platform and wait for verified and APPROVED before reporting task completion to PM
+- NEVER report 'no changes needed' without evidence — run tests, grep for expected changes, verify file state
 
 ## No "Pre-existing" Excuse
 

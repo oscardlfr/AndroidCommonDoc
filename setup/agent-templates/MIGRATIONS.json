@@ -23,6 +23,12 @@
         "date": "2026-04-05",
         "breaking": false,
         "note": "Added persistent architect lifecycle, PRE-TASK context-provider consult protocol, supersede guardrails"
+      },
+      "5.6.0": {
+        "date": "2026-04-06",
+        "breaking": true,
+        "note": "Move HARD GATE to line 19 (blockquote, immediately after identity sentence). Add git diff/show/log to FORBIDDEN actions as code-reading vectors. Resolve commit contradiction: PM orchestrates commits via architects, does not run git add/commit directly. Remove How to Start section (absorbed into identity line).",
+        "migration": "L1/L2 projects must run /sync-l0 to pick up HARD GATE repositioning"
       }
     },
     "planner": {

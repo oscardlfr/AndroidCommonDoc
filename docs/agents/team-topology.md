@@ -96,11 +96,13 @@ This ensures architects validate every pattern before it reaches dev code.
 When a core dev is busy and the architect needs parallel work:
 
 1. Architect sends: `SendMessage(to="project-manager", "need extra ui-specialist")`
-2. PM spawns: `Agent(name="ui-specialist-2", prompt="...")` -- named but NO team_name
+2. PM spawns: `Agent(name="ui-specialist-2", team_name="session-{project-slug}", prompt="...")` -- named team peer
 3. Extra dev executes, returns result to PM, PM relays to architect
 4. After architect verifies -> extra dev dies
 
-**Anonymous devs** (<=3 files): For trivial fixes, PM uses `Agent(prompt="...")` -- no name, no team_name, disposable.
+**Named extra devs (MANDATORY):** All overflow devs MUST be named team peers (`{specialist}-2`, `{specialist}-3`) with `team_name`. Anonymous `Agent()` calls (no name, no team_name) are FORBIDDEN — unnamed devs go idle and are unreachable via SendMessage.
+
+**Architect-name-honoring (MANDATORY):** When an architect requests a specific specialist by name via SendMessage, PM MUST spawn that specialist as a named team peer with the requested name. PM MUST NOT substitute an anonymous or differently-named agent.
 
 ## Overview
 

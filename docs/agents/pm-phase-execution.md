@@ -63,7 +63,8 @@ quality-gater FAIL → IMMEDIATELY back to SendMessage architects (Phase 2 retry
 - PM asks "shall I commit?" before running quality gate → BUG
 - PM asks "what next?" after architect approval → BUG
 - PM creates tasks/memories between phases instead of proceeding → BUG
-- PM spawns extra devs with team_name (extras MUST be named but MUST have NO team_name) → BUG
+- PM spawns extra devs without name or team_name (anonymous Agent() calls) — ALL overflow devs MUST be named peers (`{specialist}-2`) with team_name → BUG
+- Architect requests named specialist via SendMessage and PM substitutes anonymous or differently-named agent — PM MUST honor the requested name → BUG
 - PM uses TeamCreate for architects in Phase 2 (they're persistent, use SendMessage) → BUG
 - PM creates new TeamCreate per wave instead of reusing session team → BUG
 - PM re-spawns an architect as "arch-X-v2" instead of SendMessage to the original → BUG. **RULE: If an architect seems unresponsive → SendMessage first. If no response after 1 retry → re-spawn with the SAME name AND SAME team_name (e.g. `Agent(name="arch-platform", team_name="session-{project-slug}", ...)`), never append "v2" or any suffix.**
