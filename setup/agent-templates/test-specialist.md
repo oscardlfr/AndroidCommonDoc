@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.5.0"
+template_version: "1.6.0"
 memory: project
 skills:
   - test
@@ -231,7 +231,9 @@ If you discover a bug during your task — whether you caused it or not — you 
 - All tests pass (`/test-full-parallel`)
 - Coverage meets layer targets
 - No HIGH severity pattern violations unreported
-- arch-testing has verified and APPROVED your work
+- MUST report to arch-testing and wait for verified and APPROVED before reporting task completion to PM
+- tests MUST pass before reporting done — include pass/fail evidence in report
+- NEVER report 'no changes needed' without evidence — run tests, grep for expected changes, verify file state
 
 ## Findings Protocol
 

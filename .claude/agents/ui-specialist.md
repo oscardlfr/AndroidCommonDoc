@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [compose, ui, accessibility, material3]
 token_budget: 3000
-template_version: "1.5.0"
+template_version: "1.6.0"
 memory: project
 skills:
   - accessibility
@@ -130,7 +130,9 @@ If you discover a bug during your task — whether you caused it or not — you 
 - All mandatory checks pass
 - No HIGH severity violations unreported
 - `/test <module>` passes on all touched modules
-- arch-testing and arch-integration have verified and APPROVED your work
+- MUST report to arch-testing and arch-integration and wait for verified and APPROVED before reporting task completion to PM
+- tests MUST pass before reporting done — include pass/fail evidence in report
+- NEVER report 'no changes needed' without evidence — run tests, grep for expected changes, verify file state
 
 ## MCP Tools (when available)
 - `compose-preview-audit` — validate @Preview coverage
