@@ -139,8 +139,8 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 5.4.0', () => {
-    expect(content).toContain('template_version: "5.4.0"');
+  it('template version 5.5.0', () => {
+    expect(content).toContain('template_version: "5.5.0"');
   });
 
   it('has dev dispatch protocol', () => {
@@ -189,6 +189,16 @@ describe('project-manager template — 3-phase model', () => {
   it('has Session Team Setup section', () => {
     expect(content).toMatch(/Session Team Setup/);
   });
+
+  it('topology gate covers ALL agent dispatches, not just dev work', () => {
+    expect(content).toContain('Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() dispatch)')
+    expect(content).not.toContain('Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() for dev work)')
+    expect(content).toContain('Applies to ALL Agent() calls')
+  })
+
+  it('topology gate explicitly covers test runs and verification', () => {
+    expect(content).toContain('test runs, verification')
+  })
 });
 
 // ---------------------------------------------------------------------------

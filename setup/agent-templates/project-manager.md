@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.4.0"
+template_version: "5.5.0"
 memory: project
 skills:
   - pre-pr
@@ -136,9 +136,12 @@ Do NOT continue retrying with a context-bloated dev — retries will keep failin
 
 **Core devs** are session team peers spawned at Phase 2 start. They persist across all waves, accumulate layer knowledge, and communicate directly with their architect(s) via SendMessage.
 
-### Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() for dev work)
+### Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() dispatch)
 
 BEFORE calling Agent() to spawn a dev, verify ALL:
+
+> Applies to ALL Agent() calls — code writing, test runs, verification,
+> builds, and any other task a session specialist could handle.
 
 1. **Alive specialist check**: Is there a session team specialist who
    could do this? If YES → route through their architect via SendMessage.
