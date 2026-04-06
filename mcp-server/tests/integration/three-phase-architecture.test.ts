@@ -121,13 +121,13 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toMatch(/NEVER.*context-provider.*directly|Dev NEVER contacts context-provider/i);
   });
 
-  it('anonymous dev threshold for 3-or-fewer file fixes is documented', () => {
-    expect(content).toMatch(/3 or fewer files|3-or-fewer file|≤3 files|3 or fewer/i);
+  it('named extra dev model is documented — no anonymous Agent() calls', () => {
+    expect(content).toMatch(/No anonymous Agent\(\)|named team peer|named.*team_name/i);
   });
 
-  it('dynamic scaling model: extra devs named but no team_name', () => {
+  it('dynamic scaling model: extra devs are named team peers with team_name', () => {
     expect(content).toMatch(/extra.*dev|Extra dev/i);
-    expect(content).toMatch(/named but NO team_name|named but no team_name/i);
+    expect(content).toMatch(/named team peer|specialist-2|specialist-3|\{specialist\}-2/i);
   });
 
   it('background completion → immediately act rule is documented', () => {
@@ -139,8 +139,8 @@ describe('project-manager template — 3-phase model', () => {
     expect(content).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 5.5.0', () => {
-    expect(content).toContain('template_version: "5.5.0"');
+  it('template version 5.6.0', () => {
+    expect(content).toContain('template_version: "5.6.0"');
   });
 
   it('has dev dispatch protocol', () => {
