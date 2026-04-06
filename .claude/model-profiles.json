@@ -2,12 +2,12 @@
   "current": "balanced",
   "profiles": {
     "budget": {
-      "description": "All agents use haiku \u2014 cheapest and fastest for quick iterations",
+      "description": "All agents use haiku — cheapest and fastest for quick iterations",
       "default_model": "haiku",
       "overrides": {}
     },
     "balanced": {
-      "description": "Haiku for static/grep-like checks, Sonnet for cross-file reasoning, Opus for debugging \u2014 default",
+      "description": "Haiku for static/grep-like checks, Sonnet for cross-file reasoning, Opus for debugging — default",
       "default_model": "sonnet",
       "overrides": {
         "script-parity-validator": "haiku",
@@ -16,11 +16,12 @@
         "l0-coherence-auditor": "haiku",
         "release-guardian-agent": "haiku",
         "api-rate-limit-auditor": "haiku",
-        "template-sync-validator": "haiku"
+        "template-sync-validator": "haiku",
+        "project-manager": "opus"
       }
     },
     "advanced": {
-      "description": "Opus for orchestration and deep analysis, Sonnet for standard checks \u2014 best cost/quality ratio for serious work",
+      "description": "Opus for orchestration and deep analysis, Sonnet for standard checks — best cost/quality ratio for serious work",
       "default_model": "sonnet",
       "overrides": {
         "full-audit-orchestrator": "opus",
@@ -29,11 +30,12 @@
         "cross-platform-validator": "opus",
         "privacy-auditor": "opus",
         "test-specialist": "opus",
-        "debugger": "opus"
+        "debugger": "opus",
+        "project-manager": "opus"
       }
     },
     "quality": {
-      "description": "All agents use opus \u2014 maximum quality for critical audits and releases",
+      "description": "All agents use opus — maximum quality for critical audits and releases",
       "default_model": "opus",
       "overrides": {}
     }

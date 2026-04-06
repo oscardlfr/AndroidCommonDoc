@@ -181,11 +181,15 @@ describe("model-profiles.json", () => {
       expect(config.profiles.balanced.default_model).toBe("sonnet");
     });
 
-    it("balanced profile overrides only downgrade to haiku", () => {
+    it("balanced profile overrides only downgrade to haiku (except PM which is always opus)", () => {
       for (const [agent, model] of Object.entries(
         config.profiles.balanced.overrides,
       )) {
-        expect(model, `balanced.${agent} should be haiku`).toBe("haiku");
+        if (agent === "project-manager") {
+          expect(model, `balanced.${agent} must be opus`).toBe("opus");
+        } else {
+          expect(model, `balanced.${agent} should be haiku`).toBe("haiku");
+        }
       }
     });
 
