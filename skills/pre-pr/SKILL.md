@@ -131,6 +131,18 @@ fi
 
 Failures BLOCK the PR. The integration suite enforces Wave 1 template rules (Edit-directly removal, NEVER-you-fix rows, Scope Validation Gate, DURING-WAVE Protocol, Exact Fix Format, Post-Wave Team Integrity, dual-location sync).
 
+### Step 5.9 — Agent template behavioral lint
+
+Run when agent templates or `.claude/agents/` changed:
+
+```bash
+if git diff --name-only "$MERGE_BASE" HEAD | grep -qE '^(setup/agent-templates/|\.claude/agents/)'; then
+  bash scripts/sh/validate-agent-templates.sh --show-details
+fi
+```
+
+Failures BLOCK the PR. Validates role keyword contracts, tool-body cross-references, anti-patterns, size limits, and version/MIGRATIONS.json alignment.
+
 ### Step 6 — Registry hash freshness
 
 ```bash
@@ -165,6 +177,7 @@ Report per-module pass/fail. Show failing test names on failure.
 ║ KMP safety           ✅ PASS / ❌ FAIL  ║
 ║ Warning audit        ✅ PASS / ❌ FAIL  ║
 ║ Dep freshness        ⚠️ INFO / ⏭️ SKIP  ║
+║ Agent template behavioral lint ✅ PASS / ❌ FAIL ║
 ║ Registry hashes      ✅ PASS / ❌ FAIL  ║
 ║ Build + Tests        ✅ PASS / ❌ FAIL  ║
 ╠══════════════════════════════════════════╣

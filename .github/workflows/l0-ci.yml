@@ -49,6 +49,14 @@ jobs:
     name: Copilot Parity
     uses: ./.github/workflows/reusable-copilot-parity.yml
 
+  agent-template-lint:
+    name: Agent Template Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate agent templates
+        run: bash scripts/sh/validate-agent-templates.sh --show-details
+
   # ── Wave 2: Test suites (parallel) ─────────────────────────────────────
 
   shell-tests:
@@ -212,6 +220,7 @@ jobs:
       - detekt-rules
       - mcp-server
       - skill-registry
+      - agent-template-lint
     runs-on: ubuntu-latest
     steps:
       - name: Check results
@@ -225,6 +234,7 @@ jobs:
             "${{ needs.detekt-rules.result }}"
             "${{ needs.mcp-server.result }}"
             "${{ needs.skill-registry.result }}"
+            "${{ needs.agent-template-lint.result }}"
           )
           commit_lint="${{ needs.commit-lint.result }}"
           if [[ "$commit_lint" != "success" && "$commit_lint" != "skipped" ]]; then

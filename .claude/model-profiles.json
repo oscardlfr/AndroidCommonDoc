@@ -16,7 +16,8 @@
         "l0-coherence-auditor": "haiku",
         "release-guardian-agent": "haiku",
         "api-rate-limit-auditor": "haiku",
-        "template-sync-validator": "haiku"
+        "template-sync-validator": "haiku",
+        "project-manager": "opus"
       }
     },
     "advanced": {
@@ -29,7 +30,8 @@
         "cross-platform-validator": "opus",
         "privacy-auditor": "opus",
         "test-specialist": "opus",
-        "debugger": "opus"
+        "debugger": "opus",
+        "project-manager": "opus"
       }
     },
     "quality": {

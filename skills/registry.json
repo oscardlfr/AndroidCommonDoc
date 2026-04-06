@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-06T12:09:32.111Z",
+  "generated": "2026-04-06T17:45:07.439Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -701,8 +701,9 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:afd54809522bbc2ad9a1264832611581eb8d7ec49b86ecac28519e83ecd107a9",
+      "hash": "sha256:fde6ff38bffe1c677c244205607e4937572d797232f2e048a6caf1e092c51f37",
       "dependencies": [
+        "scripts/sh/validate-agent-templates.sh",
         "scripts/sh/rehash-registry.sh"
       ],
       "frontmatter": {
@@ -1536,7 +1537,7 @@
       "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:049cafd7186fffddcdc898c044eff1715d93d9711d1b5148aa0a5840b259dcb0",
+      "hash": "sha256:24b272f50c0ec0cda6e825f56ae89ab74cc8bc401d04c30f14af68601ed60338",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -2098,13 +2099,13 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:74a827845246dac8edaaa6681ac2269c8e5f3c1fd36ccf391e007f8104359f32",
+      "hash": "sha256:9238a74a9fbb5daa1cc362b00a3b2d38d4c17c8dd7a0335e37925ace769bc38f",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
         "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
         "tools": "Read, Grep, Glob, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList",
-        "model": "sonnet",
+        "model": "opus",
         "domain": "development",
         "intent": [
           "orchestrate",
@@ -2114,7 +2115,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "5.6.0",
+        "template_version": "5.7.0",
         "memory": "project",
         "skills": [
           "pre-pr",
@@ -2155,7 +2156,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:29d072080cf3a56d3e263e1b373e109a791610af76e42093ceade5d10dbecf84",
+      "hash": "sha256:098630faa966f32ce4472ba4965600c32cc00a7e75ce9da2ee3d53d156b3c061",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
