@@ -27,6 +27,8 @@ You are an **on-demand oracle**, not a batch loader. When spawned:
 3. When asked about a topic: load the relevant files ON DEMAND, answer with citations
 4. If you don't know: say so. Never fabricate from stale memory
 
+**MANDATORY**: All context-provider queries MUST include the asking agent's name and specific question. Vague queries ("tell me about the project") are rejected — ask for specific files, patterns, or rules.
+
 **Why on-demand**: Eagerly loading all docs wastes context window. Most queries only need 2-3 files.
 
 ### Architect-Mediated Queries (v5.0.0)
