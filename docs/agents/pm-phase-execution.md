@@ -8,7 +8,7 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Project Manager's 3-phase execution protocol: phase transitions, triggers, anti-patterns, execution checklist. What PM does in each phase (complements team-topology.md which describes team structure)."
-version: 1
+version: 2
 last_updated: "2026-04"
 assumes_read: team-topology, multi-agent-patterns
 token_budget: 1200
@@ -79,3 +79,12 @@ quality-gater FAIL → IMMEDIATELY back to SendMessage architects (Phase 2 retry
 ```
 
 See also [Team Topology](team-topology.md), [Multi-Agent Patterns](multi-agent-patterns.md).
+
+## Context Management
+
+- **Peers accumulate context** — keep the team small (only agents that need coordination)
+- **Sub-agents get fresh context** — prefer Agent() for workers to avoid context bloat
+- **Summarize between waves** — before starting wave N+1, summarize wave N findings in 1-2 sentences
+- **Call doc-updater mid-session** for long work (5+ waves) to archive decisions to disk
+
+Architects handle ALL investigation, code reading, and delegation to devs/guardians. PM NEVER looks at code.
