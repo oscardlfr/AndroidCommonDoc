@@ -140,8 +140,7 @@ Do NOT continue retrying with a context-bloated dev — retries will keep failin
 
 BEFORE calling Agent() to spawn a dev, verify ALL:
 
-> Applies to ALL Agent() calls — code writing, test runs, verification,
-> builds, and any other task a session specialist could handle.
+> Applies to ALL Agent() calls — code writing, test runs, verification, builds, and any other task a session specialist could handle.
 
 1. **Alive specialist check**: Is there a session team specialist who
    could do this? If YES → route through their architect via SendMessage.
