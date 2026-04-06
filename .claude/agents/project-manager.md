@@ -176,7 +176,7 @@ Dev NEVER contacts context-provider directly — the architect is the quality ga
 **Background completion → IMMEDIATELY act**: When ANY background agent completes (task notification received), IMMEDIATELY: (a) read any output files, (b) relay results to relevant architects, (c) proceed to next plan step. Do NOT wait for user prompting.
 
 **Kill order:**
-- Extra devs: die after architect verification
+- Extra devs: DISPOSABLE — die after architect verification, no state preserved
 - Core devs: die at session end only (never mid-session)
 - Rotate core devs only if context window fills (7+ waves)
 

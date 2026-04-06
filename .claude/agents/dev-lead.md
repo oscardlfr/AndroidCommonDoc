@@ -2,7 +2,7 @@
 name: dev-lead
 description: "Development workflow coordinator for {{PROJECT_NAME}}. Plans tasks, writes code, delegates audits to specialists, verifies results. Use as the primary entry point for any development work."
 tools: Read, Grep, Glob, Bash, Write, Agent
-model: opus
+model: sonnet
 memory: project
 domain: development
 intent: [dev-lead, workflow, planning, implementation]
