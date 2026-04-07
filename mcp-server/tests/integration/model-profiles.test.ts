@@ -329,6 +329,26 @@ describe("model-profiles.json", () => {
       expect(advancedRank).toBeLessThanOrEqual(qualityRank);
     });
   });
+
+  // ---------------------------------------------------------------
+  // 8. PM is opus in ALL non-budget profiles
+  // ---------------------------------------------------------------
+  describe("PM model tier — opus in all non-budget profiles", () => {
+    it("PM is opus in balanced profile (explicit override)", () => {
+      const resolved = config.profiles.balanced.overrides["project-manager"] ?? config.profiles.balanced.default_model;
+      expect(resolved).toBe("opus");
+    });
+
+    it("PM is opus in advanced profile (explicit override)", () => {
+      const resolved = config.profiles.advanced.overrides["project-manager"] ?? config.profiles.advanced.default_model;
+      expect(resolved).toBe("opus");
+    });
+
+    it("PM is opus in quality profile (default_model is opus, no override needed)", () => {
+      const resolved = config.profiles.quality.overrides["project-manager"] ?? config.profiles.quality.default_model;
+      expect(resolved).toBe("opus");
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -426,3 +446,4 @@ describe("model-profiles.json L0 sync contract", () => {
     expect(skillContent).toContain("current");
   });
 });
+

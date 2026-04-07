@@ -81,9 +81,9 @@ describe('PM template hub pointers', () => {
 // ---------------------------------------------------------------------------
 
 describe('PM template line count post-refactor', () => {
-  it('project-manager.md is at most 200 lines', () => {
+  it('project-manager.md is at most 210 lines', () => {
     const lines = fs.readFileSync(PM_TEMPLATE, 'utf-8').split('\n');
-    expect(lines.length).toBeLessThanOrEqual(200);
+    expect(lines.length).toBeLessThanOrEqual(210);
   });
 });
 
