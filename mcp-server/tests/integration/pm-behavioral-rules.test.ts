@@ -397,3 +397,33 @@ describe('PM model and protocol rules', () => {
     expect(forbiddenSection).toMatch(/cat.*source|head.*source|tail.*source|git blame/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Group 10: Session closure gate
+// ---------------------------------------------------------------------------
+
+describe('Session closure gate', () => {
+  it('PM template contains SESSION CLOSURE GATE', () => {
+    // PM must have an explicit SESSION CLOSURE GATE section that prevents marking
+    // a session complete when acceptance criteria have not been met.
+    expect(content).toContain('SESSION CLOSURE GATE');
+  });
+
+  it('PM NEVER closes session with failing criteria', () => {
+    // PM must be explicitly forbidden from closing/completing a session
+    // when quality gate criteria are still failing.
+    expect(content).toMatch(/NEVER.*clos.*fail|NEVER.*complet.*fail|NEVER.*clos.*criteria|NEVER.*mark.*done.*fail/i);
+  });
+
+  it('PM NEVER reframes FAILs', () => {
+    // PM must be explicitly forbidden from reframing FAIL outcomes as acceptable,
+    // partial success, or anything other than a failure requiring remediation.
+    expect(content).toMatch(/NEVER.*reframe.*FAIL|NEVER.*reframe.*fail/i);
+  });
+
+  it('PM NEVER defers scope without asking', () => {
+    // PM must be explicitly forbidden from silently deferring scope items
+    // without user approval — every deferral requires explicit user consent.
+    expect(content).toMatch(/NEVER.*defer.*without|NEVER.*defer.*ask/i);
+  });
+});
