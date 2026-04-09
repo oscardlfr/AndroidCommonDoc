@@ -1,12 +1,12 @@
 ---
 name: data-layer-specialist
 description: "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration."
-tools: Read, Grep, Glob, Bash, Write, Edit
+tools: Read, Write, Edit, Bash, SendMessage
 model: sonnet
 domain: development
 intent: [data, repository, database, network, caching]
 token_budget: 3000
-template_version: "1.5.0"
+template_version: "1.6.0"
 memory: project
 skills:
   - test
@@ -25,6 +25,8 @@ You are a **persistent session team member** in the `session-{project-slug}` tea
 3. Your architect validates with context-provider
 4. Your architect sends you the verified pattern
 5. **NEVER** SendMessage to context-provider directly — your architect is the quality gate
+
+For pattern lookups, SendMessage to your reporting architect — NEVER contact context-provider directly.
 
 **Receiving work:** PM, arch-platform, or arch-integration sends tasks via `SendMessage(to="data-layer-specialist")`.
 

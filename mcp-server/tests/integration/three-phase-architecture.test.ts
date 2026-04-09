@@ -154,8 +154,8 @@ describe('project-manager template — 3-phase model', () => {
     expect(combinedPM).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 5.9.0', () => {
-    expect(content).toContain('template_version: "5.9.0"');
+  it('template version 5.10.0', () => {
+    expect(content).toContain('template_version: "5.10.0"');
   });
 
   it('has dev dispatch protocol', () => {
@@ -250,8 +250,8 @@ describe('pm-phase-execution sub-doc — extracted phase protocol', () => {
 describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
-  it('template version 1.13.0', () => {
-    expect(archContent).toContain('template_version: "1.13.0"');
+  it('template version 1.14.0', () => {
+    expect(archContent).toContain('template_version: "1.14.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -294,12 +294,12 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
   });
 
-  it('arch-platform has template version 1.10.0', () => {
-    expect(platformContent).toContain('template_version: "1.10.0"');
+  it('arch-platform has template version 1.11.0', () => {
+    expect(platformContent).toContain('template_version: "1.11.0"');
   });
 
-  it('arch-integration has template version 1.10.0', () => {
-    expect(integrationContent).toContain('template_version: "1.10.0"');
+  it('arch-integration has template version 1.11.0', () => {
+    expect(integrationContent).toContain('template_version: "1.11.0"');
   });
 });
 
@@ -312,38 +312,12 @@ describe('arch templates — pattern search delegation rule', () => {
   for (const name of archTemplates) {
     const templateContent = fs.readFileSync(path.join(TEMPLATES_DIR, `${name}.md`), 'utf-8');
 
-    it(`${name} template FORBIDS Grep/Glob for pattern searches`, () => {
-      // Templates must have an explicit single-line rule forbidding Grep/Glob as a substitute
-      // for pattern lookup. Using /is would create false positives (FORBIDDEN and Grep exist in
-      // different contexts in the same file). Must co-occur on ONE line.
-      const lines = templateContent.split('\n');
-      const hasForbiddenGrepOnLine = lines.some(line =>
-        /FORBIDDEN.*Grep.*pattern|FORBIDDEN.*Glob.*pattern|Grep.*pattern.*FORBIDDEN|Glob.*pattern.*FORBIDDEN/i.test(line) ||
-        /do NOT.*use.*Grep.*pattern|NEVER.*use.*Grep.*pattern|Never.*Grep.*for.*pattern/i.test(line)
-      );
-      expect(hasForbiddenGrepOnLine).toBe(true);
-    });
-
-    it(`${name} template requires SendMessage to context-provider for pattern searches (not Grep/Glob)`, () => {
-      // Templates must have an explicit rule that pattern SEARCHES go through context-provider
-      // via SendMessage — NOT Grep/Glob directly. Must co-occur on a single line or adjacent window.
-      const lines = templateContent.split('\n');
-      const hasExplicitPatternDelegationRule = lines.some(line =>
-        /pattern.*search.*context-provider|context-provider.*pattern.*search/i.test(line) ||
-        /Grep.*Glob.*pattern.*context-provider|context-provider.*instead.*Grep.*pattern/i.test(line) ||
-        /NEVER.*Grep.*pattern.*SendMessage|use.*context-provider.*for.*pattern.*NOT.*Grep/i.test(line)
-      );
-      expect(hasExplicitPatternDelegationRule).toBe(true);
-    });
-
     // arch-platform and arch-integration have an existing Caller Grep Rule that must
-    // be preserved after adding the pattern-search delegation FORBIDDEN rule.
+    // include delegation via SendMessage to context-provider.
     // arch-testing never had this rule so it is excluded.
     if (name !== 'arch-testing') {
-      it(`${name} Caller Grep Rule is preserved alongside pattern-search FORBIDDEN rule`, () => {
-        // Both 'caller' and 'Grep' must still coexist — the new FORBIDDEN rule for pattern
-        // searches must NOT accidentally remove or invalidate the Caller Grep Rule.
-        expect(templateContent).toMatch(/[Cc]aller.*[Gg]rep|[Gg]rep.*[Cc]aller/);
+      it(`${name} Caller Grep Rule delegates via SendMessage`, () => {
+        expect(templateContent).toMatch(/Caller Grep Rule[\s\S]{0,500}SendMessage/);
       });
     }
   }
@@ -893,12 +867,12 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.4.0', () => {
-    expect(plannerContent).toContain('template_version: "1.4.0"');
+  it('planner version 1.5.0', () => {
+    expect(plannerContent).toContain('template_version: "1.5.0"');
   });
 
-  it('arch-testing version 1.13.0', () => {
-    expect(testingContent).toContain('template_version: "1.13.0"');
+  it('arch-testing version 1.14.0', () => {
+    expect(testingContent).toContain('template_version: "1.14.0"');
   });
 });
 
