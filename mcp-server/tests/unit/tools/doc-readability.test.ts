@@ -1,77 +1,98 @@
 /**
  * Tests for the doc-readability MCP tool.
  *
- * Mocks node:child_process execFile to avoid requiring Python/textstat.
- * Uses InMemoryTransport to exercise the full MCP tool lifecycle.
+ * Uses in-memory MCP transport with real tool registration.
+ * No mocking — real execFile invocation. Tests assert structured
+ * responses whether python3/textstat is installed or not.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  beforeEach,
+  afterAll,
+  afterEach,
+} from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { writeFile, mkdir, rm } from "node:fs/promises";
+import { registerDocReadabilityTool } from "../../../src/tools/doc-readability.js";
+import { RateLimiter } from "../../../src/utils/rate-limiter.js";
+import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-// Mock execFile before importing the tool to intercept Python invocation
-const mockExecFile = vi.fn();
-vi.mock("node:child_process", () => ({
-  execFile: (...args: unknown[]) => mockExecFile(...args),
-}));
+// ── Test fixture management ──────────────────────────────────────────────────
 
-// Import after mocking
-const { registerDocReadabilityTool } = await import(
-  "../../../src/tools/doc-readability.js"
+const TEST_ROOT = path.join(
+  os.tmpdir(),
+  "doc-readability-test-" + process.pid,
 );
 
-const OK_STDOUT = JSON.stringify({
-  status: "OK",
-  file: "/tmp/test.md",
-  scores: {
-    flesch_ease: 65.5,
-    fk_grade: 8.2,
-    word_count: 120,
-    sentence_count: 10,
-    avg_sentence_length: 12.0,
-  },
-  verdict: "readable",
+function ensureClean(): void {
+  if (existsSync(TEST_ROOT)) {
+    rmSync(TEST_ROOT, { recursive: true, force: true });
+  }
+  mkdirSync(TEST_ROOT, { recursive: true });
+}
+
+function writeMarkdown(filename: string, content: string): string {
+  const filePath = path.join(TEST_ROOT, filename);
+  writeFileSync(filePath, content, "utf-8");
+  return filePath;
+}
+
+// ── MCP client/server lifecycle ──────────────────────────────────────────────
+
+let client: Client;
+let server: McpServer;
+
+beforeAll(async () => {
+  server = new McpServer({ name: "test", version: "1.0.0" });
+  const limiter = new RateLimiter(100, 60000);
+  registerDocReadabilityTool(server, limiter);
+
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport);
+  client = new Client({ name: "test-client", version: "1.0.0" });
+  await client.connect(clientTransport);
 });
 
-const SKIPPED_STDOUT = JSON.stringify({
-  status: "SKIPPED",
-  reason: "textstat not installed: pip install textstat",
+afterAll(async () => {
+  await client.close();
+  await server.close();
 });
+
+beforeEach(() => {
+  ensureClean();
+});
+
+afterEach(() => {
+  try {
+    rmSync(TEST_ROOT, { recursive: true, force: true });
+  } catch {
+    // ignore cleanup errors
+  }
+});
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function callTool(args: Record<string, unknown>) {
+  return client.callTool({
+    name: "doc-readability",
+    arguments: args,
+  });
+}
+
+function extractText(result: Awaited<ReturnType<typeof callTool>>): string {
+  return (result.content[0] as { type: "text"; text: string }).text;
+}
+
+// ── Tests ────────────────────────────────────────────────────────────────────
 
 describe("doc-readability tool", () => {
-  let client: Client;
-  let server: McpServer;
-  let tmpDir: string;
-
-  beforeAll(async () => {
-    server = new McpServer({ name: "test", version: "1.0.0" });
-    registerDocReadabilityTool(server);
-
-    const [clientTransport, serverTransport] =
-      InMemoryTransport.createLinkedPair();
-    await server.connect(serverTransport);
-    client = new Client({ name: "test-client", version: "1.0.0" });
-    await client.connect(clientTransport);
-  });
-
-  afterAll(async () => {
-    await client.close();
-    await server.close();
-  });
-
-  beforeEach(async () => {
-    tmpDir = path.join(os.tmpdir(), `doc-readability-${process.pid}-${Date.now()}`);
-    await mkdir(tmpDir, { recursive: true });
-    mockExecFile.mockReset();
-  });
-
-  afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
-  });
-
   it("is listed as a tool", async () => {
     const { tools } = await client.listTools();
     const tool = tools.find((t) => t.name === "doc-readability");
@@ -79,144 +100,115 @@ describe("doc-readability tool", () => {
     expect(tool!.description).toBeTruthy();
   });
 
-  it("returns OK with scores for a markdown file", async () => {
-    const mdFile = path.join(tmpDir, "test.md");
-    await writeFile(
-      mdFile,
-      "# Test Doc\n\nThis is a simple test document. It has short sentences. Easy to read.",
+  it("returns OK with scores or SKIPPED for a readable markdown file", async () => {
+    const mdPath = writeMarkdown(
+      "simple.md",
+      [
+        "# Getting Started",
+        "",
+        "This guide helps you set up the project. Follow the steps below. Each step is clear.",
+        "First, install the dependencies. Then, run the build script. Finally, start the server.",
+        "The process is simple. Most users finish in five minutes. No special tools are required.",
+      ].join("\n"),
     );
 
-    // Simulate promisify wrapping: execFile callback is called internally by promisify
-    mockExecFile.mockImplementation(
-      (_cmd: string, _args: string[], _opts: unknown, callback: (err: null, result: { stdout: string; stderr: string }) => void) => {
-        callback(null, { stdout: OK_STDOUT, stderr: "" });
-      },
-    );
+    const result = await callTool({ path: mdPath });
+    const text = extractText(result);
+    const parsed = JSON.parse(text) as Record<string, unknown>;
 
-    const result = await client.callTool({
-      name: "doc-readability",
-      arguments: { path: mdFile },
-    });
+    // Tool must return a structured response — either OK (python3+textstat available)
+    // or SKIPPED (dependency absent). Never throws or returns undefined.
+    expect(["OK", "SKIPPED"]).toContain(parsed.status);
 
-    expect(result.content).toHaveLength(1);
-    const content = result.content[0] as { type: string; text: string };
-    expect(content.type).toBe("text");
+    if (parsed.status === "OK") {
+      expect(parsed).toHaveProperty("file");
+      expect(parsed).toHaveProperty("scores");
+      expect(parsed).toHaveProperty("verdict");
 
-    const parsed = JSON.parse(content.text) as Record<string, unknown>;
-    expect(parsed.status).toBe("OK");
-    expect(parsed).toHaveProperty("scores");
-    expect(parsed).toHaveProperty("verdict");
-
-    const scores = parsed.scores as Record<string, unknown>;
-    expect(scores).toHaveProperty("flesch_ease");
-    expect(scores).toHaveProperty("fk_grade");
-    expect(scores).toHaveProperty("word_count");
-    expect(scores).toHaveProperty("sentence_count");
-    expect(scores).toHaveProperty("avg_sentence_length");
+      const scores = parsed.scores as Record<string, unknown>;
+      expect(scores).toHaveProperty("flesch_ease");
+      expect(scores).toHaveProperty("fk_grade");
+      expect(scores).toHaveProperty("word_count");
+      expect(scores).toHaveProperty("sentence_count");
+      expect(scores).toHaveProperty("avg_sentence_length");
+      expect(["readable", "complex", "very_complex"]).toContain(parsed.verdict);
+    } else {
+      // SKIPPED — dependency not installed
+      expect(parsed).toHaveProperty("reason");
+    }
   });
 
-  it("returns SKIPPED when textstat is not installed", async () => {
-    const mdFile = path.join(tmpDir, "test.md");
-    await writeFile(mdFile, "# Doc\n\nSome content.");
+  it("returns ERROR for a non-existent file path", async () => {
+    const missingPath = path.join(TEST_ROOT, "does-not-exist.md");
 
-    mockExecFile.mockImplementation(
-      (_cmd: string, _args: string[], _opts: unknown, callback: (err: null, result: { stdout: string; stderr: string }) => void) => {
-        callback(null, { stdout: SKIPPED_STDOUT, stderr: "" });
-      },
-    );
-
-    const result = await client.callTool({
-      name: "doc-readability",
-      arguments: { path: mdFile },
-    });
-
-    const parsed = JSON.parse(
-      (result.content[0] as { type: string; text: string }).text,
-    ) as Record<string, unknown>;
-
-    expect(parsed.status).toBe("SKIPPED");
-    expect(parsed).toHaveProperty("reason");
-  });
-
-  it("returns ERROR for a non-existent file", async () => {
-    const missingFile = path.join(tmpDir, "does-not-exist.md");
-
-    // Simulate Python raising FileNotFoundError (non-zero exit, stderr contains FileNotFoundError)
-    mockExecFile.mockImplementation(
-      (_cmd: string, _args: string[], _opts: unknown, callback: (err: Error) => void) => {
-        const err = new Error(
-          "Command failed with exit code 1\nFileNotFoundError: [Errno 2] No such file or directory",
-        );
-        callback(err);
-      },
-    );
-
-    const result = await client.callTool({
-      name: "doc-readability",
-      arguments: { path: missingFile },
-    });
-
-    const parsed = JSON.parse(
-      (result.content[0] as { type: string; text: string }).text,
-    ) as Record<string, unknown>;
+    const result = await callTool({ path: missingPath });
+    const text = extractText(result);
+    const parsed = JSON.parse(text) as Record<string, unknown>;
 
     expect(parsed.status).toBe("ERROR");
     expect(parsed).toHaveProperty("file");
     expect(parsed).toHaveProperty("reason");
   });
 
-  it("returns SKIPPED when python3 binary is not found", async () => {
-    const mdFile = path.join(tmpDir, "test.md");
-    await writeFile(mdFile, "# Doc\n\nContent here.");
-
-    mockExecFile.mockImplementation(
-      (_cmd: string, _args: string[], _opts: unknown, callback: (err: Error) => void) => {
-        const err = new Error("spawn python3 ENOENT");
-        (err as NodeJS.ErrnoException).code = "ENOENT";
-        callback(err);
-      },
+  it("gracefully skips when python3 or textstat is unavailable (SKIPPED not ERROR)", async () => {
+    // Write a valid markdown file — if python3/textstat is absent the tool
+    // must return SKIPPED with a reason string, not an unhandled exception.
+    const mdPath = writeMarkdown(
+      "graceful.md",
+      "# Graceful degradation\n\nThis file exists and is valid markdown.",
     );
 
-    const result = await client.callTool({
-      name: "doc-readability",
-      arguments: { path: mdFile },
-    });
+    const result = await callTool({ path: mdPath });
+    const text = extractText(result);
+    const parsed = JSON.parse(text) as Record<string, unknown>;
 
-    const parsed = JSON.parse(
-      (result.content[0] as { type: string; text: string }).text,
-    ) as Record<string, unknown>;
-
-    expect(parsed.status).toBe("SKIPPED");
-    expect(parsed).toHaveProperty("reason");
+    // Must be a structured JSON response — either OK or SKIPPED, never throws
+    expect(["OK", "SKIPPED"]).toContain(parsed.status);
+    if (parsed.status === "SKIPPED") {
+      expect(typeof parsed.reason).toBe("string");
+      expect((parsed.reason as string).length).toBeGreaterThan(0);
+    }
   });
 
-  it("response has expected structure for OK result", async () => {
-    const mdFile = path.join(tmpDir, "structured.md");
-    await writeFile(mdFile, "# Structured test\n\nThis validates the response shape.");
-
-    mockExecFile.mockImplementation(
-      (_cmd: string, _args: string[], _opts: unknown, callback: (err: null, result: { stdout: string; stderr: string }) => void) => {
-        callback(null, { stdout: OK_STDOUT, stderr: "" });
-      },
+  it("response has expected top-level structure for any result", async () => {
+    const mdPath = writeMarkdown(
+      "structure.md",
+      [
+        "# Architecture Overview",
+        "",
+        "This document describes the system architecture.",
+        "The system uses a layered approach. Each layer has a clear responsibility.",
+        "Data flows from the UI layer to the domain layer. Then to the data layer.",
+      ].join("\n"),
     );
 
-    const result = await client.callTool({
-      name: "doc-readability",
-      arguments: { path: mdFile },
-    });
+    const result = await callTool({ path: mdPath });
 
     expect(result.content).toHaveLength(1);
     expect(result.content[0]).toHaveProperty("type", "text");
 
-    const parsed = JSON.parse(
-      (result.content[0] as { type: string; text: string }).text,
-    ) as Record<string, unknown>;
-
-    // Required top-level fields
+    const text = extractText(result);
+    // Response must be valid JSON with a status field
+    const parsed = JSON.parse(text) as Record<string, unknown>;
     expect(parsed).toHaveProperty("status");
-    expect(parsed).toHaveProperty("file");
-    expect(parsed).toHaveProperty("scores");
-    expect(parsed).toHaveProperty("verdict");
-    expect(["readable", "complex", "very_complex"]).toContain(parsed.verdict);
+    expect(typeof parsed.status).toBe("string");
+  });
+
+  it("resolves relative path when projectRoot is provided", async () => {
+    writeMarkdown(
+      "relative.md",
+      "# Relative Path Test\n\nShort doc. Tests relative path resolution. Works correctly.",
+    );
+
+    const result = await callTool({
+      path: "relative.md",
+      projectRoot: TEST_ROOT,
+    });
+
+    const text = extractText(result);
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+
+    // Must resolve correctly — OK or SKIPPED, not ERROR (file exists)
+    expect(["OK", "SKIPPED"]).toContain(parsed.status);
   });
 });

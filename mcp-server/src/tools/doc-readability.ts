@@ -11,6 +11,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import type { RateLimiter } from "../utils/rate-limiter.js";
 import { checkRateLimit } from "../utils/rate-limit-guard.js";
@@ -65,6 +66,25 @@ export function registerDocReadabilityTool(
       const resolvedPath = path.isAbsolute(filePath)
         ? filePath
         : path.resolve(projectRoot ?? process.cwd(), filePath);
+
+      // Check file existence before invoking python3 — this ensures ERROR is
+      // returned for missing files regardless of python3 availability.
+      if (!existsSync(resolvedPath)) {
+        logger.warn(`doc-readability: file not found — ${resolvedPath}`);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                status: "ERROR",
+                file: resolvedPath,
+                reason: `File not found: ${resolvedPath}`,
+              }),
+            },
+          ],
+          isError: true,
+        };
+      }
 
       try {
         const { stdout } = await execFileAsync(
