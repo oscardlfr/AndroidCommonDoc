@@ -47,6 +47,9 @@ import { registerKdocCoverageTool } from "./kdoc-coverage.js";
 import { registerValidateDocUpdateTool } from "./validate-doc-update.js";
 import { registerCheckDocPatternsTool } from "./check-doc-patterns.js";
 import { registerCheckOutdatedTool } from "./check-outdated.js";
+import { registerScanSecretsTool } from "./scan-secrets.js";
+import { registerDocReadabilityTool } from "./doc-readability.js";
+import { registerSearchPatternsTool } from "./search-patterns.js";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -101,6 +104,9 @@ export function registerTools(server: McpServer): void {
   registerValidateDocUpdateTool(server, rateLimiter);
   registerCheckDocPatternsTool(server, rateLimiter);
   registerCheckOutdatedTool(server, rateLimiter);
+  registerScanSecretsTool(server, rateLimiter);
+  registerDocReadabilityTool(server, rateLimiter);
+  registerSearchPatternsTool(server, rateLimiter);
 
   // Register a rate-limit-status utility tool
   server.registerTool(
@@ -126,5 +132,5 @@ export function registerTools(server: McpServer): void {
     },
   );
 
-  logger.info("Registered 39 tools with rate limiting (45/min) [check-doc-freshness is alias for monitor-sources]");
+  logger.info("Registered 42 tools with rate limiting (45/min) [check-doc-freshness is alias for monitor-sources]");
 }
