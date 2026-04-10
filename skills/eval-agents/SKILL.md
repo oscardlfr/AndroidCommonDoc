@@ -24,17 +24,17 @@ Run promptfoo evaluations against agent prompt templates.
 
 1. **Check promptfoo is available:**
    ```bash
-   npx promptfoo --version
+   npm exec -- promptfoo --version
    ```
 
 2. **Run a specific eval:**
    ```bash
-   npx promptfoo run --config promptfoo/evals/<name>-eval.yaml
+   npm exec -- promptfoo eval --config promptfoo/evals/<name>-eval.yaml
    ```
 
 3. **Run all evals:**
    ```bash
-   for f in promptfoo/evals/*-eval.yaml; do npx promptfoo run --config "$f"; done
+   for f in promptfoo/evals/*-eval.yaml; do npm exec -- promptfoo eval --config "$f"; done
    ```
 
 4. **Report results** — pass/fail per test case with assertion details.

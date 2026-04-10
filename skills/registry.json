@@ -392,7 +392,7 @@
       "description": "Run promptfoo evaluations against agent prompt templates. Validates agent prompts produce expected outputs. Use after editing agent templates to catch regressions.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b9c4a5f812ad17ba0b78e3eb233b405dc69050d18032ebe3737153f349111312",
+      "hash": "sha256:4c38b511f47e7946fe52a4bf61c9215db245e8997f2ee4eb12386551f7f5a39c",
       "dependencies": [],
       "frontmatter": {
         "name": "eval-agents",

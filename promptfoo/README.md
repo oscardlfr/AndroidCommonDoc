@@ -14,16 +14,19 @@ promptfoo/
 
 ## How to run a single eval
 
-No global install needed — `npx` handles it automatically:
+No global install needed — `npm exec` handles it automatically:
 
 ```bash
-npx promptfoo run --config promptfoo/evals/example-agent-eval.yaml
+npm exec -- promptfoo eval --config promptfoo/evals/example-agent-eval.yaml
 ```
+
+> **Note**: Use `npm exec -- promptfoo eval` (not `npx promptfoo run`). The `npx` form
+> fails without a `package.json` in the project root (npm v10+ behaviour).
 
 ## How to run all evals
 
 ```bash
-for f in promptfoo/evals/*-eval.yaml; do npx promptfoo run --config "$f"; done
+for f in promptfoo/evals/*-eval.yaml; do npm exec -- promptfoo eval --config "$f"; done
 ```
 
 ## How to add a new eval config
@@ -34,7 +37,7 @@ for f in promptfoo/evals/*-eval.yaml; do npx promptfoo run --config "$f"; done
    - `echo` — offline-safe, no LLM/API key, best for CI
    - `openai:gpt-4o` or similar — requires API key, use locally only
 4. Define `prompts` and `tests` with `assert` blocks
-5. Run with `npx promptfoo run --config promptfoo/evals/<agent-name>-eval.yaml`
+5. Run with `npm exec -- promptfoo eval --config promptfoo/evals/<agent-name>-eval.yaml`
 
 ## Provider notes
 
