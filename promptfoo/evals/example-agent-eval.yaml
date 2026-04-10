@@ -1,0 +1,11 @@
+description: "Example agent eval — echo provider (offline safe)"
+providers:
+  - id: echo
+prompts:
+  - "You are a release guardian. Analyze this code: {{code}}"
+tests:
+  - vars:
+      code: 'val key = "hardcoded_secret"'
+    assert:
+      - type: contains
+        value: "secret"

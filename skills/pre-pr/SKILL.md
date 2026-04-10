@@ -107,6 +107,19 @@ fi
 Gradle deprecation warnings → WARNING (reports, dev must acknowledge).
 "A newer version" warnings → WARNING (reports for visibility).
 
+### Step 5.6 — Secret scan
+
+Run TruffleHog on the project to detect committed secrets:
+
+```bash
+bash scripts/sh/scan-secrets.sh "$(pwd)"
+```
+
+- status=SKIPPED (trufflehog not installed): INFO — do not block
+- status=PASS: continue
+- findings with severity CRITICAL or HIGH: ERROR (blocks)
+- findings with severity MEDIUM or LOW: WARNING (report, do not block)
+
 ### Step 5.7 — Dependency freshness
 
 ```bash
@@ -176,6 +189,7 @@ Report per-module pass/fail. Show failing test names on failure.
 ║ Architecture guards  ✅ PASS / ❌ FAIL  ║
 ║ KMP safety           ✅ PASS / ❌ FAIL  ║
 ║ Warning audit        ✅ PASS / ❌ FAIL  ║
+║ Secret scan          ✅ PASS / ❌ FAIL / ⏭️ SKIP ║
 ║ Dep freshness        ⚠️ INFO / ⏭️ SKIP  ║
 ║ Agent template behavioral lint ✅ PASS / ❌ FAIL ║
 ║ Registry hashes      ✅ PASS / ❌ FAIL  ║

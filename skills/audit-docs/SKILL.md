@@ -25,6 +25,7 @@ copilot-template-type: behavioral
 - `--with-upstream` -- Include Wave 3 upstream content validation (requires network).
 - `--cache-ttl N` -- Override cache TTL for upstream content in hours (default: 24).
 - `--profile deep` -- Include LLM semantic analysis for upstream content changes.
+- `--with-readability` — Include Wave 4 readability analysis. Requires: pip install textstat.
 
 ## Waves
 
@@ -55,6 +56,19 @@ Runs `validate_upstream` assertions from doc frontmatter:
 
 #### Layer 2 — Semantic (LLM, ~$0.03/doc, --profile deep only)
 When Layer 1 detects content change, sends pattern doc + upstream to LLM for semantic comparison.
+
+### Wave 4: Readability (opt-in, --with-readability)
+
+Calls `doc-readability` MCP tool on each sub-doc (hub docs excluded).
+Reports Flesch reading ease, Flesch-Kincaid grade level, word count, avg sentence length.
+
+Verdict thresholds:
+- readable: ease >= 60 (target for technical docs)
+- complex: ease 30-59
+- very_complex: ease < 30
+
+Does NOT block — informational only. Reports per-file scores.
+Skipped gracefully if textstat not installed.
 
 ## Behavior
 

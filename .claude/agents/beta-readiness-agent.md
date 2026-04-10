@@ -8,7 +8,7 @@ intent: [beta, readiness, launch, onboarding]
 token_budget: 3000
 memory: project
 skills:
-  - pre-release
+  - pre-pr
   - test-full-parallel
 ---
 
