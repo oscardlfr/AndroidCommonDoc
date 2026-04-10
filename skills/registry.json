@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-09T21:30:53.571Z",
+  "generated": "2026-04-10T16:53:44.021Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -77,7 +77,7 @@
       "description": "Unified documentation audit — validates structure (sizes, frontmatter), coherence (links, refs), and upstream content (API assertions, deprecation scan). Waves 1+2 are local ($0). Wave 3 requires --with-upstream.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:eb77ab9cdc95444c0d81891eccdd62d4a237c30f668a37b5bad2afd5175b60be",
+      "hash": "sha256:7e951c5826595646a7d161d7cb07785a273783d64d6a913bcf3d914886f9c2bd",
       "dependencies": [],
       "frontmatter": {
         "name": "audit-docs",
@@ -383,6 +383,26 @@
         "disable-model-invocation": true,
         "copilot": true,
         "copilot-template-type": "behavioral"
+      }
+    },
+    {
+      "name": "eval-agents",
+      "type": "skill",
+      "path": "skills/eval-agents/SKILL.md",
+      "description": "Run promptfoo evaluations against agent prompt templates. Validates agent prompts produce expected outputs. Use after editing agent templates to catch regressions.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:b9c4a5f812ad17ba0b78e3eb233b405dc69050d18032ebe3737153f349111312",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "eval-agents",
+        "description": "Run promptfoo evaluations against agent prompt templates. Validates agent prompts produce expected outputs. Use after editing agent templates to catch regressions.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Glob"
+        ],
+        "copilot": false
       }
     },
     {
@@ -701,8 +721,9 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:fde6ff38bffe1c677c244205607e4937572d797232f2e048a6caf1e092c51f37",
+      "hash": "sha256:ba6ef0b3b76dfe9367d8ecdc74f66f8468fc27a5055ba33b9aaab2ffe18d267d",
       "dependencies": [
+        "scripts/sh/scan-secrets.sh",
         "scripts/sh/validate-agent-templates.sh",
         "scripts/sh/rehash-registry.sh"
       ],
@@ -2182,7 +2203,7 @@
       "description": "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:37e4c9d5b58747c02295957f5f35cd8cf41161a0bd90b76d2706000131d58de6",
+      "hash": "sha256:da5cf8dc790d932b4881ce58e72a01ca94000870a17f9e80cd0f9f65bf1c15ab",
       "dependencies": [],
       "frontmatter": {
         "name": "release-guardian-agent",
