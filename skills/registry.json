@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-10T16:53:44.021Z",
+  "generated": "2026-04-10T18:07:35.454Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1385,12 +1385,12 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8bfd745d7cc9786e7c9c282157ffc629e8052d48f9bc5861d2e6d58a191376e9",
+      "hash": "sha256:fb77527ad85e0c724e6e182fee7b72fbffa802124162124d59f3733d55f186e1",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
         "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
-        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "tools": "Read, Bash, SendMessage",
         "model": "sonnet",
         "domain": "architecture",
         "intent": [
@@ -1401,7 +1401,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.10.0",
+        "template_version": "1.11.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1415,12 +1415,12 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8dd6a6515f2e68659d64e4944a9b3a18b2435b3a8e8e5a6288350ef46f9c551a",
+      "hash": "sha256:08c1ee382753c08e05f90180d2c6e726770ab152f740302b950c6a38cc68f5da",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
         "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
-        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "tools": "Read, Bash, SendMessage",
         "model": "sonnet",
         "domain": "architecture",
         "intent": [
@@ -1430,7 +1430,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.10.0",
+        "template_version": "1.11.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1444,12 +1444,12 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:0dd7381666eb5797f149e5f2a8b48b0fa02675ed4ee5c3f959dbc38117aec37e",
+      "hash": "sha256:431c5d1878614101b078315d6e192bae800f9381e4ea0629dc9e23b95927889f",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
         "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
-        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "tools": "Read, Bash, SendMessage",
         "model": "sonnet",
         "domain": "architecture",
         "intent": [
@@ -1459,7 +1459,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.13.0",
+        "template_version": "1.14.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -1615,12 +1615,12 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c5ceb44db210adfa90264801f8fd61a636ec1c022f82f3f4e1ef2d554d6c3fab",
+      "hash": "sha256:e0da6ffbcd1e9e3cd4cc17a749976f50e26b84620cfac4e483d60eee365cf7e5",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
         "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
-        "tools": "Read, Grep, Glob, Bash, Write, Edit",
+        "tools": "Read, Write, Edit, Bash, SendMessage",
         "model": "sonnet",
         "domain": "development",
         "intent": [
@@ -1631,7 +1631,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.5.0",
+        "template_version": "1.6.0",
         "memory": "project",
         "skills": [
           "test",
@@ -1786,12 +1786,12 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a155fdd2689bafa3ca5d9cdbfc051793dcb8caa22cf0b34007d35d6ae5f16436",
+      "hash": "sha256:0388cb49746d2d44b21da83d5c6a748d644a3da245b27541768d2fe4a51dfcb7",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
         "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
-        "tools": "Read, Grep, Glob, Bash, Write, Edit",
+        "tools": "Read, Write, Edit, Bash, SendMessage",
         "model": "sonnet",
         "domain": "development",
         "intent": [
@@ -1801,7 +1801,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.5.0",
+        "template_version": "1.6.0",
         "memory": "project",
         "skills": [
           "test",
@@ -1982,12 +1982,12 @@
       "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:cb6d56084a29990dd33e352faf611b1aa5061fb14932df7605fcfc73f63b43c2",
+      "hash": "sha256:a684705192e6d6a44d08c9e6daf3dd41431652d493e26e4fa1e70f2768294493",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
         "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
-        "tools": "Read, Write, Grep, Glob, Bash, SendMessage",
+        "tools": "Read, Write, Bash, SendMessage",
         "model": "sonnet",
         "domain": "development",
         "intent": [
@@ -1997,7 +1997,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.4.0"
+        "template_version": "1.5.0"
       }
     },
     {
@@ -2120,12 +2120,12 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d99db34cffdefe476888e17bc011f631f3f8214f70d55db424e4110729110a6e",
+      "hash": "sha256:8cd71543b5afa4427d4958e832359eb4081d0d2b5b8e72a64bf08cb40d63a396",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
         "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
-        "tools": "Read, Grep, Glob, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList",
+        "tools": "Read, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList",
         "model": "opus",
         "domain": "development",
         "intent": [
@@ -2136,7 +2136,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "5.9.0",
+        "template_version": "5.10.0",
         "memory": "project",
         "skills": [
           "pre-pr",
@@ -2331,12 +2331,12 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:5dda0033b6d5687fdcbece87bb40d74170cc2a5b42bd9e49e06db1614cf9c52a",
+      "hash": "sha256:7905cbd70fbe590939d3a1ddb24d4b1f48ebf77f17004dd0d44a1675b71f039c",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
         "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
-        "tools": "Read, Grep, Glob, Bash, Write, Edit",
+        "tools": "Read, Write, Edit, Bash, SendMessage",
         "model": "sonnet",
         "domain": "development",
         "intent": [
@@ -2346,7 +2346,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.6.0",
+        "template_version": "1.7.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2368,12 +2368,12 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:596f06fc333e1276502ff98aae6252a66e5a223f17a88ce2f16e2bc5e04e85a9",
+      "hash": "sha256:4280efec2414bca778a747485044447fc941b33b987816b45e022d08792db62c",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
         "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
-        "tools": "Read, Grep, Glob, Bash, Write, Edit",
+        "tools": "Read, Write, Edit, Bash, SendMessage",
         "model": "sonnet",
         "domain": "development",
         "intent": [
@@ -2383,7 +2383,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.6.0",
+        "template_version": "1.7.0",
         "memory": "project",
         "skills": [
           "accessibility",

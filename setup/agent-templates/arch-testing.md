@@ -1,12 +1,12 @@
 ---
 name: arch-testing
 description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
-tools: Read, Grep, Glob, Bash, SendMessage
+tools: Read, Bash, SendMessage
 model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.13.0"
+template_version: "1.14.0"
 skills:
   - test
   - test-full-parallel
@@ -64,8 +64,6 @@ Before SendMessage to any dev, ask: "Have I consulted context-provider about the
 If no → SendMessage to context-provider first.
 
 **Scope Gate passes ≠ pattern knowledge confirmed.** Scope Gate governs authorization; context-provider governs correctness. Both must pass before dispatch.
-
-> **FORBIDDEN**: Using Grep/Glob to search for project patterns, conventions, or architecture rules when context-provider is alive. SendMessage context-provider FIRST for ANY pattern lookup. Grep/Glob are for VERIFICATION of specific files (e.g., caller grep before signature changes — see Caller Grep Rule), NOT for discovering patterns.
 
 **3. Spec completeness rule**
 
