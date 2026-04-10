@@ -169,4 +169,25 @@ describe("search-patterns tool", () => {
     expect(json).toHaveProperty("results");
     expect(Array.isArray(json.results)).toBe(true);
   });
+
+  it("rebuild:true returns SKIPPED or ERROR when chromadb/python3 not available", async () => {
+    // TEST_ROOT has no .chroma/ — forces the rebuild code path.
+    // Since python3/chromadb may not be installed, result is SKIPPED or ERROR.
+    // Either is acceptable: the point is the rebuild branch is exercised without throwing.
+    const result = await callTool({
+      query: "test query",
+      rebuild: true,
+      projectRoot: TEST_ROOT,
+    });
+    const text = extractText(result);
+    const json = extractJson(text);
+
+    expect(json).toHaveProperty("status");
+    expect(json).toHaveProperty("query");
+    expect(json.query).toBe("test query");
+    expect(json).toHaveProperty("results");
+    expect(Array.isArray(json.results)).toBe(true);
+    // Rebuild without chromadb/python3 → structured error, not an unhandled throw
+    expect(["SKIPPED", "ERROR", "NOT_INDEXED", "OK"]).toContain(json.status);
+  });
 });

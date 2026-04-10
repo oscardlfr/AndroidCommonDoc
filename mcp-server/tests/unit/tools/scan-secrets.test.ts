@@ -16,7 +16,7 @@ import {
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerScanSecretsTool } from "../../../src/tools/scan-secrets.js";
+import { registerScanSecretsTool, parseOutput } from "../../../src/tools/scan-secrets.js";
 import { RateLimiter } from "../../../src/utils/rate-limiter.js";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -136,5 +136,45 @@ describe("scan-secrets tool", () => {
     expect(Array.isArray(json.findings)).toBe(true);
     expect(typeof json.summary).toBe("string");
     expect(["PASS", "FAIL", "SKIPPED"]).toContain(json.status);
+  });
+
+  it("parseOutput returns FAIL when JSONL contains CRITICAL severity finding", () => {
+    // Exercise the FAIL branch of parseOutput directly with fixture JSONL.
+    // This covers the path that cannot be reached without a real trufflehog install.
+    const criticalFinding =
+      '{"SourceMetadata":{"Data":{}},"SourceID":1,"SourceType":15,' +
+      '"SourceName":"trufflehog","DetectorType":2,"DetectorName":"AWS",' +
+      '"DecoderName":"PLAIN","Verified":true,"Raw":"AKIAIOSFODNN7EXAMPLE",' +
+      '"RawV2":"","Redacted":"AKIA************MPLE","ExtraData":null,' +
+      '"StructuredData":null,"severity":"CRITICAL"}';
+
+    const result = parseOutput(criticalFinding);
+
+    expect(result.status).toBe("FAIL");
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].severity).toBe("CRITICAL");
+    expect(result.summary).toContain("CRITICAL");
+  });
+
+  it("parseOutput returns FAIL when JSONL contains HIGH severity finding", () => {
+    const highFinding =
+      '{"DetectorName":"GitHub","severity":"HIGH","Raw":"ghp_exampletoken123456"}';
+
+    const result = parseOutput(highFinding);
+
+    expect(result.status).toBe("FAIL");
+    expect(result.findings).toHaveLength(1);
+    expect(result.summary).toContain("CRITICAL or HIGH");
+  });
+
+  it("parseOutput returns PASS when findings are low severity only", () => {
+    const lowFinding =
+      '{"DetectorName":"SomeDetector","severity":"LOW","Raw":"not-critical"}';
+
+    const result = parseOutput(lowFinding);
+
+    expect(result.status).toBe("PASS");
+    expect(result.findings).toHaveLength(1);
+    expect(result.summary).toContain("no CRITICAL or HIGH");
   });
 });

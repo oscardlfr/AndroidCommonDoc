@@ -30,7 +30,7 @@ interface ScanResult {
 
 // ── Output parser ─────────────────────────────────────────────────────────────
 
-function parseOutput(stdout: string): ScanResult {
+export function parseOutput(stdout: string): ScanResult {
   const lines = stdout
     .split("\n")
     .map((l) => l.trim())
