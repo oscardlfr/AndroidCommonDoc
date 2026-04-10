@@ -1,6 +1,6 @@
 {
   "version": 1,
-"generated": "2026-04-10T16:53:44.021Z",
+  "generated": "2026-04-10T18:07:35.454Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1401,7 +1401,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-"template_version": "1.11.0",
+        "template_version": "1.11.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1430,7 +1430,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-"template_version": "1.11.0",
+        "template_version": "1.11.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1459,7 +1459,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-"template_version": "1.14.0",
+        "template_version": "1.14.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2136,7 +2136,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-"template_version": "5.10.0",
+        "template_version": "5.10.0",
         "memory": "project",
         "skills": [
           "pre-pr",
