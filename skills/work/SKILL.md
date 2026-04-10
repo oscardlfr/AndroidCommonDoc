@@ -61,10 +61,11 @@ Match `$ARGUMENTS` against these patterns in order. First match wins:
 | `post\|blog\|social\|marketing\|content` | Agent(`content-creator`) * |
 | `landing\|page\|conversion\|copy\|seo` | Agent(`landing-page-strategist`) * |
 | `pricing\|tiers\|monetize` | Agent(`product-strategist`) * |
-| `implement\|feature\|build\|scope\|plan\|execute\|wave` | Agent(`project-manager`) ** |
+| `implement\|feature\|build\|scope\|plan\|execute\|wave` | Read `project-manager` template, act as PM (in-process) *** |
 
 \* Business agents are opt-in. If the agent doesn't exist in `.claude/agents/`, fall through to Level 2.
-\** `project-manager` is the orchestrator for multi-file work. It assigns to architects, never codes.
+\** Business agents are opt-in...
+\*** `project-manager` is the orchestrator for multi-file work. It assigns to architects, never codes. It MUST run as the main Claude process (in-process), NOT as a sub-agent via Agent() — sub-agents cannot create teams (TeamCreate) or spawn other agents reliably.
 
 ### Level 2 — Frontmatter Discovery (if no Level 1 match)
 
@@ -107,3 +108,12 @@ Proceed? (y/n)
 - `dev-lead` is also a template — only exists if the project copied it from `setup/agent-templates/`
 - Always show the routing decision and ask for confirmation before executing
 - If the user disagrees with routing, ask them to clarify or pick a target manually
+
+## Orchestrator Safety Rule
+
+**NEVER** spawn orchestrator agents (`project-manager`, `dev-lead`, `quality-gater`) via `Agent()`. These agents need `TeamCreate`, `TeamDelete`, and `Agent` tools which only work at the top-level process.
+
+When routing to an orchestrator:
+1. Read the agent's template from `.claude/agents/{name}.md`
+2. Follow its instructions as the main Claude process
+3. The agent acts **in-process**, not as a sub-agent
