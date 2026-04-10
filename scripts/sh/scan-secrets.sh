@@ -3,9 +3,9 @@ set -euo pipefail
 
 # Scans a project directory for verified secrets using TruffleHog.
 #
-# Requires TruffleHog to be installed:
-#   macOS/Linux: curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
-#   pip:         pip install trufflehog
+# Requires TruffleHog v3 (Go binary) to be installed:
+#   curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+#   NOTE: Do NOT use `pip install trufflehog` — that installs v2 (Python) which lacks the `filesystem` subcommand.
 #
 # Usage:
 #   ./scan-secrets.sh [project_root]
