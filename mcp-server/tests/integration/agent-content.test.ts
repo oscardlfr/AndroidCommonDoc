@@ -102,10 +102,10 @@ describe('agent content validation', () => {
   describe('ui-specialist — mandatory checks', () => {
     const content = fs.readFileSync(path.join(agentDir, 'ui-specialist.md'), 'utf-8');
 
-    it('has 7 mandatory checks', () => {
+    it('has 8 mandatory checks (includes runtime Android layout-diff)', () => {
       const checks = content.match(/^### \d+\./gm);
       expect(checks).not.toBeNull();
-      expect(checks!.length).toBe(7);
+      expect(checks!.length).toBe(8);
     });
 
     it('marks missing previews as HIGH severity', () => {

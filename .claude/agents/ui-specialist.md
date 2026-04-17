@@ -74,12 +74,34 @@ Review and fix Compose UI code for KMP project patterns.
 - Tests verify user interactions trigger correct callbacks
 - Tests verify semantic nodes for accessibility
 
+### 8. Runtime UI Validation (Android CLI)
+Static tests prove the Composable tree *exists*; they do not prove it *renders correctly on a device*. The `android-layout-diff` MCP tool closes that gap by diffing the on-device layout against a committed baseline JSON.
+
+When to invoke:
+- After any change that touches screen rendering (UiState branches, string resources, theming)
+- Before finalizing a PR that modifies a screen with a committed baseline
+- When investigating a "tests pass but app is broken" report
+
+Invocation:
+- MCP tool: `android-layout-diff`
+- Required state: Android CLI v0.7+ on PATH, device authorized via `adb devices`, target app installed
+- Inputs: `device_serial` (optional — required only with multiple devices), `baseline_path` (absolute path to committed layout JSON)
+- Baseline capture (one-time per screen): `android layout --pretty --output=baselines/<screen>.json` after reaching the target state on device
+
+How to treat findings:
+- **HIGH — removed + resource-id**: critical. A known element vanished from the rendered tree. Most common cause: UiState branch rendering empty when it should render content. Block the PR.
+- **MEDIUM — text drift**: copy regressed or a UiState branch returned the wrong string-resource. Investigate the resource key used.
+- **LOW — anonymous added/removed**: usually dynamic content (snackbars, tooltips). Verify the baseline is still representative; update if intentional.
+
+If the tool reports `cli_missing`, `adb_offline`, or `multi_device`, surface the CLI's suggestion verbatim — do not attempt to auto-fix environment issues. Point the user at `docs/guides/getting-started/android-cli-windows.md`.
+
 ## Workflow
 1. Find `.kt` files in UI source sets (Compose screens, components) and design system modules
-2. Check each against ALL 7 rules above
+2. Check each against ALL 8 rules above
 3. Report violations with file:line and suggested fix
 4. **Implement fixes** for hardcoded strings, missing previews, and accessibility violations
-5. After fixes: run `/test <module>` to verify nothing broke
+5. If the change touched a screen with a committed baseline, invoke `android-layout-diff` — fold its findings into your report
+6. After fixes: run `/test <module>` to verify nothing broke
 
 ## No "Pre-existing" Excuse
 
@@ -97,6 +119,7 @@ If you discover a bug during your task — whether you caused it or not — you 
 
 ## MCP Tools (when available)
 - `compose-preview-audit` — validate @Preview coverage
+- `android-layout-diff` — runtime UI validation on device; diff against committed baseline JSON (see Rule 8)
 - `unused-resources` — detect unused strings/colors/drawables
 - `string-completeness` — validate string completeness across languages
 

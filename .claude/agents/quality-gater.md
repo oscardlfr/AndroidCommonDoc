@@ -178,6 +178,20 @@ If changed files touch Compose/UI code:
 3. **TDD**: failing test FIRST (RED), then fix (GREEN)
 4. **FALSE GREEN**: test passes before code change → REJECT
 
+### Step 9.5: Runtime Layout Diff (if a committed baseline exists for the changed screen)
+
+**Skip if**: no screen baseline at `baselines/<screen>.json` is present for a modified screen; or no authorized adb device is available to the runner.
+
+If a committed layout baseline exists for a screen touched by the diff:
+
+1. Invoke the `android-layout-diff` MCP tool with `baseline_path` pointing at the committed baseline and `device_serial` if multiple devices are connected.
+2. Read the `<!-- FINDINGS_START --> ... <!-- FINDINGS_END -->` block from the tool output.
+3. **BLOCK** on any HIGH finding (`removed + resource-id`) — this is the "tests pass but app is broken" signature.
+4. **Escalate** MEDIUM findings (text drift, modified interactions) as pending items in the Summary; do not auto-fix copy regressions.
+5. **Allow** LOW findings (anonymous additions, transient content) unless the PR specifically targets that element.
+
+If the tool reports `cli_missing` / `adb_offline` / `multi_device`: do NOT BLOCK on absence of validation — record it as a Summary note pointing at `docs/guides/getting-started/android-cli-windows.md`. Step 9.5 is additive; the Step 9 test suite is still the primary gate.
+
 ### Step 10: Write quality-gate stamp (if PASS)
 
 If ALL steps passed:
