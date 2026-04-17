@@ -96,6 +96,16 @@ The `l0-manifest.json` controls what gets synced:
 - **explicit**: Only syncs entries already present in `checksums` (opt-in mode)
 - **l2_specific**: Lists project-owned files that sync will never touch
 
+## External Skill Sources
+
+Not every skill on a consumer's machine is managed by L0. Google's Android Skills repository (`github.com/android/skills`, Apache 2.0) publishes official skills that users install directly via `android skills add`. These arrive at `~/.claude/skills/<name>/SKILL.md` — the same directory path L0 materializes into.
+
+**Sync policy**: `/sync-l0` **does not** generate, distribute, or touch any skill that is not present in the L0 registry (`skills/registry.json`). Google skills installed via `android skills add` live outside that registry, so they are invisible to sync and safe from accidental removal.
+
+**Collision handling**: if a Google skill slug collides with an L0 slug (rare — Google uses domain-specific names like `edge-to-edge`, L0 uses functional names like `test`/`coverage`), the consumer can opt out of the L0 copy by adding the slug to `selection.exclude_skills` in `l0-manifest.json`. Next sync leaves the Google skill intact.
+
+**Documentation entry point**: see `skills/android-skills-consume/SKILL.md` for the list of known Google skills, install commands, and the co-existence rationale (Option C selective-bridge design, approved in Phase 19 v1.3).
+
 ## Agent Templates
 
 Agent templates (`setup/agent-templates/`) are the authoritative source for PM, quality-gater, architects, and other team agents. These are also materialized in `.claude/agents/` so the registry scanner picks them up and `/sync-l0` distributes them to consumers.

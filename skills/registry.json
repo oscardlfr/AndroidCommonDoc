@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-04T17:41:24.592Z",
+  "generated": "2026-04-17T19:19:32.011Z",
   "l0_root": "C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc",
   "entries": [
     {
@@ -23,6 +23,47 @@
         ],
         "copilot": true,
         "copilot-template-type": "behavioral"
+      }
+    },
+    {
+      "name": "android-skills-consume",
+      "type": "skill",
+      "path": "skills/android-skills-consume/SKILL.md",
+      "description": "Bridge to Google's Android CLI skill ecosystem. Documents how to install Google's official Android skills via `android skills add` and how they co-exist with L0 skills without conflict.",
+      "category": "ecosystem",
+      "tier": "extended",
+      "hash": "sha256:7fef4f507b955705e04b62b3fac24aa3e108a2999af587a2524ff9d6ff445960",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "android-skills-consume",
+        "description": "Bridge to Google's Android CLI skill ecosystem. Documents how to install Google's official Android skills via `android skills add` and how they co-exist with L0 skills without conflict.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Glob"
+        ],
+        "copilot": true,
+        "copilot-template-type": "reference",
+        "scope": "l0",
+        "category": "ecosystem",
+        "slug": "android-skills-consume",
+        "status": "active",
+        "layer": "L0",
+        "version": 1,
+        "last_updated": "2026-04-17",
+        "sources": [
+          {
+            "url": "https://github.com/android/skills",
+            "type": "github-repo",
+            "tier": 1,
+            "license": "Apache-2.0"
+          },
+          {
+            "url": "https://developer.android.com/tools/agents/android-skills",
+            "type": "doc-page",
+            "tier": 2
+          }
+        ]
       }
     },
     {
@@ -936,7 +977,7 @@
       "description": "Interactive wizard to fully configure a new or existing project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Creates l0-manifest.json, syncs selected assets, and verifies the result. Bilingual output (EN + ES).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:3d1daf43f9310db15f63988270dd4545575aa36c77237fc218ede8c549ea5a28",
+      "hash": "sha256:57012119c861e670203d189ea17736387fb5dc38aab01bf1199c22ca11885e4d",
       "dependencies": [
         "scripts/sh/sync-gsd-skills.sh",
         "scripts/sh/sync-gsd-agents.sh",
@@ -1016,7 +1057,7 @@
       "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:097042f426825c2eaa6bb8c3430416fd90e65f0a3cb3a11f547ab2cec7fee595",
+      "hash": "sha256:33bfa1d3beaecd7ad11da83e6c1893fbc8dca829ffc098aa650d00f8da5a29ae",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
@@ -1210,7 +1251,7 @@
       "description": "Validate pattern docs against upstream official documentation. Runs Layer 1 deterministic assertions (api_present, deprecation_scan, etc.) from validate_upstream frontmatter. Use when checking if docs are still accurate.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:05671ca268a0548d474c4636917bff8a086df0c478dbab05f4d2fd7e94c8d4e4",
+      "hash": "sha256:12475e71d6fc62061bf02b7b9da7c443302383f281c0d234764f61d0ec23346f",
       "dependencies": [],
       "frontmatter": {
         "name": "validate-upstream",
@@ -1310,7 +1351,7 @@
       "description": "Researches a single technical decision and returns a structured comparison table with recommendation. Use when choosing between approaches, libraries, or architectures.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f43277f65e0ad4bd0c59afab92f3653d0b5bdb1a05286cc13370502afa446f40",
+      "hash": "sha256:e9ad52f1e4f1bda65a34533dea1d20569c724f42e73978196713c3a73464d775",
       "dependencies": [],
       "frontmatter": {
         "name": "advisor",
@@ -1334,7 +1375,7 @@
       "description": "Scans HTTP clients for rate limit handling, retry-after headers, exponential backoff, and timeout configuration. Use when auditing API integration robustness.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a561873b2034ba6b8a794db526f2adf7f5b0074c889c193039a7ecb7f66f7151",
+      "hash": "sha256:a0998d90eee2dd1bc379a6509dcd34d5c907b846da0badf661996d9bca01b32a",
       "dependencies": [],
       "frontmatter": {
         "name": "api-rate-limit-auditor",
@@ -1361,7 +1402,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7f30b9b353396f33f2176f9bafabe03a083bed0a5bad7363e18afb6006035aed",
+      "hash": "sha256:e03eccb47f39c9078cf1f20eeae6a08569feb35b3525ef40109f63a8b36ff609",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1391,7 +1432,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a2d31589fe3b5be24ffb260e12a6f149be4975e7c0e8bcdc6a905fe6db68a930",
+      "hash": "sha256:e4da943aae217b743400840724c56f5454857b8928e6f46a39ec4803b4d5d6e9",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1420,7 +1461,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:ea3cc0b16f04580f7de222db3c741f8ffd7928b158d1d2063adb2d38dbd0c51d",
+      "hash": "sha256:b58ccfe26fc72457653c6ce0e61041b66801ecb7602f76a94bed05405ad67505",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1450,7 +1491,7 @@
       "description": "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:1b5da370bb14651c98cf1bdf5c3b8d87e47ceaba683344992f58140d4fdc300f",
+      "hash": "sha256:f112d4cc990e556689659f768788c472f165dec58822b5e43ca55ffcc7bdccc6",
       "dependencies": [],
       "frontmatter": {
         "name": "beta-readiness-agent",
@@ -1478,7 +1519,7 @@
       "description": "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:dd827e7e834d6d8bd72f7aa30d47f4b8ea151123a86a5806c3077642ab105c82",
+      "hash": "sha256:f538f78487d154edd57af0abf0abcf90d8247aed8ffa18627a43639a4b934481",
       "dependencies": [],
       "frontmatter": {
         "name": "codebase-mapper",
@@ -1505,7 +1546,7 @@
       "description": "Drafts developer-focused content for build-in-public marketing. Creates posts for Reddit, Twitter/X, forums, and changelogs. Customize {{PRODUCT_NAME}} and tone for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:5979279e0a97c1c7246b5b751450f70821376c5c2792e7c18bba7ebce7e8c53f",
+      "hash": "sha256:78f905d1dea581ade5cc98b11855f2da176c8a055e069b20f4eb337e10f781f7",
       "dependencies": [],
       "frontmatter": {
         "name": "content-creator",
@@ -1532,7 +1573,7 @@
       "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:049cafd7186fffddcdc898c044eff1715d93d9711d1b5148aa0a5840b259dcb0",
+      "hash": "sha256:f357703c93120c6bde911b0413d314d2f291f1caae66a9d791a53d4020d41c1b",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -1557,7 +1598,7 @@
       "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:6805388d360cc824e1c1b1a6d4b42f7dd15b3b6fb01845b33f74da5f308d0de0",
+      "hash": "sha256:88307afd3c8a554617f78ff3b8a8a7f187f49174ae71324e337f803e70528862",
       "dependencies": [],
       "frontmatter": {
         "name": "cross-platform-validator",
@@ -1588,7 +1629,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:48d55854f1b3509bbb8bb03c8cc4f15638f5231d737fdb86983009b4dffcfbe5",
+      "hash": "sha256:24e188e19b08e11c8a4e34cbd87ece6019eb7a62d943ff891247b7ce677644dd",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -1619,7 +1660,7 @@
       "description": "Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b4882bf85735cba460123fa7f7fe0c4c61e2e887e35d623a41c149b187071fae",
+      "hash": "sha256:002ffe71154e8e80cd3b930c4d61fa4379b6029c3e73d880df0dc31fb667f490",
       "dependencies": [],
       "frontmatter": {
         "name": "debugger",
@@ -1648,7 +1689,7 @@
       "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:bfb3665d9fcccabe78a493c13fec9680c195fba2b14dfa1dae97318e21523b47",
+      "hash": "sha256:c7e683f8b67272de5792b73874322f536f72351bd96c854d35d70c3246779310",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-alignment-agent",
@@ -1677,7 +1718,7 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Detects drift between docs/*.md pattern documentation and what scripts/skills actually implement. Flags outdated patterns, missing validations, and version mismatches.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:8e29819fbaa88f611639e93bdc6a4f1fcb3c28a258b6c71dc3c223ede49bcc41",
+      "hash": "sha256:95e69961c50f7e7c8f6980136428864e1c79eae8a65bb27f59d999b12183ada8",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-code-drift-detector",
@@ -1700,7 +1741,7 @@
       "description": "Sporadic team agent for migrating project docs to L0 patterns. Triggered by QG frontmatter failures, doc-alignment drift, or manual /audit-docs. Creates hubs, splits oversized docs, adds frontmatter, fixes references.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:1f35c4e173c7f491f6b7853f8f14b18892b92aff703e88f9bd88ae81ab100eca",
+      "hash": "sha256:7fa3c19f11a43763af880e789f4e6702375b1dce8487439ed11462733de5d257",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-migrator",
@@ -1726,7 +1767,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:86a774f148d5245144d47b9e659564440e7bae747e7aaced610e8dd6140ef509",
+      "hash": "sha256:9b7be53b991c22196c637add8cc24b19eb3231055d9867a5409d1d51f6bd6b54",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -1756,7 +1797,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a1aefd3bcaaefd06a96a951a95906b513e8ae7049194d5c8fee1f57e43e96df1",
+      "hash": "sha256:f4c557da992711151c92872402a9c22da09c944606c427da9d18690b861f33d8",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -1786,7 +1827,7 @@
       "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:645b3f79492d44fcd550a9a3ae32850e0199b7ff6f793d83b0b8cc2d8c3885f9",
+      "hash": "sha256:b54d6a7bf7c82a4aa1cea5d5362a61e9aaab70b4b44c036a399e6e2c5f05df22",
       "dependencies": [],
       "frontmatter": {
         "name": "{{DOMAIN}}-specialist",
@@ -1815,7 +1856,7 @@
       "description": "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e38aa50d5dec8532e3093f8c478cef086e823da2edc1d8f4bbfd088f1c1cdd12",
+      "hash": "sha256:a2474b6bd0d6ca561066ca880ee9cb3b2227b2c9b5d2456afdb22957fd6a7961",
       "dependencies": [],
       "frontmatter": {
         "name": "full-audit-orchestrator",
@@ -1838,7 +1879,7 @@
       "description": "Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:49bae57d3c3e8c6de2969d4e9a51628c4a933dfd677b0a4519e8dc77b0203c05",
+      "hash": "sha256:be2adeae0318ae366d66ba6f6f1cc1b3e791cd7714e582ffd0fcc0c73420f036",
       "dependencies": [],
       "frontmatter": {
         "name": "l0-coherence-auditor",
@@ -1868,7 +1909,7 @@
       "description": "Designs landing page copy, structure, and conversion flow. Use when planning public-facing web presence, optimizing CTAs, or improving SEO for product pages.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d24e88b7557e37c39b472711e7e65171cbc01c08b1bd14b023d4211693de959e",
+      "hash": "sha256:88861fcc68c6ab4b7702894470e10230f239436c37becb3ba8e0a8b9069aeead",
       "dependencies": [],
       "frontmatter": {
         "name": "landing-page-strategist",
@@ -1895,7 +1936,7 @@
       "description": "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:36e1ea7df2f15e7483632b35dcc525e1a6c7c620f45a6f4d8bb76ec9b27146ae",
+      "hash": "sha256:356a7f6ead5a7f3c297bb1d593b08173efc3a87ee476ae0a70fb34cf1e3bb2fa",
       "dependencies": [],
       "frontmatter": {
         "name": "marketing-lead",
@@ -1920,7 +1961,7 @@
       "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6017cfe5c4a088eb8c6f54d0e5d34e50f44634937a6656f7c10063f87172d3b4",
+      "hash": "sha256:95465e41aee019f94a1d76667760f1feb910dc160397ed851756746f12d7aeeb",
       "dependencies": [],
       "frontmatter": {
         "name": "module-lifecycle",
@@ -1950,7 +1991,7 @@
       "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9dd37f7ed09343a5361e745231bb627f34771aa4b3e9cbc7ffef156c7a8ab635",
+      "hash": "sha256:63f5a48ee723fb31f2a146ded5bbcf8fb390b22cc154677477e6f452731046ea",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -1975,7 +2016,7 @@
       "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:de2adfed088431a66de1bce92fcd86579350330666ea27648e4a0fb97e53dc66",
+      "hash": "sha256:46e5e42fec4e88811ad29a5349ce4f3564428bab71bd4c0a8e6d254401dcf1ab",
       "dependencies": [],
       "frontmatter": {
         "name": "platform-auditor",
@@ -2005,7 +2046,7 @@
       "description": "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c7fb55efa407e324f270ab5246dd445a9804a86903166fb0c71f900e914001f0",
+      "hash": "sha256:e96e2328fb72e9ddda01cbe16618b8a1d0b965ca12b419836bef720053fac28c",
       "dependencies": [],
       "frontmatter": {
         "name": "privacy-auditor",
@@ -2033,7 +2074,7 @@
       "description": "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:470baae6c8d42323c3eff0025ec72790aff44ba212c89271566e48ffced69fb2",
+      "hash": "sha256:c63323a9ad78139b99d2083d86bdcd89aa2ff67c5ee78d68adc1b04f53347cbf",
       "dependencies": [],
       "frontmatter": {
         "name": "product-lead",
@@ -2059,7 +2100,7 @@
       "description": "Analyzes feature ideas against business goals using ICE scoring. Produces prioritized backlog with rationale. Customize {{PRODUCT_NAME}} and business constraints for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:02361c38a8bc1351d5884e46f4ae2f8d7fed76a867d01bb2491c3ce59e077fc4",
+      "hash": "sha256:f3c5c1b28470b0d361dbfd7af22b8e42aca335c5797160c6357e8469e4de823d",
       "dependencies": [],
       "frontmatter": {
         "name": "product-strategist",
@@ -2087,7 +2128,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ad6a0b3cd6cae8bc97882616fa3cf475dd8dae07ab1cc5b947a39c424225fd1b",
+      "hash": "sha256:10808dda2be923b637da32dc998d0ed585d66da0a5db2bdc150026766d5b74ec",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
@@ -2120,7 +2161,7 @@
       "description": "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:03cc967af7770371122cc03f927b37f1ea33009e61efe8d6552142de90e90912",
+      "hash": "sha256:dafb191678909623141ea509d0597b0b13c064ac15b654f586b6b6524450258d",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gate-orchestrator",
@@ -2143,7 +2184,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:29d072080cf3a56d3e263e1b373e109a791610af76e42093ceade5d10dbecf84",
+      "hash": "sha256:0fc5498d9d4d35ba85680d6711c8c177bcd5cbbd15a03b2ce3d6a744a41d8277",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2169,7 +2210,7 @@
       "description": "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:049e2dab2be9501b0ead703251ad7202dcf4cca17e01bc7552b8e5af1abc5086",
+      "hash": "sha256:f33b98fff8a6f192a60ebffedb32be1f70b03a356e207a769aba31b52ab29ac6",
       "dependencies": [],
       "frontmatter": {
         "name": "release-guardian-agent",
@@ -2197,7 +2238,7 @@
       "description": "Ad-hoc technical research on any topic. Use before implementation to gather context, evaluate options, or understand a domain.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:5177def422340437c4c864c06b8a29b0c47095e1d43b5755eabfa91fb449ac16",
+      "hash": "sha256:e04ada376cccec649ecd0104e74b5391f32b5309a345f578fd343d4132a58799",
       "dependencies": [],
       "frontmatter": {
         "name": "researcher",
@@ -2221,7 +2262,7 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that PowerShell and Bash script pairs are functionally equivalent. Checks flags, output format, and exit codes between scripts/ps1/ and scripts/sh/.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:8076c30532e7ec190d8ee05f4772163b7f2adb08b5cfe767faba59c6d84843d8",
+      "hash": "sha256:ce26eda17a866f0ddfbfa0df382b4ca312c9d6ac0be835f6c90cf0a5d3929e72",
       "dependencies": [],
       "frontmatter": {
         "name": "script-parity-validator",
@@ -2245,7 +2286,7 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:9ab922ea2815cbaeced38d279402fee1b8f373b643dc184becb511c615a1f238",
+      "hash": "sha256:e5f8de42c5ee755c1624982922a4cf4d05583594abd01f9767d5bcd7f102a72a",
       "dependencies": [],
       "frontmatter": {
         "name": "skill-script-alignment",
@@ -2269,7 +2310,7 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Respects the copilot frontmatter field in skills/*/SKILL.md to determine expected coverage.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:277cf9e3bc03aa1d3d549769167b9a91bc7a274da864d0cabc6489c2074db92b",
+      "hash": "sha256:a8daa2ec1bec067acf8802bed832bca30ef0f25321ad25a382b6e043c6f4351b",
       "dependencies": [],
       "frontmatter": {
         "name": "template-sync-validator",
@@ -2292,7 +2333,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:a3a146dce8d34e223cb50e08334a2bf4e5961f689751a8ab3f18d67e86926dd2",
+      "hash": "sha256:bae3562de59ea25e9c3206d6bd972ef9e0e9d67c6f1e0c1d0437d692316adf91",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2329,7 +2370,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:6c659da91fe47359c012dc5379ed328c2cc9a9f7b059a0efd18617a09dcdc3e5",
+      "hash": "sha256:ee27f6fa943b00469a42eeb26d8d7de92899bc6afafa500303ef6e1b0ec3c2b5",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2360,7 +2401,7 @@
       "description": "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8a1d6bd93025cd07dacba2cb6e4ddb00f503634b23c2f643ab76251a65d6540e",
+      "hash": "sha256:bf13f9f706ed2efb003b936e4a24af762ffdd4e065d021369a5e8758cfc13674",
       "dependencies": [],
       "frontmatter": {
         "name": "verifier",
@@ -2389,7 +2430,7 @@
       "description": "Audit documentation structure, coherence, and upstream validity.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:d74ca5f84bbcf837fb2510d218cac595c3b959a487a71404dd15e26a7266001c",
+      "hash": "sha256:1718b0ea6344824884778292e9ba5e2bb6b8077e427e6fe510a1ca6ed9b917fe",
       "dependencies": [],
       "frontmatter": {
         "description": "Audit documentation structure, coherence, and upstream validity."
@@ -2402,7 +2443,7 @@
       "description": "Generate a quality audit report with trend data — coverage, Detekt, tests, CVEs.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6685a6dda9c017f35146aa5c8523fb1124f569922a219f81d269bc253f82f17b",
+      "hash": "sha256:56413d4dfa55eeb84f752a4488568cf56bafa01cb3386a62ddd63ecc275783df",
       "dependencies": [],
       "frontmatter": {
         "description": "Generate a quality audit report with trend data — coverage, Detekt, tests, CVEs."
@@ -2415,7 +2456,7 @@
       "description": "Run benchmark suites with JVM/Android detection.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:dfa8a5f49fe8d154febcfba52c5cf50fa2056795f9ed44789f82fbfb6bc2e251",
+      "hash": "sha256:f42835c34f30085964c7eedca5fda15a915196cd686d9a653c2c6377948257a6",
       "dependencies": [],
       "frontmatter": {
         "description": "Run benchmark suites with JVM/Android detection."
@@ -2428,7 +2469,7 @@
       "description": "Parse, Classify, and Route Ideas to Docs",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:3ef4b7953c8906a98166f4ea3b13ead9d3f946bb4afb6bf1748997fe02e497da",
+      "hash": "sha256:cf72c800f9fe4ef6ba43655631d8d59848a1ca27a5fde987843b443d5af94f84",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2439,7 +2480,7 @@
       "description": "Bump Application Version",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8ddc1071d220bc418a9b9bb8fc772354ab0361c2ded514974a7dbaa53b3177fb",
+      "hash": "sha256:ac277c3f3b0cdf2a42726cf0372e2f888ee2cd5f308725ae86c90fd8574bcdf6",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2450,7 +2491,7 @@
       "description": "Generate Changelog from Git History",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:b143fd8a124720a4c590a939573e415edfff91597fb22ba1bf747790b8a5d8d8",
+      "hash": "sha256:85ca7e5a2d553bfbbe97c7a7795259d10ffc4387bcd40f3cd27e361922fa401f",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2461,7 +2502,7 @@
       "description": "Check dependency versions against Maven Central (TOML parser, kdoc-state v2 cache).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c30da015fb0991a6a73dcbb0a253126ab9b795e0895cc2d12b60f8786a9ab172",
+      "hash": "sha256:211f92245b6e1c4d71bd303e7b5b9c20af79e4210f8c57c3053d988c5470c67d",
       "dependencies": [],
       "frontmatter": {
         "description": "Check dependency versions against Maven Central (TOML parser, kdoc-state v2 cache)."
@@ -2474,7 +2515,7 @@
       "description": "Validate Conventional Commits",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7dbb319833eb97d006f8293168128a5f87b1299c0bdb7f2ff3530813cb43479b",
+      "hash": "sha256:8af465ffa1653587f56ba027ea437d84660d5bf0f3a84f4d654e7b495b8c8a8f",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2485,7 +2526,7 @@
       "description": "Analyze test coverage gaps without running tests.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:ac688adc0595aa56298e4eba9caa639eb2a3908ee8adb93dae6d46a6d44a3663",
+      "hash": "sha256:fd2ded2223461fc5a606fe04a6b610943a7dfb443ee4faf3bea50efb1672fa60",
       "dependencies": [],
       "frontmatter": {
         "description": "Analyze test coverage gaps without running tests."
@@ -2498,7 +2539,7 @@
       "description": "Systematic bug investigation using scientific debugging methodology.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a5d99248d21dbde015f7730d22d75afa21de6b2364026be23b9623ec4748ca45",
+      "hash": "sha256:9780e7eb85e794f5c0d61e1d9faa27f89951a8e2d0d112c0417eee3c4e283573",
       "dependencies": [],
       "frontmatter": {
         "description": "Systematic bug investigation using scientific debugging methodology."
@@ -2511,7 +2552,7 @@
       "description": "Technical decision analysis with structured comparison table.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2128bea65bda1a2581a73cbefee066504116b5879a4850d80a4c4b52ddadca09",
+      "hash": "sha256:b0843940fe5d315939deb5a40c04932f181a2adef7651bb5defb1e756067bb8b",
       "dependencies": [],
       "frontmatter": {
         "description": "Technical decision analysis with structured comparison table."
@@ -2524,7 +2565,7 @@
       "description": "Validate Documentation Against Code",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:b0acad13daa63b863cb9faeb0124d86df88d7514cff8ee931da04ab9f5dae296",
+      "hash": "sha256:2c0be6a59d48b1bd90ea9b6f74c9e8f9f33fb81496b7cf11dea5673b924e77a7",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2535,7 +2576,7 @@
       "description": "Unified documentation integrity audit — coverage, patterns, freshness, structure.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:1d863435a0221335df4d27939b4c44dd1caf5decabada86c03df5d99d575370d",
+      "hash": "sha256:78f98ecb5b34891d37bf4d5f5e10e0d983bcc14090f617783f21ade965a29e9d",
       "dependencies": [],
       "frontmatter": {
         "description": "Unified documentation integrity audit — coverage, patterns, freshness, structure."
@@ -2548,7 +2589,7 @@
       "description": "Update Documentation from Code Changes",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:a96ed0d4932c1c723942523a990a4447ab3a135996273ce0f9712f39e50cd5fb",
+      "hash": "sha256:81f40541755295f4a95942b8887e5e751ce18015564a1abc9ec8e11abdc781b4",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2559,7 +2600,7 @@
       "description": "Extract and format build/test errors from Gradle output.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:aa67f0f8f67ae87cadeeb640d274c45596a7695e083ad9fbd4c2c047979c2d86",
+      "hash": "sha256:b2c34103a0830a3b8fb974775187c63b956a9dfdf113379e8d4c9bb59c668065",
       "dependencies": [],
       "frontmatter": {
         "description": "Extract and format build/test errors from Gradle output."
@@ -2572,7 +2613,7 @@
       "description": "Audit Incomplete Features Visible in UI",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:9f1afa5ada5d48fe0a677aa547237cdc9d73a5d05a4250f7b005448a7b91dcf2",
+      "hash": "sha256:f9e72c7dfd28c344154eedffac010e6319554a38495b8c75e1a1c2f6999e109c",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2583,7 +2624,7 @@
       "description": "Run unified audit across all quality dimensions with findings dedup and consolidated report.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:faa9f0274b5db0892ac801cd85ed0a94c338aa25f03feb813ddd740409243bf4",
+      "hash": "sha256:5c9cfbabc6da748f6306301861c4c6b0c48017a249f01e2567b4c0e70565a997",
       "dependencies": [],
       "frontmatter": {
         "description": "Run unified audit across all quality dimensions with findings dedup and consolidated report."
@@ -2596,7 +2637,7 @@
       "description": "Generate Detekt rules from pattern doc frontmatter.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:5158c7b6a316bbf932e459002ecd7d707a4b22534215d8c01a202bb10cbcd94a",
+      "hash": "sha256:3955182455c030d2e074c9e697c9301b5c7243d2e7f63bcf6c0595c795ca1c42",
       "dependencies": [],
       "frontmatter": {
         "description": "Generate Detekt rules from pattern doc frontmatter."
@@ -2609,7 +2650,7 @@
       "description": "Git Flow Branch Management",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8fbe025698b4b450863c1cd4929f27646c26c266519e3850e1f51148daff8201",
+      "hash": "sha256:41161cfa8df3229a42220ef5a7401c8cafc03efef55a9a87dd0f73c66cf071a2",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2620,7 +2661,7 @@
       "description": "Show project context — available agents, skills, modules, and business docs.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2dfdc04c30ff4654ef36e1d4f3d6afd6d2af2aca4cdf36894302478cd6b58230",
+      "hash": "sha256:7ecec3eeca78a4d710de8b0aad576a10a7e29588891446290675db2fe20c219f",
       "dependencies": [],
       "frontmatter": {
         "description": "Show project context — available agents, skills, modules, and business docs."
@@ -2633,7 +2674,7 @@
       "description": "Validate String Resource Naming",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:51c920293989fbfa04ab9912b9d00927c2cb803e994d86188f71e2a48589e24e",
+      "hash": "sha256:3e3f73f40a38933d917b7a919f0e8f0d8b65d780a73b9c40465e13b6d8ba3f62",
       "dependencies": [
         "scripts/sh/lint-resources.sh",
         "scripts/ps1/lint-resources.ps1"
@@ -2647,7 +2688,7 @@
       "description": "Structured codebase analysis — tech stack, architecture, quality, or concerns.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2e6914ebc6c6154f6d61812d16db35312c30e647d98e0dc2adf934555df97c15",
+      "hash": "sha256:d4add68de3ef3089bf5508d8eed1bea13953c8875a1ca12d8e424f976a9a53e8",
       "dependencies": [],
       "frontmatter": {
         "description": "Structured codebase analysis — tech stack, architecture, quality, or concerns."
@@ -2660,7 +2701,7 @@
       "description": "Squash-Merge a Completed Track into Main Branch",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6c625d59b697b57966a3d15e658f973e040860a88445f6abca20c8c776c822b7",
+      "hash": "sha256:bb1fa05613745e5de50dcba58ed1224862ddb7f396bc3ce307ad1dc66e1a7a26",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2671,7 +2712,7 @@
       "description": "Project Health Dashboard",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:e83a279d432a2aafad6e455040d4098c66afa2b5663be3bb9ace725eecb42073",
+      "hash": "sha256:48f25e43cd452e046643193ceedce30f022f057cc1da47ba245906ac1b13fa4b",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2682,7 +2723,7 @@
       "description": "Zero-friction idea capture to project memory.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:deb52efea175cff8eae77abcd9fcfe1f1bf006d706c4bd20d625c9dab45d7024",
+      "hash": "sha256:46db167a05555f6af1fee68f422b4e27a7a08adac053d8cc34cb4ff5dcefffaa",
       "dependencies": [],
       "frontmatter": {
         "description": "Zero-friction idea capture to project memory."
@@ -2695,7 +2736,7 @@
       "description": "Build Distribution Package",
       "category": "build",
       "tier": "core",
-      "hash": "sha256:0aa8d771262d8c314ddb560bc02a930b19624e8d80e88de50a7b436cd2ac02c8",
+      "hash": "sha256:c7e24294158f28d33a8a7eb94e76f0c1b8983ead2330bea5753790ba602b0054",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2706,7 +2747,7 @@
       "description": "Pre-PR Validation Suite",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d379aefc7b6e0de4e18fa8e672acbec3d2888c910294292bc615a52c4fce3399",
+      "hash": "sha256:69bb81b882ef6394a957745df9dac0c5322f03fb1c6d6fb3d63fb97829dfb6d8",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2717,7 +2758,7 @@
       "description": "Pre-Release Validation Checklist",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c665e951367eae74c59a94574afeb7e1c9b768bea433cb12e472d200a954512c",
+      "hash": "sha256:59ec6d13d5e5b061927288b916ceb90895a08e0a89341276223aa120174ad830",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2728,7 +2769,7 @@
       "description": "Route Brainstorm Ideas to Roadmap",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8bead2fd7d037d552dd59203fb1883a4641ab530f88bcea23fbaed6a086307cb",
+      "hash": "sha256:3a2d9e53858922e86baadde05d6b61f778dcb7121523eb9a2241343f990269e8",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2739,7 +2780,7 @@
       "description": "Audit README.md against repo state — surfaces stale counts and missing sections",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9e484f0409524f362101ea3db8b418367d4510a19a68c0d59aeb8319f0e64d37",
+      "hash": "sha256:5cd92dda89326407f7a041b96f572013da8c3e573e6b160452616c9c0a44d0d7",
       "dependencies": [],
       "frontmatter": {
         "description": "Audit README.md against repo state — surfaces stale counts and missing sections",
@@ -2758,7 +2799,7 @@
       "description": "Ad-hoc technical research on any topic before implementation.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f2136746b5e70dbeb442e14758a7c99819a4c25d8eec869ff123a6b37df38470",
+      "hash": "sha256:ecaa0f5931523872c9463acab7a83d4fcec8f8f1aa16f62d8331c421f17773f4",
       "dependencies": [],
       "frontmatter": {
         "description": "Ad-hoc technical research on any topic before implementation."
@@ -2771,7 +2812,7 @@
       "description": "Resume session with CEO/CTO dashboard — shows status by department from last session.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:67b8c9a173096f59e4ebff7069cdedab1ead0b8f9162e30144db88eb6e9dcdac",
+      "hash": "sha256:93ad6db59c3a75daca100780ded827fcbd8a98039893239703b68f01f40df69a",
       "dependencies": [],
       "frontmatter": {
         "description": "Resume session with CEO/CTO dashboard — shows status by department from last session."
@@ -2784,7 +2825,7 @@
       "description": "Code review of a pull request with structured suggestions.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8b4e19e313d6ccbef4683afcf0274a0870f8c6547cf6aa6a069945563394a4e6",
+      "hash": "sha256:a0e3ac9d19857ea33fb9a15ab3defde69b2105591b3ca4925493e394b4d546a5",
       "dependencies": [],
       "frontmatter": {
         "description": "Code review of a pull request with structured suggestions."
@@ -2797,7 +2838,7 @@
       "description": "AI-powered security review of changed files. Scans for injection, auth flaws, PII exposure, crypto weaknesses, and more.",
       "category": "security",
       "tier": "core",
-      "hash": "sha256:158818f3fc9929698416af3247d6f8504f4130fa613d580a2cad3d5af16174d8",
+      "hash": "sha256:724dc6e9bdf79a85532579c56d7eb3a5904ec1816f4b362e49c50df00f5bcbac",
       "dependencies": [],
       "frontmatter": {
         "description": "AI-powered security review of changed files. Scans for injection, auth flaws, PII exposure, crypto weaknesses, and more."
@@ -2810,7 +2851,7 @@
       "description": "",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2a9cfe1c4c4d430bbfad74e08bd502ff47058a1f3a490943e6c7b005d0727f1b",
+      "hash": "sha256:6666033c0a4a6a5d4cdccd09c3961b9d16dd91aca34176e03a89eac626214b66",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2821,7 +2862,7 @@
       "description": "Configure a project to consume AndroidCommonDoc: install toolkit, create l0-manifest.json, sync skills, wire Detekt, and verify. Use /setup --verify-only to check an existing installation.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9b801408a9d07dbacb23e77f5d2a9ac339822e37e64c713b8ad29bc066284232",
+      "hash": "sha256:de3e3256dd93f74417ba70c5d59166961d3e638f80be034c8bb18f14502937d0",
       "dependencies": [],
       "frontmatter": {
         "description": "Configure a project to consume AndroidCommonDoc: install toolkit, create l0-manifest.json, sync skills, wire Detekt, and verify. Use /setup --verify-only to check an existing installation.",
@@ -2841,7 +2882,7 @@
       "description": "Set Up Worktree for a Parallel Track",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:cbf775ae23ac0d2493ca6379a2db721fc2239a62d52520eab7d2f54ce1ff32e4",
+      "hash": "sha256:ed0e917640d047489d9238d66763096d1e3aa544da5b9eea1144ae29e1a38ff9",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2852,7 +2893,7 @@
       "description": "",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:a835be4cfb6f363eaf0685d5213292d28a0d04cd6f1dcc387dc1a74004b2b59d",
+      "hash": "sha256:8c0e18dcc89be2a20ee58b9f3ecd76ecfca56b72fa6311afee2a26c27cfdb1bc",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2863,7 +2904,7 @@
       "description": "",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:5da8daca410b755c6d334cf9d76099e0008aae9faccf69b5023f093e8d3b3fdb",
+      "hash": "sha256:f5660bef935c0628a1a36b02e049427b1c06208c136a73c104c7cfc8c395e666",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2874,7 +2915,7 @@
       "description": "Propagate L0 skills, agents, and commands to consuming projects.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:d68fe8172ff9eab51ba35ca6477132986c717f83ead585d4d3009f3fd19bcd5d",
+      "hash": "sha256:4faeb3a36194231fb66a9d9766a4acafd37f806ef4ed9118c27016d74282d90c",
       "dependencies": [],
       "frontmatter": {
         "description": "Propagate L0 skills, agents, and commands to consuming projects."
@@ -2887,7 +2928,7 @@
       "description": "Synchronize Roadmap Phases to GSD Directories",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:0807f941b7c2be60909c0efa8ff15fe0c0c40fcdd30c864e116be18d6fb634cb",
+      "hash": "sha256:28d92d1c5504a456ef2e9a5d6de621917ff740181d88eb782e0a5c8c61b5c986",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2898,7 +2939,7 @@
       "description": "Sync Documentation Versions with Version Catalog",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:a2ec062fc8334d6bc62d886712c8b947f5632e704527e6390681a118a40e832a",
+      "hash": "sha256:c669313d7151cc49f23d88abd193246b0a89eadc4261702a2fbc765b5be9d582",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2909,7 +2950,7 @@
       "description": "Run tests only for modules with uncommitted changes.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:29ec7e52cba8818774ba6cead8dd218cb1db5271d1b75d02b09bc4655825fb77",
+      "hash": "sha256:941e82b4d44f33d9d6c7801d7b8264302ec9d5721b58fd74fb7a297b914385ac",
       "dependencies": [],
       "frontmatter": {
         "description": "Run tests only for modules with uncommitted changes."
@@ -2922,7 +2963,7 @@
       "description": "Run full test suite in parallel across all modules.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:122fa8c2b447d174d133805ecf67f209b1ea061c31fe87af9c0057ac42fd6019",
+      "hash": "sha256:ca1e2dcc29747b2377f9628852a36fa6f6283f5992a17e06ad8500b4da30fbab",
       "dependencies": [],
       "frontmatter": {
         "description": "Run full test suite in parallel across all modules."
@@ -2935,7 +2976,7 @@
       "description": "Run tests for a specific module or all modules.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:54f00e8066b582c8d02f6d9d08e1b8de964f9c047ffee3a5f62c41ddd993d8db",
+      "hash": "sha256:80bc7cfe3461cba94b831ea52baca64dc53f2b37b79cf5957558ebbdf7a16428",
       "dependencies": [],
       "frontmatter": {
         "description": "Run tests for a specific module or all modules."
@@ -2948,7 +2989,7 @@
       "description": "Kill Stuck Gradle Workers and Release File Locks",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:375d773cfa92764b863487c5cb4d5be3205a84350ce4e415e6406ce894eda03b",
+      "hash": "sha256:945efd07703ebc8f06159127cebf92d7986da17e823c9b826fd93ab91862ec24",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -2959,7 +3000,7 @@
       "description": "Check code compliance with L0 pattern conventions.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:e0a10b2c9a225428406291d7b6d1d960785d642ef45fb813367751ac2672e4fd",
+      "hash": "sha256:c4ee7dac8c9cab877de9136119361f5e34680a5eb98137f750afb4c21006dff4",
       "dependencies": [],
       "frontmatter": {
         "description": "Check code compliance with L0 pattern conventions."
@@ -2972,7 +3013,7 @@
       "description": "Run upstream validation assertions against live documentation.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:3dab4ec7edddbc4b1bb7e9d507834da39e76e3bd3e7df41251c82ce74f59e256",
+      "hash": "sha256:796a9881e7be458609b92637e35d485b051dd90cb2728fa399f8774098fce391",
       "dependencies": [],
       "frontmatter": {
         "description": "Run upstream validation assertions against live documentation."
@@ -2985,7 +3026,7 @@
       "description": "Validate KMP source set discipline and imports.",
       "category": "build",
       "tier": "core",
-      "hash": "sha256:d2cc0a8d0511dbfe8bfaed7a025d95f848c77471abd2dbaec445a46c7d65b693",
+      "hash": "sha256:4dba8b09faca0fc782baaf654697d7ab302077ed6dbd1c07179d67f2f86858c8",
       "dependencies": [],
       "frontmatter": {
         "description": "Validate KMP source set discipline and imports."
@@ -2998,7 +3039,7 @@
       "description": "Validate Database Schema Integrity",
       "category": "build",
       "tier": "core",
-      "hash": "sha256:a726c486398ab6131cc074a12cb3de7d7deac7dbd418652ae678d56f244f2248",
+      "hash": "sha256:3e66b1a7bcdb3aaf16df133fc970779955c0f26a5e3f4dd7501284a7ee05fd98",
       "dependencies": [],
       "frontmatter": {}
     },
@@ -3009,7 +3050,7 @@
       "description": "Goal-backward verification — check if code achieves stated goals.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6efb271e93afd558ba2dc4237848ce45b3a56390de630c551253e8a8184eb00b",
+      "hash": "sha256:aa59d0833ee33df7b1a6b42d8e68adf412fa153ca5d720649a7dbc3f1091c83d",
       "dependencies": [],
       "frontmatter": {
         "description": "Goal-backward verification — check if code achieves stated goals."
@@ -3022,7 +3063,7 @@
       "description": "Smart task routing — analyzes your request and delegates to the right agent or skill.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:beaeeadf0bf014d1149958a272bd3fbac4198e131ee8799d2b30ac8fd270f0c0",
+      "hash": "sha256:81580ad97b51073a2db6f331983359bbc045d6db1ae925dce6943c3081711a43",
       "dependencies": [],
       "frontmatter": {
         "description": "Smart task routing — analyzes your request and delegates to the right agent or skill."
