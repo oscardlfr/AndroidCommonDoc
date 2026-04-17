@@ -29,6 +29,7 @@ Setup, configuration, and authoring guides for the L0/L1/L2 ecosystem.
 | [doc-template](doc-template.md) | Standard doc template with frontmatter and section structure |
 | [audit-suppressions](audit-suppressions.md) | Suppress known false positives in audit findings — schema, expiry, prefix matching |
 | [upstream-validation](upstream-validation.md) | How to add `validate_upstream` assertions to pattern docs for automated upstream checks |
+| [agent-tool-permissions](agent-tool-permissions.md) | Which `android` CLI subcommands agents invoke via Bash (scoped permissions) vs. the narrow `android-cli-bridge` MCP tool (stateful + validated) |
 
 ## Key Rules
 

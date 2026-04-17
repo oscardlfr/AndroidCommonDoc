@@ -102,5 +102,5 @@
 - Spec-driven workflow → `docs/agents/spec-driven-workflow.md`
 - Agent templates → `setup/agent-templates/` (project-manager, product-strategist, content-creator, landing-page-strategist)
 - Business doc templates → `setup/doc-templates/business/` (PRODUCT_SPEC, MARKETING, PRICING, LANDING_PAGES, COMPETITIVE)
-- MCP tools → 40 tools via ~/.mcp.json (architects and specialists use these automatically)
+- MCP tools → 41 tools via ~/.mcp.json (architects and specialists use these automatically)
 - Dependency freshness → `check-outdated` MCP tool (TOML parser, Maven Central, kdoc-state v2 cache)

@@ -1,0 +1,153 @@
+name: UI Validation (android-layout-diff)
+
+# Runtime UI validation pipeline. Captures layout on a Linux emulator,
+# diffs against committed baselines under `baselines/**/*.json`, and
+# fails the PR if any HIGH finding is emitted (signature of the
+# "tests pass but app is broken" bug class).
+#
+# Scoped to PRs that touch UI code — no-op for non-UI changes so the
+# emulator cost is bounded.
+#
+# Note: this workflow is intentionally gated behind `enabled: false` by
+# default on L0 itself (L0 has no app to deploy). It is shipped for
+# consumer projects to adopt via `/sync-l0` and then enable by flipping
+# `enabled: true` in their own fork of the workflow.
+
+on:
+  pull_request:
+    paths:
+      - '**/ui/**'
+      - '**/compose/**'
+      - '**/*Screen.kt'
+      - '**/*Compose*.kt'
+      - 'baselines/**/*.json'
+  workflow_dispatch:
+    inputs:
+      enabled:
+        description: "Set to true to actually run (L0 default is false — no app to deploy)"
+        required: false
+        default: "false"
+
+concurrency:
+  group: ui-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Gate — is this enabled?
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Decide whether to run
+        id: decide
+        run: |
+          # L0 itself has no app. Consumers flip this to 'true' in their fork.
+          echo "run=false" >> "$GITHUB_OUTPUT"
+
+  ui-validation:
+    name: Android Layout Diff
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_CLI_VERSION: "0.7"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Android CLI v0.7
+        run: |
+          mkdir -p "$HOME/android-cli"
+          curl -fsSL "https://edgedl.me.gvt1.com/edgedl/android/cli/latest/linux_x86_64/android" \
+            -o "$HOME/android-cli/android"
+          chmod +x "$HOME/android-cli/android"
+          echo "$HOME/android-cli" >> "$GITHUB_PATH"
+
+      - name: Verify CLI
+        run: |
+          android --version
+
+      - name: Set up Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          script: |
+            # Build the debug APK that the emulator will run against.
+            ./gradlew :app:assembleDebug
+
+            # Install the APK.
+            adb install app/build/outputs/apk/debug/app-debug.apk
+
+            # Get the device serial (single emulator in CI).
+            DEVICE_SERIAL="$(adb devices | awk 'NR==2 {print $1}')"
+            echo "device: $DEVICE_SERIAL"
+
+            # Navigate each baseline screen, capture layout, diff against
+            # the committed baseline.
+            mkdir -p out/layout-diff
+            FAIL=0
+            for baseline in baselines/**/*.json; do
+              SCREEN="$(basename "$baseline" .json)"
+              echo "=== Validating $SCREEN ==="
+
+              # Bring the app to the target screen. Consumer projects must
+              # provide scripts/ui-validation/<screen>.sh that knows how
+              # to navigate to each baseline screen.
+              if [ -x "scripts/ui-validation/$SCREEN.sh" ]; then
+                bash "scripts/ui-validation/$SCREEN.sh"
+              else
+                echo "WARN: no navigation script for $SCREEN — skipping"
+                continue
+              fi
+              sleep 2
+
+              # Invoke the MCP tool via its CLI equivalent (node).
+              node mcp-server/build/cli/android-layout-diff.js \
+                --device-serial "$DEVICE_SERIAL" \
+                --baseline "$baseline" \
+                --output "out/layout-diff/$SCREEN.json" || FAIL=1
+            done
+
+            exit $FAIL
+
+      - name: Upload diff artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: layout-diff-${{ github.run_id }}
+          path: out/layout-diff/
+          retention-days: 14
+
+      - name: Parse HIGH findings
+        if: always()
+        run: |
+          node - <<'EOF'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const dir = 'out/layout-diff';
+          if (!fs.existsSync(dir)) { process.exit(0); }
+          let high = 0;
+          for (const f of fs.readdirSync(dir)) {
+            const blob = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8'));
+            const findings = blob.report?.findings ?? [];
+            for (const x of findings) if (x.severity === 'HIGH') high++;
+          }
+          console.log(`HIGH findings across all screens: ${high}`);
+          process.exit(high > 0 ? 1 : 0);
+          EOF
