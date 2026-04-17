@@ -299,9 +299,10 @@ These are ephemeral; do NOT commit PNG or JSON device captures (contain user-ide
 
 ## Open Follow-ups (not blocking 19-02)
 
-1. **Capture a real `modified[]` case**: current tests only produce `added[]` (new screens). Need to observe state-change-in-place (e.g., toggle a switch) to see `modified[]` schema.
-2. **Test with Compose app on device**: baseline was native Samsung Settings. Need to verify schema consistency with Compose-based UI (DawSync).
+1. **Capture a real `modified[]` case** (PARTIAL): additional tests after initial POC — dark mode toggle (`adb shell cmd uimode night yes`), scroll via `adb shell input swipe`, and Calculator launch all produced `modified: []` empty. `added[]` works as expected when new elements enter the viewport. Conclusion: `modified[]` is likely reserved for **in-place attribute changes** (e.g., `state: ["selected"]` flipping on a tab) without structural change. It is rare in navigation-driven flows. Parser treats it as `LayoutElement[]` permissively — schema gap is acceptable.
+2. **Test with Compose app on device**: baseline was native Samsung Settings. Need to verify schema consistency with Compose-based UI (DawSync). DawSync NOT installed on test device; deferred to Plan 19-02 when we build DawSync.
 3. **Test `android run --apks=... --device=R3CT30KAMEH`**: deploy flow for the narrow MCP bridge in Plan 19-04.
+4. **Device lockscreen behavior**: the CLI returns lockscreen layout elements without error when the device is locked. If tests require app-level layouts, the test runner must keep the device unlocked (or use a device with no lock).
 
 ## Sources
 
