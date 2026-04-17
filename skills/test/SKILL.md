@@ -42,6 +42,9 @@ Uses parameters from `params.json`:
 
 ## Implementation
 
+> **Claude Code agents**: Always use the `macOS / Linux` path below, regardless of host OS.
+> Claude Code agents run in bash (`/usr/bin/bash`) on all platforms including Windows.
+
 ### macOS / Linux
 ```bash
 COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set. See README.md}"

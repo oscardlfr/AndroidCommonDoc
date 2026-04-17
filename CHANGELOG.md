@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Changed
+- Agent templates: Wave 7 fixes from DawSync L2 feedback
+  - 4 core dev templates gained Wave Scope Gate (HARD STOP), Revert Compliance Protocol, and Owned Files sections
+  - 3 arch templates gained Cross-Architect Dev Delegation (Option A/B/C)
+  - Version bumps: test/ui-specialist 1.1.0→1.2.0, domain/data-layer-specialist 1.0.0→1.1.0, arch-platform/integration 1.6.0→1.7.0, arch-testing 1.7.0→1.8.0
+  - Refs: PR #28, .planning/WAVE7-PLAN.md, DawSync .planning/L0-TEMPLATE-FEEDBACK.md
+
 ### BREAKING
 - **Dev dispatch model v5.0.0**: anonymous disposable devs replaced by persistent named layer devs as session team peers
 

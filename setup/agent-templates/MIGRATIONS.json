@@ -5,7 +5,7 @@
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial PM template — flat dispatch model, architect gates"
+        "note": "Initial PM template â€” flat dispatch model, architect gates"
       },
       "1.1.0": {
         "date": "2026-03-28",
@@ -16,8 +16,45 @@
         "date": "2026-03-29",
         "breaking": true,
         "note": "3-phase model replaces flat dispatch. DISPOSABLE dev rule. Execution trigger.",
-        "required_keywords": ["TeamCreate", "IMMEDIATELY", "DISPOSABLE", "STOP PLANNING"],
-        "migration_hint": "PM now orchestrates 3 sequential teams (Planning → Execution → Quality Gate). Devs must be spawned as anonymous Agent(prompt=...) without name/team_name. Run /sync-l0 to get the updated template."
+        "required_keywords": [
+          "TeamCreate",
+          "IMMEDIATELY",
+          "DISPOSABLE",
+          "STOP PLANNING"
+        ],
+        "migration_hint": "PM now orchestrates 3 sequential teams (Planning â†’ Execution â†’ Quality Gate). Devs must be spawned as anonymous Agent(prompt=...) without name/team_name. Run /sync-l0 to get the updated template."
+      },
+      "5.1.0": {
+        "date": "2026-04-05",
+        "breaking": false,
+        "note": "Added persistent architect lifecycle, PRE-TASK context-provider consult protocol, supersede guardrails"
+      },
+      "5.6.0": {
+        "date": "2026-04-06",
+        "breaking": true,
+        "note": "Move HARD GATE to line 19 (blockquote, immediately after identity sentence). Add git diff/show/log to FORBIDDEN actions as code-reading vectors. Resolve commit contradiction: PM orchestrates commits via architects, does not run git add/commit directly. Remove How to Start section (absorbed into identity line).",
+        "migration": "L1/L2 projects must run /sync-l0 to pick up HARD GATE repositioning"
+      },
+      "5.7.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Add explicit planner spawn block to Planning Delegation section. Planner joins session team as named peer with subagent_type=Plan, enabling SendMessage to context-provider."
+      },
+      "5.8.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Hub refactor: extracted PM prose to 4 sub-docs in docs/agents/ (pm-session-setup, pm-dispatch-topology, pm-verification-gates, pm-quality-doc-pipeline). Template slimmed to ~180 lines. No behavioral changes."
+      },
+      "5.9.0": {
+        "date": "2026-04-07",
+        "breaking": false,
+        "note": "Add SESSION CLOSURE GATE — blocks session end when acceptance criteria failing"
+      },
+      "5.10.0": {
+        "date": "2026-04-09",
+        "breaking": true,
+        "note": "MECHANICAL enforcement: Grep and Glob removed from PM tools. Tools list now consistent with FORBIDDEN rule in body.",
+        "migration": "L1/L2 projects must run /sync-l0 to pick up tools line change. PM body already forbids Grep/Glob — no behavior change."
       }
     },
     "planner": {
@@ -30,27 +67,47 @@
         "date": "2026-03-29",
         "breaking": true,
         "note": "Planner is now a Planning Team PEER (not sub-agent). Uses SendMessage.",
-        "required_keywords": ["Planning Team", "SendMessage", "team peer"],
+        "required_keywords": [
+          "Planning Team",
+          "SendMessage",
+          "team peer"
+        ],
         "migration_hint": "Planner must have SendMessage in tools and describe itself as 'team peer', not 'sub-agent spawned by PM'."
+      },
+      "1.4.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Backfill: version 1.4.0 present in template, missing from registry"
+      },
+      "1.5.0": {
+        "date": "2026-04-09",
+        "breaking": true,
+        "note": "MECHANICAL enforcement: Grep and Glob removed from planner tools. Existence check at Step 1.5 rewritten to delegate to context-provider via SendMessage.",
+        "migration": "Planner no longer runs Grep directly. Route existence checks through context-provider."
       }
     },
     "quality-gater": {
       "1.0.0": {
         "date": "2026-03-29",
         "breaking": false,
-        "note": "Initial quality-gater — 5-step sequential protocol, PASS/FAIL report"
+        "note": "Initial quality-gater â€” 5-step sequential protocol, PASS/FAIL report"
       },
       "1.1.0": {
         "date": "2026-03-29",
         "breaking": false,
-        "note": "Added retry limit (max 3) to prevent infinite QG→Phase2 loops"
+        "note": "Added retry limit (max 3) to prevent infinite QGâ†’Phase2 loops"
+      },
+      "2.2.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Backfill: version 2.2.0 present in template, missing from registry"
       }
     },
     "doc-migrator": {
       "1.0.0": {
         "date": "2026-03-29",
         "breaking": false,
-        "note": "Initial doc-migrator — 3 modes (Full Migration, Gap Fill, Realignment)"
+        "note": "Initial doc-migrator â€” 3 modes (Full Migration, Gap Fill, Realignment)"
       },
       "1.1.0": {
         "date": "2026-03-29",
@@ -62,91 +119,261 @@
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial architect — read-only, SendMessage, APPROVE/ESCALATE"
+        "note": "Initial architect â€” read-only, SendMessage, APPROVE/ESCALATE"
+      },
+      "1.6.0": {
+        "date": "2026-04-05",
+        "breaking": false,
+        "note": "Added DURING-WAVE re-consult protocol (MUST-language), Scope Validation Gate against PLAN.md, Exact Fix Format for dispatches"
+      },
+      "1.7.0": {
+        "date": "2026-04-05",
+        "breaking": false,
+        "note": "Added Post-Approve Auto-Dispatch + Flag Specificity + No Re-Verification Loops"
+      },
+      "1.12.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Backfill: version 1.12.0 present in template, missing from registry"
+      },
+      "1.13.0": {
+        "date": "2026-04-07",
+        "breaking": false,
+        "note": "Add FORBIDDEN rule for Grep/Glob pattern searches — must consult context-provider first"
+      },
+      "1.14.0": {
+        "date": "2026-04-09",
+        "breaking": true,
+        "note": "MECHANICAL enforcement: Grep and Glob removed from tools. Must SendMessage context-provider.",
+        "migration": "Update arch-testing to remove any direct Grep/Glob calls. Route all pattern lookups through context-provider via SendMessage."
       }
     },
     "arch-platform": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial architect — read-only, SendMessage, APPROVE/ESCALATE"
+        "note": "Initial architect â€” read-only, SendMessage, APPROVE/ESCALATE"
+      },
+      "1.5.0": {
+        "date": "2026-04-05",
+        "breaking": false,
+        "note": "Added DURING-WAVE re-consult protocol (MUST-language), Scope Validation Gate against PLAN.md, Exact Fix Format for dispatches. Removed self-contradicting 'Edit directly' text."
+      },
+      "1.6.0": {
+        "date": "2026-04-05",
+        "breaking": false,
+        "note": "Added Post-Approve Auto-Dispatch + Flag Specificity + No Re-Verification Loops"
+      },
+      "1.9.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Backfill: version 1.9.0 present in template, missing from registry"
+      },
+      "1.10.0": {
+        "date": "2026-04-07",
+        "breaking": false,
+        "note": "Add FORBIDDEN rule for Grep/Glob pattern searches — must consult context-provider first"
+      },
+      "1.11.0": {
+        "date": "2026-04-09",
+        "breaking": true,
+        "note": "MECHANICAL enforcement: Grep and Glob removed from tools. Caller Grep Rule rewritten to delegate to context-provider.",
+        "migration": "Update arch-platform to remove any direct Grep/Glob calls. Caller grep delegation now routes through context-provider via SendMessage."
       }
     },
     "arch-integration": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial architect — read-only, SendMessage, APPROVE/ESCALATE"
+        "note": "Initial architect â€” read-only, SendMessage, APPROVE/ESCALATE"
+      },
+      "1.5.0": {
+        "date": "2026-04-05",
+        "breaking": false,
+        "note": "Added DURING-WAVE re-consult protocol (MUST-language), Scope Validation Gate against PLAN.md, Exact Fix Format for dispatches"
+      },
+      "1.6.0": {
+        "date": "2026-04-05",
+        "breaking": false,
+        "note": "Added Post-Approve Auto-Dispatch + Flag Specificity + No Re-Verification Loops"
+      },
+      "1.9.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Backfill: version 1.9.0 present in template, missing from registry"
+      },
+      "1.10.0": {
+        "date": "2026-04-07",
+        "breaking": false,
+        "note": "Add FORBIDDEN rule for Grep/Glob pattern searches — must consult context-provider first"
+      },
+      "1.11.0": {
+        "date": "2026-04-09",
+        "breaking": true,
+        "note": "MECHANICAL enforcement: Grep and Glob removed from tools. Caller Grep Rule rewritten to delegate to context-provider.",
+        "migration": "Update arch-integration to remove any direct Grep/Glob calls. Caller grep delegation now routes through context-provider via SendMessage."
       }
     },
     "context-provider": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial context-provider — mandatory read-only peer in every team"
+        "note": "Initial context-provider â€” mandatory read-only peer in every team"
+      },
+      "2.4.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Backfill: version 2.4.0 present in template, missing from registry"
       }
     },
     "doc-updater": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial doc-updater — mandatory peer, updates docs after work"
+        "note": "Initial doc-updater â€” mandatory peer, updates docs after work"
+      },
+      "2.2.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Backfill: version 2.2.0 present in template, missing from registry"
       }
     },
     "product-strategist": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial product-strategist — ICE scoring, backlog prioritization"
+        "note": "Initial product-strategist â€” ICE scoring, backlog prioritization"
       }
     },
     "content-creator": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial content-creator — build-in-public marketing content"
+        "note": "Initial content-creator â€” build-in-public marketing content"
       }
     },
     "landing-page-strategist": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial landing-page-strategist — page copy, CTAs, SEO"
+        "note": "Initial landing-page-strategist â€” page copy, CTAs, SEO"
       }
     },
     "marketing-lead": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial marketing-lead — campaign orchestrator"
+        "note": "Initial marketing-lead â€” campaign orchestrator"
       }
     },
     "product-lead": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial product-lead — product orchestrator"
+        "note": "Initial product-lead â€” product orchestrator"
       }
     },
     "platform-auditor": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial platform-auditor — cross-module coherence"
+        "note": "Initial platform-auditor â€” cross-module coherence"
       }
     },
     "module-lifecycle": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial module-lifecycle — creation and deprecation checklists"
+        "note": "Initial module-lifecycle â€” creation and deprecation checklists"
       }
     },
     "feature-domain-specialist": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial feature-domain-specialist — customizable per-domain auditor"
+        "note": "Initial feature-domain-specialist â€” customizable per-domain auditor"
+      }
+    },
+    "test-specialist": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial test-specialist â€” testing dev for Phase 2 execution"
+      },
+      "1.1.0": {
+        "date": "2026-04-05",
+        "breaking": false,
+        "note": "BUG-T2/T3/T4/T5/T6 fixes: escape hatch removal, strengthened MUST-language, added cross-refs, 5 surgical edits"
+      },
+      "1.6.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Added mandatory consultation rule: MUST report to arch-testing and wait for APPROVE before reporting done. Added NEVER-no-changes-without-evidence rule."
+      },
+      "1.7.0": {
+        "date": "2026-04-09",
+        "breaking": true,
+        "note": "MECHANICAL enforcement: Grep and Glob removed. Added SendMessage for architect communication.",
+        "migration": "Update test-specialist to remove direct Grep/Glob usage. Pattern lookups must go through reporting architect via SendMessage."
+      }
+    },
+    "ui-specialist": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial ui-specialist â€” Compose UI dev for Phase 2 execution"
+      },
+      "1.1.0": {
+        "date": "2026-04-05",
+        "breaking": false,
+        "note": "Strengthened language + additive clarifications, 2 surgical edits"
+      },
+      "1.6.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Added mandatory consultation rule: MUST report to arch-testing and wait for APPROVE before reporting done. Added NEVER-no-changes-without-evidence rule."
+      },
+      "1.7.0": {
+        "date": "2026-04-09",
+        "breaking": true,
+        "note": "MECHANICAL enforcement: Grep and Glob removed. Added SendMessage for architect communication.",
+        "migration": "Update ui-specialist to remove direct Grep/Glob usage. Pattern lookups must go through reporting architect via SendMessage."
+      }
+    },
+    "domain-model-specialist": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial domain-model-specialist â€” sealed interfaces, data classes, domain patterns"
+      },
+      "1.5.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Added mandatory consultation rule: MUST report to arch-platform and wait for APPROVE before reporting done. Added NEVER-no-changes-without-evidence rule."
+      },
+      "1.6.0": {
+        "date": "2026-04-09",
+        "breaking": true,
+        "note": "MECHANICAL enforcement: Grep and Glob removed. Added SendMessage for architect communication.",
+        "migration": "Update domain-model-specialist to remove direct Grep/Glob usage. Pattern lookups must go through reporting architect via SendMessage."
+      }
+    },
+    "data-layer-specialist": {
+      "1.0.0": {
+        "date": "2026-03-26",
+        "breaking": false,
+        "note": "Initial data-layer-specialist â€” repository patterns, source set placement, encoding"
+      },
+      "1.5.0": {
+        "date": "2026-04-06",
+        "breaking": false,
+        "note": "Added mandatory consultation rule: MUST report to arch-platform AND arch-integration and wait for APPROVE before reporting done. Added NEVER-no-changes-without-evidence rule."
+      },
+      "1.6.0": {
+        "date": "2026-04-09",
+        "breaking": true,
+        "note": "MECHANICAL enforcement: Grep and Glob removed. Added SendMessage for architect communication.",
+        "migration": "Update data-layer-specialist to remove direct Grep/Glob usage. Pattern lookups must go through reporting architect via SendMessage."
       }
     }
   }

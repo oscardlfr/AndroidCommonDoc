@@ -5,6 +5,7 @@ tools: Read, Grep, Glob
 model: haiku
 domain: infrastructure
 intent: [release, publish, deploy, secrets]
+token_budget: 2000
 memory: project
 skills:
   - sbom
@@ -92,6 +93,7 @@ Severity levels:
 
 ## MCP Tools (use when available)
 
+- `scan-secrets` — runs TruffleHog on the project root. CRITICAL/HIGH findings are BLOCKERS. Falls back gracefully if trufflehog not installed (returns SKIPPED status).
 - `proguard-validator` — validates ProGuard/R8 rules reference existing classes
 - `unused-resources` — detects orphan strings/drawables to clean before release
 

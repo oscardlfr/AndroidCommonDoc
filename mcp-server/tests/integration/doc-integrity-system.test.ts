@@ -64,8 +64,8 @@ describe('tool registration', () => {
     expect(indexContent).toContain('registerCheckDocPatternsTool');
   });
 
-  it('registers 43 tools', () => {
-    expect(indexContent).toMatch(/Registered 43 tools/);
+  it('registers 46 tools', () => {
+    expect(indexContent).toMatch(/Registered 46 tools/);
   });
 });
 
@@ -275,8 +275,8 @@ describe('doc-updater template', () => {
     expect(content).toContain('generated: true');
   });
 
-  it('template version bumped to 2.1.0', () => {
-    expect(content).toContain('template_version: "2.1.0"');
+  it('template version bumped to 2.2.0', () => {
+    expect(content).toContain('template_version: "2.2.0"');
   });
 });
 
@@ -476,7 +476,32 @@ describe('/pre-pr has Step 5.7 referencing check-outdated', () => {
   });
 });
 
-// ── 15. Test file coverage ───────────────────────────────────────────────────
+// ── 15. dispatcher-scopes doc drift coverage (Wave 1) ───────────────────────
+
+describe('dispatcher-scopes doc drift coverage (Wave 1)', () => {
+  const DISPATCHER_SCOPES = path.join(ROOT, 'docs/testing/testing-patterns-dispatcher-scopes.md');
+  const TESTING_PATTERNS = path.join(ROOT, 'docs/testing/testing-patterns.md');
+
+  it('testing-patterns-dispatcher-scopes includes Path B2 section', () => {
+    const content = readFile(DISPATCHER_SCOPES);
+    expect(content).toContain('Path B2');
+    expect(content).toContain('SharedFlow');
+    expect(content).toContain('testScheduler');
+  });
+
+  it('testing-patterns-dispatcher-scopes includes BANNED block for runTest(UnconfinedTestDispatcher())', () => {
+    const content = readFile(DISPATCHER_SCOPES);
+    expect(content).toContain('BANNED');
+    expect(content).toContain('runTest(UnconfinedTestDispatcher())');
+  });
+
+  it('testing-patterns.md Quick Reference mentions Path B2', () => {
+    const content = readFile(TESTING_PATTERNS);
+    expect(content).toContain('Path B2');
+  });
+});
+
+// ── 16. Test file coverage ───────────────────────────────────────────────────
 
 describe('test files exist for all new components', () => {
   const testDir = path.join(ROOT, 'mcp-server/tests/unit/tools');

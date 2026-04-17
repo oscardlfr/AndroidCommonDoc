@@ -5,6 +5,7 @@ tools: Read, Grep, Glob, WebSearch, WebFetch
 model: sonnet
 domain: development
 intent: [decide, choose, compare, tradeoff, library]
+token_budget: 2000
 ---
 
 You are a technical advisor. You research ONE decision and produce a structured comparison with a clear recommendation.

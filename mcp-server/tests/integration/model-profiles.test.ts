@@ -181,11 +181,15 @@ describe("model-profiles.json", () => {
       expect(config.profiles.balanced.default_model).toBe("sonnet");
     });
 
-    it("balanced profile overrides only downgrade to haiku", () => {
+    it("balanced profile overrides only downgrade to haiku (except PM which is always opus)", () => {
       for (const [agent, model] of Object.entries(
         config.profiles.balanced.overrides,
       )) {
-        expect(model, `balanced.${agent} should be haiku`).toBe("haiku");
+        if (agent === "project-manager") {
+          expect(model, `balanced.${agent} must be opus`).toBe("opus");
+        } else {
+          expect(model, `balanced.${agent} should be haiku`).toBe("haiku");
+        }
       }
     });
 
@@ -325,6 +329,26 @@ describe("model-profiles.json", () => {
       expect(advancedRank).toBeLessThanOrEqual(qualityRank);
     });
   });
+
+  // ---------------------------------------------------------------
+  // 8. PM is opus in ALL non-budget profiles
+  // ---------------------------------------------------------------
+  describe("PM model tier — opus in all non-budget profiles", () => {
+    it("PM is opus in balanced profile (explicit override)", () => {
+      const resolved = config.profiles.balanced.overrides["project-manager"] ?? config.profiles.balanced.default_model;
+      expect(resolved).toBe("opus");
+    });
+
+    it("PM is opus in advanced profile (explicit override)", () => {
+      const resolved = config.profiles.advanced.overrides["project-manager"] ?? config.profiles.advanced.default_model;
+      expect(resolved).toBe("opus");
+    });
+
+    it("PM is opus in quality profile (default_model is opus, no override needed)", () => {
+      const resolved = config.profiles.quality.overrides["project-manager"] ?? config.profiles.quality.default_model;
+      expect(resolved).toBe("opus");
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -422,3 +446,4 @@ describe("model-profiles.json L0 sync contract", () => {
     expect(skillContent).toContain("current");
   });
 });
+

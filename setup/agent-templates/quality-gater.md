@@ -25,6 +25,10 @@ You do NOT know which project you're in (L0, L1, L2). You MUST discover the proj
 
 ## Protocol
 
+### Step 0: Confirm activation
+
+Confirm you have been activated by PM for Phase 3. If activated without a specific task, SendMessage to PM: `SendMessage(to="project-manager", summary="Phase 3 scope?", message="Activated for Phase 3 — what is the scope of this quality gate run?")`.
+
 ### Step 1: Project Rule Discovery
 
 ```bash

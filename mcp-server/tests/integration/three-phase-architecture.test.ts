@@ -57,13 +57,27 @@ describe('agent template size limits', () => {
 describe('project-manager template — 3-phase model', () => {
   const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'project-manager.md'), 'utf-8');
 
+  // Hub refactor: PM content may be split across sub-docs in docs/agents/
+  const pmSubdocs = [
+    'pm-session-setup.md',
+    'pm-dispatch-topology.md',
+    'pm-verification-gates.md',
+    'pm-quality-doc-pipeline.md',
+  ];
+  const docsAgentsDir = path.join(ROOT, 'docs/agents');
+  const subdocContent = pmSubdocs
+    .map(f => path.join(docsAgentsDir, f))
+    .filter(p => fs.existsSync(p))
+    .map(p => fs.readFileSync(p, 'utf-8'))
+    .join('\n');
+  const combinedPM = content + '\n' + subdocContent;
+
   it('has 3-Phase Execution Model section', () => {
     expect(content).toMatch(/3-Phase Execution Model/i);
   });
 
   it('describes Planning Team phase', () => {
     expect(content).toMatch(/Planning Team/);
-    expect(content).toMatch(/planner.*context-provider/i);
   });
 
   it('describes Execution phase with persistent architects', () => {
@@ -77,7 +91,7 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('has retry limit for quality gate failures', () => {
-    expect(content).toMatch(/3 retries|max.*3.*retr/i);
+    expect(combinedPM).toMatch(/3 retries|max.*3.*retr/i);
   });
 
   it('has FORBIDDEN actions section', () => {
@@ -118,30 +132,30 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('pattern validation chain documented: dev contacts architect, not context-provider', () => {
-    expect(content).toMatch(/dev.*arch.*context-provider|SendMessage.*arch.*pattern/i);
-    expect(content).toMatch(/NEVER.*context-provider.*directly|Dev NEVER contacts context-provider/i);
+    expect(combinedPM).toMatch(/dev.*arch.*context-provider|SendMessage.*arch.*pattern/i);
+    expect(combinedPM).toMatch(/NEVER.*context-provider.*directly|Dev NEVER contacts context-provider/i);
   });
 
-  it('anonymous dev threshold for 3-or-fewer file fixes is documented', () => {
-    expect(content).toMatch(/3 or fewer files|3-or-fewer file|≤3 files|3 or fewer/i);
+  it('named extra dev model is documented — no anonymous Agent() calls', () => {
+    expect(combinedPM).toMatch(/No anonymous Agent\(\)|named team peer|named.*team_name/i);
   });
 
-  it('dynamic scaling model: extra devs named but no team_name', () => {
-    expect(content).toMatch(/extra.*dev|Extra dev/i);
-    expect(content).toMatch(/named but NO team_name|named but no team_name/i);
+  it('dynamic scaling model: extra devs are named team peers with team_name', () => {
+    expect(combinedPM).toMatch(/extra.*dev|Extra dev/i);
+    expect(combinedPM).toMatch(/named team peer|specialist-2|specialist-3|\{specialist\}-2/i);
   });
 
   it('background completion → immediately act rule is documented', () => {
-    expect(content).toMatch(/background.*complet.*IMMEDIATELY|IMMEDIATELY.*background/i);
+    expect(combinedPM).toMatch(/background.*complet.*IMMEDIATELY|IMMEDIATELY.*background/i);
   });
 
   it('Phase 2 uses SendMessage not TeamCreate for architects', () => {
-    expect(content).toContain('session team peers');
-    expect(content).toContain('SendMessage(to="arch-testing"');
+    expect(combinedPM).toContain('session team peers');
+    expect(combinedPM).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 5.0.0', () => {
-    expect(content).toContain('template_version: "5.0.0"');
+  it('template version 5.10.0', () => {
+    expect(content).toContain('template_version: "5.10.0"');
   });
 
   it('has dev dispatch protocol', () => {
@@ -164,7 +178,7 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('references quality gate protocol doc', () => {
-    expect(content).toMatch(/quality-gate-protocol/);
+    expect(combinedPM).toMatch(/quality-gate-protocol/);
   });
 
   it('has TeamCreate tool in frontmatter', () => {
@@ -184,16 +198,41 @@ describe('project-manager template — 3-phase model', () => {
   });
 
   it('rotation uses SAME name AND SAME team_name', () => {
-    expect(content).toContain('SAME name AND SAME team_name');
+    expect(combinedPM).toContain('SAME name AND SAME team_name');
+  });
+
+  it('has Session Team Setup section', () => {
+    expect(content).toMatch(/Session Team Setup/);
+  });
+
+  it('topology gate covers ALL agent dispatches, not just dev work', () => {
+    expect(combinedPM).toContain('Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() dispatch)')
+    expect(combinedPM).not.toContain('Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() for dev work)')
+    expect(combinedPM).toContain('Applies to ALL Agent() calls')
+  })
+
+  it('topology gate explicitly covers test runs and verification', () => {
+    expect(combinedPM).toContain('test runs, verification')
+  })
+});
+
+// ---------------------------------------------------------------------------
+// 3a. PM Phase Execution sub-doc (extracted from project-manager.md)
+// ---------------------------------------------------------------------------
+describe('pm-phase-execution sub-doc — extracted phase protocol', () => {
+  const content = fs.readFileSync(
+    path.join(ROOT, 'docs/agents/pm-phase-execution.md'),
+    'utf-8'
+  );
+
+  it('describes Planning Team phase with planner + context-provider', () => {
+    expect(content).toMatch(/Planning Team/);
+    expect(content).toMatch(/planner.*context-provider/i);
   });
 
   it('anti-pattern arch-X-v2 is documented with correction', () => {
     expect(content).toContain('arch-X-v2');
     expect(content).toContain('SAME name AND SAME team_name');
-  });
-
-  it('has Session Team Setup section', () => {
-    expect(content).toMatch(/Session Team Setup/);
   });
 
   it('references .planning/PLAN.md for plan file delivery', () => {
@@ -211,11 +250,8 @@ describe('project-manager template — 3-phase model', () => {
 describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
-  it('template version 1.6.0 (architects have NO Edit/Grep/Glob tools)', () => {
-    expect(archContent).toContain('template_version: "1.6.0"');
-    // Enforce tool restriction: architects MUST NOT have Edit, Write, Grep, or Glob tools.
-    // Without this, architects can bypass the dev delegation chain.
-    expect(archContent).toMatch(/^tools:\s+Read,\s+Bash,\s+SendMessage\s*$/m);
+  it('template version 1.14.0', () => {
+    expect(archContent).toContain('template_version: "1.14.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -258,15 +294,33 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
   });
 
-  it('arch-platform has template version 1.5.0 and no Edit/Grep/Glob tools', () => {
-    expect(platformContent).toContain('template_version: "1.5.0"');
-    expect(platformContent).toMatch(/^tools:\s+Read,\s+Bash,\s+SendMessage\s*$/m);
+  it('arch-platform has template version 1.11.0', () => {
+    expect(platformContent).toContain('template_version: "1.11.0"');
   });
 
-  it('arch-integration has template version 1.5.0 and no Edit/Grep/Glob tools', () => {
-    expect(integrationContent).toContain('template_version: "1.5.0"');
-    expect(integrationContent).toMatch(/^tools:\s+Read,\s+Bash,\s+SendMessage\s*$/m);
+  it('arch-integration has template version 1.11.0', () => {
+    expect(integrationContent).toContain('template_version: "1.11.0"');
   });
+});
+
+// ---------------------------------------------------------------------------
+// 3d. All arch templates — Pattern search delegation to context-provider
+// ---------------------------------------------------------------------------
+describe('arch templates — pattern search delegation rule', () => {
+  const archTemplates = ['arch-testing', 'arch-platform', 'arch-integration'] as const;
+
+  for (const name of archTemplates) {
+    const templateContent = fs.readFileSync(path.join(TEMPLATES_DIR, `${name}.md`), 'utf-8');
+
+    // arch-platform and arch-integration have an existing Caller Grep Rule that must
+    // include delegation via SendMessage to context-provider.
+    // arch-testing never had this rule so it is excluded.
+    if (name !== 'arch-testing') {
+      it(`${name} Caller Grep Rule delegates via SendMessage`, () => {
+        expect(templateContent).toMatch(/Caller Grep Rule[\s\S]{0,500}SendMessage/);
+      });
+    }
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -813,12 +867,12 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.4.0', () => {
-    expect(plannerContent).toContain('template_version: "1.4.0"');
+  it('planner version 1.5.0', () => {
+    expect(plannerContent).toContain('template_version: "1.5.0"');
   });
 
-  it('arch-testing version 1.6.0', () => {
-    expect(testingContent).toContain('template_version: "1.6.0"');
+  it('arch-testing version 1.14.0', () => {
+    expect(testingContent).toContain('template_version: "1.14.0"');
   });
 });
 

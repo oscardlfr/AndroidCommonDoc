@@ -5,6 +5,7 @@ tools: Read, Grep, Glob
 model: sonnet
 domain: quality
 intent: [docs, drift, alignment, stale]
+token_budget: 2000
 memory: project
 skills:
   - audit-docs

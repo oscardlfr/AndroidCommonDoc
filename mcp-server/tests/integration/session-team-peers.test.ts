@@ -34,15 +34,22 @@ describe('dev template existence', () => {
 // 2. Each dev template has template_version in frontmatter
 // ---------------------------------------------------------------------------
 describe('dev template structure — template_version in frontmatter', () => {
+  const EXPECTED_VERSIONS: Record<string, string> = {
+    'test-specialist.md': '1.7.0',
+    'ui-specialist.md': '1.7.0',
+    'data-layer-specialist.md': '1.6.0',
+    'domain-model-specialist.md': '1.6.0',
+  };
+
   for (const template of DEV_TEMPLATES) {
     it(`${template} has template_version field`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
       expect(content).toMatch(/^template_version:/m);
     });
 
-    it(`${template} template_version is "1.0.0"`, () => {
+    it(`${template} template_version is "${EXPECTED_VERSIONS[template]}"`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
-      expect(content).toContain('template_version: "1.0.0"');
+      expect(content).toContain(`template_version: "${EXPECTED_VERSIONS[template]}"`);
     });
   }
 });
@@ -151,4 +158,17 @@ describe('dev template dual-location — also in .claude/agents/', () => {
       expect(fs.existsSync(path.join(AGENTS_DIR, template))).toBe(true);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// 9. team-topology broadcast workaround documentation
+// ---------------------------------------------------------------------------
+describe('team-topology broadcast workaround documentation', () => {
+  it('team-topology documents SendMessage broadcast workaround', () => {
+    const content = fs.readFileSync(
+      path.join(ROOT, 'docs/agents/team-topology.md'), 'utf-8'
+    );
+    expect(content).toContain('SendMessage(to="*")');
+    expect(content).toMatch(/workaround|individual messages/i);
+  });
 });

@@ -5,6 +5,7 @@ tools: Read, Grep, Glob
 model: sonnet
 domain: security
 intent: [privacy, pii, gdpr, data, analytics]
+token_budget: 2000
 memory: project
 skills:
   - validate-patterns

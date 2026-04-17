@@ -37,6 +37,11 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, project-ma
 | [quality-gate-protocol](quality-gate-protocol.md) | Sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) |
 | [context-rotation-guide](context-rotation-guide.md) | Context management: rotation strategies, PM-as-relay, team dissolution |
 | [cross-layer-protocol](cross-layer-protocol.md) | Cross-layer team coordination: separate teams per layer, filesystem handoff via `.planning/HANDOFF.md`, phase sync |
+| [pm-phase-execution](pm-phase-execution.md) | PM's 3-phase execution protocol: phase transitions, triggers, anti-patterns, execution checklist |
+| [pm-session-setup](pm-session-setup.md) | PM session setup: Phase 2 core devs, selective spawning, rotation protocol, context management, architect routing |
+| [pm-dispatch-topology](pm-dispatch-topology.md) | PM dispatch: topology gate, pattern validation chain, dynamic scaling, autonomy rules, kill order |
+| [pm-verification-gates](pm-verification-gates.md) | PM verification: architect verdicts, post-verdict broadcast, post-wave integrity check |
+| [pm-quality-doc-pipeline](pm-quality-doc-pipeline.md) | PM quality gate + doc pipeline: quality-gater retry rules, doc-updater mandate, CLAUDE.md pointers-only rule |
 
 ## Key Concepts
 

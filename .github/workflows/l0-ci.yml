@@ -49,6 +49,27 @@ jobs:
     name: Copilot Parity
     uses: ./.github/workflows/reusable-copilot-parity.yml
 
+  agent-template-lint:
+    name: Agent Template Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate agent templates
+        run: bash scripts/sh/validate-agent-templates.sh --show-details
+
+  secret-scan:
+    name: Secret Scan (TruffleHog)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Install TruffleHog
+        run: curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+      - name: Scan for secrets
+        run: trufflehog filesystem . --only-verified --fail
+
   # ── Wave 2: Test suites (parallel) ─────────────────────────────────────
 
   shell-tests:
@@ -208,10 +229,12 @@ jobs:
       - check-outdated
       - agent-parity
       - copilot-parity
+      - secret-scan
       - shell-tests
       - detekt-rules
       - mcp-server
       - skill-registry
+      - agent-template-lint
     runs-on: ubuntu-latest
     steps:
       - name: Check results
@@ -225,6 +248,7 @@ jobs:
             "${{ needs.detekt-rules.result }}"
             "${{ needs.mcp-server.result }}"
             "${{ needs.skill-registry.result }}"
+            "${{ needs.agent-template-lint.result }}"
           )
           commit_lint="${{ needs.commit-lint.result }}"
           if [[ "$commit_lint" != "success" && "$commit_lint" != "skipped" ]]; then
@@ -234,6 +258,11 @@ jobs:
           check_outdated="${{ needs.check-outdated.result }}"
           if [[ "$check_outdated" != "success" && "$check_outdated" != "skipped" ]]; then
             echo "❌ check-outdated: $check_outdated"
+            exit 1
+          fi
+          secret_scan="${{ needs.secret-scan.result }}"
+          if [[ "$secret_scan" != "success" && "$secret_scan" != "skipped" ]]; then
+            echo "❌ secret-scan: $secret_scan"
             exit 1
           fi
           for r in "${results[@]}"; do

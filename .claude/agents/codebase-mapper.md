@@ -5,6 +5,7 @@ tools: Read, Grep, Glob, Bash, Write
 model: sonnet
 domain: infrastructure
 intent: [map, architecture, modules, structure, inventory]
+token_budget: 2000
 skills:
   - map-codebase
 ---

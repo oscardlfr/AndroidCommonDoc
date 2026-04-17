@@ -5,6 +5,7 @@ tools: Read, Grep, Glob
 model: haiku
 domain: audit
 intent: [skill, script, alignment, command]
+token_budget: 2000
 memory: project
 ---
 

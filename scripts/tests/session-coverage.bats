@@ -758,7 +758,7 @@ teardown() {
 }
 
 @test "README: 'What gets synced' lists consumer counts" {
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "58"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "59"
     sed -n '/What gets synced/,/^### /p' "$README" | grep -q "52"
 }
 
@@ -1079,9 +1079,9 @@ teardown() {
     grep -q "^slug: spec-driven-workflow" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
-@test "README: counts match 37 agents, 58 skills" {
-    grep -q "37 specialized agents" "$README"
-    grep -q "58 canonical" "$README"
+@test "README: counts match 39 agents, 59 skills" {
+    grep -q "39 specialized agents" "$README"
+    grep -q "59 canonical" "$README"
 }
 
 @test "CLAUDE.md: lists all new agents in delegation table" {
@@ -1162,13 +1162,13 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     done
 }
 
-@test "agents: all 37 agents have domain frontmatter" {
+@test "agents: all 39 agents have domain frontmatter" {
     for agent in $L0_ROOT/.claude/agents/*.md; do
         grep -q "^domain:" "$agent" || { echo "MISSING domain: $agent"; return 1; }
     done
 }
 
-@test "agents: all 37 agents have intent frontmatter" {
+@test "agents: all 39 agents have intent frontmatter" {
     for agent in $L0_ROOT/.claude/agents/*.md; do
         grep -q "^intent:" "$agent" || { echo "MISSING intent: $agent"; return 1; }
     done
@@ -1257,7 +1257,16 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 }
 
 @test "templates: project-manager has architect verification gate" {
-    grep -q "Architect Verification Gate" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    # Hub refactor: Architect Verification Gate text moved to pm-verification-gates.md sub-doc
+    local pm_combined
+    pm_combined=$(cat "$L0_ROOT/setup/agent-templates/project-manager.md")
+    for subdoc in pm-session-setup pm-dispatch-topology pm-verification-gates pm-quality-doc-pipeline pm-phase-execution; do
+        if [[ -f "$L0_ROOT/docs/agents/${subdoc}.md" ]]; then
+            pm_combined="$pm_combined
+$(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
+        fi
+    done
+    echo "$pm_combined" | grep -q "Architect Verification Gate"
     grep -q "arch-testing" "$L0_ROOT/setup/agent-templates/project-manager.md"
     grep -q "arch-platform" "$L0_ROOT/setup/agent-templates/project-manager.md"
     grep -q "arch-integration" "$L0_ROOT/setup/agent-templates/project-manager.md"
@@ -1402,9 +1411,9 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "doc-templates" "$README" || grep -q "PRODUCT_SPEC" "$README"
 }
 
-@test "README: counts match 37 agents, 58 skills, 52 commands" {
-    grep -q "37 specialized agents" "$README"
-    grep -q "58 canonical" "$README"
+@test "README: counts match 39 agents, 59 skills, 52 commands" {
+    grep -q "39 specialized agents" "$README"
+    grep -q "59 canonical" "$README"
     # 52 commands verified via sync table
 }
 

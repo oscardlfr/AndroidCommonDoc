@@ -107,6 +107,19 @@ fi
 Gradle deprecation warnings → WARNING (reports, dev must acknowledge).
 "A newer version" warnings → WARNING (reports for visibility).
 
+### Step 5.6 — Secret scan
+
+Run TruffleHog on the project to detect committed secrets:
+
+```bash
+bash scripts/sh/scan-secrets.sh "$(pwd)"
+```
+
+- status=SKIPPED (trufflehog not installed): INFO — do not block
+- status=PASS: continue
+- findings with severity CRITICAL or HIGH: ERROR (blocks)
+- findings with severity MEDIUM or LOW: WARNING (report, do not block)
+
 ### Step 5.7 — Dependency freshness
 
 ```bash
@@ -117,6 +130,31 @@ fi
 
 Outdated critical deps (major/minor bumps) --> WARNING (reports for visibility).
 Does NOT block -- version updates are a separate task, not a PR gate.
+
+### Step 5.8 — Agent template tests
+
+Run Vitest integration tests when agent templates, .claude/agents/, or mcp-server sources changed:
+
+```bash
+if git diff --name-only "$BASE_SHA" HEAD | grep -qE '^(setup/agent-templates/|\.claude/agents/|mcp-server/)'; then
+  cd "$ANDROID_COMMON_DOC/mcp-server" && npm test
+  cd - > /dev/null
+fi
+```
+
+Failures BLOCK the PR. The integration suite enforces Wave 1 template rules (Edit-directly removal, NEVER-you-fix rows, Scope Validation Gate, DURING-WAVE Protocol, Exact Fix Format, Post-Wave Team Integrity, dual-location sync).
+
+### Step 5.9 — Agent template behavioral lint
+
+Run when agent templates or `.claude/agents/` changed:
+
+```bash
+if git diff --name-only "$MERGE_BASE" HEAD | grep -qE '^(setup/agent-templates/|\.claude/agents/)'; then
+  bash scripts/sh/validate-agent-templates.sh --show-details
+fi
+```
+
+Failures BLOCK the PR. Validates role keyword contracts, tool-body cross-references, anti-patterns, size limits, and version/MIGRATIONS.json alignment.
 
 ### Step 6 — Registry hash freshness
 
@@ -151,7 +189,9 @@ Report per-module pass/fail. Show failing test names on failure.
 ║ Architecture guards  ✅ PASS / ❌ FAIL  ║
 ║ KMP safety           ✅ PASS / ❌ FAIL  ║
 ║ Warning audit        ✅ PASS / ❌ FAIL  ║
+║ Secret scan          ✅ PASS / ❌ FAIL / ⏭️ SKIP ║
 ║ Dep freshness        ⚠️ INFO / ⏭️ SKIP  ║
+║ Agent template behavioral lint ✅ PASS / ❌ FAIL ║
 ║ Registry hashes      ✅ PASS / ❌ FAIL  ║
 ║ Build + Tests        ✅ PASS / ❌ FAIL  ║
 ╠══════════════════════════════════════════╣

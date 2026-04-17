@@ -249,6 +249,32 @@ describe("v1.5.0 extensible routing", () => {
   });
 });
 
+describe('L0 agent frontmatter completeness', () => {
+  const agentsDir = path.join(ROOT, '.claude/agents');
+
+  it('all L0 agents with domain field have intent field', () => {
+    const agents = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
+    const mismatched: string[] = [];
+    for (const agent of agents) {
+      const content = fs.readFileSync(path.join(agentsDir, agent), 'utf8');
+      const hasDomain = /^domain:/m.test(content);
+      const hasIntent = /^intent:/m.test(content);
+      if (hasDomain && !hasIntent) mismatched.push(agent);
+    }
+    expect(mismatched, `Agents with domain but missing intent: ${mismatched.join(', ')}`).toHaveLength(0);
+  });
+
+  it('no L0 agent is missing token_budget', () => {
+    const agents = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
+    const missing: string[] = [];
+    for (const agent of agents) {
+      const content = fs.readFileSync(path.join(agentsDir, agent), 'utf8');
+      if (!/^token_budget:/m.test(content)) missing.push(agent);
+    }
+    expect(missing, `L0 agents missing token_budget: ${missing.join(', ')}`).toHaveLength(0);
+  });
+});
+
 describe('readme-audit CRLF compatibility', () => {
   const content = fs.readFileSync(
     path.join(ROOT, 'scripts/sh/readme-audit.sh'), 'utf-8'
