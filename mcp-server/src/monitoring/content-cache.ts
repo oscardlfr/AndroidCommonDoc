@@ -10,7 +10,7 @@ import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { logger } from "../utils/logger.js";
-import type { FetchedContent } from "./content-fetcher.js";
+import type { FetchedContent, FetchSource } from "./content-fetcher.js";
 
 /** Cached content entry on disk. */
 export interface CachedEntry {
@@ -18,7 +18,7 @@ export interface CachedEntry {
   content: string;
   contentHash: string;
   fetchedAt: string;
-  source: "jina" | "raw";
+  source: FetchSource;
   ttlHours: number;
 }
 

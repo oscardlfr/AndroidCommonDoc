@@ -115,6 +115,55 @@ Jina Reader handles JS-rendered pages. Raw HTTP fallback only works for static H
 | insert-koin.io | ✅ | ❌ (JS-rendered) |
 | GitHub repos | ✅ | ✅ |
 
+## Android CLI Knowledge Base (`kb://` URIs)
+
+URLs starting with `kb://` are routed through Google's Android CLI (`android docs fetch`) instead of Jina/raw HTTP. The CLI ships a local index covering Android, Firebase, Kotlin, and Google Developers docs — first invocation downloads ~10 MB and builds an index (~10 s), subsequent fetches are near-instant.
+
+### When to prefer `kb://` over `https://`
+
+- The page is in Google's indexed set (Android Dev / Firebase / Kotlin / Google Dev).
+- You want deterministic content across Jina outages or network hiccups.
+- You need offline-capable validation after the initial index download.
+
+### Example frontmatter
+
+```yaml
+validate_upstream:
+  - url: "kb://android/kotlin/flow/stateflow-and-sharedflow"
+    assertions:
+      - type: api_present
+        value: "stateIn"
+        context: "Our WhileSubscribed pattern depends on stateIn"
+      - type: deprecation_scan
+        value: "StateFlow"
+        context: "StateFlow is our core state primitive"
+    on_failure: HIGH
+```
+
+### Prerequisites
+
+- Android CLI v0.7+ on PATH (`android --version` resolves). Install: download binary from d.android.com/tools/agents or, without admin: `curl --ssl-no-revoke -fsSL https://edgedl.me.gvt1.com/edgedl/android/cli/latest/windows_x86_64/android.exe -o %USERPROFILE%\android-cli\android.exe` then add to User PATH.
+- No device required for `android docs fetch` — it reads the local KB, not a connected device.
+
+### Failure modes
+
+| Symptom | Meaning | Fix |
+|---|---|---|
+| `Android CLI not on PATH` | binary missing or not in PATH | install CLI, restart terminal |
+| `Knowledge Base has no entry for kb://...` | URL typo or not indexed | use `android docs search <query>` to find a valid `kb://` |
+| `timed out after Nms` | first-run index build took too long | re-run with larger `timeout` or after `android docs search` primes the index |
+
+### Fallback behavior
+
+- `kb://` URLs do **not** fall back to HTTP on error — the CLI is authoritative for that scheme.
+- `https://` URLs with `preferredSource: "android-cli"` try the CLI first (which rejects non-kb URIs), then fall back through the normal Jina → raw HTTP chain.
+
+| Source | Origin | Offline-capable | Rate-limited |
+|---|---|---|---|
+| `kb://` | Android CLI local index | ✅ (after first run) | N/A |
+| `https://*.jina.ai` | Jina Reader | ❌ | Jina fair-use |
+| `https://` (raw) | direct HTTP | ❌ | Origin-specific |
+
 ## Severity Guide
 
 - `on_failure: HIGH` — Critical API dependency (stateIn, Room, BiometricPrompt, CancellationException)

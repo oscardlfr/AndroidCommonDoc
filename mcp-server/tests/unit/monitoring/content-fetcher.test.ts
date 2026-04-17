@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   fetchContent,
   stripHtmlToText,
+  type AndroidCliRunner,
   type FetchResult,
 } from "../../../src/monitoring/content-fetcher.js";
 
@@ -142,6 +143,165 @@ describe("content-fetcher", () => {
         expect(results[0].data.contentHash).not.toBe(
           results[1].data.contentHash,
         );
+      }
+    });
+  });
+
+  describe("fetchContent — android-cli source", () => {
+    const SEPARATOR = "----------------------------------------";
+    const successStdout = [
+      "Waiting for index to be ready...",
+      "Fetching docs from: kb://android/kotlin/flow/stateflow-and-sharedflow",
+      "Title: StateFlow and SharedFlow",
+      "URL: kb://android/kotlin/flow/stateflow-and-sharedflow",
+      SEPARATOR,
+      "StateFlow and SharedFlow are Flow APIs that emit state updates to collectors.",
+      "",
+      "Use stateIn(WhileSubscribed(5_000)) for UI state.",
+    ].join("\n");
+
+    it("routes kb:// URLs through the android-cli runner", async () => {
+      const runner: AndroidCliRunner = vi.fn().mockResolvedValue({
+        stdout: successStdout,
+        stderr: "",
+        exitCode: 0,
+      });
+
+      const result = await fetchContent(
+        "kb://android/kotlin/flow/stateflow-and-sharedflow",
+        { androidCliRunner: runner },
+      );
+
+      expect(runner).toHaveBeenCalledWith(
+        ["docs", "fetch", "kb://android/kotlin/flow/stateflow-and-sharedflow"],
+        expect.any(Number),
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.source).toBe("android-cli");
+        expect(result.data.content).toContain("stateIn(WhileSubscribed");
+        expect(result.data.content).not.toContain("Waiting for index");
+        expect(result.data.content).not.toContain(SEPARATOR);
+      }
+    });
+
+    it("still invokes the runner when preferredSource=android-cli is set for an https URL, but the adapter refuses (kb:// only)", async () => {
+      // Adapter does not spawn the process for non-kb URLs — it short-circuits
+      // with a clear error so that the outer fetchContent can decide whether
+      // to fall back to webfetch.
+      const runner: AndroidCliRunner = vi.fn();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve("fallback body"),
+      }) as unknown as typeof fetch;
+
+      const result = await fetchContent("https://example.com/docs", {
+        preferredSource: "android-cli",
+        androidCliRunner: runner,
+      });
+
+      // The runner was NOT called (adapter rejects before spawning).
+      expect(runner).not.toHaveBeenCalled();
+      // The overall fetch succeeds via webfetch fallback.
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.source).toBe("jina");
+      }
+    });
+
+    it("surfaces 'No document found' as an error without content", async () => {
+      const runner: AndroidCliRunner = vi.fn().mockResolvedValue({
+        stdout: "Waiting for index...\nNo document found for URL: kb://android/nope",
+        stderr: "",
+        exitCode: 0,
+      });
+
+      const result = await fetchContent("kb://android/nope", {
+        androidCliRunner: runner,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.source).toBe("android-cli");
+        expect(result.error.error).toContain("no entry");
+      }
+    });
+
+    it("emits an install-hint error when the binary is not on PATH", async () => {
+      const runner: AndroidCliRunner = vi.fn().mockResolvedValue({
+        stdout: "",
+        stderr: "'android' is not recognized as an internal or external command",
+        exitCode: 127,
+      });
+
+      const result = await fetchContent("kb://android/any", {
+        androidCliRunner: runner,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.error).toContain("Android CLI not on PATH");
+      }
+    });
+
+    it("does NOT fall back to webfetch for kb:// URLs on failure", async () => {
+      const runner: AndroidCliRunner = vi.fn().mockResolvedValue({
+        stdout: "",
+        stderr: "adb offline",
+        exitCode: 1,
+      });
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      const result = await fetchContent("kb://android/foo", {
+        androidCliRunner: runner,
+      });
+
+      expect(result.ok).toBe(false);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("falls back to webfetch when preferredSource=android-cli fails on an https URL", async () => {
+      const runner: AndroidCliRunner = vi.fn().mockResolvedValue({
+        stdout: "",
+        stderr: "unreachable",
+        exitCode: 1,
+      });
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve("# Fallback content"),
+      }) as unknown as typeof fetch;
+
+      // preferredSource=android-cli triggers the adapter first, but the URL
+      // is https:// so the adapter rejects it — we then fall through to jina/raw.
+      const result = await fetchContent("https://example.com/docs", {
+        preferredSource: "android-cli",
+        androidCliRunner: runner,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.source).toBe("jina");
+        expect(result.data.content).toContain("Fallback content");
+      }
+    });
+
+    it("treats stdout with no separator as the entire body (defensive)", async () => {
+      const runner: AndroidCliRunner = vi.fn().mockResolvedValue({
+        stdout: "just body content without a separator",
+        stderr: "",
+        exitCode: 0,
+      });
+
+      const result = await fetchContent("kb://android/bare", {
+        androidCliRunner: runner,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.content).toBe("just body content without a separator");
       }
     });
   });

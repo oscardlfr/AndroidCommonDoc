@@ -6,19 +6,18 @@ import dev.detekt.api.Finding
 import dev.detekt.api.Rule
 import org.jetbrains.kotlin.psi.KtImportDirective
 
-class NoPlatformStorageInCommonRule(config: Config) : Rule(
+class NoComposeToolingInProductionRule(config: Config) : Rule(
     config,
-    "Never use platform-specific storage APIs in commonMain; use expect/actual"
+    "Compose UI Tooling imports (@Preview) must not appear in production source sets — keep them in commonTest or a dedicated `-previews` module"
 ) {
     override fun visitImportDirective(importDirective: KtImportDirective) {
         super.visitImportDirective(importDirective)
         val importPath = importDirective.importedFqName?.asString() ?: return
-        if (importPath.startsWith("android.content.SharedPreferences") ||
-                importPath.startsWith("android.database.sqlite")) {
+        if (importPath.startsWith("androidx.compose.ui.tooling")) {
             report(
                 Finding(
                     Entity.from(importDirective),
-                    "Never use platform-specific storage APIs in commonMain; use expect/actual Use 'expect/actual + multiplatform-settings / SQLDelight' instead of '$importPath'."
+                    "Compose UI Tooling imports (@Preview) must not appear in production source sets — keep them in commonTest or a dedicated `-previews` module Use 'move @Preview composables to commonTest or a -previews module' instead of '$importPath'."
                 )
             )
         }

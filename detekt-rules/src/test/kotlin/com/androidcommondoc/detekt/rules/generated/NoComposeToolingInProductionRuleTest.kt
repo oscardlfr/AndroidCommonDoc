@@ -5,15 +5,13 @@ import dev.detekt.test.lint
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
-class NoDefaultDispatcherInTestsRuleTest {
-    private val rule = NoDefaultDispatcherInTestsRule(Config.empty)
+class NoComposeToolingInProductionRuleTest {
+    private val rule = NoComposeToolingInProductionRule(Config.empty)
 
     @Test
     fun `reports violating code`() {
         val code = """
-            class MyClass {
-                val events = Dispatchers.DefaultUnit>()
-            }
+            import androidx.compose.ui.tooling
         """.trimIndent()
         val findings = rule.lint(code)
         assertThat(findings).hasSize(1)
@@ -22,9 +20,7 @@ class NoDefaultDispatcherInTestsRuleTest {
     @Test
     fun `accepts compliant code`() {
         val code = """
-            class MyClass {
-                val events = injected testDispatcher parameter<Unit>()
-            }
+            import move @Preview composables to commonTest or a -previews module
         """.trimIndent()
         val findings = rule.lint(code)
         assertThat(findings).isEmpty()

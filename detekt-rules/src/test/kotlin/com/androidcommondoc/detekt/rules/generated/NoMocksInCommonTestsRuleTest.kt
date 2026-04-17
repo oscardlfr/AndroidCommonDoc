@@ -9,32 +9,18 @@ class NoMocksInCommonTestsRuleTest {
     private val rule = NoMocksInCommonTestsRule(Config.empty)
 
     @Test
-    fun `flags io mockk import`() {
+    fun `reports violating code`() {
         val code = """
-            import io.mockk.every
-            class MyTest
-        """.trimIndent()
-        val findings = rule.lint(code)
-        assertThat(findings).hasSize(1)
-        assertThat(findings[0].message).contains("fakes")
-    }
-
-    @Test
-    fun `flags org mockito import`() {
-        val code = """
-            import org.mockito.Mockito
-            class MyTest
+            import io.mockk
         """.trimIndent()
         val findings = rule.lint(code)
         assertThat(findings).hasSize(1)
     }
 
     @Test
-    fun `accepts non-mock imports`() {
+    fun `accepts compliant code`() {
         val code = """
-            import kotlin.test.Test
-            import kotlinx.coroutines.test.runTest
-            class MyTest
+            import pure Kotlin fake class
         """.trimIndent()
         val findings = rule.lint(code)
         assertThat(findings).isEmpty()

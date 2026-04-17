@@ -13,7 +13,8 @@ class NoMocksInCommonTestsRule(config: Config) : Rule(
     override fun visitImportDirective(importDirective: KtImportDirective) {
         super.visitImportDirective(importDirective)
         val importPath = importDirective.importedFqName?.asString() ?: return
-        if (importPath.startsWith("io.mockk") || importPath.startsWith("org.mockito")) {
+        if (importPath.startsWith("io.mockk") ||
+                importPath.startsWith("org.mockito")) {
             report(
                 Finding(
                     Entity.from(importDirective),
