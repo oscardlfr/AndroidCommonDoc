@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-17T19:28:44.002Z",
+  "generated": "2026-04-17T19:59:24.091Z",
   "l0_root": "C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc",
   "entries": [
     {
@@ -1402,12 +1402,12 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e03eccb47f39c9078cf1f20eeae6a08569feb35b3525ef40109f63a8b36ff609",
+      "hash": "sha256:6d9e849175ab2ffe060e64df1a5bfd59af9292529594a99543ef99ac38301241",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
         "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
-        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "tools": "Read, Bash, SendMessage",
         "model": "sonnet",
         "domain": "architecture",
         "intent": [
@@ -1418,7 +1418,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.4.0",
+        "template_version": "1.5.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1432,12 +1432,12 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e4da943aae217b743400840724c56f5454857b8928e6f46a39ec4803b4d5d6e9",
+      "hash": "sha256:54d0cea4921344a4df944072aa9461432c3d044f1f1e6b6d3fcb2224f628a9e9",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
         "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
-        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "tools": "Read, Bash, SendMessage",
         "model": "sonnet",
         "domain": "architecture",
         "intent": [
@@ -1447,7 +1447,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.4.0",
+        "template_version": "1.5.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1461,12 +1461,12 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:b58ccfe26fc72457653c6ce0e61041b66801ecb7602f76a94bed05405ad67505",
+      "hash": "sha256:5058c6ca3cc54b9e2e42f20c81c598a3d9b7cc5ccd32daa2a81773671e53a72b",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
         "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
-        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "tools": "Read, Bash, SendMessage",
         "model": "sonnet",
         "domain": "architecture",
         "intent": [
@@ -1476,7 +1476,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.5.0",
+        "template_version": "1.6.0",
         "skills": [
           "test",
           "test-full-parallel",
