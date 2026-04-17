@@ -1,17 +1,23 @@
-name: UI Validation (android-layout-diff)
+name: UI Validation
 
-# Runtime UI validation pipeline. Captures layout on a Linux emulator,
-# diffs against committed baselines under `baselines/**/*.json`, and
-# fails the PR if any HIGH finding is emitted (signature of the
-# "tests pass but app is broken" bug class).
+# Runtime UI validation pipeline for two production UI targets:
 #
-# Scoped to PRs that touch UI code — no-op for non-UI changes so the
-# emulator cost is bounded.
+# 1. Android (live device via emulator): `android-layout-diff`
+#    Captures on-device layout, diffs against `baselines/android/**/*.json`.
+# 2. Compose Multiplatform desktop (JVM): `compose-semantic-diff`
+#    Runs `./gradlew verifyUiBaselines` (which asserts in-test against
+#    `baselines/desktop/**/*.txt`) and then invokes the MCP CLI for each
+#    screen to produce structured findings as build artifacts.
 #
-# Note: this workflow is intentionally gated behind `enabled: false` by
-# default on L0 itself (L0 has no app to deploy). It is shipped for
-# consumer projects to adopt via `/sync-l0` and then enable by flipping
-# `enabled: true` in their own fork of the workflow.
+# Both jobs fail the PR on any HIGH finding — the signature of the
+# "tests pass but app is broken" bug class.
+#
+# Scoped to PRs that touch UI code or baselines. No-op for non-UI changes
+# so the emulator cost is bounded.
+#
+# Note: both jobs are intentionally gated behind `enabled: false` on L0
+# itself (L0 has no app / no desktop target). Shipped for consumer
+# projects to adopt via `/sync-l0` and then enable by flipping `enabled: true`.
 
 on:
   pull_request:
@@ -21,10 +27,11 @@ on:
       - '**/*Screen.kt'
       - '**/*Compose*.kt'
       - 'baselines/**/*.json'
+      - 'baselines/**/*.txt'
   workflow_dispatch:
     inputs:
       enabled:
-        description: "Set to true to actually run (L0 default is false — no app to deploy)"
+        description: "Set to true to actually run (L0 default is false — no app / no desktop target to deploy)"
         required: false
         default: "false"
 
@@ -42,10 +49,10 @@ jobs:
       - name: Decide whether to run
         id: decide
         run: |
-          # L0 itself has no app. Consumers flip this to 'true' in their fork.
+          # L0 itself has neither app nor desktop target. Consumers flip this to 'true' in their fork.
           echo "run=false" >> "$GITHUB_OUTPUT"
 
-  ui-validation:
+  android-layout-diff:
     name: Android Layout Diff
     needs: gate
     if: needs.gate.outputs.run == 'true'
@@ -67,6 +74,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+
+      - name: Build MCP server CLI
+        run: |
+          cd mcp-server
+          npm ci
+          npm run build
 
       - name: Install Android CLI v0.7
         run: |
@@ -102,7 +115,8 @@ jobs:
             # the committed baseline.
             mkdir -p out/layout-diff
             FAIL=0
-            for baseline in baselines/**/*.json; do
+            for baseline in baselines/android/*.json; do
+              [ -e "$baseline" ] || continue
               SCREEN="$(basename "$baseline" .json)"
               echo "=== Validating $SCREEN ==="
 
@@ -117,24 +131,24 @@ jobs:
               fi
               sleep 2
 
-              # Invoke the MCP tool via its CLI equivalent (node).
+              # Retrofit CLI from Phase 21-01. Writes JSON report to stdout; exit 1 on HIGH.
               node mcp-server/build/cli/android-layout-diff.js \
                 --device-serial "$DEVICE_SERIAL" \
                 --baseline "$baseline" \
-                --output "out/layout-diff/$SCREEN.json" || FAIL=1
+                --format json > "out/layout-diff/$SCREEN.json" || FAIL=1
             done
 
             exit $FAIL
 
-      - name: Upload diff artifacts
+      - name: Upload android diff artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: layout-diff-${{ github.run_id }}
+          name: android-layout-diff-${{ github.run_id }}
           path: out/layout-diff/
           retention-days: 14
 
-      - name: Parse HIGH findings
+      - name: Parse HIGH findings (android)
         if: always()
         run: |
           node - <<'EOF'
@@ -145,9 +159,79 @@ jobs:
           let high = 0;
           for (const f of fs.readdirSync(dir)) {
             const blob = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8'));
-            const findings = blob.report?.findings ?? [];
+            const findings = blob.findings ?? [];
             for (const x of findings) if (x.severity === 'HIGH') high++;
           }
-          console.log(`HIGH findings across all screens: ${high}`);
+          console.log(`HIGH findings across all android screens: ${high}`);
           process.exit(high > 0 ? 1 : 0);
           EOF
+
+  desktop-semantic-diff:
+    name: Compose Semantic Diff (desktop JVM)
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build MCP server CLI
+        run: |
+          cd mcp-server
+          npm ci
+          npm run build
+
+      - name: Run verifyUiBaselines
+        # Primary gate — fails the build if any desktop baseline drifts.
+        # The capture helper writes per-screen current .txt to build/ui-snapshots/.
+        run: ./gradlew verifyUiBaselines
+
+      - name: Produce structured findings for each baseline
+        # Even when verifyUiBaselines passes, emit findings JSON for
+        # agent post-hoc analysis. When it fails, the current .txt files
+        # have already been written, so findings here will show exactly
+        # what drifted.
+        if: always()
+        run: |
+          mkdir -p out/semantic-diff
+          FAIL=0
+          for baseline in baselines/desktop/*.txt; do
+            [ -e "$baseline" ] || continue
+            SCREEN="$(basename "$baseline" .txt)"
+            CURRENT="build/ui-snapshots/${SCREEN}.current.txt"
+            if [ ! -f "$CURRENT" ]; then
+              echo "WARN: no current capture for $SCREEN at $CURRENT — skipping structured findings"
+              continue
+            fi
+            echo "=== Structured findings for $SCREEN ==="
+            node mcp-server/build/cli/compose-semantic-diff.js \
+              --baseline "$baseline" \
+              --current "$CURRENT" \
+              --screen-name "$SCREEN" \
+              --format json > "out/semantic-diff/$SCREEN.json" || FAIL=1
+          done
+          # Note: we do NOT exit on FAIL here — verifyUiBaselines is the
+          # authoritative gate. This step is diagnostic. If we reached
+          # this step and verifyUiBaselines had failed, the job already
+          # failed at the previous step.
+          echo "Structured findings written to out/semantic-diff/ (non-zero CLI exit codes recorded but not propagated: $FAIL)"
+
+      - name: Upload desktop diff artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-semantic-diff-${{ github.run_id }}
+          path: out/semantic-diff/
+          retention-days: 14

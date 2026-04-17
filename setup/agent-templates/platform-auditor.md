@@ -59,6 +59,17 @@ Every `expect` declaration has `actual` for all configured targets.
 4. Check error mapper consistency if new error types added
 5. Report findings with severity
 
+## Delegated Google Android skills (when applicable)
+
+When the diff touches build infrastructure, recommend (do NOT auto-invoke) the corresponding Google skill in your Summary:
+
+| Diff pattern | Skill to recommend |
+|---|---|
+| `proguard-rules.pro` / `consumer-rules.pro` modified; R8 keep rules added/changed | `/r8-analyzer` |
+| AGP version bump in `libs.versions.toml` (`android-gradle-plugin` or `com.android.tools.build:gradle`) | `/agp-9-upgrade` (only if upgrading TO v9) |
+
+Prerequisite: skill must be installed on the host (`android skills add --skill=<slug> --agent=claude-code`). If missing, surface "Recommended skill `/<slug>` is not installed" in the Summary. Catalog + applicability: `.planning/intel/android-skills-catalog.md`.
+
 ## Verify Before Reporting
 
 Before emitting findings:

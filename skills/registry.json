@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generated": "2026-04-17T19:59:24.091Z",
-  "l0_root": "C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc",
+  "generated": "2026-04-17T22:52:05.731Z",
+  "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc\\.claude\\worktrees\\brave-visvesvaraya-77a0f2",
   "entries": [
     {
       "name": "accessibility",
@@ -32,7 +32,7 @@
       "description": "Bridge to Google's Android CLI skill ecosystem. Documents how to install Google's official Android skills via `android skills add` and how they co-exist with L0 skills without conflict.",
       "category": "ecosystem",
       "tier": "extended",
-      "hash": "sha256:7fef4f507b955705e04b62b3fac24aa3e108a2999af587a2524ff9d6ff445960",
+      "hash": "sha256:b0af5d3cf81740f1b578e102b9290d9874a259202b8389b732ba6e66058568b6",
       "dependencies": [],
       "frontmatter": {
         "name": "android-skills-consume",
@@ -2016,7 +2016,7 @@
       "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:46e5e42fec4e88811ad29a5349ce4f3564428bab71bd4c0a8e6d254401dcf1ab",
+      "hash": "sha256:ba6a28dd54d67bae276dc0f2f4d31e49f331924f53856286a20fbb7aabb29ada",
       "dependencies": [],
       "frontmatter": {
         "name": "platform-auditor",
@@ -2184,7 +2184,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:0fc5498d9d4d35ba85680d6711c8c177bcd5cbbd15a03b2ce3d6a744a41d8277",
+      "hash": "sha256:9fc65b3e5bcc1a77448ca84ae3979abeb959fc4ef9f1312341fbd672c652ce83",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2370,7 +2370,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:ee27f6fa943b00469a42eeb26d8d7de92899bc6afafa500303ef6e1b0ec3c2b5",
+      "hash": "sha256:10107e2bd62b217cf129cb680dd7e23b6c42060448665124dfa62f162a3ff1c5",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",

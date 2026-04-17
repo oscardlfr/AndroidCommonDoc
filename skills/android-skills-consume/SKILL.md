@@ -62,17 +62,40 @@ When both L0 and Google publish a skill with the same slug, L0's `/sync-l0` will
 2. If the slug collides with an L0-owned slug, decide which one the project wants to use.
 3. If the Google version is preferred, add the slug to `selection.exclude_skills` in the project's `l0-manifest.json`. Next `/sync-l0` run leaves the Google skill intact.
 
-As of Phase 19, no collisions are known between L0 slugs (e.g. `test`, `coverage`, `sync-l0`) and Google slugs (e.g. `edge-to-edge`, `performance`, `android-cli`). Verify with `android skills list --long` before adopting a new Google skill.
+As of Phase 22 audit (2026-04-18), zero collisions between L0 slugs (e.g. `test`, `coverage`, `sync-l0`) and Google slugs (domain-scoped names). Verify with `android skills list --long` before adopting a new Google skill. Full catalog snapshot maintained at `.planning/intel/android-skills-catalog.md`.
 
-## Known Google skills (as of 2026-04-17)
+## Google catalog (as of 2026-04-18)
 
-| Slug | Purpose | Install |
+| Slug | Purpose | Applicable layer |
 |---|---|---|
-| `android-cli` | Orchestration of `android` CLI commands (auto-installed by `android init`) | `android init` |
-| `edge-to-edge` | Edge-to-edge display insets and safe areas | `android skills add edge-to-edge` |
-| `performance` | Android performance profiling and best practices | `android skills add performance` |
+| `android-cli` | Orchestrate the `android` CLI itself (auto-installed by `android init`) | ALL |
+| `navigation-3` | Jetpack Navigation 3 install/migrate, deep links, multi-backstack | Android + KMP Compose |
+| `edge-to-edge` | Jetpack Compose edge-to-edge + insets + system bars | Android Compose |
+| `r8-analyzer` | R8 / Proguard keep-rule audit | Android release builds |
+| `agp-9-upgrade` | Android Gradle Plugin v9 migration | Android build |
+| `migrate-xml-views-to-jetpack-compose` | XML View → Compose migration workflow | Android legacy→modern |
+| `play-billing-library-version-upgrade` | Play Billing Library migration | Android monetized |
 
 Run `android skills list --long` for the authoritative, up-to-date catalogue.
+
+## Per-layer applicability
+
+- **L0 (AndroidCommonDoc)**: all skills installed for agent delegation. See wire-up table in `.planning/intel/android-skills-catalog.md`.
+- **L1 (shared-kmp-libs)**: `navigation-3`, `agp-9-upgrade`. No UI means no `edge-to-edge`; no release build means no `r8-analyzer`/`play-billing`.
+- **L2 KMP desktop-primary (e.g. DawSync)**: `navigation-3` only until `androidApp` ships. Other Android-specific skills deferred.
+- **L2 Web (e.g. DawSyncWeb)**: NONE of the Google Android skills apply (Astro/Cloudflare Workers target, not Android).
+
+## L0 agent integration (Phase 22-02)
+
+L0 agents recommend — they do NOT auto-invoke — these delegatable skills when the diff matches their trigger pattern:
+
+| L0 agent | Skill | Trigger |
+|---|---|---|
+| `ui-specialist` Rule 9 | `/edge-to-edge` | Compose insets / Scaffold without padding / IME overlap / status bar legibility |
+| `ui-specialist` Rule 9 | `/navigation-3` | New route, deep-link regression, back-stack change |
+| `ui-specialist` Rule 9 | `/migrate-xml-views-to-jetpack-compose` | Legacy XML in `androidMain` |
+| `kmp-reviewer` | `/agp-9-upgrade` | AGP version bumped in `libs.versions.toml` |
+| `platform-auditor` | `/r8-analyzer` | Proguard/R8 rule changes under `proguard-rules.pro` or `consumer-rules.pro` |
 
 ## What this skill does NOT do
 

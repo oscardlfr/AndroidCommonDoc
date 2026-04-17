@@ -74,26 +74,53 @@ Review and fix Compose UI code for KMP project patterns.
 - Tests verify user interactions trigger correct callbacks
 - Tests verify semantic nodes for accessibility
 
-### 8. Runtime UI Validation (Android CLI)
-Static tests prove the Composable tree *exists*; they do not prove it *renders correctly on a device*. The `android-layout-diff` MCP tool closes that gap by diffing the on-device layout against a committed baseline JSON.
+### 8. Runtime UI Validation (platform-aware)
+Static tests prove the Composable tree *exists*; they do not prove it *renders correctly*. Two MCP tools close that gap with the same finding schema and severity heuristics — pick the branch that matches the consumer's production UI target.
 
-When to invoke:
+Both branches fire on the same triggers:
 - After any change that touches screen rendering (UiState branches, string resources, theming)
 - Before finalizing a PR that modifies a screen with a committed baseline
 - When investigating a "tests pass but app is broken" report
 
-Invocation:
+#### 8.A — Android (live device via adb)
+
 - MCP tool: `android-layout-diff`
 - Required state: Android CLI v0.7+ on PATH, device authorized via `adb devices`, target app installed
-- Inputs: `device_serial` (optional — required only with multiple devices), `baseline_path` (absolute path to committed layout JSON)
-- Baseline capture (one-time per screen): `android layout --pretty --output=baselines/<screen>.json` after reaching the target state on device
+- Inputs: `device_serial` (optional — required only with multiple devices), `baseline_path` (absolute path to committed JSON)
+- Baseline capture (one-time per screen): `android layout --pretty --output=baselines/android/<screen>.json` after reaching the target state on device
+- When the tool reports `cli_missing`, `adb_offline`, or `multi_device`, surface the CLI's suggestion verbatim and point at `docs/guides/getting-started/android-cli-windows.md`
 
-How to treat findings:
-- **HIGH — removed + resource-id**: critical. A known element vanished from the rendered tree. Most common cause: UiState branch rendering empty when it should render content. Block the PR.
-- **MEDIUM — text drift**: copy regressed or a UiState branch returned the wrong string-resource. Investigate the resource key used.
+#### 8.B — Desktop Compose (no device; JVM Compose Multiplatform)
+
+- MCP tool: `compose-semantic-diff`
+- Required state: Compose UI test module with the capture helper from `setup/templates/compose-semantic-diff/compose-semantic-capture.kt.template`; Gradle task `captureUiBaselines` wired
+- Inputs: `baseline_path` (`baselines/desktop/<screen>.txt`), `current_path` (`build/ui-snapshots/<screen>.current.txt` emitted by `verifyUiBaselines`), optional `screen_name`
+- Baseline capture: `./gradlew captureUiBaselines` commits regenerates `baselines/desktop/*.txt`
+- When the tool reports `capture_missing` (no current capture): that means Gradle didn't run `verifyUiBaselines` — the test-level Kotlin assertion already fails the build; tool invocation is for structured findings only
+
+#### Severity playbook (both branches)
+
+- **HIGH — removed + testTag/resource-id**: critical. A known element vanished from the rendered tree. Most common cause: UiState branch rendering empty when it should render content. Block the PR.
+- **MEDIUM — text drift (text / contentDescription)**: copy regressed or a UiState branch returned the wrong string-resource. Investigate the resource key used.
+- **MEDIUM — tagged addition**: likely a legitimate new component. Confirm intent, refresh the baseline in the same commit.
 - **LOW — anonymous added/removed**: usually dynamic content (snackbars, tooltips). Verify the baseline is still representative; update if intentional.
+- **LOW — extras drift (role/actions/state)**: interaction wiring changed. Update baseline if intentional.
 
-If the tool reports `cli_missing`, `adb_offline`, or `multi_device`, surface the CLI's suggestion verbatim — do not attempt to auto-fix environment issues. Point the user at `docs/guides/getting-started/android-cli-windows.md`.
+Choose 8.A, 8.B, or both based on the screens touched. Consumer projects that ship desktop-only use 8.B as the primary gate; those with both targets run both branches — dedupe keys are prefixed by source so findings never collide under `/full-audit`.
+
+### 9. Delegated Google Android skills (when applicable)
+
+Google publishes task-specific skills that a UI review can recommend when the diff matches their domain. You do NOT auto-invoke them — surface the slug in your Summary and let the orchestrator / user decide.
+
+Trigger patterns and delegation targets:
+
+| Diff pattern | Skill to recommend | Rationale |
+|---|---|---|
+| Compose `Scaffold`, window insets, IME overlap, status/navigation bar styling | `/edge-to-edge` | Official migration + troubleshooting workflow |
+| Navigation3 route added/changed, deep-link regression, back-stack divergence | `/navigation-3` | Official install/migrate guidance + deep-link patterns |
+| Legacy Android XML Views found under `androidMain` that should become Compose | `/migrate-xml-views-to-jetpack-compose` | Structured XML→Compose migration |
+
+Prerequisite: skills must be installed (`android skills add --skill=<slug>`). If missing, your Summary must note "Recommended skill `/<slug>` is not installed on this host" — do not assume presence. See `.planning/intel/android-skills-catalog.md` for per-layer applicability; `skills/android-skills-consume/SKILL.md` for the co-existence design.
 
 ## Workflow
 1. Find `.kt` files in UI source sets (Compose screens, components) and design system modules

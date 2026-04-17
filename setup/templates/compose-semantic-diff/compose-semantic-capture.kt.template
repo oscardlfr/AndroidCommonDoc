@@ -1,0 +1,88 @@
+// Compose semantic capture helper — distributed by AndroidCommonDoc L0
+// Copy to: <consumer>/core/testing/src/desktopMain/kotlin/<your-pkg>/ui/ComposeSemanticCapture.kt
+// Then import `captureSemanticBaseline` and use in desktopTest tests.
+//
+// Contract:
+//   - In "capture" mode (Gradle property `-Pbaseline.update=true` OR `./gradlew captureUiBaselines`):
+//     writes baselines/desktop/<screenName>.txt at the REPO ROOT.
+//   - In "verify" mode (default): reads the baseline, captures the current
+//     tree, diffs via the same identity + severity logic as the L0
+//     compose-semantic-diff MCP tool, and fails the test on any HIGH diff.
+//
+// Path resolution: prefers the absolute paths the companion Gradle block
+// injects via `baseline.root.dir` / `current.root.dir` system properties
+// so baselines land at the repo root regardless of which module's test
+// JVM captured them. Falls back to module-relative `baselines/desktop` if
+// the props are absent (legacy / manual invocation).
+//
+// Keep parity with mcp-server/src/tools/compose-semantic-diff.ts — that
+// tool's tests are the reference for normalization and identity rules.
+
+@file:OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+
+package {{PACKAGE}}
+
+import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
+import java.io.File
+import kotlin.test.fail
+
+/**
+ * Capture (or verify) the semantic tree rooted at the current composition.
+ *
+ * Call this inside a `runComposeUiTest` block after `setContent` and
+ * `waitForIdle`. Exactly one invocation per test — the method routes to
+ * capture-or-verify based on the `baseline.update` JVM system property.
+ *
+ * @param screenName Stable identifier (used as filename), e.g. "sessions-empty".
+ */
+fun ComposeUiTest.captureSemanticBaseline(screenName: String) {
+    val raw = onRoot().printToString(Int.MAX_VALUE)
+    val normalized = normalize(raw)
+
+    val updateMode = System.getProperty("baseline.update") == "true"
+    val baselineDir =
+        System.getProperty("baseline.root.dir") ?: "baselines/desktop"
+    val currentDir =
+        System.getProperty("current.root.dir") ?: "build/ui-snapshots"
+    val baselineFile = File(baselineDir, "$screenName.txt")
+
+    if (updateMode) {
+        baselineFile.parentFile.mkdirs()
+        baselineFile.writeText(normalized)
+        return
+    }
+
+    val currentFile = File(currentDir, "$screenName.current.txt")
+    currentFile.parentFile.mkdirs()
+    currentFile.writeText(normalized)
+
+    if (!baselineFile.exists()) {
+        fail(
+            "Baseline missing: ${'$'}{baselineFile.path}. Run " +
+                "`./gradlew captureUiBaselines` to create it, then commit.",
+        )
+    }
+
+    val expected = baselineFile.readText()
+    if (expected == normalized) return
+
+    fail(
+        "Semantic drift in '$screenName'.\n" +
+            "Expected ${'$'}{baselineFile.path}\n" +
+            "Got      ${'$'}{currentFile.path}\n" +
+            "Run `node <l0>/mcp-server/build/cli/compose-semantic-diff.js " +
+            "--baseline=${'$'}{baselineFile.path} --current=${'$'}{currentFile.path} " +
+            "--screen-name=$screenName` for structured findings.\n" +
+            "If intentional, rerun with `-Pbaseline.update=true` to refresh.",
+    )
+}
+
+// ── Normalization (mirrors mcp-server/src/tools/compose-semantic-diff.ts) ──
+
+private val NODE_ID = Regex("""Node #[0-9]+""")
+private val OBJECT_HASH = Regex("""@[0-9a-f]{5,}""")
+
+private fun normalize(raw: String): String =
+    raw.replace(NODE_ID, "Node #N").replace(OBJECT_HASH, "@HASH")

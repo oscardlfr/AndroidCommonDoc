@@ -39,6 +39,7 @@ import { registerGradleConfigLintTool } from "./gradle-config-lint.js";
 import { registerStringCompletenessTool } from "./string-completeness.js";
 import { registerComposePreviewAuditTool } from "./compose-preview-audit.js";
 import { registerAndroidLayoutDiffTool } from "./android-layout-diff.js";
+import { registerComposeSemanticDiffTool } from "./compose-semantic-diff.js";
 import { registerAndroidCliBridgeTool } from "./android-cli-bridge.js";
 import { registerProguardValidatorTool } from "./proguard-validator.js";
 import { registerAuditDocsTool } from "./audit-docs.js";
@@ -95,6 +96,7 @@ export function registerTools(server: McpServer): void {
   registerStringCompletenessTool(server, rateLimiter);
   registerComposePreviewAuditTool(server, rateLimiter);
   registerAndroidLayoutDiffTool(server, rateLimiter);
+  registerComposeSemanticDiffTool(server, rateLimiter);
   registerAndroidCliBridgeTool(server, rateLimiter);
   registerProguardValidatorTool(server, rateLimiter);
   registerAuditDocsTool(server, rateLimiter);
@@ -130,5 +132,5 @@ export function registerTools(server: McpServer): void {
     },
   );
 
-  logger.info("Registered 41 tools with rate limiting (45/min) [check-doc-freshness is alias for monitor-sources]");
+  logger.info("Registered 43 tools with rate limiting (45/min) [check-doc-freshness is alias for monitor-sources]");
 }

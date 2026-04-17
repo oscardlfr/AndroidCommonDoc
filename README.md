@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 27 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 39 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 27 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 43 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
@@ -25,12 +25,12 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
-- **MCP server** with 39 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
+- **MCP server** with 43 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
 - **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, architecture guards, and dependency freshness
-- **37 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
+- **39 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
 - **17 agent templates** for the 3-phase team model -- project-manager, planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, plus business and domain specialist templates. Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
 
 Install once, use across all your projects.
@@ -439,7 +439,7 @@ Real-time pattern enforcement and context injection during AI-assisted developme
 
 ## Skills Reference
 
-58 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
+59 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
@@ -533,6 +533,7 @@ These three skills are the recommended way to start any session. They discover a
 | `/work <task>` | **Primary entry point.** Smart task routing -- reads agent frontmatter (domain+intent), matches your task description, and delegates to the best agent or skill. Extensible: add new agents and `/work` finds them |
 | `/init-session` | Project context dashboard -- lists available agents, skills, modules, business docs, and recent activity. Run this when you open a project for the first time |
 | `/resume-work` | CEO/CTO session resume -- department-level status across your project (engineering, product, content). Picks up where you left off |
+| `/android-skills-consume` | **Reference.** Bridge doc for Google's Android Skills ecosystem (`navigation-3`, `edge-to-edge`, `r8-analyzer`, `agp-9-upgrade`, `migrate-xml-views-to-jetpack-compose`, `play-billing-library-version-upgrade`, `android-cli`) — install via `android skills add`. Per-layer applicability in `.planning/intel/android-skills-catalog.md` |
 
 ### L0 Maintenance Skills
 
@@ -630,7 +631,7 @@ See [Team Topology](docs/agents/team-topology.md) for full details.
 
 ## Agents
 
-37 specialized agents in `.claude/agents/` + 17 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
+39 specialized agents in `.claude/agents/` + 17 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
 
 ### Production Agents (synced via /sync-l0)
 
@@ -750,7 +751,7 @@ This eliminates the "agent explores for 5 minutes before planning" problem. The 
 
 ## MCP Server
 
-39 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
+43 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
 **22 tools** work in any project. **17 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
 
@@ -810,7 +811,7 @@ These tools operate on AndroidCommonDoc's own documentation, vault, and toolkit 
 
 ## Reusable CI Workflows
 
-8 `workflow_call` workflows any Android or KMP project can reference:
+9 `workflow_call` workflows any Android or KMP project can reference:
 
 ```yaml
 jobs:
@@ -851,6 +852,9 @@ jobs:
     with:
       project_root: "."
       fail_on_outdated: false   # non-blocking by default
+
+  copilot-parity:
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-copilot-parity.yml@master
 ```
 
 See `setup/github-workflows/ci-template.yml` for a full consumer project template.
@@ -1035,7 +1039,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 AndroidCommonDoc/
 +-- .claude/
 |   +-- commands/           # 52 Claude Code slash commands
-|   +-- agents/             # 37 specialized agents
+|   +-- agents/             # 39 specialized agents
 |   +-- hooks/              # Real-time enforcement hooks (8 hooks: Detekt, README, registry, quality-gate, doc-freshness, agent-delegation, plan-context)
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
@@ -1049,9 +1053,9 @@ AndroidCommonDoc/
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
-+-- mcp-server/             # MCP server (39 tools, 3 prompts, dynamic resources)
++-- mcp-server/             # MCP server (43 tools, 3 prompts, dynamic resources)
 |   +-- src/
-|   |   +-- tools/          # 39 tools: validation, analysis, metrics, audit, sync, vault, doc integrity
+|   |   +-- tools/          # 43 tools: validation, analysis, metrics, audit, sync, vault, doc integrity
 |   |   +-- types/          # Shared types (ValidationResult, AuditFinding, FindingsReport)
 |   |   +-- utils/          # Utilities (rate-limiter, jsonl-reader, gradle-parser, xml-report-reader, finding-dedup, logger, doc-scoring)
 |   |   +-- generation/     # Detekt rule parser, emitters, config-emitter
@@ -1097,6 +1101,7 @@ AndroidCommonDoc/
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
+|   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
 +-- docs/                   # 15 hub docs, 88+ sub-docs, 17 guides, 12 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/

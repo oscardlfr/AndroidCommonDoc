@@ -24,7 +24,7 @@ source "$SCRIPT_DIR/lib/audit-append.sh"
 #   --flavor <name>         Android build flavor
 #   --auto-retry            Retry failed modules once
 #   --clear-data            Clear app data before retry
-#   --list                  List discovered modules and exit
+#   --list | --list-only    List discovered modules and exit
 # =============================================================================
 
 # Defaults
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
             AUTO_RETRY=true; shift ;;
         --clear-data)
             CLEAR_DATA=true; shift ;;
-        --list)
+        --list|--list-only)
             LIST_ONLY=true; shift ;;
         *)
             shift ;;

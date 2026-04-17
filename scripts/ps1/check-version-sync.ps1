@@ -251,9 +251,7 @@ if ($OutputFormat -eq "json") {
 }
 else {
     Write-Host ""
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  Version Sync Check Report" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "Version Sync Check Report" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Source of Truth: " -NoNewline
     Write-Host $sourceName -ForegroundColor Yellow
@@ -308,11 +306,9 @@ else {
     }
 
     Write-Host ""
-    Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "Summary:" -ForegroundColor Cyan
     Write-Host "  Total Discrepancies: $($results.summary.totalDiscrepancies)"
     Write-Host "  Projects with Issues: $($results.summary.projectsWithIssues) / $($results.summary.totalProjects)"
-    Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
     if ($results.summary.totalDiscrepancies -gt 0) {

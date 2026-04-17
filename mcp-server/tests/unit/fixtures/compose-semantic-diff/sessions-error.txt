@@ -1,0 +1,16 @@
+Printing with useUnmergedTree = 'false'
+Node #1 at (l=0.0, t=0.0, r=1024.0, b=768.0)px
+IsTraversalGroup = 'true'
+ |-Node #2 at (l=0.0, t=0.0, r=1024.0, b=768.0)px, Tag: 'sessions_screen'
+   ContentDescription = '[Sessions]'
+    |-Node #3 at (l=0.0, t=0.0, r=1024.0, b=768.0)px, Tag: 'common_error_state'
+       |-Node #5 at (l=441.0, t=344.0, r=584.0, b=364.0)px, Tag: 'common_error_message'
+       | Text = '[Failed to load sessions]'
+       | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #6 at (l=467.0, t=380.0, r=558.0, b=420.0)px, Tag: 'common_retry_button'
+         Focused = 'false'
+         Role = 'Button'
+         Shape = 'RoundedCornerShape(topStart = CornerSize(size = 50.0%), topEnd = CornerSize(size = 50.0%), bottomEnd = CornerSize(size = 50.0%), bottomStart = CornerSize(size = 50.0%))'
+         Text = '[Reintentar]'
+         Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+         MergeDescendants = 'true'

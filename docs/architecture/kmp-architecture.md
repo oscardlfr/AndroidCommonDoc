@@ -103,4 +103,4 @@ This document is split into focused sub-docs for token-efficient loading:
 ---
 
 **Status**: Active -- All KMP modules must follow this source set hierarchy.
-**Last Validated**: March 2026 with Kotlin 2.3.10 / KMP Gradle Plugin 2.3.10
+**Last Validated**: April 2026 with Kotlin 2.3.20 / KMP Gradle Plugin 2.3.20

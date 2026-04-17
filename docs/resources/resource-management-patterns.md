@@ -78,4 +78,4 @@ This document is split into focused sub-docs for token-efficient loading:
 ---
 
 **Status**: Active -- Desktop apps coexisting with heavyweight processes must follow these patterns.
-**Last Validated**: March 2026 with Compose Multiplatform 1.8.x / Java 17+
+**Last Validated**: April 2026 with Compose Multiplatform 1.10.0 / Java 17+
