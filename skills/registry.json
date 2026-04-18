@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-18T11:59:17.316Z",
+  "generated": "2026-04-18T13:12:12.164Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc\\.claude\\worktrees\\brave-visvesvaraya-77a0f2",
   "entries": [
     {
@@ -762,9 +762,10 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:cee66a11ee17af970e66546fce8297039dac25fa8f1f1ef01a3540ccae68a1f3",
+      "hash": "sha256:11ce879130e3a29b26b9b7103a53e0d7b3415eb18101783edaff5ac03280d1a3",
       "dependencies": [
         "scripts/sh/scan-secrets.sh",
+        "scripts/sh/catalog-coverage-check.sh",
         "scripts/sh/validate-agent-templates.sh",
         "scripts/sh/rehash-registry.sh"
       ],
@@ -1426,7 +1427,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b517bf8b6457f8012f6081a56e8ff4e631a1a4d35abf406362fe509aabe502bc",
+      "hash": "sha256:5467c08c50908f7c20add0b5821e7a76912b06aea5089250cb16e0b85163108d",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1442,7 +1443,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.11.0",
+        "template_version": "1.12.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1456,7 +1457,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e0db19df3e7de8ee7eac4201bb69bd1e8224f88d37839c7a40274df6d514b038",
+      "hash": "sha256:a06a55f1425d7efbef776b8cb514a4c7f30a72cef05310ef1b7bef76568b5bad",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1471,7 +1472,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.11.0",
+        "template_version": "1.12.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1485,7 +1486,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:84b198b6eb0ee01b8b61515f7e0a7f428ae139879b919862e3922a631e9338e2",
+      "hash": "sha256:c8148f5c0dcfeacbec1f49ac1ba13e2f397a8b8b1f6a6062bae38c3a37316a70",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1500,7 +1501,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.14.0",
+        "template_version": "1.15.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2161,7 +2162,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8cd71543b5afa4427d4958e832359eb4081d0d2b5b8e72a64bf08cb40d63a396",
+      "hash": "sha256:f05ad42a74b87eb3d27e31d55447040fe8b10d87410a4dd22a5c9b759057d996",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
@@ -2177,7 +2178,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "5.10.0",
+        "template_version": "5.11.0",
         "memory": "project",
         "skills": [
           "pre-pr",

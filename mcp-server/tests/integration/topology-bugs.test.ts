@@ -261,6 +261,82 @@ describe("OBS-C: pre-pr skill mentions /schedule for catalog freshness", () => {
   });
 });
 
+// ── T-BUG-010: PM template main-conversation-only warning ──────────────────
+
+describe("T-BUG-010: PM template warns it is for main conversation (team-lead), not a spawnable peer", () => {
+  it("project-manager.md has WHO-READS-THIS warning + FORBIDDEN spawn instruction", () => {
+    const { claude, template } = readAgent("project-manager.md");
+    for (const content of [claude, template]) {
+      expect(content).toMatch(/T-BUG-010/);
+      expect(content).toMatch(/WHO READS THIS|main conversation|team-lead/i);
+      expect(content).toMatch(/FORBIDDEN.*project-manager|Agent\(name="project-manager"/);
+      expect(content).toMatch(/PM-peer spawn detected|Exiting/i);
+    }
+  });
+});
+
+// ── T-BUG-011: arch-* OBS-A HARD self-gate ─────────────────────────────────
+
+describe("T-BUG-011: arch-* OBS-A is a HARD SELF-GATE (not descriptive)", () => {
+  for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
+    it(`${name} has HARD SELF-GATE with wave-distance + specialty + PLAN.md checks`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toMatch(/T-BUG-011/);
+        expect(content).toMatch(/HARD SELF-GATE/);
+        expect(content).toMatch(/Wave-distance check/);
+        expect(content).toMatch(/Specialty check/);
+        expect(content).toMatch(/PLAN\.md trigger check/);
+        // REFUSE language must appear (hard-stop, not suggestion)
+        expect(content).toMatch(/REFUSE/);
+        // Anti-pattern: non-adjacent wave (N+2+) must be explicitly forbidden
+        expect(content).toMatch(/non-adjacent wave|N\+2 or further/i);
+      }
+    });
+  }
+});
+
+// ── T-BUG-012: arch-* Reporter Protocol (PM liveness + fallback) ───────────
+
+describe("T-BUG-012: arch-* Reporter Protocol checks PM liveness and falls back to team-lead", () => {
+  for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
+    it(`${name} has Reporter Protocol section with liveness check + [PM-absent] fallback`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toMatch(/T-BUG-012/);
+        expect(content).toMatch(/Reporter Protocol/);
+        expect(content).toMatch(/Liveness check|PM.*alive|shutdown notification/i);
+        expect(content).toMatch(/\[PM-absent\]/);
+        expect(content).toMatch(/fall.*back.*team-lead|team-lead.*fallback|SendMessage.*team-lead/i);
+      }
+    });
+  }
+});
+
+// ── T-BUG-013: /pre-pr wires catalog-coverage-check.sh ─────────────────────
+
+describe("T-BUG-013: /pre-pr invokes catalog-coverage-check.sh (no more unwired tool theater)", () => {
+  const PRE_PR = path.join(ROOT, "skills/pre-pr/SKILL.md");
+
+  it("pre-pr SKILL.md references catalog-coverage-check.sh with T-BUG-013 tag", () => {
+    const content = fs.readFileSync(PRE_PR, "utf-8");
+    expect(content).toMatch(/T-BUG-013/);
+    expect(content).toMatch(/catalog-coverage-check\.sh/);
+    // Step must be conditional on .gradle.kts changes
+    expect(content).toMatch(/\.gradle\.kts/);
+    // Summary table row for visibility
+    expect(content).toMatch(/Catalog coverage/);
+  });
+
+  it("scripts/sh/catalog-coverage-check.sh still scans *.gradle.kts literals", () => {
+    const script = fs.readFileSync(path.join(ROOT, "scripts/sh/catalog-coverage-check.sh"), "utf-8");
+    // The regex/grep pattern must include *.gradle.kts scanning
+    expect(script).toMatch(/\*\.gradle\.kts|"\*\.gradle\.kts"|gradle\.kts/);
+    // And must match the hardcoded-literal pattern (implementation/api/etc + quoted triplet)
+    expect(script).toMatch(/implementation\|api\|testImplementation|implementation.*api.*testImplementation/);
+  });
+});
+
 // ── Regression guard: all docs/**/*.md frontmatter `sources` are strings ──
 
 describe("frontmatter guard: docs sources are string entries (not objects)", () => {

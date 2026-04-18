@@ -55,6 +55,11 @@
         "breaking": true,
         "note": "MECHANICAL enforcement: Grep and Glob removed from PM tools. Tools list now consistent with FORBIDDEN rule in body.",
         "migration": "L1/L2 projects must run /sync-l0 to pick up tools line change. PM body already forbids Grep/Glob — no behavior change."
+      },
+      "5.11.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-010: added WHO-READS-THIS warning at top of body. Clarifies template is for main-conversation (team-lead), not a spawnable peer. FORBIDDEN: Agent(name=\"project-manager\", ...). If spawned AS peer, exit. Fixes L2 dual-PM issue where team-lead did both TeamCreate and Agent(project-manager)."
       }
     },
     "planner": {
@@ -146,6 +151,11 @@
         "breaking": true,
         "note": "MECHANICAL enforcement: Grep and Glob removed from tools. Must SendMessage context-provider.",
         "migration": "Update arch-testing to remove any direct Grep/Glob calls. Route all pattern lookups through context-provider via SendMessage."
+      },
+      "1.15.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-011 + T-BUG-012: OBS-A Scope Extension Protocol upgraded to HARD SELF-GATE (wave-distance + specialty + PLAN.md pre-checks; REFUSE extensions N+2 or cross-specialty). NEW Reporter Protocol section: PM liveness check before SendMessage, [PM-absent] fallback to team-lead when PM shut down. Prevents lost verdicts to dead PM."
       }
     },
     "arch-platform": {
@@ -179,6 +189,11 @@
         "breaking": true,
         "note": "MECHANICAL enforcement: Grep and Glob removed from tools. Caller Grep Rule rewritten to delegate to context-provider.",
         "migration": "Update arch-platform to remove any direct Grep/Glob calls. Caller grep delegation now routes through context-provider via SendMessage."
+      },
+      "1.12.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-011 + T-BUG-012: OBS-A Scope Extension Protocol upgraded to HARD SELF-GATE (wave-distance + specialty + PLAN.md pre-checks; REFUSE extensions N+2 or cross-specialty). NEW Reporter Protocol section: PM liveness check before SendMessage, [PM-absent] fallback to team-lead when PM shut down. Prevents lost verdicts to dead PM."
       }
     },
     "arch-integration": {
@@ -212,6 +227,11 @@
         "breaking": true,
         "note": "MECHANICAL enforcement: Grep and Glob removed from tools. Caller Grep Rule rewritten to delegate to context-provider.",
         "migration": "Update arch-integration to remove any direct Grep/Glob calls. Caller grep delegation now routes through context-provider via SendMessage."
+      },
+      "1.12.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-011 + T-BUG-012: OBS-A Scope Extension Protocol upgraded to HARD SELF-GATE (wave-distance + specialty + PLAN.md pre-checks; REFUSE extensions N+2 or cross-specialty). NEW Reporter Protocol section: PM liveness check before SendMessage, [PM-absent] fallback to team-lead when PM shut down. Prevents lost verdicts to dead PM."
       }
     },
     "context-provider": {

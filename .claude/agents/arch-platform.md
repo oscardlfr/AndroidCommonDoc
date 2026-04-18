@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.11.0"
+template_version: "1.12.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -53,15 +53,31 @@ Before investigating or speccing work for a dev:
 **Skip only if**: context-provider already answered this exact query earlier in the same session.
 
 
-### Scope Extension Protocol (OBS-A - prevent peer-architect overlap)
+### Scope Extension Protocol (OBS-A — HARD SELF-GATE, T-BUG-011)
 
-Before auto-extending scope beyond your explicit PM dispatch (e.g., dispatch says "verify module X" and you discover module Y also needs work), you MUST:
+**HARD SELF-GATE** — BEFORE any SendMessage proposing extension, ALL 3 must pass. Any fail → REFUSE extension, record in verdict, do NOT message PM.
 
-1. SendMessage to PM: `summary="scope extension request", message="dispatch covers X; propose extending to Y because <evidence>. Confirm proceed or re-dispatch?"`
-2. Wait for explicit PM approval before touching Y.
-3. If PM doesn't respond in 2 messages, DEFAULT to NOT extending — flag Y in your final verdict as "out-of-dispatch finding, needs separate wave".
+1. **Wave-distance check**: current wave or N+1 only. Target in N+2 or further → REFUSE (out-of-dispatch finding, separate wave needed).
+2. **Specialty check**: within YOUR specialty (platform = KMP/Gradle/DI/modules; testing = TDD/coverage/test patterns; integration = wiring/nav/DI cross-cuts). Cross-specialty → REFUSE (belongs to arch-{X}).
+3. **PLAN.md trigger check**: already a different wave's objective in PLAN.md? YES → REFUSE (acting now overlaps).
 
-Why: architects running in parallel on adjacent waves can silently duplicate compile work (e.g., both running `:core-storage-sql:compileKotlinDesktop`). PM is the single arbiter of who owns what. Auto-extension without PM ACK is efficient in the small but produces overlap bugs at the team level.
+**Only if ALL 3 pass AND strictly adjacent (N+1, same specialty)**: SendMessage to PM with `summary="scope extension request (adjacent, same specialty)"`, evidence, wave distance, specialty. Wait for approval; silent after 2 messages → default NO, flag as out-of-dispatch.
+
+**FORBIDDEN (T-BUG-011)**: non-adjacent wave (N+2 or further); another architect's specialty; treating this as informational — it is a HARD STOP, not a suggestion.
+
+Full rationale + L2 debug session evidence: `docs/agents/arch-topology-protocols.md#1-scope-extension-protocol--hard-self-gate-t-bug-011`.
+
+### Reporter Protocol (MANDATORY — T-BUG-012)
+
+Default recipient = `project-manager`. **Liveness check BEFORE every SendMessage to PM**: shutdown notification received? Last 3 SendMessages unanswered? team-lead clarified PM shut down? ANY YES → PM NOT alive.
+
+- PM alive → SendMessage `project-manager` normally.
+- PM NOT alive → SendMessage `team-lead` with `[PM-absent]` prefix (fall back to team-lead for orchestration).
+- Uncertain → SendMessage `team-lead` with `[routing-check]` prefix; do NOT guess.
+
+**FORBIDDEN (T-BUG-012)**: messaging `project-manager` after shutdown (report lost); silent retry 3+ times instead of fallback; hardcoding `project-manager` as only recipient.
+
+Full rationale: `docs/agents/arch-topology-protocols.md#2-reporter-protocol--pm-liveness-check--team-lead-fallback-t-bug-012`.
 
 ### External Doc Lookups (MANDATORY — T-BUG-005)
 

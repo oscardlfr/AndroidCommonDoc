@@ -133,6 +133,21 @@ Does NOT block -- version updates are a separate task, not a PR gate.
 
 **OBS-C (catalog-freshness monitoring)**: for continuous surveillance beyond per-PR runs, schedule `/check-outdated` via the `/schedule` skill — e.g., weekly cron posts a finding to your inbox if new upstream versions landed. Ad-hoc `/check-outdated` remains available for deep dives.
 
+### Step 5.75 — Catalog coverage (T-BUG-013)
+
+```bash
+if git diff --name-only "$MERGE_BASE..HEAD" | grep -qE '\.gradle\.kts$'; then
+  bash "$ANDROID_COMMON_DOC/scripts/sh/catalog-coverage-check.sh" --project-root "$(pwd)"
+fi
+```
+
+Catalog coverage scans `*.gradle.kts` in the consumer project for hardcoded dependency literals that bypass the version catalog (e.g., `implementation("net.java.dev.jna:jna-platform:5.14.0")` when `sharedLibs.jna.platform` exists).
+
+- Findings → WARNING (reports for visibility, does NOT block the PR).
+- Fix: replace hardcoded literal with `libs.<alias>` or `sharedLibs.<alias>` — add to the catalog if missing.
+
+**Why it matters (T-BUG-013)**: L2 debug session (2026-04-18) caught `jna-platform:5.14.0` hardcoded in DawSync while L1 `shared-kmp-libs` had bumped to `5.16.0`. Silent split-version drift. The script's logic already scanned `*.gradle.kts` correctly (since T-BUG-009) but was never invoked from any pipeline — pure theater. This step closes the wiring gap.
+
 ### Step 5.8 — Agent template tests
 
 Run Vitest integration tests when agent templates, .claude/agents/, or mcp-server sources changed:
@@ -193,6 +208,7 @@ Report per-module pass/fail. Show failing test names on failure.
 ║ Warning audit        ✅ PASS / ❌ FAIL  ║
 ║ Secret scan          ✅ PASS / ❌ FAIL / ⏭️ SKIP ║
 ║ Dep freshness        ⚠️ INFO / ⏭️ SKIP  ║
+║ Catalog coverage     ⚠️ INFO / ⏭️ SKIP  ║
 ║ Agent template behavioral lint ✅ PASS / ❌ FAIL ║
 ║ Registry hashes      ✅ PASS / ❌ FAIL  ║
 ║ Build + Tests        ✅ PASS / ❌ FAIL  ║
