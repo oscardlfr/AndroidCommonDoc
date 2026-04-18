@@ -96,8 +96,22 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: ${{ env.JAVA_DISTRIBUTION }}
       - uses: gradle/actions/setup-gradle@v3
-      - name: Run tests
-        run: ./gradlew check --no-daemon
+
+      # T-BUG-014: explicit metadata compile catches apple-side regressions
+      # (CAST_NEVER_SUCCEEDS, redundant `.toUInt()` on UInt, unused `usePinned`
+      # return, KTLC-365 instance-is-always-false, etc.) that surface when
+      # bumping Kotlin or adding apple targets. Without this step, apple
+      # source sets stay invisible to non-macOS CI runners — `./gradlew build`
+      # alone may skip them silently. Runs on Linux, ~30s overhead.
+      - name: Type-check Kotlin metadata (apple targets, cross-platform safety)
+        run: ./gradlew compileCommonMainKotlinMetadata --no-daemon --parallel
+
+      # T-BUG-014: --continue surfaces ALL failures in one run instead of
+      # stopping at first. Aligns CI with /pre-pr Step 7 (which runs the same
+      # task locally) — local pre-flight gate must equal CI gate.
+      - name: Run check (--continue surfaces all failures)
+        run: ./gradlew check --no-daemon --parallel --continue
+
       - name: Upload test reports
         uses: actions/upload-artifact@v4
         if: always()

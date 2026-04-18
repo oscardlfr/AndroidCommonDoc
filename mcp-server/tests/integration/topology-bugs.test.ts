@@ -337,6 +337,32 @@ describe("T-BUG-013: /pre-pr invokes catalog-coverage-check.sh (no more unwired 
   });
 });
 
+// ── T-BUG-014: L0 CI template catches apple-side regressions ──────────────
+
+describe("T-BUG-014: L0 CI template runs metadata compile + check --continue", () => {
+  const CI_TEMPLATE = path.join(ROOT, "setup/github-workflows/ci-template.yml");
+
+  it("ci-template.yml has explicit compileCommonMainKotlinMetadata step (T-BUG-014)", () => {
+    const content = fs.readFileSync(CI_TEMPLATE, "utf-8");
+    expect(content).toMatch(/T-BUG-014/);
+    // The step must run the metadata compile task explicitly (not rely on
+    // ./gradlew build doing it transitively, which it may skip on Linux runners
+    // when apple targets are configured but K/N toolchain is unavailable)
+    expect(content).toMatch(/compileCommonMainKotlinMetadata/);
+  });
+
+  it("ci-template.yml runs check with --continue (surfaces all failures, aligns with /pre-pr)", () => {
+    const content = fs.readFileSync(CI_TEMPLATE, "utf-8");
+    expect(content).toMatch(/gradlew check.*--continue|check --no-daemon --parallel --continue/);
+  });
+
+  it("ci-template.yml documents the apple-side gap rationale", () => {
+    const content = fs.readFileSync(CI_TEMPLATE, "utf-8");
+    // Comment must explain WHY the metadata compile step exists
+    expect(content).toMatch(/CAST_NEVER_SUCCEEDS|apple.*regression|apple-side|non-macOS/i);
+  });
+});
+
 // ── Regression guard: all docs/**/*.md frontmatter `sources` are strings ──
 
 describe("frontmatter guard: docs sources are string entries (not objects)", () => {
