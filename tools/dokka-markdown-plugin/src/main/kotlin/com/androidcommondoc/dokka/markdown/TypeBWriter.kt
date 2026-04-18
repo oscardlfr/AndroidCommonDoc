@@ -7,7 +7,6 @@ import org.jetbrains.dokka.model.doc.Throws
 
 data class TypeBContext(
     val moduleName: String,
-    val packageName: String,
     val parentClassName: String?,
     val symbolName: String,
     val platformInfo: PlatformInfo?,
@@ -65,10 +64,8 @@ object TypeBWriter {
     private fun buildBreadcrumb(ctx: TypeBContext): String {
         val parts = mutableListOf<String>()
         parts += "[${ctx.moduleName}](../../${ctx.moduleName}-hub.md)"
-        parts += "[${ctx.packageName}](../${ctx.packageName}.md)"
         ctx.parentClassName?.let { parent ->
-            val parentSlug = SlugDeriver.deriveForClass(parent)
-            parts += "[$parent]($parentSlug.md)"
+            parts += "[$parent](${SlugDeriver.fileBasename(parent)}.md)"
         }
         parts += ctx.symbolName
         return parts.joinToString(" / ")

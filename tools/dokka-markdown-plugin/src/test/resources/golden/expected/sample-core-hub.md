@@ -24,5 +24,6 @@ Auto-generated from KDoc via Dokka plugin `com.androidcommondoc:dokka-markdown-p
 
 | Class/Interface | Description |
 |----------------|-------------|
+
 | [NetworkResult](sample-core/-network-result.md) | Represents the result of a network operation. |
 | [parseJson](sample-core/parse-json.md) | Parses raw JSON bytes into a typed result. |

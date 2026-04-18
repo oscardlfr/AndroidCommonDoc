@@ -3,6 +3,7 @@ package com.androidcommondoc.dokka.markdown
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -48,6 +49,13 @@ class ContentHasherTest {
         fun `hash_outputIsLowercaseHex`() {
             val result = ContentHasher.hash("abc")
             assertTrue(result.matches(Regex("[0-9a-f]{12}")), "Expected 12 lowercase hex chars, got: $result")
+        }
+
+        @Test
+        fun `hash_noSha256Prefix`() {
+            // contract: hash() returns raw 12-char hex, no "sha256:" prefix
+            val result = ContentHasher.hash("abc")
+            assertFalse(result.startsWith("sha256:"), "hash must not include 'sha256:' prefix, got: $result")
         }
     }
 

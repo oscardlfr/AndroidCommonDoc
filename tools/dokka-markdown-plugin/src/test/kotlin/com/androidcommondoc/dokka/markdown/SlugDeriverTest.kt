@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class SlugDeriverTest {
 
@@ -49,14 +50,39 @@ class SlugDeriverTest {
     inner class DeriveForClass {
 
         @Test
-        fun `deriveForClass_leadingDashPlusKebab`() {
-            // production: deriveForClass(simpleName) → "-" + kebab(simpleName)
-            assertEquals("-base64-converter", SlugDeriver.deriveForClass("Base64Converter"))
+        fun `deriveForClass_withModule_prependsNormalizedModule`() {
+            assertEquals("core--my-class", SlugDeriver.deriveForClass("MyClass", "core"))
         }
 
         @Test
-        fun `deriveForClass_simpleClass_leadingDash`() {
-            assertEquals("-my-class", SlugDeriver.deriveForClass("MyClass"))
+        fun `deriveForClass_withHyphenatedModule_preserved`() {
+            assertEquals("core-audio--my-class", SlugDeriver.deriveForClass("MyClass", "core-audio"))
+        }
+
+        @Test
+        fun `deriveForClass_withColonModule_normalized`() {
+            // "core:audio" → "core-audio" via normalizeModule
+            assertEquals("core-audio--my-class", SlugDeriver.deriveForClass("MyClass", "core:audio"))
+        }
+
+        @Test
+        fun `deriveForClass_withModule_noLeadingDash`() {
+            // two-arg form must NOT produce the leading dash that the one-arg form produces
+            assertFalse(SlugDeriver.deriveForClass("MyClass", "core").startsWith("-"))
+        }
+    }
+
+    @Nested
+    inner class FileBasename {
+
+        @Test
+        fun `fileBasename_simpleClass_leadingDashKebab`() {
+            assertEquals("-my-class", SlugDeriver.fileBasename("MyClass"))
+        }
+
+        @Test
+        fun `fileBasename_acronymClass_leadingDashPerLetterKebab`() {
+            assertEquals("-u-r-l", SlugDeriver.fileBasename("URL"))
         }
     }
 
@@ -71,6 +97,54 @@ class SlugDeriverTest {
         @Test
         fun `deriveForHub_simpleModule_appendsApiHub`() {
             assertEquals("core-api-hub", SlugDeriver.deriveForHub("core"))
+        }
+    }
+
+    // RED: normalizeModule doesn't exist yet — compile errors until Bug 1 fix
+    @Nested
+    inner class DeriveForMemberNormalization {
+
+        @Test
+        fun `deriveForMember_colonSeparatedModule_normalized`() {
+            // "core:audio" should be normalized to "core-audio" before slug
+            assertEquals("core-audio-do-something", SlugDeriver.deriveForMember("doSomething", "core:audio"))
+        }
+
+        @Test
+        fun `deriveForMember_dotSeparatedModule_normalized`() {
+            assertEquals("core-audio-do-something", SlugDeriver.deriveForMember("doSomething", "core.audio"))
+        }
+    }
+
+    @Nested
+    inner class DeriveForHubNormalization {
+
+        @Test
+        fun `deriveForHub_colonSeparatedModule_normalized`() {
+            assertEquals("core-audio-api-hub", SlugDeriver.deriveForHub("core:audio"))
+        }
+
+        @Test
+        fun `deriveForHub_dotSeparatedModule_normalized`() {
+            assertEquals("core-audio-api-hub", SlugDeriver.deriveForHub("core.audio"))
+        }
+    }
+
+    @Nested
+    inner class NormalizeModule {
+
+        @ParameterizedTest(name = "normalizeModule({0}) == {1}")
+        @CsvSource(
+            "core,              core",
+            "core-audio,        core-audio",
+            "core:audio,        core-audio",
+            "core.audio,        core-audio",
+            "core:audio:engine, core-audio-engine",
+            "com.example.core,      com-example-core",
+            "core.audio:feature,    core-audio-feature",
+        )
+        fun `normalizeModule_variousSeparators_allHyphenated`(input: String, expected: String) {
+            assertEquals(expected, SlugDeriver.normalizeModule(input))
         }
     }
 }

@@ -2,14 +2,23 @@ package com.androidcommondoc.dokka.markdown
 
 object SlugDeriver {
 
-    fun deriveForClass(simpleName: String): String =
-        "-${toKebab(simpleName)}"
+    fun normalizeModule(raw: String): String =
+        raw
+            .lowercase()
+            .replace(Regex("[:/.]+" ), "-")
+            .trim('-')
+            .replace(Regex("-{2,}"), "-")
+
+    fun deriveForClass(className: String, moduleName: String): String =
+        "${normalizeModule(moduleName)}--${toKebab(className)}"
 
     fun deriveForMember(simpleName: String, moduleName: String): String =
-        "$moduleName-${toKebab(simpleName)}"
+        "${normalizeModule(moduleName)}-${toKebab(simpleName)}"
 
     fun deriveForHub(moduleName: String): String =
-        "$moduleName-api-hub"
+        "${normalizeModule(moduleName)}-api-hub"
+
+    fun fileBasename(className: String): String = "-${toKebab(className)}"
 
     fun toKebab(name: String): String {
         if (name.isEmpty()) return name
@@ -31,8 +40,6 @@ object SlugDeriver {
                 c.isUpperCase() && i > 0 -> {
                     val prev = name[i - 1]
                     val next = if (i + 1 < name.length) name[i + 1] else null
-                    // Insert dash before uppercase unless previous was also uppercase and next is lowercase
-                    // (handles "HTTPClient" → "http-client" but "MyHTTPClient" → "my-http-client")
                     val inAcronymRun = prev.isUpperCase() && (next == null || next.isUpperCase())
                     if (!inAcronymRun) sb.append('-')
                     else if (next != null && next.isLowerCase()) sb.append('-')

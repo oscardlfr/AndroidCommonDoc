@@ -26,6 +26,7 @@ object HubWriter {
         appendLine()
         appendLine("| Class/Interface | Description |")
         appendLine("|----------------|-------------|")
+        appendLine()
         val sorted = ctx.entries.sortedBy { it.symbolName.lowercase() }
         for (entry in sorted) {
             val desc = entry.description.take(80)

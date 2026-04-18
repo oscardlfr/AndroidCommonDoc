@@ -2,7 +2,7 @@
 scope: [api, sample-core]
 sources: [sample-core]
 targets: [all]
-slug: sample-core-network-result
+slug: sample-core--network-result
 status: active
 layer: L1
 category: api
@@ -16,6 +16,9 @@ parent: sample-core-api-hub
 ---
 
 
-[sample-core](../../sample-core-hub.md) / [com.sample.core](../com.sample.core.md) / NetworkResult
+[sample-core](../../sample-core-hub.md) / NetworkResult
 
 # NetworkResult
+
+Represents the result of a network operation.
+Can be either Success or Failure.

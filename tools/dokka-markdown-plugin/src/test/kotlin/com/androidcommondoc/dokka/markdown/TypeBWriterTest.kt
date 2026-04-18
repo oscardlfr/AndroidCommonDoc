@@ -29,7 +29,6 @@ class TypeBWriterTest {
         sees: List<org.jetbrains.dokka.model.doc.See> = emptyList(),
     ) = TypeBContext(
         moduleName = "sample",
-        packageName = "com.sample",
         parentClassName = parentClassName,
         symbolName = "doSomething",
         platformInfo = platformInfo,
@@ -82,10 +81,10 @@ class TypeBWriterTest {
     inner class Breadcrumb {
 
         @Test
-        fun `write_topLevel_breadcrumbHasModuleAndPackage`() {
+        fun `write_topLevel_breadcrumbHasModule`() {
             val result = TypeBWriter.write(minimalCtx(parentClassName = null))
             assertTrue(result.contains("[sample](../../sample-hub.md)"))
-            assertTrue(result.contains("[com.sample](../com.sample.md)"))
+            assertTrue(!result.contains("[com.sample]"))
         }
 
         @Test

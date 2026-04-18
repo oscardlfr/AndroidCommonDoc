@@ -65,6 +65,17 @@ class HubWriterTest {
                 assertEquals(line.trimEnd(), line, "Trailing whitespace: [$line]")
             }
         }
+
+        @Test
+        fun `write_blankLineAfterTableSeparator`() {
+            // RED: production emits entries immediately after "|---|---|" with no blank line
+            val entry = HubEntry("MyClass", "-my-class.md", "desc")
+            val result = HubWriter.write(minimalCtx(listOf(entry)))
+            val lines = result.lines()
+            val sepIdx = lines.indexOfFirst { it.startsWith("|---") }
+            assertTrue(sepIdx >= 0, "Table separator row not found")
+            assertEquals("", lines[sepIdx + 1], "Expected blank line after table separator, got: [${lines[sepIdx + 1]}]")
+        }
     }
 
     @Nested

@@ -12,6 +12,7 @@ data class TypeAContext(
     val symbolName: String,
     val platformInfo: PlatformInfo?,
     val constructorSignature: String?,
+    val description: String,
     val members: List<Pair<String, String>>,
     val frontmatter: FrontmatterFields,
 )
@@ -22,7 +23,7 @@ object TypeAWriter {
         append(FrontmatterSerializer.serialize(ctx.frontmatter))
         appendLine()
         appendLine()
-        appendLine("[${ctx.moduleName}](../../${ctx.moduleName}-hub.md) / [${ctx.packageName}](../${ctx.packageName}.md) / ${ctx.symbolName}")
+        appendLine("[${ctx.moduleName}](../../${ctx.moduleName}-hub.md) / ${ctx.symbolName}")
         appendLine()
         appendLine("# ${ctx.symbolName}")
         appendLine()
@@ -32,6 +33,10 @@ object TypeAWriter {
         }
         ctx.constructorSignature?.let {
             appendLine(it)
+            appendLine()
+        }
+        if (ctx.description.isNotEmpty()) {
+            appendLine(ctx.description)
             appendLine()
         }
         if (ctx.members.isNotEmpty()) {
