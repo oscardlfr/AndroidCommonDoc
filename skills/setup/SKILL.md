@@ -642,10 +642,10 @@ Omite para saltar.
    [libraries]
    dokka-markdown-plugin = { module = "com.androidcommondoc:dokka-markdown-plugin", version.ref = "dokka-markdown-plugin" }
    ```
-2. Add GitHub Packages repo to root `build.gradle.kts` if the `oscardlfr/AndroidCommonDoc` maven block is absent:
+2. Add GitHub Packages repo to root `build.gradle.kts` if the `oscardlfr/dokka-markdown-plugin` maven block is absent:
    ```kotlin
    maven {
-       url = uri("https://maven.pkg.github.com/oscardlfr/AndroidCommonDoc")
+       url = uri("https://maven.pkg.github.com/oscardlfr/dokka-markdown-plugin")
        credentials {
            username = providers.gradleProperty("gpr.user").orNull ?: System.getenv("GITHUB_ACTOR")
            password = providers.gradleProperty("gpr.key").orNull ?: System.getenv("GITHUB_TOKEN")

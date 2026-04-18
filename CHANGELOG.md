@@ -6,9 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ## [Unreleased]
 
 ### Added
-- `tools/dokka-markdown-plugin` 0.1.0 — Dokka 2.2.x custom renderer that generates L0-compliant structured markdown (`docs/api/*.md`) from KDoc. Replaces lost `dokka-to-docs.sh`. Distribution via GitHub Packages. Optional opt-in via `/setup` wizard step W10.
+- `dokka-markdown-plugin` 0.1.0 — Dokka 2.2.x custom renderer that generates L0-compliant structured markdown (`docs/api/*.md`) from KDoc. Replaces lost `dokka-to-docs.sh`. Optional opt-in via `/setup` wizard step W10.
 
 ### Changed
+- `dokka-markdown-plugin` **extracted** to its own repo: [oscardlfr/dokka-markdown-plugin](https://github.com/oscardlfr/dokka-markdown-plugin) (MIT-licensed). First artifact of the modularization plan — standalone release cadence, independent CI, independent publish. Maven coordinate unchanged (`com.androidcommondoc:dokka-markdown-plugin`); registry URL moved to `maven.pkg.github.com/oscardlfr/dokka-markdown-plugin`. Local `tools/dokka-markdown-plugin/` directory reduced to a pointer README.
 - Agent templates: Wave 7 fixes from DawSync L2 feedback
   - 4 core dev templates gained Wave Scope Gate (HARD STOP), Revert Compliance Protocol, and Owned Files sections
   - 3 arch templates gained Cross-Architect Dev Delegation (Option A/B/C)

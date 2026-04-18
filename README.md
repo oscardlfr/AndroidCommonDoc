@@ -23,7 +23,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 23 hand-written + 4 generated AST-only rules (27 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, security patterns, and testing anti-patterns
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
-- **Dokka Markdown Plugin** — transforms KDoc into L0-compliant structured markdown (`docs/api/*.md`) with 14-field YAML frontmatter, content-addressed hashes for CI drift detection, and first-class KMP expect/actual handling. See `tools/dokka-markdown-plugin/`.
+- **[Dokka Markdown Plugin](https://github.com/oscardlfr/dokka-markdown-plugin)** — transforms KDoc into L0-compliant structured markdown (`docs/api/*.md`) with 14-field YAML frontmatter, content-addressed hashes for CI drift detection, and first-class KMP expect/actual handling. Standalone repo, MIT-licensed.
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
 - **MCP server** with 46 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
@@ -435,7 +435,7 @@ Gradle plugins and utilities shipped in `tools/` — installable independently f
 | 2.2.0 | 2.3.20 | 8.x (Android-only) | 17+ | Supported |
 | 2.1.x | any | any | 17+ | Unsupported |
 
-Install via `/setup --dokka-plugin yes` (wizard W10) or manually — see [`tools/dokka-markdown-plugin/README.md`](tools/dokka-markdown-plugin/README.md) and the pattern doc at [`docs/gradle/dokka-markdown-plugin.md`](docs/gradle/dokka-markdown-plugin.md).
+Install via `/setup --dokka-plugin yes` (wizard W10) or manually — see the [standalone plugin repo](https://github.com/oscardlfr/dokka-markdown-plugin#readme) and the pattern doc at [`docs/gradle/dokka-markdown-plugin.md`](docs/gradle/dokka-markdown-plugin.md).
 
 ---
 
