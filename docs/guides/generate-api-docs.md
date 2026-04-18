@@ -24,7 +24,7 @@ KDoc source
   → dokka-markdown-plugin (CoreExtensions.renderer override)
   → docs/api/<module>-hub.md
   → docs/api/<module>/<symbol>.md
-  → .androidcommondoc/kdoc-state.json
+  → <module>/build/.androidcommondoc/kdoc-state.json  (per-module)
   → MCP tools: search-docs, find-pattern, api-surface-diff, kdoc-coverage
   → Agents: context-provider, doc-alignment-agent, codebase-mapper, beta-readiness-agent
 ```
@@ -109,7 +109,7 @@ Once `docs/api/` is populated, these consumers activate automatically:
 
 ## CI drift detection
 
-The plugin writes `.androidcommondoc/kdoc-state.json` at the end of every run — a central index of ISO 8601 timestamps and 12-char compact content hashes per file (format: `7a8836e73f62`, no `sha256:` prefix). Use this in CI to detect stale docs:
+Each module's Dokka task writes its own state file at `<module>/build/.androidcommondoc/kdoc-state.json` (per-module, not a shared central file). Each file is a JSON map: `{ "<slug>": { "source": "<path>", "content_hash": "<12-hex>" } }` plus top-level `generated_at` ISO timestamp. This avoids collision with `.androidcommondoc/` entries written by other skills (kdoc-coverage, audit-log). Use this in CI to detect stale docs:
 
 ```yaml
 # Recommended CI check (add to ci.yml)

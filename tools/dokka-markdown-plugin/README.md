@@ -73,7 +73,7 @@ Three file types are generated per module:
 - `docs/api/<module>-hub.md` — navigation hub with a markdown table of all sub-docs (≤100 lines); hub table has a blank separator row after the header
 - `docs/api/<module>/-<kebab-class>.md` — one file per top-level class/object/interface (Type A); filename has leading `-`, no module prefix (e.g., `-base64-converter.md`)
 - `docs/api/<module>/<kebab-fn>.md` — one file per top-level function/property/typealias (Type B); no leading `-` (e.g., `parse-json.md`)
-- `.androidcommondoc/kdoc-state.json` — written at end of every run: ISO 8601 timestamp + 12-char compact content hash per file, for CI drift detection
+- `<module>/build/.androidcommondoc/kdoc-state.json` — written at end of every module's Dokka task: per-module JSON map `{ "<slug>": { "source": "<path>", "content_hash": "<12-hex>" } }` + top-level `generated_at` ISO timestamp. Per-module (not a shared central file) to avoid collision with other skills writing to `.androidcommondoc/`.
 
 Each generated doc includes 14-field YAML frontmatter:
 
@@ -117,7 +117,7 @@ Dokka 2.1.x used a different renderer extension point (`htmlRenderer` shape diff
 
 | Legacy bug | Plugin behavior |
 |------------|-----------------|
-| Two timestamps per file (2-pass script) | Single-pass renderer; one ISO timestamp in central `.androidcommondoc/kdoc-state.json` |
+| Two timestamps per file (2-pass script) | Single-pass renderer; one ISO timestamp in per-module `<module>/build/.androidcommondoc/kdoc-state.json` |
 | `androidapplecommondesktop` concatenated string | `platforms: [android, apple, common, desktop]` — sorted array |
 | Duplicated expect/actual bodies | Merged — one body, platform list separate |
 | Duplicate hub entries + missing separator | Deterministic sort; one data row per symbol; blank separator row after header |
