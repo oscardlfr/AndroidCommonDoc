@@ -14,7 +14,8 @@ import kotlin.test.assertTrue
  * output against frozen golden files.
  *
  * Uses jvm() target only — iosArm64() triggers a 2GB Kotlin/Native download.
- * Plugin JAR injected via dokkaPlugin(files(...)) — no Maven publication needed.
+ * Plugin JAR injected via dokkaPlugin(files(...)) using a local Maven repo
+ * structure copied into the temp dir — avoids Windows drive-letter path issues.
  */
 class GoldenIntegrationTest {
 
@@ -44,9 +45,14 @@ class GoldenIntegrationTest {
         )
         srcDir.copyRecursively(projectDir, overwrite = true)
 
-        val jarPath = pluginJar.absolutePath.replace("\\", "/")
+        // Create a flat local Maven repository inside the temp dir.
+        // Avoids Windows drive-letter path resolution issues with files(...).
+        val localRepo = File(projectDir, "local-plugin-repo")
+        val repoCoord = "com/androidcommondoc/dokka-markdown-plugin/0.1.0"
+        val repoDir = File(localRepo, repoCoord).also { it.mkdirs() }
+        pluginJar.copyTo(File(repoDir, "dokka-markdown-plugin-0.1.0.jar"), overwrite = true)
+        File(repoDir, "dokka-markdown-plugin-0.1.0.pom").writeText(minimalPom())
 
-        // JVM-only to avoid Kotlin/Native toolchain download during tests
         val submoduleBuildContent = """
             plugins {
                 kotlin("multiplatform") version "2.3.0"
@@ -58,8 +64,11 @@ class GoldenIntegrationTest {
                     commonMain.dependencies {}
                 }
             }
+            repositories {
+                maven { url = uri(rootProject.file("local-plugin-repo")) }
+            }
             dependencies {
-                dokkaPlugin(files("$jarPath"))
+                dokkaPlugin("com.androidcommondoc:dokka-markdown-plugin:0.1.0")
             }
         """.trimIndent()
 
@@ -115,7 +124,7 @@ class GoldenIntegrationTest {
     private fun diffAgainstGolden(outputDirs: List<File>) {
         val goldenFiles = expectedDir.walkTopDown().filter { it.isFile && it.extension == "md" }
         for (goldenFile in goldenFiles) {
-            val relativePath = goldenFile.relativeTo(expectedDir).path
+            val relativePath = goldenFile.relativeTo(expectedDir).path.replace("\\", "/")
             val actualFile = outputDirs
                 .map { File(it, relativePath) }
                 .firstOrNull { it.exists() }
@@ -142,11 +151,22 @@ class GoldenIntegrationTest {
             dir.walkTopDown()
                 .filter { it.isFile && it.extension == "md" }
                 .map { file ->
-                    val key = dir.parentFile.name + "/" + file.relativeTo(dir).path
+                    val key = dir.parentFile.name + "/" + file.relativeTo(dir).path.replace("\\", "/")
                     val hash = file.readLines(Charsets.UTF_8)
                         .firstOrNull { it.startsWith("content_hash:") }
                         ?.substringAfter("content_hash:")?.trim() ?: ""
                     key to hash
                 }
         }.toMap()
+
+    private fun minimalPom(): String = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <project>
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.androidcommondoc</groupId>
+          <artifactId>dokka-markdown-plugin</artifactId>
+          <version>0.1.0</version>
+          <packaging>jar</packaging>
+        </project>
+    """.trimIndent()
 }
