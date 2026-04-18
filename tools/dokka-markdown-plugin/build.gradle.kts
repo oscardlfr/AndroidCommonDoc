@@ -37,7 +37,6 @@ tasks.test {
     useJUnitPlatform()
     // L0 rule: sequential on Windows to avoid file-lock races between JVM forks
     maxParallelForks = 1
-    forkEvery = 1
     systemProperty("pluginJarDir", layout.buildDirectory.dir("libs").get().asFile.absolutePath)
 }
 

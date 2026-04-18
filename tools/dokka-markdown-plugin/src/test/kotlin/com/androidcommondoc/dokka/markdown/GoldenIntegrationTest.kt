@@ -75,13 +75,32 @@ class GoldenIntegrationTest {
         File(projectDir, "sample-core/build.gradle.kts").writeText(submoduleBuildContent)
         File(projectDir, "sample-data/build.gradle.kts").writeText(submoduleBuildContent)
         File(projectDir, "build.gradle.kts").writeText("")
+
+        // Rewrite settings to use PREFER_PROJECT so project-level repositories work
+        File(projectDir, "settings.gradle.kts").writeText("""
+            |pluginManagement {
+            |    repositories {
+            |        mavenCentral()
+            |        gradlePluginPortal()
+            |    }
+            |}
+            |dependencyResolutionManagement {
+            |    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
+            |    repositories {
+            |        mavenCentral()
+            |    }
+            |}
+            |rootProject.name = "kmp-golden-sample"
+            |include(":sample-core")
+            |include(":sample-data")
+        """.trimMargin())
     }
 
     @Test
     fun `goldenTest_pluginRunsAndOutputMatchesExpected`() {
         val result = GradleRunner.create()
             .withProjectDir(projectDir)
-            .withArguments("dokkaGenerate", "--stacktrace")
+            .withArguments("dokkaGenerate", "--stacktrace", "--no-daemon")
             .forwardOutput()
             .build()
 
@@ -103,7 +122,7 @@ class GoldenIntegrationTest {
     fun `goldenTest_secondRun_producesZeroChanges`() {
         val runner = GradleRunner.create()
             .withProjectDir(projectDir)
-            .withArguments("dokkaGenerate")
+            .withArguments("dokkaGenerate", "--no-daemon")
             .forwardOutput()
 
         runner.build()
