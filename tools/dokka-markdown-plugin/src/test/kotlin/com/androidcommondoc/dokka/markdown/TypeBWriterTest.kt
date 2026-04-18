@@ -91,7 +91,7 @@ class TypeBWriterTest {
         @Test
         fun `write_classMember_breadcrumbIncludesParentClass`() {
             val result = TypeBWriter.write(minimalCtx(parentClassName = "MyClass"))
-            assertTrue(result.contains("[MyClass](sample--my-class.md)"))
+            assertTrue(result.contains("[MyClass](-my-class.md)"))
         }
     }
 

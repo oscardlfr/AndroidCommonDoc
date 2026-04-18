@@ -18,6 +18,8 @@ object SlugDeriver {
     fun deriveForHub(moduleName: String): String =
         "${normalizeModule(moduleName)}-api-hub"
 
+    fun fileBasename(className: String): String = "-${toKebab(className)}"
+
     fun toKebab(name: String): String {
         if (name.isEmpty()) return name
         // All-uppercase (acronym like "URL", "HTTP") — join each letter with dashes

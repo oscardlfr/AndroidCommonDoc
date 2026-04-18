@@ -89,10 +89,10 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
             members = memberEntries,
             frontmatter = frontmatter,
         ))
-        File(moduleDir, slug + ".md").writeText(content, Charsets.UTF_8)
-        val classlikeState = KdocStateEntry(slug, moduleName + "/" + slug + ".md", contentHash)
+        File(moduleDir, SlugDeriver.fileBasename(symbolName) + ".md").writeText(content, Charsets.UTF_8)
+        val classlikeState = KdocStateEntry(slug, moduleName + "/" + SlugDeriver.fileBasename(symbolName) + ".md", contentHash)
         return Pair(
-            HubEntry(symbolName, slug + ".md", description),
+            HubEntry(symbolName, SlugDeriver.fileBasename(symbolName) + ".md", description),
             listOf(classlikeState) + memberStateEntries,
         )
     }

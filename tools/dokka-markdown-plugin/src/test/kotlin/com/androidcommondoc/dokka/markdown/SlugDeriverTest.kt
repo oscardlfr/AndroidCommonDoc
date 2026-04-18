@@ -73,6 +73,20 @@ class SlugDeriverTest {
     }
 
     @Nested
+    inner class FileBasename {
+
+        @Test
+        fun `fileBasename_simpleClass_leadingDashKebab`() {
+            assertEquals("-my-class", SlugDeriver.fileBasename("MyClass"))
+        }
+
+        @Test
+        fun `fileBasename_acronymClass_leadingDashPerLetterKebab`() {
+            assertEquals("-u-r-l", SlugDeriver.fileBasename("URL"))
+        }
+    }
+
+    @Nested
     inner class DeriveForHub {
 
         @Test
