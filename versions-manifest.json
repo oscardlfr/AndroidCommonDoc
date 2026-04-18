@@ -75,6 +75,17 @@
     "compose-rules": "0.5.6",
     "android-cli": "0.7.15222914"
   },
+  "plugin_versions": {
+    "dokka-markdown-plugin": {
+      "version": "0.1.0",
+      "group": "com.androidcommondoc",
+      "artifact": "dokka-markdown-plugin",
+      "registry": "github-packages",
+      "registry_url": "https://maven.pkg.github.com/oscardlfr/AndroidCommonDoc",
+      "changelog": "tools/dokka-markdown-plugin/CHANGELOG.md",
+      "description": "Dokka plugin that transforms KDoc output to L0-compliant Markdown with YAML frontmatter. Replaces dokka-to-docs.sh."
+    }
+  },
   "version_notes": {
     "agp": "KMP projects only. Android-only projects use agp-android-only (8.x) — do not force migration to 9.0.",
     "agp-android-only": "com.android.library projects on AGP 8.x. Compatible with KMP L0 patterns except flat-module-names and KmpLibraryConventionPlugin — use AndroidLibraryConventionPlugin instead.",
