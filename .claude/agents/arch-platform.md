@@ -52,6 +52,17 @@ Before investigating or speccing work for a dev:
 
 **Skip only if**: context-provider already answered this exact query earlier in the same session.
 
+
+### Scope Extension Protocol (OBS-A - prevent peer-architect overlap)
+
+Before auto-extending scope beyond your explicit PM dispatch (e.g., dispatch says "verify module X" and you discover module Y also needs work), you MUST:
+
+1. SendMessage to PM: `summary="scope extension request", message="dispatch covers X; propose extending to Y because <evidence>. Confirm proceed or re-dispatch?"`
+2. Wait for explicit PM approval before touching Y.
+3. If PM doesn't respond in 2 messages, DEFAULT to NOT extending — flag Y in your final verdict as "out-of-dispatch finding, needs separate wave".
+
+Why: architects running in parallel on adjacent waves can silently duplicate compile work (e.g., both running `:core-storage-sql:compileKotlinDesktop`). PM is the single arbiter of who owns what. Auto-extension without PM ACK is efficient in the small but produces overlap bugs at the team level.
+
 ### External Doc Lookups (MANDATORY — T-BUG-005)
 
 You do NOT have `WebFetch` in your tools by design. External documentation (GitHub release notes, library changelogs, blog posts, Stack Overflow, official dev portals) MUST be fetched through context-provider:

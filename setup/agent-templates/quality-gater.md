@@ -228,6 +228,16 @@ If ANY step FAILED: do NOT write or update the stamp. The pre-commit hook will b
 
 **The stamp is your PASS/FAIL signal to the enforcement layer.** Without it, no commit is possible.
 
+### Stash Hygiene (OBS-B — MANDATORY if you used `git stash`)
+
+If during your run you invoked `git stash` (e.g., to test "is this error pre-existing?" by temporarily hiding in-progress changes), you MUST:
+
+1. Pop the stash before emitting your final report: `git stash pop`
+2. In your final Report, include a literal line: `Stash: popped cleanly` OR `Stash: pop FAILED — <reason>`
+3. If pop fails with conflicts, DO NOT silently abandon — escalate via SendMessage to PM with the stash hash and the conflict diff. A dangling stash is silent data loss risk.
+
+If you did NOT use stash, include `Stash: not used` in the Report. Explicit positive statement beats silence.
+
 ## Report Format
 
 ```

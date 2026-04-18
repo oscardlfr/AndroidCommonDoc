@@ -1196,7 +1196,7 @@ All skills accept `--coverage-tool jacoco|kover|auto|none` and `--exclude-covera
 | Git | `/test-changed`, `/pre-pr`, `/git-flow` | Pre-installed on most systems |
 | Gradle | All build/test scripts | Wrapper included in projects |
 | JaCoCo or Kover | `/coverage`, `/test-full` | JaCoCo built-in; Kover via `libs.versions.toml` |
-| JDK 17+ | All Gradle scripts | [sdkman](https://sdkman.io/) or [Adoptium](https://adoptium.net/) |
+| JDK 21+ (recommended) / 17+ (minimum) | All Gradle scripts. **KMP projects with AGP 9 + Kotlin 2.3+ require JDK 21** — using JDK 17 raises `UnsupportedClassVersionError` on most modules. Either (a) set `JAVA_HOME` to a JDK 21 install, or (b) configure a Gradle Java toolchain in your convention plugin (see `docs/guides/jdk-toolchain.md`). | [sdkman](https://sdkman.io/) or [Adoptium](https://adoptium.net/) |
 | Node.js 18+ | MCP server, CLI monitoring | [nodejs.org](https://nodejs.org/) |
 | Trivy | `/sbom-scan` | [trivy.dev](https://trivy.dev/) |
 
