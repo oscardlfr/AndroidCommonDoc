@@ -23,6 +23,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 23 hand-written + 4 generated AST-only rules (27 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, security patterns, and testing anti-patterns
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
+- **Dokka Markdown Plugin** — transforms KDoc into L0-compliant structured markdown (`docs/api/*.md`) with 14-field YAML frontmatter, content-addressed hashes for CI drift detection, and first-class KMP expect/actual handling. See `tools/dokka-markdown-plugin/`.
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
 - **MCP server** with 46 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
@@ -417,6 +418,24 @@ plugins {
 ```
 
 > See [docs/gradle/gradle-patterns-android-only.md](docs/gradle/gradle-patterns-android-only.md) for the full Android-only convention plugin.
+
+---
+
+## Tools
+
+Gradle plugins and utilities shipped in `tools/` — installable independently from GitHub Packages.
+
+### Dokka Markdown Plugin
+
+`com.androidcommondoc:dokka-markdown-plugin:0.1.0` — Dokka 2.2.x custom renderer that generates `docs/api/*.md` from KDoc. Replaces the legacy `dokka-to-docs.sh` script.
+
+| Dokka | Kotlin | AGP | JDK | Status |
+|-------|--------|-----|-----|--------|
+| 2.2.0 | 2.3.20 | 9.0.0+ (KMP) | 17+ | Supported |
+| 2.2.0 | 2.3.20 | 8.x (Android-only) | 17+ | Supported |
+| 2.1.x | any | any | 17+ | Unsupported |
+
+Install via `/setup --dokka-plugin yes` (wizard W10) or manually — see [`tools/dokka-markdown-plugin/README.md`](tools/dokka-markdown-plugin/README.md) and the pattern doc at [`docs/gradle/dokka-markdown-plugin.md`](docs/gradle/dokka-markdown-plugin.md).
 
 ---
 
@@ -964,7 +983,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 |-------|---------|
 | `/kdoc-audit` | Audit KDoc coverage, regressions, undocumented APIs |
 | `/kdoc-migrate` | Full-project KDoc migration, module by module |
-| `/generate-api-docs` | Optional: Dokka + transformer → docs/api/ |
+| `/generate-api-docs` | Run `dokkaGenerate` via `dokka-markdown-plugin` → `docs/api/` with 14-field YAML frontmatter (plugin replaces legacy `dokka-to-docs.sh`) |
 
 **Quality gate steps** (doc-related):
 | Step | What | Action |
