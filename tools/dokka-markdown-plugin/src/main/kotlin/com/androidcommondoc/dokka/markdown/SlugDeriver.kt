@@ -5,7 +5,7 @@ object SlugDeriver {
     fun normalizeModule(raw: String): String =
         raw
             .lowercase()
-            .replace(Regex("[:/]+"), "-")
+            .replace(Regex("[:/.]+" ), "-")
             .trim('-')
             .replace(Regex("-{2,}"), "-")
 

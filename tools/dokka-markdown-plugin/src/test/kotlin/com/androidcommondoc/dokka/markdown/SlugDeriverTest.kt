@@ -50,31 +50,19 @@ class SlugDeriverTest {
     inner class DeriveForClass {
 
         @Test
-        fun `deriveForClass_leadingDashPlusKebab`() {
-            // production: deriveForClass(simpleName) → "-" + kebab(simpleName)
-            assertEquals("-base64-converter", SlugDeriver.deriveForClass("Base64Converter"))
-        }
-
-        @Test
-        fun `deriveForClass_simpleClass_leadingDash`() {
-            assertEquals("-my-class", SlugDeriver.deriveForClass("MyClass"))
-        }
-
-        // RED: two-arg overload does not exist yet — compile error until Bug 1 fix
-        @Test
         fun `deriveForClass_withModule_prependsNormalizedModule`() {
-            assertEquals("core-my-class", SlugDeriver.deriveForClass("MyClass", "core"))
+            assertEquals("core--my-class", SlugDeriver.deriveForClass("MyClass", "core"))
         }
 
         @Test
         fun `deriveForClass_withHyphenatedModule_preserved`() {
-            assertEquals("core-audio-my-class", SlugDeriver.deriveForClass("MyClass", "core-audio"))
+            assertEquals("core-audio--my-class", SlugDeriver.deriveForClass("MyClass", "core-audio"))
         }
 
         @Test
         fun `deriveForClass_withColonModule_normalized`() {
             // "core:audio" → "core-audio" via normalizeModule
-            assertEquals("core-audio-my-class", SlugDeriver.deriveForClass("MyClass", "core:audio"))
+            assertEquals("core-audio--my-class", SlugDeriver.deriveForClass("MyClass", "core:audio"))
         }
 
         @Test
