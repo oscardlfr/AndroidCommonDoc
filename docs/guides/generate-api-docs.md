@@ -130,7 +130,7 @@ Projects that skip plugin installation (`/setup --dokka-plugin no` or W10 declin
 ## Cross-references
 
 - [`docs/gradle/dokka-markdown-plugin.md`](../gradle/dokka-markdown-plugin.md) — frontmatter contract, file taxonomy, slug rules
-- [`tools/dokka-markdown-plugin/README.md`](../../tools/dokka-markdown-plugin/README.md) — compat matrix, known fixes
+- [dokka-markdown-plugin repo](https://github.com/oscardlfr/dokka-markdown-plugin) — compat matrix, known fixes (external repo, MIT)
 - [`skills/generate-api-docs/SKILL.md`](../../skills/generate-api-docs/SKILL.md) — skill parameters and steps
 - [`skills/kdoc-audit/SKILL.md`](../../skills/kdoc-audit/SKILL.md) — coverage auditing
 - [`skills/kdoc-migrate/SKILL.md`](../../skills/kdoc-migrate/SKILL.md) — KDoc authoring

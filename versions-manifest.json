@@ -81,9 +81,11 @@
       "group": "com.androidcommondoc",
       "artifact": "dokka-markdown-plugin",
       "registry": "github-packages",
-      "registry_url": "https://maven.pkg.github.com/oscardlfr/AndroidCommonDoc",
-      "changelog": "tools/dokka-markdown-plugin/CHANGELOG.md",
-      "description": "Dokka plugin that transforms KDoc output to L0-compliant Markdown with YAML frontmatter. Replaces dokka-to-docs.sh."
+      "registry_url": "https://maven.pkg.github.com/oscardlfr/dokka-markdown-plugin",
+      "source_repo": "https://github.com/oscardlfr/dokka-markdown-plugin",
+      "license": "MIT",
+      "external": true,
+      "description": "Dokka plugin that transforms KDoc output to L0-compliant Markdown with YAML frontmatter. Extracted from AndroidCommonDoc 2026-04-18."
     }
   },
   "version_notes": {

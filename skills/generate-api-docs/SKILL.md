@@ -25,7 +25,7 @@ copilot-template-type: behavioral
 ## Prerequisites
 
 - Dokka Gradle plugin configured in `build-logic/` (convention plugin)
-- `dokka-markdown-plugin` installed: check `versions-manifest.json` `plugin_versions.dokka-markdown-plugin` — if absent, add `com.androidcommondoc:dokka-markdown-plugin:0.1.0` from GitHub Packages (`https://maven.pkg.github.com/oscardlfr/AndroidCommonDoc`) to the project's Dokka plugin dependencies and re-run `/setup` or `/sync-l0`
+- `dokka-markdown-plugin` installed: check `versions-manifest.json` `plugin_versions.dokka-markdown-plugin` — if absent, add `com.androidcommondoc:dokka-markdown-plugin:0.1.0` from GitHub Packages (`https://maven.pkg.github.com/oscardlfr/dokka-markdown-plugin`) to the project's Dokka plugin dependencies and re-run `/setup` or `/sync-l0`. See the [plugin repo](https://github.com/oscardlfr/dokka-markdown-plugin) for full install docs (MIT-licensed external tool)
 
 ## Behavior
 

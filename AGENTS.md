@@ -199,7 +199,7 @@ Automated consistency verification via `.claude/agents/`:
 
 ## API Docs (`docs/api/`)
 
-`docs/api/` files are produced by `tools/dokka-markdown-plugin/` 0.1.0 (Dokka plugin). Run `/generate-api-docs` to regenerate. Files carry `generated: true` frontmatter and are excluded from duplicate detection by `validate-doc-update`.
+`docs/api/` files are produced by the [dokka-markdown-plugin](https://github.com/oscardlfr/dokka-markdown-plugin) 0.1.0 (external Dokka plugin, MIT-licensed). Run `/generate-api-docs` to regenerate. Files carry `generated: true` frontmatter and are excluded from duplicate detection by `validate-doc-update`.
 
 ## Pattern Docs (15 categories, 88+ sub-docs)
 

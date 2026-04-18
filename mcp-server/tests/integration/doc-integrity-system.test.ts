@@ -386,37 +386,30 @@ describe('doc integrity skills', () => {
   });
 });
 
-// ── 13. Dokka markdown plugin (replaces legacy dokka-to-docs.sh) ─────────────
+// ── 13. Dokka markdown plugin (external — repo: oscardlfr/dokka-markdown-plugin) ─
 
-describe('Dokka markdown plugin', () => {
-  const PLUGIN_ROOT = path.join(ROOT, 'tools/dokka-markdown-plugin');
+describe('Dokka markdown plugin (external)', () => {
+  const PLUGIN_POINTER_README = path.join(ROOT, 'tools/dokka-markdown-plugin/README.md');
 
-  it('plugin directory exists under tools/', () => {
-    expect(fileExists(PLUGIN_ROOT)).toBe(true);
+  it('pointer README exists at original L0 path', () => {
+    expect(fileExists(PLUGIN_POINTER_README)).toBe(true);
   });
 
-  it('plugin build.gradle.kts exists', () => {
-    expect(fileExists(path.join(PLUGIN_ROOT, 'build.gradle.kts'))).toBe(true);
-  });
-
-  it('plugin README.md exists', () => {
-    expect(fileExists(path.join(PLUGIN_ROOT, 'README.md'))).toBe(true);
-  });
-
-  it('plugin SPI service file exists', () => {
-    const spiPath = path.join(PLUGIN_ROOT, 'src/main/resources/META-INF/services/org.jetbrains.dokka.plugability.DokkaPlugin');
-    expect(fileExists(spiPath)).toBe(true);
-  });
-
-  it('plugin SPI references StructuredMarkdownPlugin', () => {
-    const spiPath = path.join(PLUGIN_ROOT, 'src/main/resources/META-INF/services/org.jetbrains.dokka.plugability.DokkaPlugin');
-    const content = readFile(spiPath);
-    expect(content).toContain('com.androidcommondoc.dokka.markdown.StructuredMarkdownPlugin');
+  it('pointer README points at external repo', () => {
+    const content = readFile(PLUGIN_POINTER_README);
+    expect(content).toContain('github.com/oscardlfr/dokka-markdown-plugin');
+    expect(content).toContain('MOVED');
   });
 
   it('versions-manifest.json tracks dokka-markdown-plugin', () => {
     const content = readFile(path.join(ROOT, 'versions-manifest.json'));
     expect(content).toContain('dokka-markdown-plugin');
+  });
+
+  it('versions-manifest.json marks dokka-markdown-plugin as external', () => {
+    const content = readFile(path.join(ROOT, 'versions-manifest.json'));
+    expect(content).toContain('"external": true');
+    expect(content).toContain('maven.pkg.github.com/oscardlfr/dokka-markdown-plugin');
   });
 
   it('convention plugin template exists', () => {

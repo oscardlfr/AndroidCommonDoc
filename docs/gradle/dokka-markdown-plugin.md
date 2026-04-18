@@ -42,7 +42,7 @@ Add GitHub Packages repo in root `build.gradle.kts`:
 
 ```kotlin
 maven {
-    url = uri("https://maven.pkg.github.com/oscardlfr/AndroidCommonDoc")
+    url = uri("https://maven.pkg.github.com/oscardlfr/dokka-markdown-plugin")
     credentials {
         username = providers.gradleProperty("gpr.user").orNull ?: System.getenv("GITHUB_ACTOR")
         password = providers.gradleProperty("gpr.key").orNull ?: System.getenv("GITHUB_TOKEN")
@@ -141,7 +141,7 @@ Agents and MCP tools that rely on `docs/api/` output:
 
 ## Cross-references
 
-- [`tools/dokka-markdown-plugin/README.md`](../../tools/dokka-markdown-plugin/README.md) — apply, task, compat matrix
+- [dokka-markdown-plugin repo README](https://github.com/oscardlfr/dokka-markdown-plugin#readme) — apply, task, compat matrix (external repo, MIT)
 - [`skills/generate-api-docs/SKILL.md`](../../skills/generate-api-docs/SKILL.md) — end-to-end generation workflow
 - [`skills/kdoc-audit/SKILL.md`](../../skills/kdoc-audit/SKILL.md) — coverage auditing before generation
 - [`skills/kdoc-migrate/SKILL.md`](../../skills/kdoc-migrate/SKILL.md) — filling KDoc gaps before generation
