@@ -1,6 +1,16 @@
 plugins {
     kotlin("jvm") version "2.3.0"
     `maven-publish`
+    `java-gradle-plugin`
+}
+
+gradlePlugin {
+    plugins {
+        create("dokkaMarkdown") {
+            id = "com.androidcommondoc.dokka-markdown"
+            implementationClass = "com.androidcommondoc.dokka.markdown.StructuredMarkdownPlugin"
+        }
+    }
 }
 
 // Maven Central only — no plugins.gradle.org needed (corporate SSL proxy constraint).
@@ -25,6 +35,10 @@ kotlin {
 
 tasks.test {
     useJUnitPlatform()
+    // L0 rule: sequential on Windows to avoid file-lock races between JVM forks
+    maxParallelForks = 1
+    forkEvery = 1
+    systemProperty("pluginJarDir", layout.buildDirectory.dir("libs").get().asFile.absolutePath)
 }
 
 publishing {

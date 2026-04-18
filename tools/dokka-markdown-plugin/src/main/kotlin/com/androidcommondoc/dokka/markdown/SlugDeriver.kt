@@ -15,7 +15,14 @@ object SlugDeriver {
         if (name.isEmpty()) return name
         // All-uppercase (acronym like "URL", "HTTP") — join each letter with dashes
         if (name.all { it.isUpperCase() || it.isDigit() }) {
-            return name.lowercase().split("").filter { it.isNotEmpty() }.joinToString("-")
+            val sb = StringBuilder()
+            for (i in name.indices) {
+                val c = name[i]
+                // Dash before every letter (except first); digits attach directly (no leading dash)
+                if (i > 0 && c.isLetter()) sb.append('-')
+                sb.append(c.lowercaseChar())
+            }
+            return sb.toString()
         }
         val sb = StringBuilder()
         for (i in name.indices) {

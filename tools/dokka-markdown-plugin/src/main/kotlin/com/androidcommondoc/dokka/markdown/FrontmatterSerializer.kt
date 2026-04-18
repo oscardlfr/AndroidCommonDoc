@@ -36,7 +36,7 @@ object FrontmatterSerializer {
         appendLine("generated_from: ${fields.generatedFrom}")
         appendLine("content_hash: ${yamlString(fields.contentHash)}")
         appendLine("parent: ${fields.parent}")
-        fields.platforms?.let { appendLine("platforms: ${yamlList(it)}") }
+        fields.platforms?.takeIf { it.isNotEmpty() }?.let { appendLine("platforms: ${yamlList(it)}") }
         append("---")
     }
 
