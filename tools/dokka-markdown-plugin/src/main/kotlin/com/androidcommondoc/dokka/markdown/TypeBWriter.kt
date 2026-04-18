@@ -67,7 +67,7 @@ object TypeBWriter {
         parts += "[${ctx.moduleName}](../../${ctx.moduleName}-hub.md)"
         parts += "[${ctx.packageName}](../${ctx.packageName}.md)"
         ctx.parentClassName?.let { parent ->
-            val parentSlug = SlugDeriver.deriveForClass(parent)
+            val parentSlug = SlugDeriver.deriveForClass(parent, ctx.moduleName)
             parts += "[$parent]($parentSlug.md)"
         }
         parts += ctx.symbolName

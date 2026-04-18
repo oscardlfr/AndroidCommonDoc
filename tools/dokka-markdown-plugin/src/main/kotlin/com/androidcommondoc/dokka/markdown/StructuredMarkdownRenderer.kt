@@ -22,7 +22,7 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
     }
 
     private fun renderModule(modulePage: ModulePageNode, outputDir: File) {
-        val moduleName = modulePage.name
+        val moduleName = SlugDeriver.normalizeModule(modulePage.name)
         val moduleDir = File(outputDir, moduleName).also { it.mkdirs() }
         val hubEntries = mutableListOf<HubEntry>()
         val stateEntries = mutableListOf<KdocStateEntry>()
@@ -30,7 +30,7 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
             val packageName = packagePage.name
             for (classPage in packagePage.children.filterIsInstance<ClasslikePageNode>()) {
                 renderClasslike(classPage, moduleName, packageName, moduleDir)
-                    ?.let { (hub, state) -> hubEntries += hub; stateEntries += state }
+                    ?.let { (hub, states) -> hubEntries += hub; stateEntries += states }
             }
             for (memberPage in packagePage.children.filterIsInstance<MemberPageNode>()) {
                 renderMember(memberPage, moduleName, packageName, null, moduleDir)
@@ -39,7 +39,7 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
         }
         val hubContent = buildHubContent(moduleName, hubEntries)
         File(outputDir, moduleName + "-hub.md").writeText(hubContent, Charsets.UTF_8)
-        KdocStateWriter.write(File(outputDir, "../.androidcommondoc/kdoc-state.json"), stateEntries)
+        KdocStateWriter.write(outputDir.resolve("../../.androidcommondoc/kdoc-state.json").canonicalFile, stateEntries)
     }
 
     private fun renderClasslike(
@@ -47,16 +47,20 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
         moduleName: String,
         packageName: String,
         moduleDir: File,
-    ): Pair<HubEntry, KdocStateEntry>? {
+    ): Pair<HubEntry, List<KdocStateEntry>>? {
         val symbolName = page.name
-        val slug = SlugDeriver.deriveForClass(symbolName)
+        val slug = SlugDeriver.deriveForClass(symbolName, moduleName)
         val doc = page.documentables.firstOrNull()?.documentation?.values?.firstOrNull()
         val descTag = doc?.children?.filterIsInstance<Description>()?.firstOrNull()?.root
         val description = KdocRenderer.firstSentence(descTag).ifEmpty { symbolName }
         val memberEntries = page.children.filterIsInstance<MemberPageNode>()
             .map { child -> Pair(child.name, SlugDeriver.toKebab(child.name) + ".md") }
+        val memberStateEntries = mutableListOf<KdocStateEntry>()
         page.children.filterIsInstance<MemberPageNode>()
-            .forEach { renderMember(it, moduleName, packageName, symbolName, moduleDir) }
+            .forEach { child ->
+                renderMember(child, moduleName, packageName, symbolName, moduleDir)
+                    ?.let { (_, state) -> memberStateEntries += state }
+            }
         val platforms = page.documentables.firstOrNull()?.sourceSets?.map { it.displayName }?.toSet() ?: emptySet()
         val platformInfo = PlatformLabeler.label(platforms)
         val bodyForHash = "# $symbolName\n${platformInfo?.bodyLine ?: ""}"
@@ -68,7 +72,7 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
         val frontmatter = FrontmatterFields(
             scope = scopeList,
             sources = listOf(moduleName),
-            slug = moduleName + slug,
+            slug = slug,
             layer = "L1",
             description = description,
             lastUpdated = lastUpdated,
@@ -86,9 +90,10 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
             frontmatter = frontmatter,
         ))
         File(moduleDir, slug + ".md").writeText(content, Charsets.UTF_8)
+        val classlikeState = KdocStateEntry(slug, moduleName + "/" + slug + ".md", contentHash)
         return Pair(
             HubEntry(symbolName, slug + ".md", description),
-            KdocStateEntry(moduleName + slug, moduleName + "/" + slug + ".md", contentHash),
+            listOf(classlikeState) + memberStateEntries,
         )
     }
 
@@ -114,7 +119,7 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
         val bodyForHash = "# $symbolName\n${platformInfo?.bodyLine ?: ""}\n$description"
         val contentHash = ContentHasher.hash(bodyForHash)
         val lastUpdated = YearMonth.now().toString()
-        val parentSlug = parentClassName?.let { moduleName + SlugDeriver.deriveForClass(it) }
+        val parentSlug = parentClassName?.let { SlugDeriver.deriveForClass(it, moduleName) }
             ?: SlugDeriver.deriveForHub(moduleName)
         val scopeList = mutableListOf("api", moduleName).apply {
             platformInfo?.frontmatterList?.let { addAll(it) }
