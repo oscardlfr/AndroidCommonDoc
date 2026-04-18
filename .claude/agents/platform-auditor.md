@@ -59,16 +59,26 @@ Every `expect` declaration has `actual` for all configured targets.
 4. Check error mapper consistency if new error types added
 5. Report findings with severity
 
-## Delegated Google Android skills (when applicable)
+## Delegated Google Android skills (MANDATORY — surface in every Summary that matches)
 
-When the diff touches build infrastructure, recommend (do NOT auto-invoke) the corresponding Google skill in your Summary:
+When the diff touches build infrastructure, you MUST surface the corresponding Google skill in your Summary. Silence when a pattern matches is a protocol violation (T-BUG-003). You do NOT auto-invoke the skill — you surface the slug so the orchestrator or user decides.
 
-| Diff pattern | Skill to recommend |
-|---|---|
-| `proguard-rules.pro` / `consumer-rules.pro` modified; R8 keep rules added/changed | `/r8-analyzer` |
-| AGP version bump in `libs.versions.toml` (`android-gradle-plugin` or `com.android.tools.build:gradle`) | `/agp-9-upgrade` (only if upgrading TO v9) |
+**Scan every `.gradle.kts`, `.versions.toml`, `*.pro`, `proguard-rules.pro`, `consumer-rules.pro` in the diff**:
 
-Prerequisite: skill must be installed on the host (`android skills add --skill=<slug> --agent=claude-code`). If missing, surface "Recommended skill `/<slug>` is not installed" in the Summary. Catalog + applicability: `.planning/intel/android-skills-catalog.md`.
+| Diff pattern | Skill MUST appear in Summary as | Match criteria |
+|---|---|---|
+| `proguard-rules.pro` / `consumer-rules.pro` modified; any R8 keep rule added/changed | `/r8-analyzer` | any `-keep` / `-keepclassmembers` / `-dontwarn` added OR removed |
+| AGP version bump in `libs.versions.toml` OR `buildscript` dependency | `/agp-9-upgrade` | `android-gradle-plugin` / `com.android.tools.build:gradle` version-line changed AND target version is 9.x |
+
+**Summary format (required when any trigger matches)**:
+```
+Delegated skills:
+- /<slug> — matched pattern <X> in <file:line>. <One-line rationale>.
+```
+
+**Skill availability check**: run `ls "$HOME/.claude/skills/<slug>"` before surfacing. If missing, still surface the recommendation AND note "not installed on this host — `android skills add --skill=<slug> --agent=claude-code`".
+
+Catalog + per-layer applicability: `.planning/intel/android-skills-catalog.md`.
 
 ## Verify Before Reporting
 

@@ -147,19 +147,27 @@ Both branches fire on the same triggers:
 
 Choose 8.A, 8.B, or both based on the screens touched. Consumer projects that ship desktop-only use 8.B as the primary gate; those with both targets run both branches — dedupe keys are prefixed by source so findings never collide under `/full-audit`.
 
-### 9. Delegated Google Android skills (when applicable)
+### 9. Delegated Google Android skills (MANDATORY — surface in every Summary that matches)
 
-Google publishes task-specific skills that a UI review can recommend when the diff matches their domain. You do NOT auto-invoke them — surface the slug in your Summary and let the orchestrator / user decide.
+Google publishes task-specific skills. You do NOT auto-invoke them — but you MUST surface the slug in your Summary whenever your review's diff matches any trigger pattern below. "MUST surface" = include a `Delegated skills` section in Summary with the slug, the matched pattern, and a one-line justification. Silence is a protocol violation (T-BUG-003).
 
-Trigger patterns and delegation targets:
+**Scan every touched file for these patterns on every task:**
 
-| Diff pattern | Skill to recommend | Rationale |
+| Diff pattern | Skill MUST appear in Summary as | Match criteria |
 |---|---|---|
-| Compose `Scaffold`, window insets, IME overlap, status/navigation bar styling | `/edge-to-edge` | Official migration + troubleshooting workflow |
-| Navigation3 route added/changed, deep-link regression, back-stack divergence | `/navigation-3` | Official install/migrate guidance + deep-link patterns |
-| Legacy Android XML Views found under `androidMain` that should become Compose | `/migrate-xml-views-to-jetpack-compose` | Structured XML→Compose migration |
+| Compose `Scaffold`, window insets (`WindowInsets`, `systemBars`, `ime`), IME overlap, status/navigation bar styling | `/edge-to-edge` | any insets API call OR Scaffold without padding param OR direct `systemBars*` reference |
+| Navigation3 route added/changed, deep-link regression, back-stack divergence, `NavHost`/`NavController`/Navigation3 DSL | `/navigation-3` | any file under `navigation/` OR import of `androidx.navigation3.*` OR change to a route type |
+| Legacy Android XML Views under `androidMain` (`.xml` layouts, `findViewById`, `setContentView(R.layout.*)`) | `/migrate-xml-views-to-jetpack-compose` | any `.xml` layout touched OR XML-Compose interop code |
 
-Prerequisite: skills must be installed (`android skills add --skill=<slug>`). If missing, your Summary must note "Recommended skill `/<slug>` is not installed on this host" — do not assume presence. See `.planning/intel/android-skills-catalog.md` for per-layer applicability; `skills/android-skills-consume/SKILL.md` for the co-existence design.
+**Summary format (required when any trigger matches)**:
+```
+Delegated skills:
+- /<slug> — matched pattern <X> in <file:line>. <One-line rationale>.
+```
+
+**Skill availability check**: run `ls "$HOME/.claude/skills/<slug>"` (or the equivalent on Windows) before surfacing. If missing, still surface the recommendation AND note "not installed on this host — `android skills add --skill=<slug> --agent=claude-code`".
+
+See `.planning/intel/android-skills-catalog.md` for per-layer applicability (desktop-only consumers typically limit to `/navigation-3` until their androidApp ships) and `skills/android-skills-consume/SKILL.md` for the co-existence design.
 
 ## Workflow
 1. Find `.kt` files in UI source sets (Compose screens, components) and design system modules

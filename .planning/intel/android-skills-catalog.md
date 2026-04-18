@@ -11,7 +11,7 @@ L0 does NOT fork, vendor, or re-sync Google skills. They live at
 | Slug | Purpose | Target platform |
 |---|---|---|
 | `android-cli` | Orchestration of the `android` CLI itself (auto-installed by `android init`) | All agents |
-| `navigation-3` | Jetpack Navigation 3 install/migrate; deep links, multi-backstack, scenes, Hilt/VM integration | Android + KMP Compose |
+| `navigation-3` | Jetpack Navigation 3 install/migrate; deep links, multi-backstack, scenes, Hilt/VM integration. **PARTIAL for CMP** (see T-BUG-006 note below) | Android-only (partial CMP) |
 | `r8-analyzer` | R8 / Proguard keep-rule audit: redundancies, broad rules, consumer rule conflicts | Android (release build) |
 | `play-billing-library-version-upgrade` | Migrate to latest Play Billing Library | Android (monetized) |
 | `edge-to-edge` | Jetpack Compose edge-to-edge + insets + system-bar legibility | Android Compose |
@@ -42,6 +42,19 @@ auto-discovers — no registry entry required.
 | L2 | DawSync | navigation-3 | Desktop-primary Compose app. androidApp is a stub — skip Android-only tooling until ships |
 | L2 | DawSyncWeb | (none) | Astro + Cloudflare Workers web app. Android skills do not apply. Awareness-only via `android-skills-consume` doc |
 
+## Android Nav3 vs JetBrains CMP Nav3 disambiguation (T-BUG-006)
+
+Two distinct `navigation3` artifacts exist in the ecosystem:
+
+| Artifact | Maven GA | Covered by Google skill? |
+|---|---|---|
+| Google Jetpack Navigation 3 | `androidx.navigation3:navigation3-*` | YES — `/navigation-3` directly applicable |
+| JetBrains CMP Navigation 3 | `org.jetbrains.androidx.navigation3:navigation3-*` | PARTIAL — Compose patterns (scenes, back-stack, conditional navigation) transfer; Android-specific APIs (Hilt integration, deep-link intents, `NavGraphBuilder` extensions bound to Android Context) do NOT |
+
+**Agent guidance**: when the consumer project's `libs.versions.toml` uses `org.jetbrains.androidx.navigation3.*`, surface `/navigation-3` with the caveat: "PATTERN guidance applies; Android-specific wiring examples in the skill do not transfer to CMP — verify against JetBrains CMP nav3 docs". When the consumer uses `androidx.navigation3.*`, surface `/navigation-3` without caveats.
+
+L1 shared-kmp-libs currently uses the JetBrains CMP variant. L2 consumers inherit. Catalog `Target platform` column reflects this.
+
 ## Collision check (L0 vs Google slugs)
 
 Zero slug collisions observed. L0 slugs are functional (`test`, `coverage`,
@@ -58,7 +71,7 @@ L0 agents to reference these delegatable skills:
 | `ui-specialist` | `/edge-to-edge` | Compose insets / `Scaffold` without padding; IME overlap; status-bar legibility |
 | `ui-specialist` | `/navigation-3` | New route added, deep-link regression, back-stack divergence |
 | `ui-specialist` | `/migrate-xml-views-to-jetpack-compose` | Legacy XML found in `androidMain` |
-| `kmp-reviewer` | `/agp-9-upgrade` | AGP version change in `libs.versions.toml` |
+| `platform-auditor` | `/agp-9-upgrade` | AGP version change in `libs.versions.toml` |
 | `platform-auditor` | `/r8-analyzer` | Proguard/R8 rule changes under `proguard-rules.pro` |
 
 Agents DO NOT auto-invoke — they recommend in their Summary and surface the
