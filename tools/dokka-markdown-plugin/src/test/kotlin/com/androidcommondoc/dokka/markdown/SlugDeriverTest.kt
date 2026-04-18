@@ -126,7 +126,8 @@ class SlugDeriverTest {
             "core:audio,        core-audio",
             "core.audio,        core-audio",
             "core:audio:engine, core-audio-engine",
-            "com.example.core,  com-example-core",
+            "com.example.core,      com-example-core",
+            "core.audio:feature,    core-audio-feature",
         )
         fun `normalizeModule_variousSeparators_allHyphenated`(input: String, expected: String) {
             assertEquals(expected, SlugDeriver.normalizeModule(input))
