@@ -113,12 +113,69 @@ If this change is a bug fix, a failing test for this bug must exist in the worki
 - For dispatcher-scope handling in Compose tests (StateFlow subscription timing, UnconfinedTestDispatcher), see `docs/testing/testing-patterns-dispatcher-scopes.md`
 - For fake construction in Compose tests (no MockK), see `docs/testing/testing-patterns-fakes.md`
 
+### 8. Runtime UI Validation (platform-aware)
+Static tests prove the Composable tree *exists*; they do not prove it *renders correctly*. Two MCP tools close that gap with the same finding schema and severity heuristics — pick the branch that matches the consumer's production UI target.
+
+Both branches fire on the same triggers:
+- After any change that touches screen rendering (UiState branches, string resources, theming)
+- Before finalizing a PR that modifies a screen with a committed baseline
+- When investigating a "tests pass but app is broken" report
+
+#### 8.A — Android (live device via adb)
+
+- MCP tool: `android-layout-diff`
+- Required state: Android CLI v0.7+ on PATH, device authorized via `adb devices`, target app installed
+- Inputs: `device_serial` (optional — required only with multiple devices), `baseline_path` (absolute path to committed JSON)
+- Baseline capture (one-time per screen): `android layout --pretty --output=baselines/android/<screen>.json` after reaching the target state on device
+- When the tool reports `cli_missing`, `adb_offline`, or `multi_device`, surface the CLI's suggestion verbatim and point at `docs/guides/getting-started/android-cli-windows.md`
+
+#### 8.B — Desktop Compose (no device; JVM Compose Multiplatform)
+
+- MCP tool: `compose-semantic-diff`
+- Required state: Compose UI test module with the capture helper from `setup/templates/compose-semantic-diff/compose-semantic-capture.kt.template`; Gradle task `captureUiBaselines` wired
+- Inputs: `baseline_path` (`baselines/desktop/<screen>.txt`), `current_path` (`build/ui-snapshots/<screen>.current.txt` emitted by `verifyUiBaselines`), optional `screen_name`
+- Baseline capture: `./gradlew captureUiBaselines` commits regenerates `baselines/desktop/*.txt`
+- When the tool reports `capture_missing` (no current capture): that means Gradle didn't run `verifyUiBaselines` — the test-level Kotlin assertion already fails the build; tool invocation is for structured findings only
+
+#### Severity playbook (both branches)
+
+- **HIGH — removed + testTag/resource-id**: critical. A known element vanished from the rendered tree. Most common cause: UiState branch rendering empty when it should render content. Block the PR.
+- **MEDIUM — text drift (text / contentDescription)**: copy regressed or a UiState branch returned the wrong string-resource. Investigate the resource key used.
+- **MEDIUM — tagged addition**: likely a legitimate new component. Confirm intent, refresh the baseline in the same commit.
+- **LOW — anonymous added/removed**: usually dynamic content (snackbars, tooltips). Verify the baseline is still representative; update if intentional.
+- **LOW — extras drift (role/actions/state)**: interaction wiring changed. Update baseline if intentional.
+
+Choose 8.A, 8.B, or both based on the screens touched. Consumer projects that ship desktop-only use 8.B as the primary gate; those with both targets run both branches — dedupe keys are prefixed by source so findings never collide under `/full-audit`.
+
+### 9. Delegated Google Android skills (MANDATORY — surface in every Summary that matches)
+
+Google publishes task-specific skills. You do NOT auto-invoke them — but you MUST surface the slug in your Summary whenever your review's diff matches any trigger pattern below. "MUST surface" = include a `Delegated skills` section in Summary with the slug, the matched pattern, and a one-line justification. Silence is a protocol violation (T-BUG-003).
+
+**Scan every touched file for these patterns on every task:**
+
+| Diff pattern | Skill MUST appear in Summary as | Match criteria |
+|---|---|---|
+| Compose `Scaffold`, window insets (`WindowInsets`, `systemBars`, `ime`), IME overlap, status/navigation bar styling | `/edge-to-edge` | any insets API call OR Scaffold without padding param OR direct `systemBars*` reference |
+| Navigation3 route added/changed, deep-link regression, back-stack divergence, `NavHost`/`NavController`/Navigation3 DSL | `/navigation-3` | any file under `navigation/` OR import of `androidx.navigation3.*` OR change to a route type |
+| Legacy Android XML Views under `androidMain` (`.xml` layouts, `findViewById`, `setContentView(R.layout.*)`) | `/migrate-xml-views-to-jetpack-compose` | any `.xml` layout touched OR XML-Compose interop code |
+
+**Summary format (required when any trigger matches)**:
+```
+Delegated skills:
+- /<slug> — matched pattern <X> in <file:line>. <One-line rationale>.
+```
+
+**Skill availability check**: run `ls "$HOME/.claude/skills/<slug>"` (or the equivalent on Windows) before surfacing. If missing, still surface the recommendation AND note "not installed on this host — `android skills add --skill=<slug> --agent=claude-code`".
+
+See `.planning/intel/android-skills-catalog.md` for per-layer applicability (desktop-only consumers typically limit to `/navigation-3` until their androidApp ships) and `skills/android-skills-consume/SKILL.md` for the co-existence design.
+
 ## Workflow
 1. Find `.kt` files in UI source sets (Compose screens, components) and design system modules
-2. Check each against ALL 7 rules above
+2. Check each against ALL 8 rules above
 3. Report violations with file:line and suggested fix
 4. **Implement fixes** for hardcoded strings, missing previews, and accessibility violations
-5. After fixes: run `/test <module>` to verify nothing broke
+5. If the change touched a screen with a committed baseline, invoke `android-layout-diff` — fold its findings into your report
+6. After fixes: run `/test <module>` to verify nothing broke
 
 ## No "Pre-existing" Excuse
 
@@ -138,6 +195,7 @@ If you discover a bug during your task — whether you caused it or not — you 
 
 ## MCP Tools (when available)
 - `compose-preview-audit` — validate @Preview coverage
+- `android-layout-diff` — runtime UI validation on device; diff against committed baseline JSON (see Rule 8)
 - `unused-resources` — detect unused strings/colors/drawables
 - `string-completeness` — validate string completeness across languages
 

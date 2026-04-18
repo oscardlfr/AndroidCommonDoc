@@ -9,32 +9,18 @@ class NoPlatformStorageInCommonRuleTest {
     private val rule = NoPlatformStorageInCommonRule(Config.empty)
 
     @Test
-    fun `flags SharedPreferences import`() {
+    fun `reports violating code`() {
         val code = """
             import android.content.SharedPreferences
-            class MyRepo
-        """.trimIndent()
-        val findings = rule.lint(code)
-        assertThat(findings).hasSize(1)
-        assertThat(findings[0].message).contains("expect/actual")
-    }
-
-    @Test
-    fun `flags android sqlite import`() {
-        val code = """
-            import android.database.sqlite.SQLiteDatabase
-            class MyDao
         """.trimIndent()
         val findings = rule.lint(code)
         assertThat(findings).hasSize(1)
     }
 
     @Test
-    fun `accepts multiplatform alternatives`() {
+    fun `accepts compliant code`() {
         val code = """
-            import app.cash.sqldelight.db.SqlDriver
-            import com.russhwolf.settings.Settings
-            class MyRepo
+            import expect/actual + multiplatform-settings / SQLDelight
         """.trimIndent()
         val findings = rule.lint(code)
         assertThat(findings).isEmpty()

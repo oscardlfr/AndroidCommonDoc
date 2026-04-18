@@ -28,6 +28,23 @@ You manage the lifecycle of modules — from creation through deprecation.
 - [ ] Follows project naming convention (flat names, consistent prefix)
 - [ ] No nested module names (avoids AGP 9+ circular dependency bug)
 
+### 1.5 Scaffold choice
+
+Two scaffold paths are supported. Pick one per module based on need:
+
+**Option A — Manual scaffold (default for L1/L2 domain modules)**
+- Hand-written `build.gradle.kts` applying a convention plugin
+- Source set layout created by hand
+- Best when the module needs custom source-set slicing or non-default conventions
+- Proceed through sections 2–6 as usual
+
+**Option B — `setup/create-module.sh` wrapper (default for new app modules)**
+- Wraps Google's `android create` with L0 convention-plugin post-processing
+- Produces an AGP 9+ compliant module whose `build.gradle.kts` applies `androidcommondoc.android.library` (or equivalent)
+- Run: `bash setup/create-module.sh --name <module-slug> --package <com.project.feature.slug>`
+- See `docs/gradle/gradle-patterns-agp9.md` for the generated layout and how it maps to L0 conventions
+- Post-scaffold: still run sections 2–6, but most items are already satisfied by the template
+
 ### 2. Registration
 - [ ] Added to `settings.gradle.kts`
 - [ ] Placed in correct section with comment group

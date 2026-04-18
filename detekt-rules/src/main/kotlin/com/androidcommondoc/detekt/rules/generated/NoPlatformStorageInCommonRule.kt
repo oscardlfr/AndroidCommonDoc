@@ -13,7 +13,8 @@ class NoPlatformStorageInCommonRule(config: Config) : Rule(
     override fun visitImportDirective(importDirective: KtImportDirective) {
         super.visitImportDirective(importDirective)
         val importPath = importDirective.importedFqName?.asString() ?: return
-        if (importPath.startsWith("android.content.SharedPreferences") || importPath.startsWith("android.database.sqlite")) {
+        if (importPath.startsWith("android.content.SharedPreferences") ||
+                importPath.startsWith("android.database.sqlite")) {
             report(
                 Finding(
                     Entity.from(importDirective),

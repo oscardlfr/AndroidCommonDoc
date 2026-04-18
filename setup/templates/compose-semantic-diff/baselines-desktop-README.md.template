@@ -1,0 +1,72 @@
+# `baselines/desktop/` — Compose Semantic Baselines
+
+Committed snapshots of `composeTestRule.onRoot().printToString()` for each
+first-class desktop screen. Used by the L0 `compose-semantic-diff` tool to
+catch the "tests pass but the app renders broken" regression class at CI
+time — memory-class `feedback_ui_validation_broken.md`.
+
+## Files
+
+One `.txt` per screen, named after the test's `screenName` argument:
+
+```
+baselines/desktop/
+├── sessions-empty.txt
+├── sessions-error.txt
+├── onboarding-welcome.txt
+└── workspace-picker.txt
+```
+
+The `.txt` is a plain indented tree — diff-friendly in git, human-readable
+in review. `Node #N` identifiers and object `@hashcode` suffixes are
+normalized at capture time so the file is stable across JVM runs.
+
+## Updating baselines (intentional UI change)
+
+```bash
+./gradlew captureUiBaselines
+git add baselines/desktop/
+git commit -m "chore(ui): refresh desktop semantic baselines for <reason>"
+```
+
+Always include baseline updates in the **same commit** as the UI change
+that caused them — a design-system PR that doesn't refresh baselines is
+caught by CI, not review.
+
+## Catching drift locally
+
+```bash
+./gradlew verifyUiBaselines
+# On drift, the failing test points at the changed screen and suggests
+# running the MCP CLI for structured findings:
+node <l0>/mcp-server/build/cli/compose-semantic-diff.js \
+  --baseline=baselines/desktop/sessions-empty.txt \
+  --current=build/ui-snapshots/sessions-empty.current.txt \
+  --screen-name=sessions-empty
+```
+
+## What gets diffed
+
+The L0 tool identifies semantic nodes by `testTag` first, falling back to
+`contentDescription` then `text`. Severity heuristic:
+
+| Change | Severity | Likely cause |
+|---|---|---|
+| Tagged element removed | HIGH | UiState branch missing a render, empty state logic bug |
+| Anonymous element removed | MEDIUM | Dynamic content vanished |
+| Tagged element added | MEDIUM | New component shipped; baseline needs refresh |
+| Anonymous element added | LOW | Transient tooltip / hover node |
+| `text` or `contentDescription` drift | MEDIUM | String-resource regression |
+| `role` / `actions` / extras drift | LOW | Interaction wiring changed |
+
+## Not in scope (yet)
+
+- iOS / macOS: DawSync uses SwiftUI there — separate future tooling.
+- Android: covered by L0 `android-layout-diff` (requires a live adb device).
+- Pixel-level visual regression: this tool compares semantics, not rendering.
+  Use screenshot-diff tooling if you need pixel fidelity.
+
+## References
+
+- L0 tool source: `mcp-server/src/tools/compose-semantic-diff.ts`
+- Schema origin: AndroidCommonDoc `.planning/phases/21-desktop-ui-validation/21-POC-FINDINGS.md`

@@ -4,7 +4,8 @@
 
 - **v1.0 MVP** -- Phases 1-4 (shipped 2026-03-13)
 - **v1.1 Hardening & Intelligence** -- Phases 5-12 (shipped 2026-03-14)
-- **v1.2 Documentation Coherence & Context Management** -- Phases 13-15 (in progress, includes inserted sub-phases)
+- **v1.2 Documentation Coherence & Context Management** -- Phases 13-18 (in progress, includes inserted sub-phases)
+- **v1.3 Ecosystem Integration & UI Validation** -- Phase 19 (planned 2026-04-17)
 
 ## Phases
 
@@ -406,6 +407,7 @@ Phases 13 through 16 in strict sequence. Phase 13 (audit) must complete before P
 | 16. Ecosystem Doc Completeness | v1.2 | 6/6 | Complete | 2026-03-16 |
 | 17. Documentation Structural Homogeneity | v1.2 | 5/7 | In Progress | -- |
 | 18. GSD v1 → GSD-2 Migration | v1.2 | 4/4 | Complete | 2026-03-17 |
+| 19. Android CLI Integration | v1.3 | 0/5 | Planned | -- |
 
 ### Phase 17: Documentation Structural Homogeneity
 
@@ -436,6 +438,31 @@ Plans:
 - [x] 18-03-PLAN.md -- Configure preferences + validate migrations + cleanup v1 + update CLAUDE.md [wave 3] (GSD2-CONFIG, GSD2-VALIDATE, GSD2-CLEANUP)
 - [x] 18-04-PLAN.md -- Verify DawSync track-E continuation + final human checkpoint [wave 4] (GSD2-VERIFY)
 
+### v1.3 Ecosystem Integration & UI Validation
+
+**Milestone Goal:** Integrate Google's Android CLI v0.7 (2026-04-16) into the L0 toolkit and propagate to L1/L2. Close DawSync's "tests pass but app broken" gap via runtime layout-diff validation. Add `android docs` as an upstream validation source alongside Context7. Adopt Google skills ecosystem via selective-bridge (no fork).
+
+- [ ] **Phase 19: Android CLI Integration** - Reverse-engineer `layout --diff` schema (POC), integrate `android docs` for upstream validation, wire `screen capture + layout --diff` into `ui-specialist` and `quality-gater`, bridge Google skills via selective reference (Option C), add narrow MCP bridge for stateful commands (`run`, `create`), Windows physical-device + CI Linux policy, ecosystem propagation via `/sync-l0` (planned 2026-04-17)
+
+### Phase 19: Android CLI Integration
+**Goal:** Integrate Google Android CLI v0.7 capabilities into L0 and propagate to L1/L2 — closes UI validation gap and adds official Android KB as upstream source.
+**Requirements**: AC-CLI-01, AC-CLI-02, AC-CLI-03, AC-CLI-04, AC-CLI-05, AC-CLI-06, AC-CLI-07, AC-CLI-08
+**Depends on:** Phase 18
+**Approved plan:** `C:\Users\34645\.claude\plans\partitioned-hugging-grove.md`
+**Plans:** 0/5 (4 plans + 1 POC)
+
+Plans:
+- [ ] 19-POC -- `layout --diff` schema reverse engineering (investigation only, no code) [wave 1, parallel with 19-01]
+- [ ] 19-01-PLAN.md -- Upstream Validation + Detekt Rules (LOW blast) [wave 1] (AC-CLI-01)
+- [ ] 19-02-PLAN.md -- UI Validation Pipeline — DawSync Unblocker (MEDIUM blast) [wave 2, depends 19-POC] (AC-CLI-02)
+- [ ] 19-03-PLAN.md -- Skills Bridge + Module Lifecycle + Setup Wizard (MEDIUM blast) [wave 3, depends 19-02] (AC-CLI-03, AC-CLI-04, AC-CLI-05)
+- [ ] 19-04-PLAN.md -- MCP Narrow Bridge + CI Workflow + Ecosystem Propagation (HIGH blast) [wave 4, depends 19-01, 19-02, 19-03] (AC-CLI-06, AC-CLI-07, AC-CLI-08)
+
+**Architectural Decisions (approved):**
+- Skills = Option C (selective bridge, reference Google skills by slug, no fork)
+- MCP bridge = narrow mixto (Bash + permissions for read-only; MCP tool only for `run` and `create`)
+- Windows policy = physical device via adb + CI Linux emulator (no cloud default)
+
 ---
 *Roadmap created: 2026-03-13*
 *v1.0 details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)*
@@ -444,3 +471,4 @@ Plans:
 *Phase 16 planned: 2026-03-16*
 *Phase 17 planned: 2026-03-16*
 *Phase 18 planned: 2026-03-16*
+*Phase 19 planned: 2026-04-17 (v1.3 milestone)*

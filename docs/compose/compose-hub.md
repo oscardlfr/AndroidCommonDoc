@@ -43,6 +43,7 @@ Compose Multiplatform resource management and UI patterns.
 | [compose-resources-usage](compose-resources-usage.md) | Runtime usage — strings, images, fonts, dual system |
 | [compose-resources-troubleshooting](compose-resources-troubleshooting.md) | Common issues: missing Res, duplicate registration, CI |
 | [compose-resources-configuration-setup](compose-resources-configuration-setup.md) | Setup and initialization |
+| [compose-layout-validation](compose-layout-validation.md) | Build-time Compose layout validation (Detekt rule + runtime layout-diff pipeline) |
 
 ## Key Rules
 

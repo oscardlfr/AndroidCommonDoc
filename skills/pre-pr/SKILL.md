@@ -131,6 +131,8 @@ fi
 Outdated critical deps (major/minor bumps) --> WARNING (reports for visibility).
 Does NOT block -- version updates are a separate task, not a PR gate.
 
+**OBS-C (catalog-freshness monitoring)**: for continuous surveillance beyond per-PR runs, schedule `/check-outdated` via the `/schedule` skill — e.g., weekly cron posts a finding to your inbox if new upstream versions landed. Ad-hoc `/check-outdated` remains available for deep dives.
+
 ### Step 5.8 — Agent template tests
 
 Run Vitest integration tests when agent templates, .claude/agents/, or mcp-server sources changed:

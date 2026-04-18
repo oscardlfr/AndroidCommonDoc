@@ -21,7 +21,7 @@ param(
     [string]$Flavor = "",
     [switch]$AutoRetry = $false,
     [switch]$ClearData = $false,
-    [switch]$ListOnly = $false
+    [Alias("List")][switch]$ListOnly = $false
 )
 
 $ErrorActionPreference = "Continue"

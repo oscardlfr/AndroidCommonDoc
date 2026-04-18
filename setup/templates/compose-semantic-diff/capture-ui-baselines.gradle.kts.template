@@ -1,0 +1,58 @@
+// Gradle tasks for Compose desktop UI baseline capture + verify.
+// Append to the root `build.gradle.kts` of a consumer project, OR copy the
+// content into a convention plugin under `build-logic/`.
+//
+// Contract:
+//   - `./gradlew captureUiBaselines`  — refresh committed baselines/desktop/*.txt
+//   - `./gradlew verifyUiBaselines`   — fail if any screen drifts (wired to `check`)
+//
+// Both tasks depend on `desktopTest` on every subproject that has it. They
+// run the same underlying tests; the difference is the `baseline.update`
+// flag passed as a JVM system property to the forked test VM.
+//
+// Trigger mechanics: we detect whether Gradle was invoked with
+// `captureUiBaselines` in the task list OR with `-Pbaseline.update=true`.
+// Either form works; neither is required for `verifyUiBaselines`.
+//
+// Consumer prerequisites:
+//   1. Capture helper in place at <consumer>/core/testing/src/desktopMain/kotlin/.../ComposeSemanticCapture.kt
+//   2. baselines/desktop/ directory exists (gitignore should NOT include it)
+//   3. build/ui-snapshots/ is git-ignored
+
+// Single source of truth for whether we are in update mode.
+val updateModeRequested = gradle.startParameter.taskNames.any {
+    it.substringAfterLast(":") == "captureUiBaselines"
+} || (findProperty("baseline.update") as? String) == "true"
+
+tasks.register("captureUiBaselines") {
+    group = "verification"
+    description = "Refresh committed Compose desktop semantic baselines. Equivalent to desktopTest -Pbaseline.update=true."
+    dependsOn(subprojects.mapNotNull { it.tasks.findByName("desktopTest") })
+}
+
+tasks.register("verifyUiBaselines") {
+    group = "verification"
+    description = "Verify committed Compose desktop baselines match current rendered trees."
+    dependsOn(subprojects.mapNotNull { it.tasks.findByName("desktopTest") })
+}
+
+// Wire verify into check so CI fails on drift without explicit opt-in.
+tasks.matching { it.name == "check" }.configureEach {
+    dependsOn("verifyUiBaselines")
+}
+
+// Propagate baseline.update + absolute paths to the forked test JVMs.
+// Absolute paths land baselines at the repo root regardless of which module's
+// test JVM captured them — avoids per-module `feature/*/baselines/desktop/`.
+val baselineRootDir = rootDir.resolve("baselines/desktop").absolutePath
+val currentRootDir = rootDir.resolve("build/ui-snapshots").absolutePath
+
+subprojects {
+    tasks.matching { it.name == "desktopTest" }.configureEach {
+        (this as? Test)?.let { test ->
+            test.systemProperty("baseline.update", updateModeRequested.toString())
+            test.systemProperty("baseline.root.dir", baselineRootDir)
+            test.systemProperty("current.root.dir", currentRootDir)
+        }
+    }
+}

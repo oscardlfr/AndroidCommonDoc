@@ -1,5 +1,22 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(android --version)",
+      "Bash(android --help)",
+      "Bash(android -h)",
+      "Bash(android info)",
+      "Bash(android docs search *)",
+      "Bash(android docs fetch *)",
+      "Bash(android screen capture *)",
+      "Bash(android screen resolve *)",
+      "Bash(android layout *)",
+      "Bash(android skills list *)",
+      "Bash(android skills find *)",
+      "Bash(android sdk list *)",
+      "Bash(adb devices)",
+      "Bash(adb -s * shell input *)",
+      "Bash(adb -s * shell am start *)"
+    ],
     "deny": [
       "Bash(rm -rf *)",
       "Bash(git push --force *)",
@@ -7,7 +24,17 @@
       "Bash(git checkout main)",
       "Bash(git checkout master)",
       "Bash(git merge * master)",
-      "Bash(git merge * main)"
+      "Bash(git merge * main)",
+      "Bash(android run *)",
+      "Bash(android create *)",
+      "Bash(android sdk install *)",
+      "Bash(android sdk remove *)",
+      "Bash(android sdk update *)",
+      "Bash(android skills add *)",
+      "Bash(android skills remove *)",
+      "Bash(android init)",
+      "Bash(android update)",
+      "Bash(android emulator *)"
     ]
   },
   "hooks": {

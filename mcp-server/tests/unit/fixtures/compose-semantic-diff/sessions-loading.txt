@@ -1,0 +1,10 @@
+Printing with useUnmergedTree = 'false'
+Node #25 at (l=0.0, t=0.0, r=1024.0, b=768.0)px
+IsTraversalGroup = 'true'
+ |-Node #26 at (l=0.0, t=0.0, r=1024.0, b=768.0)px, Tag: 'sessions_screen'
+   ContentDescription = '[Sessions]'
+    |-Node #27 at (l=0.0, t=0.0, r=1024.0, b=768.0)px, Tag: 'common_loading_indicator'
+      ContentDescription = '[Loading sessions]'
+       |-Node #28 at (l=488.0, t=360.0, r=536.0, b=408.0)px
+         ProgressBarRangeInfo = 'ProgressBarRangeInfo(current=0.0, range=0.0..0.0, steps=0)'
+         MergeDescendants = 'true'

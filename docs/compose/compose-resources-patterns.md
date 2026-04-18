@@ -74,4 +74,4 @@ Resources in `commonMain/composeResources/`, `generateResClass = always`, unique
 
 ---
 
-**Status**: Active | **Last Validated**: March 2026 with Compose Multiplatform 1.8.x / Kotlin 2.3.10
+**Status**: Active | **Last Validated**: April 2026 with Compose Multiplatform 1.10.0 / Kotlin 2.3.20

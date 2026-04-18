@@ -1,0 +1,100 @@
+# AndroidCommonDoc-recommended .gitignore for L1/L2 consumer projects
+# Copy to <consumer>/.gitignore (or append missing sections to an existing one).
+# Covers Gradle + KMP + Android + Compose + IDE + L0 skill-generated artifacts.
+
+# ── Build outputs ──────────────────────────────────────────────────────────
+build/
+.gradle/
+.kotlin/
+*/build/
+out/
+bin/
+
+# Konan cache (KMP)
+.konan/
+
+# Detekt + Kover
+*/build/reports/detekt/
+*/build/reports/kover/
+
+# ── L0 skill-generated artifacts (T-BUG-008) ───────────────────────────────
+# These are produced by AndroidCommonDoc skills and MUST NOT be committed.
+docs/api/                      # Dokka-generated KDocs (from dokka-convention)
+MODULE_MAP.md                  # codebase-mapper inventory output
+coverage-full-report.md        # coverage-full skill output
+coverage-gap-report.md         # coverage gap analysis
+coverage-build.log             # coverage run logs
+.androidcommondoc/audit-log.jsonl  # sync audit log (use merge=union, not ignore — but allow local edits)
+
+# ── Agent memory + session state (user-local, never commit) ────────────────
+.claude/agent-memory/
+.claude/launch.json
+.claude/settings.local.json
+.claude/agents/*/.cache/
+
+# ── Planning artifacts (per-user scratchpad — not project state) ───────────
+# .planning/ is a GSD/planning dir — per-user/per-session artifacts.
+# Consumers that use it as a shared artifact should REMOVE this line.
+.planning/
+.gsd/
+
+# ── Windows / cross-OS noise ───────────────────────────────────────────────
+*.stackdump                    # Git Bash crash dumps
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+nul                            # stray cmd.exe null redirect
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ── IDE ────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+
+# ── Local config (overrides — never commit) ────────────────────────────────
+local.properties
+*.local.properties
+.env
+.env.local
+
+# ── Keystores + secrets ────────────────────────────────────────────────────
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+
+# ── Android tooling ────────────────────────────────────────────────────────
+.kotlin
+captures/
+release/
+*.hprof
+
+# ── Node / MCP server (if consumer vends an MCP) ───────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+
+# ── Test outputs ───────────────────────────────────────────────────────────
+test-output/
+test-results/
+*.log
+
+# ── Compose snapshot outputs (L0 Phase 21 compose-semantic-diff) ───────────
+build/ui-snapshots/            # current-capture diff files — baselines/desktop/ IS committed

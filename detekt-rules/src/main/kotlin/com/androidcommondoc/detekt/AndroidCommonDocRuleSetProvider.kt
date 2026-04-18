@@ -15,6 +15,7 @@ import com.androidcommondoc.detekt.rules.NoRunCatchingInCoroutineScopeRule
 import com.androidcommondoc.detekt.rules.NoSilentCatchRule
 import com.androidcommondoc.detekt.rules.NoSuppressAnnotationsRule
 import com.androidcommondoc.detekt.rules.NoSystemCurrentTimeMillisRule
+import com.androidcommondoc.detekt.rules.generated.NoComposeToolingInProductionRule
 import com.androidcommondoc.detekt.rules.generated.NoCustomCryptoRule
 import com.androidcommondoc.detekt.rules.generated.NoDefaultDispatcherInTestsRule
 import com.androidcommondoc.detekt.rules.generated.NoMocksInCommonTestsRule
@@ -70,6 +71,7 @@ class AndroidCommonDocRuleSetProvider : RuleSetProvider {
             ::RequireConstantIdsRule,
             ::NoSuppressAnnotationsRule,
             // ── Generated rules ────────────────────────────────────────────────
+            ::NoComposeToolingInProductionRule,
             ::NoCustomCryptoRule,
             ::NoDefaultDispatcherInTestsRule,
             ::NoMocksInCommonTestsRule,

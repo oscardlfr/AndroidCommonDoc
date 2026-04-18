@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 27 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 42 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 27 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 46 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
@@ -25,7 +25,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
-- **MCP server** with 42 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
+- **MCP server** with 46 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
@@ -119,7 +119,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 | Skills | `.claude/skills/*/SKILL.md` | 59 |
 | Agents | `.claude/agents/*.md` | 39 |
 | Commands | `.claude/commands/*.md` | 52 |
-| **Total** | | **150 entries** |
+| **Total** | | **151 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -127,7 +127,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 150 L0 entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 151 L0 entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -439,7 +439,7 @@ Real-time pattern enforcement and context injection during AI-assisted developme
 
 ## Skills Reference
 
-59 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
+60 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
@@ -533,6 +533,7 @@ These three skills are the recommended way to start any session. They discover a
 | `/work <task>` | **Primary entry point.** Smart task routing -- reads agent frontmatter (domain+intent), matches your task description, and delegates to the best agent or skill. Extensible: add new agents and `/work` finds them |
 | `/init-session` | Project context dashboard -- lists available agents, skills, modules, business docs, and recent activity. Run this when you open a project for the first time |
 | `/resume-work` | CEO/CTO session resume -- department-level status across your project (engineering, product, content). Picks up where you left off |
+| `/android-skills-consume` | **Reference.** Bridge doc for Google's Android Skills ecosystem (`navigation-3`, `edge-to-edge`, `r8-analyzer`, `agp-9-upgrade`, `migrate-xml-views-to-jetpack-compose`, `play-billing-library-version-upgrade`, `android-cli`) — install via `android skills add`. Per-layer applicability in `.planning/intel/android-skills-catalog.md` |
 
 ### L0 Maintenance Skills
 
@@ -752,7 +753,7 @@ This eliminates the "agent explores for 5 minutes before planning" problem. The 
 
 ## MCP Server
 
-42 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
+46 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
 **22 tools** work in any project. **17 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
 
@@ -812,7 +813,7 @@ These tools operate on AndroidCommonDoc's own documentation, vault, and toolkit 
 
 ## Reusable CI Workflows
 
-8 `workflow_call` workflows any Android or KMP project can reference:
+9 `workflow_call` workflows any Android or KMP project can reference:
 
 ```yaml
 jobs:
@@ -853,6 +854,9 @@ jobs:
     with:
       project_root: "."
       fail_on_outdated: false   # non-blocking by default
+
+  copilot-parity:
+    uses: <org>/AndroidCommonDoc/.github/workflows/reusable-copilot-parity.yml@master
 ```
 
 See `setup/github-workflows/ci-template.yml` for a full consumer project template.
@@ -1009,7 +1013,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (150 entries,    |   |
+                   |  | SKILL.md |    | (151 entries,    |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -1042,7 +1046,7 @@ AndroidCommonDoc/
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
 |   +-- */SKILL.md          # 59 canonical skill definitions
-|   +-- registry.json       # L0 registry (150 entries, SHA-256 hashes)
+|   +-- registry.json       # L0 registry (151 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
@@ -1051,9 +1055,9 @@ AndroidCommonDoc/
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
-+-- mcp-server/             # MCP server (42 tools, 3 prompts, dynamic resources)
++-- mcp-server/             # MCP server (46 tools, 3 prompts, dynamic resources)
 |   +-- src/
-|   |   +-- tools/          # 42 tools: validation, analysis, metrics, audit, sync, vault, doc integrity
+|   |   +-- tools/          # 46 tools: validation, analysis, metrics, audit, sync, vault, doc integrity
 |   |   +-- types/          # Shared types (ValidationResult, AuditFinding, FindingsReport)
 |   |   +-- utils/          # Utilities (rate-limiter, jsonl-reader, gradle-parser, xml-report-reader, finding-dedup, logger, doc-scoring)
 |   |   +-- generation/     # Detekt rule parser, emitters, config-emitter
@@ -1099,7 +1103,8 @@ AndroidCommonDoc/
 |   +-- reusable-audit-report.yml            # workflow_call: quality audit HTML report
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
-+-- docs/                   # 15 hub docs, 88+ sub-docs, 16 guides, 12 agent workflow docs
+|   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
++-- docs/                   # 15 hub docs, 88+ sub-docs, 17 guides, 12 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/
@@ -1191,7 +1196,7 @@ All skills accept `--coverage-tool jacoco|kover|auto|none` and `--exclude-covera
 | Git | `/test-changed`, `/pre-pr`, `/git-flow` | Pre-installed on most systems |
 | Gradle | All build/test scripts | Wrapper included in projects |
 | JaCoCo or Kover | `/coverage`, `/test-full` | JaCoCo built-in; Kover via `libs.versions.toml` |
-| JDK 17+ | All Gradle scripts | [sdkman](https://sdkman.io/) or [Adoptium](https://adoptium.net/) |
+| JDK 21+ (recommended) / 17+ (minimum) | All Gradle scripts. **KMP projects with AGP 9 + Kotlin 2.3+ require JDK 21** — using JDK 17 raises `UnsupportedClassVersionError` on most modules. Either (a) set `JAVA_HOME` to a JDK 21 install, or (b) configure a Gradle Java toolchain in your convention plugin (see `docs/guides/jdk-toolchain.md`). | [sdkman](https://sdkman.io/) or [Adoptium](https://adoptium.net/) |
 | Node.js 18+ | MCP server, CLI monitoring | [nodejs.org](https://nodejs.org/) |
 | Trivy | `/sbom-scan` | [trivy.dev](https://trivy.dev/) |
 

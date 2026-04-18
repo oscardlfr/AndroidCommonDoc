@@ -555,6 +555,70 @@ Model profile: balanced
 
 ---
 
+### Wizard W9 — Android CLI detection (projects targeting Android)
+
+Skip entirely if the project is not an Android or KMP-with-Android build (detected via presence of `android { ... }` in any `build.gradle.kts` or KMP `androidTarget()` declaration).
+
+Otherwise, run non-blocking environment detection:
+
+1. **Binary on PATH**
+   ```bash
+   if command -v android >/dev/null 2>&1; then
+     version="$(android --version 2>/dev/null || echo '?')"
+     echo "[green] Android CLI: $version"
+   else
+     echo "[yellow] Android CLI not found — runtime UI validation unavailable."
+     echo "         Install: docs/guides/getting-started/09-android-cli-windows.md"
+   fi
+   ```
+
+2. **`ANDROID_HOME` env var**
+   ```bash
+   if [[ -n "${ANDROID_HOME:-}" ]]; then
+     echo "[green] ANDROID_HOME=$ANDROID_HOME"
+   else
+     echo "[yellow] ANDROID_HOME not set — some Android tooling paths may fail."
+   fi
+   ```
+
+3. **Authorized adb device (optional — Windows only warn)**
+   If `adb` is on PATH:
+   ```bash
+   count="$(adb devices 2>/dev/null | grep -c -E '\sdevice$' || true)"
+   if [[ "$count" -ge 1 ]]; then
+     echo "[green] adb devices: $count authorized"
+   elif [[ "$(uname -s)" == *NT* ]] || [[ "${OS:-}" == "Windows_NT" ]]; then
+     echo "[yellow] No authorized adb device — UI validation will fall back to CI only."
+     echo "         (Windows emulator is disabled in Android CLI v0.7; use a physical device.)"
+   else
+     echo "[info] No adb devices connected — local UI validation disabled."
+   fi
+   ```
+
+**Important:** Wizard W9 is **always non-blocking**. Missing CLI or device is a yellow warning, never a setup failure. The `android-layout-diff` MCP tool gracefully returns `cli_missing` / `adb_offline` errors with install instructions when invoked without those dependencies.
+
+The detection is also surfaced by `/setup --verify-only`:
+
+```
+Android CLI:
+  binary:       0.7.15222914 [ok]
+  ANDROID_HOME: C:/Users/.../Sdk [ok]
+  adb devices:  1 authorized [ok]
+```
+
+vs.
+
+```
+Android CLI:
+  binary:       not found [warn]
+  → runtime UI validation via android-layout-diff will be unavailable
+  → see docs/guides/getting-started/09-android-cli-windows.md
+```
+
+See `skills/android-skills-consume/SKILL.md` for the Google skills ecosystem integration (Option C selective-bridge).
+
+---
+
 ### Step 7 — Verification checklist
 
 ```bash

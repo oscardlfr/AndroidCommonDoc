@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generated": "2026-04-10T18:07:35.454Z",
-  "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
+  "generated": "2026-04-18T11:59:17.316Z",
+  "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc\\.claude\\worktrees\\brave-visvesvaraya-77a0f2",
   "entries": [
     {
       "name": "accessibility",
@@ -23,6 +23,47 @@
         ],
         "copilot": true,
         "copilot-template-type": "behavioral"
+      }
+    },
+    {
+      "name": "android-skills-consume",
+      "type": "skill",
+      "path": "skills/android-skills-consume/SKILL.md",
+      "description": "Bridge to Google's Android CLI skill ecosystem. Documents how to install Google's official Android skills via `android skills add` and how they co-exist with L0 skills without conflict.",
+      "category": "ecosystem",
+      "tier": "extended",
+      "hash": "sha256:b0af5d3cf81740f1b578e102b9290d9874a259202b8389b732ba6e66058568b6",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "android-skills-consume",
+        "description": "Bridge to Google's Android CLI skill ecosystem. Documents how to install Google's official Android skills via `android skills add` and how they co-exist with L0 skills without conflict.",
+        "allowed-tools": [
+          "Bash",
+          "Read",
+          "Glob"
+        ],
+        "copilot": true,
+        "copilot-template-type": "reference",
+        "scope": "l0",
+        "category": "ecosystem",
+        "slug": "android-skills-consume",
+        "status": "active",
+        "layer": "L0",
+        "version": 1,
+        "last_updated": "2026-04-17",
+        "sources": [
+          {
+            "url": "https://github.com/android/skills",
+            "type": "github-repo",
+            "tier": 1,
+            "license": "Apache-2.0"
+          },
+          {
+            "url": "https://developer.android.com/tools/agents/android-skills",
+            "type": "doc-page",
+            "tier": 2
+          }
+        ]
       }
     },
     {
@@ -721,7 +762,7 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ba6ef0b3b76dfe9367d8ecdc74f66f8468fc27a5055ba33b9aaab2ffe18d267d",
+      "hash": "sha256:cee66a11ee17af970e66546fce8297039dac25fa8f1f1ef01a3540ccae68a1f3",
       "dependencies": [
         "scripts/sh/scan-secrets.sh",
         "scripts/sh/validate-agent-templates.sh",
@@ -958,7 +999,7 @@
       "description": "Interactive wizard to fully configure a new or existing project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Creates l0-manifest.json, syncs selected assets, and verifies the result. Bilingual output (EN + ES).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:3d1daf43f9310db15f63988270dd4545575aa36c77237fc218ede8c549ea5a28",
+      "hash": "sha256:57012119c861e670203d189ea17736387fb5dc38aab01bf1199c22ca11885e4d",
       "dependencies": [
         "scripts/sh/sync-gsd-skills.sh",
         "scripts/sh/sync-gsd-agents.sh",
@@ -1038,7 +1079,7 @@
       "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:097042f426825c2eaa6bb8c3430416fd90e65f0a3cb3a11f547ab2cec7fee595",
+      "hash": "sha256:33bfa1d3beaecd7ad11da83e6c1893fbc8dca829ffc098aa650d00f8da5a29ae",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
@@ -1232,7 +1273,7 @@
       "description": "Validate pattern docs against upstream official documentation. Runs Layer 1 deterministic assertions (api_present, deprecation_scan, etc.) from validate_upstream frontmatter. Use when checking if docs are still accurate.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:05671ca268a0548d474c4636917bff8a086df0c478dbab05f4d2fd7e94c8d4e4",
+      "hash": "sha256:12475e71d6fc62061bf02b7b9da7c443302383f281c0d234764f61d0ec23346f",
       "dependencies": [],
       "frontmatter": {
         "name": "validate-upstream",
@@ -1385,7 +1426,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:fb77527ad85e0c724e6e182fee7b72fbffa802124162124d59f3733d55f186e1",
+      "hash": "sha256:b517bf8b6457f8012f6081a56e8ff4e631a1a4d35abf406362fe509aabe502bc",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1415,7 +1456,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:08c1ee382753c08e05f90180d2c6e726770ab152f740302b950c6a38cc68f5da",
+      "hash": "sha256:e0db19df3e7de8ee7eac4201bb69bd1e8224f88d37839c7a40274df6d514b038",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1444,7 +1485,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:431c5d1878614101b078315d6e192bae800f9381e4ea0629dc9e23b95927889f",
+      "hash": "sha256:84b198b6eb0ee01b8b61515f7e0a7f428ae139879b919862e3922a631e9338e2",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1558,12 +1599,12 @@
       "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:24b272f50c0ec0cda6e825f56ae89ab74cc8bc401d04c30f14af68601ed60338",
+      "hash": "sha256:38b6caf5761adfff9a4b3092426c7ee66e1807afacec323e076bf0d8961c3c88",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
         "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
-        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "tools": "Read, Grep, Glob, Bash, SendMessage, WebFetch",
         "model": "sonnet",
         "domain": "infrastructure",
         "intent": [
@@ -1573,7 +1614,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "2.4.0"
+        "template_version": "2.5.0"
       }
     },
     {
@@ -1952,7 +1993,7 @@
       "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6017cfe5c4a088eb8c6f54d0e5d34e50f44634937a6656f7c10063f87172d3b4",
+      "hash": "sha256:95465e41aee019f94a1d76667760f1feb910dc160397ed851756746f12d7aeeb",
       "dependencies": [],
       "frontmatter": {
         "name": "module-lifecycle",
@@ -2007,7 +2048,7 @@
       "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:de2adfed088431a66de1bce92fcd86579350330666ea27648e4a0fb97e53dc66",
+      "hash": "sha256:9b556b3ed179308072261613b525891205936a444ac0e5f8e8c4c333ccc86d1e",
       "dependencies": [],
       "frontmatter": {
         "name": "platform-auditor",
@@ -2177,7 +2218,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:098630faa966f32ce4472ba4965600c32cc00a7e75ce9da2ee3d53d156b3c061",
+      "hash": "sha256:48d6fad1b91efcc398cddb11d925217909c0dd202620b7525674d375dcbb2160",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2368,7 +2409,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:4280efec2414bca778a747485044447fc941b33b987816b45e022d08792db62c",
+      "hash": "sha256:9266fb797e951eae6da3cb5571bf011427929322e80a09de8bbfe97337319a74",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
