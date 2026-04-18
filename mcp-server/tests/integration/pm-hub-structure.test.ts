@@ -81,9 +81,12 @@ describe('PM template hub pointers', () => {
 // ---------------------------------------------------------------------------
 
 describe('PM template line count post-refactor', () => {
-  it('project-manager.md is at most 210 lines', () => {
+  it('project-manager.md is at most 225 lines', () => {
+    // Bumped from 210 → 225 when T-BUG-010 (WHO-READS-THIS warning block) was
+    // added. The warning is critical to prevent dual-PM spawn bugs and cannot
+    // be moved to a sub-doc (team-lead must see it immediately on first read).
     const lines = fs.readFileSync(PM_TEMPLATE, 'utf-8').split('\n');
-    expect(lines.length).toBeLessThanOrEqual(210);
+    expect(lines.length).toBeLessThanOrEqual(225);
   });
 });
 
