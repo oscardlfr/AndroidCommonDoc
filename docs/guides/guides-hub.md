@@ -30,6 +30,7 @@ Setup, configuration, and authoring guides for the L0/L1/L2 ecosystem.
 | [audit-suppressions](audit-suppressions.md) | Suppress known false positives in audit findings — schema, expiry, prefix matching |
 | [upstream-validation](upstream-validation.md) | How to add `validate_upstream` assertions to pattern docs for automated upstream checks |
 | [agent-tool-permissions](agent-tool-permissions.md) | Which `android` CLI subcommands agents invoke via Bash (scoped permissions) vs. the narrow `android-cli-bridge` MCP tool (stateful + validated) |
+| [generate-api-docs](generate-api-docs.md) | End-to-end pipeline: KDoc → `dokka-markdown-plugin` → `docs/api/` → MCP tools + agents |
 
 ## Key Rules
 
