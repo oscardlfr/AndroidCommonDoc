@@ -53,6 +53,7 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
         val doc = page.documentables.firstOrNull()?.documentation?.values?.firstOrNull()
         val descTag = doc?.children?.filterIsInstance<Description>()?.firstOrNull()?.root
         val description = KdocRenderer.firstSentence(descTag).ifEmpty { symbolName }
+        val fullDescription = KdocRenderer.renderDescription(descTag)
         val memberEntries = page.children.filterIsInstance<MemberPageNode>()
             .map { child -> Pair(child.name, SlugDeriver.toKebab(child.name) + ".md") }
         val memberStateEntries = mutableListOf<KdocStateEntry>()
@@ -61,6 +62,11 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
                 renderMember(child, moduleName, packageName, symbolName, moduleDir)
                     ?.let { (_, state) -> memberStateEntries += state }
             }
+        val nestedStateEntries = mutableListOf<KdocStateEntry>()
+        page.children.filterIsInstance<ClasslikePageNode>().forEach { nestedPage ->
+            renderNestedClasslike(nestedPage, moduleName, packageName, symbolName, moduleDir)
+                ?.let { nestedStateEntries += it }
+        }
         val platforms = page.documentables.firstOrNull()?.sourceSets?.map { it.displayName }?.toSet() ?: emptySet()
         val platformInfo = PlatformLabeler.label(platforms)
         val bodyForHash = "# $symbolName\n${platformInfo?.bodyLine ?: ""}"
@@ -86,6 +92,7 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
             symbolName = symbolName,
             platformInfo = platformInfo,
             constructorSignature = null,
+            description = fullDescription,
             members = memberEntries,
             frontmatter = frontmatter,
         ))
@@ -93,7 +100,7 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
         val classlikeState = KdocStateEntry(slug, moduleName + "/" + SlugDeriver.fileBasename(symbolName) + ".md", contentHash)
         return Pair(
             HubEntry(symbolName, SlugDeriver.fileBasename(symbolName) + ".md", description),
-            listOf(classlikeState) + memberStateEntries,
+            listOf(classlikeState) + memberStateEntries + nestedStateEntries,
         )
     }
 
@@ -137,7 +144,6 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
         )
         val content = TypeBWriter.write(TypeBContext(
             moduleName = moduleName,
-            packageName = packageName,
             parentClassName = parentClassName,
             symbolName = symbolName,
             platformInfo = platformInfo,
@@ -191,6 +197,58 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
         is Bound -> renderBound(projection)
         is Star -> "*"
         else -> projection.toString()
+    }
+
+    private fun renderNestedClasslike(
+        page: ClasslikePageNode,
+        moduleName: String,
+        packageName: String,
+        parentClassName: String,
+        moduleDir: File,
+    ): KdocStateEntry? {
+        val symbolName = page.name
+        val parentKebab = SlugDeriver.toKebab(parentClassName)
+        val nestedKebab = SlugDeriver.toKebab(symbolName)
+        val slug = "${SlugDeriver.normalizeModule(moduleName)}--$parentKebab-$nestedKebab"
+        val parentSlug = SlugDeriver.deriveForClass(parentClassName, moduleName)
+        val doc = page.documentables.firstOrNull()?.documentation?.values?.firstOrNull()
+        val descTag = doc?.children?.filterIsInstance<Description>()?.firstOrNull()?.root
+        val description = KdocRenderer.firstSentence(descTag).ifEmpty { symbolName }
+        val fullDescription = KdocRenderer.renderDescription(descTag)
+        val platforms = page.documentables.firstOrNull()?.sourceSets?.map { it.displayName }?.toSet() ?: emptySet()
+        val platformInfo = PlatformLabeler.label(platforms)
+        val bodyForHash = "# $symbolName\n${platformInfo?.bodyLine ?: ""}"
+        val contentHash = ContentHasher.hash(bodyForHash)
+        val lastUpdated = YearMonth.now().toString()
+        val scopeList = mutableListOf("api", moduleName).apply {
+            platformInfo?.frontmatterList?.let { addAll(it) }
+        }
+        val frontmatter = FrontmatterFields(
+            scope = scopeList,
+            sources = listOf(moduleName),
+            slug = slug,
+            layer = "L1",
+            description = description,
+            lastUpdated = lastUpdated,
+            contentHash = contentHash,
+            parent = parentSlug,
+            platforms = platformInfo?.frontmatterList,
+        )
+        val memberEntries = page.children.filterIsInstance<MemberPageNode>()
+            .map { child -> Pair(child.name, SlugDeriver.toKebab(child.name) + ".md") }
+        val content = TypeAWriter.write(TypeAContext(
+            moduleName = moduleName,
+            packageName = packageName,
+            symbolName = symbolName,
+            platformInfo = platformInfo,
+            constructorSignature = null,
+            description = fullDescription,
+            members = memberEntries,
+            frontmatter = frontmatter,
+        ))
+        val filename = SlugDeriver.fileBasename(symbolName) + ".md"
+        File(moduleDir, filename).writeText(content, Charsets.UTF_8)
+        return KdocStateEntry(slug, moduleName + "/" + filename, contentHash)
     }
 
     private fun buildHubContent(moduleName: String, entries: List<HubEntry>): String {

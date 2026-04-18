@@ -16,7 +16,7 @@ parent: sample-core-api-hub
 ---
 
 
-[sample-core](../../sample-core-hub.md) / [com.sample.core](../com.sample.core.md) / parseJson
+[sample-core](../../sample-core-hub.md) / parseJson
 
 # parseJson
 

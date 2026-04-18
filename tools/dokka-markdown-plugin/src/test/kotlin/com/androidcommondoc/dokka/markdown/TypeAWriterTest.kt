@@ -22,12 +22,14 @@ class TypeAWriterTest {
         members: List<Pair<String, String>> = emptyList(),
         platformInfo: PlatformInfo? = null,
         constructorSignature: String? = null,
+        description: String = "",
     ) = TypeAContext(
         moduleName = "sample",
         packageName = "com.sample",
         symbolName = "MyClass",
         platformInfo = platformInfo,
         constructorSignature = constructorSignature,
+        description = description,
         members = members,
         frontmatter = minimalFrontmatter(),
     )
@@ -50,8 +52,7 @@ class TypeAWriterTest {
         @Test
         fun `write_containsBreadcrumb`() {
             val result = TypeAWriter.write(minimalCtx())
-            assertTrue(result.contains("[sample]"))
-            assertTrue(result.contains("/ [com.sample]"))
+            assertTrue(result.contains("[sample](../../sample-hub.md)"))
             assertTrue(result.contains("/ MyClass"))
         }
 
@@ -98,6 +99,22 @@ class TypeAWriterTest {
         fun `write_noMembers_noMembersSection`() {
             val result = TypeAWriter.write(minimalCtx(members = emptyList()))
             assertTrue(!result.contains("## Members"))
+        }
+    }
+
+    @Nested
+    inner class Description {
+
+        @Test
+        fun `write_withDescription_emitsDescriptionBeforeMembers`() {
+            val result = TypeAWriter.write(minimalCtx(description = "A useful class."))
+            assertTrue(result.contains("A useful class."))
+        }
+
+        @Test
+        fun `write_emptyDescription_descriptionAbsent`() {
+            val result = TypeAWriter.write(minimalCtx(description = ""))
+            assertTrue(!result.contains("A useful class."))
         }
     }
 
