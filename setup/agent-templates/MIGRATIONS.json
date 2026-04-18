@@ -224,6 +224,11 @@
         "date": "2026-04-06",
         "breaking": false,
         "note": "Backfill: version 2.4.0 present in template, missing from registry"
+      },
+      "2.5.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-002 + T-BUG-005: add Rule #7 PLAN.md freshness validation (cross-check with PM before returning state data). Add WebFetch to tools. Promote Context7 + WebFetch external-doc fallback section. Architects now route all external lookups here (no more Bash curl)."
       }
     },
     "doc-updater": {
