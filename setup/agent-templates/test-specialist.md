@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.7.0"
+template_version: "1.8.0"
 memory: project
 skills:
   - test
@@ -258,6 +258,20 @@ When invoked as part of `/full-audit`, emit a structured JSON block between mark
 ]
 <!-- FINDINGS_END -->
 ```
+
+## Bash Search Anti-pattern (FORBIDDEN — T-BUG-015)
+
+You ask your reporting architect for patterns via SendMessage — you do NOT contact context-provider directly. **You also may NOT use Bash to search/match patterns yourself**:
+
+**FORBIDDEN bash commands**:
+- `grep`, `rg`, `ripgrep`, `ag`, `ack`, `find`, `fd`
+- `awk`/`sed` when used for pattern filtering
+
+These bypass the architect-chain (you → architect → context-provider). Using `bash grep` skips your architect AND context-provider, leaving the team without a record of what knowledge you're operating on.
+
+**CORRECT path** (architect-mediated): SendMessage to your reporting architect with the pattern lookup request. Wait for architect to respond — architect SendMessages context-provider, then forwards result to you. The architect chain is the ONE allowed path.
+
+Why: L2 session (2026-04-18) caught architects bypassing context-provider via `Bash grep`. Devs bypassing too compounds the gap — by the time team-lead audits, no one knows what was actually searched. This anti-pattern keeps the chain intact.
 
 ## Output Format
 

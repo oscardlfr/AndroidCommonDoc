@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
-template_version: "1.12.0"
+template_version: "1.13.0"
 skills:
   - test
   - extract-errors
@@ -95,6 +95,21 @@ SendMessage(to="context-provider",
 
 Why: context-provider has Context7 (curated) + WebFetch (raw) + citation enforcement. Centralizing external lookups keeps the session's external-doc provenance auditable.
 
+
+### Bash Search Anti-pattern (FORBIDDEN — T-BUG-015)
+
+`Bash` is in your tools for git/gradle/test invocation only. **You may NOT use it for pattern searching:**
+
+**FORBIDDEN bash commands**:
+- `grep`, `rg`, `ripgrep`, `ag`, `ack` — text/code pattern search
+- `find`, `fd` — file pattern search
+- `awk`, `sed` (when used to filter/match patterns)
+
+These bypass the L0 PR #40 mechanical enforcement (Grep/Glob removed from your frontmatter to force context-provider delegation). Using `bash grep` defeats the design.
+
+**CORRECT path**: SendMessage to context-provider with the search query (`summary="search: <topic>"`, `message="Find <pattern> in <scope>. Return <what you need>."`).
+
+Why: L2 DawSync session (2026-04-18) caught arch-platform using `Bash grep` for pattern audits in Wave 0.7. Mechanical enforcement (no Grep/Glob in frontmatter) was bypassed via Bash. This anti-pattern closes that gap behaviourally.
 
 ### Scope Validation Gate (MANDATORY)
 

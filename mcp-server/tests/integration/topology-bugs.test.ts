@@ -337,6 +337,65 @@ describe("T-BUG-013: /pre-pr invokes catalog-coverage-check.sh (no more unwired 
   });
 });
 
+// ── T-BUG-015: Bash search anti-pattern across architects, devs, and PM ───
+
+describe("T-BUG-015: Bash search anti-pattern + Search Dispatch Protocol", () => {
+  // Architects must explicitly forbid Bash grep/find/rg/etc.
+  for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
+    it(`${name} has Bash Search Anti-pattern (FORBIDDEN bash grep/find/rg) — T-BUG-015`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toMatch(/T-BUG-015/);
+        expect(content).toMatch(/Bash Search Anti-pattern/);
+        // Specific forbidden commands (the ones that bypass PR #40)
+        expect(content).toMatch(/grep/);
+        expect(content).toMatch(/find/);
+        expect(content).toMatch(/rg|ripgrep/);
+        // Must point to context-provider as the correct path
+        expect(content).toMatch(/SendMessage.*context-provider|context-provider.*SendMessage/);
+        // Must reference the bypass it closes
+        expect(content).toMatch(/PR #40|mechanical enforcement|bypass/i);
+      }
+    });
+  }
+
+  // Devs must reinforce architect-chain + forbid Bash search
+  for (const name of [
+    "test-specialist.md",
+    "ui-specialist.md",
+    "data-layer-specialist.md",
+    "domain-model-specialist.md",
+  ]) {
+    it(`${name} has Bash Search Anti-pattern + architect-chain reinforcement — T-BUG-015`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toMatch(/T-BUG-015/);
+        expect(content).toMatch(/Bash Search Anti-pattern/);
+        // Same forbidden bash commands
+        expect(content).toMatch(/grep/);
+        expect(content).toMatch(/find/);
+        // Architect-chain reinforcement: dev → architect → context-provider
+        expect(content).toMatch(/architect.chain|reporting architect|via.*architect|architect.*context-provider/i);
+        // Devs must NOT contact context-provider directly (existing rule reinforced)
+        expect(content).toMatch(/NOT contact context-provider directly|reporting architect/i);
+      }
+    });
+  }
+
+  // PM has Search Dispatch Protocol
+  it("project-manager.md has Search Dispatch Protocol — T-BUG-015", () => {
+    const { claude, template } = readAgent("project-manager.md");
+    for (const content of [claude, template]) {
+      expect(content).toMatch(/T-BUG-015/);
+      expect(content).toMatch(/Search Dispatch Protocol/);
+      // Must mandate context-provider as FIRST step
+      expect(content).toMatch(/context-provider FIRST|SendMessage to context-provider.*Wait|Route through context-provider/i);
+      // Must forbid "use grep" instructions to architects
+      expect(content).toMatch(/use grep|bash-grep|FORBIDDEN.*grep/i);
+    }
+  });
+});
+
 // ── T-BUG-014: L0 CI template catches apple-side regressions ──────────────
 
 describe("T-BUG-014: L0 CI template runs metadata compile + check --continue", () => {

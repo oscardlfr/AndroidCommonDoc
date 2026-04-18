@@ -1427,7 +1427,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4a6b82b804063e5e032deca95f9f74e511f7213c77ed3f10bc026ea9f59628b5",
+      "hash": "sha256:a66a9fc7c44149455e21af0d3d7f8d9200bbdd1bfff9db342d06abd44da374f2",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1457,7 +1457,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1f952c4f3061f4a25acd09edff1f0eb3e681d4c003e95ff5e809f29584dbf294",
+      "hash": "sha256:f8b2dcca979377f9386fd3de86cd4c942c662930757d8529eee3b378a274cf1c",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1486,7 +1486,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:21f0c913cc038442479f234107c99eae54afc9f213831f091ef806902ac61178",
+      "hash": "sha256:a839588a18228949b92503507f9be7e8b7ed84b8a516063c18f38dd0ef95cf09",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1657,7 +1657,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e0da6ffbcd1e9e3cd4cc17a749976f50e26b84620cfac4e483d60eee365cf7e5",
+      "hash": "sha256:c3b50acb1682e7cf443172e6db24b6c1017e2fee39713b5582c7f6127550ade9",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -1828,7 +1828,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:0388cb49746d2d44b21da83d5c6a748d644a3da245b27541768d2fe4a51dfcb7",
+      "hash": "sha256:c122e97cbf857dff00c1d75f8ae1459f0054423a7337950bbd486fc935bd0470",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2162,7 +2162,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f05ad42a74b87eb3d27e31d55447040fe8b10d87410a4dd22a5c9b759057d996",
+      "hash": "sha256:b7d628b413a734ea66f8d8da5c4f780f003e5390c070a4ade24d4f8de1d899ac",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
@@ -2373,7 +2373,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:7905cbd70fbe590939d3a1ddb24d4b1f48ebf77f17004dd0d44a1675b71f039c",
+      "hash": "sha256:246b20063755d5b5c61805fcf6e130259dddc552301eff9d51665824efcd3411",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2410,7 +2410,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:9266fb797e951eae6da3cb5571bf011427929322e80a09de8bbfe97337319a74",
+      "hash": "sha256:71adbf212e018c27142edb3348773027494cca859da58f8b391b02d5b740d269",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",

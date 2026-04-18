@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.15.0"
+template_version: "1.16.0"
 skills:
   - test
   - test-full-parallel
@@ -78,6 +78,10 @@ SendMessage(to="context-provider",
 
 Why: context-provider has Context7 (curated) + WebFetch (raw) + citation enforcement. Centralizing external lookups keeps the session's external-doc provenance auditable.
 
+
+### Bash Search Anti-pattern (FORBIDDEN — T-BUG-015)
+
+**`Bash` is for git/gradle/test only. You may NOT use it for pattern searching.** FORBIDDEN: `grep`, `rg`, `ripgrep`, `ag`, `ack`, `find`, `fd`, `awk`/`sed` (for pattern filtering). These bypass L0 PR #40 (mechanical Grep/Glob removal). **CORRECT path**: SendMessage to context-provider with `summary="search: <topic>"`, `message="Find <pattern> in <scope>. Return <what you need>."`. Full rationale + L2 evidence: `docs/agents/arch-topology-protocols.md#3-bash-search-anti-pattern-t-bug-015`.
 
 ### Scope Validation Gate (MANDATORY)
 

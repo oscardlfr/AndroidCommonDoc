@@ -76,6 +76,37 @@ L2 debug session (2026-04-18) caught `arch-platform` routing a Wave 0 verdict to
 
 This is different from OBS-A (T-BUG-011). OBS-A guards WHAT you propose. Reporter Protocol guards WHERE you send. A violation of either silently erodes coordination — OBS-A wastes PM cycles on invalid requests; Reporter Protocol drops reports into a dead mailbox.
 
+## 3. Bash Search Anti-pattern (T-BUG-015)
+
+### Rule (hard-stop)
+
+`Bash` is in your tools for **git/gradle/test invocation only**. You may NOT use it for pattern searching.
+
+**FORBIDDEN bash commands**:
+- `grep`, `rg`, `ripgrep`, `ag`, `ack` — text/code pattern search
+- `find`, `fd` — file pattern search
+- `awk`, `sed` (when used to filter/match patterns)
+
+These bypass the L0 PR #40 mechanical enforcement (Grep/Glob removed from architect frontmatter to force context-provider delegation). Using `bash grep` defeats the design — the rule intent was "no pattern searching from architects", and the tools removal was one mechanism. `Bash` is the leak.
+
+### Correct path
+
+```
+SendMessage(to="context-provider",
+  summary="search: <topic>",
+  message="Find <pattern> in <scope>. Return <what you need>.")
+```
+
+context-provider has Read/Grep/Glob/Bash and is the curated knowledge layer. Architects pose questions; context-provider answers.
+
+### Why this exists
+
+L2 DawSync session (2026-04-18) caught arch-platform using `Bash grep` for pattern audits in Wave 0.7. The L0 PR #40 mechanical enforcement (Grep/Glob removed from architect frontmatter) was bypassed via Bash. Mechanical removal closed one door; Bash was the open window. This anti-pattern shuts the window.
+
+The same pattern applies to dev specialists (test-specialist, ui-specialist, data-layer-specialist, domain-model-specialist) — devs ask their reporting architect, who asks context-provider. Devs running `bash grep` bypass the architect chain entirely, leaving the team without an audit trail.
+
+PM (team-lead) has its own corollary: the **Search Dispatch Protocol** — when a user task involves pattern matching, route to context-provider FIRST and then dispatch to architect with results-as-input. Never dispatch to an architect with "use grep to find X".
+
 ## Cross-references
 
 - Template reference: each architect template (arch-platform, arch-testing, arch-integration) references this doc in its OBS-A and Reporter Protocol sections and keeps an abridged actionable checklist inline.

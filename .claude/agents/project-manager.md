@@ -6,7 +6,7 @@ model: opus
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.11.0"
+template_version: "5.12.0"
 memory: project
 skills:
   - pre-pr
@@ -74,6 +74,21 @@ After receiving ANY context-provider SendMessage response:
 2. If YES → SendMessage doc-updater IMMEDIATELY with pattern name,
    precedent files, when-to-use rules, target doc location
 3. Do NOT defer to end-of-phase batch — knowledge decays with context compression
+
+### Search Dispatch Protocol (MANDATORY — T-BUG-015)
+
+When the user task involves **pattern searching** (find files matching X, count occurrences of Y, locate uses of Z, audit codebase for pattern P), you do NOT dispatch the search to architects or devs. Route through context-provider FIRST:
+
+1. **SendMessage to context-provider** with the search query
+2. Wait for results
+3. **THEN dispatch to architect** with results-as-input — architect operates on the answer, not the search
+4. Architect dispatches dev with concrete file/line targets
+
+**FORBIDDEN**:
+- Dispatching to architect with "use grep to find X" — even though architect has Bash, this bypasses the PR #40 design AND wastes architect tokens on search-mechanics
+- Letting architect or dev "just bash-grep it" — same bypass, no audit trail
+
+Why: L2 DawSync session (2026-04-18) — team-lead dispatched grep work directly to arch-platform instead of context-provider. arch-platform used `bash grep` (mechanically allowed since it has Bash). Result: search bypassed the curated knowledge layer. The Search Dispatch Protocol makes context-provider the entry point for all search-related work.
 
 ### FORBIDDEN Agent Launches (non-negotiable)
 - **FORBIDDEN**: Spawning core devs outside Phase 2 start — the 4 core devs are spawned exactly once when Phase 2 begins

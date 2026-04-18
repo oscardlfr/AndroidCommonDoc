@@ -60,6 +60,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-010: added WHO-READS-THIS warning at top of body. Clarifies template is for main-conversation (team-lead), not a spawnable peer. FORBIDDEN: Agent(name=\"project-manager\", ...). If spawned AS peer, exit. Fixes L2 dual-PM issue where team-lead did both TeamCreate and Agent(project-manager)."
+      },
+      "5.12.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-015: added Search Dispatch Protocol — when user task involves pattern search, route to context-provider FIRST, then dispatch to architect with results. Forbids 'use grep' dispatches to architects/devs. Closes the Bash-grep bypass of L0 PR #40 mechanical enforcement."
       }
     },
     "planner": {
@@ -156,6 +161,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-011 + T-BUG-012: OBS-A Scope Extension Protocol upgraded to HARD SELF-GATE (wave-distance + specialty + PLAN.md pre-checks; REFUSE extensions N+2 or cross-specialty). NEW Reporter Protocol section: PM liveness check before SendMessage, [PM-absent] fallback to team-lead when PM shut down. Prevents lost verdicts to dead PM."
+      },
+      "1.16.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching — Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
       }
     },
     "arch-platform": {
@@ -194,6 +204,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-011 + T-BUG-012: OBS-A Scope Extension Protocol upgraded to HARD SELF-GATE (wave-distance + specialty + PLAN.md pre-checks; REFUSE extensions N+2 or cross-specialty). NEW Reporter Protocol section: PM liveness check before SendMessage, [PM-absent] fallback to team-lead when PM shut down. Prevents lost verdicts to dead PM."
+      },
+      "1.13.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching — Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
       }
     },
     "arch-integration": {
@@ -232,6 +247,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-011 + T-BUG-012: OBS-A Scope Extension Protocol upgraded to HARD SELF-GATE (wave-distance + specialty + PLAN.md pre-checks; REFUSE extensions N+2 or cross-specialty). NEW Reporter Protocol section: PM liveness check before SendMessage, [PM-absent] fallback to team-lead when PM shut down. Prevents lost verdicts to dead PM."
+      },
+      "1.13.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching — Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
       }
     },
     "context-provider": {
@@ -340,6 +360,11 @@
         "breaking": true,
         "note": "MECHANICAL enforcement: Grep and Glob removed. Added SendMessage for architect communication.",
         "migration": "Update test-specialist to remove direct Grep/Glob usage. Pattern lookups must go through reporting architect via SendMessage."
+      },
+      "1.8.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
       }
     },
     "ui-specialist": {
@@ -363,6 +388,11 @@
         "breaking": true,
         "note": "MECHANICAL enforcement: Grep and Glob removed. Added SendMessage for architect communication.",
         "migration": "Update ui-specialist to remove direct Grep/Glob usage. Pattern lookups must go through reporting architect via SendMessage."
+      },
+      "1.8.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
       }
     },
     "domain-model-specialist": {
@@ -381,6 +411,11 @@
         "breaking": true,
         "note": "MECHANICAL enforcement: Grep and Glob removed. Added SendMessage for architect communication.",
         "migration": "Update domain-model-specialist to remove direct Grep/Glob usage. Pattern lookups must go through reporting architect via SendMessage."
+      },
+      "1.7.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
       }
     },
     "data-layer-specialist": {
@@ -399,6 +434,11 @@
         "breaking": true,
         "note": "MECHANICAL enforcement: Grep and Glob removed. Added SendMessage for architect communication.",
         "migration": "Update data-layer-specialist to remove direct Grep/Glob usage. Pattern lookups must go through reporting architect via SendMessage."
+      },
+      "1.7.0": {
+        "date": "2026-04-18",
+        "breaking": false,
+        "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
       }
     }
   }
