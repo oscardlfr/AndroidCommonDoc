@@ -3,9 +3,7 @@ slug: jdk-toolchain
 category: guides
 scope: [L1, L2]
 sources:
-  - url: "https://docs.gradle.org/current/userguide/toolchains.html"
-    type: doc-page
-    tier: 1
+  - https://docs.gradle.org/current/userguide/toolchains.html
 targets: []
 description: "Configure a Gradle Java toolchain so consumer projects auto-provision the correct JDK regardless of developer-local JAVA_HOME. Closes T-BUG-007 — KMP projects on AGP 9 + Kotlin 2.3+ require JDK 21 and fail silently on JDK 17."
 ---
