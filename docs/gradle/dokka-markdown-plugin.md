@@ -24,7 +24,7 @@ Output structure:
 - `docs/api/<module>-hub.md` — navigation hub, markdown table of sub-docs (≤100 lines)
 - `docs/api/<module>/-<kebab-class>.md` — Type A: one file per class/object/interface (leading-dash filename)
 - `docs/api/<module>/<kebab-fn>.md` — Type B: one file per function/property/typealias
-- `.androidcommondoc/kdoc-state.json` — written at end of every run: ISO 8601 timestamp + 12-char compact content hash per file
+- `<module>/build/.androidcommondoc/kdoc-state.json` — written at end of each module's Dokka task: per-module JSON map of slug → `{ source, content_hash }` + top-level `generated_at` ISO timestamp
 
 ## Apply
 
@@ -108,7 +108,7 @@ Fixed field order — renderers and validators depend on this order:
 
 | Legacy bug (`dokka-to-docs.sh`) | Plugin behavior |
 |---------------------------------|-----------------|
-| Two timestamps per file (2-pass script) | Single-pass; one ISO timestamp in central `.androidcommondoc/kdoc-state.json` |
+| Two timestamps per file (2-pass script) | Single-pass; per-module `<module>/build/.androidcommondoc/kdoc-state.json` written once at task end |
 | `androidapplecommondesktop` concatenated string | `platforms: [android, apple, common, desktop]` — sorted array |
 | Duplicated expect/actual bodies | Merged — one body, platform list separate |
 | Duplicate hub entries | Deterministic sort, single data row per symbol; blank separator row after header |
