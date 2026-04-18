@@ -22,8 +22,9 @@ The plugin registers via `CoreExtensions.renderer`, overriding `htmlRenderer`. O
 
 Output structure:
 - `docs/api/<module>-hub.md` — navigation hub, markdown table of sub-docs (≤100 lines)
-- `docs/api/<module>/<kebab-name>.md` — one file per top-level symbol
-- `.androidcommondoc/kdoc-state.json` — ISO 8601 timestamp + per-file content hash for CI drift detection
+- `docs/api/<module>/-<kebab-class>.md` — Type A: one file per class/object/interface (leading-dash filename)
+- `docs/api/<module>/<kebab-fn>.md` — Type B: one file per function/property/typealias
+- `.androidcommondoc/kdoc-state.json` — written at end of every run: ISO 8601 timestamp + 12-char compact content hash per file
 
 ## Apply
 
@@ -62,44 +63,46 @@ Fixed field order — renderers and validators depend on this order:
 
 | # | Field | Type | Example | Notes |
 |---|-------|------|---------|-------|
-| 1 | `scope` | string | `core-domain` | Module name |
-| 2 | `sources` | list | `[src/commonMain/kotlin/...]` | Source paths |
-| 3 | `targets` | list | `[docs/api/core-domain/]` | Output paths |
-| 4 | `slug` | string | `base64-converter` | Type B; `--base64-converter` for Type A |
-| 5 | `status` | string | `stable` | stable / experimental / deprecated |
+| 1 | `scope` | list | `[api, core-domain]` | Always `[api, <module>]` |
+| 2 | `sources` | list | `[core-domain]` | Module name(s) |
+| 3 | `targets` | list | `[all]` | Always `[all]` |
+| 4 | `slug` | string | `core-domain--base64-converter` | Type A: `<module>--<kebab-class>`; Type B: `<module>-<kebab-fn>` |
+| 5 | `status` | string | `active` | Always `active` for generated docs |
 | 6 | `layer` | string | `L1` | Hardcoded in 0.1.0; DSL override in 0.2.0 |
 | 7 | `category` | string | `api` | Always `api` for generated docs |
-| 8 | `description` | string | `"One-line KDoc summary"` | First KDoc sentence |
-| 9 | `version` | string | `0.1.0` | Module version |
-| 10 | `last_updated` | string | `2026-04-18` | ISO 8601 date |
+| 8 | `description` | string | `One-line KDoc summary.` | First KDoc sentence, unquoted |
+| 9 | `version` | string | `1` | Always `1` (not module semver) |
+| 10 | `last_updated` | string | `2026-04` | Year-month (not full date) |
 | 11 | `generated` | bool | `true` | Always true — excludes from dup detection |
-| 12 | `generated_from` | string | `com.example.Base64Converter` | Fully qualified class name |
-| 13 | `content_hash` | string | `sha256:abc123...` | Content-addressed hash for drift detection |
-| 14 | `parent` | string | `core-domain-hub` | Hub slug |
+| 12 | `generated_from` | string | `dokka` | Always literal `dokka` |
+| 13 | `content_hash` | string | `7a8836e73f62` | 12-char compact hex, no `sha256:` prefix |
+| 14 | `parent` | string | `core-domain-api-hub` | Hub slug: `<module>-api-hub` |
 | 15 | `platforms` | list | `[android, common, desktop]` | Optional; KMP expect/actual only |
 
 ## File taxonomy
 
 | Type | Filename | Slug format | When |
 |------|----------|-------------|------|
-| **Type A** (class-index) | `-base64-converter.md` | `--base64-converter` (double-dash) | Top-level class / object / interface |
-| **Type B** (member) | `parse-json.md` | `parse-json` (single-dash) | Functions, properties, typealias |
-| **Hub** | `core-domain-hub.md` | `core-domain-hub` | One per module |
+| **Type A** (class-index) | `-base64-converter.md` | `core-domain--base64-converter` (module + double-dash + kebab) | Top-level class / object / interface |
+| **Type B** (member) | `parse-json.md` | `core-domain-parse-json` (module + single-dash + kebab) | Functions, properties, typealias |
+| **Hub** | `core-domain-hub.md` | `core-domain-api-hub` | One per module |
 
 ## Slug rules
 
-- `MyClass` → `-my-class` (Type A: leading dash + kebab)
-- `parseJson` → `parse-json` (Type B: camelCase → kebab)
-- `HTTPSClient` → `-https-client` (acronym: lowercase block)
-- Double-dash slug in frontmatter mirrors leading-dash filename: `--base64-converter`
+- Type A slug = `<module>--<kebab-class>` e.g. `core-domain--base64-converter`
+- Type B slug = `<module>-<kebab-fn>` e.g. `core-domain-parse-json`
+- `MyClass` → `my-class` (kebab: camelCase split, leading-dash in filename only)
+- `HTTPSClient` → `https-client` (acronym: lowercase block)
+- Nested sealed subclass: `<module>--<parent-kebab>-<nested-kebab>` e.g. `core-domain--network-result-success`
+- Module normalization: flat kebab (`core-domain`), colon path (`core:domain`), filesystem (`core/domain`), dot notation (`com.example.core`), deep nesting — all normalized to flat kebab before slug construction
 
 ## Body structure
 
-**Type A** (class-index): breadcrumb path, class name heading, primary constructor signature, members table (name, type, KDoc first sentence).
+**Type A** (class-index): breadcrumb `[<module>](<hub-link>) / ClassName`, class name heading, KDoc description, primary constructor signature (if present).
 
-**Type B** (member): full signature fenced block, KDoc description, `### Parameters` / `### Returns` / `### Throws` sections (omitted if empty).
+**Type B** (member): breadcrumb `[<module>](<hub-link>) / fnName`, function name heading, full signature fenced block, KDoc description, `#### Parameters` / `#### Return` / `#### Throws` / `#### See also` sections (omitted if empty).
 
-**Hub**: YAML frontmatter + intro paragraph + markdown table sorted alphabetically by symbol name (one row per symbol — no separator rows).
+**Hub**: YAML frontmatter + intro paragraph + `## Sub-documents` markdown table with a blank separator row after the header row, sorted alphabetically by symbol name.
 
 ## Fixes applied (baseline vs plugin output)
 
@@ -108,7 +111,7 @@ Fixed field order — renderers and validators depend on this order:
 | Two timestamps per file (2-pass script) | Single-pass; one ISO timestamp in central `.androidcommondoc/kdoc-state.json` |
 | `androidapplecommondesktop` concatenated string | `platforms: [android, apple, common, desktop]` — sorted array |
 | Duplicated expect/actual bodies | Merged — one body, platform list separate |
-| Empty hub separator rows + duplicate entries | Deterministic sort, single row per symbol |
+| Duplicate hub entries | Deterministic sort, single data row per symbol; blank separator row after header |
 | HTML leftovers (`[](#content)`, `index.html` links) | Direct Documentable → markdown, no ContentNode round-trip |
 | Script unavailable on Windows without WSL | Gradle-native — runs on all platforms |
 
@@ -117,7 +120,7 @@ Fixed field order — renderers and validators depend on this order:
 - `layer` field hardcoded to `L1` — custom DSL for L0/L2 override planned for 0.2.0
 - Output directory is Dokka's `context.configuration.outputDir` — `structuredMarkdown { outputDirectory }` DSL planned for 0.2.0
 - KDoc-state file path uses `../` relative from `outputDir` — absolute path override planned for 0.2.0
-- `GoldenIntegrationTest` (TestKit renderer-override + Windows daemon OOM) deferred to 0.1.1 — 101/101 unit tests pass
+- `GoldenIntegrationTest` (TestKit renderer-override + Windows daemon OOM) deferred to 0.1.1 — 120 unit tests + 2 integration tests pass
 
 ## Consumer contracts
 

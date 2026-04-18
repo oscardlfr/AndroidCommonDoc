@@ -109,7 +109,7 @@ Once `docs/api/` is populated, these consumers activate automatically:
 
 ## CI drift detection
 
-The plugin writes `.androidcommondoc/kdoc-state.json` on every run — a central index of ISO 8601 timestamps and `sha256:` content hashes per file. Use this in CI to detect stale docs:
+The plugin writes `.androidcommondoc/kdoc-state.json` at the end of every run — a central index of ISO 8601 timestamps and 12-char compact content hashes per file (format: `7a8836e73f62`, no `sha256:` prefix). Use this in CI to detect stale docs:
 
 ```yaml
 # Recommended CI check (add to ci.yml)
@@ -121,7 +121,7 @@ The plugin writes `.androidcommondoc/kdoc-state.json` on every run — a central
       --fail-on-stale
 ```
 
-Individual docs also carry `content_hash:` in their frontmatter. `api-surface-diff` compares hashes between the PR branch and `develop` to surface breaking API changes before merge.
+Individual docs also carry a `content_hash:` 12-char hex in their frontmatter. `api-surface-diff` compares hashes between the PR branch and `develop` to surface breaking API changes before merge.
 
 ## Opt-out
 

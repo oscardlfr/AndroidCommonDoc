@@ -70,28 +70,30 @@ Or for a single module:
 
 Three file types are generated per module:
 
-- `docs/api/<module>-hub.md` — navigation hub with a markdown table of all sub-docs (≤100 lines)
-- `docs/api/<module>/<kebab-name>.md` — one file per top-level symbol; class/object/interface filenames are prefixed with `-` (e.g., `-base64-converter.md`)
-- `.androidcommondoc/kdoc-state.json` — central run state: ISO 8601 timestamp + per-file content hash index for CI drift detection
+- `docs/api/<module>-hub.md` — navigation hub with a markdown table of all sub-docs (≤100 lines); hub table has a blank separator row after the header
+- `docs/api/<module>/-<kebab-class>.md` — one file per top-level class/object/interface (Type A); filename has leading `-`, no module prefix (e.g., `-base64-converter.md`)
+- `docs/api/<module>/<kebab-fn>.md` — one file per top-level function/property/typealias (Type B); no leading `-` (e.g., `parse-json.md`)
+- `.androidcommondoc/kdoc-state.json` — written at end of every run: ISO 8601 timestamp + 12-char compact content hash per file, for CI drift detection
 
 Each generated doc includes 14-field YAML frontmatter:
 
 ```yaml
 ---
-scope: module-name
-sources: [src/commonMain/kotlin/...]
-targets: [docs/api/module/]
-slug: base64-converter          # Type B; "--base64-converter" for Type A
-status: stable
+scope: [api, core-domain]
+sources: [core-domain]
+targets: [all]
+slug: core-domain--base64-converter    # Type A (class): module--kebab-class
+                                       # Type B (function): core-domain-parse-json
+status: active
 layer: L1
 category: api
-description: "One-line KDoc summary"
-version: 0.1.0
-last_updated: 2026-04-18
+description: One-line KDoc summary.
+version: 1
+last_updated: 2026-04
 generated: true
-generated_from: com.example.Base64Converter
-content_hash: sha256:abc123...
-parent: module-hub
+generated_from: dokka
+content_hash: 7a8836e73f62             # 12-char compact hex (no sha256: prefix)
+parent: core-domain-api-hub
 ---
 ```
 
@@ -118,7 +120,7 @@ Dokka 2.1.x used a different renderer extension point (`htmlRenderer` shape diff
 | Two timestamps per file (2-pass script) | Single-pass renderer; one ISO timestamp in central `.androidcommondoc/kdoc-state.json` |
 | `androidapplecommondesktop` concatenated string | `platforms: [android, apple, common, desktop]` — sorted array |
 | Duplicated expect/actual bodies | Merged — one body, platform list separate |
-| Empty hub separator rows + duplicate entries | Deterministic sort, single row per symbol |
+| Duplicate hub entries + missing separator | Deterministic sort; one data row per symbol; blank separator row after header |
 | HTML leftovers (`[](#content)`, `index.html` links) | Direct Documentable → markdown, no ContentNode round-trip |
 
 ## Replaces
