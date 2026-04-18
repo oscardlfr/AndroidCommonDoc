@@ -12,7 +12,13 @@ class StructuredMarkdownRenderer(private val context: DokkaContext) : Renderer {
 
     override fun render(root: RootPageNode) {
         val outputDir = context.configuration.outputDir.also { it.mkdirs() }
-        root.children.filterIsInstance<ModulePageNode>().forEach { renderModule(it, outputDir) }
+        // In Dokka 2.2.x single-module builds, root IS the ModulePageNode.
+        // In multi-module aggregation builds, root has ModulePageNode children.
+        val modules = when (root) {
+            is ModulePageNode -> listOf(root)
+            else -> root.children.filterIsInstance<ModulePageNode>()
+        }
+        modules.forEach { renderModule(it, outputDir) }
     }
 
     private fun renderModule(modulePage: ModulePageNode, outputDir: File) {

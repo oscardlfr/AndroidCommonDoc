@@ -15,6 +15,7 @@ content_hash: HASH_PLACEHOLDER
 parent: api-hub
 ---
 
+
 # sample-data API
 
 Auto-generated from KDoc via Dokka plugin `com.androidcommondoc:dokka-markdown-plugin`.
@@ -25,4 +26,4 @@ Auto-generated from KDoc via Dokka plugin `com.androidcommondoc:dokka-markdown-p
 |----------------|-------------|
 | [DefaultClock](sample-data/-default-clock.md) | Singleton that provides a default PlatformClock instance. |
 | [PlatformClock](sample-data/-platform-clock.md) | Platform-specific clock that returns current time in milliseconds. |
-| [RawPayload](sample-data/raw-payload.md) | A raw byte array payload received from the network. |
+| [RawPayload](sample-data/-raw-payload.md) | A raw byte array payload received from the network. |

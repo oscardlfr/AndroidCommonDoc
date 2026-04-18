@@ -35,10 +35,23 @@ kotlin {
 
 tasks.test {
     useJUnitPlatform()
-    // L0 rule: sequential on Windows to avoid file-lock races between JVM forks
+    maxParallelForks = 1
+    exclude("**/GoldenIntegrationTest*")
+    systemProperty("pluginJarDir", layout.buildDirectory.dir("libs").get().asFile.absolutePath)
+}
+
+val integrationTest by tasks.registering(Test::class) {
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    include("**/GoldenIntegrationTest*")
+    dependsOn(tasks.jar, tasks.pluginUnderTestMetadata, tasks.processTestResources)
+    jvmArgs("-Xmx1g")
     maxParallelForks = 1
     systemProperty("pluginJarDir", layout.buildDirectory.dir("libs").get().asFile.absolutePath)
 }
+
+tasks.check { dependsOn(integrationTest) }
 
 publishing {
     publications {

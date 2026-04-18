@@ -15,11 +15,12 @@ content_hash: HASH_PLACEHOLDER
 parent: sample-core-api-hub
 ---
 
+
 [sample-core](../../sample-core-hub.md) / [com.sample.core](../com.sample.core.md) / parseJson
 
 # parseJson
 
-fun parseJson(bytes: ByteArray, strict: Boolean = false): NetworkResult<String>
+fun parseJson(bytes: ByteArray, strict: Boolean): NetworkResult
 
 Parses raw JSON bytes into a typed result.
 

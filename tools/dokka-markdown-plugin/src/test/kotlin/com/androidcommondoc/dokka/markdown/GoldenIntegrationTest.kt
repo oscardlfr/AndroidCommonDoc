@@ -53,6 +53,9 @@ class GoldenIntegrationTest {
         pluginJar.copyTo(File(repoDir, "dokka-markdown-plugin-0.1.0.jar"), overwrite = true)
         File(repoDir, "dokka-markdown-plugin-0.1.0.pom").writeText(minimalPom())
 
+        // No project-level repositories — all resolution goes through settings repos.
+        // This avoids FAIL_ON_PROJECT_REPOS errors and ensures mavenCentral() is
+        // always searched (for kotlin-stdlib etc.) alongside our local plugin repo.
         val submoduleBuildContent = """
             plugins {
                 kotlin("multiplatform") version "2.3.0"
@@ -64,9 +67,6 @@ class GoldenIntegrationTest {
                     commonMain.dependencies {}
                 }
             }
-            repositories {
-                maven { url = uri(rootProject.file("local-plugin-repo")) }
-            }
             dependencies {
                 dokkaPlugin("com.androidcommondoc:dokka-markdown-plugin:0.1.0")
             }
@@ -76,7 +76,8 @@ class GoldenIntegrationTest {
         File(projectDir, "sample-data/build.gradle.kts").writeText(submoduleBuildContent)
         File(projectDir, "build.gradle.kts").writeText("")
 
-        // Rewrite settings to use PREFER_PROJECT so project-level repositories work
+        // All repos in dependencyResolutionManagement — default mode (FAIL_ON_PROJECT_REPOS)
+        // enforces that subprojects do not declare their own repos, keeping resolution unified.
         File(projectDir, "settings.gradle.kts").writeText("""
             |pluginManagement {
             |    repositories {
@@ -85,9 +86,9 @@ class GoldenIntegrationTest {
             |    }
             |}
             |dependencyResolutionManagement {
-            |    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
             |    repositories {
             |        mavenCentral()
+            |        maven { url = uri(rootProject.projectDir.resolve("local-plugin-repo")) }
             |    }
             |}
             |rootProject.name = "kmp-golden-sample"
@@ -100,7 +101,7 @@ class GoldenIntegrationTest {
     fun `goldenTest_pluginRunsAndOutputMatchesExpected`() {
         val result = GradleRunner.create()
             .withProjectDir(projectDir)
-            .withArguments("dokkaGenerate", "--stacktrace", "--no-daemon")
+            .withArguments("dokkaGenerate", "--stacktrace")
             .forwardOutput()
             .build()
 
@@ -122,7 +123,7 @@ class GoldenIntegrationTest {
     fun `goldenTest_secondRun_producesZeroChanges`() {
         val runner = GradleRunner.create()
             .withProjectDir(projectDir)
-            .withArguments("dokkaGenerate", "--no-daemon")
+            .withArguments("dokkaGenerate")
             .forwardOutput()
 
         runner.build()

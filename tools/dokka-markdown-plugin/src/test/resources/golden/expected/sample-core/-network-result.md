@@ -2,7 +2,7 @@
 scope: [api, sample-core]
 sources: [sample-core]
 targets: [all]
-slug: sample-core--network-result
+slug: sample-core-network-result
 status: active
 layer: L1
 category: api
@@ -15,12 +15,7 @@ content_hash: HASH_PLACEHOLDER
 parent: sample-core-api-hub
 ---
 
+
 [sample-core](../../sample-core-hub.md) / [com.sample.core](../com.sample.core.md) / NetworkResult
 
 # NetworkResult
-
-constructor()
-
-## Members
-- [Failure](failure.md)
-- [Success](success.md)
