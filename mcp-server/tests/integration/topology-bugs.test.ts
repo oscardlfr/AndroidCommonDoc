@@ -261,6 +261,167 @@ describe("OBS-C: pre-pr skill mentions /schedule for catalog freshness", () => {
   });
 });
 
+// ── T-BUG-010: PM template main-conversation-only warning ──────────────────
+
+describe("T-BUG-010: PM template warns it is for main conversation (team-lead), not a spawnable peer", () => {
+  it("project-manager.md has WHO-READS-THIS warning + FORBIDDEN spawn instruction", () => {
+    const { claude, template } = readAgent("project-manager.md");
+    for (const content of [claude, template]) {
+      expect(content).toMatch(/T-BUG-010/);
+      expect(content).toMatch(/WHO READS THIS|main conversation|team-lead/i);
+      expect(content).toMatch(/FORBIDDEN.*project-manager|Agent\(name="project-manager"/);
+      expect(content).toMatch(/PM-peer spawn detected|Exiting/i);
+    }
+  });
+});
+
+// ── T-BUG-011: arch-* OBS-A HARD self-gate ─────────────────────────────────
+
+describe("T-BUG-011: arch-* OBS-A is a HARD SELF-GATE (not descriptive)", () => {
+  for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
+    it(`${name} has HARD SELF-GATE with wave-distance + specialty + PLAN.md checks`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toMatch(/T-BUG-011/);
+        expect(content).toMatch(/HARD SELF-GATE/);
+        expect(content).toMatch(/Wave-distance check/);
+        expect(content).toMatch(/Specialty check/);
+        expect(content).toMatch(/PLAN\.md trigger check/);
+        // REFUSE language must appear (hard-stop, not suggestion)
+        expect(content).toMatch(/REFUSE/);
+        // Anti-pattern: non-adjacent wave (N+2+) must be explicitly forbidden
+        expect(content).toMatch(/non-adjacent wave|N\+2 or further/i);
+      }
+    });
+  }
+});
+
+// ── T-BUG-012: arch-* Reporter Protocol (PM liveness + fallback) ───────────
+
+describe("T-BUG-012: arch-* Reporter Protocol checks PM liveness and falls back to team-lead", () => {
+  for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
+    it(`${name} has Reporter Protocol section with liveness check + [PM-absent] fallback`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toMatch(/T-BUG-012/);
+        expect(content).toMatch(/Reporter Protocol/);
+        expect(content).toMatch(/Liveness check|PM.*alive|shutdown notification/i);
+        expect(content).toMatch(/\[PM-absent\]/);
+        expect(content).toMatch(/fall.*back.*team-lead|team-lead.*fallback|SendMessage.*team-lead/i);
+      }
+    });
+  }
+});
+
+// ── T-BUG-013: /pre-pr wires catalog-coverage-check.sh ─────────────────────
+
+describe("T-BUG-013: /pre-pr invokes catalog-coverage-check.sh (no more unwired tool theater)", () => {
+  const PRE_PR = path.join(ROOT, "skills/pre-pr/SKILL.md");
+
+  it("pre-pr SKILL.md references catalog-coverage-check.sh with T-BUG-013 tag", () => {
+    const content = fs.readFileSync(PRE_PR, "utf-8");
+    expect(content).toMatch(/T-BUG-013/);
+    expect(content).toMatch(/catalog-coverage-check\.sh/);
+    // Step must be conditional on .gradle.kts changes
+    expect(content).toMatch(/\.gradle\.kts/);
+    // Summary table row for visibility
+    expect(content).toMatch(/Catalog coverage/);
+  });
+
+  it("scripts/sh/catalog-coverage-check.sh still scans *.gradle.kts literals", () => {
+    const script = fs.readFileSync(path.join(ROOT, "scripts/sh/catalog-coverage-check.sh"), "utf-8");
+    // The regex/grep pattern must include *.gradle.kts scanning
+    expect(script).toMatch(/\*\.gradle\.kts|"\*\.gradle\.kts"|gradle\.kts/);
+    // And must match the hardcoded-literal pattern (implementation/api/etc + quoted triplet)
+    expect(script).toMatch(/implementation\|api\|testImplementation|implementation.*api.*testImplementation/);
+  });
+});
+
+// ── T-BUG-015: Bash search anti-pattern across architects, devs, and PM ───
+
+describe("T-BUG-015: Bash search anti-pattern + Search Dispatch Protocol", () => {
+  // Architects must explicitly forbid Bash grep/find/rg/etc.
+  for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
+    it(`${name} has Bash Search Anti-pattern (FORBIDDEN bash grep/find/rg) — T-BUG-015`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toMatch(/T-BUG-015/);
+        expect(content).toMatch(/Bash Search Anti-pattern/);
+        // Specific forbidden commands (the ones that bypass PR #40)
+        expect(content).toMatch(/grep/);
+        expect(content).toMatch(/find/);
+        expect(content).toMatch(/rg|ripgrep/);
+        // Must point to context-provider as the correct path
+        expect(content).toMatch(/SendMessage.*context-provider|context-provider.*SendMessage/);
+        // Must reference the bypass it closes
+        expect(content).toMatch(/PR #40|mechanical enforcement|bypass/i);
+      }
+    });
+  }
+
+  // Devs must reinforce architect-chain + forbid Bash search
+  for (const name of [
+    "test-specialist.md",
+    "ui-specialist.md",
+    "data-layer-specialist.md",
+    "domain-model-specialist.md",
+  ]) {
+    it(`${name} has Bash Search Anti-pattern + architect-chain reinforcement — T-BUG-015`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toMatch(/T-BUG-015/);
+        expect(content).toMatch(/Bash Search Anti-pattern/);
+        // Same forbidden bash commands
+        expect(content).toMatch(/grep/);
+        expect(content).toMatch(/find/);
+        // Architect-chain reinforcement: dev → architect → context-provider
+        expect(content).toMatch(/architect.chain|reporting architect|via.*architect|architect.*context-provider/i);
+        // Devs must NOT contact context-provider directly (existing rule reinforced)
+        expect(content).toMatch(/NOT contact context-provider directly|reporting architect/i);
+      }
+    });
+  }
+
+  // PM has Search Dispatch Protocol
+  it("project-manager.md has Search Dispatch Protocol — T-BUG-015", () => {
+    const { claude, template } = readAgent("project-manager.md");
+    for (const content of [claude, template]) {
+      expect(content).toMatch(/T-BUG-015/);
+      expect(content).toMatch(/Search Dispatch Protocol/);
+      // Must mandate context-provider as FIRST step
+      expect(content).toMatch(/context-provider FIRST|SendMessage to context-provider.*Wait|Route through context-provider/i);
+      // Must forbid "use grep" instructions to architects
+      expect(content).toMatch(/use grep|bash-grep|FORBIDDEN.*grep/i);
+    }
+  });
+});
+
+// ── T-BUG-014: L0 CI template catches apple-side regressions ──────────────
+
+describe("T-BUG-014: L0 CI template runs metadata compile + check --continue", () => {
+  const CI_TEMPLATE = path.join(ROOT, "setup/github-workflows/ci-template.yml");
+
+  it("ci-template.yml has explicit compileCommonMainKotlinMetadata step (T-BUG-014)", () => {
+    const content = fs.readFileSync(CI_TEMPLATE, "utf-8");
+    expect(content).toMatch(/T-BUG-014/);
+    // The step must run the metadata compile task explicitly (not rely on
+    // ./gradlew build doing it transitively, which it may skip on Linux runners
+    // when apple targets are configured but K/N toolchain is unavailable)
+    expect(content).toMatch(/compileCommonMainKotlinMetadata/);
+  });
+
+  it("ci-template.yml runs check with --continue (surfaces all failures, aligns with /pre-pr)", () => {
+    const content = fs.readFileSync(CI_TEMPLATE, "utf-8");
+    expect(content).toMatch(/gradlew check.*--continue|check --no-daemon --parallel --continue/);
+  });
+
+  it("ci-template.yml documents the apple-side gap rationale", () => {
+    const content = fs.readFileSync(CI_TEMPLATE, "utf-8");
+    // Comment must explain WHY the metadata compile step exists
+    expect(content).toMatch(/CAST_NEVER_SUCCEEDS|apple.*regression|apple-side|non-macOS/i);
+  });
+});
+
 // ── Regression guard: all docs/**/*.md frontmatter `sources` are strings ──
 
 describe("frontmatter guard: docs sources are string entries (not objects)", () => {

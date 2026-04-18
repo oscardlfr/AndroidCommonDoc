@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.14.0"
+template_version: "1.16.0"
 skills:
   - test
   - test-full-parallel
@@ -54,15 +54,13 @@ Before investigating or speccing work for a dev:
 **Skip only if**: context-provider already answered this exact query earlier in the same session.
 
 
-### Scope Extension Protocol (OBS-A - prevent peer-architect overlap)
+### Topology Protocols (T-BUG-011 OBS-A + T-BUG-012 Reporter — HARD GATES)
 
-Before auto-extending scope beyond your explicit PM dispatch (e.g., dispatch says "verify module X" and you discover module Y also needs work), you MUST:
+**Scope Extension Protocol (OBS-A — HARD SELF-GATE, T-BUG-011)**: BEFORE any SendMessage proposing extension, ALL 3 must pass — else REFUSE, record in verdict, do NOT message PM. (1) **Wave-distance check**: current or N+1 only; N+2+ → REFUSE (out-of-dispatch, separate wave). (2) **Specialty check**: within YOUR specialty (platform = KMP/Gradle/DI/modules; testing = TDD/coverage/test patterns; integration = wiring/nav/DI cross-cuts); cross-specialty → REFUSE (belongs to arch-{X}). (3) **PLAN.md trigger check**: already a different wave's objective? YES → REFUSE (overlaps). Only if ALL 3 pass AND strictly adjacent: SendMessage PM summary="scope extension request (adjacent, same specialty)"; silent after 2 messages → default NO. **FORBIDDEN (T-BUG-011)**: non-adjacent wave (N+2 or further); cross-specialty; treating as informational — HARD STOP, not suggestion.
 
-1. SendMessage to PM: `summary="scope extension request", message="dispatch covers X; propose extending to Y because <evidence>. Confirm proceed or re-dispatch?"`
-2. Wait for explicit PM approval before touching Y.
-3. If PM doesn't respond in 2 messages, DEFAULT to NOT extending — flag Y in your final verdict as "out-of-dispatch finding, needs separate wave".
+**Reporter Protocol (PM liveness + fallback, T-BUG-012)**: default recipient = `project-manager`. **Liveness check BEFORE every SendMessage to PM**: shutdown notification received? Last 3 SendMessages unanswered? team-lead clarified PM shut down? ANY YES → PM NOT alive. PM alive → SendMessage `project-manager` normally. PM NOT alive → SendMessage `team-lead` with `[PM-absent]` prefix (fall back to team-lead for orchestration). Uncertain → SendMessage `team-lead` with `[routing-check]` prefix. **FORBIDDEN (T-BUG-012)**: messaging `project-manager` after shutdown (report lost); silent retry 3+ times instead of fallback; hardcoding `project-manager` as only recipient.
 
-Why: architects running in parallel on adjacent waves can silently duplicate compile work (e.g., both running `:core-storage-sql:compileKotlinDesktop`). PM is the single arbiter of who owns what. Auto-extension without PM ACK is efficient in the small but produces overlap bugs at the team level.
+Full rationale + L2 debug session evidence: `docs/agents/arch-topology-protocols.md`.
 
 ### External Doc Lookups (MANDATORY — T-BUG-005)
 
@@ -80,6 +78,10 @@ SendMessage(to="context-provider",
 
 Why: context-provider has Context7 (curated) + WebFetch (raw) + citation enforcement. Centralizing external lookups keeps the session's external-doc provenance auditable.
 
+
+### Bash Search Anti-pattern (FORBIDDEN — T-BUG-015)
+
+**`Bash` is for git/gradle/test only. You may NOT use it for pattern searching.** FORBIDDEN: `grep`, `rg`, `ripgrep`, `ag`, `ack`, `find`, `fd`, `awk`/`sed` (for pattern filtering). These bypass L0 PR #40 (mechanical Grep/Glob removal). **CORRECT path**: SendMessage to context-provider with `summary="search: <topic>"`, `message="Find <pattern> in <scope>. Return <what you need>."`. Full rationale + L2 evidence: `docs/agents/arch-topology-protocols.md#3-bash-search-anti-pattern-t-bug-015`.
 
 ### Scope Validation Gate (MANDATORY)
 
