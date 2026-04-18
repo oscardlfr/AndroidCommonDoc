@@ -60,7 +60,7 @@ If coverage is below threshold or new public APIs lack docs:
 
 Wizard step W10 handles version catalog entry, GitHub Packages repo wiring, and `l0-manifest.json` tracking.
 
-**Manual install:** see [`docs/gradle/dokka-markdown-plugin.md`](dokka-markdown-plugin.md#apply) for the exact TOML + Gradle snippets.
+**Manual install:** see [`docs/gradle/dokka-markdown-plugin.md`](../gradle/dokka-markdown-plugin.md#apply) for the exact TOML + Gradle snippets.
 
 ## Step 4: Generate
 
@@ -129,7 +129,7 @@ Projects that skip plugin installation (`/setup --dokka-plugin no` or W10 declin
 
 ## Cross-references
 
-- [`docs/gradle/dokka-markdown-plugin.md`](dokka-markdown-plugin.md) — frontmatter contract, file taxonomy, slug rules
+- [`docs/gradle/dokka-markdown-plugin.md`](../gradle/dokka-markdown-plugin.md) — frontmatter contract, file taxonomy, slug rules
 - [`tools/dokka-markdown-plugin/README.md`](../../tools/dokka-markdown-plugin/README.md) — compat matrix, known fixes
 - [`skills/generate-api-docs/SKILL.md`](../../skills/generate-api-docs/SKILL.md) — skill parameters and steps
 - [`skills/kdoc-audit/SKILL.md`](../../skills/kdoc-audit/SKILL.md) — coverage auditing
