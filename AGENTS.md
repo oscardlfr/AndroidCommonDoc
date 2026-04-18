@@ -98,7 +98,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `doc-reorganize` | Reorganize docs/ into domain-based subdirectories |
 | `kdoc-audit` | Audit KDoc coverage on public Kotlin APIs — regressions, undocumented symbols |
 | `kdoc-migrate` | Full-project KDoc migration, module by module, pattern-informed |
-| `generate-api-docs` | Optional: Dokka + transformer → docs/api/ with YAML frontmatter |
+| `generate-api-docs` | Run `dokkaGenerate` via `dokka-markdown-plugin` → `docs/api/` with 14-field YAML frontmatter (plugin replaces legacy `dokka-to-docs.sh`) |
 | `doc-integrity` | Unified 5-step doc audit: coverage, patterns, freshness, structure |
 
 ### Ecosystem & Vault
@@ -196,6 +196,10 @@ Automated consistency verification via `.claude/agents/`:
 | `template-sync-validator` | Claude commands and Copilot prompts are semantically equivalent |
 | `doc-code-drift-detector` | Pattern doc version references match versions-manifest.json |
 | `quality-gate-orchestrator` | Unified pass/fail report across all gates with token cost |
+
+## API Docs (`docs/api/`)
+
+`docs/api/` files are produced by `tools/dokka-markdown-plugin/` 0.1.0 (Dokka plugin). Run `/generate-api-docs` to regenerate. Files carry `generated: true` frontmatter and are excluded from duplicate detection by `validate-doc-update`.
 
 ## Pattern Docs (15 categories, 88+ sub-docs)
 

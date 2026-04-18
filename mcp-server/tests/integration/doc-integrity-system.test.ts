@@ -370,9 +370,14 @@ describe('doc integrity skills', () => {
     expect(content).toContain('No stubs');
   });
 
-  it('generate-api-docs references dokka-to-docs', () => {
+  it('generate-api-docs references dokka-markdown-plugin', () => {
     const content = readFile(path.join(SKILLS_DIR, 'generate-api-docs/SKILL.md'));
-    expect(content).toContain('dokka-to-docs');
+    expect(content).toContain('dokka-markdown-plugin');
+  });
+
+  it('generate-api-docs no longer references dokka-to-docs.sh', () => {
+    const content = readFile(path.join(SKILLS_DIR, 'generate-api-docs/SKILL.md'));
+    expect(content).not.toContain('dokka-to-docs.sh');
   });
 
   it('generate-api-docs is marked optional', () => {
@@ -381,28 +386,37 @@ describe('doc integrity skills', () => {
   });
 });
 
-// ── 13. Dokka pipeline scripts ───────────────────────────────────────────────
+// ── 13. Dokka markdown plugin (replaces legacy dokka-to-docs.sh) ─────────────
 
-describe('Dokka pipeline', () => {
-  it('dokka-to-docs.sh exists', () => {
-    expect(fileExists(path.join(SCRIPTS_SH, 'dokka-to-docs.sh'))).toBe(true);
+describe('Dokka markdown plugin', () => {
+  const PLUGIN_ROOT = path.join(ROOT, 'tools/dokka-markdown-plugin');
+
+  it('plugin directory exists under tools/', () => {
+    expect(fileExists(PLUGIN_ROOT)).toBe(true);
   });
 
-  it('dokka-to-docs.ps1 exists (PowerShell parity)', () => {
-    expect(fileExists(path.join(SCRIPTS_PS1, 'dokka-to-docs.ps1'))).toBe(true);
+  it('plugin build.gradle.kts exists', () => {
+    expect(fileExists(path.join(PLUGIN_ROOT, 'build.gradle.kts'))).toBe(true);
   });
 
-  it('bash script exits gracefully without Dokka', () => {
-    const content = readFile(path.join(SCRIPTS_SH, 'dokka-to-docs.sh'));
-    expect(content).toContain('exit 0');
-    expect(content).toContain('optional');
+  it('plugin README.md exists', () => {
+    expect(fileExists(path.join(PLUGIN_ROOT, 'README.md'))).toBe(true);
   });
 
-  it('bash script generates frontmatter with generated: true', () => {
-    const content = readFile(path.join(SCRIPTS_SH, 'dokka-to-docs.sh'));
-    expect(content).toContain('generated: true');
-    expect(content).toContain('generated_from: dokka');
-    expect(content).toContain('generated_at:');
+  it('plugin SPI service file exists', () => {
+    const spiPath = path.join(PLUGIN_ROOT, 'src/main/resources/META-INF/services/org.jetbrains.dokka.plugability.DokkaPlugin');
+    expect(fileExists(spiPath)).toBe(true);
+  });
+
+  it('plugin SPI references StructuredMarkdownPlugin', () => {
+    const spiPath = path.join(PLUGIN_ROOT, 'src/main/resources/META-INF/services/org.jetbrains.dokka.plugability.DokkaPlugin');
+    const content = readFile(spiPath);
+    expect(content).toContain('com.androidcommondoc.dokka.markdown.StructuredMarkdownPlugin');
+  });
+
+  it('versions-manifest.json tracks dokka-markdown-plugin', () => {
+    const content = readFile(path.join(ROOT, 'versions-manifest.json'));
+    expect(content).toContain('dokka-markdown-plugin');
   });
 
   it('convention plugin template exists', () => {

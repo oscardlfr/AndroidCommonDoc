@@ -501,7 +501,7 @@
       "description": "Optional: Run Dokka + transformer to generate docs/api/ from KDoc in source code. Produces YAML-frontmatter docs consumable by context-provider and search-docs.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:e920629010c175c1e3f29d0bfd7c4283d863068eeb58311162e43b860037f261",
+      "hash": "sha256:f882c67f3153fb40c2b95efff12916f2cbce53d65d09fa007e05b0d3909b0985",
       "dependencies": [
         "scripts/sh/dokka-to-docs.sh"
       ],
@@ -1000,7 +1000,7 @@
       "description": "Interactive wizard to fully configure a new or existing project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Creates l0-manifest.json, syncs selected assets, and verifies the result. Bilingual output (EN + ES).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:57012119c861e670203d189ea17736387fb5dc38aab01bf1199c22ca11885e4d",
+      "hash": "sha256:736d1a19bb52871602fe22f7d9ca020b1687271b45833aa240ce056fc8870693",
       "dependencies": [
         "scripts/sh/sync-gsd-skills.sh",
         "scripts/sh/sync-gsd-agents.sh",

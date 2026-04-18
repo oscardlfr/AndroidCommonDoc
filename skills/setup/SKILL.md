@@ -619,6 +619,49 @@ See `skills/android-skills-consume/SKILL.md` for the Google skills ecosystem int
 
 ---
 
+### Wizard W10 — Dokka Markdown Plugin [optional]
+
+> Always shown. Default = No. Flag: `--dokka-plugin yes|no|skip`. Non-blocking.
+
+```
+Install the Dokka Markdown Plugin? [y/N]
+
+Generates docs/api/*.md from KDoc — adds a single dokkaPlugin() dep to your
+build. Decline to skip.
+/ ¿Instalar el Dokka Markdown Plugin? [y/N]
+Genera docs/api/*.md desde KDoc — añade una sola dependencia dokkaPlugin().
+Omite para saltar.
+```
+
+**YES branch:**
+
+1. Append to `libs.versions.toml`:
+   ```toml
+   [versions]
+   dokka-markdown-plugin = "0.1.0"
+   [libraries]
+   dokka-markdown-plugin = { module = "com.androidcommondoc:dokka-markdown-plugin", version.ref = "dokka-markdown-plugin" }
+   ```
+2. Add GitHub Packages repo to root `build.gradle.kts` if the `oscardlfr/AndroidCommonDoc` maven block is absent:
+   ```kotlin
+   maven {
+       url = uri("https://maven.pkg.github.com/oscardlfr/AndroidCommonDoc")
+       credentials {
+           username = providers.gradleProperty("gpr.user").orNull ?: System.getenv("GITHUB_ACTOR")
+           password = providers.gradleProperty("gpr.key").orNull ?: System.getenv("GITHUB_TOKEN")
+       }
+   }
+   ```
+3. Write plugin tracking entry to `l0-manifest.json`:
+   ```json
+   "plugins": { "dokka_markdown_plugin": { "installed": true, "version": "0.1.0" } }
+   ```
+4. Print: `[ok] Dokka Markdown Plugin 0.1.0 configured. Run: ./gradlew dokkaGenerate`
+
+**NO branch:** no-op.
+
+---
+
 ### Step 7 — Verification checklist
 
 ```bash

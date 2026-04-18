@@ -25,7 +25,7 @@ copilot-template-type: behavioral
 ## Prerequisites
 
 - Dokka Gradle plugin configured in `build-logic/` (convention plugin)
-- `dokka-to-docs.sh` script available (synced from L0 via `/sync-l0`)
+- `dokka-markdown-plugin` installed: check `versions-manifest.json` `plugin_versions.dokka-markdown-plugin` — if absent, add `com.androidcommondoc:dokka-markdown-plugin:0.1.0` from GitHub Packages (`https://maven.pkg.github.com/oscardlfr/AndroidCommonDoc`) to the project's Dokka plugin dependencies and re-run `/setup` or `/sync-l0`
 
 ## Behavior
 
@@ -41,9 +41,7 @@ Output: `build/dokka/` with raw Markdown per module.
 
 ### Step 2: Transform to Internal Format
 
-```bash
-scripts/sh/dokka-to-docs.sh --input build/dokka/ --output docs/api/
-```
+The `dokka-markdown-plugin` runs automatically as part of `dokkaGenerate` — no separate script invocation needed. The plugin (loaded via SPI) intercepts Dokka's renderer phase and writes directly to `docs/api/`.
 
 Transformer:
 - Creates `docs/api/{module}-hub.md` per module (≤100 lines, navigation only)
