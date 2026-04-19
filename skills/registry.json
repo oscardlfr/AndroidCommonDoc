@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generated": "2026-04-18T13:12:12.164Z",
-  "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc\\.claude\\worktrees\\brave-visvesvaraya-77a0f2",
+  "generated": "2026-04-19T09:20:30.388Z",
+  "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
       "name": "accessibility",
@@ -502,9 +502,7 @@
       "category": "guides",
       "tier": "extended",
       "hash": "sha256:6359846e9598b0c648c77355aca727ca8faa3d8fe60f9651ac7d00d75d0b6ac3",
-      "dependencies": [
-        "scripts/sh/dokka-to-docs.sh"
-      ],
+      "dependencies": [],
       "frontmatter": {
         "name": "generate-api-docs",
         "description": "Optional: Run Dokka + transformer to generate docs/api/ from KDoc in source code. Produces YAML-frontmatter docs consumable by context-provider and search-docs.",
@@ -1443,7 +1441,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.12.0",
+        "template_version": "1.13.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1472,7 +1470,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.12.0",
+        "template_version": "1.13.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1501,7 +1499,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.15.0",
+        "template_version": "1.16.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -1600,7 +1598,7 @@
       "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:38b6caf5761adfff9a4b3092426c7ee66e1807afacec323e076bf0d8961c3c88",
+      "hash": "sha256:7c357dc9d85439b54c94833187c40fe4fb9310e2078f29837c09e785e2d6a836",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -1615,7 +1613,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "2.5.0"
+        "template_version": "2.6.0"
       }
     },
     {
@@ -1673,7 +1671,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.6.0",
+        "template_version": "1.7.0",
         "memory": "project",
         "skills": [
           "test",
@@ -1843,7 +1841,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.6.0",
+        "template_version": "1.7.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2178,7 +2176,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "5.11.0",
+        "template_version": "5.12.0",
         "memory": "project",
         "skills": [
           "pre-pr",
@@ -2388,7 +2386,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.7.0",
+        "template_version": "1.8.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2425,7 +2423,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.7.0",
+        "template_version": "1.8.0",
         "memory": "project",
         "skills": [
           "accessibility",
@@ -2750,12 +2748,15 @@
       "name": "metrics",
       "type": "command",
       "path": ".claude/commands/metrics.md",
-      "description": "Project Health Dashboard",
+      "description": "Show unified agent/tool/skill/MCP usage dashboard — combines runtime tool-use log with skill/audit runs",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:e83a279d432a2aafad6e455040d4098c66afa2b5663be3bb9ace725eecb42073",
+      "hash": "sha256:d005e1beedfa4645a294b7e069f0e64e0f18c95aa4dc2c9d02db9687e5a565d8",
       "dependencies": [],
-      "frontmatter": {}
+      "frontmatter": {
+        "description": "Show unified agent/tool/skill/MCP usage dashboard — combines runtime tool-use log with skill/audit runs",
+        "intent": "observability"
+      }
     },
     {
       "name": "note",

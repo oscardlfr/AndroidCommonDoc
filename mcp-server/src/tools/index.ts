@@ -53,6 +53,7 @@ import { registerCheckOutdatedTool } from "./check-outdated.js";
 import { registerScanSecretsTool } from "./scan-secrets.js";
 import { registerDocReadabilityTool } from "./doc-readability.js";
 import { registerSearchPatternsTool } from "./search-patterns.js";
+import { registerToolUseAnalyticsTool } from "./tool-use-analytics.js";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -113,6 +114,7 @@ export function registerTools(server: McpServer): void {
   registerScanSecretsTool(server, rateLimiter);
   registerDocReadabilityTool(server, rateLimiter);
   registerSearchPatternsTool(server, rateLimiter);
+  registerToolUseAnalyticsTool(server, rateLimiter);
 
   // Register a rate-limit-status utility tool
   server.registerTool(
@@ -138,5 +140,5 @@ export function registerTools(server: McpServer): void {
     },
   );
 
-  logger.info("Registered 46 tools with rate limiting (45/min) [check-doc-freshness is alias for monitor-sources]");
+  logger.info("Registered 47 tools with rate limiting (45/min) [check-doc-freshness is alias for monitor-sources]");
 }

@@ -64,8 +64,8 @@ describe('tool registration', () => {
     expect(indexContent).toContain('registerCheckDocPatternsTool');
   });
 
-  it('registers 46 tools', () => {
-    expect(indexContent).toMatch(/Registered 46 tools/);
+  it('registers 47 tools', () => {
+    expect(indexContent).toMatch(/Registered 47 tools/);
   });
 });
 

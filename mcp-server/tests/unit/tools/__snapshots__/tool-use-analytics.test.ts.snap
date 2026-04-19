@@ -1,0 +1,35 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`tool-use-analytics > markdown snapshot 1`] = `
+"## Runtime Tool Usage Dashboard
+
+**Period:** 28 days | **Total calls:** 50 | **Unique tools:** 7 | **Log size:** 0.0 KB
+
+> **WARNING:** 3 CP bypass block(s) detected. Architects are bypassing context-provider consultations.
+
+### Top Tools
+| Tool | Calls | Success Rate | Avg Duration (ms) |
+|------|-------|-------------|-------------------|
+| Bash | 12 | 100% | - |
+| Read | 10 | 100% | 30 |
+| Grep | 8 | 100% | - |
+| SendMessage | 5 | 100% | - |
+| mcp__context7__get-library-docs | 5 | 100% | - |
+| mcp__mcp-server__skill-usage-analytics | 5 | 100% | - |
+| Skill | 5 | 100% | - |
+
+### Cross-Cutting Stats
+- MCP calls (all): **10**
+- Skill calls: **5**
+- Context7 calls: **5**
+- Our MCP calls (mcp-server): **5**
+- CP bypass blocks: **3**
+
+### Calls by Agent
+- arch-platform-3@session-androidcommondoc: 20
+- arch-integration-3@session-androidcommondoc: 15
+- unknown: 10
+- arch-testing-3@session-androidcommondoc: 5
+
+> **Log rotation:** \`mv .androidcommondoc/tool-use-log.jsonl .androidcommondoc/tool-use-log-$(date +%Y%m%d).jsonl\`"
+`;

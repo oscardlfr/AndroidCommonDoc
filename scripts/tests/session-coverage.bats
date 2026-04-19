@@ -758,7 +758,7 @@ teardown() {
 }
 
 @test "README: 'What gets synced' lists consumer counts" {
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "59"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "60"
     sed -n '/What gets synced/,/^### /p' "$README" | grep -q "52"
 }
 

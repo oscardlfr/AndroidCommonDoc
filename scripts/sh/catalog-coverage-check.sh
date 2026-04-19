@@ -76,13 +76,39 @@ while IFS= read -r -d '' file; do
             artifact="${BASH_REMATCH[3]}"
             version="${BASH_REMATCH[4]}"
             # Derive suggested catalog alias from artifact name
-            alias="$(echo "$artifact" | tr '[:upper:]' '[:lower:]' | tr '.' '-')"
+            catalog_alias="$(echo "$artifact" | tr '[:upper:]' '[:lower:]' | tr '.' '-')"
             printf "%s:%d  %s:%s:%s  -> consider libs.%s or sharedLibs.%s in your catalog\n" \
-                "$file" "$line_num" "$group" "$artifact" "$version" "$alias" "$alias"
+                "$file" "$line_num" "$group" "$artifact" "$version" "$catalog_alias" "$catalog_alias"
             FINDINGS=$((FINDINGS + 1))
         fi
     done < <(grep -nE '(implementation|api|testImplementation|androidTestImplementation|compileOnly|runtimeOnly|ksp|kapt|annotationProcessor|classpath)\s*\(\s*"[^":]+:[^":]+:[^"]+"' "$file" 2>/dev/null || true)
-done < <(find . -name "*.gradle.kts" -not -path "*/build/*" -not -path "*/.gradle/*" -not -path "*/node_modules/*" -print0 2>/dev/null)
+done < <(find . -name "*.gradle.kts" -not -path "*/build/*" -not -path "*/.gradle/*" -not -path "*/node_modules/*" -print0 2>/dev/null || true)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Check 2: Hyphen-notation catalog accessor in scripts/docs/templates
+# Gradle generates dot-notation: libs.androidx.lifecycle.runtime.ktx
+# Hyphen-notation (libs.androidx-lifecycle-runtime-ktx) is WRONG in grep patterns
+# ─────────────────────────────────────────────────────────────────────────────
+HYPHEN_FINDINGS=0
+HYPHEN_RE='libs\.[a-z][a-z0-9]*(-[a-z][a-z0-9]*)+'
+
+while IFS= read -r -d '' file; do
+    while IFS= read -r line_data; do
+        line_num="${line_data%%:*}"
+        line_content="${line_data#*:}"
+        printf "[WARN] Hyphen-notation catalog accessor in %s:%s — use dot-notation (libs.androidx.lifecycle.runtime.ktx)\n" \
+            "$file" "$line_num"
+        printf "  Found: %s\n" "$line_content"
+        HYPHEN_FINDINGS=$((HYPHEN_FINDINGS + 1))
+    done < <(grep -nE "$HYPHEN_RE" "$file" 2>/dev/null || true)
+done < <(find . \( -name "*.sh" -o -name "*.ps1" -o -name "*.md" \) \
+    -not -path "*/build/*" -not -path "*/.gradle/*" -not -path "*/node_modules/*" \
+    -not -path "*/.git/*" -print0 2>/dev/null || true)
+
+if [[ $HYPHEN_FINDINGS -gt 0 ]]; then
+    echo "[WARN] dot-notation check: $HYPHEN_FINDINGS hyphen-notation catalog accessor(s) found in scripts/docs/templates"
+    echo "Fix: replace libs.group-artifact with libs.group.artifact (Gradle generates dot-notation for version catalog)"
+fi
 
 echo
 if [[ $FINDINGS -eq 0 ]]; then
