@@ -1,22 +1,24 @@
 #!/usr/bin/env node
 // context-provider-gate.js — PreToolUse hook
-// Blocks Grep/Glob/Bash unless CP was consulted this session.
+// Blocks Grep/Glob/Bash-search unless the CALLING agent has consulted CP this session.
 //
-// EMPIRICAL FINDINGS (probe 2026-04-19, session c501e6c9-253c-4d27-a042-7dfbc39aa6ac):
-//   - session_id IS present in PreToolUse payload and is stable across all tool calls
-//   - CLAUDE_AGENT_NAME is NOT set in hook subprocess (env var absent)
-//   - agent_id and agent_type ARE present in payload but agent_name is NOT
-//   - Gate is session-level: one flag covers all tool calls in the session
-//   - Identity resolution falls back to CLAUDE_AGENT_NAME env (null in practice);
-//     exemption must rely on env var being set by the agent launcher or on flag presence
+// Per-agent flag: each agent must SendMessage context-provider to unblock its own searches.
+// Session-scoped gates (old behavior) let ANY agent's consultation unblock EVERYONE — that
+// created the Sprint 1 Wave 2 incident where devs grepped for patterns despite protocol.
+// Per-agent flag enforces Search Dispatch Protocol mechanically.
+//
+// Exempt via agent_type prefix match: context-provider, project-manager, team-lead.
 //
 // Fail open on any error (never block due to script failure).
-// Exempt: context-provider, team-lead, project-manager agents always allowed.
-// Emergency escape: rm $(node -e "require('os').tmpdir()")/claude-cp-consulted-*.flag
+// Emergency escape: rm "$(node -e "console.log(require('os').tmpdir())")/claude-cp-consulted-*.flag"
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+
+function sanitizeId(id) {
+  return String(id).replace(/[^a-zA-Z0-9_-]/g, '-');
+}
 
 let input = '';
 const t = setTimeout(() => process.exit(0), 5000);
@@ -29,6 +31,7 @@ process.stdin.on('end', () => {
     const toolName = data.tool_name || '';
     const sessionId = data.session_id || 'unknown';
     const agentType = data.agent_type || '';
+    const agentId = sanitizeId(data.agent_id || 'unknown');
     const EXEMPT_TYPES = ['context-provider', 'project-manager', 'team-lead'];
     if (EXEMPT_TYPES.some(e => agentType === e || agentType.startsWith(e))) process.exit(0);
 
@@ -41,19 +44,19 @@ process.stdin.on('end', () => {
       }
     }
 
-    // 3. Check consultation flag
-    const flagPath = path.join(os.tmpdir(), `claude-cp-consulted-${sessionId}.flag`);
+    // 3. Check per-agent consultation flag
+    const flagPath = path.join(os.tmpdir(), `claude-cp-consulted-${sessionId}-${agentId}.flag`);
     if (fs.existsSync(flagPath)) {
-      process.exit(0); // CP consulted — allow
+      process.exit(0); // this agent has consulted CP — allow
     }
 
-    // 4. Block — write block marker for logger and emit decision
-    const blockMarker = path.join(os.tmpdir(), `claude-cp-blocked-${sessionId}.flag`);
+    // 4. Block — write per-agent block marker for logger and emit decision
+    const blockMarker = path.join(os.tmpdir(), `claude-cp-blocked-${sessionId}-${agentId}.flag`);
     try { fs.writeFileSync(blockMarker, new Date().toISOString()); } catch {}
 
     const out = JSON.stringify({
       decision: 'block',
-      reason: 'context-provider not consulted this session. SendMessage to context-provider-2 first to validate pattern assumptions, then retry.'
+      reason: 'This agent has not consulted context-provider this session. SendMessage to context-provider first to validate pattern assumptions, then retry.'
     });
     process.stdout.write(out);
     process.exit(2);
