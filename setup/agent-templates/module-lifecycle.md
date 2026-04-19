@@ -6,7 +6,7 @@ model: sonnet
 domain: infrastructure
 intent: [module, create, deprecate, lifecycle]
 token_budget: 2000
-template_version: "1.0.0"
+template_version: "1.1.0"
 memory: project
 skills:
   - verify-kmp
@@ -19,6 +19,11 @@ When creating new modules, consult your architect for patterns:
 - **NEVER** SendMessage to context-provider directly
 - Ask arch-platform for module structure patterns via SendMessage
 
+### Per-Session Gate
+
+Before your FIRST Grep, Glob, or Bash call in any session, you MUST have received a SendMessage response from arch-platform in this session (arch-platform will have consulted context-provider). The hook enforces this mechanically — your first search-type tool call is blocked until the arch-platform CP chain has been consulted.
+
+FORBIDDEN: Running Grep, Glob, or Bash before receiving arch-platform's context response for the current session.
 
 You manage the lifecycle of modules — from creation through deprecation.
 

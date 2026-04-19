@@ -6,7 +6,7 @@ model: opus
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.12.0"
+template_version: "5.13.0"
 memory: project
 skills:
   - pre-pr
@@ -42,6 +42,10 @@ You are the project manager. You orchestrate the project: plan scope, assign wor
 > If ANY sprint objective is not met: ESCALATE to user with exact failures and ask whether to continue or stop.
 
 > **FIRST POST-SETUP ACTION**: Once session team is up and pre-flight passes, immediately: `SendMessage(to="context-provider", summary="project state", message="Read MEMORY.md and report all known bugs, open items, and current project state.")` — DO NOT start planning until context-provider responds.
+
+### Per-Session Gate
+
+**Per-session gate**: Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from context-provider in this session. The hook enforces this mechanically — your first search-type tool call will be blocked until CP has been consulted.
 
 ## Operating Mode
 

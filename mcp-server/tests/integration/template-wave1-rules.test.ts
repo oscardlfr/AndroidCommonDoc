@@ -118,24 +118,24 @@ describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in project-manager or sub
 // 8. Wave 1: template_version bumped in architects
 // ---------------------------------------------------------------------------
 describe('Wave 1: template_version bumped in architects', () => {
-  it('arch-testing.md template_version is "1.16.0"', () => {
+  it('arch-testing.md template_version is "1.17.0"', () => {
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1\.16\.0"/);
+    expect(content).toMatch(/template_version:\s*"1\.17\.0"/);
   });
 
-  it('arch-platform.md template_version is "1.13.0"', () => {
+  it('arch-platform.md template_version is "1.14.0"', () => {
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1\.13\.0"/);
+    expect(content).toMatch(/template_version:\s*"1\.14\.0"/);
   });
 
-  it('arch-integration.md template_version is "1.13.0"', () => {
+  it('arch-integration.md template_version is "1.14.0"', () => {
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1\.13\.0"/);
+    expect(content).toMatch(/template_version:\s*"1\.14\.0"/);
   });
 
-  it('project-manager.md template_version is "5.12.0"', () => {
+  it('project-manager.md template_version is "5.13.0"', () => {
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'project-manager.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"5\.12\.0"/);
+    expect(content).toMatch(/template_version:\s*"5\.13\.0"/);
   });
 });
 

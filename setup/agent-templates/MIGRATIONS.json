@@ -5,7 +5,7 @@
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial PM template â€” flat dispatch model, architect gates"
+        "note": "Initial PM template  --  flat dispatch model, architect gates"
       },
       "1.1.0": {
         "date": "2026-03-28",
@@ -22,7 +22,7 @@
           "DISPOSABLE",
           "STOP PLANNING"
         ],
-        "migration_hint": "PM now orchestrates 3 sequential teams (Planning â†’ Execution â†’ Quality Gate). Devs must be spawned as anonymous Agent(prompt=...) without name/team_name. Run /sync-l0 to get the updated template."
+        "migration_hint": "PM now orchestrates 3 sequential teams (Planning â†' Execution â†' Quality Gate). Devs must be spawned as anonymous Agent(prompt=...) without name/team_name. Run /sync-l0 to get the updated template."
       },
       "5.1.0": {
         "date": "2026-04-05",
@@ -65,6 +65,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Search Dispatch Protocol — when user task involves pattern search, route to context-provider FIRST, then dispatch to architect with results. Forbids 'use grep' dispatches to architects/devs. Closes the Bash-grep bypass of L0 PR #40 mechanical enforcement."
+      },
+      "5.13.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "planner": {
@@ -94,42 +99,57 @@
         "breaking": true,
         "note": "MECHANICAL enforcement: Grep and Glob removed from planner tools. Existence check at Step 1.5 rewritten to delegate to context-provider via SendMessage.",
         "migration": "Planner no longer runs Grep directly. Route existence checks through context-provider."
+      },
+      "1.6.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "quality-gater": {
       "1.0.0": {
         "date": "2026-03-29",
         "breaking": false,
-        "note": "Initial quality-gater â€” 5-step sequential protocol, PASS/FAIL report"
+        "note": "Initial quality-gater  --  5-step sequential protocol, PASS/FAIL report"
       },
       "1.1.0": {
         "date": "2026-03-29",
         "breaking": false,
-        "note": "Added retry limit (max 3) to prevent infinite QGâ†’Phase2 loops"
+        "note": "Added retry limit (max 3) to prevent infinite QGâ†'Phase2 loops"
       },
       "2.2.0": {
         "date": "2026-04-06",
         "breaking": false,
         "note": "Backfill: version 2.2.0 present in template, missing from registry"
+      },
+      "2.3.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "doc-migrator": {
       "1.0.0": {
         "date": "2026-03-29",
         "breaking": false,
-        "note": "Initial doc-migrator â€” 3 modes (Full Migration, Gap Fill, Realignment)"
+        "note": "Initial doc-migrator  --  3 modes (Full Migration, Gap Fill, Realignment)"
       },
       "1.1.0": {
         "date": "2026-03-29",
         "breaking": false,
         "note": "Added script-first validation requirement"
+      },
+      "1.2.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "arch-testing": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial architect â€” read-only, SendMessage, APPROVE/ESCALATE"
+        "note": "Initial architect  --  read-only, SendMessage, APPROVE/ESCALATE"
       },
       "1.6.0": {
         "date": "2026-04-05",
@@ -166,13 +186,18 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching — Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
+      },
+      "1.17.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "arch-platform": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial architect â€” read-only, SendMessage, APPROVE/ESCALATE"
+        "note": "Initial architect  --  read-only, SendMessage, APPROVE/ESCALATE"
       },
       "1.5.0": {
         "date": "2026-04-05",
@@ -209,13 +234,18 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching — Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
+      },
+      "1.14.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "arch-integration": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial architect â€” read-only, SendMessage, APPROVE/ESCALATE"
+        "note": "Initial architect  --  read-only, SendMessage, APPROVE/ESCALATE"
       },
       "1.5.0": {
         "date": "2026-04-05",
@@ -252,13 +282,18 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching — Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
+      },
+      "1.14.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "context-provider": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial context-provider â€” mandatory read-only peer in every team"
+        "note": "Initial context-provider  --  mandatory read-only peer in every team"
       },
       "2.4.0": {
         "date": "2026-04-06",
@@ -280,75 +315,120 @@
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial doc-updater â€” mandatory peer, updates docs after work"
+        "note": "Initial doc-updater  --  mandatory peer, updates docs after work"
       },
       "2.2.0": {
         "date": "2026-04-06",
         "breaking": false,
         "note": "Backfill: version 2.2.0 present in template, missing from registry"
+      },
+      "2.3.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "product-strategist": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial product-strategist â€” ICE scoring, backlog prioritization"
+        "note": "Initial product-strategist  --  ICE scoring, backlog prioritization"
+      },
+      "1.1.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "content-creator": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial content-creator â€” build-in-public marketing content"
+        "note": "Initial content-creator  --  build-in-public marketing content"
+      },
+      "1.1.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "landing-page-strategist": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial landing-page-strategist â€” page copy, CTAs, SEO"
+        "note": "Initial landing-page-strategist  --  page copy, CTAs, SEO"
+      },
+      "1.1.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "marketing-lead": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial marketing-lead â€” campaign orchestrator"
+        "note": "Initial marketing-lead  --  campaign orchestrator"
+      },
+      "1.1.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "product-lead": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial product-lead â€” product orchestrator"
+        "note": "Initial product-lead  --  product orchestrator"
+      },
+      "1.1.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "platform-auditor": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial platform-auditor â€” cross-module coherence"
+        "note": "Initial platform-auditor  --  cross-module coherence"
+      },
+      "1.1.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "module-lifecycle": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial module-lifecycle â€” creation and deprecation checklists"
+        "note": "Initial module-lifecycle  --  creation and deprecation checklists"
+      },
+      "1.1.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "feature-domain-specialist": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial feature-domain-specialist â€” customizable per-domain auditor"
+        "note": "Initial feature-domain-specialist  --  customizable per-domain auditor"
+      },
+      "1.1.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "test-specialist": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial test-specialist â€” testing dev for Phase 2 execution"
+        "note": "Initial test-specialist  --  testing dev for Phase 2 execution"
       },
       "1.1.0": {
         "date": "2026-04-05",
@@ -370,13 +450,18 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
+      },
+      "1.9.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
       }
     },
     "ui-specialist": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial ui-specialist â€” Compose UI dev for Phase 2 execution"
+        "note": "Initial ui-specialist  --  Compose UI dev for Phase 2 execution"
       },
       "1.1.0": {
         "date": "2026-04-05",
@@ -398,13 +483,18 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
+      },
+      "1.9.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
       }
     },
     "domain-model-specialist": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial domain-model-specialist â€” sealed interfaces, data classes, domain patterns"
+        "note": "Initial domain-model-specialist  --  sealed interfaces, data classes, domain patterns"
       },
       "1.5.0": {
         "date": "2026-04-06",
@@ -421,13 +511,18 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
+      },
+      "1.8.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
       }
     },
     "data-layer-specialist": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
-        "note": "Initial data-layer-specialist â€” repository patterns, source set placement, encoding"
+        "note": "Initial data-layer-specialist  --  repository patterns, source set placement, encoding"
       },
       "1.5.0": {
         "date": "2026-04-06",
@@ -444,6 +539,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
+      },
+      "1.8.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
       }
     }
   }

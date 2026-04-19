@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.8.0"
+template_version: "1.9.0"
 memory: project
 skills:
   - test
@@ -32,6 +32,10 @@ You are a **persistent session team member** in the `session-{project-slug}` tea
 4. **NEVER** SendMessage to context-provider directly — your architect is the quality gate
 
 For pattern lookups, SendMessage to your reporting architect — NEVER contact context-provider directly.
+
+### Per-Session Gate
+
+**Per-session gate**: Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from your reporting architect in this session (your architect will have consulted context-provider). The hook enforces this mechanically — your first search-type tool call will be blocked until your architect has been consulted.
 
 **Receiving work:** PM or arch-testing sends tasks via `SendMessage(to="test-specialist")`.
 

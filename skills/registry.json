@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-19T09:20:30.388Z",
+  "generated": "2026-04-19T19:43:30.025Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1425,7 +1425,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a66a9fc7c44149455e21af0d3d7f8d9200bbdd1bfff9db342d06abd44da374f2",
+      "hash": "sha256:b369544d08b0f26648a4761010d88376e7eda2d93ab70218e1ddecc57d837fc6",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1441,7 +1441,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.13.0",
+        "template_version": "1.14.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1455,7 +1455,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f8b2dcca979377f9386fd3de86cd4c942c662930757d8529eee3b378a274cf1c",
+      "hash": "sha256:fa2fba30afc8edb1ece04869b8ecf48c37f1704e27df2e647bdcd049b348597b",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1470,7 +1470,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.13.0",
+        "template_version": "1.14.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1484,7 +1484,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:a839588a18228949b92503507f9be7e8b7ed84b8a516063c18f38dd0ef95cf09",
+      "hash": "sha256:d6a89ab53199a57086ba9b579bf75e7935bd2cd5293f7711bc87ba0db391974f",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1499,7 +1499,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.16.0",
+        "template_version": "1.17.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -1571,7 +1571,7 @@
       "description": "Drafts developer-focused content for build-in-public marketing. Creates posts for Reddit, Twitter/X, forums, and changelogs. Customize {{PRODUCT_NAME}} and tone for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:5979279e0a97c1c7246b5b751450f70821376c5c2792e7c18bba7ebce7e8c53f",
+      "hash": "sha256:4c4f764501384c972fafaaa086c49444548b410247a133e3bf23fe0ee3292edd",
       "dependencies": [],
       "frontmatter": {
         "name": "content-creator",
@@ -1579,7 +1579,7 @@
         "tools": "Read, Grep, Glob, WebSearch, SendMessage",
         "model": "sonnet",
         "token_budget": 3000,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "domain": "marketing",
         "intent": [
           "post",
@@ -1655,7 +1655,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2ead38a4fac43e7ac9798539004433f8df78095e2a6f01ecbaf1196b69664136",
+      "hash": "sha256:5b2b4fff2862e86ee460d9d694a7d647d787279386624f96d6b956dc17a9f82c",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -1671,7 +1671,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.7.0",
+        "template_version": "1.8.0",
         "memory": "project",
         "skills": [
           "test",
@@ -1770,7 +1770,7 @@
       "description": "Sporadic team agent for migrating project docs to L0 patterns. Triggered by QG frontmatter failures, doc-alignment drift, or manual /audit-docs. Creates hubs, splits oversized docs, adds frontmatter, fixes references.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:1f35c4e173c7f491f6b7853f8f14b18892b92aff703e88f9bd88ae81ab100eca",
+      "hash": "sha256:cd82f3e4048af6d18728670cd880b02b49ef4dda82f1324a8ab790a9437f4c63",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-migrator",
@@ -1786,7 +1786,7 @@
           "hub"
         ],
         "token_budget": 4000,
-        "template_version": "1.1.0"
+        "template_version": "1.2.0"
       }
     },
     {
@@ -1796,7 +1796,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:d3c23b029873adb25f104598f4f067b66f8de54e2b9f07e89b6b995a7f3e77b2",
+      "hash": "sha256:0d127227a7844292910b00e9cce4ef8f6953dacf1770ba3cdac835cf727f79d7",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -1811,7 +1811,7 @@
           "roadmap"
         ],
         "token_budget": 2000,
-        "template_version": "2.2.0",
+        "template_version": "2.3.0",
         "skills": [
           "audit-docs",
           "readme-audit",
@@ -1826,7 +1826,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:540445a9a4b50e6d38dc2fec9a0b6fef4172a81fc3cc6d464fa59a326a57318f",
+      "hash": "sha256:406d2390213f186cb65977b0554b73c2999ff394ad7389a442062966f236e7bd",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -1841,7 +1841,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.7.0",
+        "template_version": "1.8.0",
         "memory": "project",
         "skills": [
           "test",
@@ -1856,7 +1856,7 @@
       "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:645b3f79492d44fcd550a9a3ae32850e0199b7ff6f793d83b0b8cc2d8c3885f9",
+      "hash": "sha256:4d2e8b524e2106e40350b69bd2a24eb138393cdd089721f271fdd7e5ed035a78",
       "dependencies": [],
       "frontmatter": {
         "name": "{{DOMAIN}}-specialist",
@@ -1870,7 +1870,7 @@
           "compliance"
         ],
         "token_budget": 3000,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "memory": "project",
         "skills": [
           "test",
@@ -1940,7 +1940,7 @@
       "description": "Designs landing page copy, structure, and conversion flow. Use when planning public-facing web presence, optimizing CTAs, or improving SEO for product pages.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d24e88b7557e37c39b472711e7e65171cbc01c08b1bd14b023d4211693de959e",
+      "hash": "sha256:b35c074ab4d697378364e6ac22129f0e673c148ad411fd86e8f3ba8604e15e89",
       "dependencies": [],
       "frontmatter": {
         "name": "landing-page-strategist",
@@ -1948,7 +1948,7 @@
         "tools": "Read, Grep, Glob, WebSearch, SendMessage",
         "model": "sonnet",
         "token_budget": 3000,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "domain": "marketing",
         "intent": [
           "landing",
@@ -1967,7 +1967,7 @@
       "description": "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:36e1ea7df2f15e7483632b35dcc525e1a6c7c620f45a6f4d8bb76ec9b27146ae",
+      "hash": "sha256:4389aec354280f871066e8fba95404627cbd7f9522510391b46ae83ab95bb74f",
       "dependencies": [],
       "frontmatter": {
         "name": "marketing-lead",
@@ -1982,7 +1982,7 @@
           "launch"
         ],
         "token_budget": 5000,
-        "template_version": "1.0.0"
+        "template_version": "1.1.0"
       }
     },
     {
@@ -1992,7 +1992,7 @@
       "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:95465e41aee019f94a1d76667760f1feb910dc160397ed851756746f12d7aeeb",
+      "hash": "sha256:f3e24292d2521832a7c413aee5a4f0961bd751e77b8a753e387c8ea72ec9ff45",
       "dependencies": [],
       "frontmatter": {
         "name": "module-lifecycle",
@@ -2007,7 +2007,7 @@
           "lifecycle"
         ],
         "token_budget": 2000,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "memory": "project",
         "skills": [
           "verify-kmp",
@@ -2022,7 +2022,7 @@
       "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a684705192e6d6a44d08c9e6daf3dd41431652d493e26e4fa1e70f2768294493",
+      "hash": "sha256:b9908252a267ea22c62651abaeabc57464f3669676f06ad0a52ca099566c9f75",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -2037,7 +2037,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.5.0"
+        "template_version": "1.6.0"
       }
     },
     {
@@ -2047,7 +2047,7 @@
       "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9b556b3ed179308072261613b525891205936a444ac0e5f8e8c4c333ccc86d1e",
+      "hash": "sha256:3cdbd051f26e9a0d09a78f6350b141e6ca90b2f85b905e5ff3e1458846e3e1ef",
       "dependencies": [],
       "frontmatter": {
         "name": "platform-auditor",
@@ -2062,7 +2062,7 @@
           "audit"
         ],
         "token_budget": 2000,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "memory": "project",
         "skills": [
           "verify-kmp",
@@ -2106,7 +2106,7 @@
       "description": "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:470baae6c8d42323c3eff0025ec72790aff44ba212c89271566e48ffced69fb2",
+      "hash": "sha256:070094342df583e6fb073e57b104a5c1a89bc6c4f9753c2cd2f616f1b1208f84",
       "dependencies": [],
       "frontmatter": {
         "name": "product-lead",
@@ -2122,7 +2122,7 @@
           "prioritize"
         ],
         "token_budget": 5000,
-        "template_version": "1.0.0"
+        "template_version": "1.1.0"
       }
     },
     {
@@ -2132,7 +2132,7 @@
       "description": "Analyzes feature ideas against business goals using ICE scoring. Produces prioritized backlog with rationale. Customize {{PRODUCT_NAME}} and business constraints for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:02361c38a8bc1351d5884e46f4ae2f8d7fed76a867d01bb2491c3ce59e077fc4",
+      "hash": "sha256:f887d498a8346dc6965a0b0205e59e2029601406160c19c0ed491dc3763f1cc2",
       "dependencies": [],
       "frontmatter": {
         "name": "product-strategist",
@@ -2140,7 +2140,7 @@
         "tools": "Read, Grep, Glob, WebSearch, WebFetch, SendMessage",
         "model": "sonnet",
         "token_budget": 3000,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "domain": "business",
         "intent": [
           "prioritize",
@@ -2160,7 +2160,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b7d628b413a734ea66f8d8da5c4f780f003e5390c070a4ade24d4f8de1d899ac",
+      "hash": "sha256:98c78bd1a730a21c6915fc1235390b54acea2747e3b2ff43025ec75d3bd9b8f3",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
@@ -2176,7 +2176,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "5.12.0",
+        "template_version": "5.13.0",
         "memory": "project",
         "skills": [
           "pre-pr",
@@ -2217,7 +2217,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:48d6fad1b91efcc398cddb11d925217909c0dd202620b7525674d375dcbb2160",
+      "hash": "sha256:8cbaf61331fd66524c2380467fc81be90e6777e878982127642992047690c765",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2233,7 +2233,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.2.0"
+        "template_version": "2.3.0"
       }
     },
     {
@@ -2371,7 +2371,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:984f43ad51995e1a05d769c778f0396265d39ad7af385c4ec6f1bcab41b364a3",
+      "hash": "sha256:1102151febf308722b231299f63c78aa2c2fa95a1b74431a2161c6ddac772caa",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2386,7 +2386,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.8.0",
+        "template_version": "1.9.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2408,7 +2408,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:941d4d12184b9e5e06a1958682ccedb22d736441be198ff1770b9e4a9802e30b",
+      "hash": "sha256:afa45be54562431e2b567cb88a1976ff3d982d19f6476217531b52b30fe1609c",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2423,7 +2423,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.8.0",
+        "template_version": "1.9.0",
         "memory": "project",
         "skills": [
           "accessibility",
