@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "PM dispatch topology: pre-dispatch gate, pattern chain, dynamic scaling, autonomy rules, mandatory team workflow, kill order for dev agents."
-version: 1
-last_updated: "2026-04"
+version: 2
+last_updated: "2026-04-19"
 assumes_read: team-topology, pm-session-setup
 token_budget: 1300
 ---
@@ -93,3 +93,33 @@ Every TeamCreate session MUST include `context-provider` + `doc-updater` as peer
 
 Skipping step 1 → decisions based on stale/hallucinated context.
 Skipping step 3 → documentation drift, lost decisions, stale roadmap.
+
+## Canonical Module Paths (for grep and dispatch)
+
+When constructing grep commands or dispatch file lists, use these exact paths (relative to project root):
+
+| Module | Path | Owner |
+|--------|------|-------|
+| Audio core | `core/audio` | arch-platform |
+| Media session | `core/media-session` | arch-platform |
+| Data layer | `core/data` | arch-platform |
+| Desktop app | `desktopApp` | arch-integration |
+
+### Dot-notation grep examples (CORRECT)
+
+```bash
+# Correct: dot-notation — Gradle generates this automatically from catalog
+grep -r "libs\.androidx\.lifecycle\.runtime\.ktx" core/audio core/media-session
+grep -r "libs\.compose\.ui" desktopApp/src
+grep -r "libs\.koin\.core" core/data
+```
+
+### Hyphen-notation grep examples (WRONG — do not use)
+
+```bash
+# Wrong: hyphen-notation — Gradle does NOT generate this
+grep -r "libs\.androidx-lifecycle-runtime-ktx" .  # BAD
+grep -r "libs\.compose-ui" .                       # BAD
+```
+
+> Hyphen-notation catalog accessors are flagged by `catalog-coverage-check.sh` (wave17-lite T3-1).
