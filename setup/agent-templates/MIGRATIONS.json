@@ -269,6 +269,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-002 + T-BUG-005: add Rule #7 PLAN.md freshness validation (cross-check with PM before returning state data). Add WebFetch to tools. Promote Context7 + WebFetch external-doc fallback section. Architects now route all external lookups here (no more Bash curl)."
+      },
+      "2.6.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "Wave 17-lite: added On Team Join broadcast section — CP sends pattern list summary to new peers on first contact."
       }
     },
     "doc-updater": {
