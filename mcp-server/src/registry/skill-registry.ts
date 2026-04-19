@@ -138,8 +138,9 @@ const WEB_SKILLS = new Set([
  * @returns Hash string prefixed with "sha256:"
  */
 export async function computeHash(filePath: string): Promise<string> {
-  const content = await readFile(filePath);
-  const hash = createHash("sha256").update(content).digest("hex");
+  const raw = await readFile(filePath);
+  const normalized = Buffer.from(raw.toString('binary').replace(/\r\n/g, '\n'), 'binary');
+  const hash = createHash('sha256').update(normalized).digest('hex');
   return `sha256:${hash}`;
 }
 

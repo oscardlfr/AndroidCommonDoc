@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-19T19:43:30.025Z",
+  "generated": "2026-04-19T22:05:54.473Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -688,6 +688,22 @@
         "name": "map-codebase",
         "description": "Structured codebase analysis using the `codebase-mapper` agent.",
         "copilot": false
+      }
+    },
+    {
+      "name": "material-3-skill",
+      "type": "skill",
+      "path": "skills/material-3-skill/SKILL.md",
+      "description": "Implement Google's Material Design 3 (Material You) UI system. Primary: Jetpack Compose Material3 (MaterialTheme, components, adaptive layout). Also Flutter and limited web (@material/web, maintenance mode). Covers tokens, 30+ components, layout, theming, M3 Expressive (platform matrix), and accessibility. Use when: \"material design\", \"MD3\", \"material you\", \"Jetpack Compose\", \"MaterialTheme\", \"material component\", \"md3 button\".\n",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:94188eba269027d825c4116c3da206056efe1ebac157b3cf5aff43ff5cd5380c",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "material-3",
+        "description": "Implement Google's Material Design 3 (Material You) UI system. Primary: Jetpack Compose Material3 (MaterialTheme, components, adaptive layout). Also Flutter and limited web (@material/web, maintenance mode). Covers tokens, 30+ components, layout, theming, M3 Expressive (platform matrix), and accessibility. Use when: \"material design\", \"MD3\", \"material you\", \"Jetpack Compose\", \"MaterialTheme\", \"material component\", \"md3 button\".\n",
+        "user-invokable": true,
+        "argument-hint": "[component|theme|layout|scaffold|audit] [description or URL]"
       }
     },
     {
