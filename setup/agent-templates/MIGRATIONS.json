@@ -106,21 +106,26 @@
         "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
-    "quality-gater": {
-      "1.0.0": {
-        "date": "2026-03-29",
-        "breaking": false,
-        "note": "Initial quality-gater â€” 5-step sequential protocol, PASS/FAIL report"
+    “quality-gater”: {
+      “1.0.0”: {
+        “date”: “2026-03-29”,
+        “breaking”: false,
+        “note”: “Initial quality-gater â€” 5-step sequential protocol, PASS/FAIL report”
       },
-      "1.1.0": {
-        "date": "2026-03-29",
-        "breaking": false,
-        "note": "Added retry limit (max 3) to prevent infinite QGâ†’Phase2 loops"
+      “1.1.0”: {
+        “date”: “2026-03-29”,
+        “breaking”: false,
+        “note”: “Added retry limit (max 3) to prevent infinite QGâ†’Phase2 loops”
       },
-      "2.2.0": {
-        "date": "2026-04-06",
-        "breaking": false,
-        "note": "Backfill: version 2.2.0 present in template, missing from registry"
+      “2.2.0”: {
+        “date”: “2026-04-06”,
+        “breaking”: false,
+        “note”: “Backfill: version 2.2.0 present in template, missing from registry”
+      },
+      “2.3.0”: {
+        “date”: “2026-04-19”,
+        “breaking”: false,
+        “note”: “W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)”
       }
     },
     “doc-migrator”: {
@@ -335,32 +340,52 @@
         “note”: “W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)”
       }
     },
-    "content-creator": {
-      "1.0.0": {
-        "date": "2026-03-26",
-        "breaking": false,
-        "note": "Initial content-creator â€” build-in-public marketing content"
+    “content-creator”: {
+      “1.0.0”: {
+        “date”: “2026-03-26”,
+        “breaking”: false,
+        “note”: “Initial content-creator â€” build-in-public marketing content”
+      },
+      “1.1.0”: {
+        “date”: “2026-04-19”,
+        “breaking”: false,
+        “note”: “W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)”
       }
     },
-    "landing-page-strategist": {
-      "1.0.0": {
-        "date": "2026-03-26",
-        "breaking": false,
-        "note": "Initial landing-page-strategist â€” page copy, CTAs, SEO"
+    “landing-page-strategist”: {
+      “1.0.0”: {
+        “date”: “2026-03-26”,
+        “breaking”: false,
+        “note”: “Initial landing-page-strategist â€” page copy, CTAs, SEO”
+      },
+      “1.1.0”: {
+        “date”: “2026-04-19”,
+        “breaking”: false,
+        “note”: “W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)”
       }
     },
-    "marketing-lead": {
-      "1.0.0": {
-        "date": "2026-03-26",
-        "breaking": false,
-        "note": "Initial marketing-lead â€” campaign orchestrator"
+    “marketing-lead”: {
+      “1.0.0”: {
+        “date”: “2026-03-26”,
+        “breaking”: false,
+        “note”: “Initial marketing-lead â€” campaign orchestrator”
+      },
+      “1.1.0”: {
+        “date”: “2026-04-19”,
+        “breaking”: false,
+        “note”: “W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)”
       }
     },
-    "product-lead": {
-      "1.0.0": {
-        "date": "2026-03-26",
-        "breaking": false,
-        "note": "Initial product-lead â€” product orchestrator"
+    “product-lead”: {
+      “1.0.0”: {
+        “date”: “2026-03-26”,
+        “breaking”: false,
+        “note”: “Initial product-lead â€” product orchestrator”
+      },
+      “1.1.0”: {
+        “date”: “2026-04-19”,
+        “breaking”: false,
+        “note”: “W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)”
       }
     },
     “platform-auditor”: {

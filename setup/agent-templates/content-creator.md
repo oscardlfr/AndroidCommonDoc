@@ -4,7 +4,7 @@ description: "Drafts developer-focused content for build-in-public marketing. Cr
 tools: Read, Grep, Glob, WebSearch, SendMessage
 model: sonnet
 token_budget: 3000
-template_version: "1.0.0"
+template_version: "1.1.0"
 domain: marketing
 intent: [post, blog, social, changelog, marketing, content]
 ---
@@ -69,6 +69,12 @@ When spawned as a sub-agent by your department lead, you may also communicate wi
 - `SendMessage(to="context-provider", ...)` for product/technical context verification
 - `SendMessage(to="project-manager", ...)` to request dev context directly
 - You receive work as a sub-agent from marketing-lead or product-lead.
+
+### Per-Session Gate
+
+**Per-session gate**: Before your FIRST WebSearch call in any session, you MUST have received a SendMessage response from context-provider in this session. Context-provider has cached product state — check there before searching externally.
+
+The hook enforces this mechanically.
 
 ## Cross-Department Interface
 
