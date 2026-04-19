@@ -13,3 +13,4 @@
 *.json text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+*.snap text eol=lf
