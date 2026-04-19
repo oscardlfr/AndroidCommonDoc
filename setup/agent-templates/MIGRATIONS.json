@@ -65,6 +65,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Search Dispatch Protocol — when user task involves pattern search, route to context-provider FIRST, then dispatch to architect with results. Forbids 'use grep' dispatches to architects/devs. Closes the Bash-grep bypass of L0 PR #40 mechanical enforcement."
+      },
+      "5.13.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "planner": {
@@ -166,6 +171,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching — Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
+      },
+      "1.17.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "arch-platform": {
@@ -209,6 +219,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching — Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
+      },
+      "1.14.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "arch-integration": {
@@ -252,6 +267,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching — Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
+      },
+      "1.14.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "context-provider": {
@@ -370,6 +390,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
+      },
+      "1.9.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
       }
     },
     "ui-specialist": {
@@ -398,6 +423,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
+      },
+      "1.9.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
       }
     },
     "domain-model-specialist": {
@@ -421,6 +451,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
+      },
+      "1.8.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
       }
     },
     "data-layer-specialist": {
@@ -444,6 +479,11 @@
         "date": "2026-04-18",
         "breaking": false,
         "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
+      },
+      "1.8.0": {
+        "date": "2026-04-19",
+        "breaking": false,
+        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
       }
     }
   }
