@@ -24,8 +24,6 @@ teardown() {
 grep -r "libs.androidx-lifecycle-runtime-ktx" .
 EOF
     run "$SCRIPT" --project-root "$WORK_DIR"
-    echo "# T1 status=$status" >&3
-    echo "# T1 output=$output" >&3
     [ "$status" -eq 0 ]
     [[ "$output" == *"hyphen-notation"* ]]
 }
@@ -35,8 +33,6 @@ EOF
 grep -r "libs.androidx.lifecycle.runtime.ktx" .
 EOF
     run "$SCRIPT" --project-root "$WORK_DIR"
-    echo "# T2 status=$status" >&3
-    echo "# T2 output=$output" >&3
     [ "$status" -eq 0 ]
     [[ "$output" != *"hyphen-notation"* ]]
 }
@@ -47,8 +43,6 @@ EOF
 implementation("com.example:lib:1.0.0")
 EOF
     run "$SCRIPT" --project-root "$WORK_DIR" --strict
-    echo "# T3 status=$status" >&3
-    echo "# T3 output=$output" >&3
     [ "$status" -eq 1 ]
     [[ "$output" == *"com.example:lib:1.0.0"* ]]
 }
