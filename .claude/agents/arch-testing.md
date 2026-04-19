@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.16.0"
+template_version: "1.17.0"
 skills:
   - test
   - test-full-parallel
@@ -53,6 +53,9 @@ Before investigating or speccing work for a dev:
 
 **Skip only if**: context-provider already answered this exact query earlier in the same session.
 
+### Per-Session Gate
+
+**Per-session gate**: Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from context-provider in this session. The hook enforces this mechanically — your first search-type tool call will be blocked until CP has been consulted.
 
 ### Topology Protocols (T-BUG-011 OBS-A + T-BUG-012 Reporter — HARD GATES)
 

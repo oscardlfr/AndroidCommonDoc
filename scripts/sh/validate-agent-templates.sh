@@ -119,7 +119,7 @@ get_frontmatter_field() {
     local field="$2"
     awk -v field="$field" '
         /^---$/ { fm++; next }
-        fm == 1 && $0 ~ "^"field":" { sub(/^[^:]+:[[:space:]]*/, ""); gsub(/["'\'']/, ""); print; exit }
+        fm == 1 && $0 ~ "^"field":" { sub(/^[^:]+:[[:space:]]*/, ""); gsub(/["'\'']/, ""); gsub(/\r/, ""); print; exit }
         fm >= 2 { exit }
     ' "$file"
 }
