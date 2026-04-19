@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // context-provider-gate.js — PreToolUse hook
-// Blocks Grep/Glob/Bash-search unless the CALLING agent has consulted CP this session.
+// Blocks Grep/Glob/Bash-search unless ANY agent has consulted CP this session.
 //
-// Per-agent flag: each agent must SendMessage context-provider to unblock its own searches.
-// Session-scoped gates (old behavior) let ANY agent's consultation unblock EVERYONE — that
-// created the Sprint 1 Wave 2 incident where devs grepped for patterns despite protocol.
-// Per-agent flag enforces Search Dispatch Protocol mechanically.
+// Session-scoped flag: one CP consultation unblocks all peers in that session.
+// The harness assigns a new agent_id per tool invocation for peer agents, so
+// per-agent flags (old behavior) never matched between PostToolUse (SendMessage)
+// and PreToolUse (Bash/Grep). Session-scoped flag restores dev autonomy.
 //
 // Exempt via agent_type prefix match: context-provider, project-manager, team-lead.
 //
@@ -44,10 +44,10 @@ process.stdin.on('end', () => {
       }
     }
 
-    // 3. Check per-agent consultation flag
-    const flagPath = path.join(os.tmpdir(), `claude-cp-consulted-${sessionId}-${agentId}.flag`);
+    // 3. Check session consultation flag (any agent's CP consult unblocks all peers)
+    const flagPath = path.join(os.tmpdir(), `claude-cp-consulted-${sessionId}.flag`);
     if (fs.existsSync(flagPath)) {
-      process.exit(0); // this agent has consulted CP — allow
+      process.exit(0); // session has CP-consulted — allow
     }
 
     // 4. Block — write per-agent block marker for logger and emit decision
@@ -56,7 +56,7 @@ process.stdin.on('end', () => {
 
     const out = JSON.stringify({
       decision: 'block',
-      reason: 'This agent has not consulted context-provider this session. SendMessage to context-provider first to validate pattern assumptions, then retry.'
+      reason: 'No agent in this session has consulted context-provider yet. SendMessage to context-provider first to validate pattern assumptions, then retry.'
     });
     process.stdout.write(out);
     process.exit(2);
