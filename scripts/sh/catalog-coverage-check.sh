@@ -82,7 +82,7 @@ while IFS= read -r -d '' file; do
             FINDINGS=$((FINDINGS + 1))
         fi
     done < <(grep -nE '(implementation|api|testImplementation|androidTestImplementation|compileOnly|runtimeOnly|ksp|kapt|annotationProcessor|classpath)\s*\(\s*"[^":]+:[^":]+:[^"]+"' "$file" 2>/dev/null || true)
-done < <(find . -name "*.gradle.kts" -not -path "*/build/*" -not -path "*/.gradle/*" -not -path "*/node_modules/*" -print0 2>/dev/null)
+done < <(find . -name "*.gradle.kts" -not -path "*/build/*" -not -path "*/.gradle/*" -not -path "*/node_modules/*" -print0 2>/dev/null || true)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Check 2: Hyphen-notation catalog accessor in scripts/docs/templates
@@ -103,7 +103,7 @@ while IFS= read -r -d '' file; do
     done < <(grep -nE "$HYPHEN_RE" "$file" 2>/dev/null || true)
 done < <(find . \( -name "*.sh" -o -name "*.ps1" -o -name "*.md" \) \
     -not -path "*/build/*" -not -path "*/.gradle/*" -not -path "*/node_modules/*" \
-    -not -path "*/.git/*" -print0 2>/dev/null)
+    -not -path "*/.git/*" -print0 2>/dev/null || true)
 
 if [[ $HYPHEN_FINDINGS -gt 0 ]]; then
     echo "[WARN] dot-notation check: $HYPHEN_FINDINGS hyphen-notation catalog accessor(s) found in scripts/docs/templates"
