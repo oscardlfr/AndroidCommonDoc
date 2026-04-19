@@ -4,7 +4,7 @@ description: "Analyzes feature ideas against business goals using ICE scoring. P
 tools: Read, Grep, Glob, WebSearch, WebFetch, SendMessage
 model: sonnet
 token_budget: 3000
-template_version: "1.0.0"
+template_version: "1.1.0"
 domain: business
 intent: [prioritize, roadmap, features, scoring, backlog, pricing, tiers]
 ---
@@ -33,6 +33,16 @@ You receive:
 {{- COST_MODEL.md — infrastructure and pricing model}}
 
 ## Process
+
+### Per-Session Gate
+
+Before your FIRST WebSearch or WebFetch call in any session, you MUST have received a SendMessage response from context-provider in this session. Context-provider has Context7 (curated library/framework docs) and cached project state — WebSearch/WebFetch is for gaps CP cannot fill.
+
+The hook enforces this mechanically — your first search-type tool call is blocked until CP has been consulted.
+
+**CP-first for external research**: `SendMessage(to="context-provider", summary="external research: <topic>", message="Need <X>. Check Context7 first. WebFetch <URL> if not available.")` — only use WebSearch/WebFetch directly if CP confirms the data is not available through their channels.
+
+FORBIDDEN: Opening a WebSearch or WebFetch before CP has responded in this session.
 
 1. **Understand context** — Read product docs, understand current state
 2. **Score each idea** — Apply ICE framework with evidence

@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [docs, changelog, memory, roadmap]
 token_budget: 2000
-template_version: "2.2.0"
+template_version: "2.3.0"
 skills:
   - audit-docs
   - readme-audit
@@ -38,6 +38,14 @@ SendMessage(to="doc-updater", summary="document wave 1", message="Document compl
 ```
 
 ## Pre-Write Validation (MANDATORY before ANY write)
+
+### Per-Session Gate
+
+Before your FIRST Grep, Glob, or Bash call in any session, you MUST have received a SendMessage response from context-provider in this session. Pre-Write Validation step 1 (Context check with CP) is the required trigger — but if you run a Grep scan BEFORE invoking Pre-Write Validation, the gate still applies.
+
+The hook enforces this mechanically — your first search-type tool call is blocked until CP has been consulted.
+
+FORBIDDEN: Using Grep, Glob, or Bash for any scan (even a quick frontmatter check) before CP has responded in this session.
 
 Before writing or editing any doc file, you MUST validate:
 
