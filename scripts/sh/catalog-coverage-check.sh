@@ -84,6 +84,32 @@ while IFS= read -r -d '' file; do
     done < <(grep -nE '(implementation|api|testImplementation|androidTestImplementation|compileOnly|runtimeOnly|ksp|kapt|annotationProcessor|classpath)\s*\(\s*"[^":]+:[^":]+:[^"]+"' "$file" 2>/dev/null || true)
 done < <(find . -name "*.gradle.kts" -not -path "*/build/*" -not -path "*/.gradle/*" -not -path "*/node_modules/*" -print0 2>/dev/null)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Check 2: Hyphen-notation catalog accessor in scripts/docs/templates
+# Gradle generates dot-notation: libs.androidx.lifecycle.runtime.ktx
+# Hyphen-notation (libs.androidx-lifecycle-runtime-ktx) is WRONG in grep patterns
+# ─────────────────────────────────────────────────────────────────────────────
+HYPHEN_FINDINGS=0
+HYPHEN_RE='libs\.[a-z][a-z0-9]*(-[a-z][a-z0-9]*)+'
+
+while IFS= read -r -d '' file; do
+    while IFS= read -r line_data; do
+        line_num="${line_data%%:*}"
+        line_content="${line_data#*:}"
+        printf "[WARN] Hyphen-notation catalog accessor in %s:%s — use dot-notation (libs.androidx.lifecycle.runtime.ktx)\n" \
+            "$file" "$line_num"
+        printf "  Found: %s\n" "$line_content"
+        HYPHEN_FINDINGS=$((HYPHEN_FINDINGS + 1))
+    done < <(grep -nE "$HYPHEN_RE" "$file" 2>/dev/null || true)
+done < <(find . \( -name "*.sh" -o -name "*.ps1" -o -name "*.md" \) \
+    -not -path "*/build/*" -not -path "*/.gradle/*" -not -path "*/node_modules/*" \
+    -not -path "*/.git/*" -print0 2>/dev/null)
+
+if [[ $HYPHEN_FINDINGS -gt 0 ]]; then
+    echo "[WARN] dot-notation check: $HYPHEN_FINDINGS hyphen-notation catalog accessor(s) found in scripts/docs/templates"
+    echo "Fix: replace libs.group-artifact with libs.group.artifact (Gradle generates dot-notation for version catalog)"
+fi
+
 echo
 if [[ $FINDINGS -eq 0 ]]; then
     echo "[OK] catalog coverage: 0 hardcoded versions found"
