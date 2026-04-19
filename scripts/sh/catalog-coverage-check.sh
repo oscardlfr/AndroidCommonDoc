@@ -76,9 +76,9 @@ while IFS= read -r -d '' file; do
             artifact="${BASH_REMATCH[3]}"
             version="${BASH_REMATCH[4]}"
             # Derive suggested catalog alias from artifact name
-            alias="$(echo "$artifact" | tr '[:upper:]' '[:lower:]' | tr '.' '-')"
+            catalog_alias="$(echo "$artifact" | tr '[:upper:]' '[:lower:]' | tr '.' '-')"
             printf "%s:%d  %s:%s:%s  -> consider libs.%s or sharedLibs.%s in your catalog\n" \
-                "$file" "$line_num" "$group" "$artifact" "$version" "$alias" "$alias"
+                "$file" "$line_num" "$group" "$artifact" "$version" "$catalog_alias" "$catalog_alias"
             FINDINGS=$((FINDINGS + 1))
         fi
     done < <(grep -nE '(implementation|api|testImplementation|androidTestImplementation|compileOnly|runtimeOnly|ksp|kapt|annotationProcessor|classpath)\s*\(\s*"[^":]+:[^":]+:[^"]+"' "$file" 2>/dev/null || true)
