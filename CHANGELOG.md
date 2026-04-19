@@ -6,6 +6,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ## [Unreleased]
 
 ### Added
+- **Context-provider adoption hook** (`.claude/hooks/context-provider-gate.js`): PreToolUse blocking gate on Grep/Glob/Bash — blocks tool calls unless the calling peer SendMessage'd context-provider first in the session. Session-level enforcement with agent_type-based exempt list.
+- **Context-provider consultation tracker** (`.claude/hooks/context-provider-consulted.js`): PostToolUse SendMessage hook — writes session flag when CP is addressed.
+- **Tool-use observability logger** (`.claude/hooks/tool-use-logger.js`): PostToolUse `.*` — logs every tool call to `.androidcommondoc/tool-use-log.jsonl` with agent_id, agent_type, mcp_server, mcp_tool, skill_name, duration, cp_bypass_blocked.
+- **MCP tool `tool-use-analytics`** (`mcp-server/src/tools/tool-use-analytics.ts`, tool #47): aggregates tool-use-log by top-tools, dead-tools, MCP/Context7/skill call rates, CP bypass count, per-agent breakdown.
+- **/metrics skill** (`.claude/commands/metrics.md`): harmonized dashboard invoking both `tool-use-analytics` and `skill-usage-analytics` — one user-facing view, two internal data sources.
+- **Hyphen-notation catalog accessor checker** in `scripts/sh/catalog-coverage-check.sh` (lines 87-111): warns when agent templates or audit scripts use hyphen-notation (`libs.androidx-lifecycle-runtime-ktx`) instead of Gradle's dot-notation (`libs.androidx.lifecycle.runtime.ktx`).
+- **context-provider template "On Team Join" section**: instructs CP to broadcast cached pattern list when new peers join the team (template_version 2.6.0).
+
+### Changed
+- `docs/agents/pm-dispatch-topology.md`: added canonical module path list (core/audio, core/media-session, core/data, desktopApp) + dot-notation grep examples.
+
+### Fixed
+- `doc-integrity-system.test.ts:68` stale assertion "Registered 46 tools" → "Registered 47 tools" after tool-use-analytics registration.
+- `three-phase-architecture.test.ts:822` hardcoded template_version "2.5.0" → "2.6.0" for context-provider template bump.
+
+---
+
+### Added
 - `dokka-markdown-plugin` 0.1.0 — Dokka 2.2.x custom renderer that generates L0-compliant structured markdown (`docs/api/*.md`) from KDoc. Replaces lost `dokka-to-docs.sh`. Optional opt-in via `/setup` wizard step W10.
 
 ### Changed
