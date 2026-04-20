@@ -8,6 +8,7 @@ description: >
   "material you", "Jetpack Compose", "MaterialTheme", "material component", "md3 button".
 user-invokable: true
 argument-hint: "[component|theme|layout|scaffold|audit] [description or URL]"
+copilot: false
 attribution: "CWTI Ltd"
 license: "MIT"
 source: "third-party"
