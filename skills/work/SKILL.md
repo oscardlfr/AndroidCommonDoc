@@ -15,6 +15,20 @@ Smart task routing — analyzes freeform text and delegates to the right agent o
 /work <task description>
 ```
 
+## Level 0.5 — Named Skill Override (checked before keyword routing)
+
+If `$ARGUMENTS` starts with or contains a known skill name, route directly to that skill — bypasses Level 1 keyword scan entirely:
+
+| Skill name match | Invokes | Use when |
+|-----------------|---------|----------|
+| `material-3` / `material 3` | `skills/material-3-skill/SKILL.md` | MD3 component, theme, scaffold, audit |
+| `sync-vault` | `skills/sync-vault/SKILL.md` | Obsidian vault sync |
+| `pre-pr` | `skills/pre-pr/SKILL.md` | Pre-merge validation |
+| `debug` | `skills/debug/SKILL.md` | Bug investigation |
+| `research` | `skills/research/SKILL.md` | Domain research |
+
+Add entries here when promoting a skill to named-route status (conscious promotion step — staleness is intentional).
+
 > **HARD GATE — Session setup blocks ALL work.**
 > If routing to `project-manager` (implement/feature/build/plan/wave keywords): verify session team exists FIRST.
 > Check: does `~/.claude/teams/session-{slug}/` exist with all 6 peers alive?
