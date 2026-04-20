@@ -10,28 +10,29 @@ const LEVEL05_ROUTES: Array<{ pattern: RegExp; route: string }> = [
   { pattern: /\bresearch\b/i, route: "research" },
 ];
 
-// Level 1 keyword routing table — mirrors skills/work/SKILL.md lines 79-97.
-// First-match-wins. Patterns are pipe-delimited, matched case-insensitively.
+// Level 1 keyword routing table — mirrors skills/work/SKILL.md Level 1 table.
+// \b word-boundary anchors added per 446652b — prevents substring false-matches.
+// First-match-wins. Patterns are matched case-insensitively.
 const LEVEL1_ROUTES: Array<{ pattern: RegExp; route: string }> = [
-  { pattern: /bug|error|fix|broken|crash/i, route: "/debug" },
-  { pattern: /test|coverage|benchmark/i, route: "test-specialist" },
-  { pattern: /review|PR|pull request/i, route: "/review-pr" },
-  { pattern: /research|investigate|explore/i, route: "/research" },
-  { pattern: /decide|choose|compare|tradeoff/i, route: "/decide" },
-  { pattern: /verify|check spec|meets criteria/i, route: "/verify" },
-  { pattern: /map|architecture|modules|inventory/i, route: "/map-codebase" },
-  { pattern: /pre-pr|validate|ready to merge/i, route: "/pre-pr" },
-  { pattern: /note|idea|remember/i, route: "/note" },
-  { pattern: /audit|quality/i, route: "/audit" },
-  { pattern: /doc|documentation|update docs/i, route: "doc-updater" },
-  { pattern: /context|pattern|lookup|what exists/i, route: "context-provider" },
-  { pattern: /ui|compose|screen|component/i, route: "ui-specialist" },
-  { pattern: /domain|model|sealed|data class/i, route: "domain-model-specialist" },
-  { pattern: /data layer|repository|encoding/i, route: "data-layer-specialist" },
-  { pattern: /prioritize|roadmap|features|backlog/i, route: "product-strategist" },
-  { pattern: /post|blog|social|marketing|content/i, route: "content-creator" },
-  { pattern: /landing|page|conversion|copy|seo/i, route: "landing-page-strategist" },
-  { pattern: /implement|feature|build|scope|plan|execute|wave/i, route: "project-manager" },
+  { pattern: /\b(bug|error|fix|broken|crash)\b/i, route: "/debug" },
+  { pattern: /\b(test|coverage|benchmark)\b/i, route: "test-specialist" },
+  { pattern: /\b(review|PR|pull request)\b/i, route: "/review-pr" },
+  { pattern: /\b(research|investigate|explore)\b/i, route: "/research" },
+  { pattern: /\b(decide|choose|compare|tradeoff)\b/i, route: "/decide" },
+  { pattern: /\b(verify|check spec|meets criteria)\b/i, route: "/verify" },
+  { pattern: /\b(map|architecture|modules|inventory)\b/i, route: "/map-codebase" },
+  { pattern: /\b(pre-pr|validate|ready to merge)\b/i, route: "/pre-pr" },
+  { pattern: /\b(note|idea|remember)\b/i, route: "/note" },
+  { pattern: /\b(audit|quality)\b/i, route: "/audit" },
+  { pattern: /\b(doc|documentation|update docs)\b/i, route: "doc-updater" },
+  { pattern: /\b(context|pattern|lookup|what exists)\b/i, route: "context-provider" },
+  { pattern: /\b(ui|compose|screen|component)\b/i, route: "ui-specialist" },
+  { pattern: /\b(domain|model|sealed|data class)\b/i, route: "domain-model-specialist" },
+  { pattern: /\b(data layer|repository|encoding)\b/i, route: "data-layer-specialist" },
+  { pattern: /\b(prioritize|roadmap|features|backlog)\b/i, route: "product-strategist" },
+  { pattern: /\b(post|blog|social|marketing|content)\b/i, route: "content-creator" },
+  { pattern: /\b(landing|page|conversion|copy|seo)\b/i, route: "landing-page-strategist" },
+  { pattern: /\b(implement|feature|build|scope|plan|execute|wave)\b/i, route: "project-manager" },
 ];
 
 export function resolveWorkRoute(input: string): string {
@@ -140,6 +141,18 @@ describe("/work skill routing", () => {
     it("T-BUG-010: 'execute' keyword routes to project-manager", () => {
       // "go execute the tasks" — no earlier-row collisions
       expect(resolveWorkRoute("go execute the tasks")).toBe("project-manager");
+    });
+
+    it("T-BUG-010: 'build a new feature' routes to project-manager (446652b fix — was ui-specialist via build→ui substring)", () => {
+      // Pre-fix: bare /ui|compose|.../ matched "bu*il*d" as substring → ui-specialist
+      // Post-fix: \b(ui|compose|...)\b requires whole word → "build" falls through to project-manager row
+      expect(resolveWorkRoute("build a new feature")).toBe("project-manager");
+    });
+
+    it("T-BUG-010: 'plan the next sprint' routes to project-manager (446652b fix — was /review-pr via sprint→pr substring)", () => {
+      // Pre-fix: bare /review|PR|.../ matched "s*pr*int" as substring → /review-pr
+      // Post-fix: \b(review|PR|...)\b requires whole word → "sprint" falls through to project-manager row
+      expect(resolveWorkRoute("plan the next sprint")).toBe("project-manager");
     });
   });
 
