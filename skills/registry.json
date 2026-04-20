@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-20T15:14:07.152Z",
+  "generated": "2026-04-20T15:35:22.637Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1075,16 +1075,16 @@
       "name": "readme-audit",
       "type": "skill",
       "path": "skills/readme-audit/SKILL.md",
-      "description": "Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use before closing a milestone or when documentation feels stale.",
+      "description": "Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use --fix to auto-correct count headers, add missing rows, and remove phantom rows. Use before closing a milestone or when documentation feels stale.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d47bdc57273e4e65f5d4520886e14e7f2f7e6139022752ac5b683bd9782b0201",
+      "hash": "sha256:52569f7c493e5e110f5b19ff262272d6eb3b5cdfaa23a72c618aeae2fba5da22",
       "dependencies": [
         "scripts/sh/readme-audit.sh"
       ],
       "frontmatter": {
         "name": "readme-audit",
-        "description": "Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use before closing a milestone or when documentation feels stale.",
+        "description": "Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use --fix to auto-correct count headers, add missing rows, and remove phantom rows. Use before closing a milestone or when documentation feels stale.",
         "intent": [
           "readme",
           "audit",

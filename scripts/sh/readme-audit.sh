@@ -68,7 +68,7 @@ actual_skill_count=$(echo "$actual_skills" | wc -l | tr -d ' \r')
 # Skills in AGENTS.md
 if [ -f AGENTS.md ]; then
   agents_md_header=$(grep -oE 'Available Skills \([0-9]+\)' AGENTS.md | grep -oE '[0-9]+' || echo "0")
-  agents_md_skills=$(sed -n '/## Available Skills/,/## MCP Tools/p' AGENTS.md | grep "^| \`" | sed 's/| `\([^`]*\)`.*/\1/' | sort)
+  agents_md_skills=$(sed -n '/## Available Skills/,/## MCP Tools/p' AGENTS.md | grep "^| \`" | sed 's/| `\([^`]*\)`.*/\1/' | sort || true)
   agents_md_skill_count=$(echo "$agents_md_skills" | grep -c "." || echo "0")
   
   if [ "$agents_md_header" != "$actual_skill_count" ]; then
@@ -92,8 +92,8 @@ fi
 
 # Skills in README.md
 if [ -f README.md ]; then
-  readme_consumer_skills=$(sed -n '/### Skills/,/### L0 Maintenance/p' README.md | grep "^| " | grep -oE '/[a-z][-a-z]*' | sed 's|^/||' | sort -u)
-  readme_l0_skills=$(sed -n '/### L0 Maintenance Skills/,/^## /p' README.md | grep "^| " | grep -oE '/[a-z][-a-z]*' | sed 's|^/||' | sort -u)
+  readme_consumer_skills=$(sed -n '/### Skills/,/### L0 Maintenance/p' README.md | grep "^| " | grep -oE '/[a-z][-a-z]*' | sed 's|^/||' | sort -u || true)
+  readme_l0_skills=$(sed -n '/### L0 Maintenance Skills/,/^## /p' README.md | grep "^| " | grep -oE '/[a-z][-a-z]*' | sed 's|^/||' | sort -u || true)
 fi
 
 # ─── 2. MCP TOOL TABLE AUDIT ───
@@ -128,11 +128,11 @@ fi
 # ─── 3. AGENT TABLE AUDIT ───
 echo "▶ Checking agent tables..."
 
-actual_agents=$(ls .claude/agents/*.md 2>/dev/null | xargs -I {} basename {} .md | sort)
+actual_agents=$(ls .claude/agents/*.md 2>/dev/null | xargs -I {} basename {} .md | sort || true)
 actual_agent_count=$(echo "$actual_agents" | grep -c "." || echo "0")
 
 if [ -f README.md ]; then
-  readme_agents=$(sed -n '/^## Agents/,/^## /p' README.md | grep "^| \`" | sed 's/| `\([^`]*\)`.*/\1/' | sort)
+  readme_agents=$(sed -n '/^## Agents/,/^## /p' README.md | grep "^| \`" | sed 's/| `\([^`]*\)`.*/\1/' | sort || true)
   readme_agent_count=$(echo "$readme_agents" | grep -c "." || echo "0")
   
   for agent in $actual_agents; do
@@ -146,11 +146,11 @@ fi
 echo "▶ Checking script tables..."
 
 if [ -d scripts/sh ]; then
-  actual_sh=$(ls scripts/sh/*.sh 2>/dev/null | xargs -I {} basename {} .sh | sort)
+  actual_sh=$(ls scripts/sh/*.sh 2>/dev/null | xargs -I {} basename {} .sh | sort || true)
   actual_sh_count=$(echo "$actual_sh" | grep -c "." || echo "0")
-  
+
   if [ -f README.md ]; then
-    readme_scripts=$(sed -n '/^## Scripts/,/^## /p' README.md | grep "^| \`" | sed 's/| `\([^`]*\)`.*/\1/' | sort)
+    readme_scripts=$(sed -n '/^## Scripts/,/^## /p' README.md | grep "^| \`" | sed 's/| `\([^`]*\)`.*/\1/' | sort || true)
     
     for script in $readme_scripts; do
       if ! echo "$actual_sh" | grep -qx "$script"; then
@@ -249,7 +249,7 @@ if [ -f README.md ]; then
   # MCP tools in description
   readme_mcp_desc=$(grep -oE 'MCP server with [0-9]+ tools' README.md | grep -oE '[0-9]+' | head -1 || echo "?")
   if [ -n "$readme_mcp_desc" ] && [ "$readme_mcp_desc" != "?" ]; then
-    actual_mcp_for_check=$(ls mcp-server/src/tools/*.ts 2>/dev/null | grep -v index | wc -l | tr -d ' \r')
+    actual_mcp_for_check=$(ls mcp-server/src/tools/*.ts 2>/dev/null | grep -v index 2>/dev/null | wc -l | tr -d ' \r' || true)
     if [ "$readme_mcp_desc" != "$actual_mcp_for_check" ]; then
       add_finding "HIGH" "count" "README description says '$readme_mcp_desc tools' but actual: $actual_mcp_for_check" "true"
     fi
@@ -365,5 +365,115 @@ echo "  Total: $total findings ($high HIGH, $medium MEDIUM, $low LOW)"
 echo "  Fixable: $fixable / $total"
 [ "${SUPPRESSED_COUNT:-0}" -gt 0 ] && echo "  Suppressed: $SUPPRESSED_COUNT (see .androidcommondoc/audit-suppressions.jsonl)"
 echo "═══════════════════════════════════════════════"
+
+# ─── FIX MODE ───
+fix_findings() {
+  local fixes=0
+  local py_tmp
+  py_tmp=$(mktemp /tmp/readme-audit-fix.XXXXXX.py)
+  trap 'rm -f "$py_tmp"' RETURN
+
+  # Write Python helper script once — reused per fix call
+  cat > "$py_tmp" << 'PYEOF'
+import sys, re, json
+
+action = sys.argv[1]
+
+if action == "count":
+    path, old, new = sys.argv[2], sys.argv[3], sys.argv[4]
+    content = open(path, encoding='utf-8').read()
+    updated = re.sub(r'(?<!\d)' + re.escape(old) + r'(?!\d)', new, content, count=1)
+    if updated != content:
+        open(path, 'w', encoding='utf-8').write(updated)
+        print("changed")
+
+elif action == "append_row":
+    path, name, desc = sys.argv[2], sys.argv[3], sys.argv[4]
+    content = open(path, encoding='utf-8').read()
+    lines = content.splitlines(keepends=True)
+    insert_at = -1
+    in_table = False
+    for i, line in enumerate(lines):
+        if '## Available Skills' in line:
+            in_table = True
+        if in_table and line.startswith('| '):
+            insert_at = i
+        if in_table and line.strip() == '' and insert_at >= 0:
+            break
+    if insert_at >= 0:
+        new_row = f'| `{name}` | {desc} |\n'
+        lines.insert(insert_at + 1, new_row)
+        open(path, 'w', encoding='utf-8').writelines(lines)
+        print("changed")
+
+elif action == "remove_row":
+    path, name = sys.argv[2], sys.argv[3]
+    content = open(path, encoding='utf-8').read()
+    lines = content.splitlines(keepends=True)
+    filtered = [l for l in lines if f'`{name}`' not in l]
+    if len(filtered) < len(lines):
+        open(path, 'w', encoding='utf-8').writelines(filtered)
+        print("changed")
+PYEOF
+
+  for f in "${FINDINGS[@]}"; do
+    local cat msg fixable
+    cat=$(echo "$f" | cut -d'|' -f2)
+    msg=$(echo "$f" | cut -d'|' -f3)
+    fixable=$(echo "$f" | cut -d'|' -f4)
+    [[ "$fixable" != "true" ]] && continue
+
+    case "$cat" in
+      count)
+        # Extract old number: from "says 'N" OR from "(N)" notation
+        old_num=$(echo "$msg" | grep -oE "says '[0-9]+" | grep -oE '[0-9]+' | head -1 || true)
+        if [[ -z "$old_num" ]]; then
+          old_num=$(echo "$msg" | grep -oE '\([0-9]+\)' | grep -oE '[0-9]+' | head -1 || true)
+        fi
+        new_num=$(echo "$msg" | grep -oE 'actual: [0-9]+' | grep -oE '[0-9]+' | head -1 || true)
+        [[ -z "$old_num" || -z "$new_num" ]] && continue
+        [[ "$old_num" == "$new_num" ]] && continue
+        if echo "$msg" | grep -q "AGENTS.md"; then
+          target_file="AGENTS.md"
+        else
+          target_file="README.md"
+        fi
+        [[ ! -f "$target_file" ]] && continue
+        result=$(python3 "$py_tmp" count "$target_file" "$old_num" "$new_num" || true)
+        [[ "$result" == "changed" ]] && fixes=$((fixes + 1))
+        ;;
+
+      missing)
+        if echo "$msg" | grep -q "Skill '.*' exists on disk but missing from AGENTS.md"; then
+          skill_name=$(echo "$msg" | grep -oE "Skill '[^']+'" | grep -oE "'[^']+'" | tr -d "'")
+          [[ -z "$skill_name" || ! -f "AGENTS.md" ]] && continue
+          skill_desc=""
+          if [ -f "skills/$skill_name/SKILL.md" ]; then
+            skill_desc=$(grep '^description:' "skills/$skill_name/SKILL.md" | sed 's/^description: *//' | sed 's/^"//' | sed 's/"$//' | head -1 || true)
+          fi
+          [[ -z "$skill_desc" ]] && skill_desc="—"
+          result=$(python3 "$py_tmp" append_row "AGENTS.md" "$skill_name" "$skill_desc" || true)
+          [[ "$result" == "changed" ]] && fixes=$((fixes + 1))
+        fi
+        ;;
+
+      phantom)
+        if echo "$msg" | grep -q "Skill '.*' in AGENTS.md table but not on disk"; then
+          skill_name=$(echo "$msg" | grep -oE "Skill '[^']+'" | grep -oE "'[^']+'" | tr -d "'")
+          [[ -z "$skill_name" || ! -f "AGENTS.md" ]] && continue
+          result=$(python3 "$py_tmp" remove_row "AGENTS.md" "$skill_name" || true)
+          [[ "$result" == "changed" ]] && fixes=$((fixes + 1))
+        fi
+        ;;
+    esac
+  done
+
+  echo ""
+  echo "  Applied: $fixes fix(es)"
+}
+
+if $FIX_MODE; then
+  fix_findings
+fi
 
 [ "$high" -gt 0 ] && exit 1 || exit 0
