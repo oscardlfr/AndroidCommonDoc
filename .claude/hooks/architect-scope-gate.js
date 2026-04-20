@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// architect-scope-gate.js — PreToolUse hook
+// architect-scope-gate.js -- PreToolUse hook
 // Blocks arch-* agents from Write/Edit on files not in current wave scope.
-// Scope source: .planning/PLAN.md — lines matching `- \`path\`` in "Scope files" sections.
+// Scope source: .planning/PLAN.md -- lines matching `- \`path\`` in "Scope files" sections.
 // Escape hatch: SCOPE_GATE_DISABLE=1 allows but logs to .planning/scope-gate-bypasses.log
 
 const fs = require('fs');
@@ -41,13 +41,14 @@ process.stdin.on('end', () => {
     if (path.isAbsolute(targetPath)) {
       normalizedTarget = path.relative(projectRoot, targetPath);
     }
-    normalizedTarget = normalizedTarget.replace(/\/g, '/').replace(/^\.\//, '');
+    normalizedTarget = normalizedTarget.replace(/\\/g, '/').replace(/^\.\//, '');
 
     if (scopeFiles.has(normalizedTarget)) process.exit(0);
 
     if (process.env.SCOPE_GATE_DISABLE === '1') {
       const logPath = path.join(projectRoot, '.planning', 'scope-gate-bypasses.log');
-      const entry = `${new Date().toISOString()} | agent=${agentType} | session=${sessionId} | file=${normalizedTarget}\n`;
+      const entry = `${new Date().toISOString()} | agent=${agentType} | session=${sessionId} | file=${normalizedTarget}
+`;
       try { fs.appendFileSync(logPath, entry); } catch {}
       process.exit(0);
     }
