@@ -1,5 +1,4 @@
 ---
-
 name: template-sync-validator
 description: "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Respects the copilot frontmatter field in skills/*/SKILL.md to determine expected coverage."
 tools: Read, Grep, Glob

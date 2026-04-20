@@ -7,6 +7,7 @@ domain: audit
 intent: [full-audit, quality-gate, wave]
 token_budget: 4000
 memory: project
+template_version: "1.0.0"
 ---
 
 You orchestrate the unified full-audit process. You receive a profile configuration and execute checks in waves, collecting and deduplicating findings into a single consolidated report.

@@ -10,6 +10,7 @@ memory: project
 skills:
   - sbom
   - verify-kmp
+template_version: "1.0.0"
 ---
 
 You are a release readiness scanner. You look for artifacts that should NEVER ship in a release build.

@@ -1,5 +1,4 @@
 ---
-
 name: release-guardian-agent
 description: Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.
 tools: Read, Grep, Glob

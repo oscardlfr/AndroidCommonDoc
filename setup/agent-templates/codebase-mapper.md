@@ -1,5 +1,4 @@
 ---
-
 name: codebase-mapper
 description: "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area)."
 tools: Read, Grep, Glob, Bash, Write

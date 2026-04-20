@@ -12,6 +12,7 @@ optional_capabilities:
   - context7
   - jina
   - jina
+template_version: "1.0.0"
 ---
 
 ## Optional Capabilities

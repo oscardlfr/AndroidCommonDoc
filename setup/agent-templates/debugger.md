@@ -1,5 +1,4 @@
 ---
-
 name: debugger
 description: Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis.
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch

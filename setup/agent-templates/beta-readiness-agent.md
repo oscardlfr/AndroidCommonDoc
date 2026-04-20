@@ -1,5 +1,4 @@
 ---
-
 name: beta-readiness-agent
 description: One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.
 tools: Read, Grep, Glob

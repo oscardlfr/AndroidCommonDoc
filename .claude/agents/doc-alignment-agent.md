@@ -11,6 +11,7 @@ skills:
   - audit-docs
   - validate-patterns
   - readme-audit
+template_version: "1.0.0"
 ---
 
 You detect documentation drift by comparing recent code changes against project documentation.

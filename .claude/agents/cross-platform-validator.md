@@ -12,6 +12,7 @@ optional_capabilities:
   - jina
 skills:
   - verify-kmp
+template_version: "1.0.0"
 ---
 
 ## Optional Capabilities

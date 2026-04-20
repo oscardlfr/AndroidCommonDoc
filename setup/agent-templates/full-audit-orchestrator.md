@@ -1,5 +1,4 @@
 ---
-
 name: full-audit-orchestrator
 description: Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking.
 tools: Read, Grep, Glob, Bash, Agent, Write

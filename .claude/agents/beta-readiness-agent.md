@@ -10,6 +10,7 @@ memory: project
 skills:
   - pre-pr
   - test-full-parallel
+template_version: "1.0.0"
 ---
 
 You perform a comprehensive beta readiness audit for a KMP project. This is a one-time deep review before the first external users see the app.

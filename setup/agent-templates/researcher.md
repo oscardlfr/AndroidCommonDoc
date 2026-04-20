@@ -1,5 +1,4 @@
 ---
-
 name: researcher
 description: Ad-hoc technical research on any topic. Use before implementation to gather context, evaluate options, or understand a domain.
 tools: Read, Grep, Glob, WebSearch, WebFetch

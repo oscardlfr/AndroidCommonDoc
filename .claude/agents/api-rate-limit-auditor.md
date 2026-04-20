@@ -9,6 +9,7 @@ token_budget: 2000
 memory: project
 skills:
   - validate-patterns
+template_version: "1.0.0"
 ---
 
 You audit HTTP client implementations for proper rate limiting and resilience patterns.

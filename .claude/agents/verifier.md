@@ -10,6 +10,7 @@ skills:
   - verify
   - test
   - validate-patterns
+template_version: "1.0.0"
 ---
 
 You are a verification agent. You check whether code actually delivers what was promised, using goal-backward analysis.

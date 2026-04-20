@@ -1,5 +1,4 @@
 ---
-
 name: advisor
 description: Researches a single technical decision and returns a structured comparison table with recommendation. Use when choosing between approaches, libraries, or architectures.
 tools: Read, Grep, Glob, WebSearch, WebFetch

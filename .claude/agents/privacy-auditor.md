@@ -9,6 +9,7 @@ token_budget: 2000
 memory: project
 skills:
   - validate-patterns
+template_version: "1.0.0"
 ---
 
 You audit code for privacy and data protection concerns, aligned with GDPR/CCPA principles.

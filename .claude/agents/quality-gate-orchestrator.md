@@ -7,6 +7,7 @@ domain: audit
 intent: [quality-gate, consistency, validators]
 token_budget: 3000
 memory: project
+template_version: "1.0.0"
 ---
 
 You are the unified quality gate orchestrator. You delegate to individual gate agents by reading their `.md` files at runtime, executing every check they describe, and producing a single consolidated report with an overall pass/fail status.
