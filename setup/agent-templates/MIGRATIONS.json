@@ -70,6 +70,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+      },
+      "5.14.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W22: model opus→sonnet (S1), spawn-prompt diet ≤25 lines + agent-core-rules.md (S2), mandatory rtk prefix rule (S3)"
       }
     },
     "planner": {
