@@ -2,6 +2,7 @@
 name: work
 description: "Smart task routing — analyzes freeform text and delegates to the right agent or skill."
 copilot: false
+intent: [route, delegate, orchestrate, debug, research, verify, audit, implement, review]
 ---
 
 # Work Skill
@@ -13,6 +14,34 @@ Smart task routing — analyzes freeform text and delegates to the right agent o
 ```
 /work <task description>
 ```
+
+> **HARD GATE — Session setup blocks ALL work.**
+> If routing to `project-manager` (implement/feature/build/plan/wave keywords): verify session team exists FIRST.
+> Check: does `~/.claude/teams/session-{slug}/` exist with all 6 peers alive?
+> - context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
+> If NO → complete TeamCreate + all 6 peers + pre-flight checklist BEFORE routing any task.
+> DO NOT plan. DO NOT dispatch. DO NOT respond to user task until session is ready.
+> If ANY pre-flight checkbox fails → fix it first, then re-verify ALL from top.
+
+## Stale Team Dir Check (run before TeamCreate)
+
+Prior sessions leave stale dirs that force `-2`/`-3` suffixes on re-spawn.
+
+```bash
+ls ~/.claude/teams/ | grep "session-{slug}"
+```
+
+If `session-{slug}-2` or `session-{slug}-3` found → stale entry exists.
+
+**Option A (preferred)**: Clean before TeamCreate:
+```bash
+rm -r ~/.claude/teams/session-{slug} 2>/dev/null || true
+rm -r ~/.claude/teams/session-{slug}-2 2>/dev/null || true
+```
+Note: use `rm -r` NOT `rm -rf` (harness deny rule at `.claude/settings.json:L21` blocks `rm -rf *`; also `rm -r` errors visibly on wrong paths instead of silently succeeding).
+If this errors "No such file or directory" — dir is already clean, proceed.
+
+**Option B (fallback)**: Accept `-2`/`-3` suffix and send correction-message to all peers with actual team name.
 
 ## Routing Logic
 
@@ -57,37 +86,56 @@ Match `$ARGUMENTS` against these patterns in order. First match wins:
 | `pre-pr\|validate\|ready to merge` | `/pre-pr` |
 | `note\|idea\|remember` | `/note` |
 | `audit\|quality` | `/audit` |
+| `doc\|documentation\|update docs` | Delegate to `doc-updater` agent |
+| `context\|pattern\|lookup\|what exists` | Delegate to `context-provider` agent |
+| `ui\|compose\|screen\|component` | Delegate to `ui-specialist` agent |
+| `domain\|model\|sealed\|data class` | Delegate to `domain-model-specialist` agent |
+| `data layer\|repository\|encoding` | Delegate to `data-layer-specialist` agent |
 | `prioritize\|roadmap\|features\|backlog` | Agent(`product-strategist`) * |
 | `post\|blog\|social\|marketing\|content` | Agent(`content-creator`) * |
 | `landing\|page\|conversion\|copy\|seo` | Agent(`landing-page-strategist`) * |
-| `pricing\|tiers\|monetize` | Agent(`product-strategist`) * |
 | `implement\|feature\|build\|scope\|plan\|execute\|wave` | Read `project-manager` template, act as PM (in-process) *** |
 
 \* Business agents are opt-in. If the agent doesn't exist in `.claude/agents/`, fall through to Level 2.
-\** Business agents are opt-in...
-\*** `project-manager` is the orchestrator for multi-file work. It assigns to architects, never codes. It MUST run as the main Claude process (in-process), NOT as a sub-agent via Agent() — sub-agents cannot create teams (TeamCreate) or spawn other agents reliably.
+\*** T-BUG-010: `project-manager` MUST run in-process (main conversation), NEVER via `Agent()`. Sub-agents cannot TeamCreate or spawn reliably. Read `.claude/agents/project-manager.md` and act as PM directly.
 
 ### Level 2 — Frontmatter Discovery (if no Level 1 match)
 
 1. Scan `.claude/agents/*.md` for `intent:` frontmatter
 2. Match keywords in user description against intent arrays
-3. If match found -> suggest that agent
-4. If no match -> check if `project-manager` agent exists:
-   - If yes: spawn `project-manager` via Agent tool
-   - If no: check if `dev-lead` agent exists (legacy fallback):
-     - If yes: spawn `dev-lead` via Agent tool
-     - If no: execute the task directly (Claude handles inline)
+3. If match found → suggest that agent
+4. If no match → read `.claude/agents/project-manager.md`, act as PM in-process
+
+## Dev Spawn First-Action Protocol
+
+When PM spawns a dev specialist, the dev's FIRST action must be:
+```
+SendMessage(to="context-provider", summary="gate ack")
+```
+
+This satisfies the per-session CP gate (Bug #7 fixed: session-scoped, one consult unblocks all peers).
+Include this instruction in every dev dispatch message from PM.
+
+## 3-Phase Execution Model
+
+When routing to project-manager (implement/wave keywords):
+1. **Planning phase**: PM reads plan file, writes `.planning/PLAN.md` via Write tool (not SendMessage)
+2. **Execution phase**: Architects dispatch devs wave by wave; each wave gated by architect APPROVE
+3. **Quality Gate phase**: quality-gater runs all validators; session closes only on full PASS
+
+quality-gater activation requires CP consultation first (same session gate as devs).
 
 ## Steps
 
 1. Parse task description from `$ARGUMENTS`
-2. Run Level 1 keyword matching against the routing table above
-3. If no Level 1 match, run Level 2 frontmatter discovery:
+2. Run Level 0 multi-department detection
+3. Run Level 1 keyword matching against the routing table above
+4. If no Level 1 match, run Level 2 frontmatter discovery:
    - Read each `.claude/agents/*.md` file
    - Extract `intent:` array from YAML frontmatter
    - Score keyword overlap with `$ARGUMENTS`
    - Select highest-scoring agent (if any scores > 0)
-4. Display the routing decision:
+5. Display the routing decision:
 
 ```
 Routing: "{task}" -> {target skill or agent}
@@ -96,8 +144,8 @@ Reason: {matched keyword or intent}
 Proceed? (y/n)
 ```
 
-5. Wait for user confirmation before executing
-6. On confirmation, invoke the matched skill or spawn the matched agent
+6. Wait for user confirmation before executing
+7. On confirmation, invoke the matched skill or spawn the matched agent
 
 ## Notes
 
@@ -105,7 +153,7 @@ Proceed? (y/n)
 - Level 2 only runs when Level 1 has no match
 - **Before routing to any agent, verify it exists** in `.claude/agents/` — if not, fall through
 - Business agents (product-strategist, content-creator, landing-page-strategist) are opt-in templates; they only exist if the project activated them via `/setup`
-- `dev-lead` is also a template — only exists if the project copied it from `setup/agent-templates/`
+- `dev-lead` is a legacy template — only exists if the project copied it from `setup/agent-templates/`
 - Always show the routing decision and ask for confirmation before executing
 - If the user disagrees with routing, ask them to clarify or pick a target manually
 
