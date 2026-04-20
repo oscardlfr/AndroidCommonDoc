@@ -26,7 +26,9 @@ Validate pattern docs against upstream official documentation. Runs Layer 1 dete
 ## Behavior
 
 1. Scan docs for `validate_upstream` frontmatter entries.
-2. Fetch upstream content (cached if fresh, via Jina Reader with raw fallback).
+2. Fetch upstream content (cached if fresh). Source is routed by URL scheme:
+   - `kb://android/...`  → Google Android CLI local KB (offline-capable after first run).
+   - `https://...`       → Jina Reader, raw HTTP fallback.
 3. Run assertions against fetched content.
 4. Report findings with severity and remediation context.
 

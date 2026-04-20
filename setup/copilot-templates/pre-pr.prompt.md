@@ -83,14 +83,111 @@ git diff "$MERGE_BASE..HEAD" -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
 Any GlobalScope or Thread.sleep match → ERROR (blocks).
 Dispatchers match → WARNING (reports but doesn't block).
 
+### Step 5.5 — Warning & suppress audit
+
+```bash
+# New @Suppress annotations in diff → ERROR (not a valid fix)
+SUPPRESS_HITS=$(git diff "$MERGE_BASE..HEAD" -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
+  | grep -cP '@Suppress\(|@SuppressWarnings\(|@file:Suppress' || true)
+
+if [ "$SUPPRESS_HITS" -gt 0 ]; then
+  echo "ERROR: $SUPPRESS_HITS new @Suppress annotation(s) found. Fix the root cause instead."
+  git diff "$MERGE_BASE..HEAD" -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
+    | grep -P '@Suppress\(|@SuppressWarnings\(|@file:Suppress'
+fi
+```
+
+New `@Suppress` → ERROR (blocks). Suppressing warnings is not a valid fix strategy. Fix the underlying issue.
+
+```bash
+# Gradle deprecation/outdated warnings (if not --skip-build)
+if [ -z "$SKIP_BUILD" ]; then
+  ./gradlew build --warning-mode all 2>&1 \
+    | grep -iE "deprecated|A newer version of .+ is available" | head -20
+fi
+```
+
+Gradle deprecation warnings → WARNING (reports, dev must acknowledge).
+"A newer version" warnings → WARNING (reports for visibility).
+
+### Step 5.6 — Secret scan
+
+Run TruffleHog on the project to detect committed secrets:
+
+```bash
+bash scripts/sh/scan-secrets.sh "$(pwd)"
+```
+
+- status=SKIPPED (trufflehog not installed): INFO — do not block
+- status=PASS: continue
+- findings with severity CRITICAL or HIGH: ERROR (blocks)
+- findings with severity MEDIUM or LOW: WARNING (report, do not block)
+
+### Step 5.7 — Dependency freshness
+
+```bash
+if [ -f "gradle/libs.versions.toml" ]; then
+  node "$ANDROID_COMMON_DOC/mcp-server/build/cli/check-outdated.js" "$(pwd)" --format summary
+fi
+```
+
+Outdated critical deps (major/minor bumps) --> WARNING (reports for visibility).
+Does NOT block -- version updates are a separate task, not a PR gate.
+
+**OBS-C (catalog-freshness monitoring)**: for continuous surveillance beyond per-PR runs, schedule `/check-outdated` via the `/schedule` skill — e.g., weekly cron posts a finding to your inbox if new upstream versions landed. Ad-hoc `/check-outdated` remains available for deep dives.
+
+### Step 5.75 — Catalog coverage (T-BUG-013)
+
+```bash
+if git diff --name-only "$MERGE_BASE..HEAD" | grep -qE '\.gradle\.kts$'; then
+  bash "$ANDROID_COMMON_DOC/scripts/sh/catalog-coverage-check.sh" --project-root "$(pwd)"
+fi
+```
+
+Catalog coverage scans `*.gradle.kts` in the consumer project for hardcoded dependency literals that bypass the version catalog (e.g., `implementation("net.java.dev.jna:jna-platform:5.14.0")` when `sharedLibs.jna.platform` exists).
+
+- Findings → WARNING (reports for visibility, does NOT block the PR).
+- Fix: replace hardcoded literal with `libs.<alias>` or `sharedLibs.<alias>` — add to the catalog if missing.
+
+**Why it matters (T-BUG-013)**: L2 debug session (2026-04-18) caught `jna-platform:5.14.0` hardcoded in DawSync while L1 `shared-kmp-libs` had bumped to `5.16.0`. Silent split-version drift. The script's logic already scanned `*.gradle.kts` correctly (since T-BUG-009) but was never invoked from any pipeline — pure theater. This step closes the wiring gap.
+
+### Step 5.8 — Agent template tests
+
+Run Vitest integration tests when agent templates, .claude/agents/, or mcp-server sources changed:
+
+```bash
+if git diff --name-only "$BASE_SHA" HEAD | grep -qE '^(setup/agent-templates/|\.claude/agents/|mcp-server/)'; then
+  cd "$ANDROID_COMMON_DOC/mcp-server" && npm test
+  cd - > /dev/null
+fi
+```
+
+Failures BLOCK the PR. The integration suite enforces Wave 1 template rules (Edit-directly removal, NEVER-you-fix rows, Scope Validation Gate, DURING-WAVE Protocol, Exact Fix Format, Post-Wave Team Integrity, dual-location sync).
+
+### Step 5.9 — Agent template behavioral lint
+
+Run when agent templates or `.claude/agents/` changed:
+
+```bash
+if git diff --name-only "$MERGE_BASE" HEAD | grep -qE '^(setup/agent-templates/|\.claude/agents/)'; then
+  bash scripts/sh/validate-agent-templates.sh --show-details
+fi
+```
+
+Failures BLOCK the PR. Validates role keyword contracts, tool-body cross-references, anti-patterns, size limits, and version/MIGRATIONS.json alignment.
+
 ### Step 6 — Registry hash freshness
 
 ```bash
+node mcp-server/build/cli/generate-registry.js
 bash scripts/sh/rehash-registry.sh --project-root "$(pwd)" --check
 ```
 
+Run `node mcp-server/build/cli/generate-registry.js` then `bash scripts/sh/rehash-registry.sh --project-root "$(pwd)" --check`. Both tools produce identical hashes post-S2.1; chaining remains required through Wave 22 as regression guard.
+
 If stale hashes found and `--fix` was passed:
 ```bash
+node mcp-server/build/cli/generate-registry.js
 bash scripts/sh/rehash-registry.sh --project-root "$(pwd)"
 git add skills/registry.json
 ```
@@ -115,6 +212,11 @@ Report per-module pass/fail. Show failing test names on failure.
 ║ Lint resources       ✅ PASS / ❌ FAIL  ║
 ║ Architecture guards  ✅ PASS / ❌ FAIL  ║
 ║ KMP safety           ✅ PASS / ❌ FAIL  ║
+║ Warning audit        ✅ PASS / ❌ FAIL  ║
+║ Secret scan          ✅ PASS / ❌ FAIL / ⏭️ SKIP ║
+║ Dep freshness        ⚠️ INFO / ⏭️ SKIP  ║
+║ Catalog coverage     ⚠️ INFO / ⏭️ SKIP  ║
+║ Agent template behavioral lint ✅ PASS / ❌ FAIL ║
 ║ Registry hashes      ✅ PASS / ❌ FAIL  ║
 ║ Build + Tests        ✅ PASS / ❌ FAIL  ║
 ╠══════════════════════════════════════════╣
@@ -132,6 +234,7 @@ If any fail: list specific violations and stop.
 3. **Architecture violations block** — fix in the PR, no bypasses
 4. **GlobalScope / Thread.sleep block** — hard failures, not warnings
 5. **Never open a PR with known failures** — fix locally first
+6. **@Suppress annotations block** — never suppress warnings to pass checks. Fix the root cause.
 
 ## Cross-References
 
