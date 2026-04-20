@@ -181,23 +181,27 @@ describe("model-profiles.json", () => {
       expect(config.profiles.balanced.default_model).toBe("sonnet");
     });
 
-    it("balanced profile overrides only downgrade to haiku (except PM which is always opus)", () => {
+    it("balanced profile overrides only downgrade to haiku (except PM which is sonnet)", () => {
       for (const [agent, model] of Object.entries(
         config.profiles.balanced.overrides,
       )) {
         if (agent === "project-manager") {
-          expect(model, `balanced.${agent} must be opus`).toBe("opus");
+          expect(model, `balanced.${agent} must be sonnet`).toBe("sonnet");
         } else {
           expect(model, `balanced.${agent} should be haiku`).toBe("haiku");
         }
       }
     });
 
-    it("advanced profile default is sonnet with opus overrides", () => {
+    it("advanced profile default is sonnet with opus overrides (PM exception: sonnet)", () => {
       const advanced = config.profiles.advanced;
       expect(advanced.default_model).toBe("sonnet");
       for (const [agent, model] of Object.entries(advanced.overrides)) {
-        expect(model, `advanced.${agent} should be opus`).toBe("opus");
+        if (agent === "project-manager") {
+          expect(model, `advanced.${agent} must be sonnet`).toBe("sonnet");
+        } else {
+          expect(model, `advanced.${agent} should be opus`).toBe("opus");
+        }
       }
     });
 
@@ -331,17 +335,17 @@ describe("model-profiles.json", () => {
   });
 
   // ---------------------------------------------------------------
-  // 8. PM is opus in ALL non-budget profiles
+  // 8. PM model tier — sonnet in balanced/advanced, opus in quality
   // ---------------------------------------------------------------
-  describe("PM model tier — opus in all non-budget profiles", () => {
-    it("PM is opus in balanced profile (explicit override)", () => {
+  describe("PM model tier — sonnet in balanced/advanced, opus in quality", () => {
+    it("PM is sonnet in balanced profile (explicit override)", () => {
       const resolved = config.profiles.balanced.overrides["project-manager"] ?? config.profiles.balanced.default_model;
-      expect(resolved).toBe("opus");
+      expect(resolved).toBe("sonnet");
     });
 
-    it("PM is opus in advanced profile (explicit override)", () => {
+    it("PM is sonnet in advanced profile (explicit override)", () => {
       const resolved = config.profiles.advanced.overrides["project-manager"] ?? config.profiles.advanced.default_model;
-      expect(resolved).toBe("opus");
+      expect(resolved).toBe("sonnet");
     });
 
     it("PM is opus in quality profile (default_model is opus, no override needed)", () => {
