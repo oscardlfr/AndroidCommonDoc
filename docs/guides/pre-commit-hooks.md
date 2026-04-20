@@ -3,8 +3,12 @@ scope: [workflow, git, hooks]
 sources: [androidcommondoc]
 targets: [all]
 slug: pre-commit-hooks
+status: active
+layer: L0
 category: guides
 description: "Pre-commit hook installation and registry validation."
+version: 1
+last_updated: "2026-04"
 ---
 
 # Pre-Commit Hooks Guide

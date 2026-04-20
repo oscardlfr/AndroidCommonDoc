@@ -33,5 +33,5 @@ fi
 HOOK
 chmod +x "$HOOKS_DIR/commit-msg"
 
-echo "✅ Installed: pre-commit (pattern-lint), commit-msg (conventional commits)"
+echo "✅ Installed: pre-commit (pattern-lint, registry-rehash), commit-msg (conventional commits)"
 echo "   To uninstall: rm .git/hooks/pre-commit .git/hooks/commit-msg"
