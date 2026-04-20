@@ -1,12 +1,12 @@
 ---
-scope: [workflow, git, hooks]
+scope: [git, hooks, pre-commit, registry, rehash]
 sources: [androidcommondoc]
-targets: [all]
+targets: [android, desktop, ios, jvm]
 slug: pre-commit-hooks
 status: active
 layer: L0
 category: guides
-description: "Pre-commit hook installation and registry validation."
+description: "Pre-commit hooks: pattern-lint on staged Kotlin files, registry rehash check on staged SKILL.md/registry.json"
 version: 1
 last_updated: "2026-04"
 ---
