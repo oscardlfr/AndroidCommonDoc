@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.14.0"
+template_version: "5.15.0"
 memory: project
 skills:
   - pre-pr
@@ -140,6 +140,15 @@ See [PM Phase Execution Protocol](docs/agents/pm-phase-execution.md) for phase t
 
 ### Quality Gate + Doc Pipeline
 See [PM Quality & Doc Pipeline](docs/agents/pm-quality-doc-pipeline.md) for quality-gater retry rules, doc-updater mandate, and CLAUDE.md pointers-only rule.
+
+### Model Profiles
+See [PM Model Profiles](docs/agents/pm-model-profiles.md) for `.claude/model-profiles.json` structure, the four profiles (budget/balanced/advanced/quality), and the PM semantic gap (template `model: sonnet` but profile override to opus at runtime).
+
+### Architect Dispatch Modes (MANDATORY — Bug #5 + Bug #6 fix)
+Every architect dispatch MUST include `scope_doc_path: .planning/PLAN-W{N}.md` and `mode: PREP` or `mode: EXECUTE`. Never hardcode `.planning/PLAN.md`. Full protocol: [arch-dispatch-modes](docs/agents/arch-dispatch-modes.md). Dispatch format: [pm-dispatch-topology § Architect Dispatch](docs/agents/pm-dispatch-topology.md#architect-dispatch--scope_doc_path--prepexecute-mode-wave-23).
+
+### Token Meter + Retrospective (MANDATORY at wave end)
+At the end of every wave, PM MUST: (1) estimate token spend as `dispatched-message-count × avg-tokens-per-message` (order-of-magnitude; no precision needed), (2) write `.planning/wave{N}/retrospective.md` with wave number, steps completed, token estimate, and verdict outcomes (APPROVE/ESCALATE counts per architect). Threshold: if estimate >80% of model context window → flag to user and propose wave split. Full spec: [pm-verification-gates § Token Meter Gate](docs/agents/pm-verification-gates.md#token-meter-gate).
 
 ### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
 

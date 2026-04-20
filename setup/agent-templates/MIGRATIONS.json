@@ -75,6 +75,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W22: model opus→sonnet (S1), spawn-prompt diet ≤25 lines + agent-core-rules.md (S2), mandatory rtk prefix rule (S3)"
+      },
+      "5.15.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W23: S8 token meter + retrospective file rule; Bug #5 fix (scope_doc_path field replaces hardcoded .planning/PLAN.md); Bug #6 fix (PREP/EXECUTE mode tagging on architect dispatch). Adds Model Profiles + Architect Dispatch Modes + Token Meter sections."
       }
     },
     "planner": {
@@ -196,6 +201,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+      },
+      "1.18.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W23: Bug #5 + #6 fix. Activation Sequence reads scope_doc_path from PM dispatch (never hardcodes .planning/PLAN.md). Scope Validation Gate + Per-Dispatch check reference scope_doc_path. New PREP/EXECUTE mode branching via docs/agents/arch-dispatch-modes.md."
       }
     },
     "arch-platform": {
@@ -244,6 +254,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+      },
+      "1.15.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W23: Bug #5 + #6 fix. Activation Sequence reads scope_doc_path from PM dispatch (never hardcodes .planning/PLAN.md). Scope Validation Gate + Per-Dispatch + Scope-doc trigger check reference scope_doc_path. New PREP/EXECUTE mode branching via docs/agents/arch-dispatch-modes.md."
       }
     },
     "arch-integration": {
@@ -292,6 +307,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+      },
+      "1.15.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W23: Bug #5 + #6 fix. Activation Sequence reads scope_doc_path from PM dispatch (never hardcodes .planning/PLAN.md). Scope Validation Gate + Per-Dispatch + Scope-doc trigger check reference scope_doc_path. New PREP/EXECUTE mode branching via docs/agents/arch-dispatch-modes.md."
       }
     },
     "context-provider": {

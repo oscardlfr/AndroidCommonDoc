@@ -774,7 +774,7 @@ This eliminates the "agent explores for 5 minutes before planning" problem. The 
 
 46 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
-**22 tools** work in any project. **17 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
+**23 tools** work in any project. **17 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
 
 ### General Tools
 
@@ -944,7 +944,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-15 domain hubs, 88+ sub-docs, 22 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+15 domain hubs, 88+ sub-docs, 23 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 

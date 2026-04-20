@@ -80,6 +80,53 @@ Do NOT re-spawn automatically — user decides. Just flag and await instruction.
 
 **Threshold**: 3 echoes (not 2 — false-positive risk on retry logic).
 
+## Token Meter Gate
+
+At the end of every wave, PM MUST produce a retrospective and flag high token spend before starting the next wave. This gate is the Wave 23 Sprint 8 (S8) addition.
+
+**What PM logs at wave end**:
+- Wave number and sprint slug
+- Steps completed (from `TaskList`) — each with short outcome: done / escalated / deferred
+- Token estimate: `dispatched-message-count × avg-tokens-per-message` (order-of-magnitude; no precision required)
+- Verdict tally: count of APPROVE and ESCALATE from each architect
+
+**Retrospective file** (required):
+- Path: `.planning/wave{N}/retrospective.md`
+- Written by PM at wave end, before proceeding to Phase 3 or closing the session
+- Format:
+
+```
+# Wave {N} Retrospective
+
+Sprint: <slug>
+Date: <YYYY-MM-DD>
+
+## Steps
+| # | Step | Outcome |
+|---|------|---------|
+| 1 | ... | done / escalated: <reason> / deferred |
+
+## Verdicts
+- arch-testing: APPROVE | ESCALATE: <reason>
+- arch-platform: APPROVE | ESCALATE: <reason>
+- arch-integration: APPROVE | ESCALATE: <reason>
+
+## Token estimate
+- Dispatched messages: <N>
+- Avg tokens/message: <N>
+- Estimate: <N * avg> (≈ <pct>% of <model> context window)
+
+## Notes
+- <anything the next-wave PM should know: compaction events, rework cycles, user interventions>
+```
+
+**Threshold action**:
+- If estimate > 80% of the model's context window → PM MUST SendMessage user with `[TOKEN-METER] Wave {N} estimate <pct>% of context window. Recommend splitting remaining scope into Wave {N+1}.`
+- Do NOT start next wave without user acknowledgement of the split proposal.
+- Threshold reason: context compaction risk climbs sharply above 80%; splitting the wave keeps each wave reliably reproducible.
+
+Precision is not the point — the retrospective anchors wave-over-wave trends so PM can see when scope creep is burning budget.
+
 ## Post-Wave Team Integrity Check (MANDATORY)
 
 After collecting verdicts from all architects at the end of each wave, verify team integrity:

@@ -1913,7 +1913,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b3778e0c23b93c34fd4ee8e4b5d1e66e0ede87507270f27d1b4d4dcc53325f86",
+      "hash": "sha256:aca36546bdeb7507024a9233440190063f9e45fbdf19c63b82c9fdb63a691dab",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1943,7 +1943,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8817cb47ffeb6dd9e1c999a3c83eca182db0c733d06132d2bf49e2724a29c7b1",
+      "hash": "sha256:17c24eceb5b48728afdc2926a0da1332df52d495738a3c281ba57fd25a1482e4",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1972,7 +1972,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:257865e54d64bc2d6c6fb71eb760539ce505d0a0c647bc037fae35d316e68894",
+      "hash": "sha256:75c39b7c532d1042e5c7ed4723c3612d03f7bda119a01ed9d0677305999f81e7",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -2648,7 +2648,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e21d353e7eca0b5393d0f0a12a2a02d621113b69d311d1da39f572218d488e2f",
+      "hash": "sha256:23951981f031738bbf3002de4cd2399765fd5dc6d03518cb30301862dc1e3164",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",

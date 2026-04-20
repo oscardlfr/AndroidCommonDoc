@@ -18,6 +18,23 @@ token_budget: 1300
 
 Reference for PM's agent dispatch rules: topology gate checks, pattern validation chain, dynamic scaling with named overflow devs, autonomy boundaries, mandatory team workflow, and kill order.
 
+## Architect Dispatch — scope_doc_path + PREP/EXECUTE mode (Wave 23)
+
+Every PM `SendMessage` to an architect MUST carry two fields: `scope_doc_path` (wave plan file) and `mode` (`PREP` or `EXECUTE`). The architect reads scope from that path (never guesses) and branches on mode.
+
+```
+SendMessage(
+  to="arch-platform",
+  summary="W{N} PREP — <specialty-focused 1-liner>",
+  message="scope_doc_path: .planning/PLAN-W{N}.md\nmode: PREP\nwave: {N}\n\n<optional context>"
+)
+```
+
+- **PREP dispatch** goes to all 3 architects in parallel **before** devs are spawned. Architects read the plan, identify domain risks, return `READY: <1-line summary>`. PM merges all 3 READY responses before spawning devs.
+- **EXECUTE dispatch** goes to all 3 architects in parallel **after** devs complete their wave work. Architects verify, delegate any fixes, write verdict to `.planning/wave{N}/arch-{role}-verdict.md`, respond `APPROVE` or `ESCALATE: <reason>`.
+
+Full protocol, PM workflow, and anti-patterns: `docs/agents/arch-dispatch-modes.md`. Fixes Wave 23 Bug #5 (hardcoded `.planning/PLAN.md`) and Bug #6 (no mode tagging).
+
 ## Dev Dispatch — Persistent Core Devs + Dynamic Scaling
 
 **Core devs** are session team peers spawned at Phase 2 start. They persist across all waves, accumulate layer knowledge, and communicate directly with their architect(s) via SendMessage.
