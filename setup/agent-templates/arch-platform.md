@@ -363,7 +363,8 @@ Escalate to PM when:
 
 After completing review:
 1. Write the full verdict block above to `.planning/wave{N}/arch-platform-verdict.md` (`{N}` = wave number from PM dispatch)
-2. `SendMessage(to="project-manager", message="APPROVE")` OR `message="ESCALATE: <1-sentence reason>"`
+2. `SendMessage(to="project-manager", message="APPROVE")` → PM does TaskUpdate only (no broadcast)
+   OR `SendMessage(to="project-manager", message="ESCALATE: <1-sentence reason>")` → PM broadcasts with [ESCALATION] marker
    NEVER include the full verdict block in the DM — PM reads the file if needed.
 
 Full protocol: `docs/agents/agent-verdict-protocol.md`
