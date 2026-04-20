@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-20T07:43:54.479Z",
+  "generated": "2026-04-20T08:59:32.754Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -930,13 +930,14 @@
       "description": "Implement Google's Material Design 3 (Material You) UI system. Primary: Jetpack Compose Material3 (MaterialTheme, components, adaptive layout). Also Flutter and limited web (@material/web, maintenance mode). Covers tokens, 30+ components, layout, theming, M3 Expressive (platform matrix), and accessibility. Use when: \"material design\", \"MD3\", \"material you\", \"Jetpack Compose\", \"MaterialTheme\", \"material component\", \"md3 button\".\n",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9001103fcb45eac42be5f84f80c977da6c29d24b43b05ab061c8d28977b6666f",
+      "hash": "sha256:cb5fc38d82c8dca497f596293ea1a0cd20dd8ca4da4fed4cef088604b9caf926",
       "dependencies": [],
       "frontmatter": {
         "name": "material-3",
         "description": "Implement Google's Material Design 3 (Material You) UI system. Primary: Jetpack Compose Material3 (MaterialTheme, components, adaptive layout). Also Flutter and limited web (@material/web, maintenance mode). Covers tokens, 30+ components, layout, theming, M3 Expressive (platform matrix), and accessibility. Use when: \"material design\", \"MD3\", \"material you\", \"Jetpack Compose\", \"MaterialTheme\", \"material component\", \"md3 button\".\n",
         "user-invokable": true,
         "argument-hint": "[component|theme|layout|scaffold|audit] [description or URL]",
+        "copilot": false,
         "attribution": "CWTI Ltd",
         "license": "MIT",
         "source": "third-party",
