@@ -1,6 +1,7 @@
 ---
 name: sync-versions
 description: "Check version catalog alignment between KMP projects. Use when asked to verify dependency versions match the source of truth."
+intent: [versions, catalog, kmp, alignment, dependencies, toml]
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
 copilot: true

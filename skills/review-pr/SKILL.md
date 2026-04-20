@@ -1,6 +1,7 @@
 ---
 name: review-pr
 description: "Code review of a pull request with structured suggestions."
+intent: [review, pr, pull-request, code-review, feedback]
 copilot: false
 ---
 

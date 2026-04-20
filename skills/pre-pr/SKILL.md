@@ -1,6 +1,7 @@
 ---
 name: pre-pr
 description: "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally."
+intent: [pre-pr, validate, pull-request, ci, lint, quality-gate]
 allowed-tools: [Bash, Read, Grep, Glob]
 copilot: true
 copilot-template-type: behavioral

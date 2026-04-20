@@ -1,6 +1,7 @@
 ---
 name: sbom-scan
 description: "Scan SBOM for known CVE vulnerabilities using Trivy. Use when asked to check for security vulnerabilities in dependencies."
+intent: [sbom, cve, vulnerabilities, trivy, security, scan]
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
 disable-model-invocation: true

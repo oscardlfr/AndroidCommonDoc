@@ -1,6 +1,7 @@
 ---
 name: sbom
 description: "Generate CycloneDX SBOM for project modules. Use when asked to produce a software bill of materials."
+intent: [sbom, cyclonedx, dependencies, bill-of-materials, security]
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
 disable-model-invocation: true

@@ -1,6 +1,7 @@
 ---
 name: research
 description: "Ad-hoc technical research before implementation."
+intent: [research, explore, investigate, technical, pre-implementation]
 copilot: false
 ---
 

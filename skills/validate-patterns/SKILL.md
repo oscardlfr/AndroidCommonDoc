@@ -1,6 +1,7 @@
 ---
 name: validate-patterns
 description: "Validate code against pattern standards (ViewModel, UI, coroutines, DI, error handling, navigation). Use when asked to check code quality or pattern compliance."
+intent: [validate, patterns, viewmodel, coroutines, di, compliance]
 allowed-tools: [Read, Grep, Glob]
 copilot: true
 copilot-template-type: behavioral

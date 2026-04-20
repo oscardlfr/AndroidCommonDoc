@@ -1,6 +1,7 @@
 ---
 name: sbom-analyze
 description: "Analyze SBOM for dependency statistics, licenses, and concerns. Use when asked to review dependency licenses or SBOM contents."
+intent: [sbom, analyze, licenses, dependencies, statistics]
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
 disable-model-invocation: true

@@ -1,6 +1,7 @@
 ---
 name: web-quality-audit
 description: "Run comprehensive web quality audit (performance, a11y, SEO, best practices). Use when asked to audit a website or run Lighthouse."
+intent: [web, quality, audit, lighthouse, performance, a11y, seo]
 allowed-tools: [Read, Grep, Glob, Bash]
 copilot: true
 copilot-template-type: behavioral
