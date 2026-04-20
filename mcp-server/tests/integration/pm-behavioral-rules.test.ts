@@ -369,10 +369,8 @@ describe('planner spawning as team peer', () => {
 // ---------------------------------------------------------------------------
 
 describe('PM model and protocol rules', () => {
-  it('PM template model must be opus [EXPECT FAIL — currently sonnet]', () => {
-    // PM is orchestrator — requires opus for complex reasoning.
-    // Regression: PM downgraded to sonnet causing reasoning failures.
-    expect(content).toMatch(/^model:\s*opus$/m);
+  it('PM template model must be sonnet', () => {
+    expect(content).toMatch(/^model:\s*sonnet$/m);
   });
 
   it('PM must have explicit FIRST POST-SETUP ACTION block for context-provider [EXPECT FAIL — no such block]', () => {
