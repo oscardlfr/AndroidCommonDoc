@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 27 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 47 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 46 tools for programmatic access, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
@@ -19,14 +19,14 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 27 custo
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
 - **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 25 cross-platform pairs + 7 Bash-only utilities
-- **AI agent skills** for Claude Code and GitHub Copilot -- 59 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
+- **AI agent skills** for Claude Code and GitHub Copilot -- 61 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
-- **Detekt rules** that enforce architecture patterns at build time -- 23 hand-written + 4 generated AST-only rules (27 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, security patterns, and testing anti-patterns
+- **Detekt rules** that enforce architecture patterns at build time -- 23 hand-written + 5 generated AST-only rules (28 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, security patterns, and testing anti-patterns
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **[Dokka Markdown Plugin](https://github.com/oscardlfr/dokka-markdown-plugin)** — transforms KDoc into L0-compliant structured markdown (`docs/api/*.md`) with 14-field YAML frontmatter, content-addressed hashes for CI drift detection, and first-class KMP expect/actual handling. Standalone repo, MIT-licensed.
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
-- **MCP server** with 47 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
+- **MCP server** with 46 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
@@ -117,7 +117,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 | What | Destination | Count |
 |------|-------------|-------|
-| Skills | `.claude/skills/*/SKILL.md` | 60 |
+| Skills | `.claude/skills/*/SKILL.md` | 61 |
 | Agents | `.claude/agents/*.md` | 39 |
 | Commands | `.claude/commands/*.md` | 52 |
 | **Total** | | **152 entries** |
@@ -292,7 +292,7 @@ Findings are persisted to `.androidcommondoc/findings-log.jsonl` with resolution
 
 ## Detekt Architecture Rules
 
-23 hand-written + 4 generated AST-only rules (27 total, no type resolution, no bindingContext) that enforce the most impactful architecture patterns at build time. Organized by category:
+23 hand-written + 5 generated AST-only rules (28 total, no type resolution, no bindingContext) that enforce the most impactful architecture patterns at build time. Organized by category:
 
 ### State & Exposure
 
@@ -374,7 +374,7 @@ This four-layer approach catches suppressions at build time (Detekt), dependency
 
 ### L0/L1 Config Hierarchy
 
-L0 ships `detekt-l0-base.yml` with all 27 rules `active: true`. The convention plugin loads both files automatically -- `detekt-l0-base.yml` as base, `config.yml` as L1 override (last file wins per key):
+L0 ships `detekt-l0-base.yml` with all 28 rules `active: true`. The convention plugin loads both files automatically -- `detekt-l0-base.yml` as base, `config.yml` as L1 override (last file wins per key):
 
 ```bash
 # Manual equivalent of what the plugin does:
@@ -400,7 +400,7 @@ plugins {
 }
 
 androidCommonDoc {
-    detektRules.set(true)       // default: true  -- 27 architecture rules
+    detektRules.set(true)       // default: true  -- 28 architecture rules
     composeRules.set(true)      // default: true  -- Compose best practices
     testConfig.set(true)        // default: true  -- useJUnitPlatform, maxParallelForks=1
     formattingRules.set(false)  // default: false -- ktlint formatting (opt-in)
@@ -884,7 +884,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Scripts
 
-25 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 7 Bash-only utilities (`check-agent-parity`, `check-detekt-coverage`, `install-git-hooks`, `readme-audit`, `rehash-registry`, `sync-gsd-agents`, `validate-agent-templates`).
+25 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 9 Bash-only utilities (`catalog-coverage-check`, `check-agent-parity`, `check-detekt-coverage`, `install-git-hooks`, `readme-audit`, `rehash-registry`, `scan-secrets`, `sync-gsd-agents`, `validate-agent-templates`).
 
 ### Core Scripts
 
@@ -927,6 +927,8 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `install-git-hooks` | Install pre-commit (pattern-lint) + commit-msg (conventional commits) git hooks |
 | `run-benchmarks` | Detect and run JVM/Android benchmark suites with Gradle |
 | `validate-agent-templates` | Lint agent templates: frontmatter, role keywords, anti-patterns, versioning (7 checks) |
+| `catalog-coverage-check` | Detect hardcoded Gradle dependency versions that should use the version catalog |
+| `scan-secrets` | Scan project directory for verified secrets using TruffleHog |
 
 ### Shared Libraries
 
@@ -941,7 +943,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-15 domain hubs, 88+ sub-docs, 16 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+15 domain hubs, 88+ sub-docs, 21 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1047,7 +1049,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 |.json     |       |  +--------------+    +---------------+  |
 +----------+       |  | detekt-      |    | build-logic/  |  |
                    |  | rules/       |--->| convention    |  |
-                   |  | (27 rules)   |    | plugin        |  |
+                   |  | (28 rules)   |    | plugin        |  |
                    |  +--------------+    +---------------+  |
                    +-----------------------------------------+
 ```
@@ -1064,13 +1066,13 @@ AndroidCommonDoc/
 |   +-- hooks/              # Real-time enforcement hooks (8 hooks: Detekt, README, registry, quality-gate, doc-freshness, agent-delegation, plan-context)
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
-|   +-- */SKILL.md          # 59 canonical skill definitions
+|   +-- */SKILL.md          # 61 canonical skill definitions
 |   +-- registry.json       # L0 registry (151 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
 |   +-- ps1/                # PowerShell (Windows) -- 25 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 32 scripts (25 cross-platform + 7 utilities)
+|   +-- sh/                 # Bash (macOS/Linux) -- 34 scripts (25 cross-platform + 9 utilities)
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
@@ -1085,7 +1087,7 @@ AndroidCommonDoc/
 |   |   +-- cli/            # CLI entrypoints: check-outdated (dependency freshness, exit 0/1/2), CI monitoring
 |   +-- tests/              # 99 test files -- vitest unit + integration (1634 tests)
 +-- detekt-rules/
-|   +-- src/main/kotlin/    # 23 hand-written + 4 generated AST-only Detekt rules (27 total)
+|   +-- src/main/kotlin/    # 23 hand-written + 5 generated AST-only Detekt rules (28 total)
 |   +-- src/main/resources/
 |       +-- config/
 |           +-- detekt-l0-base.yml  # Distributable baseline (all rules active)
