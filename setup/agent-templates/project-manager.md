@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.16.0"
+template_version: "5.17.0"
 memory: project
 skills:
   - pre-pr
@@ -106,6 +106,7 @@ Why: L2 DawSync session (2026-04-18) — team-lead dispatched grep work directly
 **FIRST thing when session starts** — before ANY planning or unrelated Agent():
 
 ```
+TeamDelete(team_name="session-{project-slug}")  # Bug #3: clear stale prior-session team (prevents -2/-3 suffix on peer names)
 TeamCreate(team_name="session-{project-slug}")
 Agent(name="context-provider", team_name="session-{project-slug}", subagent_type="context-provider", prompt="You are context-provider for this session. Read docs/agents/agent-core-rules.md. Answer pattern/doc/rule queries on demand — load files when asked, never eagerly. NEVER write files. NEVER self-assign tasks. NEVER execute CI. Stay alive.", run_in_background=true)
 Agent(name="doc-updater", team_name="session-{project-slug}", subagent_type="doc-updater", prompt="You are doc-updater for this session. Read docs/agents/agent-core-rules.md. Update docs ONLY when PM explicitly dispatches you via SendMessage. NEVER self-assign tasks from TaskList. NEVER act without a PM dispatch. Stay alive.", run_in_background=true)
@@ -153,6 +154,7 @@ At the end of every wave, PM MUST: (1) estimate token spend as `dispatched-messa
 ### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
 
 ```
+□ 0. TeamDelete("session-{project-slug}") called before TeamCreate?         → YES or STOP (Bug #3)
 □ 1. TeamCreate("session-{project-slug}") called?                           → YES or STOP
 □ 2. context-provider added to session team?                 → YES or STOP
 □ 3. doc-updater added to session team?                      → YES or STOP
