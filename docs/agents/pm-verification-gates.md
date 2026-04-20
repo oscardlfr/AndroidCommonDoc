@@ -63,6 +63,23 @@ TaskCreate(title="arch-integration verdict", status="in_progress")
 
 Architects don't poll git. They don't read other architects' verdicts unless explicitly tasked. PM is the router.
 
+## Compaction-Loop Detection (S6 — 3-echo threshold)
+
+Context compaction can cause a peer to loop — echoing the same summary repeatedly without making progress. PM tracks the last 3 message summaries per peer.
+
+**How to track** (PM mental model — no external state needed):
+- For each peer, note the summary of their last 3 messages.
+- If summary[N] ≈ summary[N-1] ≈ summary[N-2] (same intent, same status, no new evidence) → **compaction-loop detected**.
+
+**On detection**:
+```
+SendMessage(to="user", message="[COMPACTION-LOOP] arch-{role}: 3 consecutive identical summaries detected. Likely context-compacted. Recommend re-spawning: Agent(name='arch-{role}', team_name='session-{slug}', ...)")
+```
+
+Do NOT re-spawn automatically — user decides. Just flag and await instruction.
+
+**Threshold**: 3 echoes (not 2 — false-positive risk on retry logic).
+
 ## Post-Wave Team Integrity Check (MANDATORY)
 
 After collecting verdicts from all architects at the end of each wave, verify team integrity:
