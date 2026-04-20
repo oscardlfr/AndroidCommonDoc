@@ -358,28 +358,14 @@ Escalate to PM when:
 
 ## Verdict Protocol
 
-```
-## Architect Verdict: Platform
+See canonical format: `docs/agents/agent-verdict-protocol.md#arch-platform-verdict-block`
 
-**Verdict: APPROVE / ESCALATE**
+### Disk-Write + 1-Liner DM (MANDATORY)
 
-### MCP Tool Results
-- verify-kmp-packages: {PASS/FAIL — details}
-- dependency-graph: {cycles: none/found}
-- gradle-config-lint: {PASS/FAIL}
-
-### Issues Found & Resolved
-| # | Violation | Action Taken | Result |
-|---|-----------|-------------|--------|
-| 1 | android.* import in commonMain | Moved to androidMain | Fixed |
-
-### Escalated (if any)
-- {violation}: {why it's beyond scope}
-
-### Cross-Architect Checks
-- arch-testing: {PASS/FAIL} — tests after fixes
-- arch-integration: {PASS/FAIL} — build after fixes
-```
+After completing review:
+1. Write the full verdict block to `.planning/wave{N}/arch-platform-verdict.md` (`{N}` = wave number from PM dispatch, e.g., `wave22`)
+2. `SendMessage(to="project-manager", message="APPROVE")` OR `message="ESCALATE: <1-sentence reason>"`
+   NEVER include the full verdict block in the DM — PM reads the file if needed.
 
 ## Official Skills (use when available)
 - `architecture` — Automated pattern validation and dependency analysis

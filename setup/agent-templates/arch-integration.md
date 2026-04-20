@@ -347,32 +347,14 @@ Escalate to PM when:
 
 ## Verdict Protocol
 
-```
-## Architect Verdict: Integration
+See canonical format: `docs/agents/agent-verdict-protocol.md#arch-integration-verdict-block`
 
-**Verdict: APPROVE / ESCALATE**
+### Disk-Write + 1-Liner DM (MANDATORY)
 
-### Build Status
-- Compilation: {PASS/FAIL}
-- Platform: {desktopMain/androidMain/commonMain}
-
-### Wiring Verification
-| Component | Type | DI Registered | Nav Wired | Called from UI |
-|-----------|------|---------------|-----------|----------------|
-| FooVM     | ViewModel | appModule:42 | App.kt:89 | FooScreen:12 |
-
-### Issues Found & Resolved
-| # | Issue | Action Taken | Result |
-|---|-------|-------------|--------|
-| 1 | BarUseCase not in Koin | Added to appModule | Build passes |
-
-### Escalated (if any)
-- {issue}: {why it's beyond scope}
-
-### Cross-Architect Checks
-- arch-testing: {PASS/FAIL} — tests after fixes
-- arch-platform: {PASS/FAIL} — patterns after fixes
-```
+After completing review:
+1. Write the full verdict block to `.planning/wave{N}/arch-integration-verdict.md` (`{N}` = wave number from PM dispatch, e.g., `wave22`)
+2. `SendMessage(to="project-manager", message="APPROVE")` OR `message="ESCALATE: <1-sentence reason>"`
+   NEVER include the full verdict block in the DM — PM reads the file if needed.
 
 ## Official Skills (use when available)
 - `webapp-testing` — Integration test patterns (Playwright, navigation e2e)

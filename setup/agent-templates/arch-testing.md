@@ -303,30 +303,14 @@ Escalate to PM when:
 
 ## Verdict Protocol
 
-```
-## Architect Verdict: Testing
+See canonical format: `docs/agents/agent-verdict-protocol.md#arch-testing-verdict-block`
 
-**Verdict: APPROVE / ESCALATE**
+### Disk-Write + 1-Liner DM (MANDATORY)
 
-### Modules Tested
-- {module}: {PASS/FAIL} — {test count} tests
-
-### Issues Found & Resolved
-| # | Issue | Action Taken | Result |
-|---|-------|-------------|--------|
-| 1 | Missing regression test for {fix} | Delegated to test-specialist | Test written + passes |
-
-### Escalated (if any)
-- {issue}: {why it's beyond scope}
-
-### Cross-Architect Checks
-- arch-platform: {called/not needed} — {result}
-- arch-integration: {called/not needed} — {result}
-
-### Evidence
-- Test output: {summary}
-- MCP code-metrics: {if used}
-```
+After completing review:
+1. Write the full verdict block to `.planning/wave{N}/arch-testing-verdict.md` (`{N}` = wave number from PM dispatch, e.g., `wave22`)
+2. `SendMessage(to="project-manager", message="APPROVE")` OR `message="ESCALATE: <1-sentence reason>"`
+   NEVER include the full verdict block in the DM — PM reads the file if needed.
 
 ### 6. Coverage Baseline Gate
 - Run /coverage on every touched module
