@@ -86,8 +86,9 @@ describe('PM template line count post-refactor', () => {
     // then 225 → 240 when T-BUG-015 (Search Dispatch Protocol) added. Both
     // sections are critical PM-level governance that cannot move to sub-docs
     // — team-lead must see them immediately on first read of the template.
+    // +1 for trailing newline (split('\n') on a 240-line file = 241 elements).
     const lines = fs.readFileSync(PM_TEMPLATE, 'utf-8').split('\n');
-    expect(lines.length).toBeLessThanOrEqual(240);
+    expect(lines.length).toBeLessThanOrEqual(241);
   });
 });
 

@@ -90,7 +90,7 @@ FORBIDDEN: `Bash curl/wget`; falling back to training knowledge. Full rationale:
 
 ### Bash Search Anti-pattern (FORBIDDEN — T-BUG-015)
 
-Bash is for git/gradle/test only. FORBIDDEN for search: `grep`, `rg`, `find`, etc. Use SendMessage to context-provider instead. Full rationale: `docs/agents/arch-topology-protocols.md#3-bash-search-anti-pattern-t-bug-015`.
+Bash is for git/gradle/test only. FORBIDDEN for search: `grep`, `rg`, `find`, etc. — bypasses PR #40 mechanical enforcement. Use SendMessage to context-provider instead. Full rationale: `docs/agents/arch-topology-protocols.md#3-bash-search-anti-pattern-t-bug-015`.
 
 ### Scope Validation Gate (MANDATORY)
 
