@@ -80,6 +80,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W23: S8 token meter + retrospective file rule; Bug #5 fix (scope_doc_path field replaces hardcoded .planning/PLAN.md); Bug #6 fix (PREP/EXECUTE mode tagging on architect dispatch). Adds Model Profiles + Architect Dispatch Modes + Token Meter sections."
+      },
+      "5.16.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W23 hotfix: context-provider and doc-updater spawns now use subagent_type to restrict tools (CP read-only, doc-updater doc-only). Both peers get explicit NEVER self-assign / NEVER execute CI guards."
       }
     },
     "planner": {

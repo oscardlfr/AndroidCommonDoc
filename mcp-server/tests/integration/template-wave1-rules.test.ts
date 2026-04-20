@@ -136,10 +136,10 @@ describe('Wave 1: template_version bumped in architects', () => {
     expect(content).toMatch(/template_version:\s*"1\.15\.0"/);
   });
 
-  it('project-manager.md template_version is "5.15.0"', () => {
-    // Wave 23: bumped from 5.14.0 → 5.15.0 (S8 additions: token meter + arch-dispatch-modes)
+  it('project-manager.md template_version is "5.16.0"', () => {
+    // Wave 23: bumped from 5.15.0 → 5.16.0 (hotfix: subagent_type on CP+doc-updater spawns)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'project-manager.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"5\.15\.0"/);
+    expect(content).toMatch(/template_version:\s*"5.16.0"/);
   });
 });
 

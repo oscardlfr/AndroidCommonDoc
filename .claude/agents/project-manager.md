@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.15.0"
+template_version: "5.16.0"
 memory: project
 skills:
   - pre-pr
@@ -107,8 +107,8 @@ Why: L2 DawSync session (2026-04-18) — team-lead dispatched grep work directly
 
 ```
 TeamCreate(team_name="session-{project-slug}")
-Agent(name="context-provider", team_name="session-{project-slug}", prompt="You are context-provider for this session. Read docs/agents/agent-core-rules.md. Answer pattern/doc/rule queries on demand — load files when asked, never eagerly. Stay alive.", run_in_background=true)
-Agent(name="doc-updater", team_name="session-{project-slug}", prompt="You are doc-updater for this session. Read docs/agents/agent-core-rules.md. Update docs when agents SendMessage you. Stay alive.", run_in_background=true)
+Agent(name="context-provider", team_name="session-{project-slug}", subagent_type="context-provider", prompt="You are context-provider for this session. Read docs/agents/agent-core-rules.md. Answer pattern/doc/rule queries on demand — load files when asked, never eagerly. NEVER write files. NEVER self-assign tasks. NEVER execute CI. Stay alive.", run_in_background=true)
+Agent(name="doc-updater", team_name="session-{project-slug}", subagent_type="doc-updater", prompt="You are doc-updater for this session. Read docs/agents/agent-core-rules.md. Update docs ONLY when PM explicitly dispatches you via SendMessage. NEVER self-assign tasks from TaskList. NEVER act without a PM dispatch. Stay alive.", run_in_background=true)
 Agent(name="arch-testing", team_name="session-{project-slug}", prompt="You are arch-testing for this session. Read docs/agents/agent-core-rules.md. Manage test-specialist, ui-specialist. Verify test quality, TDD, coverage. Report findings via SendMessage. Stay alive.", run_in_background=true)
 Agent(name="arch-platform", team_name="session-{project-slug}", prompt="You are arch-platform for this session. Read docs/agents/agent-core-rules.md. Manage domain-model-specialist, data-layer-specialist. Verify KMP patterns, encoding, source sets. Report findings via SendMessage. Stay alive.", run_in_background=true)
 Agent(name="arch-integration", team_name="session-{project-slug}", prompt="You are arch-integration for this session. Read docs/agents/agent-core-rules.md. Manage ui-specialist, data-layer-specialist. Verify DI, navigation, wiring, compilation. Report findings via SendMessage. Stay alive.", run_in_background=true)
