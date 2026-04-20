@@ -23,10 +23,10 @@ const LEVEL1_ROUTES: Array<{ pattern: RegExp; route: string }> = [
   { pattern: /\b(map|architecture|modules|inventory)\b/i, route: "/map-codebase" },
   { pattern: /\b(pre-pr|validate|ready to merge)\b/i, route: "/pre-pr" },
   { pattern: /\b(note|idea|remember)\b/i, route: "/note" },
+  { pattern: /\b(ui|compose|screen|component)\b/i, route: "ui-specialist" },
   { pattern: /\b(audit|quality)\b/i, route: "/audit" },
   { pattern: /\b(doc|documentation|update docs)\b/i, route: "doc-updater" },
   { pattern: /\b(context|pattern|lookup|what exists)\b/i, route: "context-provider" },
-  { pattern: /\b(ui|compose|screen|component)\b/i, route: "ui-specialist" },
   { pattern: /\b(domain|model|sealed|data class)\b/i, route: "domain-model-specialist" },
   { pattern: /\b(data layer|repository|encoding)\b/i, route: "data-layer-specialist" },
   { pattern: /\b(prioritize|roadmap|features|backlog)\b/i, route: "product-strategist" },
@@ -103,10 +103,9 @@ describe("/work skill routing", () => {
       expect(resolveWorkRoute("compose screen accessibility")).toBe("ui-specialist");
     });
 
-    it('routes "compose screen accessibility audit" to /audit due to row ordering', () => {
-      // "audit" at row 10 fires before "compose"/"screen" at row 13 (first-match-wins)
-      // This documents a known ordering consequence in the SKILL.md routing table
-      expect(resolveWorkRoute("compose screen accessibility audit")).toBe("/audit");
+    it('routes "compose screen accessibility audit" to ui-specialist (f75b4f1 row reorder)', () => {
+      // f75b4f1 moved ui-specialist above audit in Level 1 table — compose fires first
+      expect(resolveWorkRoute("compose screen accessibility audit")).toBe("ui-specialist");
     });
 
     it('routes "what pattern exists for repository encoding" to context-provider', () => {
@@ -161,9 +160,9 @@ describe("/work skill routing", () => {
       expect(resolveWorkRoute("test the new screen")).toBe("test-specialist");
     });
 
-    it('"audit" matches /audit before ui-specialist (row 10 before row 13)', () => {
-      // Confirms that inputs containing both "audit" and "compose"/"screen" route to /audit
-      expect(resolveWorkRoute("audit the compose screens")).toBe("/audit");
+    it('"ui/compose" matches ui-specialist before "audit" (f75b4f1 row reorder)', () => {
+      // ui-specialist is now above audit in the table — compose wins over audit
+      expect(resolveWorkRoute("audit the compose screens")).toBe("ui-specialist");
     });
 
     it('"research" as Level 0.5 named-skill routes to research skill, not /research Level 1', () => {
