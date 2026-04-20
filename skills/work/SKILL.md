@@ -99,10 +99,10 @@ Match `$ARGUMENTS` against these patterns in order. First match wins:
 | `\b(map\|architecture\|modules\|inventory)\b` | `/map-codebase` |
 | `\b(pre-pr\|validate\|ready to merge)\b` | `/pre-pr` |
 | `\b(note\|idea\|remember)\b` | `/note` |
+| `\b(ui\|compose\|screen\|component)\b` | Delegate to `ui-specialist` agent |
 | `\b(audit\|quality)\b` | `/audit` |
 | `\b(doc\|documentation\|update docs)\b` | Delegate to `doc-updater` agent |
 | `\b(context\|pattern\|lookup\|what exists)\b` | Delegate to `context-provider` agent |
-| `\b(ui\|compose\|screen\|component)\b` | Delegate to `ui-specialist` agent |
 | `\b(domain\|model\|sealed\|data class)\b` | Delegate to `domain-model-specialist` agent |
 | `\b(data layer\|repository\|encoding)\b` | Delegate to `data-layer-specialist` agent |
 | `\b(prioritize\|roadmap\|features\|backlog)\b` | Agent(`product-strategist`) * |
