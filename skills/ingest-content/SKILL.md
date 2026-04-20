@@ -1,6 +1,7 @@
 ---
 name: ingest-content
 description: "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content."
+intent: [ingest, content, article, url, extract, patterns, docs]
 allowed-tools: [Bash, Read, Write, Edit, Grep, Glob]
 disable-model-invocation: true
 copilot: true

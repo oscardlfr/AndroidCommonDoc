@@ -1,6 +1,7 @@
 ---
 name: map-codebase
 description: "Structured codebase analysis using the `codebase-mapper` agent."
+intent: [map, codebase, analyze, architecture, structure]
 copilot: false
 ---
 

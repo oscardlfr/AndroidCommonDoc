@@ -1,6 +1,7 @@
 ---
 name: init-session
 description: "Show project context — available agents, skills, modules, and business docs."
+intent: [session, init, context, agents, skills, modules]
 copilot: false
 ---
 

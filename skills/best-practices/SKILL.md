@@ -1,6 +1,7 @@
 ---
 name: best-practices
 description: "Web security, compatibility, and code quality patterns. Background knowledge for CSP, HTTPS, deprecated APIs, and modern standards."
+intent: [security, web, csp, https, compatibility, quality, standards]
 allowed-tools: [Read, Grep, Glob, Bash]
 user-invocable: false
 copilot: true

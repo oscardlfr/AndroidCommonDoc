@@ -1,6 +1,7 @@
 ---
 name: doc-integrity
 description: "Unified documentation integrity audit. Runs kdoc-coverage, check-doc-patterns, docs/api freshness, and audit-docs in sequence. Produces a single report with coverage, drifts, and structure issues."
+intent: [docs, integrity, kdoc, audit, drift, freshness]
 allowed-tools: [Bash, Read, Grep, Glob]
 disable-model-invocation: true
 copilot: true

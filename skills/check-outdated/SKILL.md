@@ -1,6 +1,7 @@
 ---
 name: check-outdated
 description: "Check libs.versions.toml against Maven Central for outdated dependencies. Caches results in kdoc-state.json."
+intent: [dependencies, outdated, versions, toml, maven, upgrade]
 allowed-tools: [Bash, Read, Grep, Glob]
 copilot: true
 copilot-template-type: behavioral

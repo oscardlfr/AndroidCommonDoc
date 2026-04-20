@@ -1,6 +1,7 @@
 ---
 name: decide
 description: "Technical decision analysis using the `advisor` agent."
+intent: [decide, decision, advisor, compare, tradeoff]
 copilot: false
 ---
 

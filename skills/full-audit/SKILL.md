@@ -1,6 +1,7 @@
 ---
 name: full-audit
 description: Run a unified audit across all quality dimensions — architecture, code quality, testing, security, docs, and release readiness. Consolidates findings from multiple agents and scripts into a single deduplicated report.
+intent: [audit, quality, architecture, security, docs, release, unified]
 allowed-tools:
   - Bash
   - Read

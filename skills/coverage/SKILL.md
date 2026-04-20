@@ -1,6 +1,7 @@
 ---
 name: coverage
 description: "Analyze test coverage gaps from existing data without running tests. Use when asked to check coverage or find untested code."
+intent: [coverage, gaps, untested, analyze, report]
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
 copilot: true

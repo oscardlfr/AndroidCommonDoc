@@ -1,6 +1,7 @@
 ---
 name: debug
 description: "Systematic bug investigation using the `debugger` agent."
+intent: [debug, bug, investigate, hypothesis, fix]
 copilot: false
 ---
 

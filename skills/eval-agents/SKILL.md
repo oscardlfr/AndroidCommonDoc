@@ -1,6 +1,7 @@
 ---
 name: eval-agents
 description: "Run promptfoo evaluations against agent prompt templates. Validates agent prompts produce expected outputs. Use after editing agent templates to catch regressions."
+intent: [eval, agents, promptfoo, validate, regression, templates]
 allowed-tools: [Bash, Read, Glob]
 copilot: false
 ---
