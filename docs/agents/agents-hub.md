@@ -43,6 +43,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, project-ma
 | [pm-verification-gates](pm-verification-gates.md) | PM verification: architect verdicts, post-verdict broadcast, post-wave integrity check |
 | [pm-quality-doc-pipeline](pm-quality-doc-pipeline.md) | PM quality gate + doc pipeline: quality-gater retry rules, doc-updater mandate, CLAUDE.md pointers-only rule |
 | [scope-extension-protocol](scope-extension-protocol.md) | Mechanical scope-extension gate: authorization workflow when architects hit out-of-scope blockers, escape hatch, bypass audit log |
+| [Agent Core Rules](agent-core-rules.md) | Universal rules for all session agents |
 
 ## Key Concepts
 
