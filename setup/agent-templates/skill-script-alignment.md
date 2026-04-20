@@ -1,4 +1,5 @@
 ---
+
 name: skill-script-alignment
 description: "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters."
 tools: Read, Grep, Glob
@@ -7,6 +8,7 @@ domain: audit
 intent: [skill, script, alignment, command]
 token_budget: 2000
 memory: project
+template_version: "1.0.0"
 ---
 
 You verify alignment between Claude Code commands (`.claude/commands/*.md`) and their backing script implementations (`scripts/ps1/`, `scripts/sh/`). Follow these steps in order, collecting findings as you go, then produce the structured report at the end.

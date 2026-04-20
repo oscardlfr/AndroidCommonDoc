@@ -580,6 +580,132 @@
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
       }
+    },
+    "advisor": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system technical decision advisor agent."
+      }
+    },
+    "api-rate-limit-auditor": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system API rate limit auditor agent."
+      }
+    },
+    "beta-readiness-agent": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system beta readiness auditor agent."
+      }
+    },
+    "codebase-mapper": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system codebase architecture mapper agent."
+      }
+    },
+    "cross-platform-validator": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system cross-platform feature parity validator agent."
+      }
+    },
+    "debugger": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system systematic debugger agent."
+      }
+    },
+    "doc-alignment-agent": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system documentation drift detector agent."
+      }
+    },
+    "doc-code-drift-detector": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system doc-code drift internal validator agent."
+      }
+    },
+    "full-audit-orchestrator": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system full audit orchestrator agent."
+      }
+    },
+    "l0-coherence-auditor": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system L0 doc coherence auditor agent."
+      }
+    },
+    "privacy-auditor": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system privacy and PII auditor agent."
+      }
+    },
+    "quality-gate-orchestrator": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system quality gate orchestrator agent."
+      }
+    },
+    "release-guardian-agent": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system release safety guardian agent."
+      }
+    },
+    "researcher": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system ad-hoc technical researcher agent."
+      }
+    },
+    "script-parity-validator": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system PS1/Bash script parity validator agent."
+      }
+    },
+    "skill-script-alignment": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system skill-script alignment validator agent."
+      }
+    },
+    "template-sync-validator": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system template sync validator agent."
+      }
+    },
+    "verifier": {
+      "1.0.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system goal-backward verifier agent."
+      }
     }
   }
 }

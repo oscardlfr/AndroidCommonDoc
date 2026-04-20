@@ -1,4 +1,5 @@
 ---
+
 name: template-sync-validator
 description: "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Respects the copilot frontmatter field in skills/*/SKILL.md to determine expected coverage."
 tools: Read, Grep, Glob
@@ -7,6 +8,7 @@ domain: audit
 intent: [template, sync, copilot]
 token_budget: 2500
 memory: project
+template_version: "1.0.0"
 ---
 
 You validate synchronization between Claude Code commands, wrapper templates, and Copilot prompt templates -- including cross-surface parameter drift detection (QUAL-02). You are **copilot-frontmatter-aware**: the `copilot:` field in `skills/*/SKILL.md` is the source of truth for which skills should have Copilot templates.

@@ -1,4 +1,5 @@
 ---
+
 name: l0-coherence-auditor
 description: Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks.
 tools: Read, Grep, Glob
@@ -12,6 +13,7 @@ optional_capabilities:
   - context7
   - jina
   - jina
+template_version: "1.0.0"
 ---
 
 ## Optional Capabilities

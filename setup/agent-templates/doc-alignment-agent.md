@@ -1,4 +1,5 @@
 ---
+
 name: doc-alignment-agent
 description: Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.
 tools: Read, Grep, Glob
@@ -11,6 +12,7 @@ skills:
   - audit-docs
   - validate-patterns
   - readme-audit
+template_version: "1.0.0"
 ---
 
 You detect documentation drift by comparing recent code changes against project documentation.

@@ -1,4 +1,5 @@
 ---
+
 name: release-guardian-agent
 description: Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.
 tools: Read, Grep, Glob
@@ -10,6 +11,7 @@ memory: project
 skills:
   - sbom
   - verify-kmp
+template_version: "1.0.0"
 ---
 
 You are a release readiness scanner. You look for artifacts that should NEVER ship in a release build.
