@@ -1,6 +1,7 @@
 ---
 name: sync-gsd-skills
 description: "Sync skills from Claude Code marketplace, L0, and L0 agents to GSD-2 user-level directory. Opt-in only -- never runs automatically unless explicitly enabled."
+intent: [sync, gsd, skills, marketplace, l0]
 user-invocable: true
 allowed-tools: [Bash, Read, Glob]
 category: guides

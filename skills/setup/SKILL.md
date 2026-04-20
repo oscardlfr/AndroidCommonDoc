@@ -1,6 +1,7 @@
 ---
 name: setup
 description: "Interactive wizard to fully configure a new or existing project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Creates l0-manifest.json, syncs selected assets, and verifies the result. Bilingual output (EN + ES)."
+intent: [setup, configure, wizard, l0, manifest, onboard]
 user-invocable: true
 allowed-tools: [Bash, Read, Write, Edit, Glob]
 l0_requires: ANDROID_COMMON_DOC

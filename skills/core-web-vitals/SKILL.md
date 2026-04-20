@@ -1,6 +1,7 @@
 ---
 name: core-web-vitals
 description: "LCP, INP, and CLS optimization reference. Background knowledge for Core Web Vitals thresholds and fixes."
+intent: [web-vitals, lcp, inp, cls, performance, optimize]
 allowed-tools: [Read, Grep, Glob, Bash]
 user-invocable: false
 copilot: true

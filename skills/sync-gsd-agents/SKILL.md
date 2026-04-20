@@ -1,6 +1,7 @@
 ---
 name: sync-gsd-agents
 description: "Sync .claude/agents/ to GSD subagent system and verify parity. Use when GSD subagent can't find an agent that exists in .claude/agents/, or after adding/modifying agents."
+intent: [sync, gsd, agents, parity, subagent]
 user-invocable: true
 allowed-tools: [Bash, Read]
 category: ecosystem

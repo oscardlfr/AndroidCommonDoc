@@ -1,6 +1,7 @@
 ---
 name: validate-upstream
 description: "Validate pattern docs against upstream official documentation. Runs Layer 1 deterministic assertions (api_present, deprecation_scan, etc.) from validate_upstream frontmatter. Use when checking if docs are still accurate."
+intent: [validate, upstream, docs, assertions, deprecation, accuracy]
 allowed-tools: [Bash, Read, Grep, Glob]
 disable-model-invocation: true
 copilot: true

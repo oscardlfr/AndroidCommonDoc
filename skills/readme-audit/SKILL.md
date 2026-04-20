@@ -1,6 +1,7 @@
 ---
 name: readme-audit
 description: "Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use before closing a milestone or when documentation feels stale."
+intent: [readme, audit, stale, counts, references, docs]
 allowed-tools: [Bash, Read, Edit, Write]
 disable-model-invocation: false
 l0_requires: ANDROID_COMMON_DOC

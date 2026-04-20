@@ -1,6 +1,7 @@
 ---
 name: resume-work
 description: "Resume session with a CEO/CTO dashboard — shows status by department from last session."
+intent: [resume, session, dashboard, status, department]
 copilot: false
 ---
 

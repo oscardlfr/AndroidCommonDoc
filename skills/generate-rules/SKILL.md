@@ -1,6 +1,7 @@
 ---
 name: generate-rules
 description: "Generate Detekt custom rules from pattern doc frontmatter. Use when asked to create or update lint rules from documentation."
+intent: [detekt, rules, generate, lint, frontmatter]
 allowed-tools: [Bash, Read, Write, Edit, Grep, Glob]
 disable-model-invocation: true
 copilot: true

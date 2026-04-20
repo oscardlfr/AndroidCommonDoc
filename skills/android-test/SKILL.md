@@ -1,6 +1,7 @@
 ---
 name: android-test
 description: "Run Android instrumented tests with logcat capture. Use when asked to run device/emulator tests or connectedAndroidTest."
+intent: [android, test, instrumented, emulator, device, logcat]
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
 copilot: true

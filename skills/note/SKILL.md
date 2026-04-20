@@ -1,6 +1,7 @@
 ---
 name: note
 description: "Zero-friction idea capture to project memory."
+intent: [note, capture, idea, memory]
 copilot: false
 ---
 

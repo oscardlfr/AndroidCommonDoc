@@ -1,6 +1,7 @@
 ---
 name: commit-lint
 description: "Validate and fix commit messages against Conventional Commits v1.0.0. Use when writing commits, reviewing commit history, or enforcing commit conventions."
+intent: [commit, lint, conventional-commits, validate, fix]
 allowed-tools: [Bash, Read, Grep, Glob, Edit]
 copilot: true
 ---

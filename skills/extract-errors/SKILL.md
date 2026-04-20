@@ -1,6 +1,7 @@
 ---
 name: extract-errors
 description: "Extract structured build and test errors from Gradle output. Use when a build or test fails and you need actionable error details."
+intent: [errors, build, gradle, extract, failures, actionable]
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
 copilot: true

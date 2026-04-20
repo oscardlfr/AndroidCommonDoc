@@ -96,6 +96,20 @@ describe("skill-registry", () => {
 
       expect(hash1).not.toBe(hash2);
     });
+
+    it("produces same hash for CRLF and LF versions of identical content (parity with rehash-registry.sh)", async () => {
+      const lfFile = path.join(tmpDir, "parity-lf.md");
+      const crlfFile = path.join(tmpDir, "parity-crlf.md");
+      const contentLF = "# Skill\n\nDescription with arrow → here.\n\nMore content.\n";
+      const contentCRLF = contentLF.replace(/\n/g, '\r\n');
+      await writeFile(lfFile, contentLF, 'binary');
+      await writeFile(crlfFile, contentCRLF, 'binary');
+
+      const hashLF = await computeHash(lfFile);
+      const hashCRLF = await computeHash(crlfFile);
+
+      expect(hashLF).toBe(hashCRLF);
+    });
   });
 
   describe("scanSkills", () => {

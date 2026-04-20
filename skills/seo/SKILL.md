@@ -1,6 +1,7 @@
 ---
 name: seo
 description: "SEO optimization patterns (meta tags, structured data, crawlability). Background knowledge for search engine visibility."
+intent: [seo, meta-tags, structured-data, crawlability, search]
 allowed-tools: [Read, Grep, Glob, Bash]
 user-invocable: false
 copilot: true

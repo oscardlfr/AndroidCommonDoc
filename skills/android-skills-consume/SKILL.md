@@ -1,6 +1,7 @@
 ---
 name: android-skills-consume
 description: "Bridge to Google's Android CLI skill ecosystem. Documents how to install Google's official Android skills via `android skills add` and how they co-exist with L0 skills without conflict."
+intent: [android, skills, ecosystem, consume, install]
 allowed-tools: [Bash, Read, Glob]
 copilot: true
 copilot-template-type: reference

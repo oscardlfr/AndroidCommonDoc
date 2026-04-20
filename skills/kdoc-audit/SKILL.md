@@ -1,6 +1,7 @@
 ---
 name: kdoc-audit
 description: "Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-module coverage, and regression warnings vs baseline."
+intent: [kdoc, audit, coverage, kotlin, api, undocumented]
 allowed-tools: [Bash, Read, Grep, Glob]
 disable-model-invocation: true
 copilot: true

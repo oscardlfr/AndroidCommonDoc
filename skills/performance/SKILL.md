@@ -1,6 +1,7 @@
 ---
 name: performance
 description: "Web performance optimization patterns (loading, caching, images, fonts). Background knowledge for page speed improvements."
+intent: [performance, web, loading, caching, images, speed]
 allowed-tools: [Read, Grep, Glob, Bash]
 user-invocable: false
 copilot: true

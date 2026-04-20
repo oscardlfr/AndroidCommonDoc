@@ -1,6 +1,7 @@
 ---
 name: doc-reorganize
 description: "Reorganize docs/ into category subdirectories using frontmatter. Use when asked to restructure or reorganize documentation."
+intent: [docs, reorganize, restructure, category, frontmatter]
 allowed-tools: [Bash, Read, Write, Edit, Grep, Glob]
 disable-model-invocation: true
 copilot: true

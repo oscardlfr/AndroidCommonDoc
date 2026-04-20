@@ -1,6 +1,7 @@
 ---
 name: kdoc-migrate
 description: "Full-project KDoc migration orchestrator. Adds KDoc to all undocumented public APIs, module by module, informed by pattern docs."
+intent: [kdoc, migrate, document, api, kotlin, orchestrate]
 allowed-tools: [Bash, Read, Write, Edit, Grep, Glob, Agent]
 disable-model-invocation: true
 copilot: true

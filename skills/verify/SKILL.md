@@ -1,6 +1,7 @@
 ---
 name: verify
 description: "Goal-backward verification using the `verifier` agent."
+intent: [verify, goal, backward, spec, verifier]
 copilot: false
 ---
 

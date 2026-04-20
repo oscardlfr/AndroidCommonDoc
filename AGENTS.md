@@ -47,7 +47,7 @@ node mcp-server/build/cli/monitor-sources.js --project-root /path/to/l1 --layer 
 7. **Navigation:** State-driven -- never Channel-based.
 8. **No platform deps in ViewModels:** No `Context`, `Resources`, `UIKit` imports.
 
-## Available Skills (58)
+## Available Skills (61)
 
 Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-specific files.
 
@@ -111,6 +111,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `sync-vault` | Sync documentation into unified Obsidian vault |
 | `setup` | Interactive wizard to configure a project to consume L0 |
 | `set-model-profile` | Switch agent model tier: budget / balanced / advanced / quality |
+| `android-skills-consume` | Bridge to Google's Android CLI skill ecosystem — install official Android skills alongside L0 |
 
 ### Research & Workflow
 
@@ -127,6 +128,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `init-session` | Project context dashboard — available agents, skills, modules |
 | `resume-work` | CEO/CTO session resume — department status across project |
 | `work` | Smart task routing — delegates to the best agent or skill |
+| `eval-agents` | Run promptfoo evaluations against agent templates to catch regressions |
 
 ### Web Development
 
@@ -138,8 +140,9 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `performance` | Full web performance audit with recommendations |
 | `seo` | Validate SEO metadata, structure, and discoverability |
 | `web-quality-audit` | Comprehensive web quality audit across all dimensions |
+| `material-3-skill` | Implement Google's Material Design 3 (Compose, Flutter, web) — components, theming, layout, scaffold (third-party, MIT) |
 
-## MCP Tools (39)
+## MCP Tools (46)
 
 Programmatic access via Model Context Protocol server (`mcp-server/`):
 
@@ -184,6 +187,13 @@ Programmatic access via Model Context Protocol server (`mcp-server/`):
 | `validate-doc-update` | Pre-write validation: duplicate detection, anti-pattern filter, size limits |
 | `check-doc-patterns` | Detect enforceable patterns without Detekt rules and rule-doc drift |
 | `check-outdated` | Check libs.versions.toml against Maven Central for outdated dependencies |
+| `android-cli-bridge` | Bridge for stateful Android CLI commands (`android run`, `android create`) with APK validation |
+| `android-layout-diff` | Runtime UI layout validation via Android CLI — diffs device layout tree against committed baseline |
+| `compose-semantic-diff` | Runtime Compose Multiplatform JVM UI validation — diffs semantic tree against baseline |
+| `doc-readability` | Compute readability metrics (Flesch reading ease, grade level) for documentation files |
+| `scan-secrets` | Run TruffleHog on a project directory to detect verified secret leaks |
+| `search-patterns` | Semantic pattern search backed by a Chroma vector database |
+| `tool-use-analytics` | Usage dashboard from tool-use-log.jsonl — top tools, dead tools, MCP/skill breakdown, per-agent stats |
 
 ## Quality Gate Agents (5)
 

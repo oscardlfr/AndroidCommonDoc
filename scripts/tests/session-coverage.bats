@@ -758,7 +758,7 @@ teardown() {
 }
 
 @test "README: 'What gets synced' lists consumer counts" {
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "60"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "61"
     sed -n '/What gets synced/,/^### /p' "$README" | grep -q "52"
 }
 
@@ -1079,9 +1079,9 @@ teardown() {
     grep -q "^slug: spec-driven-workflow" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
-@test "README: counts match 39 agents, 59 skills" {
+@test "README: counts match 39 agents, 61 skills" {
     grep -q "39 specialized agents" "$README"
-    grep -q "59 canonical" "$README"
+    grep -q "61 canonical" "$README"
 }
 
 @test "CLAUDE.md: lists all new agents in delegation table" {
@@ -1411,9 +1411,9 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
     grep -q "doc-templates" "$README" || grep -q "PRODUCT_SPEC" "$README"
 }
 
-@test "README: counts match 39 agents, 59 skills, 52 commands" {
+@test "README: counts match 39 agents, 61 skills, 52 commands" {
     grep -q "39 specialized agents" "$README"
-    grep -q "59 canonical" "$README"
+    grep -q "61 canonical" "$README"
     # 52 commands verified via sync table
 }
 

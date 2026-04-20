@@ -1,6 +1,7 @@
 ---
 name: coverage-full
 description: "Generate comprehensive coverage report across all modules. Use when asked for full project coverage overview or metrics."
+intent: [coverage, report, modules, comprehensive, metrics]
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
 copilot: true

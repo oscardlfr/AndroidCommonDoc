@@ -1,6 +1,7 @@
 ---
 name: accessibility
 description: "Audit web accessibility against WCAG 2.1. Use when asked about a11y, WCAG compliance, or screen reader support."
+intent: [accessibility, a11y, wcag, screen-reader, audit]
 allowed-tools: [Read, Grep, Glob, Bash]
 copilot: true
 copilot-template-type: behavioral

@@ -1,6 +1,7 @@
 ---
 name: test-changed
 description: "Run tests only on modules with uncommitted changes. Use when asked to test changed files or run a quick pre-commit check."
+intent: [test, changed, uncommitted, pre-commit, fast]
 allowed-tools: [Bash, Read, Grep, Glob]
 l0_requires: ANDROID_COMMON_DOC
 copilot: true

@@ -1,6 +1,7 @@
 ---
 name: pre-pr
 description: "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally."
+intent: [pre-pr, validate, pull-request, ci, lint, quality-gate]
 allowed-tools: [Bash, Read, Grep, Glob]
 copilot: true
 copilot-template-type: behavioral
@@ -176,11 +177,15 @@ Failures BLOCK the PR. Validates role keyword contracts, tool-body cross-referen
 ### Step 6 — Registry hash freshness
 
 ```bash
+node mcp-server/build/cli/generate-registry.js
 bash scripts/sh/rehash-registry.sh --project-root "$(pwd)" --check
 ```
 
+Run `node mcp-server/build/cli/generate-registry.js` then `bash scripts/sh/rehash-registry.sh --project-root "$(pwd)" --check`. Both tools produce identical hashes post-S2.1; chaining remains required through Wave 22 as regression guard.
+
 If stale hashes found and `--fix` was passed:
 ```bash
+node mcp-server/build/cli/generate-registry.js
 bash scripts/sh/rehash-registry.sh --project-root "$(pwd)"
 git add skills/registry.json
 ```

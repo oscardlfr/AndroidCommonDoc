@@ -1,6 +1,7 @@
 ---
 name: generate-api-docs
 description: "Optional: Run Dokka + transformer to generate docs/api/ from KDoc in source code. Produces YAML-frontmatter docs consumable by context-provider and search-docs."
+intent: [api-docs, dokka, kdoc, generate, transformer]
 allowed-tools: [Bash, Read, Grep, Glob]
 disable-model-invocation: true
 copilot: true
