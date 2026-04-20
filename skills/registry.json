@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-20T06:55:48.958Z",
+  "generated": "2026-04-20T07:23:57.675Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -10,11 +10,18 @@
       "description": "Audit web accessibility against WCAG 2.1. Use when asked about a11y, WCAG compliance, or screen reader support.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:4a5bdc31e9848fd5864e451b75118b08319021e0eaac15a4f3b7bcc257988876",
+      "hash": "sha256:be301c809c5808521224b956127763f9b579407836f1ae39b0cb07fdfcb8dbfc",
       "dependencies": [],
       "frontmatter": {
         "name": "accessibility",
         "description": "Audit web accessibility against WCAG 2.1. Use when asked about a11y, WCAG compliance, or screen reader support.",
+        "intent": [
+          "accessibility",
+          "a11y",
+          "wcag",
+          "screen-reader",
+          "audit"
+        ],
         "allowed-tools": [
           "Read",
           "Grep",
@@ -32,11 +39,18 @@
       "description": "Bridge to Google's Android CLI skill ecosystem. Documents how to install Google's official Android skills via `android skills add` and how they co-exist with L0 skills without conflict.",
       "category": "ecosystem",
       "tier": "extended",
-      "hash": "sha256:b0af5d3cf81740f1b578e102b9290d9874a259202b8389b732ba6e66058568b6",
+      "hash": "sha256:de8e0d3455afd0716826b21b729028524c8fddbe58d6310d19db8af85cef96cc",
       "dependencies": [],
       "frontmatter": {
         "name": "android-skills-consume",
         "description": "Bridge to Google's Android CLI skill ecosystem. Documents how to install Google's official Android skills via `android skills add` and how they co-exist with L0 skills without conflict.",
+        "intent": [
+          "android",
+          "skills",
+          "ecosystem",
+          "consume",
+          "install"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -73,7 +87,7 @@
       "description": "Run Android instrumented tests with logcat capture. Use when asked to run device/emulator tests or connectedAndroidTest.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:1ab6d0efd553a45bd6aed02fec94eda36e3aecbd67bca43071e84c7afd2d430b",
+      "hash": "sha256:3b7d66117c345140035ad0441124f9e9357f4e88ad815a5b0ad0af6df9ad97e7",
       "dependencies": [
         "scripts/sh/run-android-tests.sh",
         "scripts/ps1/run-android-tests.ps1"
@@ -81,6 +95,14 @@
       "frontmatter": {
         "name": "android-test",
         "description": "Run Android instrumented tests with logcat capture. Use when asked to run device/emulator tests or connectedAndroidTest.",
+        "intent": [
+          "android",
+          "test",
+          "instrumented",
+          "emulator",
+          "device",
+          "logcat"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -98,11 +120,20 @@
       "description": "Generate a quality audit report from .androidcommondoc/audit-log.jsonl. Produces a manager-friendly trend table (coverage, Detekt, tests, CVEs) with traffic lights and period deltas. Zero extra Gradle runs — reads from data already written by scripts.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:cb027cc61f747974c0583ed6e83a091f8460feb3940082f3c28f2ad960ae7bf1",
+      "hash": "sha256:b2440c36bea00a5ebffb07ac729d2c0d5b804ab4a527adcdae5da4f8ea7dd683",
       "dependencies": [],
       "frontmatter": {
         "name": "audit",
         "description": "Generate a quality audit report from .androidcommondoc/audit-log.jsonl. Produces a manager-friendly trend table (coverage, Detekt, tests, CVEs) with traffic lights and period deltas. Zero extra Gradle runs — reads from data already written by scripts.",
+        "intent": [
+          "audit",
+          "report",
+          "quality",
+          "coverage",
+          "detekt",
+          "cve",
+          "trend"
+        ],
         "allowed-tools": [
           "mcp__androidcommondoc__audit-report"
         ],
@@ -118,11 +149,20 @@
       "description": "Unified documentation audit — validates structure (sizes, frontmatter), coherence (links, refs), and upstream content (API assertions, deprecation scan). Waves 1+2 are local ($0). Wave 3 requires --with-upstream.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:7e951c5826595646a7d161d7cb07785a273783d64d6a913bcf3d914886f9c2bd",
+      "hash": "sha256:dc9c38e69d17de7aa1c916d11b7270db37dda4eb4e9c4f5a30ed76e26a827bb6",
       "dependencies": [],
       "frontmatter": {
         "name": "audit-docs",
         "description": "Unified documentation audit — validates structure (sizes, frontmatter), coherence (links, refs), and upstream content (API assertions, deprecation scan). Waves 1+2 are local ($0). Wave 3 requires --with-upstream.",
+        "intent": [
+          "audit",
+          "docs",
+          "documentation",
+          "frontmatter",
+          "structure",
+          "coherence",
+          "upstream"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -143,11 +183,21 @@
       "description": "Run coherence audit on any L0/L1/L2 layer root. Checks hub doc presence, line limits, frontmatter completeness, .planning/ references, monitor_urls coverage, and detekt_rules coverage. Use when validating ecosystem-wide doc health.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a78a339f778a0bc2bd3979073156cfcc968c9e0bfc685df536e01c75483da4e8",
+      "hash": "sha256:90c6b65bcc5c81b66c591ca6c6e263012a4681aec88dd790dabcdc84ca486884",
       "dependencies": [],
       "frontmatter": {
         "name": "audit-l0",
         "description": "Run coherence audit on any L0/L1/L2 layer root. Checks hub doc presence, line limits, frontmatter completeness, .planning/ references, monitor_urls coverage, and detekt_rules coverage. Use when validating ecosystem-wide doc health.",
+        "intent": [
+          "audit",
+          "l0",
+          "l1",
+          "l2",
+          "coherence",
+          "ecosystem",
+          "hub",
+          "frontmatter"
+        ],
         "allowed-tools": [
           "Read",
           "Grep",
@@ -166,11 +216,18 @@
       "description": "Generate tests for uncovered code paths. Use when asked to increase coverage or auto-generate tests for a module.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:35af89c3339913abdf190faad46032ea25a75a8a04ff975793f9ad2ad1308df7",
+      "hash": "sha256:72c99212544cfdec0413eaae6e0ccf01b194bdcd48e9d9e5866e8f6215c79246",
       "dependencies": [],
       "frontmatter": {
         "name": "auto-cover",
         "description": "Generate tests for uncovered code paths. Use when asked to increase coverage or auto-generate tests for a module.",
+        "intent": [
+          "coverage",
+          "test",
+          "generate",
+          "uncovered",
+          "auto"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -190,7 +247,7 @@
       "description": "Run benchmarks across modules and show agent-friendly results summary. Detects available platforms and devices.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6b2c0de593446ed1d6777cab78db07ab715706012dc3776b8245a7008bf7dd7d",
+      "hash": "sha256:9cd010b0cb8127d8bb6e5627676d45e562a15d0d07f15e2e07fef0d5f90c3108",
       "dependencies": [
         "scripts/sh/run-benchmarks.sh",
         "scripts/ps1/run-benchmarks.ps1"
@@ -198,6 +255,12 @@
       "frontmatter": {
         "name": "benchmark",
         "description": "Run benchmarks across modules and show agent-friendly results summary. Detects available platforms and devices.",
+        "intent": [
+          "benchmark",
+          "performance",
+          "modules",
+          "measure"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -215,11 +278,20 @@
       "description": "Web security, compatibility, and code quality patterns. Background knowledge for CSP, HTTPS, deprecated APIs, and modern standards.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:a590e5f15cb2d73580d8937c6179ea89f05c9c50848c18ac5d8c6f9d21399bc2",
+      "hash": "sha256:00dce1b6fa7ce0769d7f660af4fc31a1efcfc4087dcba3c44b2e06e14735163e",
       "dependencies": [],
       "frontmatter": {
         "name": "best-practices",
         "description": "Web security, compatibility, and code quality patterns. Background knowledge for CSP, HTTPS, deprecated APIs, and modern standards.",
+        "intent": [
+          "security",
+          "web",
+          "csp",
+          "https",
+          "compatibility",
+          "quality",
+          "standards"
+        ],
         "allowed-tools": [
           "Read",
           "Grep",
@@ -238,11 +310,19 @@
       "description": "Check libs.versions.toml against Maven Central for outdated dependencies. Caches results in kdoc-state.json.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:244304e50507111b2c7861efe5730f0a88ee750c2a5b4fd895c70a5d209477ed",
+      "hash": "sha256:5bd071fb851bcb2d6027024914604a26afcfb1d71e32bc308272fbebf439bc28",
       "dependencies": [],
       "frontmatter": {
         "name": "check-outdated",
         "description": "Check libs.versions.toml against Maven Central for outdated dependencies. Caches results in kdoc-state.json.",
+        "intent": [
+          "dependencies",
+          "outdated",
+          "versions",
+          "toml",
+          "maven",
+          "upgrade"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -260,11 +340,18 @@
       "description": "Validate and fix commit messages against Conventional Commits v1.0.0. Use when writing commits, reviewing commit history, or enforcing commit conventions.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:bd9ec9942093e2eb5117445c37bc61018e55bf254642d082f67a8f582bd3bed7",
+      "hash": "sha256:b458c1cea8e694db442a9e591cbc544f5f3f15add9d0b372169ecbaf8337ea9d",
       "dependencies": [],
       "frontmatter": {
         "name": "commit-lint",
         "description": "Validate and fix commit messages against Conventional Commits v1.0.0. Use when writing commits, reviewing commit history, or enforcing commit conventions.",
+        "intent": [
+          "commit",
+          "lint",
+          "conventional-commits",
+          "validate",
+          "fix"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -282,11 +369,19 @@
       "description": "LCP, INP, and CLS optimization reference. Background knowledge for Core Web Vitals thresholds and fixes.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:ed44551a663f0b46a16d74664e919fc2f2e66be0ed672ebad4b1ada398b25af0",
+      "hash": "sha256:213dcb6df7e89ae958b97fdd4325c75a364afbe19ed3b2c172a704c6088677fb",
       "dependencies": [],
       "frontmatter": {
         "name": "core-web-vitals",
         "description": "LCP, INP, and CLS optimization reference. Background knowledge for Core Web Vitals thresholds and fixes.",
+        "intent": [
+          "web-vitals",
+          "lcp",
+          "inp",
+          "cls",
+          "performance",
+          "optimize"
+        ],
         "allowed-tools": [
           "Read",
           "Grep",
@@ -305,7 +400,7 @@
       "description": "Analyze test coverage gaps from existing data without running tests. Use when asked to check coverage or find untested code.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:bbf23c9bb07db4540cce938f77435243e82191b28d0b24c250c354ede80e2819",
+      "hash": "sha256:6eacf16e6276a790757d219cdb15b6198a6b486603c0ac9a148ad8f2c015a0ad",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -313,6 +408,13 @@
       "frontmatter": {
         "name": "coverage",
         "description": "Analyze test coverage gaps from existing data without running tests. Use when asked to check coverage or find untested code.",
+        "intent": [
+          "coverage",
+          "gaps",
+          "untested",
+          "analyze",
+          "report"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -330,7 +432,7 @@
       "description": "Generate comprehensive coverage report across all modules. Use when asked for full project coverage overview or metrics.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:f40cd8d161837404d204796a8a601cdb4eb9caaeab97e5aabaab9476fe823392",
+      "hash": "sha256:c119934b1c63ba2c8a5bbfe214474a9db122f67d4fa26f3435d7c85537965565",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -338,6 +440,13 @@
       "frontmatter": {
         "name": "coverage-full",
         "description": "Generate comprehensive coverage report across all modules. Use when asked for full project coverage overview or metrics.",
+        "intent": [
+          "coverage",
+          "report",
+          "modules",
+          "comprehensive",
+          "metrics"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -355,11 +464,18 @@
       "description": "Systematic bug investigation using the `debugger` agent.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:322eb380f3c5187fd5892933775d9e8a8b6927715a26223bdfd32f62d1fc023e",
+      "hash": "sha256:ff813c6700e16fdf6018e9a7326ecda44e26b837b2c499e12f6176ff6154c69b",
       "dependencies": [],
       "frontmatter": {
         "name": "debug",
         "description": "Systematic bug investigation using the `debugger` agent.",
+        "intent": [
+          "debug",
+          "bug",
+          "investigate",
+          "hypothesis",
+          "fix"
+        ],
         "copilot": false
       }
     },
@@ -370,11 +486,18 @@
       "description": "Technical decision analysis using the `advisor` agent.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c383968160b3ece08190718bd51edacb268df125f51e8ff6dab931de5a44a86a",
+      "hash": "sha256:f3794530d82ba74b2c65f623a05a6692c06c6d3ded6d984f010dd93b9bc4dca7",
       "dependencies": [],
       "frontmatter": {
         "name": "decide",
         "description": "Technical decision analysis using the `advisor` agent.",
+        "intent": [
+          "decide",
+          "decision",
+          "advisor",
+          "compare",
+          "tradeoff"
+        ],
         "copilot": false
       }
     },
@@ -385,11 +508,19 @@
       "description": "Unified documentation integrity audit. Runs kdoc-coverage, check-doc-patterns, docs/api freshness, and audit-docs in sequence. Produces a single report with coverage, drifts, and structure issues.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:cb032c2005f01f09ad9dc3ff7805de85cc147990a2100cb7204b937a1e647f01",
+      "hash": "sha256:568d0e04fac1a1bad4ad61a7a880d7da485686ecc0c08ea38243af3ac1e0ac6b",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-integrity",
         "description": "Unified documentation integrity audit. Runs kdoc-coverage, check-doc-patterns, docs/api freshness, and audit-docs in sequence. Produces a single report with coverage, drifts, and structure issues.",
+        "intent": [
+          "docs",
+          "integrity",
+          "kdoc",
+          "audit",
+          "drift",
+          "freshness"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -408,11 +539,18 @@
       "description": "Reorganize docs/ into category subdirectories using frontmatter. Use when asked to restructure or reorganize documentation.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:e1dd14936ab2f6036145c1ee6818e53fcf943f48ae2c08abce8230d17877273a",
+      "hash": "sha256:2e591fc83c8600d7dd62c51571ca9e83f02ddef0693712487bc9cfbb6c14139f",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-reorganize",
         "description": "Reorganize docs/ into category subdirectories using frontmatter. Use when asked to restructure or reorganize documentation.",
+        "intent": [
+          "docs",
+          "reorganize",
+          "restructure",
+          "category",
+          "frontmatter"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -433,11 +571,19 @@
       "description": "Run promptfoo evaluations against agent prompt templates. Validates agent prompts produce expected outputs. Use after editing agent templates to catch regressions.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4c38b511f47e7946fe52a4bf61c9215db245e8997f2ee4eb12386551f7f5a39c",
+      "hash": "sha256:9be5b473378ec370280dc1d2fc65222c1293866371c41f6d7023084973f87c5b",
       "dependencies": [],
       "frontmatter": {
         "name": "eval-agents",
         "description": "Run promptfoo evaluations against agent prompt templates. Validates agent prompts produce expected outputs. Use after editing agent templates to catch regressions.",
+        "intent": [
+          "eval",
+          "agents",
+          "promptfoo",
+          "validate",
+          "regression",
+          "templates"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -453,7 +599,7 @@
       "description": "Extract structured build and test errors from Gradle output. Use when a build or test fails and you need actionable error details.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:950482b60ab11b2c2d51078e18a7360ab092b80079a3ec7e1d321c763095de66",
+      "hash": "sha256:2f5645bed1d44883f85f0eb3915bce528b2272d404b62323bffe3705eef920ba",
       "dependencies": [
         "scripts/sh/ai-error-extractor.sh",
         "scripts/ps1/ai-error-extractor.ps1"
@@ -461,6 +607,14 @@
       "frontmatter": {
         "name": "extract-errors",
         "description": "Extract structured build and test errors from Gradle output. Use when a build or test fails and you need actionable error details.",
+        "intent": [
+          "errors",
+          "build",
+          "gradle",
+          "extract",
+          "failures",
+          "actionable"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -478,11 +632,20 @@
       "description": "Run a unified audit across all quality dimensions — architecture, code quality, testing, security, docs, and release readiness. Consolidates findings from multiple agents and scripts into a single deduplicated report.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:09461d9d93a25f45b9ecf7fa72b87f406e12c9dbe87630df12265835560a0273",
+      "hash": "sha256:3982771dbfeeab9007ef3b568c0ba8cd71c3de003c3133d44d1b535e3e8597cc",
       "dependencies": [],
       "frontmatter": {
         "name": "full-audit",
         "description": "Run a unified audit across all quality dimensions — architecture, code quality, testing, security, docs, and release readiness. Consolidates findings from multiple agents and scripts into a single deduplicated report.",
+        "intent": [
+          "audit",
+          "quality",
+          "architecture",
+          "security",
+          "docs",
+          "release",
+          "unified"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -501,11 +664,18 @@
       "description": "Optional: Run Dokka + transformer to generate docs/api/ from KDoc in source code. Produces YAML-frontmatter docs consumable by context-provider and search-docs.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:6359846e9598b0c648c77355aca727ca8faa3d8fe60f9651ac7d00d75d0b6ac3",
+      "hash": "sha256:50d4c3126fa78569da431507c19047d5a96d12f361380114c1c77b6f7ff1c8d1",
       "dependencies": [],
       "frontmatter": {
         "name": "generate-api-docs",
         "description": "Optional: Run Dokka + transformer to generate docs/api/ from KDoc in source code. Produces YAML-frontmatter docs consumable by context-provider and search-docs.",
+        "intent": [
+          "api-docs",
+          "dokka",
+          "kdoc",
+          "generate",
+          "transformer"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -524,11 +694,18 @@
       "description": "Generate Detekt custom rules from pattern doc frontmatter. Use when asked to create or update lint rules from documentation.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:aacba92c84e9e5f2023c25549344ba81ccff2027dfa7f939de1d0a1eb19b3985",
+      "hash": "sha256:873b6bf3b57bdaddf58c683c96192c16285f11db9d2b2e512fcc4778a7a896ff",
       "dependencies": [],
       "frontmatter": {
         "name": "generate-rules",
         "description": "Generate Detekt custom rules from pattern doc frontmatter. Use when asked to create or update lint rules from documentation.",
+        "intent": [
+          "detekt",
+          "rules",
+          "generate",
+          "lint",
+          "frontmatter"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -549,11 +726,19 @@
       "description": "Git Flow branch management — start feature/release/hotfix branches, merge tracks, and manage releases. Generic implementation of the Git Flow model (feature/* → develop, release/* → master). Use when setting up branches, merging completed work, or creating releases.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:86f402880086b0b47fbe0b62fea5659f875bf6c681e5e5ace5e0bc1c66d97b86",
+      "hash": "sha256:44f4f6b486ff3069beee51257d52effb76e26e726f3217749ad224d8627a5236",
       "dependencies": [],
       "frontmatter": {
         "name": "git-flow",
         "description": "Git Flow branch management — start feature/release/hotfix branches, merge tracks, and manage releases. Generic implementation of the Git Flow model (feature/* → develop, release/* → master). Use when setting up branches, merging completed work, or creating releases.",
+        "intent": [
+          "git",
+          "flow",
+          "branch",
+          "release",
+          "merge",
+          "hotfix"
+        ],
         "allowed-tools": [
           "Bash",
           "Read"
@@ -569,11 +754,20 @@
       "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:0f2b0566bf431feba5ef49d44af0bfdf22f6ae1c60805584c939997e4e818633",
+      "hash": "sha256:649b8ededf408c16e5ca34b90ee150fa2091783c7f596274386f6615c12daa25",
       "dependencies": [],
       "frontmatter": {
         "name": "ingest-content",
         "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content.",
+        "intent": [
+          "ingest",
+          "content",
+          "article",
+          "url",
+          "extract",
+          "patterns",
+          "docs"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -594,11 +788,19 @@
       "description": "Show project context — available agents, skills, modules, and business docs.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6558a34ba3c2b4fc8b253d744041e8523c6b1846b0a8b0616a9a464e51753319",
+      "hash": "sha256:63043eee0f9ab462af591dfe73022a8feca8b7571578aa79bf4148c42a706aa5",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",
         "description": "Show project context — available agents, skills, modules, and business docs.",
+        "intent": [
+          "session",
+          "init",
+          "context",
+          "agents",
+          "skills",
+          "modules"
+        ],
         "copilot": false
       }
     },
@@ -609,11 +811,19 @@
       "description": "Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-module coverage, and regression warnings vs baseline.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:b109dba6e967e0806e9dd9f4bc15575dbf9d8089af9a0a7076833e3de6ce3345",
+      "hash": "sha256:2968816c49bb33f137d2aa3396c6fcc05e53596b93f1dfda9ec53f47e2c5e958",
       "dependencies": [],
       "frontmatter": {
         "name": "kdoc-audit",
         "description": "Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-module coverage, and regression warnings vs baseline.",
+        "intent": [
+          "kdoc",
+          "audit",
+          "coverage",
+          "kotlin",
+          "api",
+          "undocumented"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -632,11 +842,19 @@
       "description": "Full-project KDoc migration orchestrator. Adds KDoc to all undocumented public APIs, module by module, informed by pattern docs.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:6a84e9e31a2f8a2edbc6ed97752a1bf8ed6aff04113d01fca6877cbc540272e9",
+      "hash": "sha256:ffe7e26d4e922ee4e9f09a8f8584358bb12c23c1c215b286010f10ca089792dc",
       "dependencies": [],
       "frontmatter": {
         "name": "kdoc-migrate",
         "description": "Full-project KDoc migration orchestrator. Adds KDoc to all undocumented public APIs, module by module, informed by pattern docs.",
+        "intent": [
+          "kdoc",
+          "migrate",
+          "document",
+          "api",
+          "kotlin",
+          "orchestrate"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -658,13 +876,21 @@
       "description": "Validate string resource naming conventions (snake_case, prefixes, duplicates, Swift sync). Use when checking resource files or before merging UI changes.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9ed74a68c292c3ce7c118f38da9ef2463067a376dfa9877ada184adc2558a529",
+      "hash": "sha256:b133857630fe7eb9750b37b24deec83a61d68730115bcf1f6c30a4f44b9e1291",
       "dependencies": [
         "scripts/sh/lint-resources.sh"
       ],
       "frontmatter": {
         "name": "lint-resources",
         "description": "Validate string resource naming conventions (snake_case, prefixes, duplicates, Swift sync). Use when checking resource files or before merging UI changes.",
+        "intent": [
+          "lint",
+          "resources",
+          "strings",
+          "naming",
+          "validate",
+          "duplicates"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -682,11 +908,18 @@
       "description": "Structured codebase analysis using the `codebase-mapper` agent.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4ec302d6f491cfc9666757503aec137126210ef234af27b72e324380b49863b0",
+      "hash": "sha256:5fc89ca7857678f7c607955297a49b9d6c1ca5a7803b833f2c78c2c491236b08",
       "dependencies": [],
       "frontmatter": {
         "name": "map-codebase",
         "description": "Structured codebase analysis using the `codebase-mapper` agent.",
+        "intent": [
+          "map",
+          "codebase",
+          "analyze",
+          "architecture",
+          "structure"
+        ],
         "copilot": false
       }
     },
@@ -724,11 +957,19 @@
       "description": "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdated dependencies or doc freshness.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:0e41920e269fbfdebd5192dd8ebfcd0f251188d48695a89d6609b210f14aaa2b",
+      "hash": "sha256:96e31e591798b33c58c39d44c5e657af3279cc1be232d13ac4ea467695558b4b",
       "dependencies": [],
       "frontmatter": {
         "name": "monitor-docs",
         "description": "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdated dependencies or doc freshness.",
+        "intent": [
+          "monitor",
+          "docs",
+          "upstream",
+          "drift",
+          "deprecation",
+          "freshness"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -749,11 +990,17 @@
       "description": "Zero-friction idea capture to project memory.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c91afc3a49114c672fef6dfcb846491874d58bca6df3cae9dd42512aaf283d1e",
+      "hash": "sha256:bd285cdb307048b11a8a2432fc010ab5f1fb6c8d37b1476a2d7ab34971a8d8f7",
       "dependencies": [],
       "frontmatter": {
         "name": "note",
         "description": "Zero-friction idea capture to project memory.",
+        "intent": [
+          "note",
+          "capture",
+          "idea",
+          "memory"
+        ],
         "copilot": false
       }
     },
@@ -764,11 +1011,19 @@
       "description": "Web performance optimization patterns (loading, caching, images, fonts). Background knowledge for page speed improvements.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:36c27d00b83486d39c9f30fd26eb4f317c4c6b28761603175fd1cbd3df07ff83",
+      "hash": "sha256:28c3a2b33d5f47b5e7a069bcd526538b1a2511627d86aa428db1ee72f2ae8336",
       "dependencies": [],
       "frontmatter": {
         "name": "performance",
         "description": "Web performance optimization patterns (loading, caching, images, fonts). Background knowledge for page speed improvements.",
+        "intent": [
+          "performance",
+          "web",
+          "loading",
+          "caching",
+          "images",
+          "speed"
+        ],
         "allowed-tools": [
           "Read",
           "Grep",
@@ -787,7 +1042,7 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8f16332a4088e242d36cd14731064c5178664c9f572b2724eba7219971160251",
+      "hash": "sha256:81e9924979b82cd31f76943bc9872478cdd71f91becf6b91bc60df14f0269d61",
       "dependencies": [
         "scripts/sh/scan-secrets.sh",
         "scripts/sh/catalog-coverage-check.sh",
@@ -797,6 +1052,14 @@
       "frontmatter": {
         "name": "pre-pr",
         "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
+        "intent": [
+          "pre-pr",
+          "validate",
+          "pull-request",
+          "ci",
+          "lint",
+          "quality-gate"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -814,13 +1077,21 @@
       "description": "Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use before closing a milestone or when documentation feels stale.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:82825c46bec372c10525484fc871268eddeb900be3b1d5e037905dd3a8fae124",
+      "hash": "sha256:d47bdc57273e4e65f5d4520886e14e7f2f7e6139022752ac5b683bd9782b0201",
       "dependencies": [
         "scripts/sh/readme-audit.sh"
       ],
       "frontmatter": {
         "name": "readme-audit",
         "description": "Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use before closing a milestone or when documentation feels stale.",
+        "intent": [
+          "readme",
+          "audit",
+          "stale",
+          "counts",
+          "references",
+          "docs"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -839,11 +1110,18 @@
       "description": "Ad-hoc technical research before implementation.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ba1261c8a3283a00f1298a81cd140f00d4a85530090a39c2489eb7ae2a20e8b5",
+      "hash": "sha256:4f5e799bedc8a6ce9951dcd89936ddc7a00f4339c248c90aa7915f0e040b8992",
       "dependencies": [],
       "frontmatter": {
         "name": "research",
         "description": "Ad-hoc technical research before implementation.",
+        "intent": [
+          "research",
+          "explore",
+          "investigate",
+          "technical",
+          "pre-implementation"
+        ],
         "copilot": false
       }
     },
@@ -854,11 +1132,18 @@
       "description": "Resume session with a CEO/CTO dashboard — shows status by department from last session.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1ffede156a88836c4e6a55c336251a8827da6ebc0d5187c9605f0d51336f72fc",
+      "hash": "sha256:f013c8952d7096cfa1d0d775d801351fb94195d6890d1dffc0019126999776bf",
       "dependencies": [],
       "frontmatter": {
         "name": "resume-work",
         "description": "Resume session with a CEO/CTO dashboard — shows status by department from last session.",
+        "intent": [
+          "resume",
+          "session",
+          "dashboard",
+          "status",
+          "department"
+        ],
         "copilot": false
       }
     },
@@ -869,11 +1154,18 @@
       "description": "Code review of a pull request with structured suggestions.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9cada6ce977a4efb8fdb9f2d5efb93458e7c3add2d1e3c799227a16cd6a6090c",
+      "hash": "sha256:fcdc27255dba6105b27bcd446a6b8c52560dd41e0c38d3adb98cfe77cc726711",
       "dependencies": [],
       "frontmatter": {
         "name": "review-pr",
         "description": "Code review of a pull request with structured suggestions.",
+        "intent": [
+          "review",
+          "pr",
+          "pull-request",
+          "code-review",
+          "feedback"
+        ],
         "copilot": false
       }
     },
@@ -884,7 +1176,7 @@
       "description": "Build, install, and run app with debug logging. Use when asked to launch, run, or deploy the app on a device or desktop.",
       "category": "build",
       "tier": "core",
-      "hash": "sha256:f616143cb1b5e00a738f20c9cc45f0ec6473169ab6cf36f444e61facbf59888c",
+      "hash": "sha256:56d215f9979eb718dfb5c6c8c25e04bd3f143fc1693886eb45d7c80007d27e7a",
       "dependencies": [
         "scripts/sh/build-run-app.sh",
         "scripts/ps1/build-run-app.ps1"
@@ -892,6 +1184,14 @@
       "frontmatter": {
         "name": "run",
         "description": "Build, install, and run app with debug logging. Use when asked to launch, run, or deploy the app on a device or desktop.",
+        "intent": [
+          "run",
+          "build",
+          "install",
+          "deploy",
+          "launch",
+          "debug"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -909,7 +1209,7 @@
       "description": "Generate CycloneDX SBOM for project modules. Use when asked to produce a software bill of materials.",
       "category": "security",
       "tier": "core",
-      "hash": "sha256:e6dc76956317e84530d30fdd551d2781e515a5f2a6c1c27b51817e8ba87da115",
+      "hash": "sha256:3dcc367becfd4c4a4b7fa019b401b0139360ed331edf530e902df7f9c9eb3992",
       "dependencies": [
         "scripts/sh/generate-sbom.sh",
         "scripts/ps1/generate-sbom.ps1"
@@ -917,6 +1217,13 @@
       "frontmatter": {
         "name": "sbom",
         "description": "Generate CycloneDX SBOM for project modules. Use when asked to produce a software bill of materials.",
+        "intent": [
+          "sbom",
+          "cyclonedx",
+          "dependencies",
+          "bill-of-materials",
+          "security"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -935,7 +1242,7 @@
       "description": "Analyze SBOM for dependency statistics, licenses, and concerns. Use when asked to review dependency licenses or SBOM contents.",
       "category": "security",
       "tier": "core",
-      "hash": "sha256:ba2f1c2f623217f0b7a542d4fadbc52f991d77ff42bcbf1a871b1beb5c014344",
+      "hash": "sha256:73585f449460a6f82b0e6b575dc5991653fa4bb3d021e21406f39ee168322853",
       "dependencies": [
         "scripts/sh/analyze-sbom.sh",
         "scripts/ps1/analyze-sbom.ps1"
@@ -943,6 +1250,13 @@
       "frontmatter": {
         "name": "sbom-analyze",
         "description": "Analyze SBOM for dependency statistics, licenses, and concerns. Use when asked to review dependency licenses or SBOM contents.",
+        "intent": [
+          "sbom",
+          "analyze",
+          "licenses",
+          "dependencies",
+          "statistics"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -961,7 +1275,7 @@
       "description": "Scan SBOM for known CVE vulnerabilities using Trivy. Use when asked to check for security vulnerabilities in dependencies.",
       "category": "security",
       "tier": "core",
-      "hash": "sha256:f6123666cc9666f062a4085e0f3e3b3d8437d0b4ddc38d7fa18e6ebe8210e5fc",
+      "hash": "sha256:e0dc2db7718d0e533c7861d5e69dea856003679fde34abd5c33831ec1e9d574e",
       "dependencies": [
         "scripts/sh/scan-sbom.sh",
         "scripts/ps1/scan-sbom.ps1"
@@ -969,6 +1283,14 @@
       "frontmatter": {
         "name": "sbom-scan",
         "description": "Scan SBOM for known CVE vulnerabilities using Trivy. Use when asked to check for security vulnerabilities in dependencies.",
+        "intent": [
+          "sbom",
+          "cve",
+          "vulnerabilities",
+          "trivy",
+          "security",
+          "scan"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -987,11 +1309,18 @@
       "description": "SEO optimization patterns (meta tags, structured data, crawlability). Background knowledge for search engine visibility.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:b2d6869a12038f99d96bcc01504c57c204492ed5f8cc2bee54d305426d5a6fe9",
+      "hash": "sha256:fc8af6d003e34efa79ffb3cbad0efe085e4948ccfab6e6317596bb9f9011b76b",
       "dependencies": [],
       "frontmatter": {
         "name": "seo",
         "description": "SEO optimization patterns (meta tags, structured data, crawlability). Background knowledge for search engine visibility.",
+        "intent": [
+          "seo",
+          "meta-tags",
+          "structured-data",
+          "crawlability",
+          "search"
+        ],
         "allowed-tools": [
           "Read",
           "Grep",
@@ -1010,11 +1339,18 @@
       "description": "> Switch the model tier used by all AndroidCommonDoc agents.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:25bf80ddd894847dea2c91b7dfde93f674d80e9e13dcf6d7fbc9914043bdec8d",
+      "hash": "sha256:ab28f3fb8bebf7bbffdf928d04b601f6def7fddfa5cf4e490c4c945582f4d9ba",
       "dependencies": [],
       "frontmatter": {
         "name": "set-model-profile",
         "description": "> Switch the model tier used by all AndroidCommonDoc agents.",
+        "intent": [
+          "model",
+          "profile",
+          "tier",
+          "agents",
+          "switch"
+        ],
         "copilot": false
       }
     },
@@ -1025,7 +1361,7 @@
       "description": "Interactive wizard to fully configure a new or existing project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Creates l0-manifest.json, syncs selected assets, and verifies the result. Bilingual output (EN + ES).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:ea58b3aa8009f757b4e78d14d44c9d83739720ff191b82983be48c8f1f8bad58",
+      "hash": "sha256:f1ac472a9257b90de3c083b35cf25c2e590cfa8c5cbd8f3d367bfd12f72994eb",
       "dependencies": [
         "scripts/sh/sync-gsd-skills.sh",
         "scripts/sh/sync-gsd-agents.sh",
@@ -1035,6 +1371,14 @@
       "frontmatter": {
         "name": "setup",
         "description": "Interactive wizard to fully configure a new or existing project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Creates l0-manifest.json, syncs selected assets, and verifies the result. Bilingual output (EN + ES).",
+        "intent": [
+          "setup",
+          "configure",
+          "wizard",
+          "l0",
+          "manifest",
+          "onboard"
+        ],
         "user-invocable": true,
         "allowed-tools": [
           "Bash",
@@ -1056,7 +1400,7 @@
       "description": "Sync .claude/agents/ to GSD subagent system and verify parity. Use when GSD subagent can't find an agent that exists in .claude/agents/, or after adding/modifying agents.",
       "category": "ecosystem",
       "tier": "extended",
-      "hash": "sha256:c0040e17baeb5b9b8ea299657d6de36b6fdbe9acb70731e1dbefe64a705d5f2c",
+      "hash": "sha256:92acb29d28018cf15dafa6023ad8056ef22188550edfb10db803805630c86ad5",
       "dependencies": [
         "scripts/sh/sync-gsd-agents.sh",
         "scripts/sh/check-agent-parity.sh"
@@ -1064,6 +1408,13 @@
       "frontmatter": {
         "name": "sync-gsd-agents",
         "description": "Sync .claude/agents/ to GSD subagent system and verify parity. Use when GSD subagent can't find an agent that exists in .claude/agents/, or after adding/modifying agents.",
+        "intent": [
+          "sync",
+          "gsd",
+          "agents",
+          "parity",
+          "subagent"
+        ],
         "user-invocable": true,
         "allowed-tools": [
           "Bash",
@@ -1080,7 +1431,7 @@
       "description": "Sync skills from Claude Code marketplace, L0, and L0 agents to GSD-2 user-level directory. Opt-in only -- never runs automatically unless explicitly enabled.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:b5e931dae7f69d5f0a9c37616cf8316022f9bd6223babedde3b12032f5da194c",
+      "hash": "sha256:3ea0b50832f292c348abdb7523a68d8a5f889b9e7627f6edc821f911edad0957",
       "dependencies": [
         "scripts/sh/sync-gsd-skills.sh",
         "scripts/ps1/sync-gsd-skills.ps1"
@@ -1088,6 +1439,13 @@
       "frontmatter": {
         "name": "sync-gsd-skills",
         "description": "Sync skills from Claude Code marketplace, L0, and L0 agents to GSD-2 user-level directory. Opt-in only -- never runs automatically unless explicitly enabled.",
+        "intent": [
+          "sync",
+          "gsd",
+          "skills",
+          "marketplace",
+          "l0"
+        ],
         "user-invocable": true,
         "allowed-tools": [
           "Bash",
@@ -1105,11 +1463,19 @@
       "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:33bfa1d3beaecd7ad11da83e6c1893fbc8dca829ffc098aa650d00f8da5a29ae",
+      "hash": "sha256:bc52f820cb72bc4e8d8579a31d1b42f8ec1778412da5c77a49c788310305eaf9",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
         "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
+        "intent": [
+          "sync",
+          "l0",
+          "registry",
+          "manifest",
+          "propagate",
+          "distribute"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -1128,11 +1494,19 @@
       "description": "Sync documentation into Obsidian vault with L0/L1/L2 hierarchy. Use when asked to update, initialize, or clean the knowledge vault.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:83baad080d5345d78d198a5d7d1d2522b4d70a3fe77305648819f9fdfcf32fe7",
+      "hash": "sha256:a3d2faba2d35d50a27fc13aab8e1b297f727037f56b08919a43ef2e3507438c8",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-vault",
         "description": "Sync documentation into Obsidian vault with L0/L1/L2 hierarchy. Use when asked to update, initialize, or clean the knowledge vault.",
+        "intent": [
+          "sync",
+          "vault",
+          "obsidian",
+          "wikilinks",
+          "docs",
+          "hierarchy"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -1151,7 +1525,7 @@
       "description": "Check version catalog alignment between KMP projects. Use when asked to verify dependency versions match the source of truth.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:a3e2620a55da209f65eb45c261d0c38a6dc5b2fc827eadbd6f95697777319f05",
+      "hash": "sha256:d710a3b649006ede63fa5d8fc8677a470798d095954e7cc24468c16632e54b69",
       "dependencies": [
         "scripts/sh/check-version-sync.sh",
         "scripts/ps1/check-version-sync.ps1"
@@ -1159,6 +1533,14 @@
       "frontmatter": {
         "name": "sync-versions",
         "description": "Check version catalog alignment between KMP projects. Use when asked to verify dependency versions match the source of truth.",
+        "intent": [
+          "versions",
+          "catalog",
+          "kmp",
+          "alignment",
+          "dependencies",
+          "toml"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -1176,7 +1558,7 @@
       "description": "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:949b1b79e9542786b1e03f75cfb6b5c3d2f43c9c8bf082735c118dc95be603fc",
+      "hash": "sha256:a8de3f141c2f0a3c6b5987ef38b5e85982f192ad62cd6d0699c4395e82faf7a5",
       "dependencies": [
         "scripts/sh/gradle-run.sh",
         "scripts/sh/ai-error-extractor.sh",
@@ -1186,6 +1568,13 @@
       "frontmatter": {
         "name": "test",
         "description": "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.",
+        "intent": [
+          "test",
+          "unit",
+          "module",
+          "retry",
+          "errors"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -1203,7 +1592,7 @@
       "description": "Run tests only on modules with uncommitted changes. Use when asked to test changed files or run a quick pre-commit check.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:cfc00dce0fc644c52dca228a64c55e879b81a1b1529110adda5f769c6154b02e",
+      "hash": "sha256:115abe52162328c6aa4826e5aaf6d8de2f7fd0d7e202cfc2f207f18e35984549",
       "dependencies": [
         "scripts/sh/run-changed-modules-tests.sh",
         "scripts/ps1/run-changed-modules-tests.ps1"
@@ -1211,6 +1600,13 @@
       "frontmatter": {
         "name": "test-changed",
         "description": "Run tests only on modules with uncommitted changes. Use when asked to test changed files or run a quick pre-commit check.",
+        "intent": [
+          "test",
+          "changed",
+          "uncommitted",
+          "pre-commit",
+          "fast"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -1228,7 +1624,7 @@
       "description": "Run all tests sequentially with full coverage report. Use when asked to run the complete test suite or generate a full coverage report.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:ead655b738853452d4c4614babfd4350de089cf0301827135a249d8939d220a9",
+      "hash": "sha256:50eb3c858ffaa2ce11b2b90c0c94e1e21ce9c4b452e238bbd486ae923aea48f0",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -1236,6 +1632,13 @@
       "frontmatter": {
         "name": "test-full",
         "description": "Run all tests sequentially with full coverage report. Use when asked to run the complete test suite or generate a full coverage report.",
+        "intent": [
+          "test",
+          "full",
+          "sequential",
+          "coverage",
+          "suite"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -1253,7 +1656,7 @@
       "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:033ef032a103d431a3995b872df653aca7f42445411e7e7f220baa6b46c6bb39",
+      "hash": "sha256:0c5ae754c6d11c0f26a44430626789f509a1ea84b7294a4c0df3bed75f36fb13",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -1261,6 +1664,13 @@
       "frontmatter": {
         "name": "test-full-parallel",
         "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
+        "intent": [
+          "test",
+          "parallel",
+          "coverage",
+          "fast",
+          "suite"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -1278,11 +1688,19 @@
       "description": "Validate code against pattern standards (ViewModel, UI, coroutines, DI, error handling, navigation). Use when asked to check code quality or pattern compliance.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:86645cfa37b437efbd2cdaf602817dbee7ad1e13992ab8024dc8729908ca8246",
+      "hash": "sha256:83acaa9fb1d686050096a45df6e3cef083097eaed7044a76118c6b06de86755b",
       "dependencies": [],
       "frontmatter": {
         "name": "validate-patterns",
         "description": "Validate code against pattern standards (ViewModel, UI, coroutines, DI, error handling, navigation). Use when asked to check code quality or pattern compliance.",
+        "intent": [
+          "validate",
+          "patterns",
+          "viewmodel",
+          "coroutines",
+          "di",
+          "compliance"
+        ],
         "allowed-tools": [
           "Read",
           "Grep",
@@ -1299,11 +1717,19 @@
       "description": "Validate pattern docs against upstream official documentation. Runs Layer 1 deterministic assertions (api_present, deprecation_scan, etc.) from validate_upstream frontmatter. Use when checking if docs are still accurate.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:12475e71d6fc62061bf02b7b9da7c443302383f281c0d234764f61d0ec23346f",
+      "hash": "sha256:184f9f8fb854ca13d99100df8a61d8cc8439420189722b275b1a44afc70911c9",
       "dependencies": [],
       "frontmatter": {
         "name": "validate-upstream",
         "description": "Validate pattern docs against upstream official documentation. Runs Layer 1 deterministic assertions (api_present, deprecation_scan, etc.) from validate_upstream frontmatter. Use when checking if docs are still accurate.",
+        "intent": [
+          "validate",
+          "upstream",
+          "docs",
+          "assertions",
+          "deprecation",
+          "accuracy"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -1322,11 +1748,18 @@
       "description": "Goal-backward verification using the `verifier` agent.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f464a6000edcf214309ad0e4b891c1184b60de22f2e1bb923c47b2e46f01cefd",
+      "hash": "sha256:cfe5e7602729b4ad9709c68b914c6c36a9a9d3ea9e1f0b02f07962d91849ea0a",
       "dependencies": [],
       "frontmatter": {
         "name": "verify",
         "description": "Goal-backward verification using the `verifier` agent.",
+        "intent": [
+          "verify",
+          "goal",
+          "backward",
+          "spec",
+          "verifier"
+        ],
         "copilot": false
       }
     },
@@ -1337,7 +1770,7 @@
       "description": "Validate KMP source set organization and forbidden imports. Use when asked to check architecture or source set correctness.",
       "category": "build",
       "tier": "core",
-      "hash": "sha256:e26fd19a905b4a5adc64ac434dd4955645ab4252cc803f68d469937c9e5af756",
+      "hash": "sha256:03d8377e6f914d2cb80094dab00a9769a7265738f38672591edd5a491440b00f",
       "dependencies": [
         "scripts/sh/verify-kmp-packages.sh",
         "scripts/ps1/verify-kmp-packages.ps1"
@@ -1345,6 +1778,13 @@
       "frontmatter": {
         "name": "verify-kmp",
         "description": "Validate KMP source set organization and forbidden imports. Use when asked to check architecture or source set correctness.",
+        "intent": [
+          "kmp",
+          "source-sets",
+          "imports",
+          "architecture",
+          "validate"
+        ],
         "allowed-tools": [
           "Bash",
           "Read",
@@ -1362,11 +1802,20 @@
       "description": "Run comprehensive web quality audit (performance, a11y, SEO, best practices). Use when asked to audit a website or run Lighthouse.",
       "category": "ui",
       "tier": "web",
-      "hash": "sha256:00639b054785713f340a016857e6d5ec1215d55c88be817a11783a86fe7142a8",
+      "hash": "sha256:3b6a093f112ca15d3abd1c745e1213f5d45a980f8cc3811e96a50dce3a5f2dec",
       "dependencies": [],
       "frontmatter": {
         "name": "web-quality-audit",
         "description": "Run comprehensive web quality audit (performance, a11y, SEO, best practices). Use when asked to audit a website or run Lighthouse.",
+        "intent": [
+          "web",
+          "quality",
+          "audit",
+          "lighthouse",
+          "performance",
+          "a11y",
+          "seo"
+        ],
         "allowed-tools": [
           "Read",
           "Grep",
@@ -3140,13 +3589,13 @@
       "name": "work",
       "type": "command",
       "path": ".claude/commands/work.md",
-      "description": "Smart task routing — analyzes your request and delegates to the right agent or skill.",
+      "description": "Smart task routing — analyzes your request and delegates to the right agent or skill. Includes HARD GATE (session team check), stale-team dir detection, and 10+ role keyword routing.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:beaeeadf0bf014d1149958a272bd3fbac4198e131ee8799d2b30ac8fd270f0c0",
+      "hash": "sha256:3da4ed6f03b9aa928343d452306fe534c43ef82c52b870eb094c2b2f6fd5a79a",
       "dependencies": [],
       "frontmatter": {
-        "description": "Smart task routing — analyzes your request and delegates to the right agent or skill."
+        "description": "Smart task routing — analyzes your request and delegates to the right agent or skill. Includes HARD GATE (session team check), stale-team dir detection, and 10+ role keyword routing."
       }
     }
   ]
