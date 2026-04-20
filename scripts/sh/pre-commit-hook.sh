@@ -34,7 +34,7 @@ if [[ ! -f "$REHASH_SCRIPT" ]]; then
 fi
 
 # Run the check
-if ! bash "$REHASH_SCRIPT" --project-root "$PROJECT_ROOT" --check; then
+if ! bash "$REHASH_SCRIPT" --project-root "$PROJECT_ROOT" --check --verbose 2>&1; then
   echo "" >&2
   echo "[REHASH] Registry hash stale." >&2
   echo "[REHASH] Run: node mcp-server/build/cli/generate-registry.js && bash scripts/sh/rehash-registry.sh --project-root \"\$(pwd)\"" >&2
