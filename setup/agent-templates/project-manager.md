@@ -204,6 +204,13 @@ PM manages branching. All development follows Git Flow.
 
 Always use `bash scripts/sh/X.sh` — NEVER invoke `scripts/ps1/X.ps1` directly in Bash tool. Even on Windows, Claude Code runs in `/usr/bin/bash`.
 
+### RTK Prefix Rule (MANDATORY)
+ALL git, gh, docker, and curl commands in agent templates and Bash tool calls MUST be prefixed with `rtk`:
+- ✅ `rtk git status`, `rtk gh pr view`, `rtk git commit`
+- ❌ `git status`, `gh pr view` (no rtk prefix)
+Note: `rtk` passes through unfiltered — safe when rtk is not installed (no-op). Mandatory for token savings in CI and agent shells.
+Note: verify that .claude/settings.json deny rules match `rtk git push --force *` in addition to `git push --force *`.
+
 ## L0 Skills + MCP Tools + Official Skills
 
 **L0 Skills**: `/test`, `/test-full-parallel`, `/coverage`, `/pre-pr`, `/audit-docs`, `/extract-errors`, `/debug`, `/research`, `/map-codebase`, `/verify`, `/decide`
