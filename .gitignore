@@ -56,3 +56,13 @@ tmp/
 
 # ── Crash dumps ──
 *.stackdump
+
+# ── Classpath artifact leaks (should never be committed) ──
+META-INF/
+org/
+
+# ── GSD internal agents (not for distribution) ──
+.gsd/agents/
+
+# ── Dry-run artifacts ──
+l0-manifest.json
