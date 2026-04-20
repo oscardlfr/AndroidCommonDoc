@@ -105,3 +105,6 @@
 - Business doc templates → `setup/doc-templates/business/` (PRODUCT_SPEC, MARKETING, PRICING, LANDING_PAGES, COMPETITIVE)
 - MCP tools → 46 tools via ~/.mcp.json (architects and specialists use these automatically)
 - Dependency freshness → `check-outdated` MCP tool (TOML parser, Maven Central, kdoc-state v2 cache)
+
+## RTK Enforcement (Wave 22)
+Agent templates MUST prefix all git/gh/docker/curl commands with `rtk`. Enforced in setup/agent-templates/project-manager.md.

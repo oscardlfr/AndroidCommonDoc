@@ -84,35 +84,13 @@ Full rationale: `docs/agents/arch-topology-protocols.md#2-reporter-protocol--pm-
 
 ### External Doc Lookups (MANDATORY — T-BUG-005)
 
-You do NOT have `WebFetch` in your tools by design. External documentation (GitHub release notes, library changelogs, blog posts, Stack Overflow, official dev portals) MUST be fetched through context-provider:
-
-```
-SendMessage(to="context-provider",
-  summary="external doc: <topic>",
-  message="Need <specific question>. Tried Context7? If not available there, WebFetch <URL>. Please cite source.")
-```
-
-**FORBIDDEN**:
-- `Bash curl` or `Bash wget` — network IO in architect scope is an anti-pattern (no rate limiting, no citation, no L0 doc-updater feedback loop)
-- Falling back to training knowledge when a doc lookup fails — architects MUST escalate via SendMessage to context-provider OR flag "uncited" in the verdict
-
-Why: context-provider has Context7 (curated) + WebFetch (raw) + citation enforcement. Centralizing external lookups keeps the session's external-doc provenance auditable.
-
+No WebFetch in tools. ALL external docs go through context-provider:
+`SendMessage(to="context-provider", summary="external doc: <topic>", message="Need <question>. Try Context7 first, then WebFetch <URL>. Cite source.")`
+FORBIDDEN: `Bash curl/wget`; falling back to training knowledge. Full rationale: `docs/agents/arch-topology-protocols.md#2-external-doc-lookups-mandatory--t-bug-005`.
 
 ### Bash Search Anti-pattern (FORBIDDEN — T-BUG-015)
 
-`Bash` is in your tools for git/gradle/test invocation only. **You may NOT use it for pattern searching:**
-
-**FORBIDDEN bash commands**:
-- `grep`, `rg`, `ripgrep`, `ag`, `ack` — text/code pattern search
-- `find`, `fd` — file pattern search
-- `awk`, `sed` (when used to filter/match patterns)
-
-These bypass the L0 PR #40 mechanical enforcement (Grep/Glob removed from your frontmatter to force context-provider delegation). Using `bash grep` defeats the design.
-
-**CORRECT path**: SendMessage to context-provider with the search query (`summary="search: <topic>"`, `message="Find <pattern> in <scope>. Return <what you need>."`).
-
-Why: L2 DawSync session (2026-04-18) caught arch-platform using `Bash grep` for pattern audits in Wave 0.7. Mechanical enforcement (no Grep/Glob in frontmatter) was bypassed via Bash. This anti-pattern closes that gap behaviourally.
+Bash is for git/gradle/test only. FORBIDDEN for search: `grep`, `rg`, `find`, etc. — bypasses PR #40 mechanical enforcement. Use SendMessage to context-provider instead. Full rationale: `docs/agents/arch-topology-protocols.md#3-bash-search-anti-pattern-t-bug-015`.
 
 ### Scope Validation Gate (MANDATORY)
 
@@ -380,6 +358,16 @@ Escalate to PM when:
 - arch-testing: {PASS/FAIL} — tests after fixes
 - arch-integration: {PASS/FAIL} — build after fixes
 ```
+
+### Disk-Write + 1-Liner DM (MANDATORY)
+
+After completing review:
+1. Write the full verdict block above to `.planning/wave{N}/arch-platform-verdict.md` (`{N}` = wave number from PM dispatch)
+2. `SendMessage(to="project-manager", message="APPROVE")` → PM does TaskUpdate only (no broadcast)
+   OR `SendMessage(to="project-manager", message="ESCALATE: <1-sentence reason>")` → PM broadcasts with [ESCALATION] marker
+   NEVER include the full verdict block in the DM — PM reads the file if needed.
+
+Full protocol: `docs/agents/agent-verdict-protocol.md`
 
 ## Official Skills (use when available)
 - `architecture` — Automated pattern validation and dependency analysis

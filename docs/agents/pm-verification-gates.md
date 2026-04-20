@@ -41,18 +41,44 @@ All APPROVE → next wave
 Any ESCALATE → PM re-plans (never codes)
 ```
 
-## Post-Verdict Broadcast (MANDATORY after every architect verdict)
+## Verdict Tally Protocol (MANDATORY — TaskList pattern)
 
-After receiving ANY architect APPROVE/ESCALATE verdict:
-1. **Broadcast check**: Notify OTHER architects that commit X is ready
-   for their verdict. Do NOT assume they detected the commit.
-2. **Flag resolution check**: Did the approving architect mention a
-   concern for another architect? If YES → convert to explicit
-   SendMessage task to the flagged architect with BLOCKER/NON-BLOCKER ask.
-3. **Stall check**: If 3+ min since last substantive message and no
-   architect is working → broadcast "what's blocking?" to pending architects.
+At Phase 2 start, create one task per expected arch verdict:
+```
+TaskCreate(title="arch-testing verdict", status="in_progress")
+TaskCreate(title="arch-platform verdict", status="in_progress")
+TaskCreate(title="arch-integration verdict", status="in_progress")
+```
+
+**On receiving `"APPROVE"` from arch-{role}**:
+1. `TaskUpdate(title="arch-{role} verdict", status="completed")` — TaskUpdate ONLY, no broadcast.
+2. `TaskList` → if all 3 verdict tasks = completed → proceed to Phase 3.
+
+**On receiving `"ESCALATE: <reason>"` from arch-{role}**:
+1. Read `.planning/wave{N}/arch-{role}-verdict.md` for full details.
+2. SendMessage to relevant peers with `[ESCALATION] arch-{role}: <reason>` marker.
+3. Decision: re-planifiable → delegate to researcher+advisor; blocked → report to user with clear error.
+
+**Stall check**: if 3+ min since last substantive message and a verdict task is still in_progress → broadcast "what's blocking?" to pending architects.
 
 Architects don't poll git. They don't read other architects' verdicts unless explicitly tasked. PM is the router.
+
+## Compaction-Loop Detection (S6 — 3-echo threshold)
+
+Context compaction can cause a peer to loop — echoing the same summary repeatedly without making progress. PM tracks the last 3 message summaries per peer.
+
+**How to track** (PM mental model — no external state needed):
+- For each peer, note the summary of their last 3 messages.
+- If summary[N] ≈ summary[N-1] ≈ summary[N-2] (same intent, same status, no new evidence) → **compaction-loop detected**.
+
+**On detection**:
+```
+SendMessage(to="user", message="[COMPACTION-LOOP] arch-{role}: 3 consecutive identical summaries detected. Likely context-compacted. Recommend re-spawning: Agent(name='arch-{role}', team_name='session-{slug}', ...)")
+```
+
+Do NOT re-spawn automatically — user decides. Just flag and await instruction.
+
+**Threshold**: 3 echoes (not 2 — false-positive risk on retry logic).
 
 ## Post-Wave Team Integrity Check (MANDATORY)
 

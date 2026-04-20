@@ -80,6 +80,19 @@ quality-gater FAIL → IMMEDIATELY back to SendMessage architects (Phase 2 retry
 
 See also [Team Topology](team-topology.md), [Multi-Agent Patterns](multi-agent-patterns.md).
 
+## PLAN.md Modularization (Wave 22 pattern)
+
+**Master PLAN.md** (≤80 lines) is the sprint index — navigation only. Per-wave detail lives in `.planning/PLAN-W{N}.md`.
+
+| File | Max lines | Content |
+|------|-----------|---------|
+| `.planning/PLAN.md` | ≤80 | Sprint table, scope-files list, acceptance criteria, risks |
+| `.planning/PLAN-W{N}.md` | no limit | Per-sprint detail: blocked-by, sub-tasks, notes for planner |
+
+**Planner writes both files.** PM reads master PLAN.md at activation (stays ≤80 lines). Per-wave detail loaded on demand when sprinting.
+
+**Why**: Wave 21 PLAN.md grew to 326 lines. PM context loaded the full file eagerly — ~50K tokens per activation. Modular split keeps master under 80 lines without losing sprint detail.
+
 ## Context Management
 
 - **Peers accumulate context** — keep the team small (only agents that need coordination)

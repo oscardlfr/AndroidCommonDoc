@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-20T16:50:48.707Z",
+  "generated": "2026-04-20T18:14:12.430Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1913,7 +1913,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b369544d08b0f26648a4761010d88376e7eda2d93ab70218e1ddecc57d837fc6",
+      "hash": "sha256:b3778e0c23b93c34fd4ee8e4b5d1e66e0ede87507270f27d1b4d4dcc53325f86",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1943,7 +1943,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:fa2fba30afc8edb1ece04869b8ecf48c37f1704e27df2e647bdcd049b348597b",
+      "hash": "sha256:8817cb47ffeb6dd9e1c999a3c83eca182db0c733d06132d2bf49e2724a29c7b1",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1972,7 +1972,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:d6a89ab53199a57086ba9b579bf75e7935bd2cd5293f7711bc87ba0db391974f",
+      "hash": "sha256:257865e54d64bc2d6c6fb71eb760539ce505d0a0c647bc037fae35d316e68894",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -2648,13 +2648,13 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:98c78bd1a730a21c6915fc1235390b54acea2747e3b2ff43025ec75d3bd9b8f3",
+      "hash": "sha256:e21d353e7eca0b5393d0f0a12a2a02d621113b69d311d1da39f572218d488e2f",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
         "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
         "tools": "Read, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList",
-        "model": "opus",
+        "model": "sonnet",
         "domain": "development",
         "intent": [
           "orchestrate",
@@ -2664,7 +2664,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "5.13.0",
+        "template_version": "5.14.0",
         "memory": "project",
         "skills": [
           "pre-pr",

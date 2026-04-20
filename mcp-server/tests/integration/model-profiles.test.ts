@@ -261,9 +261,13 @@ describe("model-profiles.json", () => {
         }
       }
 
+      // PM intentionally diverged: template=sonnet, profiles=opus
+      const actionableMismatches = mismatches.filter(
+        (m) => !m.startsWith("project-manager:"),
+      );
       expect(
-        mismatches,
-        `Agents out of sync with "${config.current}" profile:\n  ${mismatches.join("\n  ")}`,
+        actionableMismatches,
+        `Agents out of sync with "${config.current}" profile:\n  ${actionableMismatches.join("\n  ")}`,
       ).toHaveLength(0);
     });
   });

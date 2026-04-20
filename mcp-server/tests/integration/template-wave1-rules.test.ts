@@ -133,9 +133,9 @@ describe('Wave 1: template_version bumped in architects', () => {
     expect(content).toMatch(/template_version:\s*"1\.14\.0"/);
   });
 
-  it('project-manager.md template_version is "5.13.0"', () => {
+  it('project-manager.md template_version is "5.14.0"', () => {
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'project-manager.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"5\.13\.0"/);
+    expect(content).toMatch(/template_version:\s*"5\.14\.0"/);
   });
 });
 
