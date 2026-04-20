@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-20T07:23:57.675Z",
+  "generated": "2026-04-20T07:43:54.479Z",
   "l0_root": "C:\\Users\\34645\\AndroidStudioProjects\\AndroidCommonDoc",
   "entries": [
     {
@@ -1833,7 +1833,7 @@
       "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:bef104589e12d66cc84653f8e837299734e95cb067ada4dd882200cb78377238",
+      "hash": "sha256:1d86e8abb794ee8b578e5dd4b70a0b43f5a7cf950baabfc164aa9008313dffbc",
       "dependencies": [],
       "frontmatter": {
         "name": "work",
