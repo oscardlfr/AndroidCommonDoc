@@ -90,25 +90,25 @@ Match `$ARGUMENTS` against these patterns in order. First match wins:
 
 | Pattern | Route |
 |---------|-------|
-| `bug\|error\|fix\|broken\|crash` | `/debug` |
-| `test\|coverage\|benchmark` | Delegate to `test-specialist` agent |
-| `review\|PR\|pull request` | `/review-pr` |
-| `research\|investigate\|explore` | `/research` |
-| `decide\|choose\|compare\|tradeoff` | `/decide` |
-| `verify\|check spec\|meets criteria` | `/verify` |
-| `map\|architecture\|modules\|inventory` | `/map-codebase` |
-| `pre-pr\|validate\|ready to merge` | `/pre-pr` |
-| `note\|idea\|remember` | `/note` |
-| `audit\|quality` | `/audit` |
-| `doc\|documentation\|update docs` | Delegate to `doc-updater` agent |
-| `context\|pattern\|lookup\|what exists` | Delegate to `context-provider` agent |
-| `ui\|compose\|screen\|component` | Delegate to `ui-specialist` agent |
-| `domain\|model\|sealed\|data class` | Delegate to `domain-model-specialist` agent |
-| `data layer\|repository\|encoding` | Delegate to `data-layer-specialist` agent |
-| `prioritize\|roadmap\|features\|backlog` | Agent(`product-strategist`) * |
-| `post\|blog\|social\|marketing\|content` | Agent(`content-creator`) * |
-| `landing\|page\|conversion\|copy\|seo` | Agent(`landing-page-strategist`) * |
-| `implement\|feature\|build\|scope\|plan\|execute\|wave` | Read `project-manager` template, act as PM (in-process) *** |
+| `\b(bug\|error\|fix\|broken\|crash)\b` | `/debug` |
+| `\b(test\|coverage\|benchmark)\b` | Delegate to `test-specialist` agent |
+| `\b(review\|PR\|pull request)\b` | `/review-pr` |
+| `\b(research\|investigate\|explore)\b` | `/research` |
+| `\b(decide\|choose\|compare\|tradeoff)\b` | `/decide` |
+| `\b(verify\|check spec\|meets criteria)\b` | `/verify` |
+| `\b(map\|architecture\|modules\|inventory)\b` | `/map-codebase` |
+| `\b(pre-pr\|validate\|ready to merge)\b` | `/pre-pr` |
+| `\b(note\|idea\|remember)\b` | `/note` |
+| `\b(audit\|quality)\b` | `/audit` |
+| `\b(doc\|documentation\|update docs)\b` | Delegate to `doc-updater` agent |
+| `\b(context\|pattern\|lookup\|what exists)\b` | Delegate to `context-provider` agent |
+| `\b(ui\|compose\|screen\|component)\b` | Delegate to `ui-specialist` agent |
+| `\b(domain\|model\|sealed\|data class)\b` | Delegate to `domain-model-specialist` agent |
+| `\b(data layer\|repository\|encoding)\b` | Delegate to `data-layer-specialist` agent |
+| `\b(prioritize\|roadmap\|features\|backlog)\b` | Agent(`product-strategist`) * |
+| `\b(post\|blog\|social\|marketing\|content)\b` | Agent(`content-creator`) * |
+| `\b(landing\|page\|conversion\|copy\|seo)\b` | Agent(`landing-page-strategist`) * |
+| `\b(implement\|feature\|build\|scope\|plan\|execute\|wave)\b` | Read `project-manager` template, act as PM (in-process) *** |
 
 \* Business agents are opt-in. If the agent doesn't exist in `.claude/agents/`, fall through to Level 2.
 \*** T-BUG-010: `project-manager` MUST run in-process (main conversation), NEVER via `Agent()`. Sub-agents cannot TeamCreate or spawn reliably. Read `.claude/agents/project-manager.md` and act as PM directly.
