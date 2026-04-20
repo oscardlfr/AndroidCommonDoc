@@ -188,3 +188,70 @@ describe("arch-dispatch-modes.md content integrity", () => {
     expect(content).toMatch(/mode:/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wave 24 / Bug #3: PM session setup calls TeamDelete before TeamCreate
+// ---------------------------------------------------------------------------
+
+describe("Bug #3: PM session setup calls TeamDelete before TeamCreate (Wave 24)", () => {
+  it("project-manager.md has TeamDelete before TeamCreate in session start block", () => {
+    for (const content of readBoth("project-manager.md")) {
+      const deleteIdx = content.indexOf("TeamDelete(team_name=");
+      const createIdx = content.indexOf("TeamCreate(team_name=");
+      expect(deleteIdx, "TeamDelete must appear before TeamCreate").toBeGreaterThanOrEqual(0);
+      expect(createIdx, "TeamCreate must be present").toBeGreaterThanOrEqual(0);
+      expect(deleteIdx, "TeamDelete must appear BEFORE TeamCreate").toBeLessThan(createIdx);
+    }
+  });
+
+  it("project-manager.md pre-flight checklist has step 0 for TeamDelete", () => {
+    for (const content of readBoth("project-manager.md")) {
+      expect(content).toMatch(/□ 0\. TeamDelete.*TeamCreate.*Bug #3/);
+    }
+  });
+
+  it("project-manager.md template_version is 5.17.0", () => {
+    for (const content of readBoth("project-manager.md")) {
+      expect(content).toMatch(/template_version:\s*"5\.17\.0"/);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wave 24 / P4: 17 agents now mirrored in setup/agent-templates/
+// ---------------------------------------------------------------------------
+
+describe("P4: agent mirrors in setup/agent-templates/ (Wave 24)", () => {
+  const MIRRORS = [
+    "advisor.md",
+    "api-rate-limit-auditor.md",
+    "beta-readiness-agent.md",
+    "codebase-mapper.md",
+    "cross-platform-validator.md",
+    "debugger.md",
+    "doc-alignment-agent.md",
+    "doc-code-drift-detector.md",
+    "full-audit-orchestrator.md",
+    "l0-coherence-auditor.md",
+    "privacy-auditor.md",
+    "quality-gate-orchestrator.md",
+    "release-guardian-agent.md",
+    "researcher.md",
+    "script-parity-validator.md",
+    "skill-script-alignment.md",
+    "template-sync-validator.md",
+    "verifier.md",
+  ];
+
+  for (const name of MIRRORS) {
+    it(`${name} exists in setup/agent-templates/`, () => {
+      expect(fs.existsSync(path.join(TEMPLATES_DIR, name))).toBe(true);
+    });
+
+    it(`${name} is identical between setup/agent-templates/ and .claude/agents/`, () => {
+      const src = fs.readFileSync(path.join(TEMPLATES_DIR, name), "utf-8");
+      const copy = fs.readFileSync(path.join(AGENTS_DIR, name), "utf-8");
+      expect(src).toBe(copy);
+    });
+  }
+});

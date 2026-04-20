@@ -85,6 +85,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W23 hotfix: context-provider and doc-updater spawns now use subagent_type to restrict tools (CP read-only, doc-updater doc-only). Both peers get explicit NEVER self-assign / NEVER execute CI guards."
+      },
+      "5.17.0": {
+        "date": "2026-04-20",
+        "breaking": false,
+        "note": "Bug #3: TeamDelete(session-{slug}) before TeamCreate clears stale prior-session teams — prevents peer name suffix collision (-2/-3)."
       }
     },
     "planner": {

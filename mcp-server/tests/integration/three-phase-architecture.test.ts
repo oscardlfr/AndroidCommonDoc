@@ -154,8 +154,8 @@ describe('project-manager template — 3-phase model', () => {
     expect(combinedPM).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 5.16.0', () => {
-    expect(content).toContain('template_version: "5.16.0"');
+  it('template version 5.17.0', () => {
+    expect(content).toContain('template_version: "5.17.0"');
   });
 
   it('has dev dispatch protocol', () => {

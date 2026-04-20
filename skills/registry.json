@@ -2648,7 +2648,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b19c72cc2d712d298cb70a76e7ab901f70159a5e751db0454de88be33334a3fd",
+      "hash": "sha256:060887f519f763868996ecda2dfacc1a6b2c2c2bcc0f5b44e309ad2925fd1a85",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
