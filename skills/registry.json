@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-20T16:50:48.707Z",
+  "generated": "2026-04-20T18:14:12.430Z",
   "l0_root": ".",
   "entries": [
     {
@@ -2648,13 +2648,13 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:98c78bd1a730a21c6915fc1235390b54acea2747e3b2ff43025ec75d3bd9b8f3",
+      "hash": "sha256:d6fd097970d0e5a0aba35c092afe3a962b49144dfa92fe2533cbb762e82326cd",
       "dependencies": [],
       "frontmatter": {
         "name": "project-manager",
         "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
         "tools": "Read, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList",
-        "model": "opus",
+        "model": "sonnet",
         "domain": "development",
         "intent": [
           "orchestrate",
@@ -2664,7 +2664,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "5.13.0",
+        "template_version": "5.14.0",
         "memory": "project",
         "skills": [
           "pre-pr",

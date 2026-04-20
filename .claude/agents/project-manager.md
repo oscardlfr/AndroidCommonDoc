@@ -2,11 +2,11 @@
 name: project-manager
 description: "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project."
 tools: Read, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList
-model: opus
+model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.13.0"
+template_version: "5.14.0"
 memory: project
 skills:
   - pre-pr
