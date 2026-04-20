@@ -11,20 +11,8 @@ HOOKS_DIR=".git/hooks"
 
 echo "Installing git hooks..."
 
-# Pre-commit: run pattern-lint on staged .kt files
-cat > "$HOOKS_DIR/pre-commit" << 'HOOK'
-#!/bin/bash
-# Auto-installed by install-git-hooks.sh
-# Runs pattern-lint on staged Kotlin files
-
-staged_kt=$(git diff --cached --name-only --diff-filter=ACM | grep '\.kt$' || true)
-[ -z "$staged_kt" ] && exit 0
-
-if [ -f "scripts/sh/pattern-lint.sh" ]; then
-  bash scripts/sh/pattern-lint.sh --project-root "$(pwd)" 2>&1
-  exit $?
-fi
-HOOK
+# Pre-commit: registry hash gate + pattern-lint (sourced from pre-commit-hook.sh)
+cp "scripts/sh/pre-commit-hook.sh" "$HOOKS_DIR/pre-commit"
 chmod +x "$HOOKS_DIR/pre-commit"
 
 # Commit-msg: validate conventional commits
