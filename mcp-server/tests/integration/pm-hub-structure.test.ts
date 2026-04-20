@@ -81,14 +81,15 @@ describe('PM template hub pointers', () => {
 // ---------------------------------------------------------------------------
 
 describe('PM template line count post-refactor', () => {
-  it('project-manager.md is at most 240 lines', () => {
+  it('project-manager.md is at most 260 lines', () => {
     // Bumped from 210 → 225 when T-BUG-010 (WHO-READS-THIS warning) added,
-    // then 225 → 240 when T-BUG-015 (Search Dispatch Protocol) added. Both
-    // sections are critical PM-level governance that cannot move to sub-docs
-    // — team-lead must see them immediately on first read of the template.
-    // +1 for trailing newline (split('\n') on a 240-line file = 241 elements).
+    // then 225 → 240 when T-BUG-015 (Search Dispatch Protocol) added,
+    // then 240 → 260 (Wave 23 S8 additions: Token Meter + arch-dispatch-modes
+    // pointer + Model Profiles pointer — all PM-level governance that must
+    // be immediately visible on template read, cannot move to sub-docs).
+    // +1 for trailing newline (split('\n') on a 260-line file = 261 elements).
     const lines = fs.readFileSync(PM_TEMPLATE, 'utf-8').split('\n');
-    expect(lines.length).toBeLessThanOrEqual(241);
+    expect(lines.length).toBeLessThanOrEqual(261);
   });
 });
 

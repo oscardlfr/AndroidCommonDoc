@@ -45,7 +45,9 @@ describe("T-BUG-001: architect Activation Sequence (inbox-first)", () => {
       for (const content of [claude, template]) {
         expect(content).toMatch(/Activation Sequence \(MANDATORY/);
         expect(content).toMatch(/Inbox-first|inbox/i);
-        expect(content).toMatch(/T-BUG-001/);
+        // Wave 23: T-BUG-001 tag label was removed from arch templates in favour
+        // of the condensed Topology Protocols block. The functional content
+        // (Activation Sequence + inbox-first) is still present — checked above.
       }
     });
   }
@@ -279,14 +281,18 @@ describe("T-BUG-010: PM template warns it is for main conversation (team-lead), 
 
 describe("T-BUG-011: arch-* OBS-A is a HARD SELF-GATE (not descriptive)", () => {
   for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
-    it(`${name} has HARD SELF-GATE with wave-distance + specialty + PLAN.md checks`, () => {
+    it(`${name} has HARD SELF-GATE with wave-distance + specialty + scope trigger checks`, () => {
       const { claude, template } = readAgent(name);
       for (const content of [claude, template]) {
         expect(content).toMatch(/T-BUG-011/);
         expect(content).toMatch(/HARD SELF-GATE/);
         expect(content).toMatch(/Wave-distance check/);
         expect(content).toMatch(/Specialty check/);
-        expect(content).toMatch(/PLAN\.md trigger check/);
+        // Wave 23: arch-platform + arch-integration renamed the check item from
+        // "PLAN.md trigger check" → "Scope-doc trigger check" (reflects that the
+        // authoritative source is now scope_doc_path, not PLAN.md directly).
+        // arch-testing still uses the old inline form. Accept both.
+        expect(content).toMatch(/Scope-doc trigger check|PLAN\.md trigger check/);
         // REFUSE language must appear (hard-stop, not suggestion)
         expect(content).toMatch(/REFUSE/);
         // Anti-pattern: non-adjacent wave (N+2+) must be explicitly forbidden

@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "5.14.0"
+template_version: "5.16.0"
 memory: project
 skills:
   - pre-pr
@@ -107,8 +107,8 @@ Why: L2 DawSync session (2026-04-18) — team-lead dispatched grep work directly
 
 ```
 TeamCreate(team_name="session-{project-slug}")
-Agent(name="context-provider", team_name="session-{project-slug}", prompt="You are context-provider for this session. Read docs/agents/agent-core-rules.md. Answer pattern/doc/rule queries on demand — load files when asked, never eagerly. Stay alive.", run_in_background=true)
-Agent(name="doc-updater", team_name="session-{project-slug}", prompt="You are doc-updater for this session. Read docs/agents/agent-core-rules.md. Update docs when agents SendMessage you. Stay alive.", run_in_background=true)
+Agent(name="context-provider", team_name="session-{project-slug}", subagent_type="context-provider", prompt="You are context-provider for this session. Read docs/agents/agent-core-rules.md. Answer pattern/doc/rule queries on demand — load files when asked, never eagerly. NEVER write files. NEVER self-assign tasks. NEVER execute CI. Stay alive.", run_in_background=true)
+Agent(name="doc-updater", team_name="session-{project-slug}", subagent_type="doc-updater", prompt="You are doc-updater for this session. Read docs/agents/agent-core-rules.md. Update docs ONLY when PM explicitly dispatches you via SendMessage. NEVER self-assign tasks from TaskList. NEVER act without a PM dispatch. Stay alive.", run_in_background=true)
 Agent(name="arch-testing", team_name="session-{project-slug}", prompt="You are arch-testing for this session. Read docs/agents/agent-core-rules.md. Manage test-specialist, ui-specialist. Verify test quality, TDD, coverage. Report findings via SendMessage. Stay alive.", run_in_background=true)
 Agent(name="arch-platform", team_name="session-{project-slug}", prompt="You are arch-platform for this session. Read docs/agents/agent-core-rules.md. Manage domain-model-specialist, data-layer-specialist. Verify KMP patterns, encoding, source sets. Report findings via SendMessage. Stay alive.", run_in_background=true)
 Agent(name="arch-integration", team_name="session-{project-slug}", prompt="You are arch-integration for this session. Read docs/agents/agent-core-rules.md. Manage ui-specialist, data-layer-specialist. Verify DI, navigation, wiring, compilation. Report findings via SendMessage. Stay alive.", run_in_background=true)
@@ -140,6 +140,15 @@ See [PM Phase Execution Protocol](docs/agents/pm-phase-execution.md) for phase t
 
 ### Quality Gate + Doc Pipeline
 See [PM Quality & Doc Pipeline](docs/agents/pm-quality-doc-pipeline.md) for quality-gater retry rules, doc-updater mandate, and CLAUDE.md pointers-only rule.
+
+### Model Profiles
+See [PM Model Profiles](docs/agents/pm-model-profiles.md) for `.claude/model-profiles.json` structure, the four profiles (budget/balanced/advanced/quality), and the PM semantic gap (template `model: sonnet` but profile override to opus at runtime).
+
+### Architect Dispatch Modes (MANDATORY — Bug #5 + Bug #6 fix)
+Every architect dispatch MUST include `scope_doc_path: .planning/PLAN-W{N}.md` and `mode: PREP` or `mode: EXECUTE`. Never hardcode `.planning/PLAN.md`. Full protocol: [arch-dispatch-modes](docs/agents/arch-dispatch-modes.md). Dispatch format: [pm-dispatch-topology § Architect Dispatch](docs/agents/pm-dispatch-topology.md#architect-dispatch--scope_doc_path--prepexecute-mode-wave-23).
+
+### Token Meter + Retrospective (MANDATORY at wave end)
+At the end of every wave, PM MUST: (1) estimate token spend as `dispatched-message-count × avg-tokens-per-message` (order-of-magnitude; no precision needed), (2) write `.planning/wave{N}/retrospective.md` with wave number, steps completed, token estimate, and verdict outcomes (APPROVE/ESCALATE counts per architect). Threshold: if estimate >80% of model context window → flag to user and propose wave split. Full spec: [pm-verification-gates § Token Meter Gate](docs/agents/pm-verification-gates.md#token-meter-gate).
 
 ### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
 

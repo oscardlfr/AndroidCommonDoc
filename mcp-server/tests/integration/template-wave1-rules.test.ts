@@ -118,24 +118,28 @@ describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in project-manager or sub
 // 8. Wave 1: template_version bumped in architects
 // ---------------------------------------------------------------------------
 describe('Wave 1: template_version bumped in architects', () => {
-  it('arch-testing.md template_version is "1.17.0"', () => {
+  it('arch-testing.md template_version is "1.18.0"', () => {
+    // Wave 23: bumped from 1.17.0 → 1.18.0 (token meter + scope_doc_path changes)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1\.17\.0"/);
+    expect(content).toMatch(/template_version:\s*"1\.18\.0"/);
   });
 
-  it('arch-platform.md template_version is "1.14.0"', () => {
+  it('arch-platform.md template_version is "1.15.0"', () => {
+    // Wave 23: bumped from 1.14.0 → 1.15.0 (Scope-doc trigger check rename)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1\.14\.0"/);
+    expect(content).toMatch(/template_version:\s*"1\.15\.0"/);
   });
 
-  it('arch-integration.md template_version is "1.14.0"', () => {
+  it('arch-integration.md template_version is "1.15.0"', () => {
+    // Wave 23: bumped from 1.14.0 → 1.15.0 (Scope-doc trigger check rename)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1\.14\.0"/);
+    expect(content).toMatch(/template_version:\s*"1\.15\.0"/);
   });
 
-  it('project-manager.md template_version is "5.14.0"', () => {
+  it('project-manager.md template_version is "5.16.0"', () => {
+    // Wave 23: bumped from 5.15.0 → 5.16.0 (hotfix: subagent_type on CP+doc-updater spawns)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'project-manager.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"5\.14\.0"/);
+    expect(content).toMatch(/template_version:\s*"5.16.0"/);
   });
 });
 

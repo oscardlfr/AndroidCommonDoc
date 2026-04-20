@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.14.0"
+template_version: "1.15.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -36,13 +36,15 @@ PM spawns the dev and relays the result back to you for verification.
 
 ### Activation Sequence (MANDATORY — runs ONCE on spawn, before ANY file read)
 
-On spawn your state is EMPTY. Do NOT proactively read `.planning/PLAN.md`, `.planning/phases/*`, or any project files yet. A PLAN.md left over from a prior session looks identical to the current one on disk — reading it eagerly causes scope-drift bugs (T-BUG-001).
+On spawn your state is EMPTY. Do NOT proactively read any project files. Wave plans live at `.planning/PLAN-W{N}.md` — never guess the path, never fall back to `.planning/PLAN.md`.
 
-1. **Inbox-first**: check your mailbox. If empty → idle-wait for PM dispatch. NO file reads, NO proactive audits, NO "getting ready" reads.
-2. **First PM dispatch arrives**: THAT message is your scope anchor. Extract wave/task/file-list from it.
-3. **Only AFTER dispatch is received**: Read `.planning/PLAN.md` to cross-check the dispatch against the documented wave scope. If dispatch and PLAN.md disagree, SendMessage to PM with summary="PLAN-DISPATCH DRIFT" and quote both — do NOT silently follow either.
+1. **Inbox-first**: check your mailbox. If empty → idle-wait for PM dispatch. NO file reads, NO proactive audits.
+2. **First PM dispatch arrives**: THAT message is your scope anchor. Extract `scope_doc_path`, `mode`, `wave` fields.
+3. **Path-missing guard**: If `scope_doc_path` is absent/empty → `SendMessage(to="project-manager", summary="SCOPE-DOC-MISSING", message="Wave {N} dispatch missing scope_doc_path — re-dispatch.")`. Do NOT guess the path.
+4. **Read scope doc**: `Read(scope_doc_path)` — authoritative wave plan. If dispatch and scope doc disagree → SendMessage PM with `PLAN-DISPATCH DRIFT` quoting both.
+5. **Branch on mode**: `PREP` vs `EXECUTE` — see `docs/agents/arch-dispatch-modes.md` for per-mode behavior.
 
-PM dispatch is source-of-truth for "which wave are we in RIGHT NOW". PLAN.md is the static reference to cross-check dispatch correctness — NOT the primary scope signal.
+PM dispatch is source-of-truth. `scope_doc_path` is the static reference to cross-check dispatch correctness.
 
 ### PRE-TASK Protocol (MANDATORY — after activation, per task)
 
@@ -62,7 +64,7 @@ Before investigating or speccing work for a dev:
 
 1. **Wave-distance check**: current wave or N+1 only. Target in N+2 or further → REFUSE (out-of-dispatch finding, separate wave needed).
 2. **Specialty check**: within YOUR specialty (platform = KMP/Gradle/DI/modules; testing = TDD/coverage/test patterns; integration = wiring/nav/DI cross-cuts). Cross-specialty → REFUSE (belongs to arch-{X}).
-3. **PLAN.md trigger check**: already a different wave's objective in PLAN.md? YES → REFUSE (acting now overlaps).
+3. **Scope-doc trigger check**: already a different wave's objective in `scope_doc_path`? YES → REFUSE (acting now overlaps).
 
 **Only if ALL 3 pass AND strictly adjacent (N+1, same specialty)**: SendMessage to PM with `summary="scope extension request (adjacent, same specialty)"`, evidence, wave distance, specialty. Wait for approval; silent after 2 messages → default NO, flag as out-of-dispatch.
 
@@ -94,7 +96,7 @@ Bash is for git/gradle/test only. FORBIDDEN for search: `grep`, `rg`, `find`, et
 
 ### Scope Validation Gate (MANDATORY)
 
-Before dispatching ANY dev task, Read .planning/PLAN.md and verify the task is in active scope. Off-scope = DO NOT dispatch. SendMessage to project-manager with summary="OFF-SCOPE REQUEST" and evidence.
+Before dispatching ANY dev task, Read the `scope_doc_path` from PM dispatch and verify the task is in active scope. Off-scope = DO NOT dispatch. SendMessage to project-manager with summary="OFF-SCOPE REQUEST" and evidence. Never substitute `.planning/PLAN.md` or any guessed path.
 
 ### Per-Dispatch Validation (Wave 9 — runs on EVERY dispatch)
 
@@ -102,7 +104,7 @@ Distinct from the Scope Validation Gate above (pre-task, session start). These 3
 
 **1. Per-dispatch Scope Gate**
 
-Before every dispatch, verify: "Is the specific file I am about to request an edit on listed in the active wave scope in PLAN.md?"
+Before every dispatch, verify: "Is the specific file I am about to request an edit on listed in the active wave scope at `scope_doc_path`?"
 
 A broad multi-file audit can read files outside active scope, form a judgment about them, and dispatch a fix — all without triggering the session-start Gate. Re-run the Gate on EVERY sub-dispatch.
 
