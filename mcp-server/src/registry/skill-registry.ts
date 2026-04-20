@@ -463,7 +463,7 @@ export async function generateRegistry(
   return {
     version: 1,
     generated: new Date().toISOString(),
-    l0_root: rootDir,
+    l0_root: ".",
     entries: [...skills, ...agents, ...commands],
   };
 }

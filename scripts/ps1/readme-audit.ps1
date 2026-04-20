@@ -8,6 +8,7 @@
 
 [CmdletBinding()]
 param(
+    [switch]$Fix,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$ArgList
 )
@@ -26,6 +27,8 @@ if (-not $bash) {
     Write-Error "bash not found on PATH. Install Git for Windows: https://git-scm.com/download/win"
     exit 2
 }
+
+if ($Fix) { $ArgList += '--fix' }
 
 & $bash.Source $shScript @ArgList
 exit $LASTEXITCODE

@@ -2,10 +2,10 @@
 <!-- Regenerate: bash adapters/generate-all.sh -->
 ---
 mode: agent
-description: "Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use before closing a milestone or when documentation feels stale."
+description: "Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use --fix to auto-correct count headers, add missing rows, and remove phantom rows. Use before closing a milestone or when documentation feels stale."
 ---
 
-Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use before closing a milestone or when documentation feels stale.
+Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use --fix to auto-correct count headers, add missing rows, and remove phantom rows. Use before closing a milestone or when documentation feels stale.
 
 ## Implementation
 

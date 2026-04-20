@@ -884,7 +884,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Scripts
 
-25 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 9 Bash-only utilities (`catalog-coverage-check`, `check-agent-parity`, `check-detekt-coverage`, `install-git-hooks`, `readme-audit`, `rehash-registry`, `scan-secrets`, `sync-gsd-agents`, `validate-agent-templates`).
+25 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 10 Bash-only utilities (`catalog-coverage-check`, `check-agent-parity`, `check-detekt-coverage`, `install-git-hooks`, `pre-commit-hook`, `readme-audit`, `rehash-registry`, `scan-secrets`, `sync-gsd-agents`, `validate-agent-templates`).
 
 ### Core Scripts
 
@@ -925,6 +925,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `rehash-registry` | Recompute SHA-256 hashes in registry.json (CRLF→LF normalized) |
 | `copilot-parity` | Verify Copilot prompt templates match Claude skill definitions |
 | `install-git-hooks` | Install pre-commit (pattern-lint) + commit-msg (conventional commits) git hooks |
+| `pre-commit-hook` | Standalone pre-commit hook body: blocks commits with stale registry hash |
 | `run-benchmarks` | Detect and run JVM/Android benchmark suites with Gradle |
 | `validate-agent-templates` | Lint agent templates: frontmatter, role keywords, anti-patterns, versioning (7 checks) |
 | `catalog-coverage-check` | Detect hardcoded Gradle dependency versions that should use the version catalog |
@@ -943,7 +944,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-15 domain hubs, 88+ sub-docs, 21 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+15 domain hubs, 88+ sub-docs, 22 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1072,7 +1073,7 @@ AndroidCommonDoc/
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
 |   +-- ps1/                # PowerShell (Windows) -- 25 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 34 scripts (25 cross-platform + 9 utilities)
+|   +-- sh/                 # Bash (macOS/Linux) -- 35 scripts (25 cross-platform + 10 utilities)
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)

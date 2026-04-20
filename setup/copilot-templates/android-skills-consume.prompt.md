@@ -38,7 +38,3 @@ Authoritative list: `android skills list --long`.
 
 - **L0** — all installed for agent delegation
 - **L1 shared-kmp-libs** — `navigation-3`, `agp-9-upgrade`
-- **L2 KMP desktop-primary (e.g. DawSync)** — `navigation-3` until `androidApp` ships
-- **L2 Web (e.g. DawSyncWeb)** — none apply
-
-Full wire-up table and agent triggers: `.planning/intel/android-skills-catalog.md`.

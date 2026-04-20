@@ -400,7 +400,7 @@ describe("skill-registry", () => {
       expect(registry.generated).toMatch(
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
       );
-      expect(registry.l0_root).toBe(tmpDir);
+      expect(registry.l0_root).toBe(".");
       expect(registry.entries).toHaveLength(3);
 
       const types = registry.entries.map((e) => e.type).sort();

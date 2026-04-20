@@ -91,6 +91,7 @@
 - `/work` — smart task routing to agents/skills (extensible via frontmatter intent)
 - `/init-session` — show project context and available tools
 - `/resume-work` — CEO/CTO dashboard with department status from last session
+- Pre-commit hooks: see `docs/guides/pre-commit-hooks.md`
 
 ## Doc Consultation
 - Vault sync → `mcp-server/src/vault/` (transformer, moc-generator, wikilink-generator)

@@ -277,6 +277,36 @@ Write `detekt.yml` with only disabled rules under `AndroidCommonDoc:`.
 
 ---
 
+### Wizard W3.5 — Official Anthropic Skills & Plugins
+
+Check and install official skills that enhance agent capabilities.
+
+#### Check installed skills
+List currently installed skills and compare against the recommended set below.
+
+#### Recommended categories
+
+**Development Process** (all projects):
+  - `tdd-workflow`, `systematic-debugging`, `architecture`, `code-review-checklist`, `webapp-testing`, `changelog-generator`
+
+**UI/Design** (projects with UI):
+  - `frontend-design`, `uiux-design`, `uiux-design-system`, `brand-guidelines`
+
+**Business/Content** (projects with marketing/docs):
+  - `docx`, `pptx`, `xlsx`, `pdf`, `doc-coauthoring`, `internal-comms`
+
+**Security** (all projects):
+  - Copy `/security-review` from anthropics/claude-code-security-review to `.claude/commands/`
+  - Add GitHub Action: `anthropics/claude-code-security-review@main`
+
+**Knowledge-Work Plugins** (optional):
+  - `marketing`, `product-management` from anthropics/knowledge-work-plugins
+
+#### Verification
+Print which recommended skills are installed vs missing.
+
+---
+
 ### Wizard W4 — Konsist guard tests (if `--guards` not set and IS_GRADLE=true)
 
 ```
@@ -525,6 +555,113 @@ Model profile: balanced
 
 ---
 
+### Wizard W9 — Android CLI detection (projects targeting Android)
+
+Skip entirely if the project is not an Android or KMP-with-Android build (detected via presence of `android { ... }` in any `build.gradle.kts` or KMP `androidTarget()` declaration).
+
+Otherwise, run non-blocking environment detection:
+
+1. **Binary on PATH**
+   ```bash
+   if command -v android >/dev/null 2>&1; then
+     version="$(android --version 2>/dev/null || echo '?')"
+     echo "[green] Android CLI: $version"
+   else
+     echo "[yellow] Android CLI not found — runtime UI validation unavailable."
+     echo "         Install: docs/guides/getting-started/09-android-cli-windows.md"
+   fi
+   ```
+
+2. **`ANDROID_HOME` env var**
+   ```bash
+   if [[ -n "${ANDROID_HOME:-}" ]]; then
+     echo "[green] ANDROID_HOME=$ANDROID_HOME"
+   else
+     echo "[yellow] ANDROID_HOME not set — some Android tooling paths may fail."
+   fi
+   ```
+
+3. **Authorized adb device (optional — Windows only warn)**
+   If `adb` is on PATH:
+   ```bash
+   count="$(adb devices 2>/dev/null | grep -c -E '\sdevice$' || true)"
+   if [[ "$count" -ge 1 ]]; then
+     echo "[green] adb devices: $count authorized"
+   elif [[ "$(uname -s)" == *NT* ]] || [[ "${OS:-}" == "Windows_NT" ]]; then
+     echo "[yellow] No authorized adb device — UI validation will fall back to CI only."
+     echo "         (Windows emulator is disabled in Android CLI v0.7; use a physical device.)"
+   else
+     echo "[info] No adb devices connected — local UI validation disabled."
+   fi
+   ```
+
+**Important:** Wizard W9 is **always non-blocking**. Missing CLI or device is a yellow warning, never a setup failure. The `android-layout-diff` MCP tool gracefully returns `cli_missing` / `adb_offline` errors with install instructions when invoked without those dependencies.
+
+The detection is also surfaced by `/setup --verify-only`:
+
+```
+Android CLI:
+  binary:       0.7.15222914 [ok]
+  ANDROID_HOME: C:/Users/.../Sdk [ok]
+  adb devices:  1 authorized [ok]
+```
+
+vs.
+
+```
+Android CLI:
+  binary:       not found [warn]
+  → runtime UI validation via android-layout-diff will be unavailable
+  → see docs/guides/getting-started/09-android-cli-windows.md
+```
+
+See `skills/android-skills-consume/SKILL.md` for the Google skills ecosystem integration (Option C selective-bridge).
+
+---
+
+### Wizard W10 — Dokka Markdown Plugin [optional]
+
+> Always shown. Default = No. Flag: `--dokka-plugin yes|no|skip`. Non-blocking.
+
+```
+Install the Dokka Markdown Plugin? [y/N]
+
+Generates docs/api/*.md from KDoc — adds a single dokkaPlugin() dep to your
+build. Decline to skip.
+/ ¿Instalar el Dokka Markdown Plugin? [y/N]
+Genera docs/api/*.md desde KDoc — añade una sola dependencia dokkaPlugin().
+Omite para saltar.
+```
+
+**YES branch:**
+
+1. Append to `libs.versions.toml`:
+   ```toml
+   [versions]
+   dokka-markdown-plugin = "0.1.0"
+   [libraries]
+   dokka-markdown-plugin = { module = "com.androidcommondoc:dokka-markdown-plugin", version.ref = "dokka-markdown-plugin" }
+   ```
+2. Add GitHub Packages repo to root `build.gradle.kts` if the `oscardlfr/dokka-markdown-plugin` maven block is absent:
+   ```kotlin
+   maven {
+       url = uri("https://maven.pkg.github.com/oscardlfr/dokka-markdown-plugin")
+       credentials {
+           username = providers.gradleProperty("gpr.user").orNull ?: System.getenv("GITHUB_ACTOR")
+           password = providers.gradleProperty("gpr.key").orNull ?: System.getenv("GITHUB_TOKEN")
+       }
+   }
+   ```
+3. Write plugin tracking entry to `l0-manifest.json`:
+   ```json
+   "plugins": { "dokka_markdown_plugin": { "installed": true, "version": "0.1.0" } }
+   ```
+4. Print: `[ok] Dokka Markdown Plugin 0.1.0 configured. Run: ./gradlew dokkaGenerate`
+
+**NO branch:** no-op.
+
+---
+
 ### Step 7 — Verification checklist
 
 ```bash
@@ -671,7 +808,7 @@ Next steps:
 
 ## Cross-References / Referencias cruzadas
 
-- Skill: `/sync-l0` — Step 4 delegates here
+- Command: `/sync-l0` — Step 4 invokes this (CLI-direct, self-contained)
 - Skill: `/pre-pr` — run after setup to validate PR-readiness
 - Script: `setup/setup-toolkit.sh` — Steps 1 delegates here
 - Script: `setup/install-guard-tests.sh` — Step 5 delegates here

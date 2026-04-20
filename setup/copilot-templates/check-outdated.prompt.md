@@ -40,9 +40,3 @@ Maven Central queries are batched (5 concurrent) with 100ms delays between batch
 ### Cache
 
 Results are stored in `.androidcommondoc/kdoc-state.json`. Subsequent calls within the TTL window return cached results instantly. Use `cache_ttl_hours: 0` to force a fresh check.
-
-## Cross-References
-
-- MCP tool: `check-outdated` (programmatic dependency version checking)
-- Cache: `.androidcommondoc/kdoc-state.json` (dependency version cache)
-- Related: `/sync-versions` (version alignment between projects)
