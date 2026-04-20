@@ -22,7 +22,7 @@
           "DISPOSABLE",
           "STOP PLANNING"
         ],
-        "migration_hint": "PM now orchestrates 3 sequential teams (Planning â†' Execution â†' Quality Gate). Devs must be spawned as anonymous Agent(prompt=...) without name/team_name. Run /sync-l0 to get the updated template."
+        "migration_hint": "PM now orchestrates 3 sequential teams (Planning → Execution → Quality Gate). Devs must be spawned as anonymous Agent(prompt=...) without name/team_name. Run /sync-l0 to get the updated template."
       },
       "5.1.0": {
         "date": "2026-04-05",
@@ -115,7 +115,7 @@
       "1.1.0": {
         "date": "2026-03-29",
         "breaking": false,
-        "note": "Added retry limit (max 3) to prevent infinite QGâ†'Phase2 loops"
+        "note": "Added retry limit (max 3) to prevent infinite QG→Phase2 loops"
       },
       "2.2.0": {
         "date": "2026-04-06",
