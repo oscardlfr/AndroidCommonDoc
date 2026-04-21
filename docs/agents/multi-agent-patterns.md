@@ -20,7 +20,7 @@ monitor_urls:
 
 # Autonomous Multi-Agent Workflow
 
-How to design agent pipelines where specialized agents collaborate on a task. Covers the project-manager model, agent invocation, orchestration patterns, data handoff, failure handling, and cost control.
+How to design agent pipelines where specialized agents collaborate on a task. Covers the team-lead model, agent invocation, orchestration patterns, data handoff, failure handling, and cost control.
 
 ---
 
@@ -39,13 +39,13 @@ If one agent can do the job in a single context window, one agent is better. Mul
 
 ---
 
-## The Project Manager Model
+## The Team Lead Model
 
-See [claude-code-workflow](claude-code-workflow.md) for the full project-manager model. Key points:
+See [claude-code-workflow](claude-code-workflow.md) for the full team-lead model. Key points:
 
-- **PM NEVER codes** — all code is written by dev specialists, PM only orchestrates.
-- **Simple task** → PM assigns to a single dev specialist.
-- **Large task / long session** → PM orchestrates waves of devs + audits to specialists.
+- **team-lead NEVER codes** — all code is written by dev specialists, team-lead only orchestrates.
+- **Simple task** → team-lead assigns to a single dev specialist.
+- **Large task / long session** → team-lead orchestrates waves of devs + audits to specialists.
 - **CLAUDE.md Agent Roster** is the discovery mechanism. Without it, Claude uses generic agents.
 
 ---
@@ -127,7 +127,7 @@ Orchestrators and architects as peers. Workers spawned on demand as sub-agents.
 
 **3-Phase Model**: The default topology uses 3 sequential phases (Planning → Execution → Quality Gate) with 9 persistent session team peers (5 at session start + 4 core devs at Phase 2). Planner and quality-gater are temporary. See [Team Topology](team-topology.md) for the full model.
 
-**Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies and PM-as-relay pattern.
+**Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies and team-lead-as-relay pattern.
 
 ### Architect Gate Pattern
 
@@ -139,9 +139,9 @@ Between waves, architect peers cross-verify via `SendMessage`. Core devs are per
 
 **Pattern validation chain**: devs ask their architect for patterns; architects query context-provider. Devs NEVER contact context-provider directly.
 
-**Dynamic scaling**: when a core dev is busy, architects request extra devs from PM. Extras are named but have no team_name -- they die after architect verification.
+**Dynamic scaling**: when a core dev is busy, architects request extra devs from team-lead. Extras are named but have no team_name -- they die after architect verification.
 
-Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the PM re-plans (never codes the fix itself).
+Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the team-lead re-plans (never codes the fix itself).
 
 ---
 

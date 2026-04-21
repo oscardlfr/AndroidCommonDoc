@@ -5,9 +5,9 @@
  *  - Bug #5: arch templates read scope_doc_path (no hardcoded .planning/PLAN.md)
  *  - Bug #5: SCOPE-DOC-MISSING guard in arch templates
  *  - Bug #6: arch templates reference arch-dispatch-modes.md (PREP/EXECUTE)
- *  - S8:     PM template contains token meter + retrospective rule
- *  - 5.16.0: PM session spawn uses subagent_type for CP and doc-updater
- *  - Docs:   arch-dispatch-modes.md, pm-model-profiles.md, readme-audit-fix-guide.md exist
+ *  - S8:     team-lead template contains token meter + retrospective rule
+ *  - 5.16.0: team-lead session spawn uses subagent_type for CP and doc-updater
+ *  - Docs:   arch-dispatch-modes.md, tl-model-profiles.md, readme-audit-fix-guide.md exist
  */
 import { describe, it, expect } from "vitest";
 import * as fs from "fs";
@@ -42,7 +42,7 @@ function extractFrontmatter(raw: string): Record<string, unknown> | null {
 
 describe("Bug #5: arch templates use scope_doc_path, not hardcoded PLAN.md path", () => {
   for (const name of ARCHITECTS) {
-    it(`${name} reads scope_doc_path from PM dispatch`, () => {
+    it(`${name} reads scope_doc_path from team-lead dispatch`, () => {
       for (const content of readBoth(name)) {
         expect(content).toMatch(/scope_doc_path/);
       }
@@ -90,20 +90,20 @@ describe("Bug #6: arch templates reference arch-dispatch-modes.md for PREP/EXECU
 });
 
 // ---------------------------------------------------------------------------
-// S8: PM template has token meter + retrospective rule
+// S8: team-lead template has token meter + retrospective rule
 // ---------------------------------------------------------------------------
 
-describe("S8: PM template has Token Meter + retrospective rule", () => {
-  it("project-manager.md references pm-verification-gates.md Token Meter Gate", () => {
-    for (const content of readBoth("project-manager.md")) {
-      // PM template must carry at minimum a pointer to the sub-doc or
+describe("S8: team-lead template has Token Meter + retrospective rule", () => {
+  it("team-lead.md references tl-verification-gates.md Token Meter Gate", () => {
+    for (const content of readBoth("team-lead.md")) {
+      // team-lead template must carry at minimum a pointer to the sub-doc or
       // inline the retrospective rule — either satisfies the S8 requirement.
       expect(content).toMatch(/retrospective|token.meter|Token Meter/i);
     }
   });
 
-  it("pm-verification-gates.md has Token Meter Gate section", () => {
-    const vgPath = path.join(ROOT, "docs/agents/pm-verification-gates.md");
+  it("tl-verification-gates.md has Token Meter Gate section", () => {
+    const vgPath = path.join(ROOT, "docs/agents/tl-verification-gates.md");
     expect(fs.existsSync(vgPath)).toBe(true);
     const content = fs.readFileSync(vgPath, "utf-8");
     expect(content).toMatch(/Token Meter Gate/);
@@ -113,24 +113,24 @@ describe("S8: PM template has Token Meter + retrospective rule", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 5.16.0 hotfix: PM spawn lines carry subagent_type for CP and doc-updater
+// 5.16.0 hotfix: team-lead spawn lines carry subagent_type for CP and doc-updater
 // ---------------------------------------------------------------------------
 
-describe("5.16.0 hotfix: PM session setup uses subagent_type on peer spawns", () => {
-  it("project-manager.md spawns context-provider with subagent_type", () => {
-    for (const content of readBoth("project-manager.md")) {
+describe("5.16.0 hotfix: team-lead session setup uses subagent_type on peer spawns", () => {
+  it("team-lead.md spawns context-provider with subagent_type", () => {
+    for (const content of readBoth("team-lead.md")) {
       expect(content).toMatch(/subagent_type="context-provider"/);
     }
   });
 
-  it("project-manager.md spawns doc-updater with subagent_type", () => {
-    for (const content of readBoth("project-manager.md")) {
+  it("team-lead.md spawns doc-updater with subagent_type", () => {
+    for (const content of readBoth("team-lead.md")) {
       expect(content).toMatch(/subagent_type="doc-updater"/);
     }
   });
 
-  it("project-manager.md has NEVER self-assign guard for context-provider", () => {
-    for (const content of readBoth("project-manager.md")) {
+  it("team-lead.md has NEVER self-assign guard for context-provider", () => {
+    for (const content of readBoth("team-lead.md")) {
       expect(content).toMatch(/NEVER self-assign|NEVER.*write files|read-only/i);
     }
   });
@@ -160,7 +160,7 @@ describe("Wave 23 new docs exist with valid YAML frontmatter", () => {
   }
 
   checkDoc("docs/agents/arch-dispatch-modes.md");
-  checkDoc("docs/agents/pm-model-profiles.md");
+  checkDoc("docs/agents/tl-model-profiles.md");
   checkDoc("docs/guides/readme-audit-fix-guide.md");
 });
 
@@ -183,19 +183,19 @@ describe("arch-dispatch-modes.md content integrity", () => {
     expect(content).toMatch(/APPROVE|ESCALATE/);
   });
 
-  it("has mode: field example in PM dispatch", () => {
+  it("has mode: field example in team-lead dispatch", () => {
     const content = fs.readFileSync(DOC, "utf-8");
     expect(content).toMatch(/mode:/);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Wave 24 / Bug #3: PM session setup calls TeamDelete before TeamCreate
+// Wave 24 / Bug #3: team-lead session setup calls TeamDelete before TeamCreate
 // ---------------------------------------------------------------------------
 
-describe("Bug #3: PM session setup calls TeamDelete before TeamCreate (Wave 24)", () => {
-  it("project-manager.md has TeamDelete before TeamCreate in session start block", () => {
-    for (const content of readBoth("project-manager.md")) {
+describe("Bug #3: team-lead session setup calls TeamDelete before TeamCreate (Wave 24)", () => {
+  it("team-lead.md has TeamDelete before TeamCreate in session start block", () => {
+    for (const content of readBoth("team-lead.md")) {
       const deleteIdx = content.indexOf("TeamDelete(team_name=");
       const createIdx = content.indexOf("TeamCreate(team_name=");
       expect(deleteIdx, "TeamDelete must appear before TeamCreate").toBeGreaterThanOrEqual(0);
@@ -204,15 +204,15 @@ describe("Bug #3: PM session setup calls TeamDelete before TeamCreate (Wave 24)"
     }
   });
 
-  it("project-manager.md pre-flight checklist has step 0 for TeamDelete", () => {
-    for (const content of readBoth("project-manager.md")) {
+  it("team-lead.md pre-flight checklist has step 0 for TeamDelete", () => {
+    for (const content of readBoth("team-lead.md")) {
       expect(content).toMatch(/□ 0\. TeamDelete.*TeamCreate.*Bug #3/);
     }
   });
 
-  it("project-manager.md template_version is 5.17.0", () => {
-    for (const content of readBoth("project-manager.md")) {
-      expect(content).toMatch(/template_version:\s*"5\.17\.0"/);
+  it("team-lead.md template_version is 6.0.0", () => {
+    for (const content of readBoth("team-lead.md")) {
+      expect(content).toMatch(/template_version:\s*"6.0.0"/);
     }
   });
 });

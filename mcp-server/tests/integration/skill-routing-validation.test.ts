@@ -9,7 +9,7 @@
  * the current codebase and pass after the corresponding fix is applied.
  *
  * Issues detected:
- *   - skills/work/SKILL.md line 64: Agent(project-manager) -- orchestrator spawned as sub-agent
+ *   - skills/work/SKILL.md line 64: Agent(team-lead) -- orchestrator spawned as sub-agent
  *   - .claude/agents/beta-readiness-agent.md: skills.pre-release does not exist
  */
 import { describe, it, expect } from 'vitest';
@@ -62,7 +62,7 @@ function getAllKnownAgentNames(): Set<string> {
   return names;
 }
 
-const ORCHESTRATOR_AGENTS = ['project-manager', 'dev-lead', 'quality-gater'];
+const ORCHESTRATOR_AGENTS = ['team-lead', 'dev-lead', 'quality-gater'];
 
 // ---------------------------------------------------------------------------
 // Describe: Work Skill Routing - Orchestrator Safety
@@ -70,12 +70,12 @@ const ORCHESTRATOR_AGENTS = ['project-manager', 'dev-lead', 'quality-gater'];
 
 describe('Work Skill Routing - Orchestrator Safety', () => {
 
-  it('/work skill must NOT spawn project-manager via Agent() [EXPECT FAIL]', () => {
+  it('/work skill must NOT spawn team-lead via Agent() [EXPECT FAIL]', () => {
     const content = fs.readFileSync(path.join(SKILLS_DIR, 'work', 'SKILL.md'), 'utf-8');
     const agentCalls = extractAgentCalls(content);
-    // project-manager is an orchestrator -- it must not be spawned as a sub-agent.
+    // team-lead is an orchestrator -- it must not be spawned as a sub-agent.
     // The skill should instead say "Read template, act in-process" or similar.
-    expect(agentCalls).not.toContain('project-manager');
+    expect(agentCalls).not.toContain('team-lead');
   });
 
   it('/work skill must NOT spawn dev-lead via Agent()', () => {

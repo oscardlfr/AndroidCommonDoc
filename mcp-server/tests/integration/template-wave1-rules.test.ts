@@ -1,7 +1,7 @@
 /**
  * Wave 1 template rules anti-regression tests.
  *
- * Enforces the 10 Wave 1 template bug fixes across the architect + PM
+ * Enforces the 10 Wave 1 template bug fixes across the architect + team-lead
  * templates. Also enforces dual-location sync between setup/agent-templates/
  * (SOURCE) and .claude/agents/ (COPY scanned by the agent registry).
  */
@@ -102,12 +102,12 @@ describe('Wave 1 BUG 8: Exact Fix Format MANDATORY section', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. BUG 6: Post-Wave Team Integrity Check in project-manager
+// 7. BUG 6: Post-Wave Team Integrity Check in team-lead
 // ---------------------------------------------------------------------------
-describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in project-manager or sub-docs', () => {
-  it('Post-Wave Team Integrity Check exists in template or pm-verification-gates sub-doc', () => {
-    const templateContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'project-manager.md'), 'utf-8');
-    const verGatesPath = path.join(ROOT, 'docs/agents/pm-verification-gates.md');
+describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in team-lead or sub-docs', () => {
+  it('Post-Wave Team Integrity Check exists in template or tl-verification-gates sub-doc', () => {
+    const templateContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'team-lead.md'), 'utf-8');
+    const verGatesPath = path.join(ROOT, 'docs/agents/tl-verification-gates.md');
     const verGatesContent = fs.existsSync(verGatesPath) ? fs.readFileSync(verGatesPath, 'utf-8') : '';
     const combined = templateContent + '\n' + verGatesContent;
     expect(combined).toMatch(/Post-Wave Team Integrity Check/);
@@ -118,39 +118,39 @@ describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in project-manager or sub
 // 8. Wave 1: template_version bumped in architects
 // ---------------------------------------------------------------------------
 describe('Wave 1: template_version bumped in architects', () => {
-  it('arch-testing.md template_version is "1.18.0"', () => {
-    // Wave 23: bumped from 1.17.0 → 1.18.0 (token meter + scope_doc_path changes)
+  it('arch-testing.md template_version is "1.19.0"', () => {
+    // Wave 23: bumped from 1.17.0 → 1.19.0 (token meter + scope_doc_path changes)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1\.18\.0"/);
+    expect(content).toMatch(/template_version:\s*"1.19.0"/);
   });
 
-  it('arch-platform.md template_version is "1.15.0"', () => {
-    // Wave 23: bumped from 1.14.0 → 1.15.0 (Scope-doc trigger check rename)
+  it('arch-platform.md template_version is "1.16.0"', () => {
+    // Wave 23: bumped from 1.14.0 → 1.16.0 (Scope-doc trigger check rename)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1\.15\.0"/);
+    expect(content).toMatch(/template_version:\s*"1.16.0"/);
   });
 
-  it('arch-integration.md template_version is "1.15.0"', () => {
-    // Wave 23: bumped from 1.14.0 → 1.15.0 (Scope-doc trigger check rename)
+  it('arch-integration.md template_version is "1.16.0"', () => {
+    // Wave 23: bumped from 1.14.0 → 1.16.0 (Scope-doc trigger check rename)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1\.15\.0"/);
+    expect(content).toMatch(/template_version:\s*"1.16.0"/);
   });
 
-  it('project-manager.md template_version is "5.17.0"', () => {
-    // Wave 24: bumped from 5.16.0 → 5.17.0 (Bug #3: TeamDelete before TeamCreate)
-    const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'project-manager.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"5.17.0"/);
+  it('team-lead.md template_version is "6.0.0"', () => {
+    // Wave 24: bumped from 5.16.0 → 6.0.0 (Bug #3: TeamDelete before TeamCreate)
+    const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'team-lead.md'), 'utf-8');
+    expect(content).toMatch(/template_version:\s*"6.0.0"/);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 9. BUG 7: "ALL fixes go through PM" preamble in architects
+// 9. BUG 7: "ALL fixes go through team-lead" preamble in architects
 // ---------------------------------------------------------------------------
-describe('Wave 1 BUG 7: "ALL fixes go through PM" preamble in architects', () => {
+describe('Wave 1 BUG 7: "ALL fixes go through team-lead" preamble in architects', () => {
   for (const template of ARCHITECTS) {
-    it(`${template} has "ALL fixes go through PM → dev" preamble`, () => {
+    it(`${template} has "ALL fixes go through team-lead → dev" preamble`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
-      expect(content).toMatch(/\*\*ALL fixes go through PM → dev\. You have NO Write\/Edit tool/);
+      expect(content).toMatch(/\*\*ALL fixes go through team-lead → dev\. You have NO Write\/Edit tool/);
     });
   }
 });
@@ -160,7 +160,7 @@ describe('Wave 1 BUG 7: "ALL fixes go through PM" preamble in architects', () =>
 // ---------------------------------------------------------------------------
 describe('dual-location sync: setup/agent-templates/ == .claude/agents/', () => {
   const syncedTemplates = [
-    'project-manager.md',
+    'team-lead.md',
     'planner.md',
     'quality-gater.md',
     'arch-testing.md',

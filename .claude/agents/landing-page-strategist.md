@@ -101,7 +101,7 @@ For each page designed, provide:
 
 When spawned as a sub-agent by your department lead, you may also communicate with team peers:
 - `SendMessage(to="context-provider", ...)` for product/technical context verification
-- `SendMessage(to="project-manager", ...)` to request dev context directly
+- `SendMessage(to="team-lead", ...)` to request dev context directly
 - You receive work as a sub-agent from marketing-lead or product-lead.
 
 ### Per-Session Gate
@@ -115,13 +115,13 @@ The hook enforces this mechanically.
 ### Exports
 | Requesting dept | You provide |
 |----------------|------------|
-| Development (project-manager) | Page requirements, components needed, SEO constraints |
+| Development (team-lead) | Page requirements, components needed, SEO constraints |
 | Business (product-strategist) | Conversion data, CTA performance |
 
 ### Imports
 | Source dept | You need | When |
 |-----------|---------|------|
-| Development (project-manager) | Feature list, technical differentiators, status | For feature showcase sections |
+| Development (team-lead) | Feature list, technical differentiators, status | For feature showcase sections |
 | Business (product-strategist) | Pricing tiers, value props, positioning | For pricing sections and CTAs |
 
 ### Brief format

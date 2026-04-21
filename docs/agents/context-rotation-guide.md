@@ -7,7 +7,7 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "Context window management for TeamCreate teams: rotation, archiving, PM-as-relay, anti-patterns"
+description: "Context window management for TeamCreate teams: rotation, archiving, team-lead-as-relay, anti-patterns"
 version: 1
 last_updated: "2026-03"
 assumes_read: autonomous-multi-agent-workflow
@@ -16,7 +16,7 @@ token_budget: 1500
 
 # Context Rotation Guide
 
-How to manage context window growth in TeamCreate teams. Covers signals, rotation strategies, the PM-as-relay pattern, and anti-patterns.
+How to manage context window growth in TeamCreate teams. Covers signals, rotation strategies, the team-lead-as-relay pattern, and anti-patterns.
 
 ---
 
@@ -26,7 +26,7 @@ How to manage context window growth in TeamCreate teams. Covers signals, rotatio
 |------------|-----------------|--------|
 | **TeamCreate peer** | Accumulates all SendMessages + tool results | Never (until team dissolves) |
 | **Sub-agent (Agent)** | Fresh context (system prompt + task only) | Yes, on completion |
-| **PM (session lead)** | Accumulates all team + sub-agent interactions | Never (session lifetime) |
+| **team-lead (session lead)** | Accumulates all team + sub-agent interactions | Never (session lifetime) |
 
 **Key insight**: Peers are expensive (context grows). Sub-agents are cheap (context is temporary). Use sub-agents for workers, peers only for coordinators.
 
@@ -37,10 +37,10 @@ How to manage context window growth in TeamCreate teams. Covers signals, rotatio
 ## Signals: When Context Is Growing Too Large
 
 - Team has run **3+ waves** without archiving (9-peer sessions generate context faster)
-- PM summarizes findings in **3+ paragraphs** (should be 1-2 sentences)
+- team-lead summarizes findings in **3+ paragraphs** (should be 1-2 sentences)
 - Architects report patterns **already mentioned** in previous waves
 - Tool calls take noticeably longer (context overhead)
-- PM context bar exceeds **60%**
+- team-lead context bar exceeds **60%**
 
 ---
 
@@ -96,21 +96,21 @@ Agent(name="researcher", team_name="session-{project-slug}", prompt="...")
 
 ---
 
-## PM-as-Relay Pattern
+## team-lead-as-Relay Pattern
 
-PM is the only entity that can spawn sub-agents (Agent tool). All other peers must route through PM.
+team-lead is the only entity that can spawn sub-agents (Agent tool). All other peers must route through team-lead.
 
 ```
 Architect detects issue
-  → SendMessage(to="PM", summary="need test-specialist", message="{structured request}")
-PM receives
+  → SendMessage(to="team-lead", summary="need test-specialist", message="{structured request}")
+team-lead receives
   → Agent(test-specialist, prompt="{architect's request + context}")
-Dev returns to PM
+Dev returns to team-lead
   → SendMessage(to="architect", summary="dev result", message="{structured result}")
 Architect verifies
 ```
 
-**Why**: In-process teammates don't have the Agent tool. Only the session lead (PM) can spawn sub-agents.
+**Why**: In-process teammates don't have the Agent tool. Only the session lead (team-lead) can spawn sub-agents.
 
 **Context benefit**: Dev gets fresh context (only the specific task). Architect doesn't accumulate dev's working context (only the summary).
 
@@ -118,7 +118,7 @@ Architect verifies
 
 ## Structured Findings Format
 
-When relaying findings between agents (architect → PM → architect), use structured format to minimize information loss:
+When relaying findings between agents (architect → team-lead → architect), use structured format to minimize information loss:
 
 ```json
 {
@@ -138,7 +138,7 @@ When relaying findings between agents (architect → PM → architect), use stru
 
 | Agent tier | System prompt | Working context | Total capacity | Rotation threshold |
 |-----------|--------------|----------------|----------------|-------------------|
-| Orchestrator (PM) | ~5K | ~195K | 200K | Never (session lifetime) |
+| Orchestrator (team-lead) | ~5K | ~195K | 200K | Never (session lifetime) |
 | Architect | ~4K | ~196K | 200K | 7+ waves |
 | Core dev | ~3K | ~197K | 200K | 5+ waves (9-peer) / 7+ waves (5-peer) |
 | Extra dev | ~2K | ~198K | 200K | Dies after architect verification |
@@ -174,11 +174,11 @@ Add ONLY when in scope:
 | Anti-pattern | Why it's bad | Fix |
 |-------------|-------------|-----|
 | 7+ waves (9-peer) / 10+ waves (5-peer) | Context grows to 60K+ tokens | Re-spawn peers with same name/team_name, or dissolve/recreate |
-| Extra devs as team peers | Extras accumulate context they don't need | Core devs are peers; extras are sub-agents via PM (no team_name) |
-| PM reading full verdicts | Verdict prose bloats PM context | Architects: 3-line summary first, details on request |
+| Extra devs as team peers | Extras accumulate context they don't need | Core devs are peers; extras are sub-agents via team-lead (no team_name) |
+| team-lead reading full verdicts | Verdict prose bloats team-lead context | Architects: 3-line summary first, details on request |
 | Not calling doc-updater between waves | Findings lost if session crashes | Archive to disk every 3-5 waves |
 | All dept leads in every team | 8 peers = excessive overhead | Conditional: only when their domain is in scope |
-| Architects calling Agent() | Fails silently in in-process mode | SendMessage to PM for dev dispatch |
+| Architects calling Agent() | Fails silently in in-process mode | SendMessage to team-lead for dev dispatch |
 
 ---
 

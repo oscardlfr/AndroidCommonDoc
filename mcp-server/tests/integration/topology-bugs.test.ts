@@ -61,7 +61,7 @@ describe("T-BUG-002: context-provider PLAN.md freshness validation", () => {
     for (const content of [claude, template]) {
       expect(content).toMatch(/PLAN\.md freshness/i);
       expect(content).toMatch(/T-BUG-002/);
-      expect(content).toMatch(/Validate freshness|cross-check with PM|confirm active plan/i);
+      expect(content).toMatch(/Validate freshness|cross-check with team-lead|confirm active plan/i);
     }
   });
 });
@@ -235,7 +235,7 @@ describe("OBS-A: architect templates have Scope Extension Protocol", () => {
       const { claude, template } = readAgent(name);
       for (const content of [claude, template]) {
         expect(content).toMatch(/Scope Extension Protocol|OBS-A/);
-        expect(content).toMatch(/scope extension request|wait for explicit PM approval/i);
+        expect(content).toMatch(/scope extension request|wait for explicit team-lead approval/i);
       }
     });
   }
@@ -263,16 +263,16 @@ describe("OBS-C: pre-pr skill mentions /schedule for catalog freshness", () => {
   });
 });
 
-// ── T-BUG-010: PM template main-conversation-only warning ──────────────────
+// ── T-BUG-010: team-lead template main-conversation-only warning ──────────────────
 
-describe("T-BUG-010: PM template warns it is for main conversation (team-lead), not a spawnable peer", () => {
-  it("project-manager.md has WHO-READS-THIS warning + FORBIDDEN spawn instruction", () => {
-    const { claude, template } = readAgent("project-manager.md");
+describe("T-BUG-010: team-lead template warns it is for main conversation (team-lead), not a spawnable peer", () => {
+  it("team-lead.md has WHO-READS-THIS warning + FORBIDDEN spawn instruction", () => {
+    const { claude, template } = readAgent("team-lead.md");
     for (const content of [claude, template]) {
       expect(content).toMatch(/T-BUG-010/);
       expect(content).toMatch(/WHO READS THIS|main conversation|team-lead/i);
-      expect(content).toMatch(/FORBIDDEN.*project-manager|Agent\(name="project-manager"/);
-      expect(content).toMatch(/PM-peer spawn detected|Exiting/i);
+      expect(content).toMatch(/FORBIDDEN.*team-lead|Agent\(name="team-lead"/);
+      expect(content).toMatch(/team-lead-peer spawn detected|Exiting/i);
     }
   });
 });
@@ -302,17 +302,17 @@ describe("T-BUG-011: arch-* OBS-A is a HARD SELF-GATE (not descriptive)", () => 
   }
 });
 
-// ── T-BUG-012: arch-* Reporter Protocol (PM liveness + fallback) ───────────
+// ── T-BUG-012: arch-* Reporter Protocol (team-lead liveness + fallback) ───────────
 
-describe("T-BUG-012: arch-* Reporter Protocol checks PM liveness and falls back to team-lead", () => {
+describe("T-BUG-012: arch-* Reporter Protocol checks team-lead liveness and falls back to team-lead", () => {
   for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
-    it(`${name} has Reporter Protocol section with liveness check + [PM-absent] fallback`, () => {
+    it(`${name} has Reporter Protocol section with liveness check + [team-lead-absent] fallback`, () => {
       const { claude, template } = readAgent(name);
       for (const content of [claude, template]) {
         expect(content).toMatch(/T-BUG-012/);
         expect(content).toMatch(/Reporter Protocol/);
-        expect(content).toMatch(/Liveness check|PM.*alive|shutdown notification/i);
-        expect(content).toMatch(/\[PM-absent\]/);
+        expect(content).toMatch(/Liveness check|team-lead.*alive|shutdown notification/i);
+        expect(content).toMatch(/\[team-lead-absent\]/);
         expect(content).toMatch(/fall.*back.*team-lead|team-lead.*fallback|SendMessage.*team-lead/i);
       }
     });
@@ -343,7 +343,7 @@ describe("T-BUG-013: /pre-pr invokes catalog-coverage-check.sh (no more unwired 
   });
 });
 
-// ── T-BUG-015: Bash search anti-pattern across architects, devs, and PM ───
+// ── T-BUG-015: Bash search anti-pattern across architects, devs, and team-lead ───
 
 describe("T-BUG-015: Bash search anti-pattern + Search Dispatch Protocol", () => {
   // Architects must explicitly forbid Bash grep/find/rg/etc.
@@ -388,9 +388,9 @@ describe("T-BUG-015: Bash search anti-pattern + Search Dispatch Protocol", () =>
     });
   }
 
-  // PM has Search Dispatch Protocol
-  it("project-manager.md has Search Dispatch Protocol — T-BUG-015", () => {
-    const { claude, template } = readAgent("project-manager.md");
+  // team-lead has Search Dispatch Protocol
+  it("team-lead.md has Search Dispatch Protocol — T-BUG-015", () => {
+    const { claude, template } = readAgent("team-lead.md");
     for (const content of [claude, template]) {
       expect(content).toMatch(/T-BUG-015/);
       expect(content).toMatch(/Search Dispatch Protocol/);

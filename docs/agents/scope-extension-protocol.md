@@ -10,7 +10,7 @@ category: agents
 description: "Mechanical scope-extension gate: when architects hit out-of-scope blockers, request authorization via team-lead before committing. Hook at .claude/hooks/architect-scope-gate.js blocks Write/Edit calls on non-scoped files."
 version: 1
 last_updated: "2026-04"
-assumes_read: pm-dispatch-topology, pm-verification-gates
+assumes_read: tl-dispatch-topology, tl-verification-gates
 ---
 
 # Scope Extension Protocol
@@ -156,8 +156,8 @@ arch-testing commits out-of-scope changes with scope change buried in a large di
 
 | Pattern | Relevance |
 |---------|-----------|
-| [`pm-dispatch-topology`](pm-dispatch-topology.md) | PM dispatch rules and pre-dispatch topology gate — this protocol applies at the architect layer, downstream of PM dispatch |
-| [`pm-verification-gates`](pm-verification-gates.md) | Architect APPROVE/ESCALATE verdicts — scope violations discovered here trigger ESCALATE, not silent fix |
+| [`tl-dispatch-topology`](tl-dispatch-topology.md) | team-lead dispatch rules and pre-dispatch topology gate — this protocol applies at the architect layer, downstream of team-lead dispatch |
+| [`tl-verification-gates`](tl-verification-gates.md) | Architect APPROVE/ESCALATE verdicts — scope violations discovered here trigger ESCALATE, not silent fix |
 | Memory: `feedback_scope_extension_protocol` | Historical context: Wave 20 incidents that prompted this protocol |
 | Memory: `feedback_amend_requires_explicit_user_request` | Related: architect dispatch ≠ user authorization for amend-class changes |
 

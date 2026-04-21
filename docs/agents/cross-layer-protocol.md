@@ -26,7 +26,7 @@ When a task spans L1 (shared-kmp-libs) and L2 (DawSync, WakeTheCave), two indepe
 **When NOT to separate:**
 
 - Fix isolated to one layer → single team in that layer's terminal
-- Release prep (version bumps) → single PM via Bash
+- Release prep (version bumps) → single team-lead via Bash
 - Doc-only changes → single team
 
 ## Architecture: Separate Teams per Layer

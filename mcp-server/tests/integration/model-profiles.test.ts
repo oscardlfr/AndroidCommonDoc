@@ -181,11 +181,11 @@ describe("model-profiles.json", () => {
       expect(config.profiles.balanced.default_model).toBe("sonnet");
     });
 
-    it("balanced profile overrides only downgrade to haiku (except PM which is always opus)", () => {
+    it("balanced profile overrides only downgrade to haiku (except team-lead which is always opus)", () => {
       for (const [agent, model] of Object.entries(
         config.profiles.balanced.overrides,
       )) {
-        if (agent === "project-manager") {
+        if (agent === "team-lead") {
           expect(model, `balanced.${agent} must be opus`).toBe("opus");
         } else {
           expect(model, `balanced.${agent} should be haiku`).toBe("haiku");
@@ -261,9 +261,9 @@ describe("model-profiles.json", () => {
         }
       }
 
-      // PM intentionally diverged: template=sonnet, profiles=opus
+      // team-lead intentionally diverged: template=sonnet, profiles=opus
       const actionableMismatches = mismatches.filter(
-        (m) => !m.startsWith("project-manager:"),
+        (m) => !m.startsWith("team-lead:"),
       );
       expect(
         actionableMismatches,
@@ -335,21 +335,21 @@ describe("model-profiles.json", () => {
   });
 
   // ---------------------------------------------------------------
-  // 8. PM is opus in ALL non-budget profiles
+  // 8. team-lead is opus in ALL non-budget profiles
   // ---------------------------------------------------------------
-  describe("PM model tier — opus in all non-budget profiles", () => {
-    it("PM is opus in balanced profile (explicit override)", () => {
-      const resolved = config.profiles.balanced.overrides["project-manager"] ?? config.profiles.balanced.default_model;
+  describe("team-lead model tier — opus in all non-budget profiles", () => {
+    it("team-lead is opus in balanced profile (explicit override)", () => {
+      const resolved = config.profiles.balanced.overrides["team-lead"] ?? config.profiles.balanced.default_model;
       expect(resolved).toBe("opus");
     });
 
-    it("PM is opus in advanced profile (explicit override)", () => {
-      const resolved = config.profiles.advanced.overrides["project-manager"] ?? config.profiles.advanced.default_model;
+    it("team-lead is opus in advanced profile (explicit override)", () => {
+      const resolved = config.profiles.advanced.overrides["team-lead"] ?? config.profiles.advanced.default_model;
       expect(resolved).toBe("opus");
     });
 
-    it("PM is opus in quality profile (default_model is opus, no override needed)", () => {
-      const resolved = config.profiles.quality.overrides["project-manager"] ?? config.profiles.quality.default_model;
+    it("team-lead is opus in quality profile (default_model is opus, no override needed)", () => {
+      const resolved = config.profiles.quality.overrides["team-lead"] ?? config.profiles.quality.default_model;
       expect(resolved).toBe("opus");
     });
   });

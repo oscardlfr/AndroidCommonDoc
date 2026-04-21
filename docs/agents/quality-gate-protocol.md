@@ -23,7 +23,7 @@ Sequential verification that runs AFTER all 3 architects APPROVE and BEFORE comm
 ## When This Runs
 
 ```
-Architects detect → PM dispatches devs → devs implement → architects verify
+Architects detect → team-lead dispatches devs → devs implement → architects verify
   ↓
 All 3 architects: APPROVE
   ↓

@@ -30,7 +30,7 @@ If `$ARGUMENTS` starts with or contains a known skill name, route directly to th
 Add entries here when promoting a skill to named-route status (conscious promotion step — staleness is intentional).
 
 > **HARD GATE — Session setup blocks ALL work.**
-> If routing to `project-manager` (implement/feature/build/plan/wave keywords): verify session team exists FIRST.
+> If routing to `team-lead` (implement/feature/build/plan/wave keywords): verify session team exists FIRST.
 > Check: does `~/.claude/teams/session-{slug}/` exist with all 6 peers alive?
 > - context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
 > If NO → complete TeamCreate + all 6 peers + pre-flight checklist BEFORE routing any task.
@@ -108,32 +108,32 @@ Match `$ARGUMENTS` against these patterns in order. First match wins:
 | `\b(prioritize\|roadmap\|features\|backlog)\b` | Agent(`product-strategist`) * |
 | `\b(post\|blog\|social\|marketing\|content)\b` | Agent(`content-creator`) * |
 | `\b(landing\|page\|conversion\|copy\|seo)\b` | Agent(`landing-page-strategist`) * |
-| `\b(implement\|feature\|build\|scope\|plan\|execute\|wave)\b` | Read `project-manager` template, act as PM (in-process) *** |
+| `\b(implement\|feature\|build\|scope\|plan\|execute\|wave)\b` | Read `team-lead` template, act as team-lead (in-process) *** |
 
 \* Business agents are opt-in. If the agent doesn't exist in `.claude/agents/`, fall through to Level 2.
-\*** T-BUG-010: `project-manager` MUST run in-process (main conversation), NEVER via `Agent()`. Sub-agents cannot TeamCreate or spawn reliably. Read `.claude/agents/project-manager.md` and act as PM directly.
+\*** T-BUG-010: `team-lead` MUST run in-process (main conversation), NEVER via `Agent()`. Sub-agents cannot TeamCreate or spawn reliably. Read `.claude/agents/team-lead.md` and act as team-lead directly.
 
 ### Level 2 — Frontmatter Discovery (if no Level 1 match)
 
 1. Scan `.claude/agents/*.md` for `intent:` frontmatter
 2. Match keywords in user description against intent arrays
 3. If match found → suggest that agent
-4. If no match → read `.claude/agents/project-manager.md`, act as PM in-process
+4. If no match → read `.claude/agents/team-lead.md`, act as team-lead in-process
 
 ## Dev Spawn First-Action Protocol
 
-When PM spawns a dev specialist, the dev's FIRST action must be:
+When team-lead spawns a dev specialist, the dev's FIRST action must be:
 ```
 SendMessage(to="context-provider", summary="gate ack")
 ```
 
 This satisfies the per-session CP gate (Bug #7 fixed: session-scoped, one consult unblocks all peers).
-Include this instruction in every dev dispatch message from PM.
+Include this instruction in every dev dispatch message from team-lead.
 
 ## 3-Phase Execution Model
 
-When routing to project-manager (implement/wave keywords):
-1. **Planning phase**: PM reads plan file, writes `.planning/PLAN.md` via Write tool (not SendMessage)
+When routing to team-lead (implement/wave keywords):
+1. **Planning phase**: team-lead reads plan file, writes `.planning/PLAN.md` via Write tool (not SendMessage)
 2. **Execution phase**: Architects dispatch devs wave by wave; each wave gated by architect APPROVE
 3. **Quality Gate phase**: quality-gater runs all validators; session closes only on full PASS
 
@@ -173,7 +173,7 @@ Proceed? (y/n)
 
 ## Orchestrator Safety Rule
 
-**NEVER** spawn orchestrator agents (`project-manager`, `dev-lead`, `quality-gater`) via `Agent()`. These agents need `TeamCreate`, `TeamDelete`, and `Agent` tools which only work at the top-level process.
+**NEVER** spawn orchestrator agents (`team-lead`, `dev-lead`, `quality-gater`) via `Agent()`. These agents need `TeamCreate`, `TeamDelete`, and `Agent` tools which only work at the top-level process.
 
 When routing to an orchestrator:
 1. Read the agent's template from `.claude/agents/{name}.md`

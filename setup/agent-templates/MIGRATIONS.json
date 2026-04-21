@@ -1,7 +1,7 @@
 {
   "$schema": "Agent template migration registry. Used by sync-l0 to detect breaking changes and guide consumers through upgrades.",
   "templates": {
-    "project-manager": {
+    "team-lead": {
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -90,6 +90,16 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "Bug #3: TeamDelete(session-{slug}) before TeamCreate clears stale prior-session teams — prevents peer name suffix collision (-2/-3)."
+      },
+      "6.0.0": {
+        "date": "2026-04-21",
+        "breaking": true,
+        "note": "Wave 25: rename project-manager → team-lead for canonical terminology consistency. Frontmatter name: field, filename (setup/agent-templates/team-lead.md, .claude/agents/team-lead.md), agent-memory dir, all SendMessage/Agent references, Reporter Protocol fallback target all unified. \"PM\" shorthand → \"team-lead\"; \"[PM-\" protocol prefixes → \"[TL-\". Cross-reference doc filenames pm-*.md → tl-*.md.",
+        "required_keywords": [
+          "team-lead",
+          "TeamCreate"
+        ],
+        "migration_hint": "L1/L2 projects must run /sync-l0 to pick up: (a) renamed agent file (project-manager.md → team-lead.md), (b) Agent(subagent_type=\"team-lead\") in any caller code, (c) SendMessage(to=\"team-lead\") in architect templates. Old name no longer resolves."
       }
     },
     "planner": {

@@ -17,7 +17,7 @@ const DEV_TEMPLATES = ['test-specialist.md', 'ui-specialist.md', 'domain-model-s
 
 // Session team agents for exclusivity checks (Group D)
 const SESSION_TEAM = [
-  'project-manager.md', 'planner.md',
+  'team-lead.md', 'planner.md',
   'context-provider.md', 'doc-updater.md',
   'arch-testing.md', 'arch-platform.md', 'arch-integration.md',
   'test-specialist.md', 'ui-specialist.md',
@@ -145,12 +145,12 @@ describe('Group F: dev instruction text — routes to architect not context-prov
 // must delegate via SendMessage to context-provider (2 tests — FAIL now)
 // ---------------------------------------------------------------------------
 describe('Group G: Caller Grep Rule section delegates via SendMessage to context-provider', () => {
-  it('arch-platform Caller Grep Rule section delegates via SendMessage to context-provider [EXPECT FAIL — SendMessage in section points to PM, not context-provider]', () => {
+  it('arch-platform Caller Grep Rule section delegates via SendMessage to context-provider [EXPECT FAIL — SendMessage in section points to team-lead, not context-provider]', () => {
     const content = archContents['arch-platform.md'];
     expect(content).toMatch(/Caller Grep Rule[\s\S]{0,500}SendMessage[\s\S]{0,200}context-provider/);
   });
 
-  it('arch-integration Caller Grep Rule section delegates via SendMessage to context-provider [EXPECT FAIL — SendMessage in section points to PM, not context-provider]', () => {
+  it('arch-integration Caller Grep Rule section delegates via SendMessage to context-provider [EXPECT FAIL — SendMessage in section points to team-lead, not context-provider]', () => {
     const content = archContents['arch-integration.md'];
     expect(content).toMatch(/Caller Grep Rule[\s\S]{0,500}SendMessage[\s\S]{0,200}context-provider/);
   });

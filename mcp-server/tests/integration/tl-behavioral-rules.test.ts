@@ -1,5 +1,5 @@
 /**
- * PM template behavioral regression tests.
+ * team-lead template behavioral regression tests.
  *
  * Enforces rule ordering, FORBIDDEN completeness, internal consistency,
  * structural invariants, and DawSync-specific regression scenarios.
@@ -7,7 +7,7 @@
  * Tests that EXPECT to FAIL on the current template (pre-fix) are marked:
  *   [EXPECT FAIL] — these are regression anchors to verify the template is broken before fixing.
  *
- * Source: setup/agent-templates/project-manager.md
+ * Source: setup/agent-templates/team-lead.md
  */
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
@@ -16,7 +16,7 @@ import * as path from 'path';
 const ROOT = path.resolve(__dirname, '../../..');
 const TEMPLATES_DIR = path.join(ROOT, 'setup/agent-templates');
 const AGENTS_DIR = path.join(ROOT, '.claude/agents');
-const PM_TEMPLATE = path.join(TEMPLATES_DIR, 'project-manager.md');
+const PM_TEMPLATE = path.join(TEMPLATES_DIR, 'team-lead.md');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -212,10 +212,10 @@ describe('FORBIDDEN-ALLOWED consistency', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Group 4: PM template structural invariants
+// Group 4: team-lead template structural invariants
 // ---------------------------------------------------------------------------
 
-describe('PM template structural invariants', () => {
+describe('team-lead template structural invariants', () => {
   const lines = content.split('\n');
   const bodyLines = body.split('\n');
 
@@ -266,13 +266,13 @@ describe('PM template structural invariants', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Group 5: PM dual-location sync
+// Group 5: team-lead dual-location sync
 // ---------------------------------------------------------------------------
 
-describe('PM dual-location sync', () => {
-  it('setup/agent-templates/project-manager.md equals .claude/agents/project-manager.md', () => {
-    const sourcePath = path.join(TEMPLATES_DIR, 'project-manager.md');
-    const copyPath = path.join(AGENTS_DIR, 'project-manager.md');
+describe('team-lead dual-location sync', () => {
+  it('setup/agent-templates/team-lead.md equals .claude/agents/team-lead.md', () => {
+    const sourcePath = path.join(TEMPLATES_DIR, 'team-lead.md');
+    const copyPath = path.join(AGENTS_DIR, 'team-lead.md');
     const sourceContent = fs.readFileSync(sourcePath, 'utf-8');
     const copyContent = fs.readFileSync(copyPath, 'utf-8');
     expect(sourceContent).toBe(copyContent);
@@ -320,19 +320,19 @@ describe('DawSync regression scenarios', () => {
 // ---------------------------------------------------------------------------
 
 describe('dev dispatch correctness', () => {
-  // Dispatch rules may live in PM template OR in pm-dispatch-topology.md sub-doc.
+  // Dispatch rules may live in team-lead template OR in tl-dispatch-topology.md sub-doc.
   // Search both to handle the hub refactor where content moves to sub-docs.
-  const dispatchSubdocPath = path.join(ROOT, 'docs/agents/pm-dispatch-topology.md');
+  const dispatchSubdocPath = path.join(ROOT, 'docs/agents/tl-dispatch-topology.md');
   const dispatchSubdocContent = fs.existsSync(dispatchSubdocPath)
     ? fs.readFileSync(dispatchSubdocPath, 'utf-8')
     : '';
   const combinedDispatch = content + '\n' + dispatchSubdocContent;
 
   it('architect-requested specialist must be spawned by name — anonymous dev not a valid substitute', () => {
-    // When an architect sends PM a named specialist request, PM must honor the name.
-    // Regression: PM spawned anonymous Agent() instead of domain-model-specialist when arch-platform requested it.
+    // When an architect sends team-lead a named specialist request, team-lead must honor the name.
+    // Regression: team-lead spawned anonymous Agent() instead of domain-model-specialist when arch-platform requested it.
     expect(combinedDispatch).toMatch(
-      /architect.*request.*named|architect.*sends.*PM.*name|spawn.*requested.*name|honor.*architect.*name|named.*specialist.*as.*requested/i
+      /architect.*request.*named|architect.*sends.*team-lead.*name|spawn.*requested.*name|honor.*architect.*name|named.*specialist.*as.*requested/i
     );
   });
 
@@ -350,7 +350,7 @@ describe('dev dispatch correctness', () => {
 
 describe('planner spawning as team peer', () => {
   it('planner must be spawned with team_name — isolated planner cannot reach context-provider [EXPECT FAIL]', () => {
-    // Bug #6: PM template has no instruction to spawn planner as named team peer.
+    // Bug #6: team-lead template has no instruction to spawn planner as named team peer.
     // Planner spawned without team_name is isolated — cannot SendMessage to context-provider.
     // Template must contain an Agent() call for planner that includes team_name.
     // Match Agent(name="planner"...) with team_name on the same line (no dotall — prevents cross-line false positives)
@@ -358,7 +358,7 @@ describe('planner spawning as team peer', () => {
   });
 
   it('planner spawning appears in template body with explicit Agent() call [EXPECT FAIL]', () => {
-    // PM template must contain an Agent() invocation for planner — not just a reference in a table or checklist.
+    // team-lead template must contain an Agent() invocation for planner — not just a reference in a table or checklist.
     // Current template only references planner in checklist (line 124) and topology table (line 341).
     expect(body).toMatch(/Agent\(name="planner"|Agent\(name='planner'/i);
   });
@@ -368,13 +368,13 @@ describe('planner spawning as team peer', () => {
 // Group 9: Model profile + context-provider protocol
 // ---------------------------------------------------------------------------
 
-describe('PM model and protocol rules', () => {
-  it('PM template model must be sonnet', () => {
+describe('team-lead model and protocol rules', () => {
+  it('team-lead template model must be sonnet', () => {
     expect(content).toMatch(/^model:\s*sonnet$/m);
   });
 
-  it('PM must have explicit FIRST POST-SETUP ACTION block for context-provider [EXPECT FAIL — no such block]', () => {
-    // PM must have an explicit section or callout named "FIRST POST-SETUP ACTION"
+  it('team-lead must have explicit FIRST POST-SETUP ACTION block for context-provider [EXPECT FAIL — no such block]', () => {
+    // team-lead must have an explicit section or callout named "FIRST POST-SETUP ACTION"
     // that instructs consulting context-provider BEFORE any planning.
     // Current template has "START: SendMessage(to='context-provider'...)" buried in a list
     // but no dedicated, prominent block enforcing this as the mandatory FIRST action.
@@ -389,7 +389,7 @@ describe('PM model and protocol rules', () => {
   });
 
   it('FORBIDDEN section must block cat, head, tail, and git blame as code-reading vectors [EXPECT FAIL — not in FORBIDDEN]', () => {
-    // These Bash commands read file content — PM must be explicitly forbidden from using them.
+    // These Bash commands read file content — team-lead must be explicitly forbidden from using them.
     // Current FORBIDDEN section does not mention cat, head, tail, or git blame.
     const forbiddenSection = extractSection(content, 'FORBIDDEN Actions');
     expect(forbiddenSection).toMatch(/cat.*source|head.*source|tail.*source|git blame/i);
@@ -401,26 +401,26 @@ describe('PM model and protocol rules', () => {
 // ---------------------------------------------------------------------------
 
 describe('Session closure gate', () => {
-  it('PM template contains SESSION CLOSURE GATE', () => {
-    // PM must have an explicit SESSION CLOSURE GATE section that prevents marking
+  it('team-lead template contains SESSION CLOSURE GATE', () => {
+    // team-lead must have an explicit SESSION CLOSURE GATE section that prevents marking
     // a session complete when acceptance criteria have not been met.
     expect(content).toContain('SESSION CLOSURE GATE');
   });
 
-  it('PM NEVER closes session with failing criteria', () => {
-    // PM must be explicitly forbidden from closing/completing a session
+  it('team-lead NEVER closes session with failing criteria', () => {
+    // team-lead must be explicitly forbidden from closing/completing a session
     // when quality gate criteria are still failing.
     expect(content).toMatch(/NEVER.*clos.*fail|NEVER.*complet.*fail|NEVER.*clos.*criteria|NEVER.*mark.*done.*fail/i);
   });
 
-  it('PM NEVER reframes FAILs', () => {
-    // PM must be explicitly forbidden from reframing FAIL outcomes as acceptable,
+  it('team-lead NEVER reframes FAILs', () => {
+    // team-lead must be explicitly forbidden from reframing FAIL outcomes as acceptable,
     // partial success, or anything other than a failure requiring remediation.
     expect(content).toMatch(/NEVER.*reframe.*FAIL|NEVER.*reframe.*fail/i);
   });
 
-  it('PM NEVER defers scope without asking', () => {
-    // PM must be explicitly forbidden from silently deferring scope items
+  it('team-lead NEVER defers scope without asking', () => {
+    // team-lead must be explicitly forbidden from silently deferring scope items
     // without user approval — every deferral requires explicit user consent.
     expect(content).toMatch(/NEVER.*defer.*without|NEVER.*defer.*ask/i);
   });

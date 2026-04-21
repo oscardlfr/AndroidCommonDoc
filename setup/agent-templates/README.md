@@ -17,7 +17,7 @@ These are **starting points** — adapt to your project's specific modules, cons
 
 | Template | Purpose |
 |----------|---------|
-| `project-manager.md` | 3-phase orchestrator — session team peers + temporary planner/quality-gater |
+| `team-lead.md` | 3-phase orchestrator — session team peers + temporary planner/quality-gater |
 | `planner.md` | Temporary planning peer — produces structured plans, writes to `.planning/PLAN.md` |
 | `quality-gater.md` | Session team peer (Phase 3) — runs sequential verification (tests, coverage, pre-pr) |
 | `context-provider.md` | Session team peer — read-only cross-layer context oracle |

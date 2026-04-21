@@ -67,7 +67,7 @@ Platform-appropriate content ready to post. Include:
 
 When spawned as a sub-agent by your department lead, you may also communicate with team peers:
 - `SendMessage(to="context-provider", ...)` for product/technical context verification
-- `SendMessage(to="project-manager", ...)` to request dev context directly
+- `SendMessage(to="team-lead", ...)` to request dev context directly
 - You receive work as a sub-agent from marketing-lead or product-lead.
 
 ### Per-Session Gate
@@ -81,13 +81,13 @@ The hook enforces this mechanically.
 ### Exports
 | Requesting dept | You provide |
 |----------------|------------|
-| Development (project-manager) | Content calendar, upcoming deadlines, what technical info needed |
+| Development (team-lead) | Content calendar, upcoming deadlines, what technical info needed |
 | Business (product-strategist) | Engagement signals, market feedback from posts |
 
 ### Imports
 | Source dept | You need | When |
 |-----------|---------|------|
-| Development (project-manager) | What was built, technical details, code snippets, metrics | For release notes, blog posts |
+| Development (team-lead) | What was built, technical details, code snippets, metrics | For release notes, blog posts |
 | Business (product-strategist) | Feature priority, business angle | For positioning content |
 
 ### Requesting Dev Context
