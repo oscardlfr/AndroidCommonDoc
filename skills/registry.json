@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-20T18:14:12.430Z",
+  "generated": "2026-04-21T19:45:22.853Z",
   "l0_root": ".",
   "entries": [
     {
@@ -508,7 +508,7 @@
       "description": "Unified documentation integrity audit. Runs kdoc-coverage, check-doc-patterns, docs/api freshness, and audit-docs in sequence. Produces a single report with coverage, drifts, and structure issues.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:568d0e04fac1a1bad4ad61a7a880d7da485686ecc0c08ea38243af3ac1e0ac6b",
+      "hash": "sha256:e4fa1b26d012b8701ae1e8c9fb0ef2b0bfbc04ad169c7dbae365643f1389b7f6",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-integrity",
@@ -924,9 +924,9 @@
       }
     },
     {
-      "name": "material-3-skill",
+      "name": "material-3",
       "type": "skill",
-      "path": "skills/material-3-skill/SKILL.md",
+      "path": "skills/material-3/SKILL.md",
       "description": "Implement Google's Material Design 3 (Material You) UI system. Primary: Jetpack Compose Material3 (MaterialTheme, components, adaptive layout). Also Flutter and limited web (@material/web, maintenance mode). Covers tokens, 30+ components, layout, theming, M3 Expressive (platform matrix), and accessibility. Use when: \"material design\", \"MD3\", \"material you\", \"Jetpack Compose\", \"MaterialTheme\", \"material component\", \"md3 button\".\n",
       "category": "domain",
       "tier": "extended",
@@ -1464,7 +1464,7 @@
       "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:bc52f820cb72bc4e8d8579a31d1b42f8ec1778412da5c77a49c788310305eaf9",
+      "hash": "sha256:3e23de88fe6461e53c21d8e5946c6e99c393d1feb641b750a86ddfef02c44d2d",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
@@ -1834,7 +1834,7 @@
       "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1d86e8abb794ee8b578e5dd4b70a0b43f5a7cf950baabfc164aa9008313dffbc",
+      "hash": "sha256:9af39d454ac9fa713404ba148457b647bde1b7058eaebe6e708a0e3dac81425e",
       "dependencies": [],
       "frontmatter": {
         "name": "work",
@@ -1875,7 +1875,8 @@
           "tradeoff",
           "library"
         ],
-        "token_budget": 2000
+        "token_budget": 2000,
+        "template_version": "1.0.0"
       }
     },
     {
@@ -1903,7 +1904,8 @@
         "memory": "project",
         "skills": [
           "validate-patterns"
-        ]
+        ],
+        "template_version": "1.0.0"
       }
     },
     {
@@ -1913,12 +1915,12 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:aca36546bdeb7507024a9233440190063f9e45fbdf19c63b82c9fdb63a691dab",
+      "hash": "sha256:ece724bfc442cad6149b62c23c8ba294b5ba817a320a83526c86494a79c46fec",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
         "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
-        "tools": "Read, Bash, SendMessage",
+        "tools": "Read, Bash, SendMessage, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__setup-check, mcp__androidcommondoc__module-health",
         "model": "sonnet",
         "domain": "architecture",
         "intent": [
@@ -1929,7 +1931,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.14.0",
+        "template_version": "1.16.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1943,12 +1945,12 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:17c24eceb5b48728afdc2926a0da1332df52d495738a3c281ba57fd25a1482e4",
+      "hash": "sha256:788ff4eb7b03ddd3528ba03f04b247818ddb14a906479c0d438c3b6181a9e04a",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
         "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
-        "tools": "Read, Bash, SendMessage",
+        "tools": "Read, Bash, SendMessage, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__kdoc-coverage, mcp__androidcommondoc__string-completeness, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__module-health, mcp__androidcommondoc__find-pattern",
         "model": "sonnet",
         "domain": "architecture",
         "intent": [
@@ -1958,7 +1960,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.14.0",
+        "template_version": "1.16.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1972,12 +1974,12 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:75c39b7c532d1042e5c7ed4723c3612d03f7bda119a01ed9d0677305999f81e7",
+      "hash": "sha256:2d57f16b00b0b30464277f992744e03b7a356b93e2843cdab2d661645b4d7eef",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
         "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
-        "tools": "Read, Bash, SendMessage",
+        "tools": "Read, Bash, SendMessage, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__module-health, mcp__androidcommondoc__validate-doc-structure, mcp__androidcommondoc__kdoc-coverage, mcp__androidcommondoc__find-pattern",
         "model": "sonnet",
         "domain": "architecture",
         "intent": [
@@ -1987,7 +1989,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.17.0",
+        "template_version": "1.19.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2002,12 +2004,12 @@
       "description": "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:a464e94cd8ab3c221b4102c88be8903030ef0ce4327c04052c5e27d541bd5223",
+      "hash": "sha256:bc91a0840957a18e00bf89cc080b6e4c09fbc7b8d0ea98de0f755d2d9f9c1539",
       "dependencies": [],
       "frontmatter": {
         "name": "beta-readiness-agent",
         "description": "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.",
-        "tools": "Read, Grep, Glob",
+        "tools": "Read, Grep, Glob, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__find-pattern, mcp__androidcommondoc__proguard-validator, mcp__androidcommondoc__scan-secrets, mcp__androidcommondoc__module-health",
         "model": "sonnet",
         "domain": "quality",
         "intent": [
@@ -2021,7 +2023,8 @@
         "skills": [
           "pre-pr",
           "test-full-parallel"
-        ]
+        ],
+        "template_version": "1.1.0"
       }
     },
     {
@@ -2031,12 +2034,12 @@
       "description": "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e10e1e684d9e78caee2dab9ecc2c13fe9a3f1226f8ed244a432164dfda0d4fdd",
+      "hash": "sha256:ac549b13231c59d5faab32f0ea52438d2fe6d41e42b6e41a3788d48602202974",
       "dependencies": [],
       "frontmatter": {
         "name": "codebase-mapper",
         "description": "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area).",
-        "tools": "Read, Grep, Glob, Bash, Write",
+        "tools": "Read, Grep, Glob, Bash, Write, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__module-health, mcp__androidcommondoc__pattern-coverage, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__find-pattern",
         "model": "sonnet",
         "domain": "infrastructure",
         "intent": [
@@ -2049,7 +2052,8 @@
         "token_budget": 2000,
         "skills": [
           "map-codebase"
-        ]
+        ],
+        "template_version": "1.1.0"
       }
     },
     {
@@ -2059,7 +2063,7 @@
       "description": "Drafts developer-focused content for build-in-public marketing. Creates posts for Reddit, Twitter/X, forums, and changelogs. Customize {{PRODUCT_NAME}} and tone for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4c4f764501384c972fafaaa086c49444548b410247a133e3bf23fe0ee3292edd",
+      "hash": "sha256:89f13742e770ecf19e128175ce25f126ecd4911ea5595475c9285e0db5eb0f95",
       "dependencies": [],
       "frontmatter": {
         "name": "content-creator",
@@ -2083,15 +2087,15 @@
       "name": "context-provider",
       "type": "agent",
       "path": ".claude/agents/context-provider.md",
-      "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
+      "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7c357dc9d85439b54c94833187c40fe4fb9310e2078f29837c09e785e2d6a836",
+      "hash": "sha256:cee1cea4157c3b580606cf1969b7c3c3d2e91b6c0ae1b5d80cb4adea07e40d33",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
-        "description": "On-demand context oracle. Answers queries about patterns, docs, rules, specs, and cross-project state. Loads files on demand — never eagerly pre-reads everything. Read-only.",
-        "tools": "Read, Grep, Glob, Bash, SendMessage, WebFetch",
+        "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
+        "tools": "Read, Grep, Glob, Bash, SendMessage, WebFetch, mcp__androidcommondoc__search-docs, mcp__androidcommondoc__find-pattern, mcp__androidcommondoc__suggest-docs, mcp__androidcommondoc__search-patterns, mcp__androidcommondoc__check-version-sync, mcp__androidcommondoc__module-health, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__check-doc-patterns, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs",
         "model": "sonnet",
         "domain": "infrastructure",
         "intent": [
@@ -2101,7 +2105,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "2.6.0"
+        "template_version": "3.1.0"
       }
     },
     {
@@ -2133,7 +2137,8 @@
         ],
         "skills": [
           "verify-kmp"
-        ]
+        ],
+        "template_version": "1.0.0"
       }
     },
     {
@@ -2143,7 +2148,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:5b2b4fff2862e86ee460d9d694a7d647d787279386624f96d6b956dc17a9f82c",
+      "hash": "sha256:3c888d3263a35ce9dc6ac46f6374d743fe3d1e0a48a160f09445ccb5769b3d55",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -2194,7 +2199,8 @@
         "skills": [
           "test",
           "extract-errors"
-        ]
+        ],
+        "template_version": "1.0.0"
       }
     },
     {
@@ -2204,12 +2210,12 @@
       "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:36f8fe17582a3f80e6ebdf7b40ce22d8cfa944c9e46f0b6bdd39d81dca510da5",
+      "hash": "sha256:6de8d5a96f24fe0d76753e87f25c56ccb829a26ab8670abd6b212c929c74cba7",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-alignment-agent",
         "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
-        "tools": "Read, Grep, Glob",
+        "tools": "Read, Grep, Glob, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__check-version-sync, mcp__androidcommondoc__check-doc-freshness, mcp__androidcommondoc__find-pattern, mcp__androidcommondoc__monitor-sources, mcp__androidcommondoc__search-docs, mcp__androidcommondoc__suggest-docs, mcp__androidcommondoc__validate-doc-structure, mcp__androidcommondoc__check-doc-patterns, mcp__androidcommondoc__doc-readability",
         "model": "sonnet",
         "domain": "quality",
         "intent": [
@@ -2223,8 +2229,10 @@
         "skills": [
           "audit-docs",
           "validate-patterns",
-          "readme-audit"
-        ]
+          "readme-audit",
+          "doc-integrity"
+        ],
+        "template_version": "1.1.0"
       }
     },
     {
@@ -2248,7 +2256,8 @@
           "pattern"
         ],
         "token_budget": 2000,
-        "memory": "project"
+        "memory": "project",
+        "template_version": "1.0.0"
       }
     },
     {
@@ -2258,7 +2267,7 @@
       "description": "Sporadic team agent for migrating project docs to L0 patterns. Triggered by QG frontmatter failures, doc-alignment drift, or manual /audit-docs. Creates hubs, splits oversized docs, adds frontmatter, fixes references.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:cd82f3e4048af6d18728670cd880b02b49ef4dda82f1324a8ab790a9437f4c63",
+      "hash": "sha256:322b6fd555202179409cff421842cd2f8dbe79dc0ea600524206d507cb819dbd",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-migrator",
@@ -2281,25 +2290,26 @@
       "name": "doc-updater",
       "type": "agent",
       "path": ".claude/agents/doc-updater.md",
-      "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Follows L0 patterns (frontmatter, line limits, hub structure).",
+      "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:0d127227a7844292910b00e9cce4ef8f6953dacf1770ba3cdac835cf727f79d7",
+      "hash": "sha256:17aebfeee872ac9e7ac5194de779993ac0d9fbf53382bab9d877e5cdd4f9d10c",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
-        "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Follows L0 patterns (frontmatter, line limits, hub structure).",
-        "tools": "Read, Write, Edit, Grep, Glob, Bash, SendMessage",
+        "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
+        "tools": "Read, Write, Edit, Grep, Glob, Bash, SendMessage, mcp__androidcommondoc__ingest-content, mcp__androidcommondoc__search-docs, mcp__androidcommondoc__validate-doc-update, mcp__androidcommondoc__validate-doc-structure, mcp__androidcommondoc__check-doc-patterns, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__check-version-sync, mcp__androidcommondoc__suggest-docs",
         "model": "sonnet",
         "domain": "quality",
         "intent": [
           "docs",
           "changelog",
           "memory",
-          "roadmap"
+          "roadmap",
+          "ingest"
         ],
         "token_budget": 2000,
-        "template_version": "2.3.0",
+        "template_version": "2.4.0",
         "skills": [
           "audit-docs",
           "readme-audit",
@@ -2314,7 +2324,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:406d2390213f186cb65977b0554b73c2999ff394ad7389a442062966f236e7bd",
+      "hash": "sha256:5b2161e3eed18169f73bb8c2fa9d69f4e44a31768512f468a2144451a3a80024",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2387,7 +2397,8 @@
           "wave"
         ],
         "token_budget": 4000,
-        "memory": "project"
+        "memory": "project",
+        "template_version": "1.0.0"
       }
     },
     {
@@ -2397,12 +2408,12 @@
       "description": "Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:875a2ceb9c4a46e8697724cd87895cc922835a4cb8540a409964023dc1fe82e3",
+      "hash": "sha256:e33e43515b4b309faf250dd5dba8bef3b9caeeae2e9abcc02f1d8df89949fe73",
       "dependencies": [],
       "frontmatter": {
         "name": "l0-coherence-auditor",
         "description": "Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks.",
-        "tools": "Read, Grep, Glob",
+        "tools": "Read, Grep, Glob, mcp__androidcommondoc__validate-claude-md, mcp__androidcommondoc__validate-doc-structure, mcp__androidcommondoc__validate-skills, mcp__androidcommondoc__validate-vault, mcp__androidcommondoc__validate-agents, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__audit-docs",
         "model": "haiku",
         "domain": "audit",
         "intent": [
@@ -2418,6 +2429,12 @@
           "context7",
           "jina",
           "jina"
+        ],
+        "template_version": "1.2.0",
+        "skills": [
+          "audit-l0",
+          "audit-docs",
+          "readme-audit"
         ]
       }
     },
@@ -2428,7 +2445,7 @@
       "description": "Designs landing page copy, structure, and conversion flow. Use when planning public-facing web presence, optimizing CTAs, or improving SEO for product pages.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b35c074ab4d697378364e6ac22129f0e673c148ad411fd86e8f3ba8604e15e89",
+      "hash": "sha256:a7e17f8d0499b324f325c01f0423a25d143e0b99eb56a35119253d71ac471ed6",
       "dependencies": [],
       "frontmatter": {
         "name": "landing-page-strategist",
@@ -2455,7 +2472,7 @@
       "description": "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4389aec354280f871066e8fba95404627cbd7f9522510391b46ae83ab95bb74f",
+      "hash": "sha256:88c32747a2e853c0871353a0ba28f7ae775fc87c36b06b25d1ef56032237c960",
       "dependencies": [],
       "frontmatter": {
         "name": "marketing-lead",
@@ -2510,7 +2527,7 @@
       "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b9908252a267ea22c62651abaeabc57464f3669676f06ad0a52ca099566c9f75",
+      "hash": "sha256:846cd9ada8fd1be2100877c674e590520465d6f9260f2b5774932e3a3c6f8158",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -2584,7 +2601,8 @@
         "memory": "project",
         "skills": [
           "validate-patterns"
-        ]
+        ],
+        "template_version": "1.0.0"
       }
     },
     {
@@ -2594,7 +2612,7 @@
       "description": "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:070094342df583e6fb073e57b104a5c1a89bc6c4f9753c2cd2f616f1b1208f84",
+      "hash": "sha256:754192053903d2eac6277f482705d44f805332ed33f96893e5f9a4c1ecf6afa2",
       "dependencies": [],
       "frontmatter": {
         "name": "product-lead",
@@ -2620,7 +2638,7 @@
       "description": "Analyzes feature ideas against business goals using ICE scoring. Produces prioritized backlog with rationale. Customize {{PRODUCT_NAME}} and business constraints for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f887d498a8346dc6965a0b0205e59e2029601406160c19c0ed491dc3763f1cc2",
+      "hash": "sha256:a93da24121b63f808374efa8c5346ed281d60c24bea3cd19bab9eca94d6fa788",
       "dependencies": [],
       "frontmatter": {
         "name": "product-strategist",
@@ -2638,39 +2656,6 @@
           "backlog",
           "pricing",
           "tiers"
-        ]
-      }
-    },
-    {
-      "name": "project-manager",
-      "type": "agent",
-      "path": ".claude/agents/project-manager.md",
-      "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
-      "category": "domain",
-      "tier": "extended",
-      "hash": "sha256:060887f519f763868996ecda2dfacc1a6b2c2c2bcc0f5b44e309ad2925fd1a85",
-      "dependencies": [],
-      "frontmatter": {
-        "name": "project-manager",
-        "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
-        "tools": "Read, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList",
-        "model": "sonnet",
-        "domain": "development",
-        "intent": [
-          "orchestrate",
-          "plan",
-          "assign",
-          "escalate",
-          "coordinate"
-        ],
-        "token_budget": 5000,
-        "template_version": "5.14.0",
-        "memory": "project",
-        "skills": [
-          "pre-pr",
-          "commit-lint",
-          "git-flow",
-          "extract-errors"
         ]
       }
     },
@@ -2695,7 +2680,8 @@
           "validators"
         ],
         "token_budget": 3000,
-        "memory": "project"
+        "memory": "project",
+        "template_version": "1.0.0"
       }
     },
     {
@@ -2705,7 +2691,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8cbaf61331fd66524c2380467fc81be90e6777e878982127642992047690c765",
+      "hash": "sha256:885ac365f3fe55ef0038aa3d4733832e98dabf8b1cfc3451e08d9abb6724991f",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2721,7 +2707,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.3.0"
+        "template_version": "2.4.0"
       }
     },
     {
@@ -2750,7 +2736,8 @@
         "skills": [
           "sbom",
           "verify-kmp"
-        ]
+        ],
+        "template_version": "1.0.0"
       }
     },
     {
@@ -2775,7 +2762,8 @@
           "domain",
           "learn"
         ],
-        "token_budget": 2000
+        "token_budget": 2000,
+        "template_version": "1.0.0"
       }
     },
     {
@@ -2800,7 +2788,8 @@
           "script"
         ],
         "token_budget": 2000,
-        "memory": "project"
+        "memory": "project",
+        "template_version": "1.0.0"
       }
     },
     {
@@ -2825,7 +2814,41 @@
           "command"
         ],
         "token_budget": 2000,
-        "memory": "project"
+        "memory": "project",
+        "template_version": "1.0.0"
+      }
+    },
+    {
+      "name": "team-lead",
+      "type": "agent",
+      "path": ".claude/agents/team-lead.md",
+      "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:8b48fa3706f28f71399a1c19f1e205098b0fa76d5e6c76ac03d36f845cc237df",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "team-lead",
+        "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
+        "tools": "Read, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__check-version-sync, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__find-pattern, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__module-health, mcp__androidcommondoc__pattern-coverage, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__findings-report, mcp__androidcommondoc__skill-usage-analytics, mcp__androidcommondoc__tool-use-analytics, mcp__androidcommondoc__audit-report",
+        "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "orchestrate",
+          "plan",
+          "assign",
+          "escalate",
+          "coordinate"
+        ],
+        "token_budget": 5000,
+        "template_version": "6.0.0",
+        "memory": "project",
+        "skills": [
+          "pre-pr",
+          "commit-lint",
+          "git-flow",
+          "extract-errors"
+        ]
       }
     },
     {
@@ -2849,7 +2872,8 @@
           "copilot"
         ],
         "token_budget": 2500,
-        "memory": "project"
+        "memory": "project",
+        "template_version": "1.0.0"
       }
     },
     {
@@ -2859,7 +2883,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:1102151febf308722b231299f63c78aa2c2fa95a1b74431a2161c6ddac772caa",
+      "hash": "sha256:593971e9263b9511c00221b82a1c72bca2b84d931b374c77afd03ce283840983",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2881,7 +2905,8 @@
           "test-full-parallel",
           "coverage",
           "extract-errors",
-          "benchmark"
+          "benchmark",
+          "auto-cover"
         ],
         "optional_capabilities": [
           "context7",
@@ -2896,7 +2921,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:afa45be54562431e2b567cb88a1976ff3d982d19f6476217531b52b30fe1609c",
+      "hash": "sha256:7653479550f85af4ec8ef5b6156fc794811e8c37f46eaac7edaa150f0f4f2c71",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2916,7 +2941,8 @@
         "skills": [
           "accessibility",
           "lint-resources",
-          "validate-patterns"
+          "validate-patterns",
+          "material-3"
         ]
       }
     },
@@ -2927,12 +2953,12 @@
       "description": "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:10f4b3819ea030db79b7578ebc05b95727be44e778d3428ddd43d93f4b626396",
+      "hash": "sha256:ed950c76aab2fd9eee15ff4d3a440c6ecdb6d5ffbca85f86eebf2f6d5b48f078",
       "dependencies": [],
       "frontmatter": {
         "name": "verifier",
         "description": "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.",
-        "tools": "Read, Bash, Grep, Glob",
+        "tools": "Read, Bash, Grep, Glob, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__find-pattern, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__module-health",
         "domain": "quality",
         "intent": [
           "verify",
@@ -2947,7 +2973,8 @@
           "verify",
           "test",
           "validate-patterns"
-        ]
+        ],
+        "template_version": "1.1.0"
       }
     },
     {
@@ -3110,6 +3137,20 @@
       }
     },
     {
+      "name": "doc-reorganize",
+      "type": "command",
+      "path": ".claude/commands/doc-reorganize.md",
+      "description": "Reorganize docs/ into category subdirectories using frontmatter. Use when asked to restructure or re",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:a31e3c9850f51161724734e3752549ff0a20e7fed1941c2f3bf4cf38bcd91612",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Reorganize docs/ into category subdirectories using frontmatter. Use when asked to restructure or re",
+        "intent": "doc-reorganize"
+      }
+    },
+    {
       "name": "doc-update",
       "type": "command",
       "path": ".claude/commands/doc-update.md",
@@ -3182,6 +3223,20 @@
       "frontmatter": {}
     },
     {
+      "name": "ingest-content",
+      "type": "command",
+      "path": ".claude/commands/ingest-content.md",
+      "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an artic",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:30768c0f4e38b0886240b6216ced830e9a0d8979c97a373cf3ff6382f429d9e0",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an artic",
+        "intent": "ingest-content"
+      }
+    },
+    {
       "name": "init-session",
       "type": "command",
       "path": ".claude/commands/init-session.md",
@@ -3192,6 +3247,34 @@
       "dependencies": [],
       "frontmatter": {
         "description": "Show project context — available agents, skills, modules, and business docs."
+      }
+    },
+    {
+      "name": "kdoc-audit",
+      "type": "command",
+      "path": ".claude/commands/kdoc-audit.md",
+      "description": "Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-module coverage, and re",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:e8786d4b6c4da4af8dbbfe3a8b7c8ee36854e2d90fe4adbe1b34f23907ac28ff",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-module coverage, and re",
+        "intent": "kdoc-audit"
+      }
+    },
+    {
+      "name": "kdoc-migrate",
+      "type": "command",
+      "path": ".claude/commands/kdoc-migrate.md",
+      "description": "Full-project KDoc migration orchestrator. Adds KDoc to all undocumented public APIs, module by modul",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:799757655beef9ba5b4cf0deffe583171d1d52e8d78985281994f6c7f562599d",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Full-project KDoc migration orchestrator. Adds KDoc to all undocumented public APIs, module by modul",
+        "intent": "kdoc-migrate"
       }
     },
     {
@@ -3244,6 +3327,20 @@
       "frontmatter": {
         "description": "Show unified agent/tool/skill/MCP usage dashboard — combines runtime tool-use log with skill/audit runs",
         "intent": "observability"
+      }
+    },
+    {
+      "name": "monitor-docs",
+      "type": "command",
+      "path": ".claude/commands/monitor-docs.md",
+      "description": "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdate",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:3e91262824b78caedcbbcfd29115a8173f2c6a16be34737ada17bf408a6fb17f",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdate",
+        "intent": "monitor-docs"
       }
     },
     {
@@ -3362,6 +3459,20 @@
       }
     },
     {
+      "name": "sbom-analyze",
+      "type": "command",
+      "path": ".claude/commands/sbom-analyze.md",
+      "description": "Analyze SBOM for dependency statistics, licenses, and concerns. Use when asked to review dependency",
+      "category": "security",
+      "tier": "core",
+      "hash": "sha256:aad088e615e09ad83d6ff8f2628c009b5ae740b1b3301e456616b123142bef9c",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Analyze SBOM for dependency statistics, licenses, and concerns. Use when asked to review dependency",
+        "intent": "sbom-analyze"
+      }
+    },
+    {
       "name": "security-review",
       "type": "command",
       "path": ".claude/commands/security-review.md",
@@ -3472,6 +3583,20 @@
       "hash": "sha256:a2ec062fc8334d6bc62d886712c8b947f5632e704527e6390681a118a40e832a",
       "dependencies": [],
       "frontmatter": {}
+    },
+    {
+      "name": "sync-vault",
+      "type": "command",
+      "path": ".claude/commands/sync-vault.md",
+      "description": "Sync documentation into Obsidian vault with L0/L1/L2 hierarchy. Use when asked to update, initialize",
+      "category": "guides",
+      "tier": "extended",
+      "hash": "sha256:4583ab9f7b82e796d74092338f2e073b4fe2ef8d56d5dfbd2f87d1498ebabff0",
+      "dependencies": [],
+      "frontmatter": {
+        "description": "Sync documentation into Obsidian vault with L0/L1/L2 hierarchy. Use when asked to update, initialize",
+        "intent": "sync-vault"
+      }
     },
     {
       "name": "test-changed",

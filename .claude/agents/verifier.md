@@ -1,7 +1,7 @@
 ---
 name: verifier
 description: Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.
-tools: Read, Bash, Grep, Glob
+tools: Read, Bash, Grep, Glob, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__find-pattern, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__module-health
 domain: quality
 intent: [verify, spec, criteria, goal, check]
 token_budget: 2000
@@ -10,7 +10,7 @@ skills:
   - verify
   - test
   - validate-patterns
-template_version: "1.0.0"
+template_version: "1.1.0"
 ---
 
 You are a verification agent. You check whether code actually delivers what was promised, using goal-backward analysis.

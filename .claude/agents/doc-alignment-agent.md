@@ -1,7 +1,7 @@
 ---
 name: doc-alignment-agent
 description: Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__check-version-sync, mcp__androidcommondoc__check-doc-freshness, mcp__androidcommondoc__find-pattern, mcp__androidcommondoc__monitor-sources, mcp__androidcommondoc__search-docs, mcp__androidcommondoc__suggest-docs, mcp__androidcommondoc__validate-doc-structure, mcp__androidcommondoc__check-doc-patterns, mcp__androidcommondoc__doc-readability
 model: sonnet
 domain: quality
 intent: [docs, drift, alignment, stale]
@@ -11,7 +11,8 @@ skills:
   - audit-docs
   - validate-patterns
   - readme-audit
-template_version: "1.0.0"
+  - doc-integrity
+template_version: "1.1.0"
 ---
 
 You detect documentation drift by comparing recent code changes against project documentation.
