@@ -1257,16 +1257,17 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 }
 
 @test "templates: team-lead has architect verification gate" {
-    # Hub refactor: Architect Verification Gate text moved to pm-verification-gates.md sub-doc
+    # Hub refactor: Architect Verification Gate text moved to tl-verification-gates.md sub-doc
+    # (Wave 25: pm-*.md renamed to tl-*.md + section title became "Architect Verification + Post-Wave Integrity")
     local pm_combined
     pm_combined=$(cat "$L0_ROOT/setup/agent-templates/team-lead.md")
-    for subdoc in pm-session-setup pm-dispatch-topology pm-verification-gates pm-quality-doc-pipeline pm-phase-execution; do
+    for subdoc in tl-session-setup tl-dispatch-topology tl-verification-gates tl-quality-doc-pipeline tl-phase-execution; do
         if [[ -f "$L0_ROOT/docs/agents/${subdoc}.md" ]]; then
             pm_combined="$pm_combined
 $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
         fi
     done
-    echo "$pm_combined" | grep -q "Architect Verification Gate"
+    echo "$pm_combined" | grep -qE "Architect Verification"
     grep -q "arch-testing" "$L0_ROOT/setup/agent-templates/team-lead.md"
     grep -q "arch-platform" "$L0_ROOT/setup/agent-templates/team-lead.md"
     grep -q "arch-integration" "$L0_ROOT/setup/agent-templates/team-lead.md"
@@ -1274,9 +1275,9 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
 }
 
 @test "templates: team-lead has planning delegation" {
-    grep -q "Planning Delegation" "$L0_ROOT/setup/agent-templates/team-lead.md"
-    grep -q "researcher" "$L0_ROOT/setup/agent-templates/team-lead.md"
-    grep -q "advisor" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    # Wave 25: "Planning Delegation" section title became "Planning Phase (EnterPlanMode gate)"
+    grep -qE "Planning Phase|Planning Delegation" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "planner" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
 @test "templates: team-lead has TDD-first for bug fixes" {
@@ -1441,9 +1442,9 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
     done
 }
 
-@test "arch: all architects reference Escalate to PM (not dev-lead)" {
+@test "arch: all architects reference Escalate to team-lead (not dev-lead)" {
     for agent in arch-testing arch-platform arch-integration; do
-        grep -q "Escalate to PM" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        grep -q "Escalate to team-lead" "$L0_ROOT/setup/agent-templates/${agent}.md"
         ! grep -q "Escalate to dev-lead" "$L0_ROOT/setup/agent-templates/${agent}.md"
     done
 }
