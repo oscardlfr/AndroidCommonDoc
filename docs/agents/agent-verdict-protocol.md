@@ -7,26 +7,26 @@ category: agents
 parent: agents-hub
 status: active
 layer: L0
-description: "Architect verdict format + disk-write + 1-liner DM protocol. Keeps PM context narrow while preserving full audit trail."
+description: "Architect verdict format + disk-write + 1-liner DM protocol. Keeps team-lead context narrow while preserving full audit trail."
 version: 1
 last_updated: "2026-04"
 ---
 
 # Agent Verdict Protocol
 
-Architects write a full verdict block to disk and send a 1-liner DM to PM. This keeps the PM's context window narrow (~1-liner) while preserving a full audit trail on disk.
+Architects write a full verdict block to disk and send a 1-liner DM to team-lead. This keeps the team-lead's context window narrow (~1-liner) while preserving a full audit trail on disk.
 
 ## Disk-Write + 1-Liner DM Pattern (MANDATORY for all arch-* agents)
 
 After completing review for wave `{N}`:
 
 1. **Write verdict to** `.planning/wave{N}/arch-{role}-verdict.md`
-   - `{N}` = wave number from PM dispatch (e.g., `wave22`)
+   - `{N}` = wave number from team-lead dispatch (e.g., `wave22`)
    - `{role}` = `platform`, `testing`, or `integration`
-2. **SendMessage** to `project-manager`:
+2. **SendMessage** to `team-lead`:
    - `"APPROVE"` — clean pass
-   - `"ESCALATE: <1-sentence reason>"` — PM must decide
-   - NEVER include the full verdict block in the DM — PM reads the file if needed.
+   - `"ESCALATE: <1-sentence reason>"` — team-lead must decide
+   - NEVER include the full verdict block in the DM — team-lead reads the file if needed.
 
 ## arch-platform Verdict Block
 

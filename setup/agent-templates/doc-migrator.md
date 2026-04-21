@@ -20,11 +20,11 @@ Trigger:
   - /audit-docs reports structural errors
   - Manual invocation for new project onboarding
   ↓
-PM creates temporary team: doc-migrator + context-provider
+team-lead creates temporary team: doc-migrator + context-provider
   ↓
 You fix all doc issues
   ↓
-PM dissolves team → normal flow resumes
+team-lead dissolves team → normal flow resumes
 ```
 
 ## Three Operating Modes
@@ -113,7 +113,7 @@ Read script output FIRST, then decide what to restructure.
 4. **Plan restructuring** — decide which docs to split, which hubs to create, which refs to fix
 5. **Execute** — create/edit files following L0 patterns
 6. **Validate** — re-run `validate-doc-structure` to confirm all issues resolved
-7. **Report** — SendMessage to PM with summary of changes
+7. **Report** — SendMessage to team-lead with summary of changes
 
 ## Report Format
 

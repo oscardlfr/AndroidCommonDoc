@@ -15,7 +15,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **context-provider template "On Team Join" section**: instructs CP to broadcast cached pattern list when new peers join the team (template_version 2.6.0).
 
 ### Changed
-- `docs/agents/pm-dispatch-topology.md`: added canonical module path list (core/audio, core/media-session, core/data, desktopApp) + dot-notation grep examples.
+- `docs/agents/tl-dispatch-topology.md`: added canonical module path list (core/audio, core/media-session, core/data, desktopApp) + dot-notation grep examples.
 
 ### Fixed
 - `doc-integrity-system.test.ts:68` stale assertion "Registered 46 tools" → "Registered 47 tools" after tool-use-analytics registration.
@@ -59,7 +59,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **Context7 awareness** in researcher and advisor agents
 - **9-peer session team**: 4 core devs (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) join at Phase 2 start alongside 5 existing peers
 - **Pattern validation chain**: dev -> architect -> context-provider. Devs NEVER contact context-provider directly
-- **Dynamic scaling**: architects request extra named devs from PM for overflow work (no team_name, die after verification)
+- **Dynamic scaling**: architects request extra named devs from team-lead for overflow work (no team_name, die after verification)
 - **4 new dev templates**: test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist in `setup/agent-templates/` with Team Identity sections
 - **Core Dev Lifecycle**: persistent devs accumulate layer knowledge across waves (~210K tokens saved per session)
 
@@ -67,8 +67,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **DawSync L2 cleanup**: 4 L0-internal agents removed, team topology/memory/placeholders fixed on 5 agents, 3 generic agents enriched
 
 ### Changed
-- **PM template v4.2.0**: `TeamCreate("session-{project-slug}")` replaces `TeamCreate("session")` — prevents agent suffix collisions (-2/-3) when multiple Claude Code sessions run simultaneously
-- **PM template v4.2.0**: `TeamCreate("planning-{project-slug}")` replaces `TeamCreate("planning")` — same collision fix for planning phase teams
+- **team-lead template v4.2.0**: `TeamCreate("session-{project-slug}")` replaces `TeamCreate("session")` — prevents agent suffix collisions (-2/-3) when multiple Claude Code sessions run simultaneously
+- **team-lead template v4.2.0**: `TeamCreate("planning-{project-slug}")` replaces `TeamCreate("planning")` — same collision fix for planning phase teams
 - **Planner template v1.3.0**: writes plan to `.planning/PLAN.md` instead of SendMessage — bypasses message delivery size limitation for large plans
 - **context-provider and doc-updater templates**: session team references updated to use project slug (commits: c93d9d3, cd4b6c8 L0; 78db5607 L1; ca5ae701 L2)
 
@@ -88,7 +88,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **`sync-l0` command self-contained** (`.claude/commands/sync-l0.md`): rewritten to read `l0-manifest.json` and invoke the CLI directly — fixes silent hallucination in L2 where `skills/sync-l0/SKILL.md` was missing
 - **L2 manifest exclusions** (`DawSync`, `shared-kmp-libs`): `sync-gsd-agents` and `sync-gsd-skills` added to `exclude_commands` — these are L0-internal and must not propagate to consumers
 - **Stale GSD command files pruned** from `DawSync` and `shared-kmp-libs`
-- **PR #20 templates propagated** to `DawSync` and `shared-kmp-libs` via prune sync: `arch-*`, `quality-gater` v2.1.0, `project-manager` v3.0.0
+- **PR #20 templates propagated** to `DawSync` and `shared-kmp-libs` via prune sync: `arch-*`, `quality-gater` v2.1.0, `team-lead` v3.0.0
 - **`skills/setup/SKILL.md:704`**: stale cross-reference fixed — `sync-l0` is now CLI-direct, not skill-delegating
 
 ### Fixed

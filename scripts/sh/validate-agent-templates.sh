@@ -15,7 +15,7 @@ source "$SCRIPT_DIR/lib/audit-append.sh" 2>/dev/null || true
 #
 # Checks:
 #   frontmatter          Required YAML fields: name, description, tools, model, token_budget
-#   role-keywords        Per-role mandatory terms (PM: TeamCreate, arch: APPROVE, etc.)
+#   role-keywords        Per-role mandatory terms (team-lead: TeamCreate, arch: APPROVE, etc.)
 #   imperative-style     H2 sections must start with imperative verbs, not passive prose
 #   tool-body-xref       Body tool references match frontmatter tools declaration
 #   anti-patterns        Known bad patterns: passive team descriptions, missing triggers
@@ -230,7 +230,7 @@ if should_run "role-keywords"; then
     for f in "${ALL_FILES[@]}"; do
         name=$(get_frontmatter_field "$f" "name")
         case "$name" in
-            project-manager)
+            team-lead)
                 check_keywords "$f" "TeamCreate" "SendMessage" "FORBIDDEN" "ALLOWED" "IMMEDIATELY"
                 ;;
             planner)
@@ -316,7 +316,7 @@ if should_run "tool-body-xref"; then
             if echo "$body_no_fences" | grep -q "$pattern" 2>/dev/null; then
                 # Check if tool is in frontmatter
                 if ! echo "$tools_field" | grep -qi "$tool"; then
-                    # Special case: Agent() in PM is via the Agent tool
+                    # Special case: Agent() in team-lead is via the Agent tool
                     # Special case: examples showing what NOT to do (WRONG patterns)
                     if echo "$body_no_fences" | grep -B1 "$pattern" | grep -qi "WRONG\|NEVER\|FORBIDDEN\|CANNOT\|example"; then
                         continue
@@ -342,13 +342,13 @@ if should_run "anti-patterns"; then
         name=$(get_frontmatter_field "$f" "name")
         body_no_fences=$(get_body_no_fences "$f")
 
-        # PM-specific: must have execution trigger
-        if [[ "$name" == "project-manager" ]]; then
-            # Hub refactor: PM content may be split across sub-docs in docs/agents/
+        # team-lead-specific: must have execution trigger
+        if [[ "$name" == "team-lead" ]]; then
+            # Hub refactor: team-lead content may be split across sub-docs in docs/agents/
             # Build combined body: template + all pm-*.md sub-docs
             pm_combined="$body_no_fences"
             pm_docs_dir="$(dirname "$(dirname "$f")")/docs/agents"
-            for subdoc in pm-session-setup pm-dispatch-topology pm-verification-gates pm-quality-doc-pipeline pm-phase-execution; do
+            for subdoc in tl-session-setup tl-dispatch-topology tl-verification-gates tl-quality-doc-pipeline tl-phase-execution; do
                 subdoc_path="$pm_docs_dir/${subdoc}.md"
                 if [[ -f "$subdoc_path" ]]; then
                     pm_combined="$pm_combined
@@ -356,19 +356,19 @@ $(cat "$subdoc_path")"
                 fi
             done
             if ! echo "$pm_combined" | grep -q "IMMEDIATELY"; then
-                detail "$fname: PM missing IMMEDIATELY execution trigger"
+                detail "$fname: team-lead missing IMMEDIATELY execution trigger"
                 ap_warnings=$((ap_warnings + 1))
             fi
             if ! echo "$pm_combined" | grep -q "STOP PLANNING\|PHASE TRANSITIONS ARE AUTOMATIC"; then
-                detail "$fname: PM missing phase transition enforcement rule"
+                detail "$fname: team-lead missing phase transition enforcement rule"
                 ap_warnings=$((ap_warnings + 1))
             fi
             if ! echo "$pm_combined" | grep -q "PHASE TRANSITIONS ARE AUTOMATIC"; then
-                detail "$fname: PM missing automatic phase transition rule"
+                detail "$fname: team-lead missing automatic phase transition rule"
                 ap_warnings=$((ap_warnings + 1))
             fi
             if ! echo "$pm_combined" | grep -q "DISPOSABLE"; then
-                detail "$fname: PM missing DISPOSABLE dev rule"
+                detail "$fname: team-lead missing DISPOSABLE dev rule"
                 ap_warnings=$((ap_warnings + 1))
             fi
         fi
@@ -384,14 +384,14 @@ $(cat "$subdoc_path")"
 
         # Planner/quality-gater: must be "peer" not "sub-agent"
         if [[ "$name" == "planner" || "$name" == "quality-gater" ]]; then
-            if echo "$body_no_fences" | grep -qi "sub-agent spawned by PM"; then
+            if echo "$body_no_fences" | grep -qi "sub-agent spawned by team-lead"; then
                 detail "$fname: describes self as sub-agent — should be 'team peer'"
                 ap_warnings=$((ap_warnings + 1))
             fi
         fi
 
         # General: named Agent() calls (devs should be anonymous)
-        if [[ "$name" == "project-manager" ]]; then
+        if [[ "$name" == "team-lead" ]]; then
             named_agent_calls=$(echo "$body_no_fences" | grep -c 'Agent(name=' 2>/dev/null || true)
             wrong_markers=$(echo "$body_no_fences" | grep -c 'WRONG' 2>/dev/null || true)
             # Subtract WRONG examples from count

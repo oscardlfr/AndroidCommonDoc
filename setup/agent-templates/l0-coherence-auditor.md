@@ -1,7 +1,7 @@
 ---
 name: l0-coherence-auditor
 description: Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks.
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, mcp__androidcommondoc__validate-claude-md, mcp__androidcommondoc__validate-doc-structure, mcp__androidcommondoc__validate-skills, mcp__androidcommondoc__validate-vault, mcp__androidcommondoc__validate-agents, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__audit-docs
 model: haiku
 domain: audit
 intent: [coherence, l0, hub, frontmatter]
@@ -12,7 +12,11 @@ optional_capabilities:
   - context7
   - jina
   - jina
-template_version: "1.0.0"
+template_version: "1.2.0"
+skills:
+  - audit-l0
+  - audit-docs
+  - readme-audit
 ---
 
 ## Optional Capabilities

@@ -55,7 +55,7 @@
 - Cross-references use relative paths — no absolute paths between subdirectories
 
 ### Agent templates: dual-location (MUST keep in sync)
-- `setup/agent-templates/` is the SOURCE for agent templates (PM, quality-gater, architects, etc.)
+- `setup/agent-templates/` is the SOURCE for agent templates (team-lead, quality-gater, architects, etc.)
 - `.claude/agents/` contains COPIES that the registry scans and `/sync-l0` distributes
 - When editing a template: ALWAYS update `setup/agent-templates/X.md` first, then copy to `.claude/agents/X.md`
 - Regenerate registry after any template change: `node mcp-server/build/cli/generate-registry.js`
@@ -91,6 +91,9 @@
 - `/work` — smart task routing to agents/skills (extensible via frontmatter intent)
 - `/init-session` — show project context and available tools
 - `/resume-work` — CEO/CTO dashboard with department status from last session
+- `/doc-integrity` — unified doc audit (kdoc-coverage → check-doc-patterns → API freshness → audit-docs)
+- `/eval-agents` — run promptfoo evaluations against agent prompt templates before merging
+- `/metrics` — unified dashboard: runtime tool usage, skill usage, MCP rates, CP bypass count
 - Pre-commit hooks: see `docs/guides/pre-commit-hooks.md`
 
 ## Doc Consultation
@@ -101,10 +104,24 @@
 - Upstream validation → `docs/guides/upstream-validation.md` (validate_upstream frontmatter)
 - Detekt rules → `detekt-rules/` + `docs/guides/detekt-config.md`
 - Spec-driven workflow → `docs/agents/spec-driven-workflow.md`
-- Agent templates → `setup/agent-templates/` (project-manager, product-strategist, content-creator, landing-page-strategist)
+- Agent templates → `setup/agent-templates/` (team-lead, product-strategist, content-creator, landing-page-strategist)
 - Business doc templates → `setup/doc-templates/business/` (PRODUCT_SPEC, MARKETING, PRICING, LANDING_PAGES, COMPETITIVE)
-- MCP tools → 46 tools via ~/.mcp.json (architects and specialists use these automatically)
+- MCP tools → 46 tools via ~/.mcp.json — architects/specialists must declare them in `tools:` frontmatter to call them (Wave 25 fix: prose references alone don't load schemas)
 - Dependency freshness → `check-outdated` MCP tool (TOML parser, Maven Central, kdoc-state v2 cache)
 
+## Wave History (most recent on top)
+
+Development waves live in git log + memory; summarized here for onboarding context:
+
+- **Wave 25** (2026-04-21, in progress) — MCP wiring fix: 10 agents gained explicit `mcp__androidcommondoc__*` frontmatter; context-provider v3.0 pattern pre-cache; ingestion loop (context-provider → team-lead user-approval → doc-updater → `ingest-content`) finally closed after T-BUG-005 half-landed.
+- **Wave 24** (2026-04-20, PR #58) — Bug #3 `TeamDelete` before `TeamCreate` + P4: 17 agent mirrors. team-lead 5.17.0.
+- **Wave 23** (2026-04-20, PR #57) — S8 token meter + Bug #5 `scope_doc_path` + Bug #6 PREP/EXECUTE architect dispatch modes. team-lead 5.15.0.
+- **Wave 22** (2026-04-20, PR #56) — Token topology S1–S7: team-lead model → sonnet, spawn-prompt diet, RTK prefix enforcement, verdict-to-disk, compaction loop.
+- **Wave 21** (2026-04-20, PR #55) — Enforcement + portability chain (session team collision fix).
+- **Wave 20** (2026-04-20, PRs #53 + #54) — Bug #7 session-scoped CP gate, S2.1 hash parity, S2.2 MIGRATIONS, S3.1 `/work` rewrite, S3.2 material-3 ADOPT.
+
 ## RTK Enforcement (Wave 22)
-Agent templates MUST prefix all git/gh/docker/curl commands with `rtk`. Enforced in setup/agent-templates/project-manager.md.
+Agent templates MUST prefix all git/gh/docker/curl commands with `rtk`. Enforced in setup/agent-templates/team-lead.md.
+
+## Ingestion Loop (Wave 25)
+External sources (Context7 / WebFetch) flow into L0 docs via an explicit approval chain: context-provider flags the gap → team-lead requests user approval → doc-updater runs `mcp__androidcommondoc__ingest-content` → commits to `docs/{category}/{slug}.md` with citation frontmatter. User approval is a hard gate — team-lead does not forward to doc-updater without `approved_by: user`.

@@ -1,0 +1,230 @@
+name: Drift Audit (behavioral + wiring)
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+# Complements readme-audit.yml (numeric counts) with behavioral/wiring checks
+# that catch drifts like:
+#  - Agent describes MCP tool in prose but doesn't declare it in frontmatter
+#  - README claims Wave X but no Wave X section exists
+#  - Stale references to renamed roles (project-manager → team-lead)
+#  - Referenced skills/agents/commands that don't exist in filesystem
+#  - Ingestion loop documentation out of sync with agent templates
+
+jobs:
+  wiring-audit:
+    name: MCP wiring + tool/skill orphan check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run wiring audit
+        id: wiring
+        run: |
+          chmod +x scripts/audit-wiring.sh
+          bash scripts/audit-wiring.sh 2>&1 | tee /tmp/wiring-audit.md
+
+          # Extract summary lines
+          SUMMARY=$(grep "^\*\*Summary:" /tmp/wiring-audit.md || true)
+          echo "$SUMMARY"
+
+          # Fail if any MCP tool ORPHAN (no references anywhere)
+          MCP_ORPHANS=$(grep "^\*\*Summary:" /tmp/wiring-audit.md | head -1 | grep -oE 'ORPHAN=[0-9]+' | grep -oE '[0-9]+' || echo 0)
+          if [ "$MCP_ORPHANS" -gt 0 ]; then
+            echo "::error::$MCP_ORPHANS MCP tool(s) are fully orphan (not referenced anywhere)."
+            echo "Fix: wire into an agent/command, or delete the tool file."
+            exit 1
+          fi
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wiring-audit-report
+          path: /tmp/wiring-audit.md
+          retention-days: 14
+
+  behavioral-readme-check:
+    name: README behavioral content (Wave History + ingestion-loop + team-lead)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify required behavioral sections exist
+        run: |
+          FAIL=0
+          check() {
+            local label=$1
+            local pattern=$2
+            local file=$3
+            if grep -qE "$pattern" "$file"; then
+              echo "✅ $label"
+            else
+              echo "❌ $label — pattern '/$pattern/' not found in $file"
+              FAIL=1
+            fi
+          }
+
+          # README must have Wave History section documenting Wave 20+
+          check "README: Recent Changes section"         "^## Recent Changes"             "README.md"
+          check "README: Wave 25 entry"                   "Wave 25"                        "README.md"
+          check "README: Ingestion Loop mentioned"        "ingestion|ingest-content"       "README.md"
+          check "README: team-lead (not project-manager)" "team-lead"                      "README.md"
+
+          # CLAUDE.md must have Wave History + ingestion loop + MCP wiring note
+          check "CLAUDE.md: Wave History section"         "^## Wave History"               "CLAUDE.md"
+          check "CLAUDE.md: ingestion loop"               "Ingestion Loop"                 "CLAUDE.md"
+          check "CLAUDE.md: team-lead"                    "team-lead"                      "CLAUDE.md"
+
+          # README + CLAUDE.md must not contain active "project-manager" references
+          # (historical mentions in .planning/ or MIGRATIONS.json are fine)
+          for f in README.md CLAUDE.md; do
+            if grep -l "project-manager" "$f" > /dev/null; then
+              echo "❌ $f: still contains 'project-manager' — Wave 25 rename incomplete"
+              FAIL=1
+            else
+              echo "✅ $f: no stale 'project-manager' references"
+            fi
+          done
+
+          if [ $FAIL -ne 0 ]; then
+            echo ""
+            echo "Behavioral README content is incomplete or stale. Review docs/agents/ingestion-loop.md + CLAUDE.md + README.md."
+            exit 1
+          fi
+
+  referenced-names-exist:
+    name: All referenced agent/skill/command names exist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check referenced names
+        run: |
+          FAIL=0
+
+          # Every /slash command mentioned in README/CLAUDE.md must have a file
+          # Exclusions: literal placeholder tokens like /skill-name
+          PLACEHOLDERS="skill-name|command-name|slash-name"
+          echo "--- Checking slash commands referenced in README.md / CLAUDE.md ---"
+          MENTIONED=$(grep -oE '`/[a-z][a-z-]+`' README.md CLAUDE.md 2>/dev/null | \
+            grep -oE '/[a-z][a-z-]+' | sort -u | grep -vE "^/($PLACEHOLDERS)$")
+          for cmd in $MENTIONED; do
+            name=${cmd#/}
+            # Check if file exists as skill or slash command
+            if [ -f "skills/$name/SKILL.md" ] || [ -f ".claude/commands/$name.md" ]; then
+              echo "✅ $cmd"
+            else
+              echo "❌ $cmd — no skill or command file found"
+              FAIL=1
+            fi
+          done
+
+          # Every agent name mentioned in README must have a file
+          echo ""
+          echo "--- Checking agents referenced in README.md ---"
+          for agent in context-provider team-lead doc-updater arch-platform arch-testing arch-integration \
+                       doc-alignment-agent codebase-mapper beta-readiness-agent l0-coherence-auditor verifier; do
+            if [ -f ".claude/agents/$agent.md" ] && [ -f "setup/agent-templates/$agent.md" ]; then
+              if grep -q "$agent" README.md; then
+                echo "✅ $agent mentioned in README, files exist"
+              else
+                echo "⚠️  $agent files exist but NOT mentioned in README"
+              fi
+            else
+              echo "❌ $agent mentioned but files missing in .claude/agents/ or setup/agent-templates/"
+              FAIL=1
+            fi
+          done
+
+          if [ $FAIL -ne 0 ]; then
+            exit 1
+          fi
+
+  wave25-regression-tests:
+    name: Wave 25 anti-regression tests (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install + build MCP server
+        working-directory: mcp-server
+        run: |
+          npm ci --silent
+          npm run build --silent
+
+      - name: Run Wave 25 wiring test suite
+        working-directory: mcp-server
+        env:
+          ANDROID_COMMON_DOC: ${{ github.workspace }}
+        run: npx vitest run tests/integration/wave25-wiring.test.ts --reporter=verbose
+
+      - name: Run full test suite (ensures no regressions elsewhere)
+        working-directory: mcp-server
+        env:
+          ANDROID_COMMON_DOC: ${{ github.workspace }}
+        run: npm test -- --run
+
+  doc-cross-refs:
+    name: docs/agents/ cross-references resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check relative links in docs/agents/
+        run: |
+          FAIL=0
+          # Extract proper markdown links [text](path.md) only — anchors OK
+          for doc in docs/agents/*.md; do
+            [ -f "$doc" ] || continue
+            dir=$(dirname "$doc")
+            LINKS=$(grep -oE '\[[^]]+\]\(([^)]+\.md[^)]*)\)' "$doc" \
+              | grep -oE '\([^)]+\)' | tr -d '()')
+            for link in $LINKS; do
+              path="${link%%#*}"
+              [ -z "$path" ] && continue
+              echo "$path" | grep -qE '^https?://' && continue
+              target="$dir/$path"
+              if [ ! -f "$target" ] && [ ! -f "$path" ]; then
+                echo "❌ $doc references missing file: $link"
+                FAIL=1
+              fi
+            done
+          done
+
+          if [ $FAIL -eq 0 ]; then
+            echo "✅ All docs/agents/ cross-references resolve"
+          fi
+          exit $FAIL
+
+      - name: Check frontmatter completeness (scope/sources/targets/slug)
+        run: |
+          FAIL=0
+          for f in docs/*/*.md; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *hub.md) continue ;;
+              docs/archive/*) continue ;;
+            esac
+            fm=$(awk '/^---$/{c++; next} c==1' "$f" 2>/dev/null)
+            for k in scope sources targets slug; do
+              if ! echo "$fm" | grep -qE "^$k:"; then
+                echo "❌ $f: missing frontmatter field '$k'"
+                FAIL=1
+              fi
+            done
+          done
+          if [ $FAIL -eq 0 ]; then
+            echo "✅ All active docs have required frontmatter"
+          fi
+          exit $FAIL

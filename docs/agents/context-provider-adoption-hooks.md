@@ -10,7 +10,7 @@ category: agents
 description: "Context-provider adoption gate + tool-use observability layer — Wave 17-lite (session-level enforcement, falsifiable hypothesis)."
 version: 1
 last_updated: "2026-04"
-assumes_read: team-topology, pm-session-setup
+assumes_read: team-topology, tl-session-setup
 token_budget: 1500
 ---
 
@@ -137,6 +137,26 @@ The gate is session-scoped: flag file keyed by `session_id`. This was a delibera
 
 **Future upgrade path**: if session_id becomes unreliable, replace flag file with an in-memory hook state store keyed by `agent_id` — requires hook runtime state support (not available in current hook SDK).
 
+## Wave 25 Extensions
+
+Wave 25 layered two behavioral upgrades on top of the Wave 17-lite hooks layer:
+
+### 1. Pattern Pre-Cache on Spawn (context-provider v3.0.0)
+
+Earlier versions explicitly deferred all reads "on-demand" (the template said *"Do NOT eagerly pre-read"*). This produced a MCP round-trip per query even for common patterns (source set discipline, DI registration, test dispatcher scopes) — the cache was never populated because caching was banned.
+
+v3.0.0 replaces that rule with a **Spawn Protocol** that hydrates the working context with the L0 pattern index via a batch of `mcp__androidcommondoc__find-pattern` calls keyed by canonical categories (`architecture`, `testing`, `compose`, `error-handling`, `gradle`). Subsequent queries hit the cached pattern titles directly. The Answer Pipeline gains a **Cache first** step before the MCP call.
+
+See `setup/agent-templates/context-provider.md` §"Spawn Protocol" for the exact call sequence.
+
+### 2. Ingestion Loop (T-BUG-005 closed)
+
+context-provider now routes external-source findings (Context7 / WebFetch) through a team-lead-gated ingestion loop that ends in `mcp__androidcommondoc__ingest-content` writing canonical L0 docs. Before Wave 25, only the *flag* half existed — no execution path. See [Ingestion Loop](ingestion-loop.md) for the end-to-end protocol.
+
+### 3. MCP Tool Declaration Requirement
+
+The hooks in this doc (Wave 17-lite) assume agents *can call* MCP tools. Wave 25 discovered that the 10 core agents described MCP usage in their prose but none declared MCP tools in their `tools:` frontmatter — so the harness never exposed the schemas and the `cp_bypass_blocked_count` was artificially low because agents couldn't call CP-backed MCP tools anyway. Wave 25 wired MCP tools into the 10 core agents' frontmatter. This changes the baseline measurement for the Wave 17-lite falsifiable hypothesis — the 2-week window resets from 2026-04-21.
+
 ## Cross-References
 
 - Plan: `.planning/wave17-lite-PLAN.md`
@@ -146,5 +166,7 @@ The gate is session-scoped: flag file keyed by `session_id`. This was a delibera
 - MCP tool: `mcp-server/src/tools/tool-use-analytics.ts`
 - Skill: `.claude/commands/metrics.md`
 - Catalog checker: `scripts/sh/catalog-coverage-check.sh` (lines 87-111)
-- PM dispatch topology: [pm-dispatch-topology.md](pm-dispatch-topology.md)
+- team-lead dispatch topology: [tl-dispatch-topology.md](tl-dispatch-topology.md)
 - Team topology: [../agents/team-topology.md](team-topology.md)
+- Wave 25 ingestion loop: [ingestion-loop.md](ingestion-loop.md)
+- Wave 25 MCP declaration rule: [agent-core-rules.md](agent-core-rules.md) §8

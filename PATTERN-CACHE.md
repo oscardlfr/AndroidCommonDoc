@@ -16,7 +16,7 @@
 | arch-testing.md | 1.11.0 | 1.12.0 |
 | arch-platform.md | 1.9.0 | (TBD — Wave 9.3 may touch) |
 | arch-integration.md | 1.9.0 | (TBD) |
-| project-manager.md | 5.1.0 | (TBD) |
+| team-lead.md | 5.1.0 | (TBD) |
 | quality-gater.md | 2.2.0 | (TBD) |
 | context-provider.md | 2.4.0 | (no change planned) |
 | planner.md | 1.4.0 | (no change planned) |
@@ -40,7 +40,7 @@ Tests at mcp-server/tests/integration/session-team-peers.test.ts assert EXACT ve
 - quality-gater.md: "2.2.0" (line 400)
 - context-provider.md: "2.4.0" (line 779)
 - planner.md: "1.4.0" (line 825)
-- project-manager.md: "5.1.0" (line 143)
+- team-lead.md: "5.1.0" (line 143)
 
 ⚠️ Update assertions ONLY for templates that change in Wave 9.3.
 

@@ -1,7 +1,7 @@
 ---
 scope: workflow
 sources: [claude-code, agents, skills]
-targets: [CLAUDE.md, project-manager]
+targets: [CLAUDE.md, team-lead]
 category: agents
 slug: spec-driven-workflow
 description: Native Claude Code workflow for spec-driven development without GSD dependency
@@ -15,7 +15,7 @@ Native Claude Code workflow using agents, skills, Plan Mode, and worktrees.
 
 | Session | Command | Orchestrator |
 |---------|---------|-------------|
-| Development | `claude --agent project-manager` | PM → architects → devs + guardians |
+| Development | `claude --agent team-lead` | team-lead → architects → devs + guardians |
 | Marketing | `claude --agent marketing-lead` | ML → content-creator, landing-page |
 | Product | `claude --agent product-lead` | PL → product-strategist, prioritizer |
 
@@ -24,11 +24,11 @@ All sessions share context via `context-provider` agent and sync documentation v
 ## How to Start Work
 
 ```bash
-# Option 1: /work routes to project-manager automatically
+# Option 1: /work routes to team-lead automatically
 /work implement feature X from the spec
 
-# Option 2: Direct PM invocation
-@project-manager implement feature X per SPEC.md
+# Option 2: Direct team-lead invocation
+@team-lead implement feature X per SPEC.md
 ```
 
 All delegation uses the `Agent` tool. Never Bash + `claude` CLI.
@@ -37,25 +37,25 @@ All delegation uses the `Agent` tool. Never Bash + `claude` CLI.
 
 ```
 1. Human writes SPEC.md / ROADMAP.md (goals + success criteria)
-2. Human asks Claude: "/work implement feature X" or "@project-manager ..."
-3. PM orchestrates 3 sequential phases per task:
+2. Human asks Claude: "/work implement feature X" or "@team-lead ..."
+3. team-lead orchestrates 3 sequential phases per task:
 
-   Session start: PM creates TeamCreate("session-{project-slug}") with 5 peers:
+   Session start: team-lead creates TeamCreate("session-{project-slug}") with 5 peers:
      context-provider, doc-updater, arch-testing, arch-platform, arch-integration
 
    Phase 1 — Planning (temporary planner):
      planner SendMessage(to="context-provider"), writes plan to .planning/PLAN.md
-     PM reads plan, dismisses planner
+     team-lead reads plan, dismisses planner
 
    Phase 2 — Execution (session team peers — no new TeamCreate):
-     Architects detect → PM dispatches devs (sub-agents) → architects cross-verify
+     Architects detect → team-lead dispatches devs (sub-agents) → architects cross-verify
      All 3 APPROVE → proceed to Phase 3
 
    Phase 3 — Quality Gate (temporary quality-gater joins session team):
      quality-gater runs: frontmatter → KDoc → tests → coverage → benchmarks → pre-pr → prod-files → UI tests
-     PASS → PM commits. FAIL → back to Phase 2
+     PASS → team-lead commits. FAIL → back to Phase 2
 
-4. For parallel worktrees, each PM runs its own 3-phase cycle
+4. For parallel worktrees, each team-lead runs its own 3-phase cycle
 5. Claude launches verifier → "did we meet the spec?"
 6. If PASS → merge worktrees + PR
 7. If FAIL → Claude adjusts and relaunches with gaps
@@ -98,7 +98,7 @@ See [Team Topology](team-topology.md) for full details on each phase.
 
 | Template | Layer | Role |
 |----------|-------|------|
-| `project-manager` | L1/L2 | Orchestrator — assigns code to devs, launches gates |
+| `team-lead` | L1/L2 | Orchestrator — assigns code to devs, launches gates |
 | `platform-auditor` | L1 | Cross-module architecture |
 | `module-lifecycle` | L1 | Module creation/deprecation |
 | `product-strategist` | L2 | Feature prioritization (ICE) |

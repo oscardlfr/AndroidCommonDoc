@@ -69,9 +69,9 @@ describe('dev template identity — Team Identity section', () => {
       expect(content).toMatch(/persistent session team member/i);
     });
 
-    it(`${template} states PM spawns it at Phase 2 start`, () => {
+    it(`${template} states team-lead spawns it at Phase 2 start`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
-      expect(content).toMatch(/PM spawns.*Phase 2|spawns you at Phase 2/i);
+      expect(content).toMatch(/team-lead spawns.*Phase 2|spawns you at Phase 2/i);
     });
   }
 });

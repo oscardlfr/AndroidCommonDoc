@@ -2,43 +2,43 @@
 scope: [workflow, ai-agents, pm, verification]
 sources: [androidcommondoc]
 targets: [all]
-slug: pm-verification-gates
+slug: tl-verification-gates
 status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "PM verification gates: architect verdicts, post-verdict broadcast, post-wave integrity check, escalation paths."
+description: "team-lead verification gates: architect verdicts, post-verdict broadcast, post-wave integrity check, escalation paths."
 version: 1
 last_updated: "2026-04"
-assumes_read: team-topology, pm-dispatch-topology
+assumes_read: team-topology, tl-dispatch-topology
 token_budget: 1200
 ---
 
-# PM Verification Gates
+# team-lead Verification Gates
 
-Reference for PM's verification requirements after dev work: architect verification gate, post-verdict broadcast protocol, post-wave team integrity check, and escalation paths.
+Reference for team-lead's verification requirements after dev work: architect verification gate, post-verdict broadcast protocol, post-wave team integrity check, and escalation paths.
 
 ## Architect Verification Gate (non-negotiable)
 
 After EVERY wave of dev work, architects verify as session team peers:
 
 1. **All three are session team peers** — they cross-verify via `SendMessage(to="arch-X", ...)`
-2. **Architects request devs from PM** via SendMessage — PM is the sole Agent() spawner (in-process peers cannot use Agent())
+2. **Architects request devs from team-lead** via SendMessage — team-lead is the sole Agent() spawner (in-process peers cannot use Agent())
 3. **Collect verdicts**: ALL three must APPROVE before proceeding
-4. **On ESCALATE**: PM does NOT code the fix. Instead:
+4. **On ESCALATE**: team-lead does NOT code the fix. Instead:
    - **Re-planifiable** → delegate to `researcher` + `advisor` for new approach
    - **Blocked** → report to user with clear error
 
 ```
-PM (team peer) coordinates
+team-lead (team peer) coordinates
   ↓
 ┌─ arch-testing ←→ arch-platform ←→ arch-integration ─┐  (peers, SendMessage)
-│  request devs (SendMessage→PM) → detect (MCP) → validate │
+│  request devs (SendMessage→team-lead) → detect (MCP) → validate │
 │  fix via devs → cross-verify (SendMessage) → re-verify│
 └──────────────────────────────────────────────────────┘
   ↓
 All APPROVE → next wave
-Any ESCALATE → PM re-plans (never codes)
+Any ESCALATE → team-lead re-plans (never codes)
 ```
 
 ## Verdict Tally Protocol (MANDATORY — TaskList pattern)
@@ -61,13 +61,13 @@ TaskCreate(title="arch-integration verdict", status="in_progress")
 
 **Stall check**: if 3+ min since last substantive message and a verdict task is still in_progress → broadcast "what's blocking?" to pending architects.
 
-Architects don't poll git. They don't read other architects' verdicts unless explicitly tasked. PM is the router.
+Architects don't poll git. They don't read other architects' verdicts unless explicitly tasked. team-lead is the router.
 
 ## Compaction-Loop Detection (S6 — 3-echo threshold)
 
-Context compaction can cause a peer to loop — echoing the same summary repeatedly without making progress. PM tracks the last 3 message summaries per peer.
+Context compaction can cause a peer to loop — echoing the same summary repeatedly without making progress. team-lead tracks the last 3 message summaries per peer.
 
-**How to track** (PM mental model — no external state needed):
+**How to track** (team-lead mental model — no external state needed):
 - For each peer, note the summary of their last 3 messages.
 - If summary[N] ≈ summary[N-1] ≈ summary[N-2] (same intent, same status, no new evidence) → **compaction-loop detected**.
 
@@ -82,9 +82,9 @@ Do NOT re-spawn automatically — user decides. Just flag and await instruction.
 
 ## Token Meter Gate
 
-At the end of every wave, PM MUST produce a retrospective and flag high token spend before starting the next wave. This gate is the Wave 23 Sprint 8 (S8) addition.
+At the end of every wave, team-lead MUST produce a retrospective and flag high token spend before starting the next wave. This gate is the Wave 23 Sprint 8 (S8) addition.
 
-**What PM logs at wave end**:
+**What team-lead logs at wave end**:
 - Wave number and sprint slug
 - Steps completed (from `TaskList`) — each with short outcome: done / escalated / deferred
 - Token estimate: `dispatched-message-count × avg-tokens-per-message` (order-of-magnitude; no precision required)
@@ -92,7 +92,7 @@ At the end of every wave, PM MUST produce a retrospective and flag high token sp
 
 **Retrospective file** (required):
 - Path: `.planning/wave{N}/retrospective.md`
-- Written by PM at wave end, before proceeding to Phase 3 or closing the session
+- Written by team-lead at wave end, before proceeding to Phase 3 or closing the session
 - Format:
 
 ```
@@ -117,15 +117,15 @@ Date: <YYYY-MM-DD>
 - Estimate: <N * avg> (≈ <pct>% of <model> context window)
 
 ## Notes
-- <anything the next-wave PM should know: compaction events, rework cycles, user interventions>
+- <anything the next-wave team-lead should know: compaction events, rework cycles, user interventions>
 ```
 
 **Threshold action**:
-- If estimate > 80% of the model's context window → PM MUST SendMessage user with `[TOKEN-METER] Wave {N} estimate <pct>% of context window. Recommend splitting remaining scope into Wave {N+1}.`
+- If estimate > 80% of the model's context window → team-lead MUST SendMessage user with `[TOKEN-METER] Wave {N} estimate <pct>% of context window. Recommend splitting remaining scope into Wave {N+1}.`
 - Do NOT start next wave without user acknowledgement of the split proposal.
 - Threshold reason: context compaction risk climbs sharply above 80%; splitting the wave keeps each wave reliably reproducible.
 
-Precision is not the point — the retrospective anchors wave-over-wave trends so PM can see when scope creep is burning budget.
+Precision is not the point — the retrospective anchors wave-over-wave trends so team-lead can see when scope creep is burning budget.
 
 ## Post-Wave Team Integrity Check (MANDATORY)
 

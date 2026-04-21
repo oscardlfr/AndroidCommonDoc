@@ -17,7 +17,7 @@ const DOCS_DIR = path.join(ROOT, 'docs/agents');
 // ---------------------------------------------------------------------------
 describe('3-phase agent templates exist', () => {
   const requiredTemplates = [
-    'project-manager.md',
+    'team-lead.md',
     'planner.md',
     'quality-gater.md',
     'arch-testing.md',
@@ -52,17 +52,17 @@ describe('agent template size limits', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Project Manager — 3-phase model
+// 3. Team Lead — 3-phase model
 // ---------------------------------------------------------------------------
-describe('project-manager template — 3-phase model', () => {
-  const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'project-manager.md'), 'utf-8');
+describe('team-lead template — 3-phase model', () => {
+  const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'team-lead.md'), 'utf-8');
 
-  // Hub refactor: PM content may be split across sub-docs in docs/agents/
+  // Hub refactor: team-lead content may be split across sub-docs in docs/agents/
   const pmSubdocs = [
-    'pm-session-setup.md',
-    'pm-dispatch-topology.md',
-    'pm-verification-gates.md',
-    'pm-quality-doc-pipeline.md',
+    'tl-session-setup.md',
+    'tl-dispatch-topology.md',
+    'tl-verification-gates.md',
+    'tl-quality-doc-pipeline.md',
   ];
   const docsAgentsDir = path.join(ROOT, 'docs/agents');
   const subdocContent = pmSubdocs
@@ -154,12 +154,12 @@ describe('project-manager template — 3-phase model', () => {
     expect(combinedPM).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 5.17.0', () => {
-    expect(content).toContain('template_version: "5.17.0"');
+  it('template version 6.0.0', () => {
+    expect(content).toContain('template_version: "6.0.0"');
   });
 
   it('has dev dispatch protocol', () => {
-    expect(content).toMatch(/Dev Dispatch|SendMessage.*project-manager/i);
+    expect(content).toMatch(/Dev Dispatch|SendMessage.*team-lead/i);
   });
 
   it('has pre-existing excuse rule', () => {
@@ -217,11 +217,11 @@ describe('project-manager template — 3-phase model', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3a. PM Phase Execution sub-doc (extracted from project-manager.md)
+// 3a. team-lead Phase Execution sub-doc (extracted from team-lead.md)
 // ---------------------------------------------------------------------------
-describe('pm-phase-execution sub-doc — extracted phase protocol', () => {
+describe('tl-phase-execution sub-doc — extracted phase protocol', () => {
   const content = fs.readFileSync(
-    path.join(ROOT, 'docs/agents/pm-phase-execution.md'),
+    path.join(ROOT, 'docs/agents/tl-phase-execution.md'),
     'utf-8'
   );
 
@@ -239,7 +239,7 @@ describe('pm-phase-execution sub-doc — extracted phase protocol', () => {
     expect(content).toContain('.planning/PLAN.md');
   });
 
-  it('PM reads plan via Read(".planning/PLAN.md") after planner notifies', () => {
+  it('team-lead reads plan via Read(".planning/PLAN.md") after planner notifies', () => {
     expect(content).toMatch(/Read\(["']\.planning\/PLAN\.md["']\)/);
   });
 });
@@ -250,8 +250,8 @@ describe('pm-phase-execution sub-doc — extracted phase protocol', () => {
 describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
-  it('template version 1.18.0', () => {
-    expect(archContent).toContain('template_version: "1.18.0"');
+  it('template version 1.19.0', () => {
+    expect(archContent).toContain('template_version: "1.19.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -294,12 +294,12 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
   });
 
-  it('arch-platform has template version 1.15.0', () => {
-    expect(platformContent).toContain('template_version: "1.15.0"');
+  it('arch-platform has template version 1.16.0', () => {
+    expect(platformContent).toContain('template_version: "1.16.0"');
   });
 
-  it('arch-integration has template version 1.15.0', () => {
-    expect(integrationContent).toContain('template_version: "1.15.0"');
+  it('arch-integration has template version 1.16.0', () => {
+    expect(integrationContent).toContain('template_version: "1.16.0"');
   });
 });
 
@@ -331,7 +331,7 @@ describe('planner template — peer role', () => {
 
   it('describes itself as team peer (not sub-agent)', () => {
     expect(content).toMatch(/team peer|Planning Team/i);
-    expect(content).not.toMatch(/sub-agent spawned by PM/i);
+    expect(content).not.toMatch(/sub-agent spawned by team-lead/i);
   });
 
   it('has SendMessage in tools', () => {
@@ -362,8 +362,8 @@ describe('planner template — peer role', () => {
     expect(content).toContain('.planning/PLAN.md');
   });
 
-  it('notifies PM via SendMessage after writing plan file', () => {
-    expect(content).toMatch(/SendMessage.*project-manager.*plan.*ready|SendMessage.*project-manager.*PLAN\.md/i);
+  it('notifies team-lead via SendMessage after writing plan file', () => {
+    expect(content).toMatch(/SendMessage.*team-lead.*plan.*ready|SendMessage.*team-lead.*PLAN\.md/i);
   });
 
   it('has external library research step via context-provider', () => {
@@ -441,8 +441,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/[Cc]ross-cutting/);
   });
 
-  it('has template version 2.3.0', () => {
-    expect(content).toContain('template_version: "2.3.0"');
+  it('has template version 2.4.0', () => {
+    expect(content).toContain('template_version: "2.4.0"');
   });
 });
 
@@ -519,7 +519,7 @@ describe('team-topology.md — 3-phase documentation', () => {
   });
 
   it('documents key constraints', () => {
-    expect(content).toMatch(/PM is sole Agent\(\) spawner/i);
+    expect(content).toMatch(/team-lead is sole Agent\(\) spawner/i);
     expect(content).toMatch(/Architects.*NO Write/i);
   });
 
@@ -697,7 +697,7 @@ describe('agent-templates/README.md — complete listing', () => {
     expect(content).toContain('doc-updater');
   });
 
-  it('describes 3-phase model for PM', () => {
+  it('describes 3-phase model for team-lead', () => {
     expect(content).toMatch(/3-phase|Planning.*Execution.*Quality/i);
   });
 });
@@ -803,23 +803,25 @@ describe('quality-gater template — stamp enforcement', () => {
 // ---------------------------------------------------------------------------
 // 17. Context-Provider Oracle Protocol
 // ---------------------------------------------------------------------------
-describe('context-provider template — oracle protocol', () => {
+describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () => {
   const cpContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'context-provider.md'), 'utf-8');
 
-  it('description describes on-demand oracle role', () => {
-    expect(cpContent).toMatch(/[Oo]n-demand.*oracle|oracle.*on-demand/i);
+  it('description describes oracle role with pattern pre-cache', () => {
+    expect(cpContent).toMatch(/oracle/i);
+    expect(cpContent).toMatch(/pre-cache|pattern index/i);
   });
 
-  it('has Oracle Protocol section', () => {
-    expect(cpContent).toMatch(/Oracle Protocol/i);
+  it('has Spawn Protocol section', () => {
+    expect(cpContent).toMatch(/Spawn Protocol/i);
   });
 
-  it('instructs to NOT eagerly pre-read docs', () => {
-    expect(cpContent).toMatch(/NOT eagerly pre-read|do NOT eagerly/i);
+  it('instructs to pre-cache pattern index on spawn', () => {
+    expect(cpContent).toMatch(/pre-cache|hydrate|pattern index/i);
+    expect(cpContent).toMatch(/find-pattern/);
   });
 
-  it('has template version 2.6.0', () => {
-    expect(cpContent).toContain('template_version: "2.6.0"');
+  it('has template version 3.1.0', () => {
+    expect(cpContent).toContain('template_version: "3.1.0"');
   });
 
   it('has External Context section with Context7 call sequence', () => {
@@ -871,8 +873,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toContain('template_version: "1.6.0"');
   });
 
-  it('arch-testing version 1.18.0', () => {
-    expect(testingContent).toContain('template_version: "1.18.0"');
+  it('arch-testing version 1.19.0', () => {
+    expect(testingContent).toContain('template_version: "1.19.0"');
   });
 });
 

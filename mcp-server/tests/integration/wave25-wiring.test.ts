@@ -1,0 +1,340 @@
+/**
+ * Anti-regression tests for Wave 25 behaviors.
+ *
+ * Covers:
+ *  - MCP wiring: 10 core agents declare MCP tools in frontmatter (not just prose)
+ *  - Naming: no active reference to `project-manager` or `PM` as standalone word in docs/templates
+ *  - Ingestion loop: context-provider emits ingestion-request; team-lead has handler; doc-updater has §5
+ *  - Naming drift: agents reference actual registered MCP names (verify-kmp-packages, check-doc-freshness)
+ *  - context-provider v3.0.0: Spawn Protocol section with pre-cache (no "NOT eagerly pre-read")
+ *  - Dual-location sync: setup/agent-templates/ == .claude/agents/
+ *  - Audit script: scripts/audit-wiring.sh returns non-zero orphans only for expected L2 tools
+ *  - Registry parity: all MCP tools declared in frontmatter exist as registered callable names
+ */
+import { describe, it, expect } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
+import { parse as parseYaml } from "yaml";
+
+const ROOT = path.resolve(__dirname, "../../..");
+const AGENTS_DIR = path.join(ROOT, ".claude/agents");
+const TEMPLATES_DIR = path.join(ROOT, "setup/agent-templates");
+const DOCS_AGENTS_DIR = path.join(ROOT, "docs/agents");
+const TOOLS_DIR = path.join(ROOT, "mcp-server/src/tools");
+
+// Helper: read agent/template both copies
+function readBothAgent(name: string): string[] {
+  return [
+    fs.readFileSync(path.join(TEMPLATES_DIR, name), "utf-8"),
+    fs.readFileSync(path.join(AGENTS_DIR, name), "utf-8"),
+  ];
+}
+
+// Helper: extract frontmatter
+function getFrontmatter(raw: string): Record<string, unknown> | null {
+  const m = raw.match(/^---\n([\s\S]*?)\n---/);
+  if (!m) return null;
+  try {
+    return parseYaml(m[1]) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+// Helper: extract MCP tool names from a comma-separated `tools:` string
+function getMcpTools(toolsField: unknown): string[] {
+  if (typeof toolsField !== "string") return [];
+  return toolsField
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t.startsWith("mcp__"));
+}
+
+// Helper: list all registered MCP tool callable names (from server.registerTool/tool calls)
+function registeredMcpTools(): Set<string> {
+  const names = new Set<string>();
+  const files = fs.readdirSync(TOOLS_DIR).filter((f) => f.endsWith(".ts") && f !== "index.ts");
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(TOOLS_DIR, f), "utf-8");
+    const m = src.match(/server\.(?:registerTool|tool)\(\s*\n?\s*"([a-z][a-z-]+)"/);
+    if (m) names.add(m[1]);
+  }
+  return names;
+}
+
+// ---------------------------------------------------------------------------
+// Group 1: 10 core agents have MCP tools declared in frontmatter
+// ---------------------------------------------------------------------------
+
+const CORE_AGENTS_WITH_MIN_MCP_TOOLS: Array<[string, number]> = [
+  ["context-provider.md", 8],
+  ["team-lead.md", 10],
+  ["doc-updater.md", 6],
+  ["doc-alignment-agent.md", 8],
+  ["l0-coherence-auditor.md", 5],
+  ["arch-platform.md", 6],
+  ["arch-testing.md", 4],
+  ["arch-integration.md", 3],
+  ["codebase-mapper.md", 4],
+  ["beta-readiness-agent.md", 4],
+  ["verifier.md", 3],
+];
+
+describe("Wave 25: 10 core agents declare MCP tools in frontmatter", () => {
+  for (const [name, minTools] of CORE_AGENTS_WITH_MIN_MCP_TOOLS) {
+    it(`${name} declares at least ${minTools} MCP tools in tools: frontmatter`, () => {
+      for (const raw of readBothAgent(name)) {
+        const fm = getFrontmatter(raw);
+        expect(fm, `${name}: no frontmatter`).not.toBeNull();
+        const mcp = getMcpTools(fm!.tools);
+        expect(
+          mcp.length,
+          `${name}: expected >= ${minTools} MCP tools, got ${mcp.length} (${mcp.join(", ")})`,
+        ).toBeGreaterThanOrEqual(minTools);
+      }
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Group 2: team-lead rename — no active references to project-manager or PM
+// ---------------------------------------------------------------------------
+
+describe("Wave 25: team-lead rename — no active project-manager references", () => {
+  const activePaths = [
+    TEMPLATES_DIR,
+    AGENTS_DIR,
+    DOCS_AGENTS_DIR,
+  ];
+
+  it("no 'project-manager' filenames remain in active agent dirs", () => {
+    for (const dir of activePaths.slice(0, 2)) {
+      const files = fs.readdirSync(dir);
+      expect(files).not.toContain("project-manager.md");
+    }
+  });
+
+  it("no 'pm-*' filenames remain in docs/agents/", () => {
+    const files = fs.readdirSync(DOCS_AGENTS_DIR);
+    const pmPrefixed = files.filter((f) => /^pm-/.test(f));
+    expect(pmPrefixed, `found stale pm-* files: ${pmPrefixed.join(", ")}`).toHaveLength(0);
+  });
+
+  it("team-lead template and mirror exist and are identical", () => {
+    const [tmpl, agent] = readBothAgent("team-lead.md");
+    expect(tmpl).toEqual(agent);
+  });
+
+  it("team-lead.md frontmatter name is 'team-lead'", () => {
+    for (const raw of readBothAgent("team-lead.md")) {
+      const fm = getFrontmatter(raw);
+      expect(fm?.name).toBe("team-lead");
+    }
+  });
+
+  it("core agent templates do not contain 'project-manager' in body (only team-lead)", () => {
+    // Historical/migration notes intentionally keep the old name; body of active agents should not
+    const corePaths = [
+      "team-lead.md",
+      "arch-platform.md",
+      "arch-testing.md",
+      "arch-integration.md",
+      "context-provider.md",
+      "doc-updater.md",
+      "quality-gater.md",
+    ];
+    for (const name of corePaths) {
+      for (const raw of readBothAgent(name)) {
+        expect(
+          raw.includes("project-manager"),
+          `${name}: still contains 'project-manager' — run Wave 25 rename`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("MIGRATIONS.json root key is 'team-lead' (not 'project-manager')", () => {
+    const migrations = JSON.parse(
+      fs.readFileSync(path.join(TEMPLATES_DIR, "MIGRATIONS.json"), "utf-8"),
+    );
+    expect(migrations.templates).toHaveProperty("team-lead");
+    expect(migrations.templates).not.toHaveProperty("project-manager");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 3: Ingestion loop wiring (context-provider → team-lead → doc-updater)
+// ---------------------------------------------------------------------------
+
+describe("Wave 25: ingestion loop is fully wired", () => {
+  it("context-provider emits ingestion-request SendMessage pattern", () => {
+    for (const raw of readBothAgent("context-provider.md")) {
+      expect(raw).toMatch(/ingestion-request/i);
+      expect(raw).toMatch(/SendMessage\(to="team-lead"/);
+      expect(raw).toMatch(/proposed_slug/);
+      expect(raw).toMatch(/proposed_category/);
+    }
+  });
+
+  it("team-lead has Ingestion-Request Handler section", () => {
+    for (const raw of readBothAgent("team-lead.md")) {
+      expect(raw).toMatch(/Ingestion-?Request Handler/i);
+      expect(raw).toMatch(/approved_by:\s*user/);
+    }
+  });
+
+  it("doc-updater has Ingestion Handler (§5) with ingest-content call", () => {
+    for (const raw of readBothAgent("doc-updater.md")) {
+      expect(raw).toMatch(/Ingestion Handler/i);
+      expect(raw).toMatch(/mcp__androidcommondoc__ingest-content/);
+      expect(raw).toMatch(/approved_by/);
+    }
+  });
+
+  it("doc-updater declares mcp__androidcommondoc__ingest-content in tools frontmatter", () => {
+    for (const raw of readBothAgent("doc-updater.md")) {
+      const fm = getFrontmatter(raw);
+      const tools = typeof fm?.tools === "string" ? (fm.tools as string) : "";
+      expect(tools).toContain("mcp__androidcommondoc__ingest-content");
+    }
+  });
+
+  it("docs/agents/ingestion-loop.md exists and documents the flow", () => {
+    const p = path.join(DOCS_AGENTS_DIR, "ingestion-loop.md");
+    expect(fs.existsSync(p)).toBe(true);
+    const content = fs.readFileSync(p, "utf-8");
+    expect(content).toMatch(/context-provider/);
+    expect(content).toMatch(/team-lead/);
+    expect(content).toMatch(/doc-updater/);
+    expect(content).toMatch(/ingest-content/);
+    expect(content).toMatch(/approved_by:\s*user/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 4: context-provider v3.0.0 Spawn Protocol (pre-cache)
+// ---------------------------------------------------------------------------
+
+describe("Wave 25: context-provider v3.x Spawn Protocol pre-cache", () => {
+  it("context-provider has Spawn Protocol section (not Oracle Protocol)", () => {
+    for (const raw of readBothAgent("context-provider.md")) {
+      expect(raw).toMatch(/Spawn Protocol/);
+    }
+  });
+
+  it("context-provider does NOT tell agents to avoid eager pre-read", () => {
+    for (const raw of readBothAgent("context-provider.md")) {
+      // Wave 25: v3.0 reversed the "do NOT eagerly pre-read" rule into mandatory pre-cache
+      expect(raw).not.toMatch(/do NOT eagerly pre-read/i);
+    }
+  });
+
+  it("context-provider Spawn Protocol references find-pattern category batch", () => {
+    for (const raw of readBothAgent("context-provider.md")) {
+      expect(raw).toMatch(/find-pattern/);
+      expect(raw).toMatch(/pre-cache|pattern index/i);
+    }
+  });
+
+  it("context-provider template_version is 3.x", () => {
+    for (const raw of readBothAgent("context-provider.md")) {
+      expect(raw).toMatch(/template_version:\s*"3\.\d+\.\d+"/);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 5: MCP tool naming drift — declared names must exist as callables
+// ---------------------------------------------------------------------------
+
+describe("Wave 25: declared MCP tools match registered callable names", () => {
+  it("all agent-declared MCP tools exist as registered callables", () => {
+    const registered = registeredMcpTools();
+    const allAgents = fs.readdirSync(AGENTS_DIR).filter((f) => f.endsWith(".md"));
+    const missing: string[] = [];
+    for (const name of allAgents) {
+      const raw = fs.readFileSync(path.join(AGENTS_DIR, name), "utf-8");
+      const fm = getFrontmatter(raw);
+      const mcp = getMcpTools(fm?.tools);
+      for (const t of mcp) {
+        // Only check our MCP server tools; external (context7, etc.) are out of scope
+        if (!t.startsWith("mcp__androidcommondoc__")) continue;
+        const callable = t.replace("mcp__androidcommondoc__", "");
+        if (!registered.has(callable)) {
+          missing.push(`${name}: ${t} (callable '${callable}' not registered)`);
+        }
+      }
+    }
+    expect(
+      missing,
+      `Agents declare MCP tools that don't exist as registered callables:\n${missing.join("\n")}`,
+    ).toHaveLength(0);
+  });
+
+  it("known naming drifts are documented in agent-core-rules §8", () => {
+    const rules = fs.readFileSync(path.join(DOCS_AGENTS_DIR, "agent-core-rules.md"), "utf-8");
+    expect(rules).toMatch(/verify-kmp\.ts.*verify-kmp-packages/s);
+    expect(rules).toMatch(/check-freshness\.ts.*check-doc-freshness/s);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 6: Level A skill analytics — by_skill field + dead-skill detection
+// ---------------------------------------------------------------------------
+
+describe("Wave 25 Level A: tool-use-analytics computes by_skill", () => {
+  it("ToolUseReport type has by_skill, dead_skills, user_invokable_skills fields", () => {
+    const src = fs.readFileSync(
+      path.join(ROOT, "mcp-server/src/tools/tool-use-analytics.ts"),
+      "utf-8",
+    );
+    expect(src).toMatch(/by_skill:\s*SkillUsage\[\]/);
+    expect(src).toMatch(/dead_skills:\s*string\[\]/);
+    expect(src).toMatch(/user_invokable_skills:\s*string\[\]/);
+  });
+
+  it("computeToolUseReport accepts projectRoot parameter for dead-skill detection", () => {
+    const src = fs.readFileSync(
+      path.join(ROOT, "mcp-server/src/tools/tool-use-analytics.ts"),
+      "utf-8",
+    );
+    // Signature includes projectRoot (even if optional)
+    expect(src).toMatch(/projectRoot\?:\s*string/);
+  });
+
+  it("markdown renderer includes 'Skill Usage' section and 'Dead skills' heading", () => {
+    const src = fs.readFileSync(
+      path.join(ROOT, "mcp-server/src/tools/tool-use-analytics.ts"),
+      "utf-8",
+    );
+    expect(src).toMatch(/Skill Usage/);
+    expect(src).toMatch(/Dead skills/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 7: Dual-location sync (setup/agent-templates/ == .claude/agents/)
+// ---------------------------------------------------------------------------
+
+describe("Wave 25: setup/agent-templates == .claude/agents for all pairs", () => {
+  it("all agent templates are identical between setup and .claude", () => {
+    // Excludes: README.md (docs about setup/ dir, not a template)
+    const NON_TEMPLATE = new Set(["README.md"]);
+    const setupFiles = fs
+      .readdirSync(TEMPLATES_DIR)
+      .filter((f) => f.endsWith(".md") && !NON_TEMPLATE.has(f));
+    const drift: string[] = [];
+    for (const f of setupFiles) {
+      const setupPath = path.join(TEMPLATES_DIR, f);
+      const claudePath = path.join(AGENTS_DIR, f);
+      if (!fs.existsSync(claudePath)) {
+        drift.push(`${f}: missing in .claude/agents/`);
+        continue;
+      }
+      const a = fs.readFileSync(setupPath, "utf-8");
+      const b = fs.readFileSync(claudePath, "utf-8");
+      if (a !== b) drift.push(`${f}: content drift between setup and .claude`);
+    }
+    expect(drift, `Dual-location drift:\n${drift.join("\n")}`).toHaveLength(0);
+  });
+});

@@ -109,7 +109,7 @@ Not every skill on a consumer's machine is managed by L0. Google's Android Skill
 
 ## Agent Templates
 
-Agent templates (`setup/agent-templates/`) are the authoritative source for PM, quality-gater, architects, and other team agents. These are also materialized in `.claude/agents/` so the registry scanner picks them up and `/sync-l0` distributes them to consumers.
+Agent templates (`setup/agent-templates/`) are the authoritative source for team-lead, quality-gater, architects, and other team agents. These are also materialized in `.claude/agents/` so the registry scanner picks them up and `/sync-l0` distributes them to consumers.
 
 When editing a template:
 1. Edit `setup/agent-templates/<name>.md`

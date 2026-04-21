@@ -2,25 +2,25 @@
 scope: [workflow, ai-agents, pm, dispatch]
 sources: [androidcommondoc]
 targets: [all]
-slug: pm-dispatch-topology
+slug: tl-dispatch-topology
 status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "PM dispatch topology: pre-dispatch gate, pattern chain, dynamic scaling, autonomy rules, mandatory team workflow, kill order for dev agents."
+description: "team-lead dispatch topology: pre-dispatch gate, pattern chain, dynamic scaling, autonomy rules, mandatory team workflow, kill order for dev agents."
 version: 2
 last_updated: "2026-04-19"
-assumes_read: team-topology, pm-session-setup
+assumes_read: team-topology, tl-session-setup
 token_budget: 1300
 ---
 
-# PM Dispatch Topology
+# team-lead Dispatch Topology
 
-Reference for PM's agent dispatch rules: topology gate checks, pattern validation chain, dynamic scaling with named overflow devs, autonomy boundaries, mandatory team workflow, and kill order.
+Reference for team-lead's agent dispatch rules: topology gate checks, pattern validation chain, dynamic scaling with named overflow devs, autonomy boundaries, mandatory team workflow, and kill order.
 
 ## Architect Dispatch — scope_doc_path + PREP/EXECUTE mode (Wave 23)
 
-Every PM `SendMessage` to an architect MUST carry two fields: `scope_doc_path` (wave plan file) and `mode` (`PREP` or `EXECUTE`). The architect reads scope from that path (never guesses) and branches on mode.
+Every team-lead `SendMessage` to an architect MUST carry two fields: `scope_doc_path` (wave plan file) and `mode` (`PREP` or `EXECUTE`). The architect reads scope from that path (never guesses) and branches on mode.
 
 ```
 SendMessage(
@@ -30,10 +30,10 @@ SendMessage(
 )
 ```
 
-- **PREP dispatch** goes to all 3 architects in parallel **before** devs are spawned. Architects read the plan, identify domain risks, return `READY: <1-line summary>`. PM merges all 3 READY responses before spawning devs.
+- **PREP dispatch** goes to all 3 architects in parallel **before** devs are spawned. Architects read the plan, identify domain risks, return `READY: <1-line summary>`. team-lead merges all 3 READY responses before spawning devs.
 - **EXECUTE dispatch** goes to all 3 architects in parallel **after** devs complete their wave work. Architects verify, delegate any fixes, write verdict to `.planning/wave{N}/arch-{role}-verdict.md`, respond `APPROVE` or `ESCALATE: <reason>`.
 
-Full protocol, PM workflow, and anti-patterns: `docs/agents/arch-dispatch-modes.md`. Fixes Wave 23 Bug #5 (hardcoded `.planning/PLAN.md`) and Bug #6 (no mode tagging).
+Full protocol, team-lead workflow, and anti-patterns: `docs/agents/arch-dispatch-modes.md`. Fixes Wave 23 Bug #5 (hardcoded `.planning/PLAN.md`) and Bug #6 (no mode tagging).
 
 ## Dev Dispatch — Persistent Core Devs + Dynamic Scaling
 
@@ -51,12 +51,12 @@ BEFORE calling Agent() to spawn a dev, verify ALL:
 2. **Scope check**: Does task touch >3 files? If YES → MUST use session
    team specialist. Extra capacity = named peers (`{specialist}-2`) with team_name.
 3. **Architect check**: Are architects alive? If YES → SendMessage
-   architect with the task. PM NEVER dispatches devs directly when
+   architect with the task. team-lead NEVER dispatches devs directly when
    architects are alive.
 4. **Pressure check**: Am I dispatching because "it's faster" or "user
    is waiting"? If YES → STOP. That's the bypass anti-pattern. Route
    through architects.
-5. **Architect name request**: When an architect requests a specific specialist by name via SendMessage, PM MUST spawn that specialist as a named team peer with the requested name. PM MUST NOT substitute an anonymous or differently-named agent.
+5. **Architect name request**: When an architect requests a specific specialist by name via SendMessage, team-lead MUST spawn that specialist as a named team peer with the requested name. team-lead MUST NOT substitute an anonymous or differently-named agent.
 
 Violating this gate erodes the architect verification layer — fixes land without architectural review.
 
@@ -68,12 +68,12 @@ context-provider responds → architect filters → sends to dev
 ```
 Dev NEVER contacts context-provider directly — the architect is the quality gate.
 
-**Work assignment:** Architects assign tasks to their core devs via SendMessage. No PM relay needed for ongoing work. PM only spawns at Phase 2 start.
+**Work assignment:** Architects assign tasks to their core devs via SendMessage. No team-lead relay needed for ongoing work. team-lead only spawns at Phase 2 start.
 
 **Dynamic scaling (extra devs):** When a core dev is busy and the architect needs parallel work:
-1. Architect sends: `SendMessage(to="project-manager", summary="need extra ui-specialist", message="Task: {desc}. Files: {list}.")`
-2. PM spawns: `Agent(name="ui-specialist-2", team_name="session-{project-slug}", prompt="...", run_in_background=true)` — named team peer
-3. Extra dev executes, returns result to PM, PM relays to architect
+1. Architect sends: `SendMessage(to="team-lead", summary="need extra ui-specialist", message="Task: {desc}. Files: {list}.")`
+2. team-lead spawns: `Agent(name="ui-specialist-2", team_name="session-{project-slug}", prompt="...", run_in_background=true)` — named team peer
+3. Extra dev executes, returns result to team-lead, team-lead relays to architect
 4. After architect verifies → extra dev dies
 
 **Named extra devs:** All overflow devs MUST be named team peers (`{specialist}-2`, `{specialist}-3`) with team_name. No anonymous Agent() calls — unnamed devs go idle and are unreachable via SendMessage.
@@ -87,13 +87,13 @@ Dev NEVER contacts context-provider directly — the architect is the quality ga
 
 ## Autonomy with Escalation
 
-PM is autonomous on:
+team-lead is autonomous on:
 - Assigning tasks to architects (they manage devs and guardians)
 - Launching architect gates
 - Creating branches, commits, PRs, merging feature→develop
 - Coordinating multiple agents in parallel
 
-PM **escalates to the user** for:
+team-lead **escalates to the user** for:
 - Public API or product behavior decisions
 - Architectural direction uncertainty
 - Business logic without spec

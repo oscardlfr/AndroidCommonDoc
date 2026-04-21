@@ -2,6 +2,9 @@
 title: "Detekt Baseline Reduction Playbook / Guía de reducción gradual de baseline"
 slug: baseline-reduction
 category: guides
+scope: [guides, detekt, baseline]
+sources: [androidcommondoc]
+targets: [all]
 description: >
   Step-by-step playbook for progressively eliminating Detekt baseline suppressions
   in legacy Android/KMP projects. / Guía paso a paso para eliminar progresivamente

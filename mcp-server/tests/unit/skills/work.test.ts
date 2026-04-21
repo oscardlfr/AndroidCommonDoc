@@ -32,7 +32,7 @@ const LEVEL1_ROUTES: Array<{ pattern: RegExp; route: string }> = [
   { pattern: /\b(prioritize|roadmap|features|backlog)\b/i, route: "product-strategist" },
   { pattern: /\b(post|blog|social|marketing|content)\b/i, route: "content-creator" },
   { pattern: /\b(landing|page|conversion|copy|seo)\b/i, route: "landing-page-strategist" },
-  { pattern: /\b(implement|feature|build|scope|plan|execute|wave)\b/i, route: "project-manager" },
+  { pattern: /\b(implement|feature|build|scope|plan|execute|wave)\b/i, route: "team-lead" },
 ];
 
 export function resolveWorkRoute(input: string): string {
@@ -42,7 +42,7 @@ export function resolveWorkRoute(input: string): string {
   for (const { pattern, route } of LEVEL1_ROUTES) {
     if (pattern.test(input)) return route;
   }
-  return "project-manager"; // Level 2 fallback: act as PM in-process
+  return "team-lead"; // Level 2 fallback: act as team-lead in-process
 }
 
 describe("/work skill routing", () => {
@@ -89,8 +89,8 @@ describe("/work skill routing", () => {
       expect(resolveWorkRoute("review PR #45")).toBe("/review-pr");
     });
 
-    it('routes "implement new feature for wave 21" to project-manager', () => {
-      expect(resolveWorkRoute("implement new feature for wave 21")).toBe("project-manager");
+    it('routes "implement new feature for wave 21" to team-lead', () => {
+      expect(resolveWorkRoute("implement new feature for wave 21")).toBe("team-lead");
     });
 
     it('routes "update docs for sync-vault" to sync-vault via Level 0.5', () => {
@@ -114,44 +114,44 @@ describe("/work skill routing", () => {
     });
   });
 
-  describe("T-BUG-010 regression — project-manager must be in-process, never Agent()", () => {
-    it("T-BUG-010: implement/feature/wave routes to project-manager in-process, never Agent()", () => {
+  describe("T-BUG-010 regression — team-lead must be in-process, never Agent()", () => {
+    it("T-BUG-010: implement/feature/wave routes to team-lead in-process, never Agent()", () => {
       const route = resolveWorkRoute("implement new feature for wave 21");
-      expect(route).toBe("project-manager");
-      // Documented: project-manager route = read .claude/agents/project-manager.md and act in-process
-      // NEVER Agent("project-manager") — sub-agents cannot TeamCreate or spawn reliably
+      expect(route).toBe("team-lead");
+      // Documented: team-lead route = read .claude/agents/team-lead.md and act in-process
+      // NEVER Agent("team-lead") — sub-agents cannot TeamCreate or spawn reliably
     });
 
-    it("T-BUG-010: 'scope' keyword routes to project-manager", () => {
+    it("T-BUG-010: 'scope' keyword routes to team-lead", () => {
       // "scope the migration task" — no earlier-row substring collisions
-      expect(resolveWorkRoute("scope the migration task")).toBe("project-manager");
+      expect(resolveWorkRoute("scope the migration task")).toBe("team-lead");
     });
 
-    it("T-BUG-010: 'wave' keyword routes to project-manager", () => {
+    it("T-BUG-010: 'wave' keyword routes to team-lead", () => {
       // "launch wave 22" — no earlier-row collisions
-      expect(resolveWorkRoute("launch wave 22")).toBe("project-manager");
+      expect(resolveWorkRoute("launch wave 22")).toBe("team-lead");
     });
 
-    it("T-BUG-010: 'plan' keyword routes to project-manager", () => {
+    it("T-BUG-010: 'plan' keyword routes to team-lead", () => {
       // "plan the deployment" — no earlier-row collisions
-      expect(resolveWorkRoute("plan the deployment")).toBe("project-manager");
+      expect(resolveWorkRoute("plan the deployment")).toBe("team-lead");
     });
 
-    it("T-BUG-010: 'execute' keyword routes to project-manager", () => {
+    it("T-BUG-010: 'execute' keyword routes to team-lead", () => {
       // "go execute the tasks" — no earlier-row collisions
-      expect(resolveWorkRoute("go execute the tasks")).toBe("project-manager");
+      expect(resolveWorkRoute("go execute the tasks")).toBe("team-lead");
     });
 
-    it("T-BUG-010: 'build a new feature' routes to project-manager (446652b fix — was ui-specialist via build→ui substring)", () => {
+    it("T-BUG-010: 'build a new feature' routes to team-lead (446652b fix — was ui-specialist via build→ui substring)", () => {
       // Pre-fix: bare /ui|compose|.../ matched "bu*il*d" as substring → ui-specialist
-      // Post-fix: \b(ui|compose|...)\b requires whole word → "build" falls through to project-manager row
-      expect(resolveWorkRoute("build a new feature")).toBe("project-manager");
+      // Post-fix: \b(ui|compose|...)\b requires whole word → "build" falls through to team-lead row
+      expect(resolveWorkRoute("build a new feature")).toBe("team-lead");
     });
 
-    it("T-BUG-010: 'plan the next sprint' routes to project-manager (446652b fix — was /review-pr via sprint→pr substring)", () => {
+    it("T-BUG-010: 'plan the next sprint' routes to team-lead (446652b fix — was /review-pr via sprint→pr substring)", () => {
       // Pre-fix: bare /review|PR|.../ matched "s*pr*int" as substring → /review-pr
-      // Post-fix: \b(review|PR|...)\b requires whole word → "sprint" falls through to project-manager row
-      expect(resolveWorkRoute("plan the next sprint")).toBe("project-manager");
+      // Post-fix: \b(review|PR|...)\b requires whole word → "sprint" falls through to team-lead row
+      expect(resolveWorkRoute("plan the next sprint")).toBe("team-lead");
     });
   });
 
