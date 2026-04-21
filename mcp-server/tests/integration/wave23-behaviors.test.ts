@@ -210,9 +210,9 @@ describe("Bug #3: team-lead session setup calls TeamDelete before TeamCreate (Wa
     }
   });
 
-  it("team-lead.md template_version is 6.0.0", () => {
+  it("team-lead.md template_version is 6.1.0", () => {
     for (const content of readBoth("team-lead.md")) {
-      expect(content).toMatch(/template_version:\s*"6.0.0"/);
+      expect(content).toMatch(/template_version:\s*"6.1.0"/);
     }
   });
 });

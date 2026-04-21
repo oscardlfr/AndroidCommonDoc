@@ -154,8 +154,8 @@ describe('team-lead template — 3-phase model', () => {
     expect(combinedPM).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 6.0.0', () => {
-    expect(content).toContain('template_version: "6.0.0"');
+  it('template version 6.1.0', () => {
+    expect(content).toContain('template_version: "6.1.0"');
   });
 
   it('has dev dispatch protocol', () => {
@@ -441,8 +441,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/[Cc]ross-cutting/);
   });
 
-  it('has template version 2.4.0', () => {
-    expect(content).toContain('template_version: "2.4.0"');
+  it('has template version 2.5.0', () => {
+    expect(content).toContain('template_version: "2.5.0"');
   });
 });
 

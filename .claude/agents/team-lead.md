@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "6.0.0"
+template_version: "6.1.0"
 memory: project
 skills:
   - pre-pr
@@ -181,9 +181,15 @@ For non-trivial tasks:
 2. **Spawn planner**: `Agent(name="planner", team_name="session-{project-slug}", subagent_type="Plan", prompt="...", run_in_background=true)`
 3. Planner writes `.planning/PLAN.md` + `.planning/PLAN-W{N}.md` (planner is a subagent — outside plan mode scope, can write files normally)
 4. Present plan summary to user as text output (team-lead needs no file writes during planning)
-5. **On user approval**: call `ExitPlanMode()` → THEN SendMessage architects to start Phase 2
+5. **On user approval**: call `ExitPlanMode()`
+6. **⛔ MANDATORY Phase 2 Topology Activation Gate (Bug #8 — Wave 26 regression fix)**: AFTER `ExitPlanMode()` and BEFORE any architect EXECUTE dispatch:
+   - **Spawn the 4 core devs** exactly once using the "Phase 2 Core Devs" spawn block above (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist). Even if the task appears to be "just metadata" / "just frontmatter" / "just a one-liner" — spawn the devs. No exceptions.
+   - **Architect EXECUTE dispatches MUST include the mandate**: `"Your EXECUTE output is SendMessage-to-dev with edit spec. You MUST NOT use Write or Edit on source/template/test files yourself. If you self-edit, the wave is rolled back."`
+   - **Verification after architect APPROVE**: team-lead runs `rtk git log --format='%an' <commit-range>` and confirms commits are authored by the dev layer (per SendMessage ownership trail), not exclusively by the architect layer. If architects self-edited: STOP, reset, re-dispatch through devs, update `feedback_plan_mode_exit_topology.md` memory with the violation details.
+   - Why this gate exists: Wave 26 BL-W26-01a shipped with 100% architect-authored edits and 0 devs dispatched. User flagged: "no devs are working and all work has been done by the architects". Architects hold `Read` + mediation tools only; they do NOT self-implement.
+7. **Only then** SendMessage architects to start Phase 2 (PREP → EXECUTE → APPROVE cycles).
 
-Exception: simple tasks (< 5K tokens, clear path) → plan inline without EnterPlanMode.
+Exception: simple tasks (< 5K tokens, clear path) → plan inline without EnterPlanMode. Step 6 still applies if ANY file edit is needed.
 
 ## Agent Roster
 
