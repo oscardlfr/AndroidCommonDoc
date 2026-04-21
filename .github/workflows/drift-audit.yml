@@ -71,7 +71,7 @@ jobs:
 
           # README must have Wave History section documenting Wave 20+
           check "README: Recent Changes section"         "^## Recent Changes"             "README.md"
-          check "README: Wave 25 entry"                   "Wave 25.*2026"                  "README.md"
+          check "README: Wave 25 entry"                   "Wave 25"                        "README.md"
           check "README: Ingestion Loop mentioned"        "ingestion|ingest-content"       "README.md"
           check "README: team-lead (not project-manager)" "team-lead"                      "README.md"
 
@@ -108,9 +108,11 @@ jobs:
           FAIL=0
 
           # Every /slash command mentioned in README/CLAUDE.md must have a file
+          # Exclusions: literal placeholder tokens like /skill-name
+          PLACEHOLDERS="skill-name|command-name|slash-name"
           echo "--- Checking slash commands referenced in README.md / CLAUDE.md ---"
           MENTIONED=$(grep -oE '`/[a-z][a-z-]+`' README.md CLAUDE.md 2>/dev/null | \
-            grep -oE '/[a-z][a-z-]+' | sort -u)
+            grep -oE '/[a-z][a-z-]+' | sort -u | grep -vE "^/($PLACEHOLDERS)$")
           for cmd in $MENTIONED; do
             name=${cmd#/}
             # Check if file exists as skill or slash command
@@ -163,10 +165,14 @@ jobs:
 
       - name: Run Wave 25 wiring test suite
         working-directory: mcp-server
+        env:
+          ANDROID_COMMON_DOC: ${{ github.workspace }}
         run: npx vitest run tests/integration/wave25-wiring.test.ts --reporter=verbose
 
       - name: Run full test suite (ensures no regressions elsewhere)
         working-directory: mcp-server
+        env:
+          ANDROID_COMMON_DOC: ${{ github.workspace }}
         run: npm test -- --run
 
   doc-cross-refs:

@@ -145,7 +145,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 152 L0 entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 159 L0 entries (61 skills + 39 agents + 59 commands) with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -475,7 +475,7 @@ Real-time pattern enforcement and context injection during AI-assisted developme
 
 ## Skills Reference
 
-60 canonical skills in `skills/`. Invoke via Claude Code (`/skill-name`) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
+61 canonical skills in `skills/`, surfaced as user-invocable slash commands (59 total under `.claude/commands/`). Invoke via Claude Code (`/skill-name` placeholder — substitute the actual skill slug) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 

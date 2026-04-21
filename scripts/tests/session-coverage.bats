@@ -1200,26 +1200,26 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     [ -f "$L0_ROOT/setup/doc-templates/business/COMPETITIVE.md.template" ]
 }
 
-@test "templates: project-manager has FORBIDDEN/ALLOWED actions" {
-    grep -q "FORBIDDEN" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "ALLOWED" "$L0_ROOT/setup/agent-templates/project-manager.md"
+@test "templates: team-lead has FORBIDDEN/ALLOWED actions" {
+    grep -q "FORBIDDEN" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "ALLOWED" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
-@test "templates: project-manager NEVER writes code" {
-    grep -q "NEVER write code" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "NEVER writes code" "$L0_ROOT/setup/agent-templates/project-manager.md" || grep -q "NEVER write code yourself" "$L0_ROOT/setup/agent-templates/project-manager.md"
+@test "templates: team-lead NEVER writes code" {
+    grep -q "NEVER write code" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "NEVER writes code" "$L0_ROOT/setup/agent-templates/team-lead.md" || grep -q "NEVER write code yourself" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
-@test "templates: project-manager has agent roster with team roles" {
-    grep -q "Agent Roster" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "arch-testing" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "quality-gater" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "planner" "$L0_ROOT/setup/agent-templates/project-manager.md"
+@test "templates: team-lead has agent roster with team roles" {
+    grep -q "Agent Roster" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "arch-testing" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "quality-gater" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "planner" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
-@test "templates: project-manager delegates testing to skills" {
-    grep -q "/test" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "/test-full-parallel" "$L0_ROOT/setup/agent-templates/project-manager.md"
+@test "templates: team-lead delegates testing to skills" {
+    grep -q "/test" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "/test-full-parallel" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
 @test "templates: arch-testing is mini-orchestrator with MCP tools" {
@@ -1256,10 +1256,10 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     done
 }
 
-@test "templates: project-manager has architect verification gate" {
+@test "templates: team-lead has architect verification gate" {
     # Hub refactor: Architect Verification Gate text moved to pm-verification-gates.md sub-doc
     local pm_combined
-    pm_combined=$(cat "$L0_ROOT/setup/agent-templates/project-manager.md")
+    pm_combined=$(cat "$L0_ROOT/setup/agent-templates/team-lead.md")
     for subdoc in pm-session-setup pm-dispatch-topology pm-verification-gates pm-quality-doc-pipeline pm-phase-execution; do
         if [[ -f "$L0_ROOT/docs/agents/${subdoc}.md" ]]; then
             pm_combined="$pm_combined
@@ -1267,21 +1267,21 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
         fi
     done
     echo "$pm_combined" | grep -q "Architect Verification Gate"
-    grep -q "arch-testing" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "arch-platform" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "arch-integration" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "NEVER write code" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "arch-testing" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "arch-platform" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "arch-integration" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "NEVER write code" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
-@test "templates: project-manager has planning delegation" {
-    grep -q "Planning Delegation" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "researcher" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "advisor" "$L0_ROOT/setup/agent-templates/project-manager.md"
+@test "templates: team-lead has planning delegation" {
+    grep -q "Planning Delegation" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "researcher" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "advisor" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
-@test "templates: project-manager has TDD-first for bug fixes" {
-    grep -q "TDD-first for bug fixes" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "failing test" "$L0_ROOT/setup/agent-templates/project-manager.md"
+@test "templates: team-lead has TDD-first for bug fixes" {
+    grep -q "TDD-first for bug fixes" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "failing test" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
 @test "templates: all architects can delegate and cross-verify" {
@@ -1303,10 +1303,10 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
     grep -q "string-completeness" "$L0_ROOT/.claude/agents/cross-platform-validator.md"
 }
 
-@test "templates: project-manager has MCP tools section" {
-    grep -q "MCP Tools" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "verify-kmp-packages" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "35" "$L0_ROOT/setup/agent-templates/project-manager.md"
+@test "templates: team-lead has MCP tools section" {
+    grep -q "MCP Tools" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "verify-kmp-packages" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "35" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
 @test "docs: agents-hub references 3-phase model and team topology" {
@@ -1346,11 +1346,11 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
     grep -q "test-full-parallel" "$L0_ROOT/setup/agent-templates/module-lifecycle.md"
 }
 
-@test "templates: project-manager has post-change checklist" {
-    grep -q "Post-Change Checklist" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "automatic" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "audit-docs" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "readme-audit" "$L0_ROOT/setup/agent-templates/project-manager.md"
+@test "templates: team-lead has post-change checklist" {
+    grep -q "Post-Change Checklist" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "automatic" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "audit-docs" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "readme-audit" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
 @test "README: template count is 17" {
@@ -1360,10 +1360,10 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
     grep -q "planner" "$L0_ROOT/README.md"
 }
 
-@test "templates: project-manager references official anthropic skills" {
-    grep -q "Official Skills" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "tdd-workflow" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "security-review" "$L0_ROOT/setup/agent-templates/project-manager.md"
+@test "templates: team-lead references official anthropic skills" {
+    grep -q "Official Skills" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "tdd-workflow" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "security-review" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
 @test "agents: 12 agents reference official skills" {
@@ -1421,18 +1421,18 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
 # Section 7.1: Multi-Agent Architecture Tests
 # ============================================================
 
-@test "arch: dev-lead.md does NOT exist (renamed to project-manager)" {
+@test "arch: dev-lead.md does NOT exist (renamed to team-lead)" {
     [ ! -f "$L0_ROOT/setup/agent-templates/dev-lead.md" ]
 }
 
 @test "arch: PM does NOT contain 'execute implementation code' or 'codes inline'" {
-    ! grep -q "execute implementation code" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    ! grep -q "codes inline" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    ! grep -q "Write feature code" "$L0_ROOT/setup/agent-templates/project-manager.md" || grep -q "MUST delegate" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    ! grep -q "execute implementation code" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    ! grep -q "codes inline" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    ! grep -q "Write feature code" "$L0_ROOT/setup/agent-templates/team-lead.md" || grep -q "MUST delegate" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
 @test "arch: PM assigns to architects (not devs directly)" {
-    grep -q "assigns.*architects" "$L0_ROOT/setup/agent-templates/project-manager.md" || grep -q "assign.*work.*architects" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "assigns.*architects" "$L0_ROOT/setup/agent-templates/team-lead.md" || grep -q "assign.*work.*architects" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
 @test "arch: all architects have CUSTOMIZE markers for project guardians" {
@@ -1448,29 +1448,29 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
     done
 }
 
-@test "arch: agents-hub references project-manager not dev-lead as orchestrator" {
-    grep -q "project-manager" "$L0_ROOT/docs/agents/agents-hub.md"
+@test "arch: agents-hub references team-lead not dev-lead as orchestrator" {
+    grep -q "team-lead" "$L0_ROOT/docs/agents/agents-hub.md"
 }
 
 @test "arch: claude-code-workflow PM model has no codes inline" {
-    grep -q "Project Manager" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -q "Team Lead" "$L0_ROOT/docs/agents/claude-code-workflow.md"
     ! grep -q "Codes inline" "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
 @test "arch: spec-driven-workflow shows PM assigns to architects" {
-    grep -q "project-manager" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+    grep -q "team-lead" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
-@test "arch: claude-md-template examples use project-manager" {
-    grep -q "project-manager" "$L0_ROOT/docs/agents/claude-md-template.md"
+@test "arch: claude-md-template examples use team-lead" {
+    grep -q "team-lead" "$L0_ROOT/docs/agents/claude-md-template.md"
 }
 
 @test "arch: multi-agent-patterns mentions PM in architect gate" {
-    grep -q "project-manager" "$L0_ROOT/docs/agents/multi-agent-patterns.md"
+    grep -q "team-lead" "$L0_ROOT/docs/agents/multi-agent-patterns.md"
 }
 
 @test "arch: PM template forbids Bash+CLI spawning" {
-    grep -q "FORBIDDEN.*Bash.*cli\|Spawning agents via Bash" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "FORBIDDEN.*Bash.*cli\|Spawning agents via Bash" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
 @test "arch: architects are read-only (no Write/Edit, have SendMessage)" {
@@ -1485,8 +1485,8 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
     grep -q "Agent Tool Only\|Never spawn.*Bash" "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
-@test "arch: /work skill routes to project-manager" {
-    grep -q "project-manager" "$L0_ROOT/skills/work/SKILL.md"
+@test "arch: /work skill routes to team-lead" {
+    grep -q "team-lead" "$L0_ROOT/skills/work/SKILL.md"
 }
 
 @test "arch: spec-driven-workflow has How to Start Work section" {
@@ -1526,8 +1526,8 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
 }
 
 @test "dept: PM references context-provider and doc-updater" {
-    grep -q "context-provider" "$L0_ROOT/setup/agent-templates/project-manager.md"
-    grep -q "doc-updater" "$L0_ROOT/setup/agent-templates/project-manager.md"
+    grep -q "context-provider" "$L0_ROOT/setup/agent-templates/team-lead.md"
+    grep -q "doc-updater" "$L0_ROOT/setup/agent-templates/team-lead.md"
 }
 
 @test "dept: spec-driven-workflow has multi-session section" {

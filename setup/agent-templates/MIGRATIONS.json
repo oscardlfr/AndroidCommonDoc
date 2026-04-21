@@ -156,6 +156,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+      },
+      "2.4.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 25: rename project-manager → team-lead follow-up (template body references to PM now use team-lead)."
       }
     },
     "doc-migrator": {
@@ -226,6 +231,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W23: Bug #5 + #6 fix. Activation Sequence reads scope_doc_path from PM dispatch (never hardcodes .planning/PLAN.md). Scope Validation Gate + Per-Dispatch check reference scope_doc_path. New PREP/EXECUTE mode branching via docs/agents/arch-dispatch-modes.md."
+      },
+      "1.19.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 25: declare MCP tools in frontmatter (code-metrics, module-health, validate-doc-structure, kdoc-coverage, find-pattern)."
       }
     },
     "arch-platform": {
@@ -279,6 +289,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W23: Bug #5 + #6 fix. Activation Sequence reads scope_doc_path from PM dispatch (never hardcodes .planning/PLAN.md). Scope Validation Gate + Per-Dispatch + Scope-doc trigger check reference scope_doc_path. New PREP/EXECUTE mode branching via docs/agents/arch-dispatch-modes.md."
+      },
+      "1.16.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 25: declare MCP tools in frontmatter (dependency-graph, gradle-config-lint, kdoc-coverage, string-completeness, verify-kmp-packages, module-health, find-pattern). Fixes verify-kmp → verify-kmp-packages naming drift."
       }
     },
     "arch-integration": {
@@ -332,6 +347,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W23: Bug #5 + #6 fix. Activation Sequence reads scope_doc_path from PM dispatch (never hardcodes .planning/PLAN.md). Scope Validation Gate + Per-Dispatch + Scope-doc trigger check reference scope_doc_path. New PREP/EXECUTE mode branching via docs/agents/arch-dispatch-modes.md."
+      },
+      "1.16.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 25: declare MCP tools in frontmatter (dependency-graph, gradle-config-lint, setup-check, module-health). Enables ToolSearch-free MCP calls."
       }
     },
     "context-provider": {
@@ -354,6 +374,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "Wave 17-lite: added On Team Join broadcast section — CP sends pattern list summary to new peers on first contact."
+      },
+      "3.1.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 25: v3.0.0 Spawn Protocol pattern pre-cache + 10 MCP tools declared + ingestion-request protocol to team-lead (T-BUG-005 closed half). v3.1.0: minor copy updates + MCP tool list expansion."
       }
     },
     "doc-updater": {
@@ -371,6 +396,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+      },
+      "2.4.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 25: declare 8 MCP tools in frontmatter (ingest-content, search-docs, validate-doc-update, validate-doc-structure, check-doc-patterns, audit-docs, check-version-sync, suggest-docs). New §5 Ingestion Handler — receives approved-by-user payload from team-lead, runs ingest-content MCP tool, writes docs/{cat}/{slug}.md."
       }
     },
     "product-strategist": {
@@ -610,6 +640,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system beta readiness auditor agent."
+      },
+      "1.1.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 25: declare MCP tools in frontmatter (code-metrics, find-pattern, proguard-validator, scan-secrets, module-health)."
       }
     },
     "codebase-mapper": {
@@ -617,6 +652,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system codebase architecture mapper agent."
+      },
+      "1.1.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 25: declare MCP tools in frontmatter (dependency-graph, module-health, pattern-coverage, code-metrics, find-pattern)."
       }
     },
     "cross-platform-validator": {
@@ -638,6 +678,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system documentation drift detector agent."
+      },
+      "1.1.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 25: declare MCP tools (audit-docs, check-version-sync, check-doc-freshness, find-pattern, monitor-sources, search-docs, suggest-docs, validate-doc-structure, check-doc-patterns, doc-readability). skills: += doc-integrity."
       }
     },
     "doc-code-drift-detector": {
@@ -659,6 +704,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system L0 doc coherence auditor agent."
+      },
+      "1.2.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 25: declare MCP tools in frontmatter (validate-claude-md, validate-doc-structure, validate-skills, validate-vault, validate-agents, validate-all, audit-docs). skills: += audit-l0, audit-docs, readme-audit."
       }
     },
     "privacy-auditor": {
@@ -715,6 +765,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system goal-backward verifier agent."
+      },
+      "1.1.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 25: declare MCP tools in frontmatter (code-metrics, find-pattern, validate-all, module-health)."
       }
     }
   }
