@@ -46,6 +46,12 @@ interface DeadTool {
   last_seen: string;
 }
 
+interface SkillUsage {
+  skill_name: string;
+  calls: number;
+  last_used: string;
+}
+
 interface ToolUseReport {
   session_summary: {
     total_calls: number;
@@ -61,6 +67,9 @@ interface ToolUseReport {
   our_mcp_calls: number;
   cp_bypass_blocked: number;
   by_agent: Record<string, number>;
+  by_skill: SkillUsage[]; // Wave 25 Level A: skill_name aggregation (top N used)
+  dead_skills: string[]; // Wave 25 Level A: skills/ directory entries with 0 invocations in window
+  user_invokable_skills: string[]; // Wave 25 Level A: user-only skills (disable-model-invocation: true) — excluded from dead-skill alert
 }
 
 // ── Time helpers ─────────────────────────────────────────────────────────────
@@ -83,6 +92,7 @@ export function computeToolUseReport(
   weeksLookback: number,
   topN: number,
   logSizeBytes: number,
+  projectRoot?: string, // Wave 25 Level A: enables dead-skill detection from skills/ directory
 ): ToolUseReport {
   const cutoff = cutoffDate(weeksLookback);
   const periodDays = weeksLookback * 7;
@@ -163,6 +173,58 @@ export function computeToolUseReport(
   }
   deadTools.sort((a, b) => b.last_seen.localeCompare(a.last_seen));
 
+  // Wave 25 Level A: by_skill aggregation + dead-skill detection
+  const skillAgg = new Map<string, { calls: number; lastTs: string }>();
+  for (const entry of windowEntries) {
+    if (entry.skill_name) {
+      const cur = skillAgg.get(entry.skill_name) ?? { calls: 0, lastTs: "" };
+      cur.calls++;
+      if (entry.ts > cur.lastTs) cur.lastTs = entry.ts;
+      skillAgg.set(entry.skill_name, cur);
+    }
+  }
+  const bySkill: SkillUsage[] = [...skillAgg.entries()]
+    .sort((a, b) => b[1].calls - a[1].calls)
+    .slice(0, topN)
+    .map(([skill_name, s]) => ({
+      skill_name,
+      calls: s.calls,
+      last_used: s.lastTs,
+    }));
+
+  // Dead skills: declared in skills/ but 0 invocations in window
+  let deadSkills: string[] = [];
+  let userInvokable: string[] = [];
+  if (projectRoot) {
+    try {
+      const skillsDir = path.join(projectRoot, "skills");
+      const declared = fs
+        .readdirSync(skillsDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+      const invoked = new Set(skillAgg.keys());
+      for (const s of declared) {
+        if (invoked.has(s)) continue;
+        // Check if user-invokable (disable-model-invocation: true) — excluded from dead-skill alert
+        const skillMd = path.join(skillsDir, s, "SKILL.md");
+        try {
+          const fm = fs.readFileSync(skillMd, "utf-8").slice(0, 800);
+          if (/disable-model-invocation:\s*true/.test(fm) || /user-invokable:\s*true/.test(fm)) {
+            userInvokable.push(s);
+            continue;
+          }
+        } catch {
+          // skill without SKILL.md — treat as dead
+        }
+        deadSkills.push(s);
+      }
+      deadSkills.sort();
+      userInvokable.sort();
+    } catch {
+      // skills/ not found or unreadable — leave arrays empty
+    }
+  }
+
   return {
     session_summary: {
       total_calls: windowEntries.length,
@@ -178,6 +240,9 @@ export function computeToolUseReport(
     our_mcp_calls: ourMcpCalls,
     cp_bypass_blocked: cpBypassBlocked,
     by_agent: byAgent,
+    by_skill: bySkill,
+    dead_skills: deadSkills,
+    user_invokable_skills: userInvokable,
   };
 }
 
@@ -234,6 +299,38 @@ export function renderToolUseMarkdown(report: ToolUseReport): string {
     lines.push("### Dead Tools (seen before window, 0 calls in window)");
     for (const d of report.dead_tools) {
       lines.push(`- ${d.tool_name} (last seen: ${d.last_seen.split("T")[0]})`);
+    }
+    lines.push("");
+  }
+
+  // Wave 25 Level A: skill usage section
+  if (report.by_skill.length > 0 || report.dead_skills.length > 0) {
+    lines.push("### Skill Usage (Wave 25 Level A)");
+    if (report.by_skill.length > 0) {
+      lines.push("");
+      lines.push("**Top skills by invocation:**");
+      lines.push("| Skill | Calls | Last used |");
+      lines.push("|-------|-------|-----------|");
+      for (const s of report.by_skill) {
+        lines.push(`| ${s.skill_name} | ${s.calls} | ${s.last_used.split("T")[0]} |`);
+      }
+    }
+    if (report.dead_skills.length > 0) {
+      lines.push("");
+      lines.push(
+        `**⚠ Dead skills** (declared in \`skills/\` but 0 invocations in window, and NOT user-invokable): ${report.dead_skills.length} of ${report.dead_skills.length + report.by_skill.length + report.user_invokable_skills.length}`,
+      );
+      lines.push(`> ${report.dead_skills.join(", ")}`);
+      lines.push("");
+      lines.push(
+        "Fix: either wire into an agent's `skills:` frontmatter / slash command, or document as historical and prune.",
+      );
+    }
+    if (report.user_invokable_skills.length > 0) {
+      lines.push("");
+      lines.push(
+        `_User-invokable skills (excluded from dead-skill alert): ${report.user_invokable_skills.length}_`,
+      );
     }
     lines.push("");
   }
@@ -325,6 +422,7 @@ export function registerToolUseAnalyticsTool(
         weeks_lookback,
         top_n,
         logSizeBytes,
+        project_root, // Wave 25 Level A: enable dead-skill detection
       );
 
       const parts: string[] = [];

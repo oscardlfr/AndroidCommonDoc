@@ -31,5 +31,12 @@ exports[`tool-use-analytics > markdown snapshot 1`] = `
 - unknown: 10
 - arch-testing-3@session-androidcommondoc: 5
 
+### Skill Usage (Wave 25 Level A)
+
+**Top skills by invocation:**
+| Skill | Calls | Last used |
+|-------|-------|-----------|
+| validate-patterns | 5 | 2026-04-15 |
+
 > **Log rotation:** \`mv .androidcommondoc/tool-use-log.jsonl .androidcommondoc/tool-use-log-$(date +%Y%m%d).jsonl\`"
 `;
