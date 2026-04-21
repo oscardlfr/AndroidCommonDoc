@@ -2,11 +2,16 @@
 title: "Getting Started — Full L0 / L1 / L2 Setup"
 slug: getting-started
 category: guides
+scope: [guides, setup, onboarding]
+sources: [androidcommondoc]
+targets: [all]
 description: >
   Index for the complete configuration guide. Goes from zero to a working
   AndroidCommonDoc setup across L0, L1, and L2 projects in 15 minutes.
   Each sub-document is available in English and Castellano.
 last_updated: "2026-03-18"
+status: active
+layer: L0
 ---
 
 # Getting Started — L0 / L1 / L2

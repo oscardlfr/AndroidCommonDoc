@@ -113,7 +113,7 @@ docs/api generated at: {timestamp}
 | **quality-gater** | Steps 5+7 call kdoc-coverage and generate-api-docs CLIs |
 | **doc-updater** | Pre-write validation uses validate-doc-update MCP tool |
 | **CI** | `node build/cli/kdoc-coverage.js --changed-files` with exit code |
-| **PM** | Delegates to architects who use MCP tools for specifics |
+| **team-lead** | Delegates to architects who use MCP tools for specifics |
 
 ## Cross-References
 
