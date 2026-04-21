@@ -78,6 +78,10 @@ const CORE_AGENTS_WITH_MIN_MCP_TOOLS: Array<[string, number]> = [
   ["codebase-mapper.md", 4],
   ["beta-readiness-agent.md", 4],
   ["verifier.md", 3],
+  ["test-specialist.md", 2],
+  ["ui-specialist.md", 2],
+  ["release-guardian-agent.md", 3],
+  ["quality-gater.md", 3],
 ];
 
 describe("Wave 25: 10 core agents declare MCP tools in frontmatter", () => {

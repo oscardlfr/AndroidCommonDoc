@@ -1,12 +1,12 @@
 ---
 name: test-specialist
 description: "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation."
-tools: Read, Write, Edit, Bash, SendMessage
+tools: Read, Write, Edit, Bash, SendMessage, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__kdoc-coverage
 model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.9.0"
+template_version: "1.10.0"
 memory: project
 skills:
   - test

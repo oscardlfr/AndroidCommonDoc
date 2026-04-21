@@ -100,6 +100,11 @@
           "TeamCreate"
         ],
         "migration_hint": "L1/L2 projects must run /sync-l0 to pick up: (a) renamed agent file (project-manager.md → team-lead.md), (b) Agent(subagent_type=\"team-lead\") in any caller code, (c) SendMessage(to=\"team-lead\") in architect templates. Old name no longer resolves."
+      },
+      "6.1.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Bug #8 (Wave 26 regression fix): mandatory Phase 2 Topology Activation Gate after ExitPlanMode. Team-lead MUST spawn the 4 core devs (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) BEFORE any architect EXECUTE dispatch. Architect EXECUTE dispatches MUST include the no-self-edit mandate. Post-APPROVE verification: confirm commits authored by dev layer via architect-mediated SendMessage trail, not by architects directly."
       }
     },
     "planner": {
@@ -161,6 +166,11 @@
         "date": "2026-04-21",
         "breaking": false,
         "note": "Wave 25: rename project-manager → team-lead follow-up (template body references to PM now use team-lead)."
+      },
+      "2.5.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 26 BL-W26-01a: declare 3 MCP tools in frontmatter (validate-all, code-metrics, validate-doc-update) for deterministic validation."
       }
     },
     "doc-migrator": {
@@ -530,6 +540,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
+      },
+      "1.10.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 26 BL-W26-01a: declare 2 MCP tools in frontmatter (code-metrics, kdoc-coverage) for test-quality analysis of own work."
       }
     },
     "ui-specialist": {
@@ -563,6 +578,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
+      },
+      "1.10.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 26 BL-W26-01a: declare 2 MCP tools in frontmatter (compose-preview-audit, string-completeness) for UI quality analysis."
       }
     },
     "domain-model-specialist": {
@@ -730,6 +750,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system release safety guardian agent."
+      },
+      "1.1.0": {
+        "date": "2026-04-21",
+        "breaking": false,
+        "note": "Wave 26: declare MCP tools in frontmatter (scan-secrets, proguard-validator, check-version-sync)."
       }
     },
     "researcher": {

@@ -1,12 +1,12 @@
 ---
 name: ui-specialist
 description: "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations."
-tools: Read, Write, Edit, Bash, SendMessage
+tools: Read, Write, Edit, Bash, SendMessage, mcp__androidcommondoc__compose-preview-audit, mcp__androidcommondoc__string-completeness
 model: sonnet
 domain: development
 intent: [compose, ui, accessibility, material3]
 token_budget: 3000
-template_version: "1.9.0"
+template_version: "1.10.0"
 memory: project
 skills:
   - accessibility

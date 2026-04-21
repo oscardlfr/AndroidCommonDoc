@@ -139,7 +139,7 @@ describe('Wave 1: template_version bumped in architects', () => {
   it('team-lead.md template_version is "6.0.0"', () => {
     // Wave 24: bumped from 5.16.0 → 6.0.0 (Bug #3: TeamDelete before TeamCreate)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'team-lead.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"6.0.0"/);
+    expect(content).toMatch(/template_version:\s*"6.1.0"/);
   });
 });
 
