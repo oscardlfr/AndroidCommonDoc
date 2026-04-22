@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-22T18:08:50.911Z",
+  "generated": "2026-04-22T18:53:18.795Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1974,7 +1974,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:d4c0105f0de9258ac70f5f5a4c9a9e57f9ebac00555cdbcf746e078ab649d4e4",
+      "hash": "sha256:facb35bb5c66624c0553de81a3070e596a1ab0b10e98761868b18d34f0d72921",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -2148,7 +2148,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8fe58557d6cdafc8a7c099374946e06ee7996bcddb0c8be1954232be28399b91",
+      "hash": "sha256:c87798b16227b8d019f0b0ce103f306bfeec2c040e0432a6a18511d697bd17b3",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -2324,7 +2324,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:65241b40be589fdf2b72bb6f5b584885ec95f94fb1cd33e58a5dc933137d49af",
+      "hash": "sha256:c2dfaefcdff0552e57700c096d590144b63b63a2d9eeb9e3bc18c1fd51a1d1cd",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2883,7 +2883,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:2f1eb0c20542792c5b337c16e32b0702e960602cc1dfaf397900f97637b03dfb",
+      "hash": "sha256:17786e1a3a1b75c45b11045c7db0da0faaac8f730802d808b70c349837006f62",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2921,7 +2921,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:21db46fa3c656d42d1fe6955752d995156dab501ce968a58e1cd19619169c975",
+      "hash": "sha256:0c2b522654af977867f6a86bd02efdd05b3269d8dba11b3655664c8f7e85e739",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
