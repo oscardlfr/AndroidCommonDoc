@@ -154,8 +154,8 @@ describe('team-lead template — 3-phase model', () => {
     expect(combinedPM).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 6.1.0', () => {
-    expect(content).toContain('template_version: "6.1.0"');
+  it('template version 6.2.0', () => {
+    expect(content).toContain('template_version: "6.2.0"');
   });
 
   it('has dev dispatch protocol', () => {
@@ -250,8 +250,8 @@ describe('tl-phase-execution sub-doc — extracted phase protocol', () => {
 describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
-  it('template version 1.19.0', () => {
-    expect(archContent).toContain('template_version: "1.19.0"');
+  it('template version 1.20.0', () => {
+    expect(archContent).toContain('template_version: "1.20.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -294,12 +294,12 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
   });
 
-  it('arch-platform has template version 1.16.0', () => {
-    expect(platformContent).toContain('template_version: "1.16.0"');
+  it('arch-platform has template version 1.17.0', () => {
+    expect(platformContent).toContain('template_version: "1.17.0"');
   });
 
-  it('arch-integration has template version 1.16.0', () => {
-    expect(integrationContent).toContain('template_version: "1.16.0"');
+  it('arch-integration has template version 1.17.0', () => {
+    expect(integrationContent).toContain('template_version: "1.17.0"');
   });
 });
 
@@ -873,8 +873,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toContain('template_version: "1.6.0"');
   });
 
-  it('arch-testing version 1.19.0', () => {
-    expect(testingContent).toContain('template_version: "1.19.0"');
+  it('arch-testing version 1.20.0', () => {
+    expect(testingContent).toContain('template_version: "1.20.0"');
   });
 });
 

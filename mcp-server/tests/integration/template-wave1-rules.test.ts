@@ -118,28 +118,28 @@ describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in team-lead or sub-docs'
 // 8. Wave 1: template_version bumped in architects
 // ---------------------------------------------------------------------------
 describe('Wave 1: template_version bumped in architects', () => {
-  it('arch-testing.md template_version is "1.19.0"', () => {
-    // Wave 23: bumped from 1.17.0 → 1.19.0 (token meter + scope_doc_path changes)
+  it('arch-testing.md template_version is "1.20.0"', () => {
+    // Wave 27: bumped from 1.19.0 → 1.20.0 (pattern-search tools removed)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.19.0"/);
+    expect(content).toMatch(/template_version:\s*"1.20.0"/);
   });
 
-  it('arch-platform.md template_version is "1.16.0"', () => {
-    // Wave 23: bumped from 1.14.0 → 1.16.0 (Scope-doc trigger check rename)
+  it('arch-platform.md template_version is "1.17.0"', () => {
+    // Wave 27: bumped from 1.16.0 → 1.17.0 (pattern-search tools removed)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.16.0"/);
+    expect(content).toMatch(/template_version:\s*"1.17.0"/);
   });
 
-  it('arch-integration.md template_version is "1.16.0"', () => {
-    // Wave 23: bumped from 1.14.0 → 1.16.0 (Scope-doc trigger check rename)
+  it('arch-integration.md template_version is "1.17.0"', () => {
+    // Wave 27: bumped from 1.16.0 → 1.17.0 (pattern-search tools removed)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.16.0"/);
+    expect(content).toMatch(/template_version:\s*"1.17.0"/);
   });
 
-  it('team-lead.md template_version is "6.0.0"', () => {
-    // Wave 24: bumped from 5.16.0 → 6.0.0 (Bug #3: TeamDelete before TeamCreate)
+  it('team-lead.md template_version is "6.2.0"', () => {
+    // Wave 27: bumped from 6.1.0 → 6.2.0 (pattern-search tools removed)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'team-lead.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"6.1.0"/);
+    expect(content).toMatch(/template_version:\s*"6.2.0"/);
   });
 });
 

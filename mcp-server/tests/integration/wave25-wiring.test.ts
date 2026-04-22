@@ -72,8 +72,8 @@ const CORE_AGENTS_WITH_MIN_MCP_TOOLS: Array<[string, number]> = [
   ["doc-updater.md", 6],
   ["doc-alignment-agent.md", 8],
   ["l0-coherence-auditor.md", 5],
-  ["arch-platform.md", 6],
-  ["arch-testing.md", 4],
+  ["arch-platform.md", 5],
+  ["arch-testing.md", 3],
   ["arch-integration.md", 3],
   ["codebase-mapper.md", 4],
   ["beta-readiness-agent.md", 4],
@@ -340,5 +340,80 @@ describe("Wave 25: setup/agent-templates == .claude/agents for all pairs", () =>
       if (a !== b) drift.push(`${f}: content drift between setup and .claude`);
     }
     expect(drift, `Dual-location drift:\n${drift.join("\n")}`).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 8: Wave 27 anti-regression — arch-* and team-lead must NOT hold pattern-search tools
+// ---------------------------------------------------------------------------
+
+describe("Wave 27: pattern-search tools removed from architects and team-lead", () => {
+  const PATTERN_SEARCH_TOOLS = [
+    "mcp__androidcommondoc__find-pattern",
+    "mcp__androidcommondoc__pattern-coverage",
+    "mcp__androidcommondoc__search-docs",
+  ];
+
+  const AGENTS_THAT_MUST_NOT_HAVE_SEARCH: string[] = [
+    "arch-testing.md",
+    "arch-platform.md",
+    "arch-integration.md",
+    "team-lead.md",
+  ];
+
+  for (const agentFile of AGENTS_THAT_MUST_NOT_HAVE_SEARCH) {
+    it(`${agentFile} does NOT declare pattern-search tools in frontmatter`, () => {
+      for (const raw of readBothAgent(agentFile)) {
+        const fm = getFrontmatter(raw);
+        const mcp = getMcpTools(fm?.tools);
+        for (const forbidden of PATTERN_SEARCH_TOOLS) {
+          expect(
+            mcp,
+            `${agentFile}: found forbidden pattern-search tool '${forbidden}' — must route via context-provider (W27 BL-W26-06)`,
+          ).not.toContain(forbidden);
+        }
+      }
+    });
+  }
+
+  it("module-health is NOT declared by arch-testing, arch-platform, arch-integration, or team-lead", () => {
+    for (const agentFile of AGENTS_THAT_MUST_NOT_HAVE_SEARCH) {
+      for (const raw of readBothAgent(agentFile)) {
+        const fm = getFrontmatter(raw);
+        const mcp = getMcpTools(fm?.tools);
+        expect(
+          mcp,
+          `${agentFile}: found forbidden 'mcp__androidcommondoc__module-health' — must route via context-provider (W27 BL-W26-06)`,
+        ).not.toContain("mcp__androidcommondoc__module-health");
+      }
+    }
+  });
+
+  it("context-provider retains find-pattern, module-health, search-docs (it IS the entry point)", () => {
+    for (const raw of readBothAgent("context-provider.md")) {
+      const fm = getFrontmatter(raw);
+      const mcp = getMcpTools(fm?.tools);
+      expect(mcp).toContain("mcp__androidcommondoc__find-pattern");
+      expect(mcp).toContain("mcp__androidcommondoc__module-health");
+      expect(mcp).toContain("mcp__androidcommondoc__search-docs");
+    }
+  });
+
+  it("arch-testing Pattern delivery chain prose present", () => {
+    for (const raw of readBothAgent("arch-testing.md")) {
+      expect(raw).toMatch(/you are the MCP tool holder for pattern discovery|Pattern delivery chain|Why you hold the pattern chain/i);
+    }
+  });
+
+  it("arch-platform Pattern delivery chain prose present", () => {
+    for (const raw of readBothAgent("arch-platform.md")) {
+      expect(raw).toMatch(/you are the MCP tool holder for pattern discovery|Pattern delivery chain|Why you hold the pattern chain/i);
+    }
+  });
+
+  it("arch-integration Pattern delivery chain prose present", () => {
+    for (const raw of readBothAgent("arch-integration.md")) {
+      expect(raw).toMatch(/you are the MCP tool holder for pattern discovery|Pattern delivery chain|Why you hold the pattern chain/i);
+    }
   });
 });
