@@ -1,12 +1,12 @@
 ---
 name: team-lead
 description: "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project."
-tools: Read, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__check-version-sync, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__find-pattern, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__module-health, mcp__androidcommondoc__pattern-coverage, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__findings-report, mcp__androidcommondoc__skill-usage-analytics, mcp__androidcommondoc__tool-use-analytics, mcp__androidcommondoc__audit-report
+tools: Read, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__check-version-sync, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__findings-report, mcp__androidcommondoc__skill-usage-analytics, mcp__androidcommondoc__tool-use-analytics, mcp__androidcommondoc__audit-report
 model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "6.1.0"
+template_version: "6.2.0"
 memory: project
 skills:
   - pre-pr

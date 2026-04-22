@@ -22,7 +22,7 @@
           "DISPOSABLE",
           "STOP PLANNING"
         ],
-        "migration_hint": "PM now orchestrates 3 sequential teams (Planning → Execution → Quality Gate). Devs must be spawned as anonymous Agent(prompt=...) without name/team_name. Run /sync-l0 to get the updated template."
+        "migration_hint": "PM now orchestrates 3 sequential teams (Planning -> Execution -> Quality Gate). Devs must be spawned as anonymous Agent(prompt=...) without name/team_name. Run /sync-l0 to get the updated template."
       },
       "5.1.0": {
         "date": "2026-04-05",
@@ -48,13 +48,13 @@
       "5.9.0": {
         "date": "2026-04-07",
         "breaking": false,
-        "note": "Add SESSION CLOSURE GATE — blocks session end when acceptance criteria failing"
+        "note": "Add SESSION CLOSURE GATE -- blocks session end when acceptance criteria failing"
       },
       "5.10.0": {
         "date": "2026-04-09",
         "breaking": true,
         "note": "MECHANICAL enforcement: Grep and Glob removed from PM tools. Tools list now consistent with FORBIDDEN rule in body.",
-        "migration": "L1/L2 projects must run /sync-l0 to pick up tools line change. PM body already forbids Grep/Glob — no behavior change."
+        "migration": "L1/L2 projects must run /sync-l0 to pick up tools line change. PM body already forbids Grep/Glob -- no behavior change."
       },
       "5.11.0": {
         "date": "2026-04-18",
@@ -64,17 +64,17 @@
       "5.12.0": {
         "date": "2026-04-18",
         "breaking": false,
-        "note": "T-BUG-015: added Search Dispatch Protocol — when user task involves pattern search, route to context-provider FIRST, then dispatch to architect with results. Forbids 'use grep' dispatches to architects/devs. Closes the Bash-grep bypass of L0 PR #40 mechanical enforcement."
+        "note": "T-BUG-015: added Search Dispatch Protocol -- when user task involves pattern search, route to context-provider FIRST, then dispatch to architect with results. Forbids 'use grep' dispatches to architects/devs. Closes the Bash-grep bypass of L0 PR #40 mechanical enforcement."
       },
       "5.13.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       },
       "5.14.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W22: model opus→sonnet (S1), spawn-prompt diet ≤25 lines + agent-core-rules.md (S2), mandatory rtk prefix rule (S3)"
+        "note": "W22: model opus->sonnet (S1), spawn-prompt diet <=25 lines + agent-core-rules.md (S2), mandatory rtk prefix rule (S3)"
       },
       "5.15.0": {
         "date": "2026-04-20",
@@ -89,22 +89,27 @@
       "5.17.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "Bug #3: TeamDelete(session-{slug}) before TeamCreate clears stale prior-session teams — prevents peer name suffix collision (-2/-3)."
+        "note": "Bug #3: TeamDelete(session-{slug}) before TeamCreate clears stale prior-session teams -- prevents peer name suffix collision (-2/-3)."
       },
       "6.0.0": {
         "date": "2026-04-21",
         "breaking": true,
-        "note": "Wave 25: rename project-manager → team-lead for canonical terminology consistency. Frontmatter name: field, filename (setup/agent-templates/team-lead.md, .claude/agents/team-lead.md), agent-memory dir, all SendMessage/Agent references, Reporter Protocol fallback target all unified. \"PM\" shorthand → \"team-lead\"; \"[PM-\" protocol prefixes → \"[TL-\". Cross-reference doc filenames pm-*.md → tl-*.md.",
+        "note": "Wave 25: rename project-manager -> team-lead for canonical terminology consistency. Frontmatter name: field, filename (setup/agent-templates/team-lead.md, .claude/agents/team-lead.md), agent-memory dir, all SendMessage/Agent references, Reporter Protocol fallback target all unified. \"PM\" shorthand -> \"team-lead\"; \"[PM-\" protocol prefixes -> \"[TL-\". Cross-reference doc filenames pm-*.md -> tl-*.md.",
         "required_keywords": [
           "team-lead",
           "TeamCreate"
         ],
-        "migration_hint": "L1/L2 projects must run /sync-l0 to pick up: (a) renamed agent file (project-manager.md → team-lead.md), (b) Agent(subagent_type=\"team-lead\") in any caller code, (c) SendMessage(to=\"team-lead\") in architect templates. Old name no longer resolves."
+        "migration_hint": "L1/L2 projects must run /sync-l0 to pick up: (a) renamed agent file (project-manager.md -> team-lead.md), (b) Agent(subagent_type=\"team-lead\") in any caller code, (c) SendMessage(to=\"team-lead\") in architect templates. Old name no longer resolves."
       },
       "6.1.0": {
         "date": "2026-04-21",
         "breaking": false,
         "note": "Bug #8 (Wave 26 regression fix): mandatory Phase 2 Topology Activation Gate after ExitPlanMode. Team-lead MUST spawn the 4 core devs (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) BEFORE any architect EXECUTE dispatch. Architect EXECUTE dispatches MUST include the no-self-edit mandate. Post-APPROVE verification: confirm commits authored by dev layer via architect-mediated SendMessage trail, not by architects directly."
+      },
+      "6.2.0": {
+        "date": "2026-04-22",
+        "breaking": false,
+        "note": "Wave 27 BL-W26-06: remove find-pattern, module-health, pattern-coverage from tools frontmatter. team-lead's own Search Dispatch Protocol (T-BUG-015) mandates routing these via context-provider. Keeps all telemetry and orchestration MCP tools."
       }
     },
     "planner": {
@@ -138,7 +143,7 @@
       "1.6.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "quality-gater": {
@@ -150,7 +155,7 @@
       "1.1.0": {
         "date": "2026-03-29",
         "breaking": false,
-        "note": "Added retry limit (max 3) to prevent infinite QG→Phase2 loops"
+        "note": "Added retry limit (max 3) to prevent infinite QG->Phase2 loops"
       },
       "2.2.0": {
         "date": "2026-04-06",
@@ -160,12 +165,12 @@
       "2.3.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       },
       "2.4.0": {
         "date": "2026-04-21",
         "breaking": false,
-        "note": "Wave 25: rename project-manager → team-lead follow-up (template body references to PM now use team-lead)."
+        "note": "Wave 25: rename project-manager -> team-lead follow-up (template body references to PM now use team-lead)."
       },
       "2.5.0": {
         "date": "2026-04-21",
@@ -187,7 +192,7 @@
       "1.2.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "arch-testing": {
@@ -214,7 +219,7 @@
       "1.13.0": {
         "date": "2026-04-07",
         "breaking": false,
-        "note": "Add FORBIDDEN rule for Grep/Glob pattern searches — must consult context-provider first"
+        "note": "Add FORBIDDEN rule for Grep/Glob pattern searches -- must consult context-provider first"
       },
       "1.14.0": {
         "date": "2026-04-09",
@@ -230,12 +235,12 @@
       "1.16.0": {
         "date": "2026-04-18",
         "breaking": false,
-        "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching — Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
+        "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching -- Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
       },
       "1.17.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       },
       "1.18.0": {
         "date": "2026-04-20",
@@ -246,6 +251,11 @@
         "date": "2026-04-21",
         "breaking": false,
         "note": "Wave 25: declare MCP tools in frontmatter (code-metrics, module-health, validate-doc-structure, kdoc-coverage, find-pattern)."
+      },
+      "1.20.0": {
+        "date": "2026-04-22",
+        "breaking": false,
+        "note": "Wave 27 BL-W26-06: remove module-health and find-pattern from tools frontmatter. Both are pattern-search tools -- under Search Dispatch Protocol (T-BUG-015), pattern queries enter via context-provider, not directly from architects. Keeps: code-metrics, validate-doc-structure, kdoc-coverage."
       }
     },
     "arch-platform": {
@@ -272,7 +282,7 @@
       "1.10.0": {
         "date": "2026-04-07",
         "breaking": false,
-        "note": "Add FORBIDDEN rule for Grep/Glob pattern searches — must consult context-provider first"
+        "note": "Add FORBIDDEN rule for Grep/Glob pattern searches -- must consult context-provider first"
       },
       "1.11.0": {
         "date": "2026-04-09",
@@ -288,12 +298,12 @@
       "1.13.0": {
         "date": "2026-04-18",
         "breaking": false,
-        "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching — Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
+        "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching -- Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
       },
       "1.14.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       },
       "1.15.0": {
         "date": "2026-04-20",
@@ -303,7 +313,12 @@
       "1.16.0": {
         "date": "2026-04-21",
         "breaking": false,
-        "note": "Wave 25: declare MCP tools in frontmatter (dependency-graph, gradle-config-lint, kdoc-coverage, string-completeness, verify-kmp-packages, module-health, find-pattern). Fixes verify-kmp → verify-kmp-packages naming drift."
+        "note": "Wave 25: declare MCP tools in frontmatter (dependency-graph, gradle-config-lint, kdoc-coverage, string-completeness, verify-kmp-packages, module-health, find-pattern). Fixes verify-kmp -> verify-kmp-packages naming drift."
+      },
+      "1.17.0": {
+        "date": "2026-04-22",
+        "breaking": false,
+        "note": "Wave 27 BL-W26-06: remove module-health and find-pattern from tools frontmatter. Search Dispatch Protocol (T-BUG-015): pattern lookup tools belong to context-provider, not architects. Keeps: dependency-graph, gradle-config-lint, kdoc-coverage, string-completeness, verify-kmp-packages."
       }
     },
     "arch-integration": {
@@ -330,7 +345,7 @@
       "1.10.0": {
         "date": "2026-04-07",
         "breaking": false,
-        "note": "Add FORBIDDEN rule for Grep/Glob pattern searches — must consult context-provider first"
+        "note": "Add FORBIDDEN rule for Grep/Glob pattern searches -- must consult context-provider first"
       },
       "1.11.0": {
         "date": "2026-04-09",
@@ -346,12 +361,12 @@
       "1.13.0": {
         "date": "2026-04-18",
         "breaking": false,
-        "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching — Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
+        "note": "T-BUG-015: added Bash Search Anti-pattern section. FORBIDDEN bash grep/find/rg/fd/ag/sed/awk for pattern searching -- Bash is for git/gradle/test only. Pattern lookups MUST SendMessage(context-provider). Closes the Bash bypass of L0 PR #40 mechanical Grep/Glob removal."
       },
       "1.14.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       },
       "1.15.0": {
         "date": "2026-04-20",
@@ -362,6 +377,11 @@
         "date": "2026-04-21",
         "breaking": false,
         "note": "Wave 25: declare MCP tools in frontmatter (dependency-graph, gradle-config-lint, setup-check, module-health). Enables ToolSearch-free MCP calls."
+      },
+      "1.17.0": {
+        "date": "2026-04-22",
+        "breaking": false,
+        "note": "Wave 27 BL-W26-06: remove module-health from tools frontmatter. Search Dispatch Protocol (T-BUG-015): module-health is a lookup tool, belongs to context-provider. Keeps: dependency-graph, gradle-config-lint, setup-check."
       }
     },
     "context-provider": {
@@ -383,7 +403,7 @@
       "2.6.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "Wave 17-lite: added On Team Join broadcast section — CP sends pattern list summary to new peers on first contact."
+        "note": "Wave 17-lite: added On Team Join broadcast section -- CP sends pattern list summary to new peers on first contact."
       },
       "3.1.0": {
         "date": "2026-04-21",
@@ -405,12 +425,12 @@
       "2.3.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       },
       "2.4.0": {
         "date": "2026-04-21",
         "breaking": false,
-        "note": "Wave 25: declare 8 MCP tools in frontmatter (ingest-content, search-docs, validate-doc-update, validate-doc-structure, check-doc-patterns, audit-docs, check-version-sync, suggest-docs). New §5 Ingestion Handler — receives approved-by-user payload from team-lead, runs ingest-content MCP tool, writes docs/{cat}/{slug}.md."
+        "note": "Wave 25: declare 8 MCP tools in frontmatter (ingest-content, search-docs, validate-doc-update, validate-doc-structure, check-doc-patterns, audit-docs, check-version-sync, suggest-docs). New §5 Ingestion Handler -- receives approved-by-user payload from team-lead, runs ingest-content MCP tool, writes docs/{cat}/{slug}.md."
       }
     },
     "product-strategist": {
@@ -422,7 +442,7 @@
       "1.1.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "content-creator": {
@@ -434,7 +454,7 @@
       "1.1.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "landing-page-strategist": {
@@ -446,7 +466,7 @@
       "1.1.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "marketing-lead": {
@@ -458,7 +478,7 @@
       "1.1.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "product-lead": {
@@ -470,7 +490,7 @@
       "1.1.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "platform-auditor": {
@@ -482,7 +502,7 @@
       "1.1.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "module-lifecycle": {
@@ -494,7 +514,7 @@
       "1.1.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "feature-domain-specialist": {
@@ -506,7 +526,7 @@
       "1.1.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
       }
     },
     "test-specialist": {
@@ -534,17 +554,22 @@
       "1.8.0": {
         "date": "2026-04-18",
         "breaking": false,
-        "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
+        "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching -- must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
       },
       "1.9.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
       },
       "1.10.0": {
         "date": "2026-04-21",
         "breaking": false,
         "note": "Wave 26 BL-W26-01a: declare 2 MCP tools in frontmatter (code-metrics, kdoc-coverage) for test-quality analysis of own work."
+      },
+      "1.11.0": {
+        "date": "2026-04-22",
+        "breaking": false,
+        "note": "Wave 27 BL-W26-06: add clarifying clause to Pattern validation chain section -- arch-testing holds MCP pattern-search tools, which is why the dev->arch->CP chain is mechanical. No frontmatter change."
       }
     },
     "ui-specialist": {
@@ -572,17 +597,22 @@
       "1.8.0": {
         "date": "2026-04-18",
         "breaking": false,
-        "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
+        "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching -- must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
       },
       "1.9.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
       },
       "1.10.0": {
         "date": "2026-04-21",
         "breaking": false,
         "note": "Wave 26 BL-W26-01a: declare 2 MCP tools in frontmatter (compose-preview-audit, string-completeness) for UI quality analysis."
+      },
+      "1.11.0": {
+        "date": "2026-04-22",
+        "breaking": false,
+        "note": "Wave 27 BL-W26-06: add clarifying clause to Pattern validation chain section -- reporting architect holds MCP pattern-search tools, which is why the dev->arch->CP chain is mechanical. No frontmatter change."
       }
     },
     "domain-model-specialist": {
@@ -605,12 +635,17 @@
       "1.7.0": {
         "date": "2026-04-18",
         "breaking": false,
-        "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
+        "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching -- must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
       },
       "1.8.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
+      },
+      "1.9.0": {
+        "date": "2026-04-22",
+        "breaking": false,
+        "note": "Wave 27 BL-W26-06: add clarifying clause to Pattern validation chain section -- arch-platform holds MCP pattern-search tools, which is why the dev->arch->CP chain is mechanical. No frontmatter change."
       }
     },
     "data-layer-specialist": {
@@ -633,33 +668,38 @@
       "1.7.0": {
         "date": "2026-04-18",
         "breaking": false,
-        "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching — must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
+        "note": "T-BUG-015: added Bash Search Anti-pattern section reinforcing the architect-chain. Devs may NOT use bash grep/find/rg/fd/sed/awk for pattern matching -- must SendMessage reporting architect, who SendMessages context-provider. Closes Bash bypass of architect-chain delegation."
       },
       "1.8.0": {
         "date": "2026-04-19",
         "breaking": false,
-        "note": "W19-S2b: added Per-Session Gate block — Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
+        "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until reporting architect consulted (hook PR #51)"
+      },
+      "1.9.0": {
+        "date": "2026-04-22",
+        "breaking": false,
+        "note": "Wave 27 BL-W26-06: add clarifying clause to Pattern validation chain section -- reporting architect holds MCP pattern-search tools, which is why the dev->arch->CP chain is mechanical. No frontmatter change."
       }
     },
     "advisor": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system technical decision advisor agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system technical decision advisor agent."
       }
     },
     "api-rate-limit-auditor": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system API rate limit auditor agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system API rate limit auditor agent."
       }
     },
     "beta-readiness-agent": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system beta readiness auditor agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system beta readiness auditor agent."
       },
       "1.1.0": {
         "date": "2026-04-21",
@@ -671,7 +711,7 @@
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system codebase architecture mapper agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system codebase architecture mapper agent."
       },
       "1.1.0": {
         "date": "2026-04-21",
@@ -683,21 +723,21 @@
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system cross-platform feature parity validator agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system cross-platform feature parity validator agent."
       }
     },
     "debugger": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system systematic debugger agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system systematic debugger agent."
       }
     },
     "doc-alignment-agent": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system documentation drift detector agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system documentation drift detector agent."
       },
       "1.1.0": {
         "date": "2026-04-21",
@@ -709,21 +749,21 @@
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system doc-code drift internal validator agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system doc-code drift internal validator agent."
       }
     },
     "full-audit-orchestrator": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system full audit orchestrator agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system full audit orchestrator agent."
       }
     },
     "l0-coherence-auditor": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system L0 doc coherence auditor agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system L0 doc coherence auditor agent."
       },
       "1.2.0": {
         "date": "2026-04-21",
@@ -735,21 +775,21 @@
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system privacy and PII auditor agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system privacy and PII auditor agent."
       }
     },
     "quality-gate-orchestrator": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system quality gate orchestrator agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system quality gate orchestrator agent."
       }
     },
     "release-guardian-agent": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system release safety guardian agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system release safety guardian agent."
       },
       "1.1.0": {
         "date": "2026-04-21",
@@ -761,35 +801,35 @@
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system ad-hoc technical researcher agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system ad-hoc technical researcher agent."
       }
     },
     "script-parity-validator": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system PS1/Bash script parity validator agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system PS1/Bash script parity validator agent."
       }
     },
     "skill-script-alignment": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system skill-script alignment validator agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system skill-script alignment validator agent."
       }
     },
     "template-sync-validator": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system template sync validator agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system template sync validator agent."
       }
     },
     "verifier": {
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
-        "note": "W24-P4: Initial agent mirror — portability chain. Mirrors system goal-backward verifier agent."
+        "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system goal-backward verifier agent."
       },
       "1.1.0": {
         "date": "2026-04-21",
