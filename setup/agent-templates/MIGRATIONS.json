@@ -110,6 +110,11 @@
         "date": "2026-04-22",
         "breaking": false,
         "note": "Wave 27 BL-W26-06: remove find-pattern, module-health, pattern-coverage from tools frontmatter. team-lead's own Search Dispatch Protocol (T-BUG-015) mandates routing these via context-provider. Keeps all telemetry and orchestration MCP tools."
+      },
+      "6.2.1": {
+        "date": "2026-04-22",
+        "breaking": false,
+        "note": "Spawn Prompt Hygiene cross-reference added to Planning Phase section (BL-W27-04). Pointer to docs/agents/agent-core-rules.md#spawn-prompt-hygiene. No rule change."
       }
     },
     "planner": {
@@ -570,6 +575,11 @@
         "date": "2026-04-22",
         "breaking": false,
         "note": "Wave 27 BL-W26-06: add clarifying clause to Pattern validation chain section -- arch-testing holds MCP pattern-search tools, which is why the dev->arch->CP chain is mechanical. No frontmatter change."
+      },
+      "1.11.1": {
+        "date": "2026-04-22",
+        "breaking": false,
+        "note": "Owned Files section rewritten to permissive specialty-default + arch-authorized-override pattern (BL-W27-02, Opcion B). Aligns with ui-specialist/domain-model-specialist/data-layer-specialist pattern. 2 blank lines trimmed to stay under 300-line dev limit."
       }
     },
     "ui-specialist": {
