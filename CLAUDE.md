@@ -28,6 +28,10 @@
 | `researcher` | Domain research | Pre-implementation exploration — `/research` |
 | `codebase-mapper` | Architecture analysis | First-time repo analysis — `/map-codebase` |
 
+**Dev scope gates**: specialty default + architect-authorized override. test-specialist aligned with other core devs 2026-04-22 (BL-W27-02).
+
+**Agent-template `.md` edits**: doc-updater owns by default; a core dev may own when the template change is domain-specific (e.g., test-specialist template → test-specialist self-edits). Formalized 2026-04-22 (BL-W27-03).
+
 ### 3. Verification Before Done
 - MCP tool change → full Vitest suite + verify with `sync-vault`
 - New skill → `validate-skills`; new doc → `validate-doc-structure`

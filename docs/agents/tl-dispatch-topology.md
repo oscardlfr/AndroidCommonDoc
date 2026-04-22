@@ -153,3 +153,7 @@ Each SendMessage between team peers MUST cover ONE topic only. Mixing a CANCEL w
 > Message 2: "New task: add Koin registration for FooUseCase in appModule.kt:42."
 
 This applies to all peer-to-peer messages: arch→dev, arch→arch, team-lead→arch.
+
+## Spawn Prompt Hygiene
+
+Spawn prompts use lean standby language only. No wave/round forecasts in spawn — work arrives via SendMessage post-spawn. Full guidance: `docs/agents/agent-core-rules.md#spawn-prompt-hygiene`.

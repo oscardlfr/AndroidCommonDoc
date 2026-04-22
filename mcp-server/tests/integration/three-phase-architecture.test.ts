@@ -155,7 +155,7 @@ describe('team-lead template — 3-phase model', () => {
   });
 
   it('template version 6.2.0', () => {
-    expect(content).toContain('template_version: "6.2.0"');
+    expect(content).toContain('template_version: "6.2.1"');
   });
 
   it('has dev dispatch protocol', () => {

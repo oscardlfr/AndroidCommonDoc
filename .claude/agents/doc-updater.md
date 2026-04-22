@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [docs, changelog, memory, roadmap, ingest]
 token_budget: 2000
-template_version: "2.4.0"
+template_version: "2.5.0"
 skills:
   - audit-docs
   - readme-audit
@@ -136,6 +136,19 @@ When team-lead forwards an **approved ingestion request** (originated by context
 - `search-docs` finds existing doc covering same scope → need UPDATE path, not INGEST.
 - `validate-doc-update` returns REJECTED after auto-fix attempts.
 - Content violates L0 line limits and can't be split cleanly.
+
+## Owned Files
+
+By default, doc-updater owns all documentation and agent template files:
+- `.claude/agents/*.md` — agent mirror copies (kept in sync with setup/agent-templates/)
+- `setup/agent-templates/*.md` — agent template sources
+- `docs/agents/*.md` — agent topology and protocol docs
+- `docs/**/*.md` — all other L0 pattern and guide docs
+- `CLAUDE.md`, `CHANGELOG.md`, `README.md` — project-level docs
+- `.planning/*.md` — planning and backlog files
+- Memory files at `~/.claude/projects/.../memory/`
+
+**Exception**: a core dev may own a template edit when the change is domain-specific to their specialty (e.g., test-specialist self-edits test-specialist.md for scope gate changes). In that case, doc-updater mirrors the result to `.claude/agents/` if the dev did not do so.
 
 ## L0 Documentation Patterns
 

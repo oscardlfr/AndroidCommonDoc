@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-22T20:56:01.115Z",
+  "generated": "2026-04-22T21:11:24.478Z",
   "l0_root": ".",
   "entries": [
     {
@@ -2293,7 +2293,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:17aebfeee872ac9e7ac5194de779993ac0d9fbf53382bab9d877e5cdd4f9d10c",
+      "hash": "sha256:89a445e19101f80d44f4253b0f204b4c630f5da0106e419660a52ea20e68ac8d",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2309,7 +2309,7 @@
           "ingest"
         ],
         "token_budget": 2000,
-        "template_version": "2.4.0",
+        "template_version": "2.5.0",
         "skills": [
           "audit-docs",
           "readme-audit",
@@ -2825,7 +2825,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a09d20dd6d9c976ccdf7b6f9d95ec8d0d6ca4937b17e812b57a9d9fb75adefdb",
+      "hash": "sha256:e4aa2e717bc83f7c8790ba303894b807a8b87e25fa7c3871fa331e49c6b5410c",
       "dependencies": [],
       "frontmatter": {
         "name": "team-lead",
@@ -2841,7 +2841,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "6.2.0",
+        "template_version": "6.2.1",
         "memory": "project",
         "skills": [
           "pre-pr",
@@ -2883,7 +2883,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:17786e1a3a1b75c45b11045c7db0da0faaac8f730802d808b70c349837006f62",
+      "hash": "sha256:96eae55c016d3a34d6238084313da99f9e7e5c97a1cc8ac1737bd17b4598007e",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2898,7 +2898,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.11.0",
+        "template_version": "1.11.1",
         "memory": "project",
         "skills": [
           "test",

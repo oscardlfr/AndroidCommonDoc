@@ -139,7 +139,7 @@ describe('Wave 1: template_version bumped in architects', () => {
   it('team-lead.md template_version is "6.2.0"', () => {
     // Wave 27: bumped from 6.1.0 → 6.2.0 (pattern-search tools removed)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'team-lead.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"6.2.0"/);
+    expect(content).toMatch(/template_version:\s*"6.2.1"/);
   });
 });
 
