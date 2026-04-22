@@ -5,6 +5,9 @@
  *  - BL-W27-01: CP Spawn Protocol uses search-docs(query) not find-pattern(category)
  *  - W17 HIGH #3: Message Topic Discipline section present in arch templates
  *  - W17 HIGH #4: Scope Immutability Gate section present in arch templates
+ *  - BL-W27-02: test-specialist Owned Files has permissive + arch-authorized pattern
+ *  - BL-W27-03: doc-updater Owned Files explicitly includes agent-template globs
+ *  - BL-W27-04: agent-core-rules.md has Spawn Prompt Hygiene section
  */
 import { describe, it, expect } from "vitest";
 import * as fs from "fs";
@@ -70,4 +73,45 @@ describe("Wave 28 W17-HIGH-4: Scope Immutability Gate present in arch templates 
       expect(content).toMatch(/Scope Immutability Gate/i);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Group 4: BL-W27-02 — test-specialist Owned Files has permissive + arch-authorized pattern
+// ---------------------------------------------------------------------------
+
+describe("Wave 28 BL-W27-02: test-specialist Owned Files permissive default + arch-authorized extension", () => {
+  it("test-specialist.md contains Specialty default and Arch-authorized extension in Owned Files", () => {
+    for (const raw of readBothAgent("test-specialist.md")) {
+      expect(raw).toMatch(/Specialty default/i);
+      expect(raw).toMatch(/Arch-authorized extension/i);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 5: BL-W27-03 — doc-updater Owned Files explicitly includes agent-template globs
+// ---------------------------------------------------------------------------
+
+describe("Wave 28 BL-W27-03: doc-updater Owned Files lists agent-template glob paths", () => {
+  it("doc-updater.md Owned Files includes .claude/agents, setup/agent-templates, docs/agents globs", () => {
+    for (const raw of readBothAgent("doc-updater.md")) {
+      expect(raw).toMatch(/\.claude\/agents\/\*\.md/);
+      expect(raw).toMatch(/setup\/agent-templates\/\*\.md/);
+      expect(raw).toMatch(/docs\/agents\/\*\.md/);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 6: BL-W27-04 — agent-core-rules.md has Spawn Prompt Hygiene section
+// ---------------------------------------------------------------------------
+
+describe("Wave 28 BL-W27-04: agent-core-rules.md has Spawn Prompt Hygiene section", () => {
+  it("docs/agents/agent-core-rules.md contains Spawn Prompt Hygiene", () => {
+    const content = fs.readFileSync(
+      path.join(ROOT, "docs/agents/agent-core-rules.md"),
+      "utf-8"
+    );
+    expect(content).toMatch(/Spawn Prompt Hygiene/i);
+  });
 });
