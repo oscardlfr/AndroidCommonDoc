@@ -113,6 +113,7 @@
 
 Development waves live in git log + memory; summarized here for onboarding context:
 
+- **Wave 27** (2026-04-22, PR #61) — BL-W26-06 rollback W25 pattern-search MCP + codify dev→arch→CP chain. Frontmatter strips (find-pattern/module-health/pattern-coverage) from 3 architects + team-lead. Prose additions in 3 arch + 4 dev templates. Hub/sub-doc split for arch-testing.md → docs/agents/arch-testing-dispatch-protocol.md. 8 MIGRATIONS entries. New Group 8 anti-regression (7 tests). team-lead 6.2.0. 2210/2210 tests pass.
 - **Wave 25** (2026-04-21, in progress) — MCP wiring fix: 10 agents gained explicit `mcp__androidcommondoc__*` frontmatter; context-provider v3.0 pattern pre-cache; ingestion loop (context-provider → team-lead user-approval → doc-updater → `ingest-content`) finally closed after T-BUG-005 half-landed.
 - **Wave 24** (2026-04-20, PR #58) — Bug #3 `TeamDelete` before `TeamCreate` + P4: 17 agent mirrors. team-lead 5.17.0.
 - **Wave 23** (2026-04-20, PR #57) — S8 token meter + Bug #5 `scope_doc_path` + Bug #6 PREP/EXECUTE architect dispatch modes. team-lead 5.15.0.
