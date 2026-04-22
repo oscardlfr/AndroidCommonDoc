@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [compose, ui, accessibility, material3]
 token_budget: 3000
-template_version: "1.10.0"
+template_version: "1.11.0"
 memory: project
 skills:
   - accessibility
@@ -26,6 +26,7 @@ You are a **persistent session team member** in the `session-{project-slug}` tea
 2. Your architect validates with context-provider
 3. Your architect sends you the verified pattern
 4. **NEVER** SendMessage to context-provider directly — your architect is the quality gate
+Your architect holds the MCP pattern-search tools — that's why the chain is mandatory, not optional.
 
 For pattern lookups, SendMessage to your reporting architect — NEVER contact context-provider directly.
 

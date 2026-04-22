@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-21T22:15:44.124Z",
+  "generated": "2026-04-22T18:53:18.795Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1915,12 +1915,12 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ece724bfc442cad6149b62c23c8ba294b5ba817a320a83526c86494a79c46fec",
+      "hash": "sha256:23fcfd56cf660950ca7f957f9840e1d124fbb57ef45b35a21d38d5fa67431226",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
         "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
-        "tools": "Read, Bash, SendMessage, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__setup-check, mcp__androidcommondoc__module-health",
+        "tools": "Read, Bash, SendMessage, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__setup-check",
         "model": "sonnet",
         "domain": "architecture",
         "intent": [
@@ -1931,7 +1931,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.16.0",
+        "template_version": "1.17.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1945,12 +1945,12 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:788ff4eb7b03ddd3528ba03f04b247818ddb14a906479c0d438c3b6181a9e04a",
+      "hash": "sha256:811b6e5ed75fab604797a40bdaa2b6b92bf60ddf9d921076a15e2e4c79ff8786",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
         "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
-        "tools": "Read, Bash, SendMessage, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__kdoc-coverage, mcp__androidcommondoc__string-completeness, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__module-health, mcp__androidcommondoc__find-pattern",
+        "tools": "Read, Bash, SendMessage, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__kdoc-coverage, mcp__androidcommondoc__string-completeness, mcp__androidcommondoc__verify-kmp-packages",
         "model": "sonnet",
         "domain": "architecture",
         "intent": [
@@ -1960,7 +1960,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.16.0",
+        "template_version": "1.17.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1974,12 +1974,12 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:2d57f16b00b0b30464277f992744e03b7a356b93e2843cdab2d661645b4d7eef",
+      "hash": "sha256:facb35bb5c66624c0553de81a3070e596a1ab0b10e98761868b18d34f0d72921",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
         "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
-        "tools": "Read, Bash, SendMessage, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__module-health, mcp__androidcommondoc__validate-doc-structure, mcp__androidcommondoc__kdoc-coverage, mcp__androidcommondoc__find-pattern",
+        "tools": "Read, Bash, SendMessage, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__validate-doc-structure, mcp__androidcommondoc__kdoc-coverage",
         "model": "sonnet",
         "domain": "architecture",
         "intent": [
@@ -1989,7 +1989,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.19.0",
+        "template_version": "1.20.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2148,7 +2148,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:3c888d3263a35ce9dc6ac46f6374d743fe3d1e0a48a160f09445ccb5769b3d55",
+      "hash": "sha256:c87798b16227b8d019f0b0ce103f306bfeec2c040e0432a6a18511d697bd17b3",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -2164,7 +2164,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.8.0",
+        "template_version": "1.9.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2324,7 +2324,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:5b2161e3eed18169f73bb8c2fa9d69f4e44a31768512f468a2144451a3a80024",
+      "hash": "sha256:c2dfaefcdff0552e57700c096d590144b63b63a2d9eeb9e3bc18c1fd51a1d1cd",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2339,7 +2339,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.8.0",
+        "template_version": "1.9.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2825,12 +2825,12 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ac8e613a00ff4ca2019594df9c32f73e6eff58a1dfea8642f355632469bd4016",
+      "hash": "sha256:a09d20dd6d9c976ccdf7b6f9d95ec8d0d6ca4937b17e812b57a9d9fb75adefdb",
       "dependencies": [],
       "frontmatter": {
         "name": "team-lead",
         "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
-        "tools": "Read, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__check-version-sync, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__find-pattern, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__module-health, mcp__androidcommondoc__pattern-coverage, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__findings-report, mcp__androidcommondoc__skill-usage-analytics, mcp__androidcommondoc__tool-use-analytics, mcp__androidcommondoc__audit-report",
+        "tools": "Read, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__check-version-sync, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__findings-report, mcp__androidcommondoc__skill-usage-analytics, mcp__androidcommondoc__tool-use-analytics, mcp__androidcommondoc__audit-report",
         "model": "sonnet",
         "domain": "development",
         "intent": [
@@ -2841,7 +2841,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "6.1.0",
+        "template_version": "6.2.0",
         "memory": "project",
         "skills": [
           "pre-pr",
@@ -2883,7 +2883,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:a6a422aaf4504cdf3e6b1287cf60f938a3262d52c07531390e4482292df92b5f",
+      "hash": "sha256:17786e1a3a1b75c45b11045c7db0da0faaac8f730802d808b70c349837006f62",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2898,7 +2898,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.10.0",
+        "template_version": "1.11.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2921,7 +2921,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:5c377a61a872821f49114e6d294751a517a22b800ad738a8bb03c7c5ec3a9697",
+      "hash": "sha256:0c2b522654af977867f6a86bd02efdd05b3269d8dba11b3655664c8f7e85e739",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2936,7 +2936,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.10.0",
+        "template_version": "1.11.0",
         "memory": "project",
         "skills": [
           "accessibility",
