@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-22T21:57:16.369Z",
+  "generated": "2026-04-22T22:06:53.963Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1915,7 +1915,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4223ce4f93973f5d57edcb56ea0429e461c6484a73c80e36753a02b43802e340",
+      "hash": "sha256:6223222316fbfbbe579251ee7480f6122f8574c3e42a79c9adff252717848d33",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1945,7 +1945,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c2b831aec308b98882cd1fe9ad198506742bfec947041f1e2a4bb463680c017a",
+      "hash": "sha256:00bb07c2c41a7e08060dfb55d5967fdeeb1e1ee13a3a6230a20ff85da3a13113",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",

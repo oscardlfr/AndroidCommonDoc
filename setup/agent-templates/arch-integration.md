@@ -320,6 +320,8 @@ Before requesting ANY constructor/function signature change via team-lead:
 | Before release | `SendMessage(to="team-lead", summary="need release-guardian-agent", message="Pre-release validation needed. Also run privacy-auditor.")` |
 | `TODO()` in production | `SendMessage(to="team-lead", summary="need domain-model-specialist", message="Implement {feature} placeholder in {file}")` |
 
+{{CUSTOMIZE: Add project-specific guardian calls here}}
+
 ## Cross-Architect Verification
 
 - After wiring DI/nav → `SendMessage(to="arch-testing", summary="verify tests", message="Run /test on modules I modified: {list}")`
@@ -384,10 +386,8 @@ After completing review:
    NEVER include the full verdict block in the DM — team-lead reads the file if needed.
 
 Full protocol: `docs/agents/agent-verdict-protocol.md`
-
 ## Official Skills (use when available)
 - `webapp-testing` — Integration test patterns (Playwright, navigation e2e)
-
 ## Done Criteria
 
 You are NOT done until:

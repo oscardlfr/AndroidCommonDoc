@@ -323,6 +323,8 @@ Before requesting ANY constructor/function signature change via team-lead:
 | After domain model changes | `SendMessage(to="team-lead", summary="need version-checker", message="Check version alignment after domain model changes in {files}")` |
 | Five-layer violation | SendMessage(to="team-lead", summary="ESCALATE", message="...") |
 
+{{CUSTOMIZE: Add project-specific guardian calls here}}
+
 ## Cross-Architect Verification
 
 - After fixing imports/deps → `SendMessage(to="arch-testing", summary="verify tests after fixes", message="Run /test on modules I modified: {list}")`
@@ -381,12 +383,10 @@ After completing review:
    NEVER include the full verdict block in the DM — team-lead reads the file if needed.
 
 Full protocol: `docs/agents/agent-verdict-protocol.md`
-
 ## Official Skills (use when available)
 - `architecture` — Automated pattern validation and dependency analysis
 - `software-architecture` — ADR generation and architecture review
 - `api-patterns` — REST/GraphQL API design decisions
-
 ## Done Criteria
 
 You are NOT done until:
