@@ -401,19 +401,19 @@ describe("Wave 27: pattern-search tools removed from architects and team-lead", 
 
   it("arch-testing Pattern delivery chain prose present", () => {
     for (const raw of readBothAgent("arch-testing.md")) {
-      expect(raw).toMatch(/you are the MCP tool holder for pattern discovery|Pattern delivery chain|Why you hold the pattern chain/i);
+      expect(raw).toMatch(/you are the MCP tool holder for pattern discovery|Pattern delivery chain|Why you hold the pattern chain|pattern-chain-rationale/i);
     }
   });
 
   it("arch-platform Pattern delivery chain prose present", () => {
     for (const raw of readBothAgent("arch-platform.md")) {
-      expect(raw).toMatch(/you are the MCP tool holder for pattern discovery|Pattern delivery chain|Why you hold the pattern chain/i);
+      expect(raw).toMatch(/you are the MCP tool holder for pattern discovery|Pattern delivery chain|Why you hold the pattern chain|pattern-chain-rationale/i);
     }
   });
 
   it("arch-integration Pattern delivery chain prose present", () => {
     for (const raw of readBothAgent("arch-integration.md")) {
-      expect(raw).toMatch(/you are the MCP tool holder for pattern discovery|Pattern delivery chain|Why you hold the pattern chain/i);
+      expect(raw).toMatch(/you are the MCP tool holder for pattern discovery|Pattern delivery chain|Why you hold the pattern chain|pattern-chain-rationale/i);
     }
   });
 });

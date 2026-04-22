@@ -26,12 +26,12 @@ On spawn, hydrate your working context with the **L0 pattern index** before wait
 Execute in this exact order:
 
 1. Read `CLAUDE.md` and memory files in `~/.claude/projects/{project}/memory/` (existing behavior).
-2. Call `mcp__androidcommondoc__find-pattern` for each canonical category:
-   - `{category: "architecture"}` — source set discipline, module naming, DI
-   - `{category: "testing"}` — runTest, FakeRepository, dispatcher scopes
-   - `{category: "compose"}` — Material3, state-driven nav, previews
-   - `{category: "error-handling"}` — Result<T>, CancellationException, DomainException
-   - `{category: "gradle"}` — convention plugins, version catalog, composite builds
+2. Call `mcp__androidcommondoc__search-docs` for each canonical category:
+   - query: `"architecture"` — source set discipline, module naming, DI
+   - query: `"testing"` — runTest, FakeRepository, dispatcher scopes
+   - query: `"compose"` — Material3, state-driven nav, previews
+   - query: `"error-handling"` — Result<T>, CancellationException, DomainException
+   - query: `"gradle"` — convention plugins, version catalog, composite builds
 3. Call `mcp__androidcommondoc__vault-status` once to confirm doc graph is healthy.
 4. Hold results in conversation context for the full session lifetime.
 

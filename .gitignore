@@ -44,7 +44,10 @@ coverage/
 tmp/
 
 # ── Session-local planning & feedback (not for sharing) ──
-.planning/
+.planning/*.md
+# Wave 28+: canonical cross-session files are tracked
+!.planning/backlog.md
+!.planning/wave*-propagation-plan.md
 
 # ── Local agent memory & settings (per-user) ──
 .claude/agent-memory/

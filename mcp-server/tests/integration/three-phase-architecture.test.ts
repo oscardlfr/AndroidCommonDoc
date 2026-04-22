@@ -45,7 +45,7 @@ describe('agent template size limits', () => {
   for (const template of templates) {
     it(`${template} is ≤400 lines`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
-      const lines = content.split('\n').length;
+      const lines = content.trimEnd().split('\n').length;
       expect(lines).toBeLessThanOrEqual(400);
     });
   }
@@ -155,7 +155,7 @@ describe('team-lead template — 3-phase model', () => {
   });
 
   it('template version 6.2.0', () => {
-    expect(content).toContain('template_version: "6.2.0"');
+    expect(content).toContain('template_version: "6.2.1"');
   });
 
   it('has dev dispatch protocol', () => {

@@ -160,7 +160,7 @@ describe('dev template structural invariants', () => {
   it('all 4 dev templates are at most 300 lines', () => {
     for (const t of DEV_TEMPLATES) {
       const c = fs.readFileSync(path.join(TEMPLATES_DIR, t), 'utf-8');
-      expect(c.split('\n').length, `${t} must be ≤300 lines`).toBeLessThanOrEqual(300);
+      expect(c.trimEnd().split('\n').length, `${t} must be ≤300 lines`).toBeLessThanOrEqual(300);
     }
   });
 

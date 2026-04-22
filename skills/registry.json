@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-22T18:53:18.795Z",
+  "generated": "2026-04-22T22:06:53.963Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1915,7 +1915,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:23fcfd56cf660950ca7f957f9840e1d124fbb57ef45b35a21d38d5fa67431226",
+      "hash": "sha256:6223222316fbfbbe579251ee7480f6122f8574c3e42a79c9adff252717848d33",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1945,7 +1945,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:811b6e5ed75fab604797a40bdaa2b6b92bf60ddf9d921076a15e2e4c79ff8786",
+      "hash": "sha256:00bb07c2c41a7e08060dfb55d5967fdeeb1e1ee13a3a6230a20ff85da3a13113",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1974,7 +1974,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:facb35bb5c66624c0553de81a3070e596a1ab0b10e98761868b18d34f0d72921",
+      "hash": "sha256:2c0b107969557bab62c6d830ab015e18d2005ccd3aeceb29631a6fc3b7f87a56",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -2090,7 +2090,7 @@
       "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:cee1cea4157c3b580606cf1969b7c3c3d2e91b6c0ae1b5d80cb4adea07e40d33",
+      "hash": "sha256:6948efa6525e662fdd72edce20a23f91f1a5c087919cafc595325bf60359f210",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -2293,7 +2293,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:17aebfeee872ac9e7ac5194de779993ac0d9fbf53382bab9d877e5cdd4f9d10c",
+      "hash": "sha256:89a445e19101f80d44f4253b0f204b4c630f5da0106e419660a52ea20e68ac8d",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2309,7 +2309,7 @@
           "ingest"
         ],
         "token_budget": 2000,
-        "template_version": "2.4.0",
+        "template_version": "2.5.0",
         "skills": [
           "audit-docs",
           "readme-audit",
@@ -2825,7 +2825,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a09d20dd6d9c976ccdf7b6f9d95ec8d0d6ca4937b17e812b57a9d9fb75adefdb",
+      "hash": "sha256:e4aa2e717bc83f7c8790ba303894b807a8b87e25fa7c3871fa331e49c6b5410c",
       "dependencies": [],
       "frontmatter": {
         "name": "team-lead",
@@ -2841,7 +2841,7 @@
           "coordinate"
         ],
         "token_budget": 5000,
-        "template_version": "6.2.0",
+        "template_version": "6.2.1",
         "memory": "project",
         "skills": [
           "pre-pr",
@@ -2883,7 +2883,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:17786e1a3a1b75c45b11045c7db0da0faaac8f730802d808b70c349837006f62",
+      "hash": "sha256:88112753d0b5f5aa5b7e1d992650de1547e7be75ee9be9d8f1a2a2278515f32f",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2898,7 +2898,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.11.0",
+        "template_version": "1.11.1",
         "memory": "project",
         "skills": [
           "test",

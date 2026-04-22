@@ -28,6 +28,10 @@
 | `researcher` | Domain research | Pre-implementation exploration — `/research` |
 | `codebase-mapper` | Architecture analysis | First-time repo analysis — `/map-codebase` |
 
+**Dev scope gates**: specialty default + architect-authorized override. test-specialist aligned with other core devs 2026-04-22 (BL-W27-02).
+
+**Agent-template `.md` edits**: doc-updater owns by default; a core dev may own when the template change is domain-specific (e.g., test-specialist template → test-specialist self-edits). Formalized 2026-04-22 (BL-W27-03).
+
 ### 3. Verification Before Done
 - MCP tool change → full Vitest suite + verify with `sync-vault`
 - New skill → `validate-skills`; new doc → `validate-doc-structure`
@@ -113,8 +117,10 @@
 
 Development waves live in git log + memory; summarized here for onboarding context:
 
+- **Wave 28** (2026-04-22, PR feature/wave-28→develop) — L0 housekeeping pre-W29. Shipped BL-W27-01 (CP Spawn Protocol find-pattern→search-docs), BL-W27-02 (dev scope Opción B), BL-W27-03 (doc-updater ownership of agent-template edits), BL-W27-04 (spawn-prompt hygiene), BL-W26-01b (planner no-change verdict), W17 HIGH #1 (addressee-liveness-gate.js hook), #3 (Message Topic Discipline), #4 (Scope Immutability Gate), #5 (catalog Kotlin scan). Trim+extract on arch-platform/arch-integration to fit 400-line limit. 13 new tests (9 Vitest + 4 bats). doc-updater 2.5.0, team-lead 6.2.1, test-specialist 1.11.1. Plugin v0.2.1 verified triggered-only. backlog.md consolidated with 0 HIGH/MEDIUM without target-wave.
 - **Wave 27** (2026-04-22, PR #61) — BL-W26-06 rollback W25 pattern-search MCP + codify dev→arch→CP chain. Frontmatter strips (find-pattern/module-health/pattern-coverage) from 3 architects + team-lead. Prose additions in 3 arch + 4 dev templates. Hub/sub-doc split for arch-testing.md → docs/agents/arch-testing-dispatch-protocol.md. 8 MIGRATIONS entries. New Group 8 anti-regression (7 tests). team-lead 6.2.0. 2210/2210 tests pass.
-- **Wave 25** (2026-04-21, in progress) — MCP wiring fix: 10 agents gained explicit `mcp__androidcommondoc__*` frontmatter; context-provider v3.0 pattern pre-cache; ingestion loop (context-provider → team-lead user-approval → doc-updater → `ingest-content`) finally closed after T-BUG-005 half-landed.
+- **Wave 26** (2026-04-21, PR #60) — BL-W26-01a MCP wiring for 4 agents (test-specialist, quality-gater, release-guardian-agent, cross-platform-validator) + Bug #8 topology gate in team-lead template (MANDATORY Phase 2 Topology Activation Gate post-ExitPlanMode). team-lead 6.1.0.
+- **Wave 25** (2026-04-21, PR #59) — MCP wiring fix: 10 agents gained explicit `mcp__androidcommondoc__*` frontmatter; context-provider v3.0 pattern pre-cache; ingestion loop (context-provider → team-lead user-approval → doc-updater → `ingest-content`) finally closed after T-BUG-005 half-landed.
 - **Wave 24** (2026-04-20, PR #58) — Bug #3 `TeamDelete` before `TeamCreate` + P4: 17 agent mirrors. team-lead 5.17.0.
 - **Wave 23** (2026-04-20, PR #57) — S8 token meter + Bug #5 `scope_doc_path` + Bug #6 PREP/EXECUTE architect dispatch modes. team-lead 5.15.0.
 - **Wave 22** (2026-04-20, PR #56) — Token topology S1–S7: team-lead model → sonnet, spawn-prompt diet, RTK prefix enforcement, verdict-to-disk, compaction loop.

@@ -80,3 +80,21 @@ If you CALL a `mcp__androidcommondoc__<name>` tool, it MUST appear in your agent
 **Declared MCP tools (Wave 25)**: 10 core agents declare MCP tools — context-provider (9), team-lead (13), doc-updater (8), doc-alignment-agent (10), l0-coherence-auditor (7), arch-platform (7), beta-readiness-agent (5), arch-testing (5), codebase-mapper (5), arch-integration (4), verifier (4). See `setup/agent-templates/` for the canonical `tools:` lines.
 
 **If a MCP tool you need is NOT in your frontmatter**: use `ToolSearch("select:mcp__androidcommondoc__<name>")` to load its schema on-demand. Reserve this for rare cross-domain calls — add the tool to your frontmatter if you use it regularly.
+
+## Spawn Prompt Hygiene
+
+Spawn prompts MUST use lean standby language only. Do NOT include wave/round forecasts, task previews, or "you will be doing X" in spawn prompts — work arrives via SendMessage post-spawn.
+
+**Why**: Spawn forecasts create stale context before the agent receives its actual dispatch. The agent starts with incorrect assumptions about scope, priority, or task order. All task context arrives via the first SendMessage from the orchestrator.
+
+**Anti-example (WRONG):**
+```
+Agent(name="arch-integration", prompt="You are arch-integration. Wave 28 Round 1: you will review CP wiring + liveness hook + catalog script. Start immediately.")
+```
+
+**Good example (CORRECT):**
+```
+Agent(name="arch-integration", prompt="You are arch-integration. Wait for dispatch via SendMessage. Your first action on spawn is to SendMessage to context-provider with 'gate ack'.")
+```
+
+See `docs/agents/tl-dispatch-topology.md#spawn-prompt-hygiene` for full rationale.

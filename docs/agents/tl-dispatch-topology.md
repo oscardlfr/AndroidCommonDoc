@@ -140,3 +140,20 @@ grep -r "libs\.compose-ui" .                       # BAD
 ```
 
 > Hyphen-notation catalog accessors are flagged by `catalog-coverage-check.sh` (wave17-lite T3-1).
+
+## Message Topic Discipline
+
+Each SendMessage between team peers MUST cover ONE topic only. Mixing a CANCEL with a NEW dispatch in a single message creates ambiguous state for the receiver.
+
+**WRONG — mixed topics:**
+> "Cancel the nav-route dispatch and also add the Koin registration for FooUseCase."
+
+**CORRECT — two messages:**
+> Message 1: "Cancel the nav-route dispatch — scope changed."
+> Message 2: "New task: add Koin registration for FooUseCase in appModule.kt:42."
+
+This applies to all peer-to-peer messages: arch→dev, arch→arch, team-lead→arch.
+
+## Spawn Prompt Hygiene
+
+Spawn prompts use lean standby language only. No wave/round forecasts in spawn — work arrives via SendMessage post-spawn. Full guidance: `docs/agents/agent-core-rules.md#spawn-prompt-hygiene`.

@@ -276,7 +276,7 @@ describe('doc-updater template', () => {
   });
 
   it('template version bumped to 2.4.0', () => {
-    expect(content).toContain('template_version: "2.4.0"');
+    expect(content).toContain('template_version: "2.5.0"');
   });
 });
 

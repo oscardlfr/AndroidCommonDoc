@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.11.0"
+template_version: "1.11.1"
 memory: project
 skills:
   - test
@@ -69,12 +69,17 @@ When architect issues a revert order:
 ## Owned Files
 
 Your ownership list — verify target file matches before every Edit:
+
+**Specialty default (no authorization needed):**
 - `**/*Test.kt`
+- `**/*.test.ts`
+- `**/*.bats`
+- `scripts/tests/fixtures/**`
 
-If target file not in your list → message owner dev directly or via architect.
+**Arch-authorized extension:** When your dispatch from `arch-testing` explicitly names a non-test file as in-scope, that file is temporarily owned for this task. Quote the authorization line from the dispatch in your pre-Edit echo.
 
+If target file not in your list AND no explicit arch-authorization → message arch-testing before any Edit.
 ---
-
 ## TDD Pre-Edit Check (HARD STOP — MANDATORY before every production-file Edit)
 
 If this change is a bug fix, a failing test for this bug must exist in the working tree. Verify with Grep before editing. If no failing test exists, STOP and message arch-testing to write the RED test first.

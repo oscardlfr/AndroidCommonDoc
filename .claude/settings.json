@@ -92,6 +92,15 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/addressee-liveness-gate.js"
+          }
+        ]
+      },
+      {
         "matcher": "Write|Edit",
         "hooks": [
           {

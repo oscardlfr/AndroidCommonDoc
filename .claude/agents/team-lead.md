@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [orchestrate, plan, assign, escalate, coordinate]
 token_budget: 5000
-template_version: "6.2.0"
+template_version: "6.2.1"
 memory: project
 skills:
   - pre-pr
@@ -190,6 +190,8 @@ For non-trivial tasks:
 7. **Only then** SendMessage architects to start Phase 2 (PREP → EXECUTE → APPROVE cycles).
 
 Exception: simple tasks (< 5K tokens, clear path) → plan inline without EnterPlanMode. Step 6 still applies if ANY file edit is needed.
+
+**Spawn Prompt Hygiene**: lean standby language only in spawn prompts — no wave/round forecasts. See `docs/agents/agent-core-rules.md#spawn-prompt-hygiene`.
 
 ## Agent Roster
 

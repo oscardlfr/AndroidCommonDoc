@@ -56,3 +56,13 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" == *"hyphen-notation"* ]]
 }
+
+@test "catalog-coverage-check flags hyphen-notation in Konsist .kt files" {
+    mkdir -p "$WORK_DIR/detekt-rules"
+    cat > "$WORK_DIR/detekt-rules/FakeKonsist.kt" <<'EOF'
+val dep = libs.androidx-lifecycle-runtime-ktx
+EOF
+    run bash "$SCRIPT" --project-root "$WORK_DIR"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"androidx-lifecycle-runtime-ktx"* ]]
+}
