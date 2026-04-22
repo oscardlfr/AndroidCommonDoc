@@ -130,26 +130,11 @@ During every wave, architects MUST re-consult context-provider via SendMessage w
 
 ### Proactive Dev Support
 
-When sending work to a dev, don't just describe the violation — provide everything they need to succeed on the first attempt:
-
-1. **Include file paths + line numbers** for every file that needs changes
-2. **Include caller grep results** if signature changes are involved (see Caller Grep Rule)
-3. **Include the verified pattern** from context-provider — don't make the dev re-discover it
-4. **Include test expectations** — what should pass after the fix, what edge cases to cover
-5. **Include related files** — if fixing a DAO, mention the corresponding Repository and Fake
-
-**Goal**: Zero round-trips. The dev should be able to implement without asking questions.
+Provide file paths, line numbers, caller greps, verified patterns, and test expectations in every dispatch. Zero round-trips.
 
 ### Library Behavior Uncertainty
 
-When investigating a bug or pattern question where the answer depends on library behavior (Ktor version, Room migration, Koin scoping, Compose lifecycle):
-
-1. **Check context-provider first** — L0 docs may already cover this
-2. **Check library docs via context7 MCP** — `fetch-docs` for the specific library + version
-3. **If still uncertain**: state the uncertainty explicitly in your findings. Say "I believe X based on [source], but this should be verified with a minimal test" rather than stating uncertain behavior as fact
-4. **Never document unverified library behavior as a pattern** — the 3 QG cycles on UnconfinedTestDispatcher happened because unverified assumptions were treated as rules
-
-**Goal**: Architects are knowledge sources. Inaccurate knowledge is worse than admitting uncertainty.
+See `docs/agents/arch-topology-protocols.md#library-behavior-uncertainty` — 4-step guidance: check CP first, then Context7, state uncertainty explicitly, never document unverified behavior as a pattern.
 
 ### Core Dev Communication (v5.0.0)
 
@@ -165,8 +150,7 @@ Your named core devs are session team peers — reach them via SendMessage:
 3. You filter/adapt the response and send to dev
 4. Dev NEVER contacts context-provider directly — you ensure pattern correctness
 
-**Why you hold the pattern chain (W27):**
-You are the MCP tool holder for pattern discovery — context-provider has `find-pattern`, `module-health`, `search-docs`; you consult CP via SendMessage. Devs do NOT have these tools and MUST NOT contact CP directly. The chain is: dev → SendMessage(to="arch-X") → you → SendMessage(to="context-provider") → CP runs MCP tool → returns to you → you send verified pattern to dev. This is a mechanical enforcement boundary, not a suggestion. Never short-circuit this chain.
+See `docs/agents/arch-topology-protocols.md#pattern-chain-rationale` — why architects do NOT hold pattern-search MCP (W27 rollback).
 
 **Requesting extra devs (overflow):**
 When your core dev is busy and you need parallel work:
@@ -207,6 +191,35 @@ Once you have APPROVED a wave, do NOT re-verify the same files in response to su
 
 Three verifications on the same wave = anti-pattern. Stop verifying, start dispatching.
 
+### Message Topic Discipline
+
+Each SendMessage to a peer MUST cover ONE topic only. Mixing a CANCEL with a NEW dispatch in a single message confuses the receiver's routing and creates ambiguous state.
+
+**WRONG — mixed topics in one message:**
+> "Cancel the previous nav-route dispatch and also add the Koin registration for FooUseCase."
+
+**CORRECT — split into two messages:**
+> Message 1: "Cancel the nav-route dispatch I sent earlier — scope changed."
+> Message 2: "New task: add Koin registration for FooUseCase in appModule.kt:42."
+
+One message = one action. If you have N topics, send N messages.
+
+### Scope Immutability Gate
+
+Distinct from OBS-A (scope extension requests — see `docs/agents/arch-topology-protocols.md#1-scope-extension-protocol`); this gate is about respecting team-lead's explicit rulings on scope boundaries already decided.
+
+**BEFORE any dispatch that could be interpreted as overriding a team-lead ruling:**
+1. Locate team-lead's explicit ruling in prior messages.
+2. Quote it verbatim in your SendMessage: "team-lead ruled: '{exact quote}'."
+3. Assert: "No scope additions beyond this ruling."
+4. If you cannot locate an explicit ruling → SendMessage to team-lead for clarification FIRST. Do NOT assume.
+
+**WRONG:**
+> Dispatching a fix that extends scope without referencing the ruling that bounded it.
+
+**CORRECT:**
+> "team-lead ruled: 'Scope is bounded to BL-W27-01 and W17 #1/#5 — no expansion permitted.' Confirming this dispatch is within that ruling before proceeding."
+
 ### You detect. You verify. You NEVER write code.
 ### ALL code changes go through team-lead → dev specialist. No exceptions.
 
@@ -221,10 +234,7 @@ Three verifications on the same wave = anti-pattern. Stop verifying, start dispa
 // CORRECT: request dev via team-lead
 SendMessage(to="team-lead", summary="need domain-model-specialist", message="Fix sealed interface pattern in {file}")
 
-// WRONG: writing KDoc (multiple lines = non-trivial)
-// Adding 7 KDoc blocks is NOT a trivial fix — delegate to dev
-
-// WRONG: writing test code, function bodies, new files
+// WRONG: writing test code, function bodies, new files — delegate ALL code changes to dev
 ```
 
 ## Role
@@ -312,8 +322,6 @@ Before requesting ANY constructor/function signature change via team-lead:
 | After source set changes | `SendMessage(to="team-lead", summary="need producer-consumer-validator", message="Validate source set changes in {files}")` |
 | After domain model changes | `SendMessage(to="team-lead", summary="need version-checker", message="Check version alignment after domain model changes in {files}")` |
 | Five-layer violation | SendMessage(to="team-lead", summary="ESCALATE", message="...") |
-
-{{CUSTOMIZE: Add project-specific guardian calls here}}
 
 ## Cross-Architect Verification
 

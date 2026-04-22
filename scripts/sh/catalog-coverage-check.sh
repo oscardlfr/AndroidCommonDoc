@@ -101,7 +101,7 @@ while IFS= read -r -d '' file; do
         printf "  Found: %s\n" "$line_content"
         HYPHEN_FINDINGS=$((HYPHEN_FINDINGS + 1))
     done < <(grep -nE "$HYPHEN_RE" "$file" 2>/dev/null || true)
-done < <(find . \( -name "*.sh" -o -name "*.ps1" -o -name "*.md" \) \
+done < <(find . \( -name "*.sh" -o -name "*.ps1" -o -name "*.md" -o -name "*Konsist*.kt" -o -path "*/detekt-rules/*.kt" \) \
     -not -path "*/build/*" -not -path "*/.gradle/*" -not -path "*/node_modules/*" \
     -not -path "*/.git/*" -print0 2>/dev/null || true)
 

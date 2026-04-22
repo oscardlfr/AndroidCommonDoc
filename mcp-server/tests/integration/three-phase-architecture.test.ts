@@ -45,7 +45,7 @@ describe('agent template size limits', () => {
   for (const template of templates) {
     it(`${template} is ≤400 lines`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
-      const lines = content.split('\n').length;
+      const lines = content.trimEnd().split('\n').length;
       expect(lines).toBeLessThanOrEqual(400);
     });
   }

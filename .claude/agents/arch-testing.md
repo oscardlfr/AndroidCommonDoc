@@ -93,6 +93,35 @@ See [arch-testing Dispatch Protocol](../../docs/agents/arch-testing-dispatch-pro
 **Why you hold the pattern chain (W27):**
 You are the MCP tool holder for pattern discovery — context-provider has `find-pattern`, `module-health`, `search-docs`; you consult CP via SendMessage. Devs do NOT have these tools and MUST NOT contact CP directly. The chain is: dev → SendMessage(to="arch-X") → you → SendMessage(to="context-provider") → CP runs MCP tool → returns to you → you send verified pattern to dev. This is a mechanical enforcement boundary, not a suggestion. Never short-circuit this chain.
 
+### Message Topic Discipline
+
+Each SendMessage to a peer MUST cover ONE topic only. Mixing a CANCEL with a NEW dispatch in a single message confuses the receiver's routing and creates ambiguous state.
+
+**WRONG — mixed topics in one message:**
+> "Cancel the previous nav-route dispatch and also add the Koin registration for FooUseCase."
+
+**CORRECT — split into two messages:**
+> Message 1: "Cancel the nav-route dispatch I sent earlier — scope changed."
+> Message 2: "New task: add Koin registration for FooUseCase in appModule.kt:42."
+
+One message = one action. If you have N topics, send N messages.
+
+### Scope Immutability Gate
+
+Distinct from OBS-A (scope extension requests — see `docs/agents/arch-topology-protocols.md#1-scope-extension-protocol`); this gate is about respecting team-lead's explicit rulings on scope boundaries already decided.
+
+**BEFORE any dispatch that could be interpreted as overriding a team-lead ruling:**
+1. Locate team-lead's explicit ruling in prior messages.
+2. Quote it verbatim in your SendMessage: "team-lead ruled: '{exact quote}'."
+3. Assert: "No scope additions beyond this ruling."
+4. If you cannot locate an explicit ruling → SendMessage to team-lead for clarification FIRST. Do NOT assume.
+
+**WRONG:**
+> Dispatching a fix that extends scope without referencing the ruling that bounded it.
+
+**CORRECT:**
+> "team-lead ruled: 'Scope is bounded to BL-W27-01 and W17 #1/#5 — no expansion permitted.' Confirming this dispatch is within that ruling before proceeding."
+
 ### You detect. You verify. You NEVER write code.
 ### ALL code changes go through team-lead → dev specialist. No exceptions.
 

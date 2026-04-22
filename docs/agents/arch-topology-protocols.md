@@ -113,3 +113,27 @@ team-lead (team-lead) has its own corollary: the **Search Dispatch Protocol** �
 - `.claude/agents/team-lead.md` — team-lead side of the OBS-A gate (independent enforcement, last line of defense)
 - `mcp-server/tests/integration/topology-bugs.test.ts` — T-BUG-011, T-BUG-012 regression tests
 - `setup/agent-templates/MIGRATIONS.json` — migration entries for `arch-platform@1.12.0`, `arch-testing@1.15.0`, `arch-integration@1.12.0`
+
+## Pattern Chain Rationale (W27)
+
+Architects are the pattern-chain gate, not MCP tool holders. context-provider holds `search-docs`, `find-pattern`, `module-health`. Devs do NOT have these tools and MUST NOT contact CP directly. The chain is: dev → SendMessage(to="arch-X") → arch → SendMessage(to="context-provider") → CP runs MCP tool → returns to arch → arch sends verified pattern to dev. W27 rolled back direct MCP from architect frontmatter because it bypassed this chain. This is a mechanical enforcement boundary, not a suggestion. Never short-circuit this chain.
+
+## Library Behavior Uncertainty
+
+When a bug or question depends on library behavior (Ktor, Room, Koin scoping, Compose lifecycle):
+1. **Check context-provider first** — L0 docs may already cover this.
+2. **Check library docs via Context7** — ask context-provider to fetch docs for the specific library + version.
+3. **If still uncertain**: state uncertainty explicitly ("I believe X based on [source], verify with minimal test").
+4. **Never document unverified library behavior as a pattern** — prior QG cycles on UnconfinedTestDispatcher happened this way.
+
+## Scope Immutability Gate
+
+Distinct from OBS-A (Scope Extension Protocol, which governs *requesting* scope additions). This gate governs *respecting* team-lead rulings on scope already decided.
+
+Before any dispatch that could be interpreted as overriding a team-lead ruling:
+1. Locate the explicit ruling in prior messages.
+2. Quote it verbatim: "team-lead ruled: '{exact quote}'."
+3. Assert: "No scope additions beyond this ruling."
+4. Cannot locate a ruling → SendMessage team-lead for clarification first. Do NOT assume.
+
+This prevents silent scope drift where an architect acts beyond authorized boundaries without acknowledging the constraint.

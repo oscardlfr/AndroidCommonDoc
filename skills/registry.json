@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-22T18:53:18.795Z",
+  "generated": "2026-04-22T20:56:01.115Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1915,7 +1915,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:23fcfd56cf660950ca7f957f9840e1d124fbb57ef45b35a21d38d5fa67431226",
+      "hash": "sha256:4223ce4f93973f5d57edcb56ea0429e461c6484a73c80e36753a02b43802e340",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1945,7 +1945,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:811b6e5ed75fab604797a40bdaa2b6b92bf60ddf9d921076a15e2e4c79ff8786",
+      "hash": "sha256:c2b831aec308b98882cd1fe9ad198506742bfec947041f1e2a4bb463680c017a",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1974,7 +1974,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:facb35bb5c66624c0553de81a3070e596a1ab0b10e98761868b18d34f0d72921",
+      "hash": "sha256:2c0b107969557bab62c6d830ab015e18d2005ccd3aeceb29631a6fc3b7f87a56",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -2090,7 +2090,7 @@
       "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:cee1cea4157c3b580606cf1969b7c3c3d2e91b6c0ae1b5d80cb4adea07e40d33",
+      "hash": "sha256:6948efa6525e662fdd72edce20a23f91f1a5c087919cafc595325bf60359f210",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
