@@ -92,7 +92,7 @@ SUPPRESS_HITS=$(git diff "$MERGE_BASE..HEAD" -- '*.kt' | grep '^\+' | grep -v '^
 if [ "$SUPPRESS_HITS" -gt 0 ]; then
   echo "ERROR: $SUPPRESS_HITS new @Suppress annotation(s) found. Fix the root cause instead."
   git diff "$MERGE_BASE..HEAD" -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
-    | grep -P '@Suppress\(|@SuppressWarnings\(|@file:Suppress'
+    | grep -E '@Suppress\(|@SuppressWarnings\(|@file:Suppress'
 fi
 ```
 
