@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-22T22:06:53.963Z",
+  "generated": "2026-04-23T17:46:09.215Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1834,7 +1834,7 @@
       "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9af39d454ac9fa713404ba148457b647bde1b7058eaebe6e708a0e3dac81425e",
+      "hash": "sha256:c12ec382804fabea22d969b12d8e379c0e8faaafbe3a2aab330acea1e20d9a2f",
       "dependencies": [],
       "frontmatter": {
         "name": "work",
@@ -2210,7 +2210,7 @@
       "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:6de8d5a96f24fe0d76753e87f25c56ccb829a26ab8670abd6b212c929c74cba7",
+      "hash": "sha256:60363f9ae7841e15fdb48f98c59db5aad2ae8531fb043cea3b584bcc57baef81",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-alignment-agent",

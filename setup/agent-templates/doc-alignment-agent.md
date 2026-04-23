@@ -97,7 +97,7 @@ Report ALL findings to the invoker with severity:
 - **MEDIUM**: formatting issues, frontmatter gaps, old dates
 - **LOW**: style suggestions, optimization opportunities
 
-**NEVER fix docs directly.** Report findings so dev-lead or Claude can decide
+**NEVER fix docs directly.** Report findings so team-lead or Claude can decide
 what to fix and in what order. This follows the same principle as test-specialist:
 audit and report, don't unilaterally modify.
 

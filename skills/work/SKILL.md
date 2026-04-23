@@ -173,7 +173,7 @@ Proceed? (y/n)
 
 ## Orchestrator Safety Rule
 
-**NEVER** spawn orchestrator agents (`team-lead`, `dev-lead`, `quality-gater`) via `Agent()`. These agents need `TeamCreate`, `TeamDelete`, and `Agent` tools which only work at the top-level process.
+**NEVER** spawn orchestrator agents (`team-lead`, `quality-gater`) via `Agent()`. These agents need `TeamCreate`, `TeamDelete`, and `Agent` tools which only work at the top-level process.
 
 When routing to an orchestrator:
 1. Read the agent's template from `.claude/agents/{name}.md`
