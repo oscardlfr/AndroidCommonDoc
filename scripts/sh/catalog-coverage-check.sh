@@ -7,11 +7,12 @@
 # with a suggestion to migrate to the catalog.
 #
 # Usage:
-#   ./catalog-coverage-check.sh [--project-root DIR] [--strict]
+#   ./catalog-coverage-check.sh [--project-root DIR] [--strict] [--module-paths PATH1,PATH2,...]
 #
 # Options:
-#   --project-root DIR   Project root (default: cwd)
-#   --strict             Exit 1 if any hardcoded version found (default: 0, warn only)
+#   --project-root DIR            Project root (default: cwd)
+#   --strict                      Exit 1 if any hardcoded version found (default: 0, warn only)
+#   --module-paths PATH1,PATH2    Comma-separated subdirectory paths to restrict scan (default: all)
 #
 # Exit codes:
 #   0  Clean (or warn-only mode with findings)
@@ -26,11 +27,12 @@ set -euo pipefail
 
 PROJECT_ROOT="${ANDROID_COMMON_DOC:-$(pwd)}"
 STRICT=false
+MODULE_PATHS=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --help|-h)
-            sed -n '4,22p' "$0" | sed 's/^# //'
+            sed -n '4,23p' "$0" | sed 's/^# //'
             exit 0
             ;;
         --project-root)
@@ -41,6 +43,10 @@ while [[ $# -gt 0 ]]; do
             STRICT=true
             shift
             ;;
+        --module-paths)
+            MODULE_PATHS="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown arg: $1" >&2
             exit 2
@@ -49,6 +55,19 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd "$PROJECT_ROOT" || exit 2
+
+# Build search roots: comma-separated MODULE_PATHS → array of dirs, or default to "."
+SEARCH_ROOTS=()
+if [ -n "$MODULE_PATHS" ]; then
+    IFS=',' read -ra _paths <<< "$MODULE_PATHS"
+    for p in "${_paths[@]}"; do
+        p="${p#"${p%%[![:space:]]*}"}"  # trim leading whitespace
+        p="${p%"${p##*[![:space:]]}"}"  # trim trailing whitespace
+        SEARCH_ROOTS+=("$p")
+    done
+else
+    SEARCH_ROOTS=(".")
+fi
 
 # Pattern matches:
 #   implementation("group:artifact:1.2.3")
@@ -82,7 +101,7 @@ while IFS= read -r -d '' file; do
             FINDINGS=$((FINDINGS + 1))
         fi
     done < <(grep -nE '(implementation|api|testImplementation|androidTestImplementation|compileOnly|runtimeOnly|ksp|kapt|annotationProcessor|classpath)\s*\(\s*"[^":]+:[^":]+:[^"]+"' "$file" 2>/dev/null || true)
-done < <(find . -name "*.gradle.kts" -not -path "*/build/*" -not -path "*/.gradle/*" -not -path "*/node_modules/*" -print0 2>/dev/null || true)
+done < <(find "${SEARCH_ROOTS[@]}" -name "*.gradle.kts" -not -path "*/build/*" -not -path "*/.gradle/*" -not -path "*/node_modules/*" -print0 2>/dev/null || true)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Check 2: Hyphen-notation catalog accessor in scripts/docs/templates
