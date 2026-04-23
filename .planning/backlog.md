@@ -222,6 +222,54 @@ L0 is shipping-ready for Wave 29 propagation.
 
 ---
 
+## Wave 29 closures (2026-04-23)
+
+### BL-W29-01 — L1 manifest drift cleanup (✅ SHIPPED W29)
+Removed ghost dev-lead + L0-generic entries (platform-auditor, module-lifecycle) from shared-kmp-libs l2_specific.agents. Added project-manager (legacy L1). PR #28.
+
+### BL-W29-02 — api-contract-guardian CP gate (✅ SHIPPED W29)
+Added FIRST ACTION SendMessage(CP) per agent-core-rules.md § 1. PR #28.
+
+### BL-W29-03 — DawSync manifest drift cleanup (✅ SHIPPED W29)
+Removed data-layer-specialist + domain-model-specialist (L0 generics). Added audio-engine-specialist + build-in-public-drafter (real L2-private but missing). Commit d3af4ce9 on feature/sidebar-bug-sprint.
+
+### BL-W29-04 — 4 DawSync private agents CP gate (✅ SHIPPED W29)
+daw-guardian, audio-engine-specialist, freemium-gate-checker, producer-consumer-validator. Commit 0f654dcd.
+
+### BL-W29-05 — L0 dev-lead legacy reference cleanup (✅ SHIPPED W29)
+Removed dev-lead mentions from doc-alignment-agent.md (both locations) + skills/work/SKILL.md orchestrator safety list. On L0 feature/wave-29 (pending commit).
+
+---
+
+## Wave 30 seeds
+
+### BL-W30-01 (LOW tool fix) — tool-use-analytics aggregation bug
+`mcp-server/src/tools/tool-use-analytics.ts` reports `our_mcp_calls: 0` when log has 16+ entries with `mcp_server: "androidcommondoc"`. Aggregation bug. ~15 min fix.
+
+### BL-W30-02 (observation) — CP shutdown latency memory update
+Update `feedback_cp_shutdown_bug.md`: CP DOES process shutdown_request, with ~38s delay after first TeamDelete rejection. Current memory says "ignores shutdown_request" — incorrect. Bug #3 (TeamDelete-before-TeamCreate) remains conservative workaround.
+
+### BL-W30-03 (doc alignment audit) — DI patterns drift check
+Verify no drift between `docs/di/di-patterns-modules.md` and `~/.claude/CLAUDE.md` global DI guidance (KoinIsolatedContext, startKoin semantics).
+
+### BL-W30-04 — /sync-l0 setup/agent-templates/ staleness bug (from W29 observations)
+`/sync-l0` does NOT propagate `setup/agent-templates/`. L1 + L2 `team-lead.md`, `quality-gater.md`, etc. lag L0 after every L0 wave. Fix in sync-engine.ts: include that dir OR provide explicit propagation command. Memory: `project_sync_staleness_bug.md`.
+
+### BL-W30-05 — DawSync remote setup
+DawSync is local-only. When ready: create GitHub repo, `git remote add origin ...`, push develop + master + feature/sidebar-bug-sprint. Enables normal PR flow for future waves.
+
+### BL-W30-06..09 — W17 MED simple-fixes deferred from W29 Phase 4
+(Phase 4 skipped this wave — capacity allocated to manifest drift cleanup + CP gates.)
+- BL-W30-06 (from W17 MED #4): /pre-pr K/N stdlib interop @Suppress allowlist. ~20min. skills/pre-pr/SKILL.md.
+- BL-W30-07 (from W17 MED #14): git pre-commit hook blocking compile-fail commits.
+- BL-W30-08 (from W17 MED #16): --module-paths flag for catalog-coverage-check.sh.
+- BL-W30-09 (from W17 MED #19): specialist raw-output + [DEV NOTE] template rule.
+
+### BL-W30-10 — W29 A3 scope creep lesson
+W29 initially ran /pre-pr /check-outdated /audit-docs in L1 via test-specialist — this was out of scope. Future waves: L0 propagates only; L1/L2 consoles validate. Codify in planner template if needed.
+
+---
+
 ## Out-of-scope leftover (pre-Wave 25)
 
 - `project_wave17_l2_topology_findings.md` findings #1, #2, #4, #5, #6, #8, #9, #10, #12, #14, #17, #18, #19 — may become unnecessary if Wave 17-lite hypothesis holds post-reset
