@@ -441,6 +441,59 @@ export async function scanCommands(
   return entries;
 }
 
+/**
+ * Scan setup/agent-templates/ directory for agent template markdown files.
+ * These are the SOURCE templates; .claude/agents/ contains copies.
+ *
+ * @param rootDir - L0 root directory
+ * @returns Array of agent template registry entries
+ */
+export async function scanAgentTemplates(
+  rootDir: string,
+): Promise<SkillRegistryEntry[]> {
+  const templatesDir = path.join(rootDir, "setup", "agent-templates");
+  let files;
+  try {
+    files = await readdir(templatesDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const entries: SkillRegistryEntry[] = [];
+
+  for (const file of files) {
+    if (!file.isFile() || !file.name.endsWith(".md")) continue;
+
+    const filePath = path.join(templatesDir, file.name);
+    let content: string;
+    try {
+      content = await readFile(filePath, "utf-8");
+    } catch {
+      continue;
+    }
+
+    const name = file.name.replace(/\.md$/, "");
+    const fm = parseFrontmatter(content);
+    const fmData: Record<string, unknown> = fm?.data ?? {};
+    const description =
+      typeof fmData.description === "string" ? fmData.description : "";
+
+    entries.push({
+      name,
+      type: "agent",
+      path: `setup/agent-templates/${file.name}`,
+      description,
+      category: "architecture",
+      tier: "extended",
+      hash: await computeHash(filePath),
+      dependencies: [],
+      frontmatter: fmData,
+    });
+  }
+
+  return entries;
+}
+
 // ---------------------------------------------------------------------------
 // Registry generation
 // ---------------------------------------------------------------------------
@@ -454,17 +507,18 @@ export async function scanCommands(
 export async function generateRegistry(
   rootDir: string,
 ): Promise<SkillRegistry> {
-  const [skills, agents, commands] = await Promise.all([
+  const [skills, agents, commands, agentTemplates] = await Promise.all([
     scanSkills(rootDir),
     scanAgents(rootDir),
     scanCommands(rootDir),
+    scanAgentTemplates(rootDir),
   ]);
 
   return {
     version: 1,
     generated: new Date().toISOString(),
     l0_root: ".",
-    entries: [...skills, ...agents, ...commands],
+    entries: [...skills, ...agents, ...commands, ...agentTemplates],
   };
 }
 
