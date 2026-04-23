@@ -5,13 +5,20 @@ description: Ktor 3 WebSocket migration guide — Duration API breaking change (
 category: network
 layer: L0
 status: stable
-scope: KMP projects using Ktor WebSockets
+scope:
+  - network
+  - websocket
+  - ktor
+  - migration
 targets:
-  - Android
-  - Desktop
-  - iOS
+  - android
+  - desktop
+  - ios
+  - jvm
 sources:
   - context7:/ktorio/ktor-documentation@2026-04-23
+monitor_urls:
+  - https://github.com/ktorio/ktor/releases
 ---
 
 # Ktor WebSocket Patterns
