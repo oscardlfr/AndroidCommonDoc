@@ -124,8 +124,10 @@ export function computeToolUseReport(
 
     if (entry.tool_name.startsWith("mcp__")) mcpCalls++;
     if (entry.tool_name === "Skill") skillCalls++;
-    if (entry.mcp_server === "context7") context7Calls++;
-    if (entry.mcp_server === "androidcommondoc") ourMcpCalls++;
+    // Match bare name OR plugin-wrapped form (e.g. `plugin_context7_context7`).
+    // Claude Code wraps plugin-provided MCP servers with a `plugin_<id>_` prefix.
+    if (entry.mcp_server && /(^|_)context7$/.test(entry.mcp_server)) context7Calls++;
+    if (entry.mcp_server && /(^|_)androidcommondoc$/.test(entry.mcp_server)) ourMcpCalls++;
     if (entry.cp_bypass_blocked) cpBypassBlocked++;
 
     const agentKey = entry.agent_id ?? entry.agent_type ?? "unknown";
