@@ -97,6 +97,27 @@ The `l0-manifest.json` controls what gets synced:
 - **explicit**: Only syncs entries already present in `checksums` (opt-in mode)
 - **l2_specific**: Lists project-owned files that sync will never touch
 
+## Migration Detection
+
+When the L0 registry ships breaking changes (renamed agents, new manifest fields), consumers may need migration steps applied before or after sync. The migration registry at `skills/sync-l0/migrations.json` defines these steps.
+
+**Using `--auto-migrate`**:
+```bash
+node build/sync/sync-l0-cli.js --project-root <target> --auto-migrate
+```
+
+This runs the migration detection + apply pipeline before sync:
+
+1. **Detect**: `detectMigrations()` reads `migrations.json`, compares against the target project state (case-insensitive file matching on Windows — A5), and returns pending migrations.
+2. **Apply**: `applyMigrations()` executes each pending migration (e.g. rename `dev-lead.md` → `project-manager.md`) and records the migration ID in `l0-manifest.json` under `migrations_applied`.
+3. **Idempotent**: double-applying a migration is a no-op — already-applied IDs are skipped.
+
+**`migrations_applied` field**: added to `l0-manifest.json` (ManifestSchemaV2) as `migrations_applied: string[]`. Tracks which migration IDs have been applied so repeated syncs don't re-run them.
+
+**Seed migrations**:
+- `M001`: `dev-lead` agent renamed to `project-manager` (applies when `l0_version_before: "5.0.0"`)
+- `M002`: `migrations_applied` field added to manifest schema (applies when field is absent)
+
 ## External Skill Sources
 
 Not every skill on a consumer's machine is managed by L0. Google's Android Skills repository (`github.com/android/skills`, Apache 2.0) publishes official skills that users install directly via `android skills add`. These arrive at `~/.claude/skills/<name>/SKILL.md` — the same directory path L0 materializes into.

@@ -17,7 +17,7 @@
  * - Registry existence is validated before any sync operations
  */
 
-import { readFile, writeFile, mkdir, unlink, access } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink, access, readdir, rename } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { execSync } from "node:child_process";
 import path from "node:path";
@@ -1279,4 +1279,107 @@ export async function syncL0(
   }
 
   return report;
+}
+
+// ---------------------------------------------------------------------------
+// Migration support
+// ---------------------------------------------------------------------------
+
+export interface MigrationEntry {
+  id: string;
+  description: string;
+  type: string;
+  from?: string;
+  to?: string;
+  field_to_add?: string;
+  default_value?: unknown;
+  applies_when: Record<string, string | string[]>;
+}
+
+export interface MigrationRegistry {
+  format_version: string;
+  migrations: MigrationEntry[];
+}
+
+/**
+ * Detect which migrations are pending for a target project directory.
+ * Normalizes filenames to lowercase for case-insensitive comparison (A5).
+ */
+export async function detectMigrations(
+  targetDir: string,
+  registry: MigrationRegistry,
+  manifest: Manifest,
+): Promise<MigrationEntry[]> {
+  const pending: MigrationEntry[] = [];
+  const applied = new Set(manifest.migrations_applied ?? []);
+
+  for (const migration of registry.migrations) {
+    if (applied.has(migration.id)) continue;
+
+    if (migration.type === 'agent_rename' && migration.from) {
+      // Check for the old agent file (case-insensitive — A5)
+      const agentsDir = path.join(targetDir, '.claude', 'agents');
+      try {
+        const files = await readdir(agentsDir);
+        const normalizedFiles = files.map(f => f.toLowerCase());
+        if (normalizedFiles.includes(`${migration.from.toLowerCase()}.md`)) {
+          pending.push(migration);
+        }
+      } catch {
+        // agents dir doesn't exist — skip
+      }
+    } else if (migration.type === 'manifest_schema_bump' && migration.field_to_add) {
+      const condition = migration.applies_when as Record<string, string>;
+      if (condition.field_missing) {
+        const fieldValue = (manifest as Record<string, unknown>)[condition.field_missing];
+        if (fieldValue == null) {
+          pending.push(migration);
+        }
+      }
+    }
+  }
+
+  return pending;
+}
+
+/**
+ * Apply a list of migrations to the target project directory.
+ * Idempotent: double-applying is a no-op.
+ */
+export async function applyMigrations(
+  targetDir: string,
+  migrations: MigrationEntry[],
+  manifest: Manifest,
+  manifestPath: string,
+): Promise<void> {
+  const applied = new Set(manifest.migrations_applied ?? []);
+
+  for (const migration of migrations) {
+    if (applied.has(migration.id)) continue;
+
+    if (migration.type === 'agent_rename' && migration.from && migration.to) {
+      const agentsDir = path.join(targetDir, '.claude', 'agents');
+      try {
+        const files = await readdir(agentsDir);
+        // Find matching file case-insensitively (A5)
+        const match = files.find(f => f.toLowerCase() === `${migration.from!.toLowerCase()}.md`);
+        if (match) {
+          const oldPath = path.join(agentsDir, match);
+          const newPath = path.join(agentsDir, `${migration.to}.md`);
+          await rename(oldPath, newPath);
+        }
+      } catch {
+        // skip if dir missing
+      }
+    } else if (migration.type === 'manifest_schema_bump' && migration.field_to_add) {
+      // Field added via migrations_applied tracking — manifest_schema_bump is handled
+      // by the schema default; just mark as applied
+    }
+
+    applied.add(migration.id);
+  }
+
+  // Write updated manifest with migrations_applied
+  manifest.migrations_applied = [...applied];
+  await writeManifest(manifestPath, manifest);
 }

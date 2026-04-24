@@ -45,6 +45,9 @@ KMP source set organization, module structure, and architecture enforcement patt
 | [kmp-architecture-sourceset](kmp-architecture-sourceset.md) | Source sets — commonMain, jvmMain, appleMain, expect/actual, file naming |
 | [kmp-architecture-modules](kmp-architecture-modules.md) | Module structure — flat naming, Compose Resources config, module boundaries |
 | [layer-topology](layer-topology.md) | L0/L1/L2 layer model, flat vs chain topology, auto-sync setup |
+| [kmp-supported-platforms-reference](kmp-supported-platforms-reference.md) | KMP + Compose MP platform stability matrix (2026) — citable reference |
+| [kotlinx-io-reference](kotlinx-io-reference.md) | kotlinx-io Buffer/Source/Sink API reference — citable source for kmp-features-2026 |
+| [kotlinx-coroutines-reference](kotlinx-coroutines-reference.md) | kotlinx.coroutines builders, Flow, Dispatchers reference — citable source for kmp-features-2026 |
 
 ## Key Rules
 

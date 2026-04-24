@@ -35,9 +35,12 @@ import {
   resolveL0Source,
   cloneRemoteSource,
   cleanupClone,
+  detectMigrations,
+  applyMigrations,
   type SyncOptions,
   type SyncReport,
   type MultiSourceSyncReport,
+  type MigrationRegistry,
 } from "./sync-engine.js";
 import {
   createDefaultManifest,
@@ -60,6 +63,7 @@ interface CliArgs {
   prune: boolean;
   force: boolean;
   dryRun: boolean;
+  autoMigrate: boolean;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -68,6 +72,7 @@ function parseArgs(argv: string[]): CliArgs {
   let prune = false;
   let force = false;
   let dryRun = false;
+  let autoMigrate = false;
 
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--project-root" && argv[i + 1]) {
@@ -82,10 +87,12 @@ function parseArgs(argv: string[]): CliArgs {
       force = true;
     } else if (argv[i] === "--dry-run") {
       dryRun = true;
+    } else if (argv[i] === "--auto-migrate") {
+      autoMigrate = true;
     }
   }
 
-  return { projectRoot, l0Root, prune, force, dryRun };
+  return { projectRoot, l0Root, prune, force, dryRun, autoMigrate };
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +186,7 @@ async function ensureManifest(
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const { projectRoot, l0Root: l0RootArg, prune, force, dryRun } = parseArgs(process.argv);
+  const { projectRoot, l0Root: l0RootArg, prune, force, dryRun, autoMigrate } = parseArgs(process.argv);
 
   console.log(`Sync → ${projectRoot}`);
   if (dryRun) console.log("  (dry-run mode — no files will be modified)");
@@ -187,6 +194,27 @@ async function main(): Promise<void> {
   const { l0Root, isMultiSource, clonedDirs } = await ensureManifest(projectRoot, l0RootArg);
 
   try {
+
+  // Auto-migrate: detect and apply pending migrations before sync
+  if (autoMigrate) {
+    const migrationsPath = path.join(l0Root, 'skills', 'sync-l0', 'migrations.json');
+    const manifestPath = path.join(projectRoot, 'l0-manifest.json');
+    try {
+      const { readManifest: rm } = await import('./manifest-schema.js');
+      const migrationsContent = await readFile(migrationsPath, 'utf-8');
+      const registry = JSON.parse(migrationsContent) as MigrationRegistry;
+      const manifest = await rm(manifestPath);
+      const pending = await detectMigrations(projectRoot, registry, manifest);
+      if (pending.length > 0) {
+        console.log(`Auto-migrate: applying ${pending.length} pending migration(s)...`);
+        for (const m of pending) console.log(`  ${m.id}: ${m.description}`);
+        await applyMigrations(projectRoot, pending, manifest, manifestPath);
+        console.log('Auto-migrate: complete.');
+      }
+    } catch (err) {
+      console.warn(`Auto-migrate: skipped (${err instanceof Error ? err.message : String(err)})`);
+    }
+  }
 
   const options: SyncOptions = { prune, force, dryRun };
   let report: SyncReport;

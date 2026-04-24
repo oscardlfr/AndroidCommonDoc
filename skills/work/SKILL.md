@@ -139,6 +139,8 @@ When routing to team-lead (implement/wave keywords):
 
 quality-gater activation requires CP consultation first (same session gate as devs).
 
+> WARNING (T-BUG-010): MUST run in main context only. Spawning as subagent causes Agent() tool loss (#31977). Execute team-lead playbook inline — do NOT use Agent() with team-lead as subagent_type.
+
 ## Steps
 
 1. Parse task description from `$ARGUMENTS`
@@ -170,6 +172,14 @@ Proceed? (y/n)
 - `dev-lead` is a legacy template — only exists if the project copied it from `setup/agent-templates/`
 - Always show the routing decision and ask for confirmation before executing
 - If the user disagrees with routing, ask them to clarify or pick a target manually
+
+## WARNING — T-BUG-010: Main Context Only
+
+**MUST run in main context only. Spawning /work as a subagent causes Agent() tool loss (Claude Code bug #31977).**
+
+- Do NOT invoke `/work` as a subagent with team-lead as the subagent_type — this breaks TeamCreate and Agent() tool availability
+- /work reads the team-lead template and acts in-process — it IS the team-lead flow, not a caller of it
+- If you find yourself wanting to spawn /work as an Agent(), you are in the wrong process layer
 
 ## Orchestrator Safety Rule
 

@@ -124,10 +124,10 @@ describe('Wave 1: template_version bumped in architects', () => {
     expect(content).toMatch(/template_version:\s*"1.20.0"/);
   });
 
-  it('arch-platform.md template_version is "1.17.0"', () => {
-    // Wave 27: bumped from 1.16.0 → 1.17.0 (pattern-search tools removed)
+  it('arch-platform.md template_version is "1.18.0"', () => {
+    // Wave 31: bumped from 1.17.0 → 1.18.0 (Knowledge Currency Gate added)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.17.0"/);
+    expect(content).toMatch(/template_version:\s*"1.18.0"/);
   });
 
   it('arch-integration.md template_version is "1.17.0"', () => {

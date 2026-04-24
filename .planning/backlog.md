@@ -276,3 +276,16 @@ W29 initially ran /pre-pr /check-outdated /audit-docs in L1 via test-specialist 
 
 - `project_wave17_l2_topology_findings.md` findings #1, #2, #4, #5, #6, #8, #9, #10, #12, #14, #17, #18, #19 — may become unnecessary if Wave 17-lite hypothesis holds post-reset
 - Plugin v0.2.1 TestKit classloader fix — blocked on Maven Central publish (see `project_plugin_v0.2.0_shipped.md`)
+
+---
+
+## Wave 31 closed items
+
+### BL-W31-00 — team-lead template hardening (CLOSED in W31)
+**Status**: closed | **Priority**: high | **Wave**: W31
+**Bugs closed**:
+- Bug 1 (subagent_type="Plan"→"planner"): FIXED W31 session start (pre-plan)
+- Bug 2 (plan-context.js didn't block PLAN*.md writes): FIXED via sentinel mechanism (.planning/.plan-mode-active) + PreToolUse Write/Edit hook
+- Bug 3 (FORBIDDEN Bash CLI agent spawn unenforced): FIXED via NEW bash-cli-spawn-gate.js (A8 false-positive safe — `claude --help` not blocked)
+- Bug 4 (/work skill spawned team-lead subagent → Agent() loss per #31977): FIXED via skills/work/SKILL.md inline rewrite + MAIN-CONTEXT-ONLY warning
+**Tests**: 7 assertions in wave31-team-lead-hardening.test.ts, all GREEN

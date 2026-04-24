@@ -294,8 +294,8 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
   });
 
-  it('arch-platform has template version 1.17.0', () => {
-    expect(platformContent).toContain('template_version: "1.17.0"');
+  it('arch-platform has template version 1.18.0', () => {
+    expect(platformContent).toContain('template_version: "1.18.0"');
   });
 
   it('arch-integration has template version 1.17.0', () => {
@@ -441,8 +441,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/[Cc]ross-cutting/);
   });
 
-  it('has template version 2.5.0', () => {
-    expect(content).toContain('template_version: "2.5.0"');
+  it('has template version 2.6.0', () => {
+    expect(content).toContain('template_version: "2.6.0"');
   });
 });
 
