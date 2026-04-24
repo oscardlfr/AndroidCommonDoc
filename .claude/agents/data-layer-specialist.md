@@ -165,5 +165,7 @@ When invoked as a subagent, end your response with a structured summary:
 - **Tests written**: N (unit: X, integration: Y)
 - **Issues found**: N (X high, Y medium)
 - **Files modified**: [list]
+- **Raw output**: [paste verbatim tool/build/test output that supports your findings]
+- **[DEV NOTE]**: [your interpretation of the above — kept separate from raw evidence]
 - **Status**: PASS | FAIL | NEEDS_REVIEW
 ```

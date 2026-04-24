@@ -1362,7 +1362,7 @@
       "description": "Interactive wizard to fully configure a new or existing project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Creates l0-manifest.json, syncs selected assets, and verifies the result. Bilingual output (EN + ES).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:f1ac472a9257b90de3c083b35cf25c2e590cfa8c5cbd8f3d367bfd12f72994eb",
+      "hash": "sha256:3f8aff5ca33125d2c5dc0588523cdef409018e30704fde1a28e23ffcb13586b2",
       "dependencies": [
         "scripts/sh/sync-gsd-skills.sh",
         "scripts/sh/sync-gsd-agents.sh",
@@ -2148,7 +2148,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c87798b16227b8d019f0b0ce103f306bfeec2c040e0432a6a18511d697bd17b3",
+      "hash": "sha256:ba08f0469fdc687ba60f4e2c4577a58f1fe4ff3a4da735a24a94083af27c6069",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -2324,7 +2324,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c2dfaefcdff0552e57700c096d590144b63b63a2d9eeb9e3bc18c1fd51a1d1cd",
+      "hash": "sha256:162dcfc7a91580eee559dbe19c5af599817a78f842fe8bd766a4e5b2f080aa7f",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2883,7 +2883,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:88112753d0b5f5aa5b7e1d992650de1547e7be75ee9be9d8f1a2a2278515f32f",
+      "hash": "sha256:df1f5a017f31c218792837b8dd4404cf96b47fc2de05555061150cad22c21d9d",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2921,7 +2921,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:0c2b522654af977867f6a86bd02efdd05b3269d8dba11b3655664c8f7e85e739",
+      "hash": "sha256:7a55692bc7acb821ffd0bc2375b3d2c9dae02b0cc1a03d61cd357abcabdc19d8",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",

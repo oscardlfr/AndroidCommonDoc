@@ -296,5 +296,7 @@ When invoked as a subagent, end your response with a structured summary:
 - **Previews added**: N
 - **Pattern violations**: N
 - **Files modified**: [list if applicable]
+- **Raw output**: [paste verbatim tool/build/test output that supports your findings]
+- **[DEV NOTE]**: [your interpretation of the above — kept separate from raw evidence]
 - **Status**: PASS | FAIL | NEEDS_REVIEW
 ```
