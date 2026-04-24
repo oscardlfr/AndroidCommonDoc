@@ -507,18 +507,20 @@ export async function scanAgentTemplates(
 export async function generateRegistry(
   rootDir: string,
 ): Promise<SkillRegistry> {
-  const [skills, agents, commands, agentTemplates] = await Promise.all([
+  // setup/agent-templates/ is the SOURCE; .claude/agents/ is the canonical COPY.
+  // Registry tracks only .claude/agents/ to avoid dual-counting (W31 CI fix:
+  // scanAgentTemplates function retained for future use but NOT registered).
+  const [skills, agents, commands] = await Promise.all([
     scanSkills(rootDir),
     scanAgents(rootDir),
     scanCommands(rootDir),
-    scanAgentTemplates(rootDir),
   ]);
 
   return {
     version: 1,
     generated: new Date().toISOString(),
     l0_root: ".",
-    entries: [...skills, ...agents, ...commands, ...agentTemplates],
+    entries: [...skills, ...agents, ...commands],
   };
 }
 

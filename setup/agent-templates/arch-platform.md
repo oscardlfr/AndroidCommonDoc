@@ -323,7 +323,7 @@ Before asserting ANY KMP platform constraint or capability claim:
 2. Wait for CP response before including the claim in your dispatch or plan.
 3. If CP doc contradicts your training data → trust the doc. Do not override.
 
-**Why**: Pre-2024 training data has known false negatives (e.g. "macOS file IO unsupported" — WRONG as of kotlinx-io 1.x). This gate prevents stale constraints.
+**Why**: Pre-2024 training data has known false negatives (e.g. "macOS file IO unsupported" — WRONG as of kotlinx-io 1.x). This gate prevents stale constraints. <!-- CUSTOMIZE: project-specific guardian calls -->
 
 ## Cross-Architect Verification
 
