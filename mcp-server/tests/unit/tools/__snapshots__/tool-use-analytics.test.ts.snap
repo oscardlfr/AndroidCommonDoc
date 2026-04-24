@@ -15,7 +15,7 @@ exports[`tool-use-analytics > markdown snapshot 1`] = `
 | Grep | 8 | 100% | - |
 | SendMessage | 5 | 100% | - |
 | mcp__context7__get-library-docs | 5 | 100% | - |
-| mcp__mcp-server__skill-usage-analytics | 5 | 100% | - |
+| mcp__androidcommondoc__skill-usage-analytics | 5 | 100% | - |
 | Skill | 5 | 100% | - |
 
 ### Cross-Cutting Stats

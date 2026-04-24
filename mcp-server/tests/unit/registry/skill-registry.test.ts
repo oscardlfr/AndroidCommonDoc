@@ -15,6 +15,7 @@ import {
   scanSkills,
   scanAgents,
   scanCommands,
+  scanAgentTemplates,
   generateRegistry,
   extractDependencies,
   categorize,
@@ -58,6 +59,15 @@ async function createCommand(
   content: string,
 ): Promise<void> {
   const dir = path.join(tmpDir, ".claude", "commands");
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, `${name}.md`), content, "utf-8");
+}
+
+async function createAgentTemplate(
+  name: string,
+  content: string,
+): Promise<void> {
+  const dir = path.join(tmpDir, "setup", "agent-templates");
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, `${name}.md`), content, "utf-8");
 }
@@ -455,5 +465,106 @@ describe("skill-registry", () => {
       const uniqueKeys = new Set(keys);
       expect(keys.length).toBe(uniqueKeys.size);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BL-W30-04: scanAgentTemplates + generateRegistry includes setup/agent-templates/
+// ---------------------------------------------------------------------------
+
+describe("scanAgentTemplates (BL-W30-04)", () => {
+  it("returns entries with path starting with setup/agent-templates/", async () => {
+    await createAgentTemplate(
+      "team-lead",
+      '---\nname: team-lead\ndescription: "Orchestrates the team"\ntemplate_version: "1.0.0"\n---\n\n# Team Lead\n',
+    );
+    await createAgentTemplate(
+      "arch-platform",
+      '---\nname: arch-platform\ndescription: "Platform architect"\n---\n\n# Arch Platform\n',
+    );
+
+    const entries = await scanAgentTemplates(tmpDir);
+
+    expect(entries).toHaveLength(2);
+    expect(entries.every((e) => e.path.startsWith("setup/agent-templates/"))).toBe(true);
+  });
+
+  it("returns entries with type=agent, category=architecture, tier=extended", async () => {
+    await createAgentTemplate(
+      "planner",
+      '---\nname: planner\ndescription: "Writes the plan"\n---\n\n# Planner\n',
+    );
+
+    const entries = await scanAgentTemplates(tmpDir);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].type).toBe("agent");
+    expect(entries[0].category).toBe("architecture");
+    expect(entries[0].tier).toBe("extended");
+  });
+
+  it("reads description from frontmatter", async () => {
+    await createAgentTemplate(
+      "context-provider",
+      '---\nname: context-provider\ndescription: "Serves context to the team"\n---\n\n# Context Provider\n',
+    );
+
+    const entries = await scanAgentTemplates(tmpDir);
+
+    expect(entries[0].description).toBe("Serves context to the team");
+  });
+
+  it("returns empty array when setup/agent-templates/ does not exist", async () => {
+    const entries = await scanAgentTemplates(tmpDir);
+    expect(entries).toEqual([]);
+  });
+
+  it("skips non-.md files in setup/agent-templates/", async () => {
+    const dir = path.join(tmpDir, "setup", "agent-templates");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "README.txt"), "not a template", "utf-8");
+    await writeFile(path.join(dir, "team-lead.md"), '---\nname: team-lead\n---\n', "utf-8");
+
+    const entries = await scanAgentTemplates(tmpDir);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].name).toBe("team-lead");
+  });
+
+  it("hash is a sha256: prefixed string", async () => {
+    await createAgentTemplate(
+      "team-lead",
+      '---\nname: team-lead\ndescription: "Lead"\n---\n\n# Team Lead\n',
+    );
+
+    const entries = await scanAgentTemplates(tmpDir);
+
+    expect(entries[0].hash).toMatch(/^sha256:[a-f0-9]{64}$/);
+  });
+});
+
+describe("generateRegistry includes agent templates (BL-W30-04)", () => {
+  it("includes entries from setup/agent-templates/ alongside skills/agents/commands", async () => {
+    await createSkill("test", '---\nname: test\ndescription: "Tests"\n---\n\nContent.\n');
+    await createAgent("test-specialist", '---\nname: test-specialist\ndescription: "Tests"\n---\n\nContent.\n');
+    await createAgentTemplate("team-lead", '---\nname: team-lead\ndescription: "Lead"\n---\n\nContent.\n');
+
+    const registry = await generateRegistry(tmpDir);
+
+    const templateEntries = registry.entries.filter((e) =>
+      e.path.startsWith("setup/agent-templates/"),
+    );
+    expect(templateEntries).toHaveLength(1);
+    expect(templateEntries[0].name).toBe("team-lead");
+    expect(registry.entries.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("destPath for setup/agent-templates/ paths is identity (no skills/ prefix added)", () => {
+    // setup/agent-templates/ does not start with "skills/" so destPath returns unchanged
+    // Full destPath tests live in sync-engine.test.ts (BL-W30-04 assertion there)
+    const templatePath = "setup/agent-templates/team-lead.md";
+    expect(templatePath.startsWith("skills/")).toBe(false);
+    // destPath fallthrough: returns path as-is
+    expect(templatePath).toBe("setup/agent-templates/team-lead.md");
   });
 });

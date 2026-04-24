@@ -462,7 +462,7 @@ Do not overwrite without `--force`.
 ### Step 4 — Sync L0 skills and agents
 
 ```
-Read skills/sync-l0/SKILL.md
+Run: /sync-l0 (self-contained CLI — reads l0-manifest.json, no local skills/ path needed)
 ```
 
 Only selected skills and agents are materialised. Skip if `--dry-run`.

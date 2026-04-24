@@ -56,6 +56,11 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/agent-delegation-reminder.js",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/registry-rehash-reminder.js",
+            "timeout": 5
           }
         ]
       },
@@ -107,6 +112,11 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/architect-scope-gate.js",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/architect-self-edit-gate.js",
+            "timeout": 5
           }
         ]
       },
@@ -131,7 +141,7 @@
         ]
       },
       {
-        "matcher": "Grep|Glob|Bash",
+        "matcher": "Grep|Glob|Bash|Read",
         "hooks": [
           {
             "type": "command",

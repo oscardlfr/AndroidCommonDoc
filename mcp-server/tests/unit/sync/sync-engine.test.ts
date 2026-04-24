@@ -91,6 +91,12 @@ describe("destPath", () => {
   it("leaves command paths unchanged (already have .claude/ prefix)", () => {
     expect(destPath(".claude/commands/run.md")).toBe(".claude/commands/run.md");
   });
+
+  it("BL-W30-04: setup/agent-templates/ paths are identity-mapped (no prefix added)", () => {
+    expect(destPath("setup/agent-templates/team-lead.md")).toBe("setup/agent-templates/team-lead.md");
+    expect(destPath("setup/agent-templates/planner.md")).toBe("setup/agent-templates/planner.md");
+    expect(destPath("setup/agent-templates/arch-platform.md")).toBe("setup/agent-templates/arch-platform.md");
+  });
 });
 
 // ---------------------------------------------------------------------------

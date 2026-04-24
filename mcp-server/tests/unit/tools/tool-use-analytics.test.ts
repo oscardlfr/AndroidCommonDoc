@@ -88,7 +88,39 @@ describe("tool-use-analytics", () => {
 
   it("mcp_calls counts entries starting with mcp__", () => {
     const report = computeToolUseReport(entries, 4, 10, 0);
-    expect(report.mcp_calls).toBe(10); // 5 context7 + 5 mcp-server
+    expect(report.mcp_calls).toBe(10); // 5 context7 + 5 androidcommondoc
+  });
+
+  it("our_mcp_calls counts androidcommondoc entries, not context7", () => {
+    // BL-W30-01: tool-use-logger.js logs mcp_server="androidcommondoc", not "mcp-server"
+    const base = {
+      ts: new Date().toISOString(),
+      session_id: "s1",
+      tool_name: "mcp__androidcommondoc__search-docs",
+      mcp_tool: "search-docs",
+      skill_name: null,
+      input_summary: "",
+      duration_ms: null,
+      success: true,
+      agent_name: null,
+      agent_id: null,
+      agent_type: null,
+      cp_bypass_blocked: false,
+    };
+    const ourEntries = Array.from({ length: 12 }, (_, i) => ({
+      ...base,
+      mcp_server: "androidcommondoc" as const,
+      tool_name: `mcp__androidcommondoc__tool-${i}`,
+    }));
+    const otherEntries = Array.from({ length: 5 }, (_, i) => ({
+      ...base,
+      mcp_server: "context7" as const,
+      tool_name: `mcp__context7__get-library-docs-${i}`,
+    }));
+    const report = computeToolUseReport([...ourEntries, ...otherEntries], 4, 10, 0);
+    expect(report.our_mcp_calls).toBe(12);
+    expect(report.context7_calls).toBe(5);
+    expect(report.our_mcp_calls).toBeGreaterThan(0);
   });
 
   it("markdown snapshot", () => {

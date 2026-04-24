@@ -90,48 +90,26 @@ val koin = SharedSdk.koin
 > Authoritative reference: [Build-Time vs Runtime](../gradle/gradle-patterns-dependencies.md) — complementarity table and full explanation.
 > Deep dive: [Koin SDK + Dagger App hybrid](../archive/di-hybrid-koin-sdk-dagger-app.md) -- bridge pattern for Hilt consumers.
 
-### Desktop/Compose — GlobalContext Bridge
+## Desktop/Compose — Isolated Koin (SharedSdk)
 
-`SharedSdk.init()` creates an **isolated** `koinApplication` (not `startKoin`). Compose helpers (`koinViewModel()`, `LocalKoinScope`, `KoinContext`) look up `GlobalContext`, which remains empty unless explicitly bridged.
-
-**DO**: Register the SDK instance into GlobalContext on Desktop/Compose:
+When consuming SharedSdk.init() (which returns an isolated koinApplication):
 
 ```kotlin
-// desktopApp Main.kt
-fun main() = application {
-    val app = remember {
-        val koinApp = SharedSdk.init(
-            modules = setOf(SdkModule.Encryption.Default, ...),
-            appModules = listOf(appModule, viewModelModule),
-        )
-        GlobalContext.startKoin(koinApp)  // Bridge: isolated → global
-        koinApp
-    }
-
-    Window(onCloseRequest = ::exitApplication) {
-        App()  // koinViewModel() now works
-    }
+val koinApp = remember { SharedSdk.init(...) }
+KoinIsolatedContext(context = koinApp) {
+    Window(...) { App() }
 }
 ```
 
-**DON'T**: Call `startKoin {}` separately — it creates a second Koin instance. Use `GlobalContext.startKoin(app)` with the existing `koinApplication` returned by `SharedSdk.init()`.
+- `KoinIsolatedContext` makes `koinViewModel()` resolve against the isolated app without polluting GlobalContext.
+- Do NOT use `GlobalContext.startKoin(koinApp)` — double-calls `createEagerInstances()`.
+- Do NOT call `startKoin {}` separately — creates a second instance.
 
-**Why `remember`**: `SharedSdk.init()` has an idempotency guard, and `GlobalContext.startKoin` throws `KoinApplicationAlreadyStartedException` on double-call. Wrapping in `remember` prevents re-execution on recomposition.
+See `SharedSdk.kt:119-121` KDoc for the contract.
 
-**Android**: `startKoin {}` in `Application.onCreate()` registers globally by default — no bridge needed. The issue is Desktop-specific because `application {}` is a composable scope.
+### Standalone Desktop (no SharedSdk)
 
-**Key insight**: `koinApplication {}` creates the DI graph but does NOT register it in `GlobalContext`. `startKoin {}` does both. `GlobalContext.startKoin(app)` bridges an existing isolated graph into the global scope. `createEagerInstances()` runs during the bridge call, activating `createdAtStart = true` singletons.
-
-### Fallback — Standalone Apps
-
-For projects **without** a shared SDK layer:
-
-```kotlin
-// Direct koinApplication (acceptable for single-app projects)
-fun initKoin(): KoinApplication = koinApplication {
-    modules(coreModule, networkModule, snapshotModule)
-}
-```
+For apps that do NOT consume SharedSdk and want a self-managed Koin root: use `startKoin {}` in the `fun main()` body directly; `koinViewModel()` will resolve against GlobalContext. Do NOT mix this pattern with SharedSdk in the same app.
 
 ### KMP Platform Modules
 

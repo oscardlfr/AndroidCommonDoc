@@ -125,7 +125,7 @@ export function computeToolUseReport(
     if (entry.tool_name.startsWith("mcp__")) mcpCalls++;
     if (entry.tool_name === "Skill") skillCalls++;
     if (entry.mcp_server === "context7") context7Calls++;
-    if (entry.mcp_server === "mcp-server") ourMcpCalls++;
+    if (entry.mcp_server === "androidcommondoc") ourMcpCalls++;
     if (entry.cp_bypass_blocked) cpBypassBlocked++;
 
     const agentKey = entry.agent_id ?? entry.agent_type ?? "unknown";

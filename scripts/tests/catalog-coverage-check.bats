@@ -66,3 +66,48 @@ EOF
     [ "$status" -eq 1 ]
     [[ "$output" == *"androidx-lifecycle-runtime-ktx"* ]]
 }
+
+# BL-W30-08: --module-paths flag
+@test "--module-paths restricts scan to specified subdirectory" {
+    # module-a has a hardcoded dep; module-b does not
+    mkdir -p "$WORK_DIR/module-a" "$WORK_DIR/module-b"
+    cat > "$WORK_DIR/module-a/build.gradle.kts" <<'EOF'
+implementation("com.example:lib-a:1.0.0")
+EOF
+    cat > "$WORK_DIR/module-b/build.gradle.kts" <<'EOF'
+implementation("com.other:lib-b:2.0.0")
+EOF
+    # Scanning only module-b in strict mode → should flag lib-b, not lib-a
+    run "$SCRIPT" --project-root "$WORK_DIR" --strict --module-paths "module-b"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"com.other:lib-b:2.0.0"* ]]
+    [[ "$output" != *"com.example:lib-a:1.0.0"* ]]
+}
+
+@test "--module-paths with two paths scans both" {
+    mkdir -p "$WORK_DIR/core" "$WORK_DIR/feature" "$WORK_DIR/ignored"
+    cat > "$WORK_DIR/core/build.gradle.kts" <<'EOF'
+implementation("com.core:util:1.1.0")
+EOF
+    cat > "$WORK_DIR/feature/build.gradle.kts" <<'EOF'
+implementation("com.feature:ui:3.0.0")
+EOF
+    cat > "$WORK_DIR/ignored/build.gradle.kts" <<'EOF'
+implementation("com.ignored:dep:9.9.9")
+EOF
+    run "$SCRIPT" --project-root "$WORK_DIR" --strict --module-paths "core,feature"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"com.core:util:1.1.0"* ]]
+    [[ "$output" == *"com.feature:ui:3.0.0"* ]]
+    [[ "$output" != *"com.ignored:dep:9.9.9"* ]]
+}
+
+@test "--module-paths with clean modules exits 0 in strict mode" {
+    mkdir -p "$WORK_DIR/clean-module"
+    cat > "$WORK_DIR/clean-module/build.gradle.kts" <<'EOF'
+implementation(libs.androidx.core.ktx)
+EOF
+    run "$SCRIPT" --project-root "$WORK_DIR" --strict --module-paths "clean-module"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"0 hardcoded"* ]]
+}

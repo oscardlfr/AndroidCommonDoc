@@ -86,16 +86,17 @@ Dispatchers match → WARNING (reports but doesn't block).
 ```bash
 # New @Suppress annotations in diff → ERROR (not a valid fix)
 SUPPRESS_HITS=$(git diff "$MERGE_BASE..HEAD" -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
-  | grep -cP '@Suppress\(|@SuppressWarnings\(|@file:Suppress' || true)
+  | grep -E '@Suppress\(|@SuppressWarnings\(|@file:Suppress' \
+  | grep -vcE 'ACTUAL_WITHOUT_EXPECT|EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING|NO_ACTUAL_FOR_EXPECT|INVISIBLE_MEMBER|INVISIBLE_REFERENCE' || true)
 
 if [ "$SUPPRESS_HITS" -gt 0 ]; then
   echo "ERROR: $SUPPRESS_HITS new @Suppress annotation(s) found. Fix the root cause instead."
   git diff "$MERGE_BASE..HEAD" -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
-    | grep -P '@Suppress\(|@SuppressWarnings\(|@file:Suppress'
+    | grep -E '@Suppress\(|@SuppressWarnings\(|@file:Suppress'
 fi
 ```
 
-New `@Suppress` → ERROR (blocks). Suppressing warnings is not a valid fix strategy. Fix the underlying issue.
+New `@Suppress` → ERROR (blocks). Suppressing warnings is not a valid fix strategy. Fix the underlying issue. Exception: K/N stdlib interop suppressions (ACTUAL_WITHOUT_EXPECT, INVISIBLE_MEMBER, INVISIBLE_REFERENCE, etc.) are exempt.
 
 ```bash
 # Gradle deprecation/outdated warnings (if not --skip-build)
