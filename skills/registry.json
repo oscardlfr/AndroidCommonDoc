@@ -2883,7 +2883,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:df1f5a017f31c218792837b8dd4404cf96b47fc2de05555061150cad22c21d9d",
+      "hash": "sha256:a574fd9650e4c70c94ad65d7aeee1c17a51662e368963a1f0cf9c9a50d0add68",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
