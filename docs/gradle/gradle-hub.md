@@ -55,6 +55,7 @@ KMP and Android-only Gradle build configuration, convention plugins, and depende
 | [gradle-patterns-publishing](gradle-patterns-publishing.md) | Maven publishing — composite build, coordinates, signing |
 | [gradle-patterns-agp9](gradle-patterns-agp9.md) | AGP 9.0+ module templates (`android create`), L0 post-processing, flat-module-names invariant |
 | [dokka-markdown-plugin](dokka-markdown-plugin.md) | Dokka 2.2.x plugin — KDoc → `docs/api/*.md` with 14-field YAML frontmatter, content-hash drift detection |
+| [gradle-patterns-dgpv2-typed-config](gradle-patterns-dgpv2-typed-config.md) | DGPv2 typed pluginsConfiguration — registerBinding, jsonEncode, fqPluginName gotchas |
 
 ## Key Rules
 

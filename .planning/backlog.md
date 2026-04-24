@@ -78,6 +78,8 @@ For each completed session, look at the task intent (from prompt / PLAN.md) and 
 **Memory**: `project_wave19_sprint2_deferred.md`
 
 `.gsd/agents/` has stale mirrors of `.claude/agents/` (4+ files still reference `project-manager` after Wave 25 rename). Decision: sync OR deprecate the directory.
+**Status**: RESOLVED (2026-04-24, W30 Round 5)
+**Resolution**: .gsd/agents/ already gitignored (.gitignore:68). material-3-skill/ never existed. Agent mirrors near-parity — 1 orphan (project-manager.md in .claude/ only) + 3 missing .claude/ copies (data-layer-specialist, domain-model-specialist, team-lead). Forward constraint recorded in CLAUDE.md.
 
 ### BL-W26-05: Align `.planning/` historical plan files
 

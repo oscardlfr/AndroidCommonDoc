@@ -63,6 +63,7 @@
 - `.claude/agents/` contains COPIES that the registry scans and `/sync-l0` distributes
 - When editing a template: ALWAYS update `setup/agent-templates/X.md` first, then copy to `.claude/agents/X.md`
 - Regenerate registry after any template change: `node mcp-server/build/cli/generate-registry.js`
+- **New agents**: MUST create both `setup/agent-templates/<name>.md` (source) and `.claude/agents/<name>.md` (copy) atomically in the same commit.
 
 ### Vault sync is fragile
 - Run `validate-vault` before every sync (0 duplicates, 0 homogeneity errors)
