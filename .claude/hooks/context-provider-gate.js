@@ -53,7 +53,8 @@ process.stdin.on('end', () => {
             (/[/\\]\.claude[/\\]agents[/\\]/.test(filePath) && filePath.endsWith('.md')) ||
             /skills[/\\][^/\\]+[/\\]SKILL\.md$/.test(filePath);
           if (isPatternDiscovery) {
-            const flagPath = path.join(os.tmpdir(), `claude-cp-consulted-${sessionId}.flag`);
+            const tmpDir = process.env.TMPDIR || process.env.TMP || os.tmpdir();
+            const flagPath = path.join(tmpDir, `claude-cp-consulted-${sessionId}.flag`);
             if (!fs.existsSync(flagPath)) {
               process.stdout.write(JSON.stringify({
                 decision: 'block',
@@ -77,13 +78,14 @@ process.stdin.on('end', () => {
     }
 
     // 3. Check session consultation flag (any agent's CP consult unblocks all peers)
-    const flagPath = path.join(os.tmpdir(), `claude-cp-consulted-${sessionId}.flag`);
+    const tmpDir = process.env.TMPDIR || process.env.TMP || os.tmpdir();
+    const flagPath = path.join(tmpDir, `claude-cp-consulted-${sessionId}.flag`);
     if (fs.existsSync(flagPath)) {
       process.exit(0); // session has CP-consulted — allow
     }
 
     // 4. Block — write per-agent block marker for logger and emit decision
-    const blockMarker = path.join(os.tmpdir(), `claude-cp-blocked-${sessionId}-${agentId}.flag`);
+    const blockMarker = path.join(tmpDir, `claude-cp-blocked-${sessionId}-${agentId}.flag`);
     try { fs.writeFileSync(blockMarker, new Date().toISOString()); } catch {}
 
     const out = JSON.stringify({

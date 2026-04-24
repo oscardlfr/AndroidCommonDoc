@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 
 setup() {
+  export TMPDIR="${BATS_TMPDIR:-/tmp}"
   export SESSION_ID="test-session-$$"
   export FLAG_FILE="${TMPDIR:-/tmp}/claude-cp-consulted-${SESSION_ID}.flag"
   rm -f "$FLAG_FILE"
