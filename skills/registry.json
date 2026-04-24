@@ -2527,7 +2527,7 @@
       "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:846cd9ada8fd1be2100877c674e590520465d6f9260f2b5774932e3a3c6f8158",
+      "hash": "sha256:582dcd938f8c3c33457c731a0dfc3c7c6d53ffe664462fe54730bf271a2984a8",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
