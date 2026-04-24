@@ -35,7 +35,39 @@ process.stdin.on('end', () => {
     const EXEMPT_TYPES = ['context-provider', 'project-manager', 'team-lead'];
     if (EXEMPT_TYPES.some(e => agentType === e || agentType.startsWith(e))) process.exit(0);
 
-    // 2. Bash allow-list: non-search bash commands pass through
+    // 2a. Read on pattern-discovery paths requires CP consultation (T-BUG-015)
+    try {
+      if (toolName === 'Read') {
+        const filePath = data.tool_input?.file_path ?? '';
+        const isExemptPath =
+          filePath.includes('/.planning/') ||
+          filePath.includes('\\.planning\\') ||
+          filePath.includes('/.claude/teams/') ||
+          filePath.includes('\\.claude\\teams\\') ||
+          filePath.endsWith('team.json') ||
+          filePath.endsWith('config.json');
+        if (!isExemptPath) {
+          const isPatternDiscovery =
+            (/[/\\]docs[/\\]/.test(filePath) && filePath.endsWith('.md')) ||
+            (/[/\\]setup[/\\]agent-templates[/\\]/.test(filePath) && filePath.endsWith('.md')) ||
+            (/[/\\]\.claude[/\\]agents[/\\]/.test(filePath) && filePath.endsWith('.md')) ||
+            /skills[/\\][^/\\]+[/\\]SKILL\.md$/.test(filePath);
+          if (isPatternDiscovery) {
+            const flagPath = path.join(os.tmpdir(), `claude-cp-consulted-${sessionId}.flag`);
+            if (!fs.existsSync(flagPath)) {
+              process.stdout.write(JSON.stringify({
+                decision: 'block',
+                reason: `[T-BUG-015] CP gate: Read on pattern/doc/template path "${filePath}" requires context-provider consultation first. SendMessage(to="context-provider") before reading pattern docs.`
+              }));
+              process.exit(2);
+            }
+          }
+        }
+        process.exit(0); // Read not blocked — allow
+      }
+    } catch { process.exit(0); }
+
+    // 2b. Bash allow-list: non-search bash commands pass through
     if (toolName === 'Bash') {
       const cmd = data.tool_input?.command || '';
       // Block only if command contains search patterns
