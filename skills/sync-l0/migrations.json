@@ -1,0 +1,21 @@
+{
+  "format_version": "1.0",
+  "migrations": [
+    {
+      "id": "M001",
+      "description": "dev-lead renamed to project-manager",
+      "type": "agent_rename",
+      "from": "dev-lead",
+      "to": "project-manager",
+      "applies_when": { "l0_version_before": "5.0.0" }
+    },
+    {
+      "id": "M002",
+      "description": "l0-manifest.json gains migrations_applied array field",
+      "type": "manifest_schema_bump",
+      "field_to_add": "migrations_applied",
+      "default_value": [],
+      "applies_when": { "field_missing": "migrations_applied" }
+    }
+  ]
+}

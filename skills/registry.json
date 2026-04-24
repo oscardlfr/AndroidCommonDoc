@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-23T17:46:09.215Z",
+  "generated": "2026-04-24T17:51:38.131Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1464,7 +1464,7 @@
       "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:3e23de88fe6461e53c21d8e5946c6e99c393d1feb641b750a86ddfef02c44d2d",
+      "hash": "sha256:5957247f6834800f929b6313cf798244b63dff8608024278724e8c15900f5988",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
@@ -1834,7 +1834,7 @@
       "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c12ec382804fabea22d969b12d8e379c0e8faaafbe3a2aab330acea1e20d9a2f",
+      "hash": "sha256:a5ab7ae30a801ca1f9bad5d3f51b2c67ce8ffcce9e660aed6bfb4733ff4442b0",
       "dependencies": [],
       "frontmatter": {
         "name": "work",
@@ -1945,7 +1945,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:00bb07c2c41a7e08060dfb55d5967fdeeb1e1ee13a3a6230a20ff85da3a13113",
+      "hash": "sha256:fa39d277b5667b15c3de5771a90c211b26bfbab6dce5d1cba0d5df8269a4096d",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1960,7 +1960,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.17.0",
+        "template_version": "1.18.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -2542,7 +2542,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.6.0"
+        "template_version": "1.7.0"
       }
     },
     {
@@ -2691,7 +2691,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:bb73b9c4cb07d2d5cc083e7a7c6a0d4891b051e273decfe160ea5c38146300a0",
+      "hash": "sha256:0ac160adc3dc9366ac4032ae4e4054cbf715d2212f1addddd5f4984cf3cb0daa",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2707,7 +2707,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.5.0"
+        "template_version": "2.6.0"
       }
     },
     {
@@ -2825,7 +2825,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e4aa2e717bc83f7c8790ba303894b807a8b87e25fa7c3871fa331e49c6b5410c",
+      "hash": "sha256:cc741907271b88ea0721993aee4302d831e3a5a872b2bafb61f7952981bc7de4",
       "dependencies": [],
       "frontmatter": {
         "name": "team-lead",

@@ -17,12 +17,42 @@ process.stdin.on('end', () => {
     const data = JSON.parse(input);
     const toolName = data.tool_name;
 
+    // ExitPlanMode: delete sentinel file
+    if (toolName === 'ExitPlanMode') {
+      const sentinelPath = path.join(data.cwd || process.cwd(), '.planning', '.plan-mode-active');
+      try { fs.unlinkSync(sentinelPath); } catch (_) { /* silent */ }
+      process.exit(0);
+    }
+
+    // PreToolUse: block Write/Edit on PLAN*.md during plan mode
+    if (toolName === 'Write' || toolName === 'Edit') {
+      const cwd2 = data.cwd || process.cwd();
+      const sentinelPath = path.join(cwd2, '.planning', '.plan-mode-active');
+      const toolInput = data.tool_input || {};
+      const targetFile = toolInput.file_path || toolInput.path || '';
+      const isPlanFile = /\/\.planning\/PLAN[^/]*\.md$/.test(targetFile) ||
+                         /\\\.planning\\PLAN[^\\]*\.md$/.test(targetFile);
+      if (isPlanFile && fs.existsSync(sentinelPath)) {
+        const output = { decision: 'block', reason: 'FORBIDDEN: Direct edits to PLAN*.md are blocked during plan mode. Only the planner subagent may write plan files (T-BUG-031-00).' };
+        process.stdout.write(JSON.stringify(output));
+        process.exit(0);
+      }
+      process.exit(0); // sentinel absent — allow
+    }
+
     // Only trigger on EnterPlanMode
     if (toolName !== 'EnterPlanMode') {
       process.exit(0);
     }
 
     const cwd = data.cwd || process.cwd();
+
+    // Write sentinel file so PreToolUse hooks can detect plan mode
+    const sentinelPath = path.join(cwd, '.planning', '.plan-mode-active');
+    try {
+      fs.writeFileSync(sentinelPath, new Date().toISOString(), 'utf8');
+    } catch (_) { /* silent */ }
+
     const parts = [];
 
     // 1. Read MODULE_MAP.md if it exists

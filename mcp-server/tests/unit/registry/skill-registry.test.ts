@@ -543,19 +543,21 @@ describe("scanAgentTemplates (BL-W30-04)", () => {
   });
 });
 
-describe("generateRegistry includes agent templates (BL-W30-04)", () => {
-  it("includes entries from setup/agent-templates/ alongside skills/agents/commands", async () => {
+describe("generateRegistry does NOT dual-count setup/agent-templates/ (W31 CI fix)", () => {
+  it("registry excludes setup/agent-templates/ entries; scanAgentTemplates remains callable for future use", async () => {
     await createSkill("test", '---\nname: test\ndescription: "Tests"\n---\n\nContent.\n');
     await createAgent("test-specialist", '---\nname: test-specialist\ndescription: "Tests"\n---\n\nContent.\n');
     await createAgentTemplate("team-lead", '---\nname: team-lead\ndescription: "Lead"\n---\n\nContent.\n');
 
     const registry = await generateRegistry(tmpDir);
 
+    // W31: setup/agent-templates/ is the SOURCE; .claude/agents/ is the canonical COPY.
+    // Registry tracks only .claude/agents/ to keep counts in sync with README + CI check.
+    // scanAgentTemplates() function remains exported for future sync/propagation flows.
     const templateEntries = registry.entries.filter((e) =>
       e.path.startsWith("setup/agent-templates/"),
     );
-    expect(templateEntries).toHaveLength(1);
-    expect(templateEntries[0].name).toBe("team-lead");
+    expect(templateEntries).toHaveLength(0);
     expect(registry.entries.length).toBeGreaterThanOrEqual(2);
   });
 

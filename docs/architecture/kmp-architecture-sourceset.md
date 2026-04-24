@@ -202,3 +202,7 @@ expect fun createTempId(): String
 ---
 
 **Parent doc**: [kmp-architecture.md](kmp-architecture.md)
+
+## See Also
+
+- [KMP Features & Platform Capability Matrix (2026)](kmp-features-2026.md) — per-platform support tiers for file IO, networking, coroutines, Compose UI, and more

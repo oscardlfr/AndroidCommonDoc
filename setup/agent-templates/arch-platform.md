@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.17.0"
+template_version: "1.18.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -230,13 +230,6 @@ Distinct from OBS-A (scope extension requests — see `docs/agents/arch-topology
 | **NEVER you fix** | ANY code change (import, annotation, KDoc, etc.) | SendMessage to team-lead for dev — you have NO Edit tool |
 | **NON-TRIVIAL (delegate)** | KDoc blocks, function bodies, test code, refactoring, new files, multi-line changes | SendMessage to team-lead for dev |
 
-```
-// CORRECT: request dev via team-lead
-SendMessage(to="team-lead", summary="need domain-model-specialist", message="Fix sealed interface pattern in {file}")
-
-// WRONG: writing test code, function bodies, new files — delegate ALL code changes to dev
-```
-
 ## Role
 
 After specialists complete a wave of work:
@@ -323,7 +316,14 @@ Before requesting ANY constructor/function signature change via team-lead:
 | After domain model changes | `SendMessage(to="team-lead", summary="need version-checker", message="Check version alignment after domain model changes in {files}")` |
 | Five-layer violation | SendMessage(to="team-lead", summary="ESCALATE", message="...") |
 
-{{CUSTOMIZE: Add project-specific guardian calls here}}
+## Knowledge Currency Gate (MANDATORY — W31)
+
+Before asserting ANY KMP platform constraint or capability claim:
+1. SendMessage(to="context-provider", message="Verify KMP capability: {claim}. Load docs/architecture/kmp-features-2026.md and confirm platform support.")
+2. Wait for CP response before including the claim in your dispatch or plan.
+3. If CP doc contradicts your training data → trust the doc. Do not override.
+
+**Why**: Pre-2024 training data has known false negatives (e.g. "macOS file IO unsupported" — WRONG as of kotlinx-io 1.x). This gate prevents stale constraints. <!-- CUSTOMIZE: project-specific guardian calls -->
 
 ## Cross-Architect Verification
 

@@ -82,6 +82,8 @@ export const ManifestSchemaV2 = z.object({
   selection: SelectionSchema,
   checksums: z.record(z.string(), z.string()),
   l2_specific: L2SpecificSchema,
+  /** Migration IDs that have been applied to this manifest */
+  migrations_applied: z.array(z.string()).optional().default([]),
 });
 
 export type ManifestV2 = z.infer<typeof ManifestSchemaV2>;
@@ -109,6 +111,7 @@ export function migrateV1toV2(v1: ManifestV1): ManifestV2 {
     selection: v1.selection,
     checksums: v1.checksums,
     l2_specific: v1.l2_specific,
+    migrations_applied: [],
   };
 }
 
@@ -146,6 +149,7 @@ export function createDefaultManifest(l0Source: string): Manifest {
     },
     checksums: {},
     l2_specific: { commands: [], agents: [], skills: [] },
+    migrations_applied: [],
   };
 }
 
@@ -164,6 +168,7 @@ export function createChainManifest(sources: LayerSource[]): Manifest {
     },
     checksums: {},
     l2_specific: { commands: [], agents: [], skills: [] },
+    migrations_applied: [],
   };
 }
 

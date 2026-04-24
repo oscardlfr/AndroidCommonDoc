@@ -75,6 +75,16 @@
         ]
       },
       {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/plan-context.js",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": ".*",
         "hooks": [
           {
@@ -117,6 +127,11 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/architect-self-edit-gate.js",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/plan-context.js",
+            "timeout": 5
           }
         ]
       },
@@ -136,6 +151,11 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-gate-pre-commit.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/bash-cli-spawn-gate.js",
             "timeout": 5
           }
         ]
