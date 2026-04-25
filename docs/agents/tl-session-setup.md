@@ -41,6 +41,10 @@ Skip specialists with zero tasks. Do NOT default to spawning all 4. Log skipped 
 
 > 35K tokens were wasted on an idle ui-specialist in a data/domain-only sprint.
 
+**No-UI waves**: If the sprint plan has zero `ui` tasks in the scope table above, SKIP ui-specialist spawn.
+Route any doc work (README, CHANGELOG, English polish, frontmatter) to `doc-updater` instead.
+Log: "Skipping ui-specialist — no UI tasks in scope; doc work routed to doc-updater."
+
 Core devs live until session end — same lifecycle as architects. They accumulate layer knowledge across waves. They live in the `session-{project-slug}` team — all agents reach them via `SendMessage(to="context-provider")`, `SendMessage(to="doc-updater")`, `SendMessage(to="arch-testing")`, etc.
 
 **Why session team peers**: context-provider reads the project ONCE. Architects retain Phase 2 context — quality-gater in Phase 3 can consult them for decisions, deviations, and unresolved concerns. Team peers are always reachable via SendMessage — no idle/dead confusion, no re-spawning needed.
@@ -86,3 +90,33 @@ Agent(name="arch-testing", run_in_background=true, prompt="...")
 // WRONG — Bash spawning or team-lead reading source code
 Bash("claude --print '...'")
 ```
+
+## Canonical Spawning Pattern (Recommended)
+
+Per Anthropic agent-teams canonical doc: the main agent IS the team lead. No separate team-lead subagent needed.
+
+The main agent spawns all 11 session peers directly:
+
+```
+TeamCreate("session-{project-slug}")
+// Planning + cross-cutting peers (live from session start)
+Agent(name="context-provider", team_name="session-{project-slug}", ...)
+Agent(name="doc-updater", team_name="session-{project-slug}", ...)
+// Architecture peers (live from session start)
+Agent(name="arch-platform", team_name="session-{project-slug}", ...)
+Agent(name="arch-integration", team_name="session-{project-slug}", ...)
+Agent(name="arch-testing", team_name="session-{project-slug}", ...)
+// Dev peers (spawn at Phase 2 start, or all at once in simple sessions)
+Agent(name="data-layer-specialist", team_name="session-{project-slug}", ...)
+Agent(name="domain-model-specialist", team_name="session-{project-slug}", ...)
+Agent(name="ui-specialist", team_name="session-{project-slug}", ...)
+Agent(name="test-specialist", team_name="session-{project-slug}", ...)
+// Quality gate peer
+Agent(name="quality-gater", team_name="session-{project-slug}", ...)
+```
+
+In this pattern, all peers are live from session start. PREP/EXECUTE distinction in arch templates is a **legacy compatibility pattern** — required only when team-lead runs as a subagent and devs are not yet spawned when architects receive their Phase 1 dispatch.
+
+**Legacy pattern (deferred to W31.7+)**: nested spawning where arch-platform/arch-integration/arch-testing spawn devs after PREP phase. Still supported via PREP/EXECUTE distinction in arch templates. Will be replaced when BL-W31.7-01 ships.
+
+**PREP/EXECUTE distinction in arch templates**: legacy compatibility — required when team-lead runs as a subagent and devs are not yet live when architects receive their Phase 1 dispatch. Obsolete in canonical pattern (all peers live from session start).

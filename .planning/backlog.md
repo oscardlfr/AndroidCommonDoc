@@ -289,3 +289,217 @@ W29 initially ran /pre-pr /check-outdated /audit-docs in L1 via test-specialist 
 - Bug 3 (FORBIDDEN Bash CLI agent spawn unenforced): FIXED via NEW bash-cli-spawn-gate.js (A8 false-positive safe — `claude --help` not blocked)
 - Bug 4 (/work skill spawned team-lead subagent → Agent() loss per #31977): FIXED via skills/work/SKILL.md inline rewrite + MAIN-CONTEXT-ONLY warning
 **Tests**: 7 assertions in wave31-team-lead-hardening.test.ts, all GREEN
+
+---
+
+## Wave 31.5 findings (in-flight discovery)
+
+> **W31.5 status (2026-04-25):** Trilogy COMPLETE. v0.1.0 (sub-wave a) + v0.2.0 (sub-wave b) + v0.3.0 (sub-wave c) all shipped. All BL-W31.5-XX items below remain DEFERRED to a post-W31.5c L0 cleanup session — none addressed in W31.5c per resume prompt rule "no L0 commits in this wave".
+
+### BL-W31.5-01 — Architect dispatch uses subagent_type instead of team name (HIGH)
+
+**Status**: backlog
+**Priority**: HIGH — this bug desencadena toda una cadena de fallos de dispatch
+**Discovered**: 2026-04-25 during Wave 31.5 execution (user confirmed root-cause)
+
+**Problem**: Architect templates (arch-platform, arch-integration, arch-testing) dispatch devs using `SendMessage(to="data-layer-specialist")` — the agent's `subagent_type` — instead of the team member's NAME (`data-dev`, `domain-dev`, `ui-dev`, `test-dev`). SendMessage routing requires the NAME. Messages sent to a subagent_type go to a nonexistent address. Devs sit idle waiting for a dispatch that never arrives; team-lead must re-dispatch directly to unblock.
+
+**Impact observed in W31.5**:
+- Round a-2 Track 1 + Track 2 both stalled ~15 min when arch-integration sent dispatches to "domain-model-specialist" / "data-layer-specialist" — devs never received them. Team-lead detected + re-dispatched to `domain-dev` / `data-dev`.
+- Round a-4: same pattern with "ui-specialist" — team-lead had to forward from own inbox to `ui-dev`.
+
+**Root cause**: Architect templates show examples like `SendMessage(to="test-specialist")` where `test-specialist` is the subagent_type, not the team name. The 4-core-dev persistent model uses short names (`data-dev` etc.) per the team config.
+
+**Fix (proposed)**:
+1. In `setup/agent-templates/arch-platform.md`, `arch-integration.md`, `arch-testing.md`: replace every `SendMessage(to="<subagent_type>")` example with `SendMessage(to="<team-name>")`. The canonical names are:
+   - `data-layer-specialist` → `data-dev`
+   - `domain-model-specialist` → `domain-dev`
+   - `ui-specialist` → `ui-dev`
+   - `test-specialist` → `test-dev`
+2. Add a "Dev dispatch protocol" section to the 3 architect templates that explicitly states: "Dispatch by team NAME (e.g., `data-dev`), NOT by subagent_type (`data-layer-specialist`). Team-lead spawns the 4 core devs with fixed names; subagent_type is the agent file, name is the addressable handle."
+3. Optional enforcement: a hook that rejects SendMessage to unknown names, or a validator in the quality-gater's pre-pr step.
+
+**Tests**: 1 assertion per architect template (grep -L for `SendMessage(to="[a-z]+-specialist"` in each arch-*.md) + 1 integration that validates a session-level round-trip `architect → dev-name`.
+
+**Copies to propagate**: `.claude/agents/arch-platform.md`, `.claude/agents/arch-integration.md`, `.claude/agents/arch-testing.md`. Must also rehash registry after.
+
+**Triggered**: post-W31.5c (this wave's scope is extraction-only; L0 template edits are a separate next wave).
+
+---
+
+### BL-W31.5-02 — ui-specialist template is Compose-only; no docs-owner role in no-UI waves (MEDIUM)
+
+**Status**: backlog
+**Priority**: medium
+**Discovered**: 2026-04-25 during Wave 31.5 (no-UI wave)
+
+**Problem**: `setup/agent-templates/ui-specialist.md` assumes Compose UI work (accessibility, Material3, previews, a11y). In waves without UI (CLI tools, Gradle plugins, backend-only), there is no natural owner for README + doc ports + CHANGELOG + English polish. Current workaround: team-lead re-scopes ui-dev to "docs owner" per-dispatch, but this is a forced fit — ui-specialist.md contains instructions irrelevant to docs work that can confuse the agent (e.g., "audit Compose previews" with no previews to audit).
+
+**Observed in W31.5**:
+- Round a-4 dispatched ui-dev to port 8 L0 testing docs (pure markdown copy + frontmatter strip). User initially read this as "ui-dev doing testing" — template language ambiguity.
+- Sub-wave c Round c-3 will dispatch ui-dev for CHANGELOG + final README + English polish. Again, zero Compose UI.
+
+**Fix options**:
+1. **Split**: create a new `docs-owner` agent template (README, CHANGELOG, English polish, frontmatter discipline, doc-hub/split strategy). Core roster becomes 5: data-dev / domain-dev / ui-dev / test-dev / docs-dev. But adds complexity.
+2. **Generalize**: rewrite `ui-specialist.md` to cover both Compose UI AND repo docs. Add a mode toggle ("I'm in a UI wave vs a docs-only wave"). Less disruption.
+3. **Delete ui-dev from no-UI waves**: team-lead spawns only 3 core devs (data/domain/test) in waves with no UI, and handles docs directly OR dispatches doc-updater (which already exists).
+
+**Recommendation**: Option 3 is simplest; doc-updater already has repo-docs ownership semantics. Spec: if wave prompt declares `ui_scope: none`, team-lead skips ui-dev spawn and routes doc work to doc-updater.
+
+**Triggered**: post-W31.5c, same batch as BL-W31.5-01.
+
+---
+
+### BL-W31.5-03 — kmp-test-runner CI tool catalog (L0 parity check)
+
+**Status**: partial-done (W31.5 in-flight); remainder tracked for later sub-waves
+**Priority**: medium
+**Discovered**: 2026-04-25 during W31.5 ship-gate review (user asked about L0 tool parity)
+
+**Context**: kmp-test-runner is a new OSS repo — needs comparable CI tooling to L0 where it applies. Mapping of L0 tools to kmp-test-runner state:
+
+| Tool (L0) | Applies here? | Status | Wave |
+|---|---|---|---|
+| TruffleHog OSS `--only-verified` | Yes | **DONE** (a-2 A3 amendment) | W31.5a |
+| shellcheck `--severity=warning --external-sources` | Yes | **DONE** (a-2) | W31.5a |
+| bats + Pester + vitest + coverage 80% | Yes | **DONE** (a-3) | W31.5a |
+| `npm audit` | Yes | **IN FLIGHT** at ship gate | W31.5a |
+| License checker (Apache-2.0 compat) | Yes | **PLANNED** sub-wave c | W31.5c |
+| markdown-link-check / lychee | Yes | **PLANNED** sub-wave c Round c-2 | W31.5c |
+| Dependabot (`.github/dependabot.yml`) | Yes | **TODO** sub-wave c polish | W31.5c |
+| Detekt | Yes (for Gradle plugin Kotlin) | **TODO** sub-wave b | W31.5b |
+| kdoc-coverage | Yes (plugin public API) | **TODO** sub-wave b | W31.5b |
+| gradle-config-lint | Yes (plugin build.gradle.kts) | **TODO** sub-wave b | W31.5b |
+| verify-kmp-packages | No (plugin is JVM-only; consumers are KMP) | N/A | — |
+| dependency-graph (MCP) | Maybe (consumer Gradle plugin deps) | **DEFER** post-v0.3.0 | later |
+| compose-preview-audit | No (no Compose UI) | N/A | — |
+| string-completeness | No (no i18n surface) | N/A | — |
+| module-health | No (single-module repo) | N/A | — |
+| pattern-coverage | No (patterns are L0-internal) | N/A | — |
+| eslint/prettier | Skip (only 2 .js files — bin wrapper + lib/cli.js, overkill) | **SKIP** | — |
+
+**Fix plan**:
+- Sub-wave a (now): add `npm audit` to ci.yml — standard, zero setup, vulnerability scan.
+- Sub-wave b: add Detekt + kdoc-coverage + gradle-config-lint when Gradle plugin module lands.
+- Sub-wave c: add license checker + markdown-link-check + Dependabot config as part of polish round.
+
+**Triggered**: progressive; entries drop off as each sub-wave ships.
+
+---
+
+### BL-W31.5-04 — Dev specialist template recurring bug: devs search patterns directly instead of asking architect (HIGH)
+
+**Discovered**: 2026-04-25 during W31.5c Round c-1 + c-2 EXECUTE — user observed `data-layer-specialist` searching patterns/docs directly instead of routing through `arch-platform → context-provider` chain.
+
+**Pattern**: Recurring violation across waves despite W27 codification of dev→arch→CP chain (BL-W26-06) and W31 pre-split hardening. Specialist templates still permit (or fail to forbid emphatically) direct pattern lookups via Grep / find-pattern / Read on docs/* paths.
+
+**Evidence**:
+- W27 shipped explicit "ALL pattern queries go via reporting architect" preamble in 4 dev specialist templates.
+- W26 wired CP gate hook (`context-provider-gate.js`) to block Read on docs/agents/*/templates/* paths.
+- T-BUG-015 (Wave 30) hardened the gate against bash-search anti-patterns (grep/find on pattern paths from dev sessions).
+- Despite all the above, devs still do it as of 2026-04-25 W31.5c.
+
+**Root cause hypotheses** (need investigation in fix wave):
+1. Hook misses some path patterns (e.g., agent-specific docs, MCP queries, planner outputs).
+2. Template "ALL pattern queries via architect" wording is buried — needs hard FIRST-LINE banner that's harder to miss.
+3. Spawn prompt includes lean defaults (per BL-W27-04 hygiene) that omit the explicit ban each session.
+4. Architect EXECUTE dispatch templates don't repeat the ban (devs forget between PREP and EXECUTE).
+5. Devs may be using grep/find via Bash instead of Grep tool, bypassing path-restriction hooks.
+
+**Fix scope** (post-W31.5c L0 cleanup session — NOT this wave):
+- Audit all 4 core specialist templates (`setup/agent-templates/{data-layer,domain-model,test,ui}-specialist.md`) for HARD ban language placement (top of file, not buried).
+- Add explicit BANNED-TOOLS line at top of each spawn prompt (override of generic Read/Grep tool access for docs paths).
+- Extend `context-provider-gate.js` hook coverage if path patterns are slipping through (audit missing path globs).
+- Add detection: scan tool-use logs for dev sessions hitting docs/* directly; flag as gate-bypass for retroactive review.
+- Repeat the ban in every EXECUTE dispatch template line (architects forward the ban into specialist prompts verbatim).
+- Consider: rip Grep/Read from dev specialist tools entirely; route all queries via SendMessage to architect.
+
+**Owner**: post-W31.5c L0 cleanup session.
+
+**Severity**: HIGH — workflow integrity bug. Each violation costs user trust + tokens. 4+ recurrences across W26→W31.5c means current mitigations are insufficient.
+
+**Memory refs**: `feedback_dev_context_delivery.md`; `project_wave27_shipped.md` (BL-W26-06 chain codification); `feedback_tools_not_connected.md`; `feedback_enforcement_not_templates.md` (hooks not templates).
+
+---
+
+## Wave 31.7 — Canonical Pattern Deep Refactor (PENDING USER REVIEW)
+
+> Items detectados en W31.6 al cotejar con doc canónica de Anthropic (https://code.claude.com/docs/en/agent-teams). Marcados como **PENDING REVIEW** — discutir con usuario antes de scope-locking en W31.7.
+
+### BL-W31.7-01 (PENDING REVIEW) — Flat-spawning real
+
+**Status**: Pending user discussion
+**Priority**: HIGH (pending confirmation)
+**Spec**: Main spawnea los 4 devs core (data-layer-specialist, domain-model-specialist, ui-specialist, test-specialist) como peers desde Phase 1 — no nested via arquitectos. Arquitectos solo coordinan vía SendMessage a devs que ya son peers.
+**Impacto**: ~40 archivos afectados (todos los templates de arch + devs + docs/agents/*). Cambio profundo en cómo arquitectos dispatch trabajo.
+**Razón pending**: Confirmar con usuario si el cambio merece el esfuerzo, o si nested spawning con PREP/EXECUTE es aceptable como permanente.
+
+---
+
+### BL-W31.7-02 (PENDING REVIEW) — Pull-model task claiming
+
+**Status**: Pending user discussion
+**Priority**: MEDIUM (pending confirmation)
+**Spec**: Peers idle ven TaskList y claiman tasks vía `TaskUpdate(owner=self)` en vez de push desde main vía `TaskUpdate(owner=other)`.
+**Impacto**: Reentrenar templates de todos los peers para añadir "check TaskList on idle, claim available tasks" en lugar de "wait for assignment".
+**Razón pending**: Push-model actual funciona; pull-model puede crear race conditions o tasks unclaimed. Validar con usuario.
+
+---
+
+### BL-W31.7-03 (PENDING REVIEW) — Reducción de hooks
+
+**Status**: Pending user discussion
+**Priority**: MEDIUM (pending confirmation)
+**Spec**: Auditar hooks (`context-provider-gate.js`, `scope-immutability-gate.js`, `addressee-liveness-gate.js`) y consolidar/eliminar redundantes. Doc canónica usa prompts y tools — no hooks bash.
+**Impacto**: Riesgo de regresión en enforcement (hooks bloquean violations mecánicamente, prompts solo guían).
+**Razón pending**: Necesitamos audit de cuántas violations cada hook ha bloqueado en últimas N waves antes de eliminar.
+
+---
+
+### BL-W31.7-04 (PENDING REVIEW) — Spawn-prompt diet pass 2
+
+**Status**: Pending user discussion
+**Priority**: MEDIUM (pending confirmation)
+**Spec**: Bajar payload de spawn prompts de KB → bytes. Wave 22 hizo pass 1 (~30% reducción). Faltan pass 2 y 3.
+**Impacto**: Reduce token cost por sesión.
+**Razón pending**: Identificar qué contenido es realmente esencial vs. boilerplate redundante.
+
+---
+
+### BL-W31.7-05 (PENDING REVIEW) — Eliminar Phase 1/2/3 split
+
+**Status**: Pending user discussion
+**Priority**: MEDIUM (pending confirmation)
+**Spec**: Doc canónica no tiene fases. Refactorizar `tl-session-setup.md` y guías para "spawn equipo, empezar" — sin fases discretas.
+**Impacto**: Cambio de modelo mental significativo. Coordinación con doc-updater para reescribir guías.
+**Razón pending**: Las fases nos sirven para gating (planning antes de execution); validar si el split es necesario o sobrecarga.
+
+---
+
+### BL-W31.7-06 (PENDING REVIEW) — Architect Bash-write workaround tightening
+**Status**: Pending user discussion
+**Spec**: arch-testing during W31.6 used `Bash` + Python scripts to edit files because architects don't have Write/Edit by design. This bypasses the "architects ≠ coders" principle (memory `feedback_architect_writes_code.md`). Options to tighten:
+- Remove `Bash` from architect tools entirely (forces dispatch to dev specialist)
+- Hook that blocks Bash-invoked file writes (heredoc, python edit, sed, awk) when invoked by architect agents
+- Or accept the workaround and document it as legitimate (when no specialist with Write tool is on the team yet)
+**Impacto**: Tightens enforcement of architect role boundary, but architects lose Bash capability for legitimate uses (running tests, git, validation scripts).
+**Razón pending**: Need user input on whether the boundary is principled or pragmatic. Bash is needed by architects for verification (npm test, validate, etc.) — full removal isn't viable. Hook-based selective block is more nuanced.
+
+---
+
+### BL-W31.7-07 (HIGH, PENDING REVIEW) — Architect Bash file-write hook (concrete enforcement)
+**Status**: Pending user discussion (concrete spec, testable)
+**Spec**: Implement `.claude/hooks/architect-bash-write-gate.js` that intercepts Bash invocations and blocks file-mutating patterns when invoked by an agent whose `agentType` starts with `arch-`. Patterns to block:
+- Output redirection: `> file`, `>> file` (shell heredoc patterns: `<< 'EOF'`, `cat <<EOF > file`)
+- In-place editors: `sed -i`, `awk -i inplace`, `gawk -i inplace`
+- Python file-write: `python -c '...open(...,"w")'`, `python ... > file`
+- Direct file-creating tools: `tee file`, `printf > file`, `echo > file`
+- npm/git commands that mutate workspace: allowed (architect needs `git status`, `npm test`, `gradle build` for verification)
+
+**Acceptance criteria**:
+- Hook blocks pattern matches for arch-* agents with clear error message: "Architects must dispatch Write/Edit work to a dev specialist via SendMessage. Workaround attempted: <command>."
+- Hook test suite covers: 5+ blocked patterns + 5+ allowed patterns (git, npm test, validate-agents, etc.)
+- Discovered in W31.6 — all 3 architects (arch-platform, arch-testing, arch-integration) bypassed Write/Edit ban via Bash. Tests passed but architecture principle violated.
+- Pairs with BL-W31.7-06 ("options menu") and BL-W31.7-01 (flat-spawning real, which makes architect direct edits even less defensible).
+
+**Razón pending**: hook implementation is well-defined but needs user signoff before W31.7 scope-lock. Some commands are ambiguous (e.g., `python -m pytest > result.txt` is verification, not file mutation in spirit). Pattern list needs review.

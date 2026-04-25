@@ -94,12 +94,10 @@ describe("Bug #6: arch templates reference arch-dispatch-modes.md for PREP/EXECU
 // ---------------------------------------------------------------------------
 
 describe("S8: team-lead template has Token Meter + retrospective rule", () => {
-  it("team-lead.md references tl-verification-gates.md Token Meter Gate", () => {
-    for (const content of readBoth("team-lead.md")) {
-      // team-lead template must carry at minimum a pointer to the sub-doc or
-      // inline the retrospective rule — either satisfies the S8 requirement.
-      expect(content).toMatch(/retrospective|token.meter|Token Meter/i);
-    }
+  it("main-agent-orchestration-guide.md references tl-verification-gates.md Token Meter Gate (W31.6)", () => {
+    // team-lead.md retired W31.6 — content now in main-agent-orchestration-guide.md
+    const raw = fs.readFileSync(path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md"), "utf-8");
+    expect(raw).toMatch(/retrospective|token.meter|Token Meter/i);
   });
 
   it("tl-verification-gates.md has Token Meter Gate section", () => {
@@ -117,22 +115,20 @@ describe("S8: team-lead template has Token Meter + retrospective rule", () => {
 // ---------------------------------------------------------------------------
 
 describe("5.16.0 hotfix: team-lead session setup uses subagent_type on peer spawns", () => {
-  it("team-lead.md spawns context-provider with subagent_type", () => {
-    for (const content of readBoth("team-lead.md")) {
-      expect(content).toMatch(/subagent_type="context-provider"/);
-    }
+  it("main-agent-orchestration-guide.md spawns context-provider with subagent_type (W31.6)", () => {
+    // team-lead.md retired W31.6 — content in main-agent-orchestration-guide.md
+    const raw = fs.readFileSync(path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md"), "utf-8");
+    expect(raw).toMatch(/subagent_type="context-provider"/);
   });
 
-  it("team-lead.md spawns doc-updater with subagent_type", () => {
-    for (const content of readBoth("team-lead.md")) {
-      expect(content).toMatch(/subagent_type="doc-updater"/);
-    }
+  it("main-agent-orchestration-guide.md spawns doc-updater with subagent_type (W31.6)", () => {
+    const raw = fs.readFileSync(path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md"), "utf-8");
+    expect(raw).toMatch(/subagent_type="doc-updater"/);
   });
 
-  it("team-lead.md has NEVER self-assign guard for context-provider", () => {
-    for (const content of readBoth("team-lead.md")) {
-      expect(content).toMatch(/NEVER self-assign|NEVER.*write files|read-only/i);
-    }
+  it("main-agent-orchestration-guide.md has NEVER self-assign guard for context-provider (W31.6)", () => {
+    const raw = fs.readFileSync(path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md"), "utf-8");
+    expect(raw).toMatch(/NEVER self-assign|NEVER.*write files|read-only/i);
   });
 });
 
@@ -194,26 +190,25 @@ describe("arch-dispatch-modes.md content integrity", () => {
 // ---------------------------------------------------------------------------
 
 describe("Bug #3: team-lead session setup calls TeamDelete before TeamCreate (Wave 24)", () => {
-  it("team-lead.md has TeamDelete before TeamCreate in session start block", () => {
-    for (const content of readBoth("team-lead.md")) {
-      const deleteIdx = content.indexOf("TeamDelete(team_name=");
-      const createIdx = content.indexOf("TeamCreate(team_name=");
-      expect(deleteIdx, "TeamDelete must appear before TeamCreate").toBeGreaterThanOrEqual(0);
-      expect(createIdx, "TeamCreate must be present").toBeGreaterThanOrEqual(0);
-      expect(deleteIdx, "TeamDelete must appear BEFORE TeamCreate").toBeLessThan(createIdx);
-    }
+  it("main-agent-orchestration-guide.md has TeamDelete before TeamCreate in session start block (W31.6)", () => {
+    // team-lead.md retired W31.6 — content in main-agent-orchestration-guide.md
+    const raw = fs.readFileSync(path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md"), "utf-8");
+    const deleteIdx = raw.indexOf("TeamDelete(team_name=");
+    const createIdx = raw.indexOf("TeamCreate(team_name=");
+    expect(deleteIdx, "TeamDelete must appear before TeamCreate").toBeGreaterThanOrEqual(0);
+    expect(createIdx, "TeamCreate must be present").toBeGreaterThanOrEqual(0);
+    expect(deleteIdx, "TeamDelete must appear BEFORE TeamCreate").toBeLessThan(createIdx);
   });
 
-  it("team-lead.md pre-flight checklist has step 0 for TeamDelete", () => {
-    for (const content of readBoth("team-lead.md")) {
-      expect(content).toMatch(/□ 0\. TeamDelete.*TeamCreate.*Bug #3/);
-    }
+  it("main-agent-orchestration-guide.md pre-flight checklist has step 0 for TeamDelete (W31.6)", () => {
+    const raw = fs.readFileSync(path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md"), "utf-8");
+    expect(raw).toMatch(/0\..*TeamDelete.*Bug #3/);
   });
 
-  it("team-lead.md template_version is 6.2.0", () => {
-    for (const content of readBoth("team-lead.md")) {
-      expect(content).toMatch(/template_version:\s*"6.2.1"/);
-    }
+  it("team-lead retirement entry exists in MIGRATIONS.json (W31.6)", () => {
+    const migrationsRaw = fs.readFileSync(path.join(TEMPLATES_DIR, "MIGRATIONS.json"), "utf-8");
+    const migrations = JSON.parse(migrationsRaw);
+    expect(migrations.templates["team-lead"]).toHaveProperty("RETIRED-W31.6");
   });
 });
 

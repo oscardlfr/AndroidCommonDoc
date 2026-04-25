@@ -106,7 +106,8 @@ describe('Wave 1 BUG 8: Exact Fix Format MANDATORY section', () => {
 // ---------------------------------------------------------------------------
 describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in team-lead or sub-docs', () => {
   it('Post-Wave Team Integrity Check exists in template or tl-verification-gates sub-doc', () => {
-    const templateContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'team-lead.md'), 'utf-8');
+    // W31.6: team-lead.md retired — read guide instead
+    const templateContent = fs.readFileSync(path.join(ROOT, 'docs/agents/main-agent-orchestration-guide.md'), 'utf-8');
     const verGatesPath = path.join(ROOT, 'docs/agents/tl-verification-gates.md');
     const verGatesContent = fs.existsSync(verGatesPath) ? fs.readFileSync(verGatesPath, 'utf-8') : '';
     const combined = templateContent + '\n' + verGatesContent;
@@ -118,28 +119,34 @@ describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in team-lead or sub-docs'
 // 8. Wave 1: template_version bumped in architects
 // ---------------------------------------------------------------------------
 describe('Wave 1: template_version bumped in architects', () => {
-  it('arch-testing.md template_version is "1.20.0"', () => {
-    // Wave 27: bumped from 1.19.0 → 1.20.0 (pattern-search tools removed)
+  it('arch-testing.md template_version is "1.21.0"', () => {
+    // W31.6: bumped from 1.20.0 → 1.21.0 (PREP/EXECUTE clarification + ban reminder)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.20.0"/);
+    expect(content).toMatch(/template_version:\s*"1.21.0"/);
   });
 
-  it('arch-platform.md template_version is "1.18.0"', () => {
-    // Wave 31: bumped from 1.17.0 → 1.18.0 (Knowledge Currency Gate added)
+  it('arch-platform.md template_version is "1.19.0"', () => {
+    // W31.6: bumped from 1.18.0 → 1.19.0 (PREP/EXECUTE clarification + ban reminder)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
+    expect(content).toMatch(/template_version:\s*"1.19.0"/);
+  });
+
+  it('arch-integration.md template_version is "1.18.0"', () => {
+    // W31.6: bumped from 1.17.0 → 1.18.0 (PREP/EXECUTE clarification + ban reminder)
+    const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
     expect(content).toMatch(/template_version:\s*"1.18.0"/);
   });
 
-  it('arch-integration.md template_version is "1.17.0"', () => {
-    // Wave 27: bumped from 1.16.0 → 1.17.0 (pattern-search tools removed)
-    const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.17.0"/);
-  });
-
-  it('team-lead.md template_version is "6.2.0"', () => {
-    // Wave 27: bumped from 6.1.0 → 6.2.0 (pattern-search tools removed)
-    const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'team-lead.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"6.2.1"/);
+  it('MIGRATIONS.json has W31.6 RETIRED entry for team-lead (W31.6: retired)', () => {
+    // W31.6: team-lead.md retired — MIGRATIONS.json entry confirms retirement
+    // Structure: { "templates": { "team-lead": { "RETIRED-W31.6": {...} } } }
+    const migrationsRaw = fs.readFileSync(path.join(ROOT, 'setup/agent-templates/MIGRATIONS.json'), 'utf-8');
+    const migrations = JSON.parse(migrationsRaw);
+    const tlEntry = migrations?.templates?.['team-lead'];
+    expect(tlEntry).toBeDefined();
+    expect(tlEntry['RETIRED-W31.6']).toBeDefined();
+    expect(migrationsRaw).toMatch(/RETIRED-W31\.6/);
+    expect(migrationsRaw).toMatch(/main-agent-orchestration-guide/);
   });
 });
 
@@ -163,7 +170,7 @@ describe('Wave 1 BUG 7: "ALL fixes go through team-lead" preamble in architects'
 // ---------------------------------------------------------------------------
 describe('dual-location sync: setup/agent-templates/ == .claude/agents/', () => {
   const syncedTemplates = [
-    'team-lead.md',
+    // W31.6: team-lead.md removed (retired — see MIGRATIONS.json RETIRED-W31.6)
     'planner.md',
     'quality-gater.md',
     'arch-testing.md',

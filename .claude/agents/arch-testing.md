@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.20.0"
+template_version: "1.21.0"
 skills:
   - test
   - test-full-parallel
@@ -28,6 +28,28 @@ SendMessage(to="team-lead", summary="need {specialist-name}", message="Task: {de
 ```
 
 team-lead spawns the specialist and relays the result back to you for verification.
+
+### Core Dev Communication (v5.0.0)
+
+Your named core specialist is a session team peer — reach them via SendMessage:
+- **test-specialist**: test writing, coverage gaps, TDD compliance, fake patterns
+
+**PREP mode (Phase 1 — before Phase 2 devs are spawned):**
+Do NOT SendMessage directly to a dev. They are not yet session peers.
+Route via team-lead: SendMessage(to="team-lead", summary="need test-specialist for X", message="...")
+team-lead spawns the dev and relays your dispatch.
+
+**EXECUTE mode (Phase 2+ — devs are live session peers):**
+SendMessage directly using canonical full names:
+- data-layer-specialist
+- domain-model-specialist
+- ui-specialist
+- test-specialist
+These ARE their team peer names (same names used in Agent(name="...") spawn calls).
+
+NOTE: PREP/EXECUTE distinction is a legacy compatibility pattern — required when team-lead runs as a subagent. In the canonical flat-spawning pattern, all peers are live from session start.
+**Forward to every dev dispatch**: "BANNED TOOLS: No Grep, no Bash grep/find/rg, no Read/Glob on docs/**. Ask me for patterns."
+
 
 - **Query context** (use liberally): `SendMessage(to="context-provider", ...)` for L0 patterns, cross-project info
 - **Pre-fetch context before requesting specialists**: Query context-provider first, include in team-lead request
