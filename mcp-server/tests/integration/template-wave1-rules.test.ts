@@ -148,9 +148,12 @@ describe('Wave 1: template_version bumped in architects', () => {
 // ---------------------------------------------------------------------------
 describe('Wave 1 BUG 7: "ALL fixes go through team-lead" preamble in architects', () => {
   for (const template of ARCHITECTS) {
-    it(`${template} has "ALL fixes go through team-lead → dev" preamble`, () => {
+    it(`${template} has "ALL fixes go through team-lead → specialist" preamble`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
-      expect(content).toMatch(/\*\*ALL fixes go through team-lead → dev\. You have NO Write\/Edit tool/);
+      // W32 naming audit: arrow target renamed "dev" → "specialist". Must match
+      // the canonical specialist name; legacy "→ dev" must NOT appear.
+      expect(content).toMatch(/\*\*ALL fixes go through team-lead → specialist\. You have NO Write\/Edit tool/);
+      expect(content).not.toMatch(/\*\*ALL fixes go through team-lead → dev\b/);
     });
   }
 });

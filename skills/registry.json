@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-25T11:15:51.857Z",
+  "generated": "2026-04-25T11:24:13.289Z",
   "l0_root": ".",
   "entries": [
     {
@@ -2709,17 +2709,6 @@
         "token_budget": 3000,
         "template_version": "2.6.0"
       }
-    },
-    {
-      "name": "README",
-      "type": "agent",
-      "path": ".claude/agents/README.md",
-      "description": "",
-      "category": "domain",
-      "tier": "extended",
-      "hash": "sha256:ca13641fc19d6984677db902b77ca49237e21b3437dcdfb89c34c160195733f2",
-      "dependencies": [],
-      "frontmatter": {}
     },
     {
       "name": "release-guardian-agent",
