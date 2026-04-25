@@ -82,7 +82,7 @@ Default recipient = `team-lead`. **Liveness check BEFORE every SendMessage to te
 
 **FORBIDDEN (T-BUG-012)**: messaging `team-lead` after shutdown (report lost); silent retry 3+ times instead of fallback; hardcoding `team-lead` as only recipient.
 
-Full rationale: `docs/agents/arch-topology-protocols.md#2-reporter-protocol--pm-liveness-check--team-lead-fallback-t-bug-012`.
+Full rationale: `docs/agents/arch-topology-protocols.md#2-reporter-protocol--team-lead-liveness-check--team-lead-fallback-t-bug-012`.
 
 ### External Doc Lookups (MANDATORY — T-BUG-005)
 

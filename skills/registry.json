@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-24T17:51:38.131Z",
+  "generated": "2026-04-25T10:59:37.844Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1915,7 +1915,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6223222316fbfbbe579251ee7480f6122f8574c3e42a79c9adff252717848d33",
+      "hash": "sha256:a92753138adf038c5f81781968346f2d59fe8c7886cab6bfc2b46ba0cd3fb11c",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1945,7 +1945,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:fa39d277b5667b15c3de5771a90c211b26bfbab6dce5d1cba0d5df8269a4096d",
+      "hash": "sha256:00e1051a8d14bccbd148ad599ee624ddaa173ee3ebae16ff7a0729234952554e",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -2354,7 +2354,7 @@
       "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4d2e8b524e2106e40350b69bd2a24eb138393cdd089721f271fdd7e5ed035a78",
+      "hash": "sha256:d6890ed1a4c48d98064d3210d7fa7b5a7f6a619b2175d42f5243de64ee95c46c",
       "dependencies": [],
       "frontmatter": {
         "name": "{{DOMAIN}}-specialist",
@@ -2825,7 +2825,7 @@
       "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:cc741907271b88ea0721993aee4302d831e3a5a872b2bafb61f7952981bc7de4",
+      "hash": "sha256:e07a8b391f38774b51c936fc868cce503a80d2c26f27a100c65687fde257f6cd",
       "dependencies": [],
       "frontmatter": {
         "name": "team-lead",
