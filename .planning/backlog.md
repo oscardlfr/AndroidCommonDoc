@@ -298,7 +298,7 @@ W29 initially ran /pre-pr /check-outdated /audit-docs in L1 via test-specialist 
 
 ### BL-W31.5-01 — Architect dispatch uses subagent_type instead of team name (HIGH)
 
-**Status**: backlog
+**Status**: SHIPPED 2026-04-25 in PR #69 (77aa199)
 **Priority**: HIGH — this bug desencadena toda una cadena de fallos de dispatch
 **Discovered**: 2026-04-25 during Wave 31.5 execution (user confirmed root-cause)
 
@@ -329,7 +329,7 @@ W29 initially ran /pre-pr /check-outdated /audit-docs in L1 via test-specialist 
 
 ### BL-W31.5-02 — ui-specialist template is Compose-only; no docs-owner role in no-UI waves (MEDIUM)
 
-**Status**: backlog
+**Status**: SHIPPED 2026-04-25 in PR #69 (77aa199)
 **Priority**: medium
 **Discovered**: 2026-04-25 during Wave 31.5 (no-UI wave)
 
@@ -389,6 +389,7 @@ W29 initially ran /pre-pr /check-outdated /audit-docs in L1 via test-specialist 
 
 ### BL-W31.5-04 — Dev specialist template recurring bug: devs search patterns directly instead of asking architect (HIGH)
 
+**Status**: SHIPPED 2026-04-25 in PR #69 (77aa199)
 **Discovered**: 2026-04-25 during W31.5c Round c-1 + c-2 EXECUTE — user observed `data-layer-specialist` searching patterns/docs directly instead of routing through `arch-platform → context-provider` chain.
 
 **Pattern**: Recurring violation across waves despite W27 codification of dev→arch→CP chain (BL-W26-06) and W31 pre-split hardening. Specialist templates still permit (or fail to forbid emphatically) direct pattern lookups via Grep / find-pattern / Read on docs/* paths.
