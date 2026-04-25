@@ -28,7 +28,7 @@ These are **starting points** — adapt to your project's specific modules, cons
 
 | Template | Purpose |
 |----------|---------|
-| `arch-testing.md` | Test quality, TDD, regression — manages test-specialist, ui-specialist. Compile gate: devs must prove `./gradlew assemble` passes |
+| `arch-testing.md` | Test quality, TDD, regression — manages test-specialist, ui-specialist. Compile gate: specialists must prove `./gradlew assemble` passes |
 | `arch-platform.md` | KMP patterns, deps, source sets — manages domain-model, data-layer. Compile gate enforced |
 | `arch-integration.md` | Compilation, DI, nav, gates — manages ui-specialist, data-layer. Compile gate enforced |
 
@@ -43,7 +43,7 @@ These are **starting points** — adapt to your project's specific modules, cons
 
 | Template | Purpose |
 |----------|---------|
-| `feature-domain-specialist.md` | Domain-specific architecture auditor (customize per domain). Senior engineer role: devs must demonstrate understanding before implementation |
+| `feature-domain-specialist.md` | Domain-specific architecture auditor (customize per domain). Specialist role: must demonstrate understanding before implementation |
 | `product-strategist.md` | ICE-scored feature prioritization and milestone planning |
 | `content-creator.md` | Build-in-public marketing content (Reddit, Twitter, changelogs) |
 

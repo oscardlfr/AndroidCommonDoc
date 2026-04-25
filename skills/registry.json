@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-24T17:51:38.131Z",
+  "generated": "2026-04-25T11:24:13.289Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1915,7 +1915,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6223222316fbfbbe579251ee7480f6122f8574c3e42a79c9adff252717848d33",
+      "hash": "sha256:d9561fd0180dfe61865e8a7a41374766e6b82618d1e74533f77f711523906a7c",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1945,7 +1945,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:fa39d277b5667b15c3de5771a90c211b26bfbab6dce5d1cba0d5df8269a4096d",
+      "hash": "sha256:fbeaced721eaa69b8adec24303ee7bcb18e8bb1544ef4caa61482e593606831f",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1974,7 +1974,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:2c0b107969557bab62c6d830ab015e18d2005ccd3aeceb29631a6fc3b7f87a56",
+      "hash": "sha256:1f43ab3f955cbb4f670fd7b635190d0697d6e88aad891b671fe1ddf9d1827e43",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -2090,7 +2090,7 @@
       "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6948efa6525e662fdd72edce20a23f91f1a5c087919cafc595325bf60359f210",
+      "hash": "sha256:886054a524ba5a984a7714edb714a31f1b97bcfeb622b92aaa2bf64b80aea8e2",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -2148,7 +2148,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ba08f0469fdc687ba60f4e2c4577a58f1fe4ff3a4da735a24a94083af27c6069",
+      "hash": "sha256:cbfc078471a5a472bba5e4941fa2e29c00f9107005665a9fda718ecea8a954ca",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -2293,7 +2293,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:89a445e19101f80d44f4253b0f204b4c630f5da0106e419660a52ea20e68ac8d",
+      "hash": "sha256:d369b43e97d9670b6e158d41f1be226ca6fd6165481e60aa47f7fad40450efbd",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2324,7 +2324,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:162dcfc7a91580eee559dbe19c5af599817a78f842fe8bd766a4e5b2f080aa7f",
+      "hash": "sha256:fc71e0617aaa18acd2673c2fe65ecfa6746606b61427cc8ed05285778992b876",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2354,7 +2354,7 @@
       "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4d2e8b524e2106e40350b69bd2a24eb138393cdd089721f271fdd7e5ed035a78",
+      "hash": "sha256:d6890ed1a4c48d98064d3210d7fa7b5a7f6a619b2175d42f5243de64ee95c46c",
       "dependencies": [],
       "frontmatter": {
         "name": "{{DOMAIN}}-specialist",
@@ -2527,7 +2527,7 @@
       "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:582dcd938f8c3c33457c731a0dfc3c7c6d53ffe664462fe54730bf271a2984a8",
+      "hash": "sha256:987faa75d807d4d2fb12f4c579f2f6fdb323b2dd6d44a834ab4e7da4dc88146f",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -2822,14 +2822,14 @@
       "name": "team-lead",
       "type": "agent",
       "path": ".claude/agents/team-lead.md",
-      "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
+      "description": "Project orchestrator. Plans scope, assigns work to specialists, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:cc741907271b88ea0721993aee4302d831e3a5a872b2bafb61f7952981bc7de4",
+      "hash": "sha256:01c2f6e75d4e441bae0975ab459afda8501e0dbe57a2d60cf1827cd42ed969ba",
       "dependencies": [],
       "frontmatter": {
         "name": "team-lead",
-        "description": "Project orchestrator. Plans scope, assigns work to devs, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
+        "description": "Project orchestrator. Plans scope, assigns work to specialists, launches architect gates, handles escalations. NEVER writes code. Customize {{PROJECT_NAME}} and Agent Roster for your project.",
         "tools": "Read, Bash, Agent, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__check-version-sync, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__findings-report, mcp__androidcommondoc__skill-usage-analytics, mcp__androidcommondoc__tool-use-analytics, mcp__androidcommondoc__audit-report",
         "model": "sonnet",
         "domain": "development",
@@ -2883,7 +2883,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:a574fd9650e4c70c94ad65d7aeee1c17a51662e368963a1f0cf9c9a50d0add68",
+      "hash": "sha256:862472bca4138d805235dcf726d99f0ee95f734b4cbc2cbc6f8e5776e905ccf2",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2921,7 +2921,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:7a55692bc7acb821ffd0bc2375b3d2c9dae02b0cc1a03d61cd357abcabdc19d8",
+      "hash": "sha256:5ee415238b78be4eb8b5510b44036696ac062fa5e37f9b6214a6376b485530b2",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",

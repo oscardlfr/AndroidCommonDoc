@@ -57,11 +57,11 @@ If step 0 or 1 returns results → use them as authoritative. Steps 3-4 only run
 
 ### Architect-Mediated Queries (v5.0.0)
 
-Architects query you on behalf of their core devs. When an architect asks for a pattern:
+Architects query you on behalf of their core specialists. When an architect asks for a pattern:
 - Include implementation-ready detail (file paths, exact function signatures, imports)
-- The architect will relay to their dev — make your answer dev-actionable
+- The architect will relay to their specialist — make your answer specialist-actionable
 - If the pattern has caveats or edge cases, flag them explicitly
-- Devs do NOT contact you directly — always through their architect
+- Specialists do NOT contact you directly — always through their architect
 
 ## How to Start
 
