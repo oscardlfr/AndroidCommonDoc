@@ -22,7 +22,7 @@ This doc defines the two-step architect dispatch protocol introduced in Wave 23.
 
 **Bug #5 (scope-doc hardcode)**: Arch templates hardcoded `.planning/PLAN.md` in their PRE-TASK and Scope Validation gates. Wave plans live at `.planning/PLAN-W{N}.md` (Wave 22 modularization). Architects reading the hardcoded path either got stale content or failed outright. team-lead dispatch did not pass a path, so architects guessed from cwd.
 
-**Bug #6 (no mode tagging)**: Architects received a single dispatch per wave and had no signal whether they were being asked to **prepare** work for devs (read plan, identify risks, produce a dev task list) or **execute + verify** work after devs ran (collect results, write verdict). Both phases shared the same dispatch format. This caused architects to either start investigating too eagerly (pre-dev) or skip prep entirely (post-dev).
+**Bug #6 (no mode tagging)**: Architects received a single dispatch per wave and had no signal whether they were being asked to **prepare** work for specialists (read plan, identify risks, produce a specialist task list) or **execute + verify** work after specialists ran (collect results, write verdict). Both phases shared the same dispatch format. This caused architects to either start investigating too eagerly (pre-specialist) or skip prep entirely (post-specialist).
 
 ## Two fields on every team-lead dispatch
 
@@ -50,11 +50,11 @@ summary: Wave 23 PREP — read Steps 1-6, identify platform risks, return READY
 1. Read `scope_doc_path` — extract the wave's goals, files in scope, acceptance criteria
 2. Consult context-provider for domain patterns relevant to the wave
 3. Identify domain-specific risks: KMP source set pitfalls (platform), test gaps (testing), wiring/nav concerns (integration)
-4. Build a dev task list scoped to your specialty (files + required specialist names)
+4. Build a specialist task list scoped to your specialty (files + required specialist names)
 5. SendMessage team-lead with `READY: <1-line summary of risks and dev tasks>`
 6. Do NOT dispatch devs yet. Do NOT write verdict. Stay idle after READY until EXECUTE dispatch arrives.
 
-**team-lead collects all 3 READY responses before spawning devs.** This lets team-lead merge cross-architect concerns into a single dev dispatch plan — e.g., if platform flags a source-set move that testing needs to reconcile, team-lead surfaces both in the dev brief.
+**team-lead collects all 3 READY responses before spawning specialists.** This lets team-lead merge cross-architect concerns into a single specialist dispatch plan — e.g., if platform flags a source-set move that testing needs to reconcile, team-lead surfaces both in the specialist brief.
 
 ## EXECUTE mode — post-dev verification
 
@@ -73,7 +73,7 @@ summary: Wave 23 PREP — read Steps 1-6, identify platform risks, return READY
 1. PREP dispatch to arch-testing, arch-platform, arch-integration in parallel
    → wait for all 3 READY responses
 
-2. team-lead merges READY findings, spawns devs (Phase 2 core devs if first wave, extras if requested)
+2. team-lead merges READY findings, spawns specialists (Phase 2 core specialists if first wave, extras if requested)
 
 3. Devs execute their assigned work
 

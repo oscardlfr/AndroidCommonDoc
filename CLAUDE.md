@@ -4,6 +4,8 @@
 
 ## Workflow Orchestration
 
+> **W31.6 Canonical Pattern**: The main agent IS the orchestrator — see `docs/agents/main-agent-orchestration-guide.md` for session protocol. Canonical flat-spawning is preferred over nested team-lead subagent model.
+
 ### 1. Plan Mode Default
 - Enter plan mode for ANY non-trivial task (3+ steps or architectural impact)
 - Changing vault sync (`moc-generator.ts`, `transformer.ts`, `wikilink-generator.ts`) → plan mode — graph impact
@@ -109,7 +111,8 @@
 - Upstream validation → `docs/guides/upstream-validation.md` (validate_upstream frontmatter)
 - Detekt rules → `detekt-rules/` + `docs/guides/detekt-config.md`
 - Spec-driven workflow → `docs/agents/spec-driven-workflow.md`
-- Agent templates → `setup/agent-templates/` (team-lead, product-strategist, content-creator, landing-page-strategist)
+- Agent templates → `setup/agent-templates/` (product-strategist, content-creator, landing-page-strategist; orchestration guide at `docs/agents/main-agent-orchestration-guide.md`)
+- Note: `setup/agent-templates/team-lead.md` deprecated W31.6 — see `docs/agents/main-agent-orchestration-guide.md`
 - Business doc templates → `setup/doc-templates/business/` (PRODUCT_SPEC, MARKETING, PRICING, LANDING_PAGES, COMPETITIVE)
 - MCP tools → 46 tools via ~/.mcp.json — architects/specialists must declare them in `tools:` frontmatter to call them (Wave 25 fix: prose references alone don't load schemas)
 - Dependency freshness → `check-outdated` MCP tool (TOML parser, Maven Central, kdoc-state v2 cache)
@@ -130,7 +133,7 @@ Development waves live in git log + memory; summarized here for onboarding conte
 - **Wave 20** (2026-04-20, PRs #53 + #54) — Bug #7 session-scoped CP gate, S2.1 hash parity, S2.2 MIGRATIONS, S3.1 `/work` rewrite, S3.2 material-3 ADOPT.
 
 ## RTK Enforcement (Wave 22)
-Agent templates MUST prefix all git/gh/docker/curl commands with `rtk`. Enforced in setup/agent-templates/team-lead.md.
+Agent templates MUST prefix all git/gh/docker/curl commands with `rtk`. Enforced via agent template guidelines — see `docs/agents/main-agent-orchestration-guide.md`.
 
 ## Ingestion Loop (Wave 25)
 External sources (Context7 / WebFetch) flow into L0 docs via an explicit approval chain: context-provider flags the gap → team-lead requests user approval → doc-updater runs `mcp__androidcommondoc__ingest-content` → commits to `docs/{category}/{slug}.md` with citation frontmatter. User approval is a hard gate — team-lead does not forward to doc-updater without `approved_by: user`.

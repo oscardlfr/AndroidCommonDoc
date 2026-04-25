@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.18.0"
+template_version: "1.19.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -141,6 +141,23 @@ See `docs/agents/arch-topology-protocols.md#library-behavior-uncertainty` — 4-
 Your named core specialists are session team peers — reach them via SendMessage:
 - **domain-model-specialist**: sealed interfaces, data classes, domain patterns
 - **data-layer-specialist**: repository patterns, source set placement, encoding
+
+**PREP mode (Phase 1 — before Phase 2 devs are spawned):**
+Do NOT SendMessage directly to a dev. They are not yet session peers.
+Route via team-lead: SendMessage(to="team-lead", summary="need data-layer-specialist for X", message="...")
+team-lead spawns the dev and relays your dispatch.
+
+**EXECUTE mode (Phase 2+ — devs are live session peers):**
+SendMessage directly using canonical full names:
+- data-layer-specialist
+- domain-model-specialist
+- ui-specialist
+- test-specialist
+These ARE their team peer names (same names used in Agent(name="...") spawn calls).
+
+NOTE: PREP/EXECUTE distinction is a legacy compatibility pattern — required when team-lead runs as a subagent. In the canonical flat-spawning pattern, all peers are live from session start.
+**Forward to every dev dispatch**: "BANNED TOOLS: No Grep, no Bash grep/find/rg, no Read/Glob on docs/**. Ask me for patterns."
+
 
 **Assigning work:** SendMessage(to="specialist-name", summary="task", message="details + files + acceptance criteria")
 

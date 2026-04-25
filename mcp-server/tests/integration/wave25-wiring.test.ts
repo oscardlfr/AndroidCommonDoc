@@ -68,7 +68,6 @@ function registeredMcpTools(): Set<string> {
 
 const CORE_AGENTS_WITH_MIN_MCP_TOOLS: Array<[string, number]> = [
   ["context-provider.md", 8],
-  ["team-lead.md", 10],
   ["doc-updater.md", 6],
   ["doc-alignment-agent.md", 8],
   ["l0-coherence-auditor.md", 5],
@@ -124,22 +123,24 @@ describe("Wave 25: team-lead rename — no active project-manager references", (
     expect(pmPrefixed, `found stale pm-* files: ${pmPrefixed.join(", ")}`).toHaveLength(0);
   });
 
-  it("team-lead template and mirror exist and are identical", () => {
-    const [tmpl, agent] = readBothAgent("team-lead.md");
-    expect(tmpl).toEqual(agent);
+  it("team-lead template files are DELETED (W31.6 retirement)", () => {
+    // W31.6: team-lead.md deprecated — content moved to docs/agents/main-agent-orchestration-guide.md
+    expect(fs.existsSync(path.join(TEMPLATES_DIR, "team-lead.md"))).toBe(false);
+    expect(fs.existsSync(path.join(AGENTS_DIR, "team-lead.md"))).toBe(false);
   });
 
-  it("team-lead.md frontmatter name is 'team-lead'", () => {
-    for (const raw of readBothAgent("team-lead.md")) {
-      const fm = getFrontmatter(raw);
-      expect(fm?.name).toBe("team-lead");
-    }
+  it("main-agent-orchestration-guide.md exists in docs/agents/ (W31.6 replacement)", () => {
+    const guidePath = path.join(DOCS_AGENTS_DIR, "main-agent-orchestration-guide.md");
+    expect(fs.existsSync(guidePath)).toBe(true);
+    const content = fs.readFileSync(guidePath, "utf-8");
+    // Must have doc frontmatter (not subagent frontmatter)
+    expect(content).toMatch(/^category: agents/m);
+    expect(content).not.toMatch(/^name: team-lead/m);
   });
 
   it("core agent templates do not contain 'project-manager' in body (only team-lead)", () => {
     // Historical/migration notes intentionally keep the old name; body of active agents should not
     const corePaths = [
-      "team-lead.md",
       "arch-platform.md",
       "arch-testing.md",
       "arch-integration.md",
@@ -180,11 +181,12 @@ describe("Wave 25: ingestion loop is fully wired", () => {
     }
   });
 
-  it("team-lead has Ingestion-Request Handler section", () => {
-    for (const raw of readBothAgent("team-lead.md")) {
-      expect(raw).toMatch(/Ingestion-?Request Handler/i);
-      expect(raw).toMatch(/approved_by:\s*user/);
-    }
+  it("main-agent-orchestration-guide.md has Ingestion-Request Handler section (W31.6)", () => {
+    // team-lead.md retired W31.6 — content moved to main-agent-orchestration-guide.md
+    const guidePath = path.join(DOCS_AGENTS_DIR, "main-agent-orchestration-guide.md");
+    const raw = fs.readFileSync(guidePath, "utf-8");
+    expect(raw).toMatch(/Ingestion-?Request Handler/i);
+    expect(raw).toMatch(/approved_by:\s*user/);
   });
 
   it("doc-updater has Ingestion Handler (§5) with ingest-content call", () => {
@@ -358,7 +360,7 @@ describe("Wave 27: pattern-search tools removed from architects and team-lead", 
     "arch-testing.md",
     "arch-platform.md",
     "arch-integration.md",
-    "team-lead.md",
+    // team-lead.md retired W31.6 — no longer exists as a template file
   ];
 
   for (const agentFile of AGENTS_THAT_MUST_NOT_HAVE_SEARCH) {

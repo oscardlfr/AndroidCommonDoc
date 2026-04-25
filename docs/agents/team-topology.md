@@ -7,7 +7,7 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "3-phase team model with 9 session team peers (5 at session start + 4 core devs at Phase 2). Planning → Execution → Quality Gate. Phases are lightweight — session team peers carry context across all three."
+description: "3-phase team model with 9 session team peers (5 at session start + 4 core specialists at Phase 2). Planning → Execution → Quality Gate. Phases are lightweight — session team peers carry context across all three."
 version: 4
 last_updated: "2026-04"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
@@ -16,13 +16,13 @@ token_budget: 1500
 
 # Team Topology: 3-Phase Model
 
-Three sequential phases, each lightweight. Nine **session team peers** live in the `session-{project-slug}` team: five spawned at session start plus four core layer devs added when Phase 2 begins. All carry context across phases. The project slug is derived from the project directory name (lowercased, hyphens replacing spaces -- e.g., `DawSync` becomes `daw-sync`).
+Three sequential phases, each lightweight. Nine **session team peers** live in the `session-{project-slug}` team: five spawned at session start plus four core specialists added when Phase 2 begins. All carry context across phases. The project slug is derived from the project directory name (lowercased, hyphens replacing spaces -- e.g., `DawSync` becomes `daw-sync`).
 
 ---
 
 ## Session Team Peers (9)
 
-Five agents join at session start; four core layer devs join when Phase 2 begins. All nine stay alive across phases.
+Five agents join at session start; four core specialists join when Phase 2 begins. All nine stay alive across phases.
 
 ```
 Session Start (5 agents)
@@ -33,7 +33,7 @@ Session Start (5 agents)
   team-lead: Agent(name="arch-platform", team_name="session-{project-slug}", run_in_background=true)
   team-lead: Agent(name="arch-integration", team_name="session-{project-slug}", run_in_background=true)
 
-Phase 2 Start (+4 core devs)
+Phase 2 Start (+4 core specialists)
   team-lead: Agent(name="test-specialist", team_name="session-{project-slug}", run_in_background=true)
   team-lead: Agent(name="ui-specialist", team_name="session-{project-slug}", run_in_background=true)
   team-lead: Agent(name="domain-model-specialist", team_name="session-{project-slug}", run_in_background=true)
@@ -67,40 +67,41 @@ Now all 9 are `TeamCreate("session-{project-slug}")` peers. Four advantages:
 - **Quality-gater has direct access** — joins the session team in Phase 3, SendMessages architects directly
 - **Cross-phase context preserved** — architects accumulate Phase 2 knowledge, quality-gater Step 1.5 can ask "what changed?" and get a real answer
 
-## Core Dev Lifecycle
 
-Four core devs (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) are spawned at Phase 2 start and persist until session end -- same lifecycle as architects.
+## Core Specialist Lifecycle
+
+Four core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) are spawned at Phase 2 start and persist until session end -- same lifecycle as architects.
 
 - **Spawn**: team-lead spawns all 4 when Phase 2 begins (not at session start)
-- **Work**: Architects assign tasks via SendMessage; devs execute across multiple waves
-- **Knowledge**: Devs accumulate layer expertise across waves -- no re-reading project context
-- **Kill**: Core devs die at session end only. Never rotated mid-session unless context fills (7+ waves)
-- **Reporting**: Each dev reports to specific architect(s) -- see Agent table above
+- **Work**: Architects assign tasks via SendMessage; specialists execute across multiple waves
+- **Knowledge**: Specialists accumulate layer expertise across waves -- no re-reading project context
+- **Kill**: Core specialists die at session end only. Never rotated mid-session unless context fills (7+ waves)
+- **Reporting**: Each specialist reports to specific architect(s) -- see Agent table above
 
 ## Pattern Validation Chain
 
-Devs NEVER contact context-provider directly. The architect is the quality gate:
+Specialists NEVER contact context-provider directly. The architect is the quality gate:
 
 ```
-dev needs pattern -> SendMessage(to="arch-platform", "how to handle X?")
+specialist needs pattern -> SendMessage(to="arch-platform", "how to handle X?")
 architect validates -> SendMessage(to="context-provider", "pattern for X?")
-context-provider responds -> architect filters -> sends to dev
+context-provider responds -> architect filters -> sends to specialist
 ```
 
-This ensures architects validate every pattern before it reaches dev code.
+This ensures architects validate every pattern before it reaches specialist code.
 
-**External context path**: context-provider: internal miss -> Context7 lookup -> architect filters -> dev
+**External context path**: context-provider: internal miss -> Context7 lookup -> architect filters -> specialist
 
 ## Dynamic Scaling
 
-When a core dev is busy and the architect needs parallel work:
+When a core specialist is busy and the architect needs parallel work:
 
 1. Architect sends: `SendMessage(to="team-lead", "need extra ui-specialist")`
 2. team-lead spawns: `Agent(name="ui-specialist-2", team_name="session-{project-slug}", prompt="...")` -- named team peer
-3. Extra dev executes, returns result to team-lead, team-lead relays to architect
-4. After architect verifies -> extra dev dies
+3. Extra specialist executes, returns result to team-lead, team-lead relays to architect
+4. After architect verifies -> extra specialist dies
 
-**Named extra devs (MANDATORY):** All overflow devs MUST be named team peers (`{specialist}-2`, `{specialist}-3`) with `team_name`. Anonymous `Agent()` calls (no name, no team_name) are FORBIDDEN — unnamed devs go idle and are unreachable via SendMessage.
+**Named extra specialists (MANDATORY):** All overflow specialists MUST be named team peers (`{specialist}-2`, `{specialist}-3`) with `team_name`. Anonymous `Agent()` calls (no name, no team_name) are FORBIDDEN — unnamed specialists go idle and are unreachable via SendMessage.
 
 **Architect-name-honoring (MANDATORY):** When an architect requests a specific specialist by name via SendMessage, team-lead MUST spawn that specialist as a named team peer with the requested name. team-lead MUST NOT substitute an anonymous or differently-named agent.
 
@@ -115,7 +116,7 @@ Phase 1 — Planning (temporary planner)
 Phase 2 — Execution (no TeamCreate — architects are already alive)
   team-lead SendMessage(to="arch-testing/platform/integration") with plan
   architects SendMessage(to="context-provider") for patterns/rules
-  Architects assign work to core devs via SendMessage
+  Architects assign work to core specialists via SendMessage
   SendMessage(to="doc-updater") after work
   All 3 architects APPROVE → phase complete
 
@@ -159,7 +160,7 @@ Phase 3 — Quality Gate (temporary quality-gater)
 1. team-lead `SendMessage(to="arch-testing/platform/integration")` with plan assignments
 2. Architects `SendMessage(to="context-provider")` for patterns and project rules
 3. Architects detect issues using MCP tools (code-metrics, verify-kmp-packages, dependency-graph, etc.)
-4. Architects assign tasks to core devs: `SendMessage(to="test-specialist", summary="task", message="...")`
+4. Architects assign tasks to core specialists: `SendMessage(to="test-specialist", summary="task", message="...")`
 5. For overflow: architects request extra devs from team-lead via SendMessage
 6. team-lead spawns extras as named agents (no team_name); relays results to architect
 7. Architects cross-verify via `SendMessage(to="arch-X", ...)`
@@ -201,11 +202,11 @@ See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 
 - **team-lead is sole Agent() spawner** -- teammates can't use Agent() in in-process mode (#31977)
 - **Architects**: Read, Grep, Glob, Bash, SendMessage (NO Write/Edit/Agent)
-- **9 session team peers** -- 5 at session start (context-provider, doc-updater, arch-testing, arch-platform, arch-integration) + 4 core devs at Phase 2 start (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist). For long sessions (5+ waves), re-spawn with same name AND same team_name.
+- **9 session team peers** -- 5 at session start (context-provider, doc-updater, arch-testing, arch-platform, arch-integration) + 4 core specialists at Phase 2 start (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist). For long sessions (5+ waves), re-spawn with same name AND same team_name.
 - **No new TeamCreate for Phase 2** -- architects are already in the session team. team-lead sends plan via SendMessage. No additional team creation needed.
 - **Phase 3 deliberation is mandatory** -- quality-gater MUST consult all 3 architects before running automated checks. Skipping deliberation voids the gate.
-- **team-lead FORBIDDEN from spawning core devs outside Phase 2 start** -- the 4 core devs are spawned exactly once when Phase 2 begins.
-- **Pattern validation chain** -- devs NEVER contact context-provider directly; architect is the quality gate.
+- **team-lead FORBIDDEN from spawning core specialists outside Phase 2 start** -- the 4 core specialists are spawned exactly once when Phase 2 begins.
+- **Pattern validation chain** -- specialists NEVER contact context-provider directly; architect is the quality gate.
 - **Project-specific agents MUST be in routing table** -- guardians, validators, domain specialists. If the team-lead routing table doesn't list a domain, architects can't request specialists for it.
 
 ---

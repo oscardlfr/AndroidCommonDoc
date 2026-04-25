@@ -7,7 +7,7 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "team-lead session setup: Phase 2 core dev spawning, selective spawning, rotation protocol, context management, architect routing."
+description: "team-lead session setup: Phase 2 core specialist spawning, selective spawning, rotation protocol, context management, architect routing."
 version: 1
 last_updated: "2026-04"
 assumes_read: team-topology, tl-phase-execution
@@ -16,11 +16,11 @@ token_budget: 1500
 
 # team-lead Session Setup
 
-Reference for team-lead's session initialization: Phase 2 core dev spawning, selective spawning rules, long-session rotation, context management, architect routing, and correct TeamCreate patterns.
+Reference for team-lead's session initialization: Phase 2 core specialist spawning, selective spawning rules, long-session rotation, context management, architect routing, and correct TeamCreate patterns.
 
-## Phase 2 Core Devs
+## Phase 2 Core Specialists
 
-When Phase 2 execution begins, team-lead spawns 4 core layer devs as named session team members:
+When Phase 2 execution begins, team-lead spawns 4 core specialists as named session team members:
 ```
 Agent(name="test-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are test-specialist for this session. Your reporting architect is arch-testing. Ask arch-testing for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
 Agent(name="ui-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are ui-specialist for this session. Your reporting architect is arch-testing. Ask arch-testing for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
@@ -28,7 +28,7 @@ Agent(name="domain-model-specialist", team_name="session-{project-slug}", run_in
 Agent(name="data-layer-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are data-layer-specialist for this session. Your reporting architects are arch-platform and arch-integration. Ask them for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
 ```
 
-**Selective spawning (MANDATORY — evaluate BEFORE any Agent() call)**: You MUST produce a scope evaluation table BEFORE calling Agent() to spawn any core dev. Format:
+**Selective spawning (MANDATORY — evaluate BEFORE any Agent() call)**: You MUST produce a scope evaluation table BEFORE calling Agent() to spawn any core specialist. Format:
 
 | Layer | Tasks in plan | Spawn? |
 |---|---|---|
@@ -37,18 +37,22 @@ Agent(name="data-layer-specialist", team_name="session-{project-slug}", run_in_b
 | domain | {count} | YES/SKIP |
 | data | {count} | YES/SKIP |
 
-Skip specialists with zero tasks. Do NOT default to spawning all 4. Log skipped devs: "Skipping {name} — no work in sprint scope". Architects can still request a skipped dev mid-sprint via SendMessage to team-lead.
+Skip specialists with zero tasks. Do NOT default to spawning all 4. Log skipped specialists: "Skipping {name} — no work in sprint scope". Architects can still request a skipped specialist mid-sprint via SendMessage to team-lead.
 
 > 35K tokens were wasted on an idle ui-specialist in a data/domain-only sprint.
 
-Core devs live until session end — same lifecycle as architects. They accumulate layer knowledge across waves. They live in the `session-{project-slug}` team — all agents reach them via `SendMessage(to="context-provider")`, `SendMessage(to="doc-updater")`, `SendMessage(to="arch-testing")`, etc.
+**No-UI waves**: If the sprint plan has zero `ui` tasks in the scope table above, SKIP ui-specialist spawn.
+Route any doc work (README, CHANGELOG, English polish, frontmatter) to `doc-updater` instead.
+Log: "Skipping ui-specialist — no UI tasks in scope; doc work routed to doc-updater."
+
+Core specialists live until session end — same lifecycle as architects. They accumulate layer knowledge across waves. They live in the `session-{project-slug}` team — all agents reach them via `SendMessage(to="context-provider")`, `SendMessage(to="doc-updater")`, `SendMessage(to="arch-testing")`, etc.
 
 **Why session team peers**: context-provider reads the project ONCE. Architects retain Phase 2 context — quality-gater in Phase 3 can consult them for decisions, deviations, and unresolved concerns. Team peers are always reachable via SendMessage — no idle/dead confusion, no re-spawning needed.
 
 **Rotation**: for long sessions (5+ waves), re-spawn with SAME name AND SAME team_name: `Agent(name="context-provider", team_name="session-{project-slug}", ...)` — replaces the old peer in the team.
 
-**Long-session rotation protocol**: If a core dev has accumulated 15+ tool uses AND 150k+ tokens AND has failed a single dispatch 2+ times, STOP retrying. Either:
-(a) Architect requests team-lead rotate the dev (re-spawn with SAME name and SAME team_name — clears persistent context), OR
+**Long-session rotation protocol**: If a core specialist has accumulated 15+ tool uses AND 150k+ tokens AND has failed a single dispatch 2+ times, STOP retrying. Either:
+(a) Architect requests team-lead rotate the specialist (re-spawn with SAME name and SAME team_name — clears persistent context), OR
 (b) team-lead spawns a named overflow dev (e.g. `{specialist}-2`, team_name="session-{project-slug}") for the specific failing task.
 
 Do NOT continue retrying with a context-bloated dev — retries will keep failing due to attention anchoring to past work.
@@ -73,7 +77,7 @@ Architects handle ALL investigation, code reading, and delegation to devs/guardi
 
 ## Session Team Setup Patterns
 
-**Use `TeamCreate("session-{project-slug}")` at session start. 6 core agents join at session start; 4 core devs join at Phase 2 start.**
+**Use `TeamCreate("session-{project-slug}")` at session start. 6 core agents join at session start; 4 core specialists join at Phase 2 start.**
 
 ```
 // CORRECT — session peers reach each other via SendMessage
@@ -86,3 +90,33 @@ Agent(name="arch-testing", run_in_background=true, prompt="...")
 // WRONG — Bash spawning or team-lead reading source code
 Bash("claude --print '...'")
 ```
+
+## Canonical Spawning Pattern (Recommended)
+
+Per Anthropic agent-teams canonical doc: the main agent IS the team lead. No separate team-lead subagent needed.
+
+The main agent spawns all 11 session peers directly:
+
+```
+TeamCreate("session-{project-slug}")
+// Planning + cross-cutting peers (live from session start)
+Agent(name="context-provider", team_name="session-{project-slug}", ...)
+Agent(name="doc-updater", team_name="session-{project-slug}", ...)
+// Architecture peers (live from session start)
+Agent(name="arch-platform", team_name="session-{project-slug}", ...)
+Agent(name="arch-integration", team_name="session-{project-slug}", ...)
+Agent(name="arch-testing", team_name="session-{project-slug}", ...)
+// Dev peers (spawn at Phase 2 start, or all at once in simple sessions)
+Agent(name="data-layer-specialist", team_name="session-{project-slug}", ...)
+Agent(name="domain-model-specialist", team_name="session-{project-slug}", ...)
+Agent(name="ui-specialist", team_name="session-{project-slug}", ...)
+Agent(name="test-specialist", team_name="session-{project-slug}", ...)
+// Quality gate peer
+Agent(name="quality-gater", team_name="session-{project-slug}", ...)
+```
+
+In this pattern, all peers are live from session start. PREP/EXECUTE distinction in arch templates is a **legacy compatibility pattern** — required only when team-lead runs as a subagent and devs are not yet spawned when architects receive their Phase 1 dispatch.
+
+**Legacy pattern (deferred to W31.7+)**: nested spawning where arch-platform/arch-integration/arch-testing spawn devs after PREP phase. Still supported via PREP/EXECUTE distinction in arch templates. Will be replaced when BL-W31.7-01 ships.
+
+**PREP/EXECUTE distinction in arch templates**: legacy compatibility — required when team-lead runs as a subagent and devs are not yet live when architects receive their Phase 1 dispatch. Obsolete in canonical pattern (all peers live from session start).

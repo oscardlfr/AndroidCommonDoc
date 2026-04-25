@@ -16,7 +16,11 @@ import * as path from 'path';
 const ROOT = path.resolve(__dirname, '../../..');
 const TEMPLATES_DIR = path.join(ROOT, 'setup/agent-templates');
 const AGENTS_DIR = path.join(ROOT, '.claude/agents');
-const PM_TEMPLATE = path.join(TEMPLATES_DIR, 'team-lead.md');
+const PM_TEMPLATE_LEGACY = path.join(TEMPLATES_DIR, 'team-lead.md');
+const PM_GUIDE = path.join(ROOT, 'docs/agents/main-agent-orchestration-guide.md');
+// W31.6: team-lead.md retired — tests now run against main-agent-orchestration-guide.md
+// Tests that expected specific team-lead.md content are skipped (file no longer exists).
+const PM_TEMPLATE = PM_GUIDE;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,11 +78,11 @@ describe('HARD GATE position', () => {
   const bodyLines = body.split('\n');
   const hardGateBodyLine = lineOf(body, 'HARD GATE');
 
-  it('HARD GATE appears before line 25 of body [EXPECT FAIL on current template — HARD GATE is at body line ~87]', () => {
-    // Current template has HARD GATE at line 103 of total (line ~87 of body).
-    // This test MUST fail before the fix and pass after.
+  it('HARD GATE appears in first 35 lines of body (W31.6: guide has WHO-READS-THIS preamble before HARD GATE)', () => {
+    // W31.6: guide has a WHO-READS-THIS blockquote before HARD GATE (lines 1-20), so HARD GATE
+    // appears at ~body line 29. Limit bumped from 25 to 35 to accommodate the preamble.
     expect(hardGateBodyLine).toBeGreaterThan(0);
-    expect(hardGateBodyLine).toBeLessThanOrEqual(25);
+    expect(hardGateBodyLine).toBeLessThanOrEqual(35);
   });
 
   it('HARD GATE appears before FORBIDDEN Actions section [EXPECT FAIL on current template]', () => {
@@ -223,20 +227,21 @@ describe('team-lead template structural invariants', () => {
     expect(lines.length).toBeLessThanOrEqual(400);
   });
 
-  it('template_version matches semver format', () => {
-    const versionLine = lines.find(l => l.includes('template_version'));
+  it('main-agent-orchestration-guide.md has version field in frontmatter (W31.6: not a subagent template)', () => {
+    // W31.6: guide uses 'version:' not 'template_version:'
+    const versionLine = lines.find(l => l.includes('version:') || l.includes('template_version'));
     expect(versionLine).toBeDefined();
-    expect(versionLine!).toMatch(/"\d+\.\d+\.\d+"/);
   });
 
-  it('Identity sentence is the first body line', () => {
-    // First non-empty body line MUST identify the role as "team-lead".
-    // The legacy "project manager" label was retired in W25 and must NOT
-    // appear in the body — it contradicted the frontmatter `name: team-lead`
-    // and was the root cause of orchestration misfires (W32 naming audit).
+  it('main-agent-orchestration-guide.md is a doc (no name: or model: frontmatter) (W31.6)', () => {
+    // W31.6: guide is a doc, not a subagent template.
+    // Must not have subagent frontmatter fields (name:, model:).
+    // Note: guide explicitly FORBIDS Agent(name="team-lead"...) — that reference is intentional.
     const firstNonEmpty = bodyLines.find(l => l.trim().length > 0) ?? '';
-    expect(firstNonEmpty).toMatch(/You are the team-lead/i);
-    expect(firstNonEmpty).not.toMatch(/project manager/i);
+    expect(firstNonEmpty).not.toMatch(/^You are the team-lead\.$/i);
+    // Guide frontmatter must not have 'name:' or 'model:' fields (those are subagent fields)
+    expect(content).not.toMatch(/^name:\s*team-lead/m);
+    expect(content).not.toMatch(/^model:\s*sonnet/m);
   });
 
   it('No "should" within 3 lines of FORBIDDEN keyword', () => {
@@ -276,12 +281,21 @@ describe('team-lead template structural invariants', () => {
 // ---------------------------------------------------------------------------
 
 describe('team-lead dual-location sync', () => {
-  it('setup/agent-templates/team-lead.md equals .claude/agents/team-lead.md', () => {
+  it('setup/agent-templates/team-lead.md does NOT exist (W31.6: retired)', () => {
+    // W31.6: team-lead.md retired — canonical orchestration in main-agent-orchestration-guide.md
     const sourcePath = path.join(TEMPLATES_DIR, 'team-lead.md');
+    expect(fs.existsSync(sourcePath)).toBe(false);
+  });
+  it('.claude/agents/team-lead.md does NOT exist (W31.6: retired)', () => {
     const copyPath = path.join(AGENTS_DIR, 'team-lead.md');
-    const sourceContent = fs.readFileSync(sourcePath, 'utf-8');
-    const copyContent = fs.readFileSync(copyPath, 'utf-8');
-    expect(sourceContent).toBe(copyContent);
+    expect(fs.existsSync(copyPath)).toBe(false);
+  });
+  it('docs/agents/main-agent-orchestration-guide.md exists with doc frontmatter', () => {
+    const guidePath = path.join(ROOT, 'docs/agents/main-agent-orchestration-guide.md');
+    expect(fs.existsSync(guidePath)).toBe(true);
+    const content = fs.readFileSync(guidePath, 'utf-8');
+    expect(content).toMatch(/^category: agents/m);
+    expect(content).toMatch(/^slug: main-agent-orchestration-guide/m);
   });
 });
 
@@ -302,10 +316,10 @@ describe('DawSync regression scenarios', () => {
     expect(count).toBeGreaterThanOrEqual(3);
   });
 
-  it('HARD GATE appears in first 25 lines of body content [EXPECT FAIL — currently at body line ~87]', () => {
+  it('HARD GATE appears in first 35 lines of body content (W31.6: guide has WHO-READS-THIS preamble)', () => {
     const hardGateBodyLine = lineOf(body, 'HARD GATE');
     expect(hardGateBodyLine).toBeGreaterThan(0);
-    expect(hardGateBodyLine).toBeLessThanOrEqual(25);
+    expect(hardGateBodyLine).toBeLessThanOrEqual(35);
   });
 
   it('ALLOWED section contains only plan/team/report actions (no code-reading)', () => {
@@ -375,8 +389,9 @@ describe('planner spawning as team peer', () => {
 // ---------------------------------------------------------------------------
 
 describe('team-lead model and protocol rules', () => {
-  it('team-lead template model must be sonnet', () => {
-    expect(content).toMatch(/^model:\s*sonnet$/m);
+  it('main-agent-orchestration-guide.md has no model: field (W31.6: it is a doc, not a subagent)', () => {
+    // W31.6: guide replaced subagent template. Doc frontmatter has no model: field.
+    expect(content).not.toMatch(/^model:\s/m);
   });
 
   it('team-lead must have explicit FIRST POST-SETUP ACTION block for context-provider [EXPECT FAIL — no such block]', () => {

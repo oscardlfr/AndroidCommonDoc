@@ -265,15 +265,22 @@ describe("OBS-C: pre-pr skill mentions /schedule for catalog freshness", () => {
 
 // ── T-BUG-010: team-lead template main-conversation-only warning ──────────────────
 
-describe("T-BUG-010: team-lead template warns it is for main conversation (team-lead), not a spawnable peer", () => {
-  it("team-lead.md has WHO-READS-THIS warning + FORBIDDEN spawn instruction", () => {
-    const { claude, template } = readAgent("team-lead.md");
-    for (const content of [claude, template]) {
-      expect(content).toMatch(/T-BUG-010/);
-      expect(content).toMatch(/WHO READS THIS|main conversation|team-lead/i);
-      expect(content).toMatch(/FORBIDDEN.*team-lead|Agent\(name="team-lead"/);
-      expect(content).toMatch(/team-lead-peer spawn detected|Exiting/i);
-    }
+describe("T-BUG-010: team-lead.md retired W31.6 — main-agent-orchestration-guide.md confirms no subagent spawn", () => {
+  it("team-lead.md does NOT exist in setup/agent-templates/ (W31.6 retirement)", () => {
+    const templatePath = path.join(TEMPLATES_DIR, "team-lead.md");
+    expect(fs.existsSync(templatePath)).toBe(false);
+  });
+
+  it("team-lead.md does NOT exist in .claude/agents/ (W31.6 retirement)", () => {
+    const agentPath = path.join(AGENTS_DIR, "team-lead.md");
+    expect(fs.existsSync(agentPath)).toBe(false);
+  });
+
+  it("main-agent-orchestration-guide.md confirms Agent(name='team-lead') is FORBIDDEN", () => {
+    const guidePath = path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md");
+    const guideContent = fs.readFileSync(guidePath, "utf-8");
+    expect(guideContent).toMatch(/T-BUG-010/);
+    expect(guideContent).toMatch(/FORBIDDEN.*team-lead|Agent\(name="team-lead"/);
   });
 });
 
@@ -388,17 +395,14 @@ describe("T-BUG-015: Bash search anti-pattern + Search Dispatch Protocol", () =>
     });
   }
 
-  // team-lead has Search Dispatch Protocol
-  it("team-lead.md has Search Dispatch Protocol — T-BUG-015", () => {
-    const { claude, template } = readAgent("team-lead.md");
-    for (const content of [claude, template]) {
-      expect(content).toMatch(/T-BUG-015/);
-      expect(content).toMatch(/Search Dispatch Protocol/);
-      // Must mandate context-provider as FIRST step
-      expect(content).toMatch(/context-provider FIRST|SendMessage to context-provider.*Wait|Route through context-provider/i);
-      // Must forbid "use grep" instructions to architects
-      expect(content).toMatch(/use grep|bash-grep|FORBIDDEN.*grep/i);
-    }
+  // W31.6: team-lead.md retired. Search Dispatch Protocol is in main-agent-orchestration-guide.md
+  it("main-agent-orchestration-guide.md has Search Dispatch Protocol — T-BUG-015", () => {
+    const guidePath = path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md");
+    const guideContent = fs.readFileSync(guidePath, "utf-8");
+    expect(guideContent).toMatch(/T-BUG-015/);
+    expect(guideContent).toMatch(/Search Dispatch Protocol/);
+    expect(guideContent).toMatch(/context-provider FIRST|SendMessage to context-provider.*Wait|Route through context-provider/i);
+    expect(guideContent).toMatch(/use grep|bash-grep|FORBIDDEN.*grep/i);
   });
 });
 

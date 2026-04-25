@@ -35,13 +35,13 @@ SendMessage(
 
 Full protocol, team-lead workflow, and anti-patterns: `docs/agents/arch-dispatch-modes.md`. Fixes Wave 23 Bug #5 (hardcoded `.planning/PLAN.md`) and Bug #6 (no mode tagging).
 
-## Dev Dispatch — Persistent Core Devs + Dynamic Scaling
+## Specialist Dispatch — Persistent Core Specialists + Dynamic Scaling
 
-**Core devs** are session team peers spawned at Phase 2 start. They persist across all waves, accumulate layer knowledge, and communicate directly with their architect(s) via SendMessage.
+**Core specialists** are session team peers spawned at Phase 2 start. They persist across all waves, accumulate layer knowledge, and communicate directly with their architect(s) via SendMessage.
 
 ## Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() dispatch)
 
-BEFORE calling Agent() to spawn a dev, verify ALL:
+BEFORE calling Agent() to spawn a specialist, verify ALL:
 
 > Applies to ALL Agent() calls — code writing, test runs, verification, builds, and any other task a session specialist could handle.
 
@@ -51,7 +51,7 @@ BEFORE calling Agent() to spawn a dev, verify ALL:
 2. **Scope check**: Does task touch >3 files? If YES → MUST use session
    team specialist. Extra capacity = named peers (`{specialist}-2`) with team_name.
 3. **Architect check**: Are architects alive? If YES → SendMessage
-   architect with the task. team-lead NEVER dispatches devs directly when
+   architect with the task. team-lead NEVER dispatches specialists directly when
    architects are alive.
 4. **Pressure check**: Am I dispatching because "it's faster" or "user
    is waiting"? If YES → STOP. That's the bypass anti-pattern. Route
@@ -62,15 +62,15 @@ Violating this gate erodes the architect verification layer — fixes land witho
 
 **Pattern validation chain (CRITICAL):**
 ```
-dev needs pattern → SendMessage(to="arch-platform", "how to handle X?")
+specialist needs pattern → SendMessage(to="arch-platform", "how to handle X?")
 architect validates → SendMessage(to="context-provider", "pattern for X?")
-context-provider responds → architect filters → sends to dev
+context-provider responds → architect filters → sends to specialist
 ```
-Dev NEVER contacts context-provider directly — the architect is the quality gate.
+Specialist NEVER contacts context-provider directly — the architect is the quality gate.
 
-**Work assignment:** Architects assign tasks to their core devs via SendMessage. No team-lead relay needed for ongoing work. team-lead only spawns at Phase 2 start.
+**Work assignment:** Architects assign tasks to their core specialists via SendMessage. No team-lead relay needed for ongoing work. team-lead only spawns at Phase 2 start.
 
-**Dynamic scaling (extra devs):** When a core dev is busy and the architect needs parallel work:
+**Dynamic scaling (extra specialists):** When a core specialist is busy and the architect needs parallel work:
 1. Architect sends: `SendMessage(to="team-lead", summary="need extra ui-specialist", message="Task: {desc}. Files: {list}.")`
 2. team-lead spawns: `Agent(name="ui-specialist-2", team_name="session-{project-slug}", prompt="...", run_in_background=true)` — named team peer
 3. Extra dev executes, returns result to team-lead, team-lead relays to architect
@@ -83,7 +83,7 @@ Dev NEVER contacts context-provider directly — the architect is the quality ga
 **Kill order:**
 - Extra devs: DISPOSABLE — die after architect verification, no state preserved
 - Core devs: die at session end only (never mid-session)
-- Rotate core devs only if context window fills (7+ waves)
+- Rotate core specialists only if context window fills (7+ waves)
 
 ## Autonomy with Escalation
 

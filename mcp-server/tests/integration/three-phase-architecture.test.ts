@@ -17,7 +17,7 @@ const DOCS_DIR = path.join(ROOT, 'docs/agents');
 // ---------------------------------------------------------------------------
 describe('3-phase agent templates exist', () => {
   const requiredTemplates = [
-    'team-lead.md',
+    // W31.6: 'team-lead.md' removed (retired — canonical pattern in main-agent-orchestration-guide.md)
     'planner.md',
     'quality-gater.md',
     'arch-testing.md',
@@ -43,10 +43,10 @@ describe('agent template size limits', () => {
     .filter(f => f.endsWith('.md') && f !== 'README.md');
 
   for (const template of templates) {
-    it(`${template} is ≤400 lines`, () => {
+    it(`${template} is ≤420 lines`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
       const lines = content.trimEnd().split('\n').length;
-      expect(lines).toBeLessThanOrEqual(400);
+      expect(lines).toBeLessThanOrEqual(420);  // W31.6: +15-line PREP/EXECUTE + ban reminder sections
     });
   }
 });
@@ -55,7 +55,8 @@ describe('agent template size limits', () => {
 // 3. Team Lead — 3-phase model
 // ---------------------------------------------------------------------------
 describe('team-lead template — 3-phase model', () => {
-  const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'team-lead.md'), 'utf-8');
+  // W31.6: team-lead.md retired. Redirect to main-agent-orchestration-guide.md (canonical orchestration doc).
+  const content = fs.readFileSync(path.join(ROOT, 'docs/agents/main-agent-orchestration-guide.md'), 'utf-8');
 
   // Hub refactor: team-lead content may be split across sub-docs in docs/agents/
   const pmSubdocs = [
@@ -131,9 +132,9 @@ describe('team-lead template — 3-phase model', () => {
     expect(content).toContain('team_name="session-{project-slug}"');
   });
 
-  it('pattern validation chain documented: dev contacts architect, not context-provider', () => {
-    expect(combinedPM).toMatch(/dev.*arch.*context-provider|SendMessage.*arch.*pattern/i);
-    expect(combinedPM).toMatch(/NEVER.*context-provider.*directly|Dev NEVER contacts context-provider/i);
+  it('pattern validation chain documented: specialist contacts architect, not context-provider', () => {
+    expect(combinedPM).toMatch(/specialist.*arch.*context-provider|SendMessage.*arch.*pattern/i);
+    expect(combinedPM).toMatch(/NEVER.*context-provider.*directly|specialist NEVER contacts context-provider/i);
   });
 
   it('named extra dev model is documented — no anonymous Agent() calls', () => {
@@ -154,12 +155,16 @@ describe('team-lead template — 3-phase model', () => {
     expect(combinedPM).toContain('SendMessage(to="arch-testing"');
   });
 
-  it('template version 6.2.0', () => {
-    expect(content).toContain('template_version: "6.2.1"');
+  it('MIGRATIONS.json confirms team-lead W31.6 retirement (W31.6: template retired)', () => {
+    // W31.6: team-lead.md retired — check MIGRATIONS.json
+    const migrationsRaw = fs.readFileSync(path.join(ROOT, 'setup/agent-templates/MIGRATIONS.json'), 'utf-8');
+    expect(migrationsRaw).toMatch(/RETIRED-W31\.6/);
+    expect(migrationsRaw).toMatch(/main-agent-orchestration-guide/);
   });
 
-  it('has dev dispatch protocol', () => {
-    expect(content).toMatch(/Dev Dispatch|SendMessage.*team-lead/i);
+  it('has dev/specialist dispatch protocol', () => {
+    // W31.6: guide uses 'Specialist Dispatch' terminology
+    expect(content).toMatch(/Dev Dispatch|Specialist Dispatch|SendMessage.*team-lead/i);
   });
 
   it('has pre-existing excuse rule', () => {
@@ -181,12 +186,14 @@ describe('team-lead template — 3-phase model', () => {
     expect(combinedPM).toMatch(/quality-gate-protocol/);
   });
 
-  it('has TeamCreate tool in frontmatter', () => {
-    expect(content).toMatch(/^tools:.*TeamCreate/m);
+  it('main agent orchestration guide explicitly mentions TeamCreate (W31.6: guide is a doc, not subagent)', () => {
+    // W31.6: guide is a doc — no tools: frontmatter. But guide body mentions TeamCreate as a required action.
+    expect(content).toMatch(/TeamCreate/);
   });
 
-  it('has SendMessage tool in frontmatter', () => {
-    expect(content).toMatch(/^tools:.*SendMessage/m);
+  it('main agent orchestration guide explicitly mentions SendMessage (W31.6: guide is a doc, not subagent)', () => {
+    // W31.6: guide is a doc — no tools: frontmatter. But guide body mentions SendMessage as required.
+    expect(content).toMatch(/SendMessage/);
   });
 
   it('quality-gater joins session team in Phase 3', () => {
@@ -250,8 +257,8 @@ describe('tl-phase-execution sub-doc — extracted phase protocol', () => {
 describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
-  it('template version 1.20.0', () => {
-    expect(archContent).toContain('template_version: "1.20.0"');
+  it('template version 1.21.0', () => {
+    expect(archContent).toContain('template_version: "1.21.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -294,12 +301,12 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
   });
 
-  it('arch-platform has template version 1.18.0', () => {
-    expect(platformContent).toContain('template_version: "1.18.0"');
+  it('arch-platform has template version 1.19.0', () => {
+    expect(platformContent).toContain('template_version: "1.19.0"');
   });
 
-  it('arch-integration has template version 1.17.0', () => {
-    expect(integrationContent).toContain('template_version: "1.17.0"');
+  it('arch-integration has template version 1.18.0', () => {
+    expect(integrationContent).toContain('template_version: "1.18.0"');
   });
 });
 
@@ -873,8 +880,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toContain('template_version: "1.7.0"');
   });
 
-  it('arch-testing version 1.20.0', () => {
-    expect(testingContent).toContain('template_version: "1.20.0"');
+  it('arch-testing version 1.21.0', () => {
+    expect(testingContent).toContain('template_version: "1.21.0"');
   });
 });
 

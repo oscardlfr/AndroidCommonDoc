@@ -115,6 +115,12 @@
         "date": "2026-04-22",
         "breaking": false,
         "note": "Spawn Prompt Hygiene cross-reference added to Planning Phase section (BL-W27-04). Pointer to docs/agents/agent-core-rules.md#spawn-prompt-hygiene. No rule change."
+      },
+      "RETIRED-W31.6": {
+        "date": "2026-04-25",
+        "breaking": true,
+        "note": "Template retired W31.6 \u2014 replaced by docs/agents/main-agent-orchestration-guide.md (canonical pattern: main IS team lead, not subagent)",
+        "migration_hint": "The main agent reads docs/agents/main-agent-orchestration-guide.md directly. No team-lead subagent should be spawned. Agent(name='team-lead', team_name=...) is FORBIDDEN per T-BUG-010."
       }
     },
     "planner": {
@@ -261,6 +267,11 @@
         "date": "2026-04-22",
         "breaking": false,
         "note": "Wave 27 BL-W26-06: remove module-health and find-pattern from tools frontmatter. Both are pattern-search tools -- under Search Dispatch Protocol (T-BUG-015), pattern queries enter via context-provider, not directly from architects. Keeps: code-metrics, validate-doc-structure, kdoc-coverage."
+      },
+      "1.21.0": {
+        "date": "2026-04-25",
+        "breaking": false,
+        "note": "W31.6 Group A+B: Add PREP/EXECUTE mode dispatch distinction (devs not live in PREP, route via team-lead) + ban reminder in EXECUTE block (forward 'BANNED TOOLS: No Grep, no Bash grep/find/rg, no Read/Glob on docs/**' to every dev dispatch)."
       }
     },
     "arch-platform": {
@@ -324,6 +335,11 @@
         "date": "2026-04-22",
         "breaking": false,
         "note": "Wave 27 BL-W26-06: remove module-health and find-pattern from tools frontmatter. Search Dispatch Protocol (T-BUG-015): pattern lookup tools belong to context-provider, not architects. Keeps: dependency-graph, gradle-config-lint, kdoc-coverage, string-completeness, verify-kmp-packages."
+      },
+      "1.19.0": {
+        "date": "2026-04-25",
+        "breaking": false,
+        "note": "W31.6 Group A+B: Add PREP/EXECUTE mode dispatch distinction (devs not live in PREP, route via team-lead) + ban reminder in EXECUTE block (forward 'BANNED TOOLS: No Grep, no Bash grep/find/rg, no Read/Glob on docs/**' to every dev dispatch)."
       }
     },
     "arch-integration": {
@@ -387,6 +403,11 @@
         "date": "2026-04-22",
         "breaking": false,
         "note": "Wave 27 BL-W26-06: remove module-health from tools frontmatter. Search Dispatch Protocol (T-BUG-015): module-health is a lookup tool, belongs to context-provider. Keeps: dependency-graph, gradle-config-lint, setup-check."
+      },
+      "1.18.0": {
+        "date": "2026-04-25",
+        "breaking": false,
+        "note": "W31.6 Group A+B: Add PREP/EXECUTE mode dispatch distinction (devs not live in PREP, route via team-lead) + ban reminder in EXECUTE block (forward 'BANNED TOOLS: No Grep, no Bash grep/find/rg, no Read/Glob on docs/**' to every dev dispatch)."
       }
     },
     "context-provider": {
@@ -435,7 +456,7 @@
       "2.4.0": {
         "date": "2026-04-21",
         "breaking": false,
-        "note": "Wave 25: declare 8 MCP tools in frontmatter (ingest-content, search-docs, validate-doc-update, validate-doc-structure, check-doc-patterns, audit-docs, check-version-sync, suggest-docs). New §5 Ingestion Handler -- receives approved-by-user payload from team-lead, runs ingest-content MCP tool, writes docs/{cat}/{slug}.md."
+        "note": "Wave 25: declare 8 MCP tools in frontmatter (ingest-content, search-docs, validate-doc-update, validate-doc-structure, check-doc-patterns, audit-docs, check-version-sync, suggest-docs). New \u00a75 Ingestion Handler -- receives approved-by-user payload from team-lead, runs ingest-content MCP tool, writes docs/{cat}/{slug}.md."
       }
     },
     "product-strategist": {
@@ -580,6 +601,11 @@
         "date": "2026-04-22",
         "breaking": false,
         "note": "Owned Files section rewritten to permissive specialty-default + arch-authorized-override pattern (BL-W27-02, Opcion B). Aligns with ui-specialist/domain-model-specialist/data-layer-specialist pattern. 2 blank lines trimmed to stay under 300-line dev limit."
+      },
+      "1.12.0": {
+        "date": "2026-04-25",
+        "breaking": false,
+        "note": "W31.6 Group B: Add first-line BANNED-TOOLS banner (Grep tool, Glob on docs/**, Read on docs/**, Bash grep/find/rg, find-pattern MCP -- all FORBIDDEN). Hook in context-provider-gate.js now mechanically blocks Grep/Glob on docs/** paths."
       }
     },
     "ui-specialist": {
@@ -623,6 +649,11 @@
         "date": "2026-04-22",
         "breaking": false,
         "note": "Wave 27 BL-W26-06: add clarifying clause to Pattern validation chain section -- reporting architect holds MCP pattern-search tools, which is why the dev->arch->CP chain is mechanical. No frontmatter change."
+      },
+      "1.12.0": {
+        "date": "2026-04-25",
+        "breaking": false,
+        "note": "W31.6 Group B: Add first-line BANNED-TOOLS banner (Grep tool, Glob on docs/**, Read on docs/**, Bash grep/find/rg, find-pattern MCP -- all FORBIDDEN). Hook in context-provider-gate.js now mechanically blocks Grep/Glob on docs/** paths."
       }
     },
     "domain-model-specialist": {
@@ -656,6 +687,11 @@
         "date": "2026-04-22",
         "breaking": false,
         "note": "Wave 27 BL-W26-06: add clarifying clause to Pattern validation chain section -- arch-platform holds MCP pattern-search tools, which is why the dev->arch->CP chain is mechanical. No frontmatter change."
+      },
+      "1.10.0": {
+        "date": "2026-04-25",
+        "breaking": false,
+        "note": "W31.6 Group B: Add first-line BANNED-TOOLS banner (Grep tool, Glob on docs/**, Read on docs/**, Bash grep/find/rg, find-pattern MCP -- all FORBIDDEN). Hook in context-provider-gate.js now mechanically blocks Grep/Glob on docs/** paths."
       }
     },
     "data-layer-specialist": {
@@ -689,6 +725,11 @@
         "date": "2026-04-22",
         "breaking": false,
         "note": "Wave 27 BL-W26-06: add clarifying clause to Pattern validation chain section -- reporting architect holds MCP pattern-search tools, which is why the dev->arch->CP chain is mechanical. No frontmatter change."
+      },
+      "1.10.0": {
+        "date": "2026-04-25",
+        "breaking": false,
+        "note": "W31.6 Group B: Add first-line BANNED-TOOLS banner (Grep tool, Glob on docs/**, Read on docs/**, Bash grep/find/rg, find-pattern MCP -- all FORBIDDEN). Hook in context-provider-gate.js now mechanically blocks Grep/Glob on docs/** paths."
       }
     },
     "advisor": {

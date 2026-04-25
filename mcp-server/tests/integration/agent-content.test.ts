@@ -56,11 +56,11 @@ describe('agent content validation', () => {
       });
     }
 
-    it('team-lead template has pre-existing excuse rule', () => {
-      const content = fs.readFileSync(
-        path.join(ROOT, 'setup/agent-templates/team-lead.md'), 'utf-8'
-      );
-      expect(content).toMatch(/pre-existing/i);
+    it('main-agent-orchestration-guide.md has pre-existing excuse rule (W31.6: team-lead.md retired)', () => {
+      // W31.6: team-lead.md retired — check main-agent-orchestration-guide.md
+      const guidePath = path.join(ROOT, 'docs/agents/main-agent-orchestration-guide.md');
+      const guideContent = fs.readFileSync(guidePath, 'utf-8');
+      expect(guideContent).toMatch(/pre-existing/i);
     });
   });
 

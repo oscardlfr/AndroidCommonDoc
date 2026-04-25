@@ -335,20 +335,24 @@ describe("model-profiles.json", () => {
   });
 
   // ---------------------------------------------------------------
-  // 8. team-lead is opus in ALL non-budget profiles
+  // 8. W31.6: team-lead retired — no override in balanced/advanced/quality profiles
   // ---------------------------------------------------------------
   describe("team-lead model tier — opus in all non-budget profiles", () => {
     it("team-lead is opus in balanced profile (explicit override)", () => {
-      const resolved = config.profiles.balanced.overrides["team-lead"] ?? config.profiles.balanced.default_model;
-      expect(resolved).toBe("opus");
+      // W31.6: team-lead.md retired. No override needed in balanced profile.
+      // The override is removed; the default_model (sonnet) applies, which is fine
+      // since the main agent is the orchestrator (not a spawned team-lead subagent).
+      // This test now just asserts the override is absent (regression guard).
+      expect(config.profiles.balanced.overrides["team-lead"]).toBeUndefined();
     });
 
     it("team-lead is opus in advanced profile (explicit override)", () => {
-      const resolved = config.profiles.advanced.overrides["team-lead"] ?? config.profiles.advanced.default_model;
-      expect(resolved).toBe("opus");
+      // W31.6: team-lead.md retired. No override needed in advanced profile.
+      expect(config.profiles.advanced.overrides["team-lead"]).toBeUndefined();
     });
 
     it("team-lead is opus in quality profile (default_model is opus, no override needed)", () => {
+      // quality profile default_model is opus — still passes for main agent
       const resolved = config.profiles.quality.overrides["team-lead"] ?? config.profiles.quality.default_model;
       expect(resolved).toBe("opus");
     });

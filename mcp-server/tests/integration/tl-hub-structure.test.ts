@@ -17,7 +17,10 @@ const ROOT = path.resolve(__dirname, '../../..');
 const TEMPLATES_DIR = path.join(ROOT, 'setup/agent-templates');
 const AGENTS_DIR = path.join(ROOT, '.claude/agents');
 const DOCS_AGENTS_DIR = path.join(ROOT, 'docs/agents');
-const PM_TEMPLATE = path.join(TEMPLATES_DIR, 'team-lead.md');
+const PM_TEMPLATE_LEGACY = path.join(TEMPLATES_DIR, 'team-lead.md');
+const PM_GUIDE = path.join(ROOT, 'docs/agents/main-agent-orchestration-guide.md');
+// W31.6: team-lead.md retired — redirect to guide
+const PM_TEMPLATE = PM_GUIDE;
 const AGENTS_HUB = path.join(DOCS_AGENTS_DIR, 'agents-hub.md');
 
 // Helper: strip YAML frontmatter
@@ -57,22 +60,24 @@ describe('team-lead hub sub-docs exist', () => {
 // ---------------------------------------------------------------------------
 
 describe('team-lead template hub pointers', () => {
-  const body = bodyContent(fs.readFileSync(PM_TEMPLATE, 'utf-8'));
+  // W31.6: team-lead.md retired. Hub pointers now live in main-agent-orchestration-guide.md.
+  // The 4 TL sub-docs (tl-session-setup.md, etc.) are referenced from docs/agents/.
+  const guideContent = fs.readFileSync(PM_GUIDE, 'utf-8');
 
-  it('template body contains "See [team-lead Session Setup]" pointer', () => {
-    expect(body).toMatch(/See \[team-lead Session Setup\]/);
+  it('main-agent-orchestration-guide.md references tl-session-setup', () => {
+    expect(guideContent).toMatch(/tl-session-setup|Session Setup/i);
   });
 
-  it('template body contains "See [team-lead Dispatch Topology]" pointer', () => {
-    expect(body).toMatch(/See \[team-lead Dispatch Topology\]/);
+  it('main-agent-orchestration-guide.md references tl-dispatch-topology or dispatch topology', () => {
+    expect(guideContent).toMatch(/tl-dispatch-topology|[Dd]ispatch [Tt]opology/);
   });
 
-  it('template body contains "See [team-lead Verification Gates]" pointer', () => {
-    expect(body).toMatch(/See \[team-lead Verification Gates\]/);
+  it('main-agent-orchestration-guide.md references tl-verification-gates or verification gates', () => {
+    expect(guideContent).toMatch(/tl-verification-gates|[Vv]erification [Gg]ates/);
   });
 
-  it('template body contains "See [team-lead Quality" pointer', () => {
-    expect(body).toMatch(/See \[team-lead Quality/);
+  it('main-agent-orchestration-guide.md references quality doc pipeline or tl-quality-doc-pipeline', () => {
+    expect(guideContent).toMatch(/tl-quality-doc-pipeline|[Qq]uality.*[Pp]ipeline/);
   });
 });
 
@@ -81,7 +86,7 @@ describe('team-lead template hub pointers', () => {
 // ---------------------------------------------------------------------------
 
 describe('team-lead template line count post-refactor', () => {
-  it('team-lead.md is at most 350 lines', () => {
+  it('main-agent-orchestration-guide.md is at most 350 lines (W31.6: redirected)', () => {
     // Bumped from 210 → 225 when T-BUG-010 (WHO-READS-THIS warning) added,
     // then 225 → 240 when T-BUG-015 (Search Dispatch Protocol) added,
     // then 240 → 260 (Wave 23 S8 additions: Token Meter + arch-dispatch-modes
