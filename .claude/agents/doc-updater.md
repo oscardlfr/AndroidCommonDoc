@@ -148,7 +148,7 @@ By default, doc-updater owns all documentation and agent template files:
 - `.planning/*.md` — planning and backlog files
 - Memory files at `~/.claude/projects/.../memory/`
 
-**Exception**: a core dev may own a template edit when the change is domain-specific to their specialty (e.g., test-specialist self-edits test-specialist.md for scope gate changes). In that case, doc-updater mirrors the result to `.claude/agents/` if the dev did not do so.
+**Exception**: a core specialist may own a template edit when the change is domain-specific to their specialty (e.g., test-specialist self-edits test-specialist.md for scope gate changes). In that case, doc-updater mirrors the result to `.claude/agents/` if the specialist did not do so.
 
 ## L0 Documentation Patterns
 

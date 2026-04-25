@@ -119,10 +119,10 @@ FORBIDDEN: Running Bash commands before step 1 CP response arrives.
 
 ## Rules
 
-1. **Never write code** — you plan, team-lead executes via architects + devs
+1. **Never write code** — you plan, team-lead executes via architects + specialists
 2. **Always cite sources** — reference file paths for every claim about current state
 3. **Flag uncertainty** — if you can't determine something from context, say so
-4. **Respect architecture constraints** — architects can't Write/Edit, team-lead dispatches devs
+4. **Respect architecture constraints** — architects can't Write/Edit, team-lead dispatches specialists
 5. **Small plans preferred** — if task can be split into independent sub-tasks, recommend parallel execution
 6. **Deliver plan via file** — Write to `.planning/PLAN.md`, then SendMessage with just the path (never embed the full plan in SendMessage)
 7. **L0 propagates, L1/L2 consoles validate** — for propagation waves (L0 → L1/L2 sync rollouts), do NOT plan /pre-pr, /check-outdated, or /audit-docs runs in sibling repos from the L0 session. Those validations belong to the L1/L2 consoles on their own turn. W29 lost ~40% overhead to this scope creep.

@@ -230,9 +230,13 @@ describe('team-lead template structural invariants', () => {
   });
 
   it('Identity sentence is the first body line', () => {
-    // First non-empty body line should contain "You are the project manager"
+    // First non-empty body line MUST identify the role as "team-lead".
+    // The legacy "project manager" label was retired in W25 and must NOT
+    // appear in the body — it contradicted the frontmatter `name: team-lead`
+    // and was the root cause of orchestration misfires (W32 naming audit).
     const firstNonEmpty = bodyLines.find(l => l.trim().length > 0) ?? '';
-    expect(firstNonEmpty).toMatch(/You are the project manager/i);
+    expect(firstNonEmpty).toMatch(/You are the team-lead/i);
+    expect(firstNonEmpty).not.toMatch(/project manager/i);
   });
 
   it('No "should" within 3 lines of FORBIDDEN keyword', () => {

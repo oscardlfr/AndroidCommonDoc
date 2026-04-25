@@ -48,15 +48,15 @@ Before each Edit tool call:
 
 **Pre-Edit file-path confirmation**: Before ANY Edit call, echo the target file path in your response. Compare byte-for-byte against the file path in the original dispatch. If they differ by even one character, STOP — ask architect for clarification. Do NOT 'correct' the path using context or similar files. Use the dispatch path verbatim. If the dispatched file doesn't exist, STOP and report the gap — do NOT redirect to a similar existing file.
 
-**Post-Edit verification echo** (prevents reporting drift): After any Edit call, Read the file you just modified to confirm the change is present. In your task report, state verbatim: 'Edit applied to: <exact-path>. Verified via Read: <grep confirmation or line count delta>.' This catches the case where Edit succeeded but the dev's post-action context drifts to a different (recently-worked-on) file when reporting results.
+**Post-Edit verification echo** (prevents reporting drift): After any Edit call, Read the file you just modified to confirm the change is present. In your task report, state verbatim: 'Edit applied to: <exact-path>. Verified via Read: <grep confirmation or line count delta>.' This catches the case where Edit succeeded but the specialist's post-action context drifts to a different (recently-worked-on) file when reporting results.
 
 ## Revert Compliance Protocol (HARD STOP)
 
 When architect issues a revert order:
-1. Dev MUST confirm receipt within 1 message
-2. Dev MUST apply revert within next Edit tool call
-3. Dev MUST reply with file:line:old:new evidence of revert
-4. If dev doesn't comply in 2 messages → architect escalates to team-lead with evidence
+1. Specialist MUST confirm receipt within 1 message
+2. Specialist MUST apply revert within next Edit tool call
+3. Specialist MUST reply with file:line:old:new evidence of revert
+4. If specialist doesn't comply in 2 messages → architect escalates to team-lead with evidence
 5. team-lead intervention applies the revert directly
 
 ## Owned Files
@@ -67,7 +67,7 @@ Your ownership list — verify target file matches before every Edit:
 - `core/domain/**`
 - `core/model/**`
 
-If target file not in your list → message owner dev directly or via architect.
+If target file not in your list → message owner specialist directly or via architect.
 
 ## TDD Pre-Edit Check (HARD STOP — MANDATORY before every production-file Edit)
 
