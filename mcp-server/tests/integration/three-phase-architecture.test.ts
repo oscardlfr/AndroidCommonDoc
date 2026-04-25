@@ -132,9 +132,9 @@ describe('team-lead template — 3-phase model', () => {
     expect(content).toContain('team_name="session-{project-slug}"');
   });
 
-  it('pattern validation chain documented: dev contacts architect, not context-provider', () => {
-    expect(combinedPM).toMatch(/dev.*arch.*context-provider|SendMessage.*arch.*pattern/i);
-    expect(combinedPM).toMatch(/NEVER.*context-provider.*directly|Dev NEVER contacts context-provider/i);
+  it('pattern validation chain documented: specialist contacts architect, not context-provider', () => {
+    expect(combinedPM).toMatch(/specialist.*arch.*context-provider|SendMessage.*arch.*pattern/i);
+    expect(combinedPM).toMatch(/NEVER.*context-provider.*directly|specialist NEVER contacts context-provider/i);
   });
 
   it('named extra dev model is documented — no anonymous Agent() calls', () => {
