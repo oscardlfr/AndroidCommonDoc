@@ -127,7 +127,9 @@ jobs:
           # Every agent name mentioned in README must have a file
           echo ""
           echo "--- Checking agents referenced in README.md ---"
-          for agent in context-provider team-lead doc-updater arch-platform arch-testing arch-integration \
+          # Note: team-lead retired W31.6 (canonical pattern: main agent IS team-lead, no subagent).
+          # See docs/agents/main-agent-orchestration-guide.md.
+          for agent in context-provider doc-updater arch-platform arch-testing arch-integration \
                        doc-alignment-agent codebase-mapper beta-readiness-agent l0-coherence-auditor verifier; do
             if [ -f ".claude/agents/$agent.md" ] && [ -f "setup/agent-templates/$agent.md" ]; then
               if grep -q "$agent" README.md; then

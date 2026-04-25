@@ -2,6 +2,7 @@
 category: agents
 slug: main-agent-orchestration-guide
 scope: L0
+sources: ["W31.6 retirement of setup/agent-templates/team-lead.md", "docs/agents/tl-session-setup.md", "docs/agents/tl-dispatch-topology.md"]
 targets: [main agent]
 version: 1.0.0
 description: "Orchestration guide for the main agent running a session: team topology, phase protocol, architect routing, quality gates."
