@@ -44,7 +44,7 @@ If one agent can do the job in a single context window, one agent is better. Mul
 See [claude-code-workflow](claude-code-workflow.md) for the full team-lead model. Key points:
 
 - **team-lead NEVER codes** — all code is written by dev specialists, team-lead only orchestrates.
-- **Simple task** → team-lead assigns to a single dev specialist.
+- **Simple task** → team-lead assigns to a single specialist.
 - **Large task / long session** → team-lead orchestrates waves of devs + audits to specialists.
 - **CLAUDE.md Agent Roster** is the discovery mechanism. Without it, Claude uses generic agents.
 
@@ -123,9 +123,9 @@ Orchestrators and architects as peers. Workers spawned on demand as sub-agents.
 
 **Key**: Peers need ongoing coordination (cross-verify, cross-dept requests). Sub-agents are workers — they receive task, execute, return.
 
-**Session team peers**: `context-provider`, `doc-updater`, and all 3 architects are added at session start; 4 core devs (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) join at Phase 2 start. All 9 stay alive across phases. See [Team Topology](team-topology.md).
+**Session team peers**: `context-provider`, `doc-updater`, and all 3 architects are added at session start; 4 core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) join at Phase 2 start. All 9 stay alive across phases. See [Team Topology](team-topology.md).
 
-**3-Phase Model**: The default topology uses 3 sequential phases (Planning → Execution → Quality Gate) with 9 persistent session team peers (5 at session start + 4 core devs at Phase 2). Planner and quality-gater are temporary. See [Team Topology](team-topology.md) for the full model.
+**3-Phase Model**: The default topology uses 3 sequential phases (Planning → Execution → Quality Gate) with 9 persistent session team peers (5 at session start + 4 core specialists at Phase 2). Planner and quality-gater are temporary. See [Team Topology](team-topology.md) for the full model.
 
 **Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies and team-lead-as-relay pattern.
 
@@ -139,7 +139,7 @@ Between waves, architect peers cross-verify via `SendMessage`. Core devs are per
 
 **Pattern validation chain**: devs ask their architect for patterns; architects query context-provider. Devs NEVER contact context-provider directly.
 
-**Dynamic scaling**: when a core dev is busy, architects request extra devs from team-lead. Extras are named but have no team_name -- they die after architect verification.
+**Dynamic scaling**: when a core specialist is busy, architects request extra specialists from team-lead. Extras are named but have no team_name -- they die after architect verification.
 
 Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the team-lead re-plans (never codes the fix itself).
 

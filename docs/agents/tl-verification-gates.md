@@ -16,11 +16,11 @@ token_budget: 1200
 
 # team-lead Verification Gates
 
-Reference for team-lead's verification requirements after dev work: architect verification gate, post-verdict broadcast protocol, post-wave team integrity check, and escalation paths.
+Reference for team-lead's verification requirements after specialist work: architect verification gate, post-verdict broadcast protocol, post-wave team integrity check, and escalation paths.
 
 ## Architect Verification Gate (non-negotiable)
 
-After EVERY wave of dev work, architects verify as session team peers:
+After EVERY wave of specialist work, architects verify as session team peers:
 
 1. **All three are session team peers** — they cross-verify via `SendMessage(to="arch-X", ...)`
 2. **Architects request devs from team-lead** via SendMessage — team-lead is the sole Agent() spawner (in-process peers cannot use Agent())
@@ -132,5 +132,5 @@ Precision is not the point — the retrospective anchors wave-over-wave trends s
 After collecting verdicts from all architects at the end of each wave, verify team integrity:
 1. Bash: read team config to list active session team peers
 2. Confirm context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater are ALL alive
-3. Confirm all spawned core devs (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist — whichever were spawned in scope) are ALL alive
+3. Confirm all spawned core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist — whichever were spawned in scope) are ALL alive
 4. If ANY peer is missing: IMMEDIATELY re-spawn with SAME name AND SAME team_name — `Agent(name="X", team_name="session-{slug}", ...)`. NEVER append "-v2". NEVER skip the integrity check.

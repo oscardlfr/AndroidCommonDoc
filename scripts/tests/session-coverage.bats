@@ -759,7 +759,7 @@ teardown() {
 
 @test "README: 'What gets synced' lists consumer counts" {
     sed -n '/What gets synced/,/^### /p' "$README" | grep -q "61"
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "52"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "59"
 }
 
 @test "README: 'What gets synced' clarifies what is NOT synced" {
@@ -1079,8 +1079,8 @@ teardown() {
     grep -q "^slug: spec-driven-workflow" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
-@test "README: counts match 39 agents, 61 skills" {
-    grep -q "39 specialized agents" "$README"
+@test "README: counts match 38 agents, 61 skills" {
+    grep -q "38 specialized agents" "$README"
     grep -q "61 canonical" "$README"
 }
 
@@ -1162,13 +1162,13 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     done
 }
 
-@test "agents: all 39 agents have domain frontmatter" {
+@test "agents: all 38 agents have domain frontmatter" {
     for agent in $L0_ROOT/.claude/agents/*.md; do
         grep -q "^domain:" "$agent" || { echo "MISSING domain: $agent"; return 1; }
     done
 }
 
-@test "agents: all 39 agents have intent frontmatter" {
+@test "agents: all 38 agents have intent frontmatter" {
     for agent in $L0_ROOT/.claude/agents/*.md; do
         grep -q "^intent:" "$agent" || { echo "MISSING intent: $agent"; return 1; }
     done
@@ -1412,10 +1412,10 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
     grep -q "doc-templates" "$README" || grep -q "PRODUCT_SPEC" "$README"
 }
 
-@test "README: counts match 39 agents, 61 skills, 52 commands" {
-    grep -q "39 specialized agents" "$README"
+@test "README: counts match 38 agents, 61 skills, 59 commands" {
+    grep -q "38 specialized agents" "$README"
     grep -q "61 canonical" "$README"
-    # 52 commands verified via sync table
+    # 59 commands verified via sync table
 }
 
 # ============================================================

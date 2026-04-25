@@ -80,7 +80,7 @@ If the task changes scope entirely (e.g., from bug fixes to new feature), create
 1. `SendMessage(to="doc-updater", ...)` — archive current team's findings
 2. Dissolve current team
 3. `TeamCreate(team_name="session-{project-slug}")` — new session team, clean slate
-4. Re-add all 9 session team peers with fresh context (5 at session start, 4 core devs when Phase 2 resumes)
+4. Re-add all 9 session team peers with fresh context (5 at session start, 4 core specialists when Phase 2 resumes)
 
 ### 5. Sub-Agent Over Peer When Possible
 
@@ -140,8 +140,8 @@ When relaying findings between agents (architect → team-lead → architect), u
 |-----------|--------------|----------------|----------------|-------------------|
 | Orchestrator (team-lead) | ~5K | ~195K | 200K | Never (session lifetime) |
 | Architect | ~4K | ~196K | 200K | 7+ waves |
-| Core dev | ~3K | ~197K | 200K | 5+ waves (9-peer) / 7+ waves (5-peer) |
-| Extra dev | ~2K | ~198K | 200K | Dies after architect verification |
+| Core specialist | ~3K | ~197K | 200K | 5+ waves (9-peer) / 7+ waves (5-peer) |
+| Extra specialist | ~2K | ~198K | 200K | Dies after architect verification |
 | Shared service | ~2K | ~198K | 200K | 7+ waves |
 
 **Warning signs**: If a template exceeds its system prompt budget, extract sections to reference docs (`.claude/docs/`).
@@ -150,7 +150,7 @@ When relaying findings between agents (architect → team-lead → architect), u
 
 ## Conditional Team Composition
 
-Default session team (9 peers in `session-{project-slug}`: 5 at session start + 4 core devs at Phase 2):
+Default session team (9 peers in `session-{project-slug}`: 5 at session start + 4 core specialists at Phase 2):
 ```
 Session start:
   TeamCreate("session-{project-slug}")
@@ -174,7 +174,7 @@ Add ONLY when in scope:
 | Anti-pattern | Why it's bad | Fix |
 |-------------|-------------|-----|
 | 7+ waves (9-peer) / 10+ waves (5-peer) | Context grows to 60K+ tokens | Re-spawn peers with same name/team_name, or dissolve/recreate |
-| Extra devs as team peers | Extras accumulate context they don't need | Core devs are peers; extras are sub-agents via team-lead (no team_name) |
+| Extra specialists as team peers | Extras accumulate context they don't need | Core specialists are peers; extras are sub-agents via team-lead (no team_name) |
 | team-lead reading full verdicts | Verdict prose bloats team-lead context | Architects: 3-line summary first, details on request |
 | Not calling doc-updater between waves | Findings lost if session crashes | Archive to disk every 3-5 waves |
 | All dept leads in every team | 8 peers = excessive overhead | Conditional: only when their domain is in scope |

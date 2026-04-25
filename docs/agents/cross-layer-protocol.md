@@ -36,7 +36,7 @@ Terminal 1 (L2 DawSync):         Terminal 2 (L1 shared-kmp-libs):
 session-dawsync team             session-shared-kmp-libs team
 ├── context-provider             ├── context-provider
 ├── 3 architects                 ├── architects
-├── 4 core devs                  ├── core devs
+├── 4 core specialists           ├── core specialists
 └── quality-gater (P3)           └── quality-gater (P3)
 ```
 

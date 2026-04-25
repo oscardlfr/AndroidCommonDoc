@@ -24,12 +24,12 @@ How development works across the L0/L1/L2 ecosystem with Claude Code, specialize
 
 ## The Team Lead Model
 
-Every L1/L2 project has a `team-lead` agent as the primary workflow coordinator. team-lead NEVER writes code — all code is written by dev specialists.
+Every L1/L2 project has a `team-lead` agent as the primary workflow coordinator. team-lead NEVER writes code — all code is written by specialists.
 
 | Task size | team-lead behavior |
 |-----------|--------------------------|
-| **Simple** (bug fix, 1 file) | Assigns to dev specialist, reviews result, runs tests |
-| **Medium** (feature, 1-3 files) | Assigns code to dev specialist, delegates audits to domain specialists |
+| **Simple** (bug fix, 1 file) | Assigns to specialist, reviews result, runs tests |
+| **Medium** (feature, 1-3 files) | Assigns code to specialist, delegates audits to domain specialists |
 | **Large** (5+ files, multi-step) | Orchestrates waves — assigns code to dev specialists, audits to domain specialists |
 | **Long session** (3+ features) | Always orchestrates — delegates everything, manages flow only |
 
@@ -57,7 +57,7 @@ delegate to daw-guardian: "Audit changed files in core/data/ for ProcessingMode 
 | Domain-specific audit (DAW safety, API purity, feature gates) | **Always delegate** — specialist knows the rules |
 | Code review after implementation | **Delegate** to test-specialist or relevant domain agent |
 | Parallel implementation (a11y across modules, test generation) | **Delegate to specialists with Write** — NOT multiple team-lead copies |
-| Writing code for any change | **Delegate to dev specialist** — team-lead never writes code |
+| Writing code for any change | **Delegate to specialist** — team-lead never writes code |
 | Running tests, linting, coverage | **Use L0 skills** (`/test`, `/pre-pr`) — not agents |
 | Cross-cutting concern (privacy, release readiness) | **Delegate** — specialist scans holistically |
 | After any wave of specialist work | **Architect gate** — arch-testing + arch-platform + arch-integration detect, fix, and cross-verify before proceeding |

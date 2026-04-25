@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-25T20:08:40.702Z",
+  "generated": "2026-04-25T20:45:34.348Z",
   "l0_root": ".",
   "entries": [
     {
@@ -2691,12 +2691,12 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:0ac160adc3dc9366ac4032ae4e4054cbf715d2212f1addddd5f4984cf3cb0daa",
+      "hash": "sha256:5bda18f901ce3f5e252b6cb796c41419b11a96d06b8ea27a79d81f78113680a1",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
         "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
-        "tools": "Read, Grep, Glob, Bash, SendMessage, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__validate-doc-update",
+        "tools": "Read, Grep, Glob, Bash, SendMessage, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__validate-doc-update, mcp__androidcommondoc__tool-use-analytics",
         "model": "sonnet",
         "domain": "quality",
         "intent": [
