@@ -71,7 +71,7 @@ process.stdin.on('end', () => {
     // 2c. Block Grep/Glob tool on docs/** or agent-template paths
     if (toolName === 'Grep' || toolName === 'Glob') {
       const queryPath = data.tool_input?.path ?? data.tool_input?.pattern ?? '';
-      const isDocPath = /[/\]docs[/\]/.test(queryPath) || /[/\]setup[/\]agent-templates[/\]/.test(queryPath);
+      const isDocPath = /[/\\]docs[/\\]/.test(queryPath) || /[/\\]setup[/\\]agent-templates[/\\]/.test(queryPath);
       if (!isDocPath) process.exit(0); // non-docs Grep/Glob allowed
       // doc-path Grep/Glob: fall through to session-flag check
     }

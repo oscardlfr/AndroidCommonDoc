@@ -13,7 +13,7 @@ Per-dispatch rules that run during every wave. Referenced from [arch-testing](..
 
 ### Per-Dispatch Validation (Wave 9 — runs on EVERY dispatch)
 
-Distinct from the Scope Validation Gate above (pre-task, session start). These 3 checks run EVERY time you SendMessage to a dev.
+Distinct from the Scope Validation Gate above (pre-task, session start). These 3 checks run EVERY time you SendMessage to a specialist.
 
 **1. Per-dispatch Scope Gate**
 
@@ -31,7 +31,7 @@ If no → SendMessage to context-provider first.
 
 **3. Spec completeness rule**
 
-Before sending a factory/stub spec to a dev, verify that every class referenced by name in the spec either:
+Before sending a factory/stub spec to a specialist, verify that every class referenced by name in the spec either:
 - (a) exists in the codebase at a known path, OR
 - (b) is a new class with a complete body provided inline
 
@@ -47,21 +47,21 @@ During every wave, architects MUST re-consult context-provider via SendMessage w
 
 ### Proactive Dev Support
 
-When a dev asks about coroutine test setup, dispatcher choice, or StateFlow collection patterns:
+When a specialist asks about coroutine test setup, dispatcher choice, or StateFlow collection patterns:
 1. Determine if their class is Path A (stateIn) or Path B (startObserving) — see [testing-patterns-dispatcher-scopes](../testing/testing-patterns-dispatcher-scopes.md)
 2. Provide the matching pattern (NOT a blanket "use UnconfinedTestDispatcher for everything")
 3. If uncertain, query context-provider for the specific class architecture before advising
 
 ### Library Behavior Uncertainty
 
-When a dev reports unexpected coroutine/test behavior:
+When a specialist reports unexpected coroutine/test behavior:
 1. **Consult Context7 FIRST** via context-provider before diagnosing
 2. Only suggest empirical fixes if Context7 does not cover the scenario
 3. This rule exists because 3 QG cycles were lost in DawSync L2 — the official docs had the answer
 
 ### Core Dev Communication (v5.0.0)
 
-Your named core devs are session team peers — reach them via SendMessage:
+Your named core specialists are session team peers — reach them via SendMessage:
 - **test-specialist**: test quality, regression tests, TDD compliance
 - **ui-specialist**: UI test review, Compose test patterns
 
@@ -75,7 +75,7 @@ Your named core devs are session team peers — reach them via SendMessage:
 **Why you hold the pattern chain (W27):**
 You are the MCP tool holder for pattern discovery — context-provider has `find-pattern`, `module-health`, `search-docs`; you consult CP via SendMessage. Devs do NOT have these tools and MUST NOT contact CP directly. The chain is: dev → SendMessage(to="arch-X") → you → SendMessage(to="context-provider") → CP runs MCP tool → returns to you → you send verified pattern to dev. This is a mechanical enforcement boundary, not a suggestion. Never short-circuit this chain.
 **Requesting extra devs (overflow):**
-When your core dev is busy and you need parallel work:
+When your core specialist is busy and you need parallel work:
 SendMessage(to="team-lead", summary="need extra {dev-type}", message="Task: {desc}. Files: {list}.")
 team-lead spawns an extra named dev (no team_name) — it executes, returns result to team-lead, team-lead relays to you.
 

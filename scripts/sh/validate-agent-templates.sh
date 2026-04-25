@@ -409,20 +409,20 @@ fi
 # Check 6: Size limits
 # =========================================================================
 if should_run "size-limits"; then
-    echo -e "${CYAN}Check 6: Size limits (agents ≤400, docs ≤300)${RESET}"
+    echo -e "${CYAN}Check 6: Size limits (agents ≤425, docs ≤300)${RESET}"
     sz_errors=0
 
     for f in "${ALL_FILES[@]}"; do
         fname="$(basename "$f")"
         lines=$(wc -l < "$f" | tr -d ' \r')
-        # Agent templates: 400 lines (orchestrators are complex)
+        # Agent templates: 425 lines (W31.6 bumped from 400 for arch templates with PREP/EXECUTE blocks + ban reminders)
         # Doc files: 300 lines (handled by validate-doc-structure)
-        if [[ $lines -gt 400 ]]; then
-            detail "$fname: $lines lines (limit: 400)"
+        if [[ $lines -gt 425 ]]; then
+            detail "$fname: $lines lines (limit: 425)"
             sz_errors=$((sz_errors + 1))
         fi
     done
-    report_check "Size limits (all agents ≤400 lines)" "$sz_errors" "ERROR"
+    report_check "Size limits (all agents ≤425 lines)" "$sz_errors" "ERROR"
 fi
 
 # =========================================================================

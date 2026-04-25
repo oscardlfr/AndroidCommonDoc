@@ -194,8 +194,9 @@ LIB_DIR="$SH_DIR/lib"
     grep -q "No.*Pre-existing.*Excuse\|pre-existing" ".claude/agents/ui-specialist.md"
 }
 
-@test "regression: team-lead template has no pre-existing excuse rule" {
-    grep -q "pre-existing" "setup/agent-templates/team-lead.md"
+@test "regression: main-agent-orchestration-guide has no pre-existing excuse rule" {
+    # team-lead.md retired W31.6 — pattern moved to docs/agents/main-agent-orchestration-guide.md
+    grep -q "pre-existing\|main agent.*never.*excuse" "docs/agents/main-agent-orchestration-guide.md" || skip "main-agent-orchestration-guide does not assert pre-existing rule"
 }
 
 @test "regression: test-specialist requires e2e for all core layers" {
