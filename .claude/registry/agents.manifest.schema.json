@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://androidcommondoc.local/agents.manifest.schema.json",
+  "title": "AndroidCommonDoc Agents Manifest",
+  "description": "Single source of truth for all L0 agent metadata. CI validators MUST validate the manifest against this schema; a green schema check is the precondition for any agent template / mirror / registry write.",
+  "type": "object",
+  "required": ["manifest", "categories", "agents"],
+  "additionalProperties": false,
+  "properties": {
+    "manifest": {
+      "type": "object",
+      "required": ["version", "generated_at"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "generated_at": { "type": "string", "format": "date" },
+        "generator": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "version": { "type": "string" },
+            "notes": { "type": "string" }
+          }
+        }
+      }
+    },
+    "paths_template": {
+      "type": "object",
+      "description": "Path templates derived from canonical_name. Per-agent paths_override supported.",
+      "additionalProperties": false,
+      "properties": {
+        "template": {
+          "type": "string",
+          "default": "setup/agent-templates/{canonical_name}.md"
+        },
+        "mirror": {
+          "type": "string",
+          "default": ".claude/agents/{canonical_name}.md"
+        }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "description": "Enum of legal `category` values for agent entries. Adding a new category requires schema_version bump.",
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "lifecycles": {
+      "type": "array",
+      "description": "Enum of legal `lifecycle` values.",
+      "items": { "enum": ["ephemeral", "persistent", "per-task"] },
+      "minItems": 3,
+      "uniqueItems": true
+    },
+    "invariants": {
+      "type": "array",
+      "description": "Cross-cutting rules enforced by the manifest validator. Each invariant has an id, an applies_to selector, and a require constraint.",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "applies_to", "require"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]+$",
+            "description": "SCREAMING_SNAKE id, unique across invariants."
+          },
+          "description": { "type": "string", "minLength": 10 },
+          "applies_to": {
+            "type": "object",
+            "description": "Selector — agent matches when ALL key/value pairs equal the agent's value."
+          },
+          "require": {
+            "type": "object",
+            "description": "Constraints that must hold for matched agents. Keys are dotted paths into the agent entry; values are expected sets/values."
+          },
+          "rationale_ref": {
+            "type": "string",
+            "description": "Optional pointer to memory/backlog/doc explaining the rule's origin."
+          }
+        }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "minProperties": 1,
+      "patternProperties": {
+        "^[a-z][a-z0-9-]*$": { "$ref": "#/$defs/agent" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "agent": {
+      "type": "object",
+      "required": [
+        "canonical_name",
+        "subagent_type",
+        "template_version",
+        "category",
+        "lifecycle",
+        "description",
+        "runtime",
+        "tools",
+        "dispatch"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "canonical_name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Used in SendMessage(to=...). MUST equal the YAML key. MUST equal subagent_type in v1."
+        },
+        "subagent_type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Used in Agent(subagent_type=...). MUST equal canonical_name in v1."
+        },
+        "template_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "SemVer from template frontmatter `template_version` field."
+        },
+        "template_frontmatter_sha256": {
+          "oneOf": [
+            { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            { "type": "null" }
+          ],
+          "description": "SHA-256 of the template's frontmatter block (between --- markers). Used for drift detection. NULL allowed during seed phase; required in Phase 4."
+        },
+        "category": {
+          "type": "string",
+          "description": "Must be a member of top-level `categories` array."
+        },
+        "lifecycle": {
+          "enum": ["ephemeral", "persistent", "per-task"],
+          "description": "ephemeral = spawned per dispatch and dies; persistent = lives across phases (e.g., context-provider); per-task = spawned per Task tool invocation."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 10,
+          "description": "One-line, copied verbatim from the template's frontmatter `description:` field."
+        },
+        "domain": { "type": "string" },
+        "intent": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "runtime": {
+          "type": "object",
+          "required": ["model"],
+          "additionalProperties": false,
+          "properties": {
+            "model": { "enum": ["opus", "sonnet", "haiku", "inherit"] },
+            "token_budget": { "type": "integer", "minimum": 100, "maximum": 200000 }
+          }
+        },
+        "tools": {
+          "type": "object",
+          "required": ["allowed"],
+          "additionalProperties": false,
+          "properties": {
+            "allowed": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Exact, expanded list from frontmatter `tools:` field."
+            },
+            "banned": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "top_level": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "uniqueItems": true,
+                  "description": "Top-level tool names (e.g., Agent, Write, Edit). Hook blocks PreToolUse on these."
+                },
+                "bash_subcommands": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "uniqueItems": true,
+                  "description": "Bash subcommand names (e.g., grep, rg, find). Hook blocks Bash invocations whose first non-flag arg matches."
+                },
+                "grep_patterns": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "uniqueItems": true,
+                  "description": "Glob patterns blocking Grep tool by path. `*` denotes any path."
+                },
+                "glob_patterns": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "uniqueItems": true,
+                  "description": "Glob patterns blocking Glob tool by pattern. e.g., `docs/**`."
+                },
+                "read_patterns": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "uniqueItems": true,
+                  "description": "Glob patterns blocking Read tool by path. e.g., `docs/**` blocks reading any pattern doc directly. Surfaced in 4 core-specialist templates (W26→W31)."
+                },
+                "mcp_tools_blocked": {
+                  "type": "array",
+                  "items": { "type": "string", "pattern": "^mcp__" },
+                  "uniqueItems": true,
+                  "description": "Specific MCP tool names this agent must NOT call. e.g., `mcp__androidcommondoc__find-pattern` for specialists. Stricter than excluding from `tools.allowed` (catches frontmatter-inheritance edge cases)."
+                }
+              }
+            }
+          }
+        },
+        "dispatch": {
+          "type": "object",
+          "required": ["spawn_method", "dispatched_by"],
+          "additionalProperties": false,
+          "properties": {
+            "spawn_method": {
+              "enum": ["Agent", "TeamCreate-peer", "manual-cli"],
+              "description": "How this agent enters the session. Most are spawned via Agent(); team-lead is manual-cli (the main agent itself)."
+            },
+            "dispatched_by": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Canonical names of agents allowed to spawn / dispatch this agent."
+            },
+            "can_dispatch_to": {
+              "type": "array",
+              "items": { "type": "string" },
+              "uniqueItems": true,
+              "default": [],
+              "description": "Canonical names this agent can spawn/dispatch. Empty for in-process peers (no Agent tool)."
+            },
+            "can_send_to": {
+              "oneOf": [
+                {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "uniqueItems": true
+                },
+                { "const": "*" }
+              ],
+              "description": "SendMessage targets. `*` means broadcast to all session peers (used by context-provider)."
+            }
+          }
+        },
+        "gates": {
+          "type": "array",
+          "description": "Pre/post-action gates enforced by hooks.",
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "enforcement"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "type": { "enum": ["pre_action_gate", "post_action_gate", "spawn_gate"] },
+              "triggers": {
+                "type": "array",
+                "items": { "type": "string" },
+                "uniqueItems": true,
+                "description": "Tool names or `Tool:subcommand` patterns that activate this gate."
+              },
+              "resolution": { "type": "string", "description": "Action the agent must take to pass the gate." },
+              "enforcement": { "enum": ["hook", "advisory", "manual"] },
+              "hook_path": { "type": "string", "description": "Path to the hook script that enforces this gate." }
+            }
+          }
+        },
+        "skills_referenced": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true,
+          "default": []
+        },
+        "optional_capabilities": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true,
+          "default": []
+        },
+        "memory": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Frontmatter `memory:` value (e.g., 'project'). Null if not declared."
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "uniqueItems": true,
+          "default": [],
+          "description": "MUST be empty in v1. Reserved for future renames."
+        },
+        "superseded_by": {
+          "oneOf": [
+            { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "If non-null, this agent has been replaced by the named agent and should not be spawned in new sessions."
+        },
+        "replaces": {
+          "oneOf": [
+            { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "If non-null, this agent replaces the named legacy agent. Validator scans memory/backlog for legacy mentions and flags them."
+        }
+      }
+    }
+  }
+}
