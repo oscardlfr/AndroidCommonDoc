@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-26T14:50:04.473Z",
+  "generated": "2026-04-26T21:54:40.693Z",
   "l0_root": ".",
   "entries": [
     {
@@ -2115,12 +2115,12 @@
       "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:960fc03f75dc5552768735b002fae48aefc144f677f7c95159a1cdd9767c3adf",
+      "hash": "sha256:1f696b318c85bf46ae925a0b3ef6d62fdd1ccaf260d75f32f18cf2ad55656225",
       "dependencies": [],
       "frontmatter": {
         "name": "cross-platform-validator",
         "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
-        "tools": "Read, Grep, Glob",
+        "tools": "Read, Grep, Glob, SendMessage",
         "model": "sonnet",
         "domain": "quality",
         "intent": [
@@ -2138,7 +2138,7 @@
         "skills": [
           "verify-kmp"
         ],
-        "template_version": "1.0.0"
+        "template_version": "1.0.1"
       }
     },
     {
@@ -2496,12 +2496,12 @@
       "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f3e24292d2521832a7c413aee5a4f0961bd751e77b8a753e387c8ea72ec9ff45",
+      "hash": "sha256:efceaa2a68bf9e81b3a0fa02d799d64efe546193cec8287277e7b1f5fedf9d6e",
       "dependencies": [],
       "frontmatter": {
         "name": "module-lifecycle",
         "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
-        "tools": "Read, Grep, Glob, Bash, Write",
+        "tools": "Read, Grep, Glob, Bash, Write, SendMessage",
         "model": "sonnet",
         "domain": "infrastructure",
         "intent": [
@@ -2511,7 +2511,7 @@
           "lifecycle"
         ],
         "token_budget": 2000,
-        "template_version": "1.1.0",
+        "template_version": "1.1.1",
         "memory": "project",
         "skills": [
           "verify-kmp",

