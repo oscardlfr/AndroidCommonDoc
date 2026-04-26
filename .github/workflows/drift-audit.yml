@@ -177,6 +177,73 @@ jobs:
           ANDROID_COMMON_DOC: ${{ github.workspace }}
         run: npm test -- --run
 
+  manifest-drift-warn:
+    name: Manifest drift (WARN)
+    # Phase 2 of the agents-manifest workflow (PR #71 shipped Phase 1).
+    # Compares `.claude/registry/agents.manifest.yaml` against agent template
+    # frontmatter and surfaces drift to the GitHub Actions step summary.
+    # WARN mode: this job NEVER fails the build, even when the validator
+    # detects errors. Phase 4 flips this to BLOCK by removing the final
+    # `exit 0` step and propagating the validator's exit code.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install + build MCP server
+        working-directory: mcp-server
+        run: |
+          npm ci --silent
+          npm run build --silent
+
+      - name: Run manifest drift validator (WARN mode)
+        id: validator
+        run: |
+          set +e
+          bash scripts/sh/validate-manifest.sh > /tmp/manifest-drift.txt 2>&1
+          VALIDATOR_EXIT=$?
+          set -e
+          echo "exit_code=$VALIDATOR_EXIT" >> "$GITHUB_OUTPUT"
+          cat /tmp/manifest-drift.txt
+          if [ "$VALIDATOR_EXIT" -ne 0 ]; then
+            echo "::warning::Manifest validator exited $VALIDATOR_EXIT — see job summary for findings"
+          fi
+
+      - name: Post findings to job summary
+        if: always()
+        run: |
+          {
+            echo "## Manifest drift (WARN mode)"
+            echo ""
+            echo "Validator exit code: \`${{ steps.validator.outputs.exit_code }}\`"
+            echo ""
+            echo "<details><summary>Full validator output</summary>"
+            echo ""
+            echo '```'
+            cat /tmp/manifest-drift.txt 2>/dev/null || echo "(no output captured)"
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload validator report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-drift-report
+          path: /tmp/manifest-drift.txt
+          retention-days: 14
+
+      # WARN mode: always succeed regardless of validator outcome.
+      # Phase 4 will remove this step and let the validator's exit propagate.
+      - name: WARN mode — do not fail the build
+        run: exit 0
+
   doc-cross-refs:
     name: docs/agents/ cross-references resolve
     runs-on: ubuntu-latest
