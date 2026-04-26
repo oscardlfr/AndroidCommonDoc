@@ -11,7 +11,6 @@ optional_capabilities:
   - mcp-gsd
   - context7
   - jina
-  - jina
 template_version: "1.2.0"
 skills:
   - audit-l0

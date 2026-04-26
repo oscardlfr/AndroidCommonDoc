@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-25T20:45:34.348Z",
+  "generated": "2026-04-26T14:50:04.473Z",
   "l0_root": ".",
   "entries": [
     {
@@ -2408,7 +2408,7 @@
       "description": "Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e33e43515b4b309faf250dd5dba8bef3b9caeeae2e9abcc02f1d8df89949fe73",
+      "hash": "sha256:42a4198ba09ad86cd1368733ad2ff32342bce81cb60a80fdb0671cb97f2d9642",
       "dependencies": [],
       "frontmatter": {
         "name": "l0-coherence-auditor",
@@ -2427,7 +2427,6 @@
         "optional_capabilities": [
           "mcp-gsd",
           "context7",
-          "jina",
           "jina"
         ],
         "template_version": "1.2.0",
@@ -2552,12 +2551,12 @@
       "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:3cdbd051f26e9a0d09a78f6350b141e6ca90b2f85b905e5ff3e1458846e3e1ef",
+      "hash": "sha256:2498878d0e334dbd5bdfc6932653af5cb0f24a24d6711995ad013be9e013fcef",
       "dependencies": [],
       "frontmatter": {
         "name": "platform-auditor",
         "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
-        "tools": "Read, Grep, Glob, Bash",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
         "model": "sonnet",
         "domain": "quality",
         "intent": [
@@ -2567,7 +2566,7 @@
           "audit"
         ],
         "token_budget": 2000,
-        "template_version": "1.1.0",
+        "template_version": "1.1.1",
         "memory": "project",
         "skills": [
           "verify-kmp",
