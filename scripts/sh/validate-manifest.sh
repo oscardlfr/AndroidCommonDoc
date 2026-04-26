@@ -71,6 +71,14 @@ while [[ $# -gt 0 ]]; do
             grep -E "^# " "$0" | sed -e 's/^# //' -e 's/^#//' | head -30
             exit 0
             ;;
+        --project-root)
+            PROJECT_ROOT_ARG="$2"
+            shift 2
+            ;;
+        --project-root=*)
+            PROJECT_ROOT_ARG="${1#--project-root=}"
+            shift
+            ;;
         --strict|--format|--format=*)
             PASSTHROUGH_ARGS+=("$1")
             # --format takes a value when not in --format=value form
