@@ -1,12 +1,12 @@
 ---
 name: module-lifecycle
 description: "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules."
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash, Write, SendMessage
 model: sonnet
 domain: infrastructure
 intent: [module, create, deprecate, lifecycle]
 token_budget: 2000
-template_version: "1.1.0"
+template_version: "1.1.1"
 memory: project
 skills:
   - verify-kmp

@@ -1,0 +1,1865 @@
+# yaml-language-server: $schema=./agents.manifest.schema.json
+#
+# =============================================================================
+# AndroidCommonDoc Agent Manifest
+# =============================================================================
+# Single source of truth for all L0 agent metadata. Validated against
+# `agents.manifest.schema.json` (JSON Schema draft 2020-12).
+#
+# Edit policy:
+#   - Phase 1 (current): hand-edited seed. Schema validation is advisory.
+#   - Phase 2: validators wired into CI in WARN mode (drift detection).
+#   - Phase 3: templates GENERATED from this manifest, one agent at a time.
+#   - Phase 4: validators flip from WARN to BLOCK; pre-Agent-spawn hook
+#              validates `name` + `subagent_type` against this manifest.
+#
+# Author: team-lead, 2026-04-26 (W31.7 — agents-manifest seed Phase 1)
+# Status: SEED — Phase 1 COMPLETE. 38 / 38 agents populated, all surfaced misalignments RESOLVED. Not enforced yet (Phase 2 wires CI WARN mode).
+# =============================================================================
+
+manifest:
+  version: 1
+  generated_at: "2026-04-26"
+  generator:
+    name: "manual-seed-phase-1"
+    version: "0.4.0"
+    notes: "Hand-extracted from setup/agent-templates/*.md frontmatter. 38/38 populated (Phase 1 complete). team-lead retired W31.6 (PR #69) — canonical pattern is main-agent-as-team-lead per docs/agents/main-agent-orchestration-guide.md. ALL surfaced misalignments resolved 2026-04-26: 4 mechanical fixes (platform-auditor, l0-coherence-auditor, module-lifecycle, cross-platform-validator — all SendMessage / dedup); 3 investigations resolved as intentional / out-of-scope (feature-domain-specialist scaffold, runtime drift Anthropic-side, find-pattern retention W27-scope-was-architects-only). Audit #6: 6 scaffolds + 4 manual-only + 1 sporadic doc-migrator + 27 actively-dispatched."
+
+paths_template:
+  template: "setup/agent-templates/{canonical_name}.md"
+  mirror: ".claude/agents/{canonical_name}.md"
+
+categories:
+  - architect
+  - core-specialist
+  - domain-specialist
+  - context
+  - orchestrator
+  - validator
+  - auditor
+  - tool
+  - lead
+  - doc-owner
+
+lifecycles:
+  - ephemeral
+  - persistent
+  - per-task
+
+# -----------------------------------------------------------------------------
+# Cross-cutting invariants (enforced by manifest validator in Phase 2+)
+# -----------------------------------------------------------------------------
+invariants:
+
+  - id: ARCHITECT_NO_FILE_WRITE
+    description: "Architects must not have Write/Edit tools. They plan + verify; they do not author code. Bash file-write patterns are also banned per BL-W31.7-07."
+    applies_to: { category: architect }
+    require:
+      tools.banned.top_level: [Agent, Write, Edit]
+    rationale_ref: "memory/feedback_architect_writes_code.md"
+
+  - id: IN_PROCESS_NO_AGENT
+    description: "Agents that run in-process as TeamCreate peers cannot use the Agent tool (Anthropic SDK restriction). Specialist requests must route through team-lead via SendMessage."
+    applies_to: { dispatch.spawn_method: TeamCreate-peer }
+    require:
+      tools.banned.top_level: [Agent]
+    rationale_ref: "GitHub#31977 (in-process peers lose Agent tool)"
+
+  - id: NAMING_CONVENTION
+    description: "canonical_name must be one of: arch-*, *-specialist, *-orchestrator, *-validator, *-auditor, *-agent, *-mapper, *-strategist, *-creator, *-lead, *-migrator, *-lifecycle, context-provider, doc-updater, quality-gater, team-lead, advisor, debugger, researcher, verifier, planner."
+    applies_to: {}
+    require:
+      canonical_name.pattern: "^(arch-.+|.+-specialist|.+-orchestrator|.+-validator|.+-auditor|.+-agent|.+-mapper|.+-strategist|.+-creator|.+-lead|.+-migrator|.+-lifecycle|context-provider|doc-updater|quality-gater|team-lead|advisor|debugger|researcher|verifier|planner)$"
+    rationale_ref: "W31.6 dev→specialist sweep + memory/MEMORY.md"
+
+  - id: CANONICAL_NAME_MATCHES_SUBAGENT_TYPE
+    description: "In v1, canonical_name and subagent_type must be identical. No aliases. This prevents the test-dev/test-specialist class of bug surfaced in W31.7 session."
+    applies_to: {}
+    require:
+      canonical_name.equals: subagent_type
+    rationale_ref: "Session 2026-04-26 — test-dev/test-specialist contradiction in BL-W31.5-01 vs W31.6 sweep"
+
+  - id: CONTEXT_PROVIDER_READ_ONLY
+    description: "context-provider must not have Write/Edit tools. Read-only by design (it serves context, never mutates state)."
+    applies_to: { category: context }
+    require:
+      tools.banned.top_level: [Write, Edit, Agent]
+
+# -----------------------------------------------------------------------------
+# Agent entries
+# -----------------------------------------------------------------------------
+# Coverage: 38 / 38 (Phase 1 complete; team-lead retired W31.6 — replaced by docs/agents/main-agent-orchestration-guide.md)
+#   - architects: 3/3
+#   - core-specialist: 4/4
+#   - domain-specialist: 1/1 (feature-domain-specialist — template scaffold for L2 instantiation)
+#   - context: 1/1
+#   - doc-owner: 2/2
+#   - orchestrator: 4/4 (incl. planner)
+#   - lead: 2/2
+#   - validator: 5/5
+#   - auditor: 7/7
+#   - tool: 8/8
+#
+# Misalignments — ALL RESOLVED as of 2026-04-26 (Phase 1 close):
+#   FIXED:
+#     ✅ platform-auditor SendMessage gap (1.1.0 → 1.1.1)
+#     ✅ l0-coherence-auditor duplicate jina entry
+#     ✅ module-lifecycle SendMessage gap (1.1.0 → 1.1.1) — same class as platform-auditor
+#     ✅ cross-platform-validator no-SendMessage session-flag dependency (1.0.0 → 1.0.1)
+#   RESOLVED (intentional / out-of-scope):
+#     ✅ feature-domain-specialist scaffold-by-design — invariant exemption documented
+#     ✅ runtime agent-roster `(Tools: ...)` suffix is Anthropic-runtime artifact, NOT L0 frontmatter content
+#     ✅ verifier + codebase-mapper retain find-pattern — W27 retirement scope was architects+team-lead only
+#
+# Usage classification (audit #6, 2026-04-26):
+#   - 28/38 actively dispatched by commands/skills/hooks
+#   - 6/38 L1/L2 scaffolds (marketing-lead, product-lead, content-creator, landing-page-strategist, product-strategist, feature-domain-specialist) — propagated via /sync-l0; not invoked at L0 itself
+#   - 4/38 manual-only (platform-auditor, privacy-auditor, api-rate-limit-auditor, module-lifecycle) — invoked manually for periodic audits
+#   - 1/38 sporadic (doc-migrator) — L0 adoption migration tool, KEEP per user directive
+# -----------------------------------------------------------------------------
+agents:
+
+  # ============================================================
+  # ARCHITECTS (3/3) — TeamCreate peers, mini-orchestrators
+  # ============================================================
+
+  arch-platform:
+    canonical_name: arch-platform
+    subagent_type: arch-platform
+    template_version: "1.19.0"
+    template_frontmatter_sha256: null
+    category: architect
+    lifecycle: ephemeral
+    description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
+    domain: architecture
+    intent: [platform, KMP, source-sets, encoding]
+    runtime:
+      model: sonnet
+      token_budget: 4000
+    tools:
+      allowed:
+        - Read
+        - Bash
+        - SendMessage
+        - mcp__androidcommondoc__dependency-graph
+        - mcp__androidcommondoc__gradle-config-lint
+        - mcp__androidcommondoc__kdoc-coverage
+        - mcp__androidcommondoc__string-completeness
+        - mcp__androidcommondoc__verify-kmp-packages
+      banned:
+        top_level: [Agent, Write, Edit]
+        bash_subcommands: []
+        grep_patterns: []
+        glob_patterns: []
+    dispatch:
+      spawn_method: TeamCreate-peer
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to:
+        - team-lead
+        - arch-testing
+        - arch-integration
+        - context-provider
+        - doc-updater
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "SendMessage(to=context-provider) before first call to satisfy session gate"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [verify-kmp, validate-patterns]
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Mini-orchestrator: produces APPROVE/ESCALATE verdict per round."
+      - "Specialist requests routed via team-lead (in-process — no Agent tool)."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  arch-testing:
+    canonical_name: arch-testing
+    subagent_type: arch-testing
+    template_version: "1.21.0"
+    template_frontmatter_sha256: null
+    category: architect
+    lifecycle: ephemeral
+    description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
+    domain: architecture
+    intent: [testing, TDD, coverage, test-quality]
+    runtime:
+      model: sonnet
+      token_budget: 4000
+    tools:
+      allowed:
+        - Read
+        - Bash
+        - SendMessage
+        - mcp__androidcommondoc__code-metrics
+        - mcp__androidcommondoc__validate-doc-structure
+        - mcp__androidcommondoc__kdoc-coverage
+      banned:
+        top_level: [Agent, Write, Edit]
+        bash_subcommands: []
+        grep_patterns: []
+        glob_patterns: []
+    dispatch:
+      spawn_method: TeamCreate-peer
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to:
+        - team-lead
+        - arch-platform
+        - arch-integration
+        - context-provider
+        - doc-updater
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "SendMessage(to=context-provider) before first call"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [test, test-full-parallel, coverage]
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Test-quality lens; fix dispatch routes via team-lead → test-specialist."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  arch-integration:
+    canonical_name: arch-integration
+    subagent_type: arch-integration
+    template_version: "1.18.0"
+    template_frontmatter_sha256: null
+    category: architect
+    lifecycle: ephemeral
+    description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
+    domain: architecture
+    intent: [integration, wiring, DI, navigation, compilation]
+    runtime:
+      model: sonnet
+      token_budget: 4000
+    tools:
+      allowed:
+        - Read
+        - Bash
+        - SendMessage
+        - mcp__androidcommondoc__dependency-graph
+        - mcp__androidcommondoc__gradle-config-lint
+        - mcp__androidcommondoc__setup-check
+      banned:
+        top_level: [Agent, Write, Edit]
+        bash_subcommands: []
+        grep_patterns: []
+        glob_patterns: []
+    dispatch:
+      spawn_method: TeamCreate-peer
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to:
+        - team-lead
+        - arch-platform
+        - arch-testing
+        - context-provider
+        - doc-updater
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "SendMessage(to=context-provider) before first call"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [test, extract-errors]
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Cross-cutting compile/DI/nav verification. Fixes routed via team-lead."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ============================================================
+  # CORE SPECIALISTS (4/4) — implement work, own code edits
+  # ============================================================
+
+  test-specialist:
+    canonical_name: test-specialist
+    subagent_type: test-specialist
+    template_version: "1.12.0"
+    template_frontmatter_sha256: null
+    category: core-specialist
+    lifecycle: ephemeral
+    description: "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation."
+    domain: development
+    intent: [test, coverage, quality, tdd]
+    runtime:
+      model: sonnet
+      token_budget: 3000
+    tools:
+      allowed:
+        - Read
+        - Write
+        - Edit
+        - Bash
+        - SendMessage
+        - mcp__androidcommondoc__code-metrics
+        - mcp__androidcommondoc__kdoc-coverage
+      banned:
+        top_level: [Agent]
+        bash_subcommands: [grep, rg, find, ag, ack, fd]
+        grep_patterns: ["*"]
+        glob_patterns: ["docs/**"]
+        read_patterns: ["docs/**"]
+        mcp_tools_blocked: [mcp__androidcommondoc__find-pattern]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to:
+        - team-lead
+        - arch-testing
+        - arch-platform
+        - arch-integration
+        - context-provider
+        - doc-updater
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "SendMessage(to=context-provider, summary='gate ack') as first action on spawn"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [test, test-full-parallel, coverage, extract-errors, benchmark, auto-cover]
+    optional_capabilities: [context7, mcp-monitor]
+    memory: project
+    notes:
+      - "Pattern queries route through reporting architect (arch-testing typically) → context-provider chain."
+      - "Owns test files; production-code edits within test scope only (architect-authorized override otherwise)."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  data-layer-specialist:
+    canonical_name: data-layer-specialist
+    subagent_type: data-layer-specialist
+    template_version: "1.10.0"
+    template_frontmatter_sha256: null
+    category: core-specialist
+    lifecycle: ephemeral
+    description: "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration."
+    domain: development
+    intent: [data, repository, database, network, caching]
+    runtime:
+      model: sonnet
+      token_budget: 3000
+    tools:
+      allowed:
+        - Read
+        - Write
+        - Edit
+        - Bash
+        - SendMessage
+      banned:
+        top_level: [Agent]
+        bash_subcommands: [grep, rg, find, ag, ack, fd]
+        grep_patterns: ["*"]
+        glob_patterns: ["docs/**"]
+        read_patterns: ["docs/**"]
+        mcp_tools_blocked: [mcp__androidcommondoc__find-pattern]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to:
+        - team-lead
+        - arch-platform       # primary reporting architect
+        - arch-integration    # secondary reporting architect
+        - arch-testing
+        - context-provider
+        - doc-updater
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, Read, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "SendMessage(to=context-provider, summary='gate ack') as first action on spawn"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [test, validate-patterns]
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "Reporting architects: arch-platform (primary), arch-integration (secondary)."
+      - "Pattern queries route through reporting architect → context-provider chain."
+      - "Owns repository / DAO / network layer files; edits outside this scope require architect authorization."
+      - "BANNED TOOLS section in template body cites 4+ violations W26→W31.5c — strict enforcement."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  domain-model-specialist:
+    canonical_name: domain-model-specialist
+    subagent_type: domain-model-specialist
+    template_version: "1.10.0"
+    template_frontmatter_sha256: null
+    category: core-specialist
+    lifecycle: ephemeral
+    description: "Implements domain layer — models, use cases, business logic. Reports to arch-platform."
+    domain: development
+    intent: [domain, model, usecase, business-logic]
+    runtime:
+      model: sonnet
+      token_budget: 3000
+    tools:
+      allowed:
+        - Read
+        - Write
+        - Edit
+        - Bash
+        - SendMessage
+      banned:
+        top_level: [Agent]
+        bash_subcommands: [grep, rg, find, ag, ack, fd]
+        grep_patterns: ["*"]
+        glob_patterns: ["docs/**"]
+        read_patterns: ["docs/**"]
+        mcp_tools_blocked: [mcp__androidcommondoc__find-pattern]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to:
+        - team-lead
+        - arch-platform       # primary reporting architect
+        - arch-testing
+        - arch-integration
+        - context-provider
+        - doc-updater
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, Read, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "SendMessage(to=context-provider, summary='gate ack') as first action on spawn"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [test, validate-patterns]
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "Reporting architect: arch-platform."
+      - "Owns domain models, use cases, business logic. Pure-Kotlin, no platform deps."
+      - "Pattern queries route through arch-platform → context-provider chain."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  ui-specialist:
+    canonical_name: ui-specialist
+    subagent_type: ui-specialist
+    template_version: "1.12.0"
+    template_frontmatter_sha256: null
+    category: core-specialist
+    lifecycle: ephemeral
+    description: "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations."
+    domain: development
+    intent: [compose, ui, accessibility, material3]
+    runtime:
+      model: sonnet
+      token_budget: 3000
+    tools:
+      allowed:
+        - Read
+        - Write
+        - Edit
+        - Bash
+        - SendMessage
+        - mcp__androidcommondoc__compose-preview-audit
+        - mcp__androidcommondoc__string-completeness
+      banned:
+        top_level: [Agent]
+        bash_subcommands: [grep, rg, find, ag, ack, fd]
+        grep_patterns: ["*"]
+        glob_patterns: ["docs/**"]
+        read_patterns: ["docs/**"]
+        mcp_tools_blocked: [mcp__androidcommondoc__find-pattern]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to:
+        - team-lead
+        - arch-platform
+        - arch-testing
+        - arch-integration
+        - context-provider
+        - doc-updater
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, Read, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "SendMessage(to=context-provider, summary='gate ack') as first action on spawn"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [accessibility, lint-resources, validate-patterns, material-3]
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "Owns Compose UI files (composables, previews, strings, themes)."
+      - "Per BL-W31.5-02 resolution: in no-UI waves, this specialist is NOT spawned; doc-owner work routes via doc-updater instead."
+      - "Pattern queries route through reporting architect → context-provider chain."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ============================================================
+  # CONTEXT (1/1) — persistent, read-only oracle
+  # ============================================================
+
+  context-provider:
+    canonical_name: context-provider
+    subagent_type: context-provider
+    template_version: "3.1.0"
+    template_frontmatter_sha256: null
+    category: context
+    lifecycle: persistent
+    description: "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only."
+    domain: infrastructure
+    intent: [context, rules, patterns, state]
+    runtime:
+      model: sonnet
+      token_budget: 2000
+    tools:
+      allowed:
+        - Read
+        - Grep
+        - Glob
+        - Bash
+        - SendMessage
+        - WebFetch
+        - mcp__androidcommondoc__search-docs
+        - mcp__androidcommondoc__find-pattern
+        - mcp__androidcommondoc__suggest-docs
+        - mcp__androidcommondoc__search-patterns
+        - mcp__androidcommondoc__check-version-sync
+        - mcp__androidcommondoc__module-health
+        - mcp__androidcommondoc__code-metrics
+        - mcp__androidcommondoc__check-doc-patterns
+        - mcp__plugin_context7_context7__resolve-library-id
+        - mcp__plugin_context7_context7__query-docs
+      banned:
+        top_level: [Write, Edit, Agent]
+        bash_subcommands: []
+        grep_patterns: []
+        glob_patterns: []
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to: "*"
+    gates: []
+    skills_referenced: []
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Persistent across phases. Spawned ONCE at session start by team-lead."
+      - "Pre-caches L0 pattern index on spawn; subsequent queries are mostly local lookups."
+      - "Read-only by design (CONTEXT_PROVIDER_READ_ONLY invariant)."
+      - "All architects/specialists MUST consult before pattern/doc lookups (mechanical hook gate)."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ============================================================
+  # DOC OWNERS (3) — documentation lifecycle agents
+  # ============================================================
+
+  doc-updater:
+    canonical_name: doc-updater
+    subagent_type: doc-updater
+    template_version: "2.5.0"
+    template_frontmatter_sha256: null
+    category: doc-owner
+    lifecycle: persistent
+    description: "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure)."
+    domain: quality
+    intent: [docs, changelog, memory, roadmap, ingest]
+    runtime:
+      model: sonnet
+      token_budget: 2000
+    tools:
+      allowed:
+        - Read
+        - Write
+        - Edit
+        - Grep
+        - Glob
+        - Bash
+        - SendMessage
+        - mcp__androidcommondoc__ingest-content
+        - mcp__androidcommondoc__search-docs
+        - mcp__androidcommondoc__validate-doc-update
+        - mcp__androidcommondoc__validate-doc-structure
+        - mcp__androidcommondoc__check-doc-patterns
+        - mcp__androidcommondoc__audit-docs
+        - mcp__androidcommondoc__check-version-sync
+        - mcp__androidcommondoc__suggest-docs
+      banned:
+        top_level: [Agent]
+        bash_subcommands: []
+        grep_patterns: []
+        glob_patterns: []
+        read_patterns: []
+        mcp_tools_blocked: []
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to: "*"
+    gates: []
+    skills_referenced: [audit-docs, readme-audit, commit-lint]
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Persistent across phases. Spawned ONCE at session start by team-lead."
+      - "Owns CHANGELOG, roadmap, memory, specs. Cross-department (Development, Marketing, Product all route doc updates here)."
+      - "Allowed Grep/Glob (unlike specialists) — needs to find files for cross-doc updates."
+      - "Per BL-W27-03: agent-template `.md` edits owned by doc-updater by default; specialists own when domain-specific."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  doc-migrator:
+    canonical_name: doc-migrator
+    subagent_type: doc-migrator
+    template_version: "1.2.0"
+    template_frontmatter_sha256: null
+    category: doc-owner
+    lifecycle: ephemeral
+    description: "Sporadic team agent for migrating project docs to L0 patterns. Triggered by QG frontmatter failures, doc-alignment drift, or manual /audit-docs. Creates hubs, splits oversized docs, adds frontmatter, fixes references."
+    domain: quality
+    intent: [docs, migrate, frontmatter, split, hub]
+    runtime:
+      model: sonnet
+      token_budget: 4000
+    tools:
+      allowed:
+        - Read
+        - Grep
+        - Glob
+        - Bash
+        - Write
+        - Edit
+        - SendMessage
+      banned:
+        top_level: [Agent]
+        bash_subcommands: []
+        grep_patterns: []
+        glob_patterns: []
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to:
+        - team-lead
+        - context-provider
+        - doc-updater
+    gates: []
+    skills_referenced: []
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Sporadic: spawned in temporary team (doc-migrator + context-provider) by team-lead. Team dissolved after task."
+      - "Triggers: quality-gater FAIL on Step 0 (frontmatter validation); doc-alignment-agent detects drift; /audit-docs reports structural errors; manual invocation."
+      - "USAGE: legitimate L0 adoption migration tool — runs when integrating L0 system into existing project (doc structure normalization). KEEP per user directive 2026-04-26."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  doc-alignment-agent:
+    canonical_name: doc-alignment-agent
+    subagent_type: doc-alignment-agent
+    template_version: "1.1.0"
+    template_frontmatter_sha256: null
+    category: auditor
+    lifecycle: per-task
+    description: "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code."
+    domain: quality
+    intent: [docs, drift, alignment, stale]
+    runtime:
+      model: sonnet
+      token_budget: 2000
+    tools:
+      allowed:
+        - Read
+        - Grep
+        - Glob
+        - mcp__androidcommondoc__audit-docs
+        - mcp__androidcommondoc__check-version-sync
+        - mcp__androidcommondoc__check-doc-freshness
+        - mcp__androidcommondoc__find-pattern
+        - mcp__androidcommondoc__monitor-sources
+        - mcp__androidcommondoc__search-docs
+        - mcp__androidcommondoc__suggest-docs
+        - mcp__androidcommondoc__validate-doc-structure
+        - mcp__androidcommondoc__check-doc-patterns
+        - mcp__androidcommondoc__doc-readability
+      banned:
+        top_level: [Write, Edit, Agent, Bash, SendMessage]
+        bash_subcommands: []
+        grep_patterns: []
+        glob_patterns: []
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to: []
+    gates: []
+    skills_referenced: [audit-docs, validate-patterns, readme-audit, doc-integrity]
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "Read-only auditor: produces drift reports; does not fix. Fix dispatch routes via doc-migrator or doc-updater."
+      - "Allowed `find-pattern` MCP (unlike specialists) — auditors are explicitly permitted to scan patterns."
+      - "Banned Bash + SendMessage by frontmatter (no shell, no inter-agent comms — pure read+report)."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ============================================================
+  # ORCHESTRATORS (3) — multi-agent or multi-step coordinators
+  # ============================================================
+
+  full-audit-orchestrator:
+    canonical_name: full-audit-orchestrator
+    subagent_type: full-audit-orchestrator
+    template_version: "1.0.0"
+    template_frontmatter_sha256: null
+    category: orchestrator
+    lifecycle: per-task
+    description: "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking."
+    domain: audit
+    intent: [full-audit, quality-gate, wave]
+    runtime:
+      model: sonnet
+      token_budget: 4000
+    tools:
+      allowed:
+        - Read
+        - Grep
+        - Glob
+        - Bash
+        - Agent
+        - Write
+      banned:
+        top_level: []
+        bash_subcommands: []
+        grep_patterns: []
+        glob_patterns: []
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli]   # invoked by /full-audit skill
+      can_dispatch_to:
+        # Sub-agents per `skills/full-audit/profiles.json` waves; subset of L0 auditors:
+        - api-rate-limit-auditor
+        - beta-readiness-agent
+        - privacy-auditor
+        - platform-auditor
+        - release-guardian-agent
+        - cross-platform-validator
+        - doc-alignment-agent
+        - l0-coherence-auditor
+      can_send_to: []
+    gates: []
+    skills_referenced: []
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "Has Agent tool — meta-orchestrator that spawns wave-based sub-agents."
+      - "Wave config lives in `skills/full-audit/profiles.json`."
+      - "Produces consolidated report with 3-pass deduplication."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  quality-gate-orchestrator:
+    canonical_name: quality-gate-orchestrator
+    subagent_type: quality-gate-orchestrator
+    template_version: "1.0.0"
+    template_frontmatter_sha256: null
+    category: orchestrator
+    lifecycle: per-task
+    description: "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement."
+    domain: audit
+    intent: [quality-gate, consistency, validators]
+    runtime:
+      model: sonnet
+      token_budget: 3000
+    tools:
+      allowed:
+        - Read
+        - Grep
+        - Glob
+        - Bash
+      banned:
+        top_level: [Agent, Write, Edit, SendMessage]
+        bash_subcommands: []
+        grep_patterns: []
+        glob_patterns: []
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [manual-cli]   # invoked by quality gate skill
+      can_dispatch_to: []
+      can_send_to: []
+    gates: []
+    skills_referenced: []
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "Does NOT have Agent tool: reads other validator agent .md files at runtime and executes their checks inline."
+      - "Delegates by reading these 4 files: script-parity-validator, skill-script-alignment, template-sync-validator, doc-code-drift-detector."
+      - "Produces consolidated PASS/FAIL with token cost measurement."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  quality-gater:
+    canonical_name: quality-gater
+    subagent_type: quality-gater
+    template_version: "2.6.0"
+    template_frontmatter_sha256: null
+    category: orchestrator
+    lifecycle: ephemeral
+    description: "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL."
+    domain: quality
+    intent: [gate, verify, pre-pr, coverage, detekt]
+    runtime:
+      model: sonnet
+      token_budget: 3000
+    tools:
+      allowed:
+        - Read
+        - Grep
+        - Glob
+        - Bash
+        - SendMessage
+        - mcp__androidcommondoc__code-metrics
+        - mcp__androidcommondoc__validate-all
+        - mcp__androidcommondoc__validate-doc-update
+        - mcp__androidcommondoc__tool-use-analytics
+      banned:
+        top_level: [Agent, Write, Edit]
+        bash_subcommands: []
+        grep_patterns: []
+        glob_patterns: ["docs/**", ".claude/agents/**", "setup/agent-templates/**"]
+        read_patterns: ["docs/**", ".claude/agents/**", "setup/agent-templates/**"]
+        mcp_tools_blocked: [mcp__androidcommondoc__find-pattern]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to:
+        - team-lead
+        - arch-platform
+        - arch-testing
+        - arch-integration
+        - context-provider
+        - doc-updater
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, Read, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "SendMessage(to=context-provider) — Search Dispatch Protocol (T-BUG-015)"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: []
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Spawned ONLY in Phase 3 (post-architect APPROVE, pre-commit). Dies at session end."
+      - "Dynamic rule discovery: reads CLAUDE.md + asks context-provider + runs `/pre-pr` (project's own validation pipeline)."
+      - "T-BUG-015 Search Dispatch Protocol: pattern discovery via Grep/Glob/Read on docs/agents/templates is hook-blocked. Project-file Grep/Read still allowed."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ============================================================
+  # LEADS (2) — department orchestrators (NEVER write content/code themselves)
+  # ============================================================
+
+  marketing-lead:
+    canonical_name: marketing-lead
+    subagent_type: marketing-lead
+    template_version: "1.1.0"
+    template_frontmatter_sha256: null
+    category: lead
+    lifecycle: persistent
+    description: "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists."
+    domain: marketing
+    intent: [campaign, content, marketing, launch]
+    runtime:
+      model: sonnet
+      token_budget: 5000
+    tools:
+      allowed:
+        - Read
+        - Grep
+        - Glob
+        - Bash
+        - TeamCreate
+        - SendMessage
+        - TaskCreate
+        - TaskList
+      banned:
+        top_level: [Agent, Write, Edit]
+        bash_subcommands: []
+        grep_patterns: []
+        glob_patterns: []
+    dispatch:
+      spawn_method: manual-cli   # `claude --agent marketing-lead`
+      dispatched_by: [manual-cli, team-lead]
+      can_dispatch_to:
+        - content-creator
+        - landing-page-strategist
+      can_send_to:
+        - team-lead
+        - arch-platform
+        - arch-testing
+        - arch-integration
+        - product-lead
+        - context-provider
+        - doc-updater
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "SendMessage(to=context-provider) — Workflow step 1 'Get context MANDATORY'"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: []
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "NEVER writes content — banned Write/Edit. All creation delegated to content-creator / landing-page-strategist."
+      - "Has TeamCreate + TaskCreate/TaskList — can spawn marketing sub-team and manage backlog."
+      - "Cannot use Agent (in-process when joined to a team)."
+      - "USAGE: L1/L2 scaffold — propagated via /sync-l0 to consumer projects (e.g., DawSync product launch). Not invoked at L0 itself (toolkit has no marketing team). User confirmed KEEP 2026-04-26 — may activate marketing-lead workflow later."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  product-lead:
+    canonical_name: product-lead
+    subagent_type: product-lead
+    template_version: "1.1.0"
+    template_frontmatter_sha256: null
+    category: lead
+    lifecycle: persistent
+    description: "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code."
+    domain: business
+    intent: [product, spec, pricing, roadmap, prioritize]
+    runtime:
+      model: sonnet
+      token_budget: 5000
+    tools:
+      allowed:
+        - Read
+        - Grep
+        - Glob
+        - Bash
+        - TeamCreate
+        - SendMessage
+        - TaskCreate
+        - TaskList
+      banned:
+        top_level: [Agent, Write, Edit]
+        bash_subcommands: []
+        grep_patterns: []
+        glob_patterns: []
+    dispatch:
+      spawn_method: manual-cli
+      dispatched_by: [manual-cli, team-lead]
+      can_dispatch_to:
+        - product-strategist
+      can_send_to:
+        - team-lead
+        - arch-platform
+        - arch-testing
+        - arch-integration
+        - marketing-lead
+        - context-provider
+        - doc-updater
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "SendMessage(to=context-provider) — Workflow step 1 'Get context MANDATORY'"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: []
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "NEVER writes code — banned Write/Edit. Specs/docs delegated to doc-updater."
+      - "USAGE: L1/L2 scaffold — propagated via /sync-l0 to consumer projects. Not invoked at L0 itself (toolkit has no product team). User confirmed KEEP 2026-04-26."
+      - "Has TeamCreate + TaskCreate/TaskList — can spawn product sub-team."
+      - "Analysis routed to product-strategist."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ============================================================
+  # VALIDATORS (4) — internal sub-agents of quality-gate-orchestrator
+  # ============================================================
+  # Common shape: tools=[Read, Grep, Glob], model=haiku, no SendMessage.
+  # Inline-loaded (read .md at runtime) by quality-gate-orchestrator.
+
+  script-parity-validator:
+    canonical_name: script-parity-validator
+    subagent_type: script-parity-validator
+    template_version: "1.0.0"
+    template_frontmatter_sha256: null
+    category: validator
+    lifecycle: per-task
+    description: "Internal validator -- invoked by quality-gate-orchestrator. Validates that PowerShell and Bash script pairs are functionally equivalent. Checks flags, output format, and exit codes between scripts/ps1/ and scripts/sh/."
+    domain: audit
+    intent: [parity, ps1, sh, script]
+    runtime:
+      model: haiku
+      token_budget: 2000
+    tools:
+      allowed: [Read, Grep, Glob]
+      banned:
+        top_level: [Agent, Write, Edit, Bash, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [quality-gate-orchestrator]
+      can_dispatch_to: []
+      can_send_to: []
+    gates: []
+    skills_referenced: []
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "Static analysis only — does NOT execute scripts."
+      - "No SendMessage tool: produces report inline; quality-gate-orchestrator collects."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  skill-script-alignment:
+    canonical_name: skill-script-alignment
+    subagent_type: skill-script-alignment
+    template_version: "1.0.0"
+    template_frontmatter_sha256: null
+    category: validator
+    lifecycle: per-task
+    description: "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters."
+    domain: audit
+    intent: [skill, script, alignment, command]
+    runtime:
+      model: haiku
+      token_budget: 2000
+    tools:
+      allowed: [Read, Grep, Glob]
+      banned:
+        top_level: [Agent, Write, Edit, Bash, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [quality-gate-orchestrator]
+      can_dispatch_to: []
+      can_send_to: []
+    gates: []
+    skills_referenced: []
+    optional_capabilities: []
+    memory: project
+    notes: []
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  template-sync-validator:
+    canonical_name: template-sync-validator
+    subagent_type: template-sync-validator
+    template_version: "1.0.0"
+    template_frontmatter_sha256: null
+    category: validator
+    lifecycle: per-task
+    description: "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Respects the copilot frontmatter field in skills/*/SKILL.md to determine expected coverage."
+    domain: audit
+    intent: [template, sync, copilot]
+    runtime:
+      model: haiku
+      token_budget: 2500
+    tools:
+      allowed: [Read, Grep, Glob]
+      banned:
+        top_level: [Agent, Write, Edit, Bash, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [quality-gate-orchestrator]
+      can_dispatch_to: []
+      can_send_to: []
+    gates: []
+    skills_referenced: []
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "Copilot-frontmatter aware: `copilot:` field in skills/*/SKILL.md is the source of truth for expected coverage."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  doc-code-drift-detector:
+    canonical_name: doc-code-drift-detector
+    subagent_type: doc-code-drift-detector
+    template_version: "1.0.0"
+    template_frontmatter_sha256: null
+    category: validator
+    lifecycle: per-task
+    description: "Internal validator -- invoked by quality-gate-orchestrator. Detects drift between docs/*.md pattern documentation and what scripts/skills actually implement. Flags outdated patterns, missing validations, and version mismatches."
+    domain: audit
+    intent: [drift, doc-code, pattern]
+    runtime:
+      model: haiku
+      token_budget: 2000
+    tools:
+      allowed: [Read, Grep, Glob]
+      banned:
+        top_level: [Agent, Write, Edit, Bash, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [quality-gate-orchestrator]
+      can_dispatch_to: []
+      can_send_to: []
+    gates: []
+    skills_referenced: []
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "Reads `versions-manifest.json` as canonical version source for VERSIONS check."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ============================================================
+  # AUDITORS (6) — standalone audit agents, dispatched by team-lead, full-audit-orchestrator, or manual-cli
+  # ============================================================
+
+  l0-coherence-auditor:
+    canonical_name: l0-coherence-auditor
+    subagent_type: l0-coherence-auditor
+    template_version: "1.2.0"
+    template_frontmatter_sha256: null
+    category: auditor
+    lifecycle: per-task
+    description: "Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks."
+    domain: audit
+    intent: [coherence, l0, hub, frontmatter]
+    runtime:
+      model: haiku
+      token_budget: 3000
+    tools:
+      allowed:
+        - Read
+        - Grep
+        - Glob
+        - mcp__androidcommondoc__validate-claude-md
+        - mcp__androidcommondoc__validate-doc-structure
+        - mcp__androidcommondoc__validate-skills
+        - mcp__androidcommondoc__validate-vault
+        - mcp__androidcommondoc__validate-agents
+        - mcp__androidcommondoc__validate-all
+        - mcp__androidcommondoc__audit-docs
+      banned:
+        top_level: [Agent, Write, Edit, Bash, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli, full-audit-orchestrator]
+      can_dispatch_to: []
+      can_send_to: []
+    gates: []
+    skills_referenced: [audit-l0, audit-docs, readme-audit]
+    optional_capabilities: [mcp-gsd, context7, jina]
+    memory: project
+    notes:
+      - "FIXED 2026-04-26: duplicate `jina` entry removed from optional_capabilities (was real typo). Template unchanged in version (still 1.2.0) since this was a typo correction, no semantic change."
+      - "Conditional behaviors: gsd state read if mcp-gsd available; URL reachability via Jina; version drift via Context7."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  api-rate-limit-auditor:
+    canonical_name: api-rate-limit-auditor
+    subagent_type: api-rate-limit-auditor
+    template_version: "1.0.0"
+    template_frontmatter_sha256: null
+    category: auditor
+    lifecycle: per-task
+    description: "Scans HTTP clients for rate limit handling, retry-after headers, exponential backoff, and timeout configuration. Use when auditing API integration robustness."
+    domain: security
+    intent: [rate-limit, retry, timeout, http]
+    runtime:
+      model: haiku
+      token_budget: 2000
+    tools:
+      allowed: [Read, Grep, Glob]
+      banned:
+        top_level: [Agent, Write, Edit, Bash, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli, full-audit-orchestrator]
+      can_dispatch_to: []
+      can_send_to: []
+    gates: []
+    skills_referenced: [validate-patterns]
+    optional_capabilities: []
+    memory: project
+    notes: []
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  beta-readiness-agent:
+    canonical_name: beta-readiness-agent
+    subagent_type: beta-readiness-agent
+    template_version: "1.1.0"
+    template_frontmatter_sha256: null
+    category: auditor
+    lifecycle: per-task
+    description: "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release."
+    domain: quality
+    intent: [beta, readiness, launch, onboarding]
+    runtime:
+      model: sonnet
+      token_budget: 3000
+    tools:
+      allowed:
+        - Read
+        - Grep
+        - Glob
+        - mcp__androidcommondoc__code-metrics
+        - mcp__androidcommondoc__find-pattern
+        - mcp__androidcommondoc__proguard-validator
+        - mcp__androidcommondoc__scan-secrets
+        - mcp__androidcommondoc__module-health
+      banned:
+        top_level: [Agent, Write, Edit, Bash, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli]   # one-time: NOT in full-audit-orchestrator's regular waves
+      can_dispatch_to: []
+      can_send_to: []
+    gates: []
+    skills_referenced: [pre-pr, test-full-parallel]
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "One-time invocation before first beta release — NOT part of full-audit regular cycles."
+      - "Uses sonnet (deeper analysis required) vs other auditors on haiku."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  privacy-auditor:
+    canonical_name: privacy-auditor
+    subagent_type: privacy-auditor
+    template_version: "1.0.0"
+    template_frontmatter_sha256: null
+    category: auditor
+    lifecycle: per-task
+    description: "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits."
+    domain: security
+    intent: [privacy, pii, gdpr, data, analytics]
+    runtime:
+      model: sonnet
+      token_budget: 2000
+    tools:
+      allowed: [Read, Grep, Glob]
+      banned:
+        top_level: [Agent, Write, Edit, Bash, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli, full-audit-orchestrator]
+      can_dispatch_to: []
+      can_send_to: []
+    gates: []
+    skills_referenced: [validate-patterns]
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "GDPR/CCPA-aligned. Sonnet model for nuanced PII detection (vs haiku-grade pattern matching)."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  platform-auditor:
+    canonical_name: platform-auditor
+    subagent_type: platform-auditor
+    template_version: "1.1.1"
+    template_frontmatter_sha256: null
+    category: auditor
+    lifecycle: per-task
+    description: "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks."
+    domain: quality
+    intent: [coherence, cross-module, architecture, audit]
+    runtime:
+      model: sonnet
+      token_budget: 2000
+    tools:
+      allowed: [Read, Grep, Glob, Bash, SendMessage]
+      banned:
+        top_level: [Agent, Write, Edit]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli, full-audit-orchestrator]
+      can_dispatch_to: []
+      can_send_to: [context-provider]
+    gates:
+      - per-session-cp-consult
+    skills_referenced: [verify-kmp, validate-patterns]
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "FIXED 2026-04-26: SendMessage added to tools (was missing despite Per-Session Gate body requirement). Template version 1.1.0 → 1.1.1. Original discrepancy was: template body cited Per-Session Gate requiring SendMessage(to=context-provider) but frontmatter tools: did not include SendMessage."
+      - "Description has `{{PROJECT_NAME}}` template placeholder — substituted at /sync-l0 propagation time."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  release-guardian-agent:
+    canonical_name: release-guardian-agent
+    subagent_type: release-guardian-agent
+    template_version: "1.1.0"
+    template_frontmatter_sha256: null
+    category: auditor
+    lifecycle: per-task
+    description: "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build."
+    domain: infrastructure
+    intent: [release, publish, deploy, secrets]
+    runtime:
+      model: haiku
+      token_budget: 2000
+    tools:
+      allowed:
+        - Read
+        - Grep
+        - Glob
+        - mcp__androidcommondoc__scan-secrets
+        - mcp__androidcommondoc__proguard-validator
+        - mcp__androidcommondoc__check-version-sync
+      banned:
+        top_level: [Agent, Write, Edit, Bash, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli, full-audit-orchestrator]
+      can_dispatch_to: []
+      can_send_to: []
+    gates: []
+    skills_referenced: [sbom, verify-kmp]
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "Gate before any release/publish — NOT a periodic auditor."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ============================================================
+  # BATCH 5 — Tools + misc (12) — added 2026-04-26
+  # ============================================================
+
+  # ---- Decision/research one-shots (4) ----
+
+  advisor:
+    canonical_name: advisor
+    subagent_type: advisor
+    template_version: "1.0.0"
+    template_frontmatter_sha256: null
+    category: tool
+    lifecycle: per-task
+    description: "Researches a single technical decision and returns a structured comparison table with recommendation. Use when choosing between approaches, libraries, or architectures."
+    domain: development
+    intent: [decide, choose, compare, tradeoff, library]
+    runtime:
+      model: sonnet
+      token_budget: 2000
+    tools:
+      allowed: [Read, Grep, Glob, WebSearch, WebFetch]
+      banned:
+        top_level: [Agent, Write, Edit, Bash, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli, planner]
+      can_dispatch_to: []
+      can_send_to: []
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob]
+        resolution: "Inherits session flag from parent session (one-shot via /decide; relies on session-id propagation)"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [decide]
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "One-shot research role — output is comparison table + recommendation, not code."
+      - "DESIGN: tools lack SendMessage by design (one-shot tool, no multi-turn coordination). For pattern context, relies on parent-session CP-flag inheritance via session_id propagation. Acceptable for /decide invocation pattern."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  debugger:
+    canonical_name: debugger
+    subagent_type: debugger
+    template_version: "1.0.0"
+    template_frontmatter_sha256: null
+    category: tool
+    lifecycle: per-task
+    description: "Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis."
+    domain: development
+    intent: [bug, error, fix, broken, crash, exception]
+    runtime:
+      model: sonnet
+      token_budget: 2500
+    tools:
+      allowed: [Read, Write, Edit, Bash, Grep, Glob, WebSearch]
+      banned:
+        top_level: [Agent, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli]
+      can_dispatch_to: []
+      can_send_to: []
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "Inherits session flag from parent session"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [test, extract-errors, debug]
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Has Write/Edit because debuggers fix bugs — distinct from architects which are review-only."
+      - "DESIGN: tools lack SendMessage by design (one-shot /debug invocation). Multi-step debugging happens within the agent's own context. If multi-agent escalation is needed, /debug should be wrapped in a team session, not invoked solo."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  researcher:
+    canonical_name: researcher
+    subagent_type: researcher
+    template_version: "1.0.0"
+    template_frontmatter_sha256: null
+    category: tool
+    lifecycle: per-task
+    description: "Ad-hoc technical research on any topic. Use before implementation to gather context, evaluate options, or understand a domain."
+    domain: development
+    intent: [research, investigate, explore, domain, learn]
+    runtime:
+      model: sonnet
+      token_budget: 2000
+    tools:
+      allowed: [Read, Grep, Glob, WebSearch, WebFetch]
+      banned:
+        top_level: [Agent, Write, Edit, Bash, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli, planner]
+      can_dispatch_to: []
+      can_send_to: []
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob]
+        resolution: "Inherits session flag from parent session"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [research]
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Twin of advisor but for open-ended exploration (no decision required)."
+      - "Same SendMessage gap as advisor — informational not blocking."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  verifier:
+    canonical_name: verifier
+    subagent_type: verifier
+    template_version: "1.1.0"
+    template_frontmatter_sha256: null
+    category: tool
+    lifecycle: per-task
+    description: "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec."
+    domain: quality
+    intent: [verify, spec, criteria, goal, check]
+    runtime:
+      model: sonnet
+      token_budget: 2000
+    tools:
+      allowed:
+        - Read
+        - Bash
+        - Grep
+        - Glob
+        - mcp__androidcommondoc__code-metrics
+        - mcp__androidcommondoc__find-pattern
+        - mcp__androidcommondoc__validate-all
+        - mcp__androidcommondoc__module-health
+      banned:
+        top_level: [Agent, Write, Edit, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli]
+      can_dispatch_to: []
+      can_send_to: []
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "Inherits session flag from parent (typically run after specialist edits in same session, where CP was consulted earlier)"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [verify, test, validate-patterns]
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "INTENTIONAL: retains `mcp__androidcommondoc__find-pattern` post-W27. W27 retirement scope was explicit — `removed find-pattern, module-health, pattern-coverage from architects + team-lead frontmatter` (per memory project_wave27_shipped.md). verifier is meta-tool (quality verifier), NOT architect/team-lead → retention is by-design."
+      - "USAGE: invoked manually via /verify after feature completion. No automated dispatcher."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ---- Planning Team peer (1) ----
+
+  planner:
+    canonical_name: planner
+    subagent_type: planner
+    template_version: "1.7.0"
+    template_frontmatter_sha256: null
+    category: orchestrator
+    lifecycle: ephemeral
+    description: "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team."
+    domain: development
+    intent: [plan, scope, breakdown, estimate]
+    runtime:
+      model: sonnet
+      token_budget: 4000
+    tools:
+      allowed: [Read, Write, Bash, SendMessage]
+      banned:
+        top_level: [Agent, Edit, Grep, Glob]
+    dispatch:
+      spawn_method: TeamCreate-peer
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to:
+        - team-lead
+        - context-provider
+    gates: []
+    skills_referenced: []
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Phase 1 peer with context-provider — produces .planning/ plan documents."
+      - "OBSERVATION: tools include Bash but exclude Grep/Glob — interesting choice. Bash for file existence checks; pattern lookup goes through context-provider via SendMessage. Aligns with dev→arch→CP chain pattern (planner is its own role, not a dev specialist, but adopts the same discipline)."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ---- Architecture mapping (1) ----
+
+  codebase-mapper:
+    canonical_name: codebase-mapper
+    subagent_type: codebase-mapper
+    template_version: "1.1.0"
+    template_frontmatter_sha256: null
+    category: tool
+    lifecycle: per-task
+    description: "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area)."
+    domain: infrastructure
+    intent: [map, architecture, modules, structure, inventory]
+    runtime:
+      model: sonnet
+      token_budget: 2000
+    tools:
+      allowed:
+        - Read
+        - Grep
+        - Glob
+        - Bash
+        - Write
+        - mcp__androidcommondoc__dependency-graph
+        - mcp__androidcommondoc__module-health
+        - mcp__androidcommondoc__pattern-coverage
+        - mcp__androidcommondoc__code-metrics
+        - mcp__androidcommondoc__find-pattern
+      banned:
+        top_level: [Agent, Edit, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli]
+      can_dispatch_to: []
+      can_send_to: []
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "Mapper IS pattern discovery — inherits session flag from parent /map-codebase invocation"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [map-codebase]
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "INTENTIONAL: retains `find-pattern`, `module-health`, `pattern-coverage` post-W27. W27 retirement scope was explicit — `removed find-pattern, module-health, pattern-coverage from architects + team-lead frontmatter` (per memory project_wave27_shipped.md). codebase-mapper is meta-tool — it MAPS patterns rather than consults them. Retention by-design."
+      - "OBSERVATION: Has Write but not Edit — intentional, only writes new MODULE_MAP.md, never modifies existing files."
+      - "USAGE: invoked manually via /map-codebase. No automated dispatcher."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ---- Marketing roles (3) — managed by marketing-lead ----
+
+  content-creator:
+    canonical_name: content-creator
+    subagent_type: content-creator
+    template_version: "1.1.0"
+    template_frontmatter_sha256: null
+    category: tool
+    lifecycle: per-task
+    description: "Drafts developer-focused content for build-in-public marketing. Creates posts for Reddit, Twitter/X, forums, and changelogs. Customize {{PRODUCT_NAME}} and tone for your project."
+    domain: marketing
+    intent: [post, blog, social, changelog, marketing, content]
+    runtime:
+      model: sonnet
+      token_budget: 3000
+    tools:
+      allowed: [Read, Grep, Glob, WebSearch, SendMessage]
+      banned:
+        top_level: [Agent, Write, Edit, Bash]
+    dispatch:
+      spawn_method: TeamCreate-peer
+      dispatched_by: [marketing-lead, team-lead, manual-cli]
+      can_dispatch_to: []
+      can_send_to:
+        - marketing-lead
+        - team-lead
+    gates: []
+    skills_referenced: []
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Description has `{{PRODUCT_NAME}}` placeholder — substituted at /sync-l0 propagation."
+      - "Note: drafts content but does NOT have Write — output is via SendMessage / chat reply. Discussion drafting role, not artifact creation."
+      - "USAGE: L1/L2 scaffold satellite of marketing-lead. Propagated via /sync-l0. User confirmed KEEP 2026-04-26."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  landing-page-strategist:
+    canonical_name: landing-page-strategist
+    subagent_type: landing-page-strategist
+    template_version: "1.1.0"
+    template_frontmatter_sha256: null
+    category: tool
+    lifecycle: per-task
+    description: "Designs landing page copy, structure, and conversion flow. Use when planning public-facing web presence, optimizing CTAs, or improving SEO for product pages."
+    domain: marketing
+    intent: [landing, page, conversion, copy, seo, cta]
+    runtime:
+      model: sonnet
+      token_budget: 3000
+    tools:
+      allowed: [Read, Grep, Glob, WebSearch, SendMessage]
+      banned:
+        top_level: [Agent, Write, Edit, Bash]
+    dispatch:
+      spawn_method: TeamCreate-peer
+      dispatched_by: [marketing-lead, team-lead, manual-cli]
+      can_dispatch_to: []
+      can_send_to:
+        - marketing-lead
+        - team-lead
+    gates: []
+    skills_referenced: []
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Twin of content-creator with landing-page focus."
+      - "USAGE: L1/L2 scaffold satellite of marketing-lead. Propagated via /sync-l0. User confirmed KEEP 2026-04-26."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  product-strategist:
+    canonical_name: product-strategist
+    subagent_type: product-strategist
+    template_version: "1.1.0"
+    template_frontmatter_sha256: null
+    category: tool
+    lifecycle: per-task
+    description: "Analyzes feature ideas against business goals using ICE scoring. Produces prioritized backlog with rationale. Customize {{PRODUCT_NAME}} and business constraints for your project."
+    domain: business
+    intent: [prioritize, roadmap, features, scoring, backlog, pricing, tiers]
+    runtime:
+      model: sonnet
+      token_budget: 3000
+    tools:
+      allowed: [Read, Grep, Glob, WebSearch, WebFetch, SendMessage]
+      banned:
+        top_level: [Agent, Write, Edit, Bash]
+    dispatch:
+      spawn_method: TeamCreate-peer
+      dispatched_by: [product-lead, team-lead, manual-cli]
+      can_dispatch_to: []
+      can_send_to:
+        - product-lead
+        - team-lead
+    gates: []
+    skills_referenced: []
+    optional_capabilities: []
+    memory: null
+    notes:
+      - "Description has `{{PRODUCT_NAME}}` placeholder — substituted at /sync-l0 propagation."
+      - "USAGE: L1/L2 scaffold satellite of product-lead. Propagated via /sync-l0. User confirmed KEEP 2026-04-26."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ---- Cross-platform / module ops (2) — FIXED 2026-04-26 ----
+
+  cross-platform-validator:
+    canonical_name: cross-platform-validator
+    subagent_type: cross-platform-validator
+    template_version: "1.0.1"
+    template_frontmatter_sha256: null
+    category: validator
+    lifecycle: per-task
+    description: "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features."
+    domain: quality
+    intent: [platform, expect-actual, sourceset, kmp]
+    runtime:
+      model: sonnet
+      token_budget: 2500
+    tools:
+      allowed: [Read, Grep, Glob, SendMessage]
+      banned:
+        top_level: [Agent, Write, Edit, Bash]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli, full-audit-orchestrator]
+      can_dispatch_to: []
+      can_send_to: [context-provider]
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob]
+        resolution: "SendMessage(to=context-provider) before first Grep/Glob; agent can now self-consult CP from cold-start session"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [verify-kmp]
+    optional_capabilities: [context7, jina]
+    memory: project
+    notes:
+      - "FIXED 2026-04-26: SendMessage added to tools. Was previously dependent on session-flag inheritance from parent session (fragile cold-start). Template version 1.0.0 → 1.0.1."
+      - "RESOLVED (drift): agent-roster `(Tools: ...)` suffix is Anthropic-runtime artifact, not L0 frontmatter content. Frontmatter is source of truth."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  module-lifecycle:
+    canonical_name: module-lifecycle
+    subagent_type: module-lifecycle
+    template_version: "1.1.1"
+    template_frontmatter_sha256: null
+    category: tool
+    lifecycle: per-task
+    description: "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules."
+    domain: infrastructure
+    intent: [module, create, deprecate, lifecycle]
+    runtime:
+      model: sonnet
+      token_budget: 2000
+    tools:
+      allowed: [Read, Grep, Glob, Bash, Write, SendMessage]
+      banned:
+        top_level: [Agent, Edit]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead, manual-cli]
+      can_dispatch_to: []
+      can_send_to: [arch-platform, context-provider]
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "SendMessage(to=arch-platform) before first call; arch-platform consults context-provider"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [verify-kmp, test]
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "FIXED 2026-04-26: SendMessage added to tools (was missing despite body line 20 + Per-Session Gate body requirement). Template version 1.1.0 → 1.1.1. Same class of bug as pre-fix platform-auditor."
+      - "RESOLVED (drift): agent-roster `(Tools: ...)` suffix is Anthropic-runtime artifact added at agent-listing rendering time. L0 frontmatter is source of truth; display drift does not reflect actual tool grants."
+      - "Description has `{{PROJECT_NAME}}` placeholder — substituted at /sync-l0 propagation time."
+      - "USAGE: rare-but-legitimate (manual invocation when adding/deprecating modules; no skill wrapper). Never invoked by automated commands/skills/hooks."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  # ---- Template stub (1) — special case ----
+
+  feature-domain-specialist:
+    canonical_name: feature-domain-specialist
+    subagent_type: feature-domain-specialist
+    template_version: "1.1.0"
+    template_frontmatter_sha256: null
+    category: domain-specialist
+    lifecycle: per-task
+    description: "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}."
+    domain: development
+    intent: [domain, architecture, compliance]
+    runtime:
+      model: sonnet
+      token_budget: 3000
+    tools:
+      allowed: [Read, Grep, Glob, Bash]
+      banned:
+        top_level: [Agent, Write, Edit, SendMessage]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to: []
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "Template stub — instantiated at L2 via /sync-l0 placeholder substitution"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [test, validate-patterns]
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "SCAFFOLD-BY-DESIGN (resolved): file frontmatter `name: {{DOMAIN}}-specialist` uses literal placeholders for L2 instantiation via /sync-l0. File basename `feature-domain-specialist.md` is the L0 catalog entry; runtime `name:` becomes the substituted form (e.g., `auth-domain-specialist`) after propagation."
+      - "INVARIANT EXEMPTION: NAMING_CONVENTION + CANONICAL_NAME_MATCHES_SUBAGENT_TYPE apply to RUNTIME form (post-substitution), not template form. Manifest entry uses placeholder values for the catalog index."
+      - "BODY SendMessage gap inherited from scaffold pattern — same fix needed at instantiation time. Per-instantiation tool grant should follow {{DOMAIN}}-specialist pattern with SendMessage included (consistent with W31.6 dev→arch→CP chain)."
+      - "USAGE: L1/L2 scaffold. Propagated via /sync-l0. User confirmed KEEP 2026-04-26."
+    aliases: ["{{DOMAIN}}-specialist (literal frontmatter name)"]
+    superseded_by: null
+    replaces: null
+
+  # ---- team-lead retired W31.6 ----
+  # team-lead.md was retired in PR #69 (W31.6). Canonical pattern: main agent IS
+  # team-lead (per docs/agents/main-agent-orchestration-guide.md). No subagent
+  # entry required in manifest — the orchestrator is the main conversation agent.

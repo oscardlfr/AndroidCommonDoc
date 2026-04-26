@@ -1,12 +1,12 @@
 ---
 name: platform-auditor
 description: "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks."
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, SendMessage
 model: sonnet
 domain: quality
 intent: [coherence, cross-module, architecture, audit]
 token_budget: 2000
-template_version: "1.1.0"
+template_version: "1.1.1"
 memory: project
 skills:
   - verify-kmp

@@ -1,7 +1,7 @@
 ---
 name: cross-platform-validator
 description: Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, SendMessage
 model: sonnet
 domain: quality
 intent: [platform, expect-actual, sourceset, kmp]
@@ -12,7 +12,7 @@ optional_capabilities:
   - jina
 skills:
   - verify-kmp
-template_version: "1.0.0"
+template_version: "1.0.1"
 ---
 
 ## Optional Capabilities
