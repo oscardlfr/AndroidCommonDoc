@@ -7,6 +7,7 @@
 //   - in-place sed          sed -i '...' file
 //   - in-place awk          awk -i inplace ...
 //   - python file write     python3 -c "open('foo','w').write(...)"
+//   - python heredoc write  python3 <<'EOF' ... open('foo','w') ... EOF
 //   - tee to file           tee foo.md (without /dev/null)
 //   - plain redirect        > file or >> file to a project path
 //
@@ -63,6 +64,13 @@ const AWK_INPLACE_RE = /\bawk\s+[^|<>;&'"]*?-i\s+inplace\b/;
 // closes before a pipe/semi, because architect bypasses are typically a
 // single python -c invocation.
 const PYTHON_WRITE_RE = /\bpython3?\s+-c\b[^|;&]*?open\s*\([^)]*['"]w[+ab]?['"]/;
+// `python3 <<'PYEOF' ... open(<file>,'w') ... PYEOF` — heredoc bypass that
+// avoided the `-c` form during W31.5/W31.6 (audit log entry 2026-04-21
+// arch-platform editing MIGRATIONS.json). Distinct from PYTHON_WRITE_RE
+// because heredoc-fed scripts can contain newlines that the [^|;&] class
+// blocks above filter out.
+const PYTHON_HEREDOC_WRITE_RE =
+  /\bpython3?\s+<<-?\s*['"]?[A-Za-z_]\w*['"]?[\s\S]*?open\s*\([^)]*['"]w[+ab]?['"]/;
 const TEE_WRITE_RE = /\btee\s+(?:-a\s+|--append\s+)?(['"]?)([^-\s|<>;&'"]+)\1/;
 
 function isExemptTarget(target) {
@@ -94,6 +102,10 @@ function detectViolation(cmd) {
 
   if (PYTHON_WRITE_RE.test(cmd)) {
     return { kind: "python -c open(...,'w')" };
+  }
+
+  if (PYTHON_HEREDOC_WRITE_RE.test(cmd)) {
+    return { kind: "python <<EOF open(...,'w')" };
   }
 
   for (const match of cmd.matchAll(new RegExp(TEE_WRITE_RE.source, 'g'))) {
