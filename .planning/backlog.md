@@ -497,6 +497,43 @@ W29 initially ran /pre-pr /check-outdated /audit-docs in L1 via test-specialist 
 
 ---
 
+### BL-W31.7-11 — Manifest ABI (agent-API stability validator) (MEDIUM)
+**Status**: backlog
+**Priority**: MEDIUM (consumer-side stability concern)
+**Source**: User question 2026-04-27 during Phase 3 round 1 wrap-up — "shouldn't we have something like Android's ABI?"
+
+**Problem**: Phase 2/3 manifest tooling detects:
+- DRIFT (template frontmatter ≠ manifest) — Phase 2 validator
+- Frontmatter SHA-256 baseline (any byte change → drift) — Phase 3 generator
+- Cross-cutting invariants (5 rules: ARCHITECT_NO_FILE_WRITE, IN_PROCESS_NO_AGENT, NAMING_CONVENTION, CANONICAL_NAME_MATCHES_SUBAGENT_TYPE, CONTEXT_PROVIDER_READ_ONLY)
+
+But it does NOT detect **breaking changes** that would invalidate downstream consumers:
+- Renaming `canonical_name` (breaks `Agent(subagent_type=...)` calls)
+- Removing entries from `dispatch.can_send_to` (breaks SendMessage callers)
+- Removing `tools.allowed` entries (caller's existing prompt may rely on them)
+- Renaming `subagent_type` (breaks Agent spawning)
+- Removing an agent entry entirely (breaks any caller still referencing it)
+- Reordering `intent[]` if downstream routing depends on first-match semantics
+
+**Comparison to Android's binary-compatibility-validator (BCV)**:
+- BCV diffs the public Kotlin API surface (`.api` files committed to the repo) and fails CI on incompatible changes
+- An "agent ABI" would diff a serialized manifest snapshot (e.g., `.claude/registry/agents.api`) against the live manifest and fail CI on incompatible changes
+- Compatible (additive) changes: new agent, new field, new optional capability, expanding `tools.allowed`, expanding `dispatch.can_send_to`
+- Incompatible: rename, remove, narrow, change required fields, change `subagent_type`, change `canonical_name`
+
+**Approach options**:
+- **Option A (snapshot file)**: commit `.claude/registry/agents.api` with the structural fingerprint of every agent (canonical_name, subagent_type, dispatch shape, required tools). PR diff vs baseline → flag breaking changes; require explicit `apiCheck()` analogous to BCV's `apiDump`.
+- **Option B (per-agent contract test)**: each manifest entry annotated with `stability: stable|experimental` field; stable entries enforce ABI rules.
+- **Option C (semantic-version field)**: bump `template_version` MAJOR for breaking, MINOR for additive, PATCH for fix. Validator checks: MAJOR-bump REQUIRED for breaking changes, BLOCK if not.
+
+**Recommended**: A + C. A catches the structural diff; C catches contract intent. C is already half-built (every agent has `template_version` SemVer).
+
+**Trigger**: when downstream consumers (skills, hooks, /work routing) start depending on manifest fields beyond `tools.allowed` and `description`. Currently Phase 4 pre-spawn hook will add `canonical_name + subagent_type` as load-bearing — that's the moment ABI becomes critical.
+
+**Related**: BL-W31.7-09 (verdict-to-disk protocol — also a consumer contract issue). BL-W31.7-10 (quality-gater consumer assumptions about project shape).
+
+---
+
 ### BL-W31.7-10 — quality-gater hardcodes Gradle/Kotlin protocol — fails on L0 (HIGH)
 **Status**: backlog
 **Priority**: HIGH (renders Phase 3 sequential gate unusable on L0 toolkit)

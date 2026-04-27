@@ -11,6 +11,23 @@ PS1_SCRIPT="$BATS_TEST_DIRNAME/../ps1/generate-template.ps1"
 REAL_PROJECT_ROOT="$BATS_TEST_DIRNAME/../.."
 TMP_DIR="${BATS_TEST_TMPDIR:-/tmp}/gen-template-smoke-$$"
 
+# Ensure mcp-server is built before any test that invokes the CLI directly.
+# CI runs `npx bats scripts/tests/*.bats` without a prior build step (the
+# Shell Script Tests workflow only installs bats), so this suite is responsible
+# for its own toolchain. Local runs typically have build/ already populated;
+# this is a no-op in that case.
+setup_file() {
+  local cli="$REAL_PROJECT_ROOT/mcp-server/build/cli/generate-template.js"
+  if [ ! -f "$cli" ]; then
+    if ! command -v npm >/dev/null 2>&1; then
+      skip "npm not on PATH; cannot build mcp-server CLI for bats suite"
+    fi
+    (cd "$REAL_PROJECT_ROOT/mcp-server" && npm ci --silent >/dev/null 2>&1 && npm run build --silent >/dev/null 2>&1) \
+      || skip "mcp-server build failed; bats suite cannot run"
+    [ -f "$cli" ] || skip "mcp-server build did not produce $cli"
+  fi
+}
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 # Build a minimal synthetic project under the REAL project root's build so the
