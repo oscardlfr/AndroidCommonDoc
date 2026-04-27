@@ -32,7 +32,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
 - **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, architecture guards, and dependency freshness
 - **38 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
-- **16 agent templates** for the 3-phase team model -- planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, plus business and domain specialist templates. Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
+- **38 agent templates** governing the workflow (canonical pattern: main agent IS team-lead, no separate `team-lead` subagent — see `docs/agents/main-agent-orchestration-guide.md`). Roster: 3 architects, 4 core specialists, 1 context-provider, 4 orchestrators (planner, quality-gater, full-audit-orchestrator, quality-gate-orchestrator), 5 validators, 7 auditors, 8 tool-class agents (codebase-mapper, researcher, advisor, debugger, verifier, etc.), 2 doc owners, 1 domain-specialist scaffold, 5 L1/L2 marketing/product templates. Manifest at `.claude/registry/agents.manifest.yaml` is the source of truth (PR #71); CI WARN-mode validator surfaces drift (PR #72). Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
 
 Install once, use across all your projects.
 
@@ -44,7 +44,15 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 
 | Wave | Date | PR | Theme |
 |------|------|----|-------|
-| 25 | 2026-04-21 | (in progress) | MCP wiring fix across 10 agents; context-provider v3.0 pattern pre-cache; ingestion loop closed (context-provider → team-lead approval → doc-updater → `ingest-content`) |
+| 31.7 | 2026-04-26 → 04-27 | [#71](https://github.com/oscardlfr/AndroidCommonDoc/pull/71), [#72](https://github.com/oscardlfr/AndroidCommonDoc/pull/72), [#73](https://github.com/oscardlfr/AndroidCommonDoc/pull/73) | agents-manifest workflow: Phase 1 seed (38/38 agents + 5 invariants), Phase 2 CI validators in WARN mode (manifest-validator.ts + drift-audit job), and `architect-bash-write-gate.js` hook closing the W31.5 Bash bypass (BL-W31.7-07) |
+| 31.6 | 2026-04-25 | [#69](https://github.com/oscardlfr/AndroidCommonDoc/pull/69) | agent-template cleanup + canonical pattern alignment; team-lead.md retired in favor of `docs/agents/main-agent-orchestration-guide.md` (main agent IS team-lead) |
+| 31 | 2026-04-24 | [#66](https://github.com/oscardlfr/AndroidCommonDoc/pull/66) | Pre-split hardening + BL-W31-00 + W18/W19 triage + CI fix for W30-latent registry drift |
+| 30 | 2026-04-24 | [#65](https://github.com/oscardlfr/AndroidCommonDoc/pull/65) | 10 backlog items + P3 enforcement hooks + BL-W30-11 planner T-BUG-015 fix |
+| 29 | 2026-04-23 | local + L1 [#28](https://github.com/oscardlfr/shared-kmp-libs/pull/28) | L0 → L1/L2 propagation; shared-kmp-libs manifest cleanup; DawSync local FF merge; api-contract-guardian CP gate |
+| 28 | 2026-04-22 | [#62](https://github.com/oscardlfr/AndroidCommonDoc/pull/62) | L0 housekeeping pre-W29: BL-W27-01..04 + W17 HIGH findings #1, #3-#5 |
+| 27 | 2026-04-22 | [#61](https://github.com/oscardlfr/AndroidCommonDoc/pull/61) | BL-W26-06 rollback W25 pattern-search MCP wiring; codified dev → arch → CP chain |
+| 26 | 2026-04-21 | [#60](https://github.com/oscardlfr/AndroidCommonDoc/pull/60) | BL-W26-01a MCP wiring for 4 agents + Bug #8 topology activation gate post-ExitPlanMode |
+| 25 | 2026-04-21 | [#59](https://github.com/oscardlfr/AndroidCommonDoc/pull/59) | MCP wiring fix across 10 agents; context-provider v3.0 pattern pre-cache; ingestion loop closed (context-provider → team-lead approval → doc-updater → `ingest-content`) |
 | 24 | 2026-04-20 | [#58](https://github.com/oscardlfr/AndroidCommonDoc/pull/58) | Bug #3 session teardown (`TeamDelete` before `TeamCreate`); P4 17 agent mirrors; team-lead 5.17.0 |
 | 23 | 2026-04-20 | [#57](https://github.com/oscardlfr/AndroidCommonDoc/pull/57) | S8 token meter + scope_doc_path + PREP/EXECUTE architect dispatch modes |
 | 22 | 2026-04-20 | [#56](https://github.com/oscardlfr/AndroidCommonDoc/pull/56) | Token topology S1–S7: team-lead → sonnet, spawn-prompt diet, RTK prefix, verdict-to-disk |

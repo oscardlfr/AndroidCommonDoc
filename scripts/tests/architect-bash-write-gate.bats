@@ -78,6 +78,18 @@ EOF' 'arch-testing'
   [[ "$output" == *"python -c"* ]]
 }
 
+@test "blocks python3 <<EOF heredoc with open(...,'w')" {
+  # Real bypass observed 2026-04-21 (arch-platform editing MIGRATIONS.json).
+  make_input "python3 << 'PYEOF'
+import json
+with open('setup/agent-templates/MIGRATIONS.json', 'w') as f:
+    json.dump({}, f)
+PYEOF" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"python <<EOF"* ]]
+}
+
 @test "blocks plain shell redirect to project file" {
   make_input "echo body > docs/new.md" 'arch-integration'
   run_hook
@@ -150,6 +162,16 @@ EOF' 'data-layer-specialist'
 
 @test "allows arch-testing pipe-only command (no redirect)" {
   make_input "ls -la | grep .md" 'arch-testing'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "allows python3 heredoc without open() write (read-only analysis)" {
+  make_input "python3 << 'PYEOF'
+import json
+data = json.load(open('foo.json', 'r'))
+print(len(data))
+PYEOF" 'arch-platform'
   run_hook
   [ "$status" -eq 0 ]
 }
