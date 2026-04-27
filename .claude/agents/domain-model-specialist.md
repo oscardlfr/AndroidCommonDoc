@@ -1,6 +1,6 @@
 ---
 name: domain-model-specialist
-description: "Implements domain layer â€” models, use cases, business logic. Reports to arch-platform."
+description: "Implements domain layer — models, use cases, business logic. Reports to arch-platform."
 tools: Read, Write, Edit, Bash, SendMessage
 model: sonnet
 domain: development

@@ -14,7 +14,7 @@
 #              validates `name` + `subagent_type` against this manifest.
 #
 # Author: team-lead, 2026-04-26 (W31.7 — agents-manifest seed Phase 1)
-# Status: SEED — Phase 1 COMPLETE. 38 / 38 agents populated, all surfaced misalignments RESOLVED. Not enforced yet (Phase 2 wires CI WARN mode).
+# Status: SEED — Phase 2 IN-FLIGHT — WARN validators wired in drift-audit.yml. 38 / 38 agents populated. Drift surfaced as warnings; nothing blocks merges yet (Phase 4 flips WARN → BLOCK).
 # =============================================================================
 
 manifest:
@@ -23,7 +23,7 @@ manifest:
   generator:
     name: "manual-seed-phase-1"
     version: "0.4.0"
-    notes: "Hand-extracted from setup/agent-templates/*.md frontmatter. 38/38 populated (Phase 1 complete). team-lead retired W31.6 (PR #69) — canonical pattern is main-agent-as-team-lead per docs/agents/main-agent-orchestration-guide.md. ALL surfaced misalignments resolved 2026-04-26: 4 mechanical fixes (platform-auditor, l0-coherence-auditor, module-lifecycle, cross-platform-validator — all SendMessage / dedup); 3 investigations resolved as intentional / out-of-scope (feature-domain-specialist scaffold, runtime drift Anthropic-side, find-pattern retention W27-scope-was-architects-only). Audit #6: 6 scaffolds + 4 manual-only + 1 sporadic doc-migrator + 27 actively-dispatched."
+    notes: "Hand-extracted from setup/agent-templates/*.md frontmatter. 38/38 populated (Phase 1 complete). team-lead retired W31.6 (PR #69) — canonical pattern is main-agent-as-team-lead per docs/agents/main-agent-orchestration-guide.md. ALL surfaced misalignments resolved 2026-04-26: 4 mechanical fixes (platform-auditor, l0-coherence-auditor, module-lifecycle, cross-platform-validator — all SendMessage / dedup); 3 investigations resolved as intentional / out-of-scope (feature-domain-specialist scaffold, runtime drift Anthropic-side, find-pattern retention W27-scope-was-architects-only). Audit #6: 6 scaffolds + 4 manual-only + 1 sporadic doc-migrator + 27 actively-dispatched. Phase 2 (2026-04-27): WARN-mode CI validator wired (scripts/sh/validate-manifest.sh + mcp-server/src/cli/validate-manifest.ts + .github/workflows/drift-audit.yml manifest-drift-warn job). Side fixes shipped alongside: NAMING_CONVENTION regex extended with -detector + -alignment suffixes; UTF-8 mojibake (â€”) in description fields of data-layer-specialist, domain-model-specialist, ui-specialist templates + mirrors restored to em-dash."
 
 paths_template:
   template: "setup/agent-templates/{canonical_name}.md"
@@ -66,11 +66,11 @@ invariants:
     rationale_ref: "GitHub#31977 (in-process peers lose Agent tool)"
 
   - id: NAMING_CONVENTION
-    description: "canonical_name must be one of: arch-*, *-specialist, *-orchestrator, *-validator, *-auditor, *-agent, *-mapper, *-strategist, *-creator, *-lead, *-migrator, *-lifecycle, context-provider, doc-updater, quality-gater, team-lead, advisor, debugger, researcher, verifier, planner."
+    description: "canonical_name must be one of: arch-*, *-specialist, *-orchestrator, *-validator, *-auditor, *-agent, *-mapper, *-strategist, *-creator, *-lead, *-migrator, *-lifecycle, *-detector, *-alignment, context-provider, doc-updater, quality-gater, team-lead, advisor, debugger, researcher, verifier, planner."
     applies_to: {}
     require:
-      canonical_name.pattern: "^(arch-.+|.+-specialist|.+-orchestrator|.+-validator|.+-auditor|.+-agent|.+-mapper|.+-strategist|.+-creator|.+-lead|.+-migrator|.+-lifecycle|context-provider|doc-updater|quality-gater|team-lead|advisor|debugger|researcher|verifier|planner)$"
-    rationale_ref: "W31.6 dev→specialist sweep + memory/MEMORY.md"
+      canonical_name.pattern: "^(arch-.+|.+-specialist|.+-orchestrator|.+-validator|.+-auditor|.+-agent|.+-mapper|.+-strategist|.+-creator|.+-lead|.+-migrator|.+-lifecycle|.+-detector|.+-alignment|context-provider|doc-updater|quality-gater|team-lead|advisor|debugger|researcher|verifier|planner)$"
+    rationale_ref: "W31.6 dev→specialist sweep + memory/MEMORY.md; W31.7 Phase 2 added -detector, -alignment for skill-script-alignment + doc-code-drift-detector"
 
   - id: CANONICAL_NAME_MATCHES_SUBAGENT_TYPE
     description: "In v1, canonical_name and subagent_type must be identical. No aliases. This prevents the test-dev/test-specialist class of bug surfaced in W31.7 session."

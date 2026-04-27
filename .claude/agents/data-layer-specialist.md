@@ -1,6 +1,6 @@
 ---
 name: data-layer-specialist
-description: "Implements data layer â€” repositories, database, network, caching. Reports to arch-platform and arch-integration."
+description: "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration."
 tools: Read, Write, Edit, Bash, SendMessage
 model: sonnet
 domain: development
