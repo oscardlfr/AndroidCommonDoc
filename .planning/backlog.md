@@ -423,84 +423,74 @@ W29 initially ran /pre-pr /check-outdated /audit-docs in L1 via test-specialist 
 
 ---
 
-## Wave 31.7 — Canonical Pattern Deep Refactor (PENDING USER REVIEW)
+## Wave 31.7 — Canonical Pattern Deep Refactor (TRIAGED 2026-04-27)
 
-> Items detectados en W31.6 al cotejar con doc canónica de Anthropic (https://code.claude.com/docs/en/agent-teams). Marcados como **PENDING REVIEW** — discutir con usuario antes de scope-locking en W31.7.
+> Items detectados en W31.6 al cotejar con doc canónica de Anthropic (https://code.claude.com/docs/en/agent-teams). **Triaged 2026-04-27 post-PR #73**: BL-07 SHIPPED, BL-06 partially addressed (audit complete), BL-01..05 deferred to a fresh session focused on Phase 3 / W31.8 since each requires a multi-hour design discussion.
 
-### BL-W31.7-01 (PENDING REVIEW) — Flat-spawning real
+### BL-W31.7-01 (DEFERRED — fresh session) — Flat-spawning real
 
-**Status**: Pending user discussion
-**Priority**: HIGH (pending confirmation)
+**Status**: Deferred to fresh session (post-Phase-3 milestone)
+**Priority**: HIGH
 **Spec**: Main spawnea los 4 devs core (data-layer-specialist, domain-model-specialist, ui-specialist, test-specialist) como peers desde Phase 1 — no nested via arquitectos. Arquitectos solo coordinan vía SendMessage a devs que ya son peers.
 **Impacto**: ~40 archivos afectados (todos los templates de arch + devs + docs/agents/*). Cambio profundo en cómo arquitectos dispatch trabajo.
-**Razón pending**: Confirmar con usuario si el cambio merece el esfuerzo, o si nested spawning con PREP/EXECUTE es aceptable como permanente.
+**Why deferred**: Architectural decision with broad blast radius — needs a dedicated planning session, not a closeout. Pairs naturally with BL-W31.7-05 (eliminar Phase 1/2/3 split).
 
 ---
 
-### BL-W31.7-02 (PENDING REVIEW) — Pull-model task claiming
+### BL-W31.7-02 (DEFERRED — fresh session) — Pull-model task claiming
 
-**Status**: Pending user discussion
-**Priority**: MEDIUM (pending confirmation)
+**Status**: Deferred to fresh session
+**Priority**: MEDIUM
 **Spec**: Peers idle ven TaskList y claiman tasks vía `TaskUpdate(owner=self)` en vez de push desde main vía `TaskUpdate(owner=other)`.
 **Impacto**: Reentrenar templates de todos los peers para añadir "check TaskList on idle, claim available tasks" en lugar de "wait for assignment".
-**Razón pending**: Push-model actual funciona; pull-model puede crear race conditions o tasks unclaimed. Validar con usuario.
+**Why deferred**: Push-model actual funciona; pull-model puede crear race conditions o tasks unclaimed. Necesita prototipo + observación antes de cambiar templates de prod.
 
 ---
 
-### BL-W31.7-03 (PENDING REVIEW) — Reducción de hooks
+### BL-W31.7-03 (DEFERRED — fresh session) — Reducción de hooks
 
-**Status**: Pending user discussion
-**Priority**: MEDIUM (pending confirmation)
+**Status**: Deferred to fresh session
+**Priority**: MEDIUM
 **Spec**: Auditar hooks (`context-provider-gate.js`, `scope-immutability-gate.js`, `addressee-liveness-gate.js`) y consolidar/eliminar redundantes. Doc canónica usa prompts y tools — no hooks bash.
 **Impacto**: Riesgo de regresión en enforcement (hooks bloquean violations mecánicamente, prompts solo guían).
-**Razón pending**: Necesitamos audit de cuántas violations cada hook ha bloqueado en últimas N waves antes de eliminar.
+**Why deferred**: Necesitamos telemetría de cuántas violations cada hook ha bloqueado en últimas N waves antes de eliminar. `tool-use-analytics` MCP debe correrse primero.
 
 ---
 
-### BL-W31.7-04 (PENDING REVIEW) — Spawn-prompt diet pass 2
+### BL-W31.7-04 (DEFERRED — fresh session) — Spawn-prompt diet pass 2
 
-**Status**: Pending user discussion
-**Priority**: MEDIUM (pending confirmation)
+**Status**: Deferred to fresh session
+**Priority**: MEDIUM
 **Spec**: Bajar payload de spawn prompts de KB → bytes. Wave 22 hizo pass 1 (~30% reducción). Faltan pass 2 y 3.
 **Impacto**: Reduce token cost por sesión.
-**Razón pending**: Identificar qué contenido es realmente esencial vs. boilerplate redundante.
+**Why deferred**: Touches cada spawn prompt — coordinated rewrite across templates. Más coherente como dedicated wave de polish.
 
 ---
 
-### BL-W31.7-05 (PENDING REVIEW) — Eliminar Phase 1/2/3 split
+### BL-W31.7-05 (DEFERRED — fresh session) — Eliminar Phase 1/2/3 split
 
-**Status**: Pending user discussion
-**Priority**: MEDIUM (pending confirmation)
+**Status**: Deferred to fresh session (paired with BL-W31.7-01)
+**Priority**: MEDIUM
 **Spec**: Doc canónica no tiene fases. Refactorizar `tl-session-setup.md` y guías para "spawn equipo, empezar" — sin fases discretas.
 **Impacto**: Cambio de modelo mental significativo. Coordinación con doc-updater para reescribir guías.
-**Razón pending**: Las fases nos sirven para gating (planning antes de execution); validar si el split es necesario o sobrecarga.
+**Why deferred**: Diseño accoplado a BL-W31.7-01 (flat-spawning real). Decisión de juntarlos vs separarlos pertenece a la fresh session.
 
 ---
 
-### BL-W31.7-06 (PENDING REVIEW) — Architect Bash-write workaround tightening
-**Status**: Pending user discussion
-**Spec**: arch-testing during W31.6 used `Bash` + Python scripts to edit files because architects don't have Write/Edit by design. This bypasses the "architects ≠ coders" principle (memory `feedback_architect_writes_code.md`). Options to tighten:
-- Remove `Bash` from architect tools entirely (forces dispatch to dev specialist)
-- Hook that blocks Bash-invoked file writes (heredoc, python edit, sed, awk) when invoked by architect agents
-- Or accept the workaround and document it as legitimate (when no specialist with Write tool is on the team yet)
-**Impacto**: Tightens enforcement of architect role boundary, but architects lose Bash capability for legitimate uses (running tests, git, validation scripts).
-**Razón pending**: Need user input on whether the boundary is principled or pragmatic. Bash is needed by architects for verification (npm test, validate, etc.) — full removal isn't viable. Hook-based selective block is more nuanced.
+### BL-W31.7-06 (✅ SHIPPED — audit complete) — Architect Bash-write workaround tightening
+**Status**: Done. Substantially addressed by PR #73; closeout audit 2026-04-27 ran the architect tool-use-log entries from W31.5 / W31.6 against the new hook and surfaced one gap (python heredoc), which was patched in the same closeout session.
+**Spec**: arch-testing during W31.6 used `Bash` + Python scripts to edit files because architects don't have Write/Edit by design. Original options:
+- Remove `Bash` from architect tools entirely (forces dispatch to dev specialist) — REJECTED, breaks legitimate verification work.
+- Hook that blocks Bash-invoked file writes (heredoc, python edit, sed, awk) when invoked by architect agents — **ADOPTED** as BL-W31.7-07.
+- Or accept the workaround and document it as legitimate — REJECTED, undermines role boundary.
+**Resolution**: Hook approach landed in PR #73 (`architect-bash-write-gate.js`). Initial 6 bypass patterns covered (heredoc redirect, sed -i, awk -i inplace, python -c open(...,'w'), tee write, plain shell redirect).
+**Audit findings (2026-04-27 closeout)**: Cross-referenced `.androidcommondoc/tool-use-log.jsonl` for `agent_type` matching `arch-*` and `tool_name` `Bash`. Confirmed 5 of 6 patterns trigger correctly on real W31.5/W31.6 invocations (e.g. `cat > MIGRATIONS.json <<EOF`, `sed -i 's/...' file`, `cat > .../setup/agent-templates/...`, etc.). **One gap discovered**: `python3 << 'PYEOF' ... open(...,'w') ... PYEOF` heredoc form — observed 2026-04-21 with `arch-platform` editing `MIGRATIONS.json`. The `-c` flag was the regex anchor, so heredoc-fed python scripts slipped through. **Patched in same closeout PR**: added `PYTHON_HEREDOC_WRITE_RE` + 2 bats (`blocks python3 <<EOF heredoc with open(...,'w')` + `allows python3 heredoc without open() write`). Hook now covers 7 patterns; bats grew 21 → 23.
 
 ---
 
-### BL-W31.7-07 (HIGH, PENDING REVIEW) — Architect Bash file-write hook (concrete enforcement)
-**Status**: Pending user discussion (concrete spec, testable)
-**Spec**: Implement `.claude/hooks/architect-bash-write-gate.js` that intercepts Bash invocations and blocks file-mutating patterns when invoked by an agent whose `agentType` starts with `arch-`. Patterns to block:
-- Output redirection: `> file`, `>> file` (shell heredoc patterns: `<< 'EOF'`, `cat <<EOF > file`)
-- In-place editors: `sed -i`, `awk -i inplace`, `gawk -i inplace`
-- Python file-write: `python -c '...open(...,"w")'`, `python ... > file`
-- Direct file-creating tools: `tee file`, `printf > file`, `echo > file`
-- npm/git commands that mutate workspace: allowed (architect needs `git status`, `npm test`, `gradle build` for verification)
-
-**Acceptance criteria**:
-- Hook blocks pattern matches for arch-* agents with clear error message: "Architects must dispatch Write/Edit work to a dev specialist via SendMessage. Workaround attempted: <command>."
-- Hook test suite covers: 5+ blocked patterns + 5+ allowed patterns (git, npm test, validate-agents, etc.)
-- Discovered in W31.6 — all 3 architects (arch-platform, arch-testing, arch-integration) bypassed Write/Edit ban via Bash. Tests passed but architecture principle violated.
-- Pairs with BL-W31.7-06 ("options menu") and BL-W31.7-01 (flat-spawning real, which makes architect direct edits even less defensible).
-
-**Razón pending**: hook implementation is well-defined but needs user signoff before W31.7 scope-lock. Some commands are ambiguous (e.g., `python -m pytest > result.txt` is verification, not file mutation in spirit). Pattern list needs review.
+### BL-W31.7-07 (✅ SHIPPED 2026-04-27 — PR #73 commit 0514058) — Architect Bash file-write hook
+**Status**: Done. `.claude/hooks/architect-bash-write-gate.js` (≈110 LOC) + `scripts/tests/architect-bash-write-gate.bats` (21 tests) + wired into `PreToolUse → Bash` matcher in `.claude/settings.json`. Pairs with `architect-self-edit-gate.js` to fully close the W31.5 architect Write/Edit bypass surface.
+**Patterns blocked**: heredoc redirect, sed -i / --in-place, awk -i inplace, python(3)? -c open(...,'w'), tee write, plain `>` / `>>` redirect to non-exempt targets.
+**Exempt write targets**: `/tmp/*`, `$TMPDIR/*`, `/dev/null`, `/dev/std*`, `.planning/wave*/arch-*-verdict.md`, `.androidcommondoc/audit-log.jsonl`.
+**Test deltas**: 21 bats covering each block pattern, each exempt target, non-arch passthrough, read-only bash, fd-2 redirects, malformed input.
+**CI**: 19/19 green on merge commit. Commit Lint required one amend (scope `(agents,hooks)` → `(agents)`; `hooks` not in valid scope list).

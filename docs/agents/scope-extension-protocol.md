@@ -152,6 +152,20 @@ arch-testing commits out-of-scope changes with scope change buried in a large di
   ❌ Audit log + wave-close review catches this; retroactive authorization costs more time
 ```
 
+## Companion Hooks (Architect Tool Boundary)
+
+`architect-scope-gate.js` is one of three companion hooks that mechanically enforce the architect-tool-boundary policy. All three are wired into `.claude/settings.json` under `PreToolUse`. Together they prevent architects from authoring code or docs through ANY tool path — architects detect, plan, and verify; specialists implement.
+
+| Hook | Trigger | Blocks |
+|------|---------|--------|
+| `architect-scope-gate.js` | `PreToolUse` on `Write`/`Edit` | Out-of-scope file edits (this doc) |
+| `architect-self-edit-gate.js` | `PreToolUse` on `Write`/`Edit` | Any source/template edit by `arch-*` agents — only `.planning/wave*/arch-*-verdict.md` allowed |
+| `architect-bash-write-gate.js` | `PreToolUse` on `Bash` | Bash bypass patterns: heredoc redirect, `sed -i`, `awk -i inplace`, `python -c open(...,'w')`, `python <<EOF` heredoc with `open(...,'w')`, `tee` to file, plain `>`/`>>` shell redirect. Exempt targets: `/tmp/*`, `$TMPDIR/*`, `/dev/null`, `/dev/std*`, `.planning/wave*/arch-*-verdict.md`, `.androidcommondoc/audit-log.jsonl` |
+
+When designing a new architect-class agent, audit it against all three hooks: any tool the agent uses must satisfy each gate's contract.
+
+Test coverage lives in `scripts/tests/architect-self-edit-gate.bats` (5 tests) and `scripts/tests/architect-bash-write-gate.bats` (23 tests). The scope-gate test surface is integration-tested via the `scope-extension-protocol` Vitest suite.
+
 ## Relationship to Other Patterns
 
 | Pattern | Relevance |
@@ -160,6 +174,7 @@ arch-testing commits out-of-scope changes with scope change buried in a large di
 | [`tl-verification-gates`](tl-verification-gates.md) | Architect APPROVE/ESCALATE verdicts — scope violations discovered here trigger ESCALATE, not silent fix |
 | Memory: `feedback_scope_extension_protocol` | Historical context: Wave 20 incidents that prompted this protocol |
 | Memory: `feedback_amend_requires_explicit_user_request` | Related: architect dispatch ≠ user authorization for amend-class changes |
+| Memory: `feedback_architect_writes_code.md` | Recurring root pattern that motivated all three companion hooks |
 
 ## Rules
 
