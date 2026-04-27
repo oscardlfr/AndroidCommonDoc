@@ -49,8 +49,9 @@ tmp/
 !.planning/backlog.md
 !.planning/wave*-propagation-plan.md
 # W31.7: architect verdicts are session-scoped scratch files (`.gitignore`
-# pattern at line 47 only matches depth 1; subdir needs its own rule).
+# pattern at line 47 only matches depth 1; subdirs need their own rules).
 .planning/verdicts/
+.planning/wave*/
 
 # ── Local agent memory & settings (per-user) ──
 .claude/agent-memory/

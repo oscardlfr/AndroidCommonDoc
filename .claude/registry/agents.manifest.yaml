@@ -14,7 +14,7 @@
 #              validates `name` + `subagent_type` against this manifest.
 #
 # Author: team-lead, 2026-04-26 (W31.7 — agents-manifest seed Phase 1)
-# Status: SEED — Phase 2 IN-FLIGHT — WARN validators wired in drift-audit.yml. 38 / 38 agents populated. Drift surfaced as warnings; nothing blocks merges yet (Phase 4 flips WARN → BLOCK).
+# Status: Phase 3 ROUND 1 SHIPPED — generator at mcp-server/src/registry/template-generator.ts + CLI generate-template.ts. arch-platform / arch-testing / arch-integration regenerated; SHA-256 baselines populated. 35 agents pending future rounds. WARN-mode validators still active in drift-audit.yml. Phase 4 flips validator WARN → BLOCK + adds pre-Agent-spawn hook once all 38 templates reach canonical state.
 # =============================================================================
 
 manifest:
@@ -23,7 +23,7 @@ manifest:
   generator:
     name: "manual-seed-phase-1"
     version: "0.4.0"
-    notes: "Hand-extracted from setup/agent-templates/*.md frontmatter. 38/38 populated (Phase 1 complete). team-lead retired W31.6 (PR #69) — canonical pattern is main-agent-as-team-lead per docs/agents/main-agent-orchestration-guide.md. ALL surfaced misalignments resolved 2026-04-26: 4 mechanical fixes (platform-auditor, l0-coherence-auditor, module-lifecycle, cross-platform-validator — all SendMessage / dedup); 3 investigations resolved as intentional / out-of-scope (feature-domain-specialist scaffold, runtime drift Anthropic-side, find-pattern retention W27-scope-was-architects-only). Audit #6: 6 scaffolds + 4 manual-only + 1 sporadic doc-migrator + 27 actively-dispatched. Phase 2 (2026-04-27): WARN-mode CI validator wired (scripts/sh/validate-manifest.sh + mcp-server/src/cli/validate-manifest.ts + .github/workflows/drift-audit.yml manifest-drift-warn job). Side fixes shipped alongside: NAMING_CONVENTION regex extended with -detector + -alignment suffixes; UTF-8 mojibake (â€”) in description fields of data-layer-specialist, domain-model-specialist, ui-specialist templates + mirrors restored to em-dash."
+    notes: "Hand-extracted from setup/agent-templates/*.md frontmatter. 38/38 populated (Phase 1 complete). team-lead retired W31.6 (PR #69) — canonical pattern is main-agent-as-team-lead per docs/agents/main-agent-orchestration-guide.md. ALL surfaced misalignments resolved 2026-04-26: 4 mechanical fixes (platform-auditor, l0-coherence-auditor, module-lifecycle, cross-platform-validator — all SendMessage / dedup); 3 investigations resolved as intentional / out-of-scope (feature-domain-specialist scaffold, runtime drift Anthropic-side, find-pattern retention W27-scope-was-architects-only). Audit #6: 6 scaffolds + 4 manual-only + 1 sporadic doc-migrator + 27 actively-dispatched. Phase 2 (2026-04-27): WARN-mode CI validator wired (scripts/sh/validate-manifest.sh + mcp-server/src/cli/validate-manifest.ts + .github/workflows/drift-audit.yml manifest-drift-warn job). Side fixes shipped alongside: NAMING_CONVENTION regex extended with -detector + -alignment suffixes; UTF-8 mojibake (â€”) in description fields of data-layer-specialist, domain-model-specialist, ui-specialist templates + mirrors restored to em-dash. Phase 3 round 1 (2026-04-27): template-generator lib + CLI shipped; arch-platform / arch-testing / arch-integration SHA-256 baselines populated via surgical line-based writer (replaces yaml Document API which would have rewritten ~900 lines). 16/38 agents already canonical-aligned at round 1 boundary; 22/38 will be canonicalized in subsequent rounds before Phase 4."
 
 paths_template:
   template: "setup/agent-templates/{canonical_name}.md"
@@ -127,7 +127,7 @@ agents:
     canonical_name: arch-platform
     subagent_type: arch-platform
     template_version: "1.19.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: d4c72c96b402d431fc1d7356782aa34691332716d424fb553a6d107cc47a8cba
     category: architect
     lifecycle: ephemeral
     description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -182,7 +182,7 @@ agents:
     canonical_name: arch-testing
     subagent_type: arch-testing
     template_version: "1.21.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 392c30c958e74e6c199d09bd08690b109912a4cd2faf6e54b7d32c62e2a9e185
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -234,7 +234,7 @@ agents:
     canonical_name: arch-integration
     subagent_type: arch-integration
     template_version: "1.18.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 329fd8749b942c1db6ac68a58a1a2d99d5d19a0e72c14e6542e80eb91bcc86fb
     category: architect
     lifecycle: ephemeral
     description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."

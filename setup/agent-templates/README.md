@@ -55,6 +55,33 @@ These are **starting points** — adapt to your project's specific modules, cons
 | `marketing-lead.md` | Marketing orchestrator — campaigns, content, landing pages |
 | `landing-page-strategist.md` | Landing page copy, structure, CTAs, SEO strategy |
 
+## Generator (W31.7 Phase 3)
+
+Round 1 (PR #75): templates are now generated from `.claude/registry/agents.manifest.yaml` for `arch-platform`, `arch-testing`, `arch-integration`. Other 35 agents remain hand-edited until subsequent rounds; when 38/38 reach canonical state, Phase 4 flips the validator from WARN to BLOCK.
+
+**For generated agents, edit the manifest, not the template.** Hand-editing template frontmatter on a regenerated agent is drift the validator catches.
+
+```bash
+# Regenerate one agent (writes template + mirror, idempotent)
+node mcp-server/build/cli/generate-template.js arch-platform .
+
+# Read-only drift check (CI-ready, exit 1 on drift)
+node mcp-server/build/cli/generate-template.js arch-platform . --check
+
+# Batch over every manifest entry
+node mcp-server/build/cli/generate-template.js --all . --check
+
+# Regenerate + write SHA-256 baseline back to manifest
+node mcp-server/build/cli/generate-template.js arch-platform . --update-manifest-hash
+```
+
+Wrappers (script-parity rule): `scripts/sh/generate-template.sh`, `scripts/ps1/generate-template.ps1`.
+
+**Canonical frontmatter field order** (anchors round-1 SHA-256 baseline):
+`name → description → tools → model → domain → intent → token_budget → template_version → memory → skills → optional_capabilities`
+
+Optional fields are omitted entirely when null/undefined/empty. Body content is preserved byte-for-byte across regeneration — only the YAML frontmatter is authored from manifest data.
+
 ## Conventions
 
 All agents follow these conventions from L0:

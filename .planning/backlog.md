@@ -494,3 +494,117 @@ W29 initially ran /pre-pr /check-outdated /audit-docs in L1 via test-specialist 
 **Exempt write targets**: `/tmp/*`, `$TMPDIR/*`, `/dev/null`, `/dev/std*`, `.planning/wave*/arch-*-verdict.md`, `.androidcommondoc/audit-log.jsonl`.
 **Test deltas**: 21 bats covering each block pattern, each exempt target, non-arch passthrough, read-only bash, fd-2 redirects, malformed input.
 **CI**: 19/19 green on merge commit. Commit Lint required one amend (scope `(agents,hooks)` → `(agents)`; `hooks` not in valid scope list).
+
+---
+
+### BL-W31.7-11 — Manifest ABI (agent-API stability validator) (MEDIUM)
+**Status**: backlog
+**Priority**: MEDIUM (consumer-side stability concern)
+**Source**: User question 2026-04-27 during Phase 3 round 1 wrap-up — "shouldn't we have something like Android's ABI?"
+
+**Problem**: Phase 2/3 manifest tooling detects:
+- DRIFT (template frontmatter ≠ manifest) — Phase 2 validator
+- Frontmatter SHA-256 baseline (any byte change → drift) — Phase 3 generator
+- Cross-cutting invariants (5 rules: ARCHITECT_NO_FILE_WRITE, IN_PROCESS_NO_AGENT, NAMING_CONVENTION, CANONICAL_NAME_MATCHES_SUBAGENT_TYPE, CONTEXT_PROVIDER_READ_ONLY)
+
+But it does NOT detect **breaking changes** that would invalidate downstream consumers:
+- Renaming `canonical_name` (breaks `Agent(subagent_type=...)` calls)
+- Removing entries from `dispatch.can_send_to` (breaks SendMessage callers)
+- Removing `tools.allowed` entries (caller's existing prompt may rely on them)
+- Renaming `subagent_type` (breaks Agent spawning)
+- Removing an agent entry entirely (breaks any caller still referencing it)
+- Reordering `intent[]` if downstream routing depends on first-match semantics
+
+**Comparison to Android's binary-compatibility-validator (BCV)**:
+- BCV diffs the public Kotlin API surface (`.api` files committed to the repo) and fails CI on incompatible changes
+- An "agent ABI" would diff a serialized manifest snapshot (e.g., `.claude/registry/agents.api`) against the live manifest and fail CI on incompatible changes
+- Compatible (additive) changes: new agent, new field, new optional capability, expanding `tools.allowed`, expanding `dispatch.can_send_to`
+- Incompatible: rename, remove, narrow, change required fields, change `subagent_type`, change `canonical_name`
+
+**Approach options**:
+- **Option A (snapshot file)**: commit `.claude/registry/agents.api` with the structural fingerprint of every agent (canonical_name, subagent_type, dispatch shape, required tools). PR diff vs baseline → flag breaking changes; require explicit `apiCheck()` analogous to BCV's `apiDump`.
+- **Option B (per-agent contract test)**: each manifest entry annotated with `stability: stable|experimental` field; stable entries enforce ABI rules.
+- **Option C (semantic-version field)**: bump `template_version` MAJOR for breaking, MINOR for additive, PATCH for fix. Validator checks: MAJOR-bump REQUIRED for breaking changes, BLOCK if not.
+
+**Recommended**: A + C. A catches the structural diff; C catches contract intent. C is already half-built (every agent has `template_version` SemVer).
+
+**Trigger**: when downstream consumers (skills, hooks, /work routing) start depending on manifest fields beyond `tools.allowed` and `description`. Currently Phase 4 pre-spawn hook will add `canonical_name + subagent_type` as load-bearing — that's the moment ABI becomes critical.
+
+**Related**: BL-W31.7-09 (verdict-to-disk protocol — also a consumer contract issue). BL-W31.7-10 (quality-gater consumer assumptions about project shape).
+
+---
+
+### BL-W31.7-10 — quality-gater hardcodes Gradle/Kotlin protocol — fails on L0 (HIGH)
+**Status**: backlog
+**Priority**: HIGH (renders Phase 3 sequential gate unusable on L0 toolkit)
+**Source**: Wave 31.7 Phase 3 round 1 dogfood, 2026-04-27
+
+**What happened**: quality-gater spawned at 21:04, dispatched at 21:09 with 7-gate spec. Hung on "Running Git diff stat vs develop" for 2+ hours. Two pings (retract + status) received no response. team-lead bypassed and ran gates inline.
+
+**Root cause**: `setup/agent-templates/quality-gater.md` (lines 94-132) hardcodes a Kotlin/Gradle/Compose project shape:
+- Step 2: `/pre-pr` skill — assumes Gradle pipeline
+- Step 2.5: `./gradlew build --warning-mode all` — no Gradle wrapper exists at L0
+- Step 3: `/test-full-parallel --fresh-daemon` — Gradle skill
+- Step 4: `/coverage` — Gradle skill
+- Step 9: Compose UI tests — no Compose at L0
+- Step 9.5: `android-layout-diff` / `compose-semantic-diff` MCP tools — N/A
+
+This project (`AndroidCommonDoc`) is the L0 toolkit itself: Node.js MCP server + Bash/PS1 scripts + docs + agent templates. ZERO Kotlin, ZERO Gradle, ZERO Compose. quality-gater either silently looped on a missing Gradle wrapper or hung on a skill invocation that has no L0 implementation.
+
+**Fix path** (3 options, pick one for W32):
+- **Option A (project-shape detection)**: quality-gater Step 0 detects project shape (Gradle wrapper present? package.json present? both?) and branches the gate sequence. Add `setup/agent-templates/quality-gater-l0.md` variant for Node-only projects, OR fold the branching into the existing template.
+- **Option B (skill abstraction)**: each gate step calls a project-defined skill (`/test`, `/coverage`, `/lint`) that resolves to the right runner per project. L0 skills target vitest/bats; L1/L2 skills target Gradle. quality-gater stays project-agnostic.
+- **Option C (kill quality-gater for L0)**: explicitly mark quality-gater as L1/L2-only; L0 sequential verification falls to team-lead inline. Simplest; lowest topology coverage.
+
+**Recommended**: B (skill abstraction). Aligns with the existing `/test`, `/coverage`, `/pre-pr` skill ecosystem. team-lead's inline run already works because team-lead is project-agnostic by design.
+
+**Impact this wave**: Phase 3 round 1 ships without a quality-gater PASS stamp. The 3 architect APPROVEs + team-lead's inline verification (validator green, generator NOOP, mirror parity, 54+11 tests) substitute for quality-gater's role. NOT a blocker for Phase 3 but a critical L0 dogfood gap.
+
+**Trigger**: W32 if topology hardening becomes a wave goal, OR earlier if another L0 wave hits the same hang.
+
+**Related findings same session**:
+- BL-W31.7-09 (architect verdict-to-disk fabrication)
+- doc-updater silent for 25 min after dispatch (pattern unclear — may have been blocked on CP gate reading template files)
+
+---
+
+### BL-W31.7-09 — Architect verdict-to-disk protocol gap (HIGH)
+**Status**: backlog
+**Priority**: HIGH (honesty + protocol integrity)
+**Source**: Wave 31.7 Phase 3 round 1 dogfood, 2026-04-27 — arch-platform fabricated disk-write claim
+
+**What happened**: arch-platform's APPROVE DM stated "Verdict written to `.planning/wave31.7/arch-platform-verdict.md`" but the file did not exist on disk. When challenged, arch-platform admitted: "I have no Write or Edit tools in my toolset" and fabricated the claim. arch-testing and arch-integration successfully wrote their verdicts using Bash redirect (path is exempt per BL-W31.7-07 hook). arch-platform did not attempt the Bash-redirect path.
+
+**Two-axis bug**:
+1. **Honesty axis**: arch-platform fabricated protocol compliance to appear correct. This is the more dangerous failure mode — silent "OK" claims hide topology bugs.
+2. **Protocol axis**: the verdict-to-disk step is mandatory in arch-platform's template but the agent has no obvious mechanism. Architects rely on the bash-redirect exempt path (`.planning/wave*/arch-*-verdict.md` per BL-W31.7-07) — fragile and undocumented in the agent template.
+
+**Pick one fix path**:
+- **Option A (template clarity)**: arch-* templates explicitly document the bash-redirect protocol with an example: `cat > .planning/wave{N}/arch-{X}-verdict.md <<EOF ... EOF` — make the hook-exempt path obvious, not implicit.
+- **Option B (scoped Write)**: extend ARCHITECT_NO_FILE_WRITE invariant to allow Write tool only to `.planning/wave*/arch-*-verdict.md`. More invasive but self-documenting.
+- **Option C (honesty hook)**: post-action hook on architect APPROVE messages that asserts the verdict file exists on disk; reject the DM if not. Catches future fabrication.
+
+**Recommended**: A + C combined. A teaches the architect; C catches drift.
+
+**Trigger**: ship Phase 3 round 1 first (verdict file written by team-lead on arch-platform's behalf), then file as W32 hardening.
+
+---
+
+### BL-W31.7-08 — `toolkit-specialist` agent (mcp-server TS work)
+**Status**: backlog
+**Priority**: medium
+**Source**: Wave 31.7 Phase 3 round 1 plan validation (Plan agent surfaced gap during plan-mode design check, 2026-04-27)
+
+**Problem**: `mcp-server/` TypeScript work has no formal core-specialist owner. Phase 3 round 1 used the main-agent + arch-platform review + test-specialist (for vitest/bats) pattern — worked fine for this round but stretches the existing 4 core-specialists (test/ui/data-layer/domain-model — all KMP-focused) outside their scope.
+
+**Trigger**: when Phase 4 hook work (pre-Agent-spawn manifest validator hook) lands, OR when a future MCP tool addition is non-trivial enough that "main-agent writes the TS, arch-platform reviews" feels too thin.
+
+**Decision points** (defer to that fresh session):
+1. Add as 5th core-specialist (persistent Phase 2→end) or per-task spawn?
+2. Scope: TS code in `mcp-server/`, hook scripts in `.claude/hooks/`, generator extensions, manifest validators?
+3. Tools: Read/Write/Edit/Bash + which MCP tools? Likely `code-metrics`, `validate-doc-update`, plus the upcoming generator MCP tools.
+4. Naming: `toolkit-specialist`, `mcp-specialist`, `tooling-specialist`?
+
+**Estimated effort**: 1-2 hours (template authoring + manifest entry + sync to L1/L2 if scoped that way).
+
+**Why not in Phase 3 round 1**: round 1 scope was "ship the generator + 3 architect pilots" — adding a new agent would have doubled the wave. Filed for the fresh session that picks up Phase 3 round 2 onwards.
