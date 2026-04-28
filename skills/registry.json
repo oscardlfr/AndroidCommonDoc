@@ -2115,7 +2115,7 @@
       "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:1f696b318c85bf46ae925a0b3ef6d62fdd1ccaf260d75f32f18cf2ad55656225",
+      "hash": "sha256:1a11f9a8b6fdc5ad0987dcf29861b73dfb711cc7fe056fc93da292d5ce4c28d7",
       "dependencies": [],
       "frontmatter": {
         "name": "cross-platform-validator",
@@ -2210,7 +2210,7 @@
       "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:60363f9ae7841e15fdb48f98c59db5aad2ae8531fb043cea3b584bcc57baef81",
+      "hash": "sha256:d5777f30925f26794246f58d6dd1a384979e077b041016ec2d2fd3526507b0b2",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-alignment-agent",
@@ -2408,7 +2408,7 @@
       "description": "Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:42a4198ba09ad86cd1368733ad2ff32342bce81cb60a80fdb0671cb97f2d9642",
+      "hash": "sha256:9a074ff8a9347aa4a32a40666a61d4be458a9ef2887ffc3e4d031e1ba1502a88",
       "dependencies": [],
       "frontmatter": {
         "name": "l0-coherence-auditor",
@@ -2716,7 +2716,7 @@
       "description": "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:32ca9a93ad12921700047af4088b848607e53ed43aa949ea5fe0da6f1ba139f6",
+      "hash": "sha256:65760f4dbbe8e46c51a56ee222a3e4bddb1bf377b53cd0caa5d505577f1d2588",
       "dependencies": [],
       "frontmatter": {
         "name": "release-guardian-agent",
