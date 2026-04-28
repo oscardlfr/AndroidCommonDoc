@@ -893,7 +893,7 @@ agents:
     canonical_name: marketing-lead
     subagent_type: marketing-lead
     template_version: "1.1.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: cbe4a2591e7f4345209bddd4491fc2805ffc52bedd8e75dfaccae7c6a10717a4
     category: lead
     lifecycle: persistent
     description: "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists."
@@ -954,7 +954,7 @@ agents:
     canonical_name: product-lead
     subagent_type: product-lead
     template_version: "1.1.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 0ac087e19ac14a1782f76768550c4f48247563be5c53dfe6ce87a6c9347eaf45
     category: lead
     lifecycle: persistent
     description: "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code."
@@ -1299,7 +1299,7 @@ agents:
     canonical_name: platform-auditor
     subagent_type: platform-auditor
     template_version: "1.1.1"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 08f2b33382f0aa24521c8f515f93b0ca242b3878a8afc2ed980e89890e05499f
     category: auditor
     lifecycle: per-task
     description: "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks."
@@ -1543,7 +1543,7 @@ agents:
     canonical_name: planner
     subagent_type: planner
     template_version: "1.7.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: f7195bdc3f8c97849855f3e6059e3b3a466ee4888a99a1b8daa1c4e762bebfaa
     category: orchestrator
     lifecycle: ephemeral
     description: "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team."
@@ -1779,7 +1779,7 @@ agents:
     canonical_name: module-lifecycle
     subagent_type: module-lifecycle
     template_version: "1.1.1"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: a4a976287201ee10896f53cb44137c65ce6f23f1fc8c8586fabb01e9e0dd1485
     category: tool
     lifecycle: per-task
     description: "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules."
