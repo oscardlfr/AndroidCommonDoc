@@ -6,8 +6,8 @@ model: haiku
 domain: audit
 intent: [parity, ps1, sh, script]
 token_budget: 2000
-memory: project
 template_version: "1.0.0"
+memory: project
 ---
 
 You validate functional parity between PowerShell (`scripts/ps1/`) and Bash (`scripts/sh/`) script pairs using static analysis only (no script execution). Follow these steps in order, collecting findings as you go, then produce the structured report at the end.

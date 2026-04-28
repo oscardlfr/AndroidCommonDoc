@@ -6,8 +6,8 @@ model: haiku
 domain: audit
 intent: [skill, script, alignment, command]
 token_budget: 2000
-memory: project
 template_version: "1.0.0"
+memory: project
 ---
 
 You verify alignment between Claude Code commands (`.claude/commands/*.md`) and their backing script implementations (`scripts/ps1/`, `scripts/sh/`). Follow these steps in order, collecting findings as you go, then produce the structured report at the end.

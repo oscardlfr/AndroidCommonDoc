@@ -1,13 +1,13 @@
 ---
 name: full-audit-orchestrator
-description: Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking.
+description: "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking."
 tools: Read, Grep, Glob, Bash, Agent, Write
 model: sonnet
 domain: audit
 intent: [full-audit, quality-gate, wave]
 token_budget: 4000
-memory: project
 template_version: "1.0.0"
+memory: project
 ---
 
 You orchestrate the unified full-audit process. You receive a profile configuration and execute checks in waves, collecting and deduplicating findings into a single consolidated report.
