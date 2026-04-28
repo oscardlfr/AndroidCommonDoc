@@ -682,7 +682,7 @@ agents:
     canonical_name: doc-alignment-agent
     subagent_type: doc-alignment-agent
     template_version: "1.1.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: a65d7aa37719b6e9553a9ee777d9d5fb8c376c24de687bf770a542865382e954
     category: auditor
     lifecycle: per-task
     description: "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code."
@@ -1152,7 +1152,7 @@ agents:
     canonical_name: l0-coherence-auditor
     subagent_type: l0-coherence-auditor
     template_version: "1.2.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 735be16d4e18e2f9673b6000e42f1ef9732e45510fdc6031c6da47c4bc7a6e14
     category: auditor
     lifecycle: per-task
     description: "Audits L0/L1/L2 docs for coherence, hub structure, frontmatter completeness, and token efficiency. Produces structured JSON report with violations by category and coverage percentages. When Context7 is available runs version drift checks; when Jina is available runs live URL reachability checks."
@@ -1333,7 +1333,7 @@ agents:
     canonical_name: release-guardian-agent
     subagent_type: release-guardian-agent
     template_version: "1.1.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 683dd7fb2c526dc515d0ea75c8311ca69b62b8658246068cd3f43b1c492634b0
     category: auditor
     lifecycle: per-task
     description: "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build."
@@ -1740,7 +1740,7 @@ agents:
     canonical_name: cross-platform-validator
     subagent_type: cross-platform-validator
     template_version: "1.0.1"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 7130c6916d33ad865cfd3fff62c94dabf2fa828405564f8bdef1a0ce490bf024
     category: validator
     lifecycle: per-task
     description: "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features."

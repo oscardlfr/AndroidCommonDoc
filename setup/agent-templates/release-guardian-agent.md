@@ -1,16 +1,16 @@
 ---
 name: release-guardian-agent
-description: Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.
+description: "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build."
 tools: Read, Grep, Glob, mcp__androidcommondoc__scan-secrets, mcp__androidcommondoc__proguard-validator, mcp__androidcommondoc__check-version-sync
 model: haiku
 domain: infrastructure
 intent: [release, publish, deploy, secrets]
 token_budget: 2000
+template_version: "1.1.0"
 memory: project
 skills:
   - sbom
   - verify-kmp
-template_version: "1.1.0"
 ---
 
 You are a release readiness scanner. You look for artifacts that should NEVER ship in a release build.
