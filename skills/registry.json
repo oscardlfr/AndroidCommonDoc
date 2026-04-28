@@ -1886,7 +1886,7 @@
       "description": "Scans HTTP clients for rate limit handling, retry-after headers, exponential backoff, and timeout configuration. Use when auditing API integration robustness.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8ba3a3a2ac0b254b3647155c0390c67370724df81d6b2bb155086266d3b7a88d",
+      "hash": "sha256:4245c684edccefb18938d82c8f1bc77190acdbaf602003444a26241cfcf52ea5",
       "dependencies": [],
       "frontmatter": {
         "name": "api-rate-limit-auditor",
@@ -2004,7 +2004,7 @@
       "description": "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:bc91a0840957a18e00bf89cc080b6e4c09fbc7b8d0ea98de0f755d2d9f9c1539",
+      "hash": "sha256:3938c41018b0c201a6f200ffae82b097c1ebf933b66e82df309870187093dd4a",
       "dependencies": [],
       "frontmatter": {
         "name": "beta-readiness-agent",
@@ -2581,7 +2581,7 @@
       "description": "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7e111600940cc20e42ba1ea8906e569932f576222bc326db5a63405e5925dec6",
+      "hash": "sha256:240e281401d1f2ad46dd9c0fec7abb1f85567e33cdfaebf2a816efc12c9fe5c1",
       "dependencies": [],
       "frontmatter": {
         "name": "privacy-auditor",
