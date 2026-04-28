@@ -6,9 +6,9 @@ model: sonnet
 domain: infrastructure
 intent: [map, architecture, modules, structure, inventory]
 token_budget: 2000
+template_version: "1.1.0"
 skills:
   - map-codebase
-template_version: "1.1.0"
 ---
 
 You are a codebase analyst. You systematically explore a codebase and produce structured documentation about its architecture, patterns, and quality.

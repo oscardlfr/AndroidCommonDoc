@@ -1860,7 +1860,7 @@
       "description": "Researches a single technical decision and returns a structured comparison table with recommendation. Use when choosing between approaches, libraries, or architectures.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a7eb1654af2d5055d0aa414e368ee67c8c38bd16440c5b90ab5a8ed0ff637cd9",
+      "hash": "sha256:7016d213e17b65be9f5342eb830d513a8b176f76512fa6dcbc445901903be146",
       "dependencies": [],
       "frontmatter": {
         "name": "advisor",
@@ -2034,7 +2034,7 @@
       "description": "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ac549b13231c59d5faab32f0ea52438d2fe6d41e42b6e41a3788d48602202974",
+      "hash": "sha256:c5b6829136538240338c5d124b6e9d33c86ed6fdbde74e86f21f4ed6a373f799",
       "dependencies": [],
       "frontmatter": {
         "name": "codebase-mapper",
@@ -2063,7 +2063,7 @@
       "description": "Drafts developer-focused content for build-in-public marketing. Creates posts for Reddit, Twitter/X, forums, and changelogs. Customize {{PRODUCT_NAME}} and tone for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:89f13742e770ecf19e128175ce25f126ecd4911ea5595475c9285e0db5eb0f95",
+      "hash": "sha256:0d9582695f55113f89c5e64cbff449b9bae2487c6ff9bdceb8b75d22539181f6",
       "dependencies": [],
       "frontmatter": {
         "name": "content-creator",
@@ -2179,7 +2179,7 @@
       "description": "Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4c89bb1f95b4351f3487d8e4f87245d5334d1cc185e554457d0da58ef89f8a07",
+      "hash": "sha256:c05f670b2e247e099c96e0d6ec2d4de191700c3fce04cd8d65cfa82320678746",
       "dependencies": [],
       "frontmatter": {
         "name": "debugger",
@@ -2444,7 +2444,7 @@
       "description": "Designs landing page copy, structure, and conversion flow. Use when planning public-facing web presence, optimizing CTAs, or improving SEO for product pages.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a7e17f8d0499b324f325c01f0423a25d143e0b99eb56a35119253d71ac471ed6",
+      "hash": "sha256:72060af3ca01a59a177ae2d941362d6bf80fb9e9eb8c0d482d1b3bb3926000a8",
       "dependencies": [],
       "frontmatter": {
         "name": "landing-page-strategist",
@@ -2637,7 +2637,7 @@
       "description": "Analyzes feature ideas against business goals using ICE scoring. Produces prioritized backlog with rationale. Customize {{PRODUCT_NAME}} and business constraints for your project.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a93da24121b63f808374efa8c5346ed281d60c24bea3cd19bab9eca94d6fa788",
+      "hash": "sha256:33853f5d56a5c57fbe8f958d42fcb05866e9ce40d76a38094018674c490c9138",
       "dependencies": [],
       "frontmatter": {
         "name": "product-strategist",
@@ -2746,7 +2746,7 @@
       "description": "Ad-hoc technical research on any topic. Use before implementation to gather context, evaluate options, or understand a domain.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1d0187f6ae8365c762382a9b42a966958bd9f6756ae74ecd7374125b5cd1d0f1",
+      "hash": "sha256:44718563bcd3699f71894c1ce927cd413ce2a3542a26d8db2754485073084628",
       "dependencies": [],
       "frontmatter": {
         "name": "researcher",
@@ -2919,7 +2919,7 @@
       "description": "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ed950c76aab2fd9eee15ff4d3a440c6ecdb6d5ffbca85f86eebf2f6d5b48f078",
+      "hash": "sha256:b48657f7d5506b793d4f37f8eea71fb2fdc54c2b6e2203e388d2c64fdf605289",
       "dependencies": [],
       "frontmatter": {
         "name": "verifier",

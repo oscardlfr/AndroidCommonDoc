@@ -1377,7 +1377,7 @@ agents:
     canonical_name: advisor
     subagent_type: advisor
     template_version: "1.0.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: e0d5cdaec632c5efaaa6ce5871b16a8acbb01735b4734d4210bda27532c4c06e
     category: tool
     lifecycle: per-task
     description: "Researches a single technical decision and returns a structured comparison table with recommendation. Use when choosing between approaches, libraries, or architectures."
@@ -1416,7 +1416,7 @@ agents:
     canonical_name: debugger
     subagent_type: debugger
     template_version: "1.0.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 1bcc43d933feaf46264d438a2047573176ce29aab9017177e8e4070f400637fb
     category: tool
     lifecycle: per-task
     description: "Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis."
@@ -1455,7 +1455,7 @@ agents:
     canonical_name: researcher
     subagent_type: researcher
     template_version: "1.0.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 8c850a7d3afa8c25705a1c310c5ea6f21b6f37ebae2c692d083e56e05ef58653
     category: tool
     lifecycle: per-task
     description: "Ad-hoc technical research on any topic. Use before implementation to gather context, evaluate options, or understand a domain."
@@ -1494,7 +1494,7 @@ agents:
     canonical_name: verifier
     subagent_type: verifier
     template_version: "1.1.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 86dbed61070a092c98ad1253ea270286ff78d4af82aca06b81a14a75a1038f40
     category: tool
     lifecycle: per-task
     description: "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec."
@@ -1580,7 +1580,7 @@ agents:
     canonical_name: codebase-mapper
     subagent_type: codebase-mapper
     template_version: "1.1.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 3d574433d66771b61159c96dc2e4230c6787ef8c31b19a5fad746b49de3dfa7e
     category: tool
     lifecycle: per-task
     description: "Explores and documents codebase architecture. Two modes: --inventory (generates MODULE_MAP.md for plan mode context) or --full (deep analysis by focus area)."
@@ -1632,7 +1632,7 @@ agents:
     canonical_name: content-creator
     subagent_type: content-creator
     template_version: "1.1.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 3dd11e30e9a91e7f9e9707ba1ee711955181f711c27e8849a4e7f24cc6651c5b
     category: tool
     lifecycle: per-task
     description: "Drafts developer-focused content for build-in-public marketing. Creates posts for Reddit, Twitter/X, forums, and changelogs. Customize {{PRODUCT_NAME}} and tone for your project."
@@ -1668,7 +1668,7 @@ agents:
     canonical_name: landing-page-strategist
     subagent_type: landing-page-strategist
     template_version: "1.1.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: d6da01bb4eaba43266eda5dd6fd1dd9fb17daa8bba0cecf0db626819471ba501
     category: tool
     lifecycle: per-task
     description: "Designs landing page copy, structure, and conversion flow. Use when planning public-facing web presence, optimizing CTAs, or improving SEO for product pages."
@@ -1703,7 +1703,7 @@ agents:
     canonical_name: product-strategist
     subagent_type: product-strategist
     template_version: "1.1.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 73acc19d43fe79b69daa27a9e88b49606fe33196eaca2eb473881b09ea08b541
     category: tool
     lifecycle: per-task
     description: "Analyzes feature ideas against business goals using ICE scoring. Produces prioritized backlog with rationale. Customize {{PRODUCT_NAME}} and business constraints for your project."

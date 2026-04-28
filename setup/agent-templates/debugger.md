@@ -1,15 +1,16 @@
 ---
 name: debugger
-description: Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis.
+description: "Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis."
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch
 model: sonnet
 domain: development
 intent: [bug, error, fix, broken, crash, exception]
 token_budget: 2500
+template_version: "1.0.0"
 skills:
   - test
   - extract-errors
-template_version: "1.0.0"
+  - debug
 ---
 
 You are a systematic debugger. You investigate bugs using the scientific method: gather evidence, form hypotheses, test them one at a time, and fix with confidence.
