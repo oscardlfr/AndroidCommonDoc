@@ -736,7 +736,7 @@ agents:
     canonical_name: full-audit-orchestrator
     subagent_type: full-audit-orchestrator
     template_version: "1.0.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: de6f5bd076deb30182103796eae3062558baa5ecfbdb2924a28ff39e15043279
     category: orchestrator
     lifecycle: per-task
     description: "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking."
@@ -788,7 +788,7 @@ agents:
     canonical_name: quality-gate-orchestrator
     subagent_type: quality-gate-orchestrator
     template_version: "1.0.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: b1c8cb04901f6d92c9d486574bc3e7b567d726842de9214a0f50c5858e65bfa7
     category: orchestrator
     lifecycle: per-task
     description: "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement."
@@ -1020,7 +1020,7 @@ agents:
     canonical_name: script-parity-validator
     subagent_type: script-parity-validator
     template_version: "1.0.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 0d8cf15946c8b9080e58aadbc2da934b14ef26d76578c911df984399ed1d315e
     category: validator
     lifecycle: per-task
     description: "Internal validator -- invoked by quality-gate-orchestrator. Validates that PowerShell and Bash script pairs are functionally equivalent. Checks flags, output format, and exit codes between scripts/ps1/ and scripts/sh/."
@@ -1053,7 +1053,7 @@ agents:
     canonical_name: skill-script-alignment
     subagent_type: skill-script-alignment
     template_version: "1.0.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: a2d2cd77664d82e53f6481d51d3d09c578e8e93e7dc6f06867679fe8e803cc1b
     category: validator
     lifecycle: per-task
     description: "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters."
@@ -1084,7 +1084,7 @@ agents:
     canonical_name: template-sync-validator
     subagent_type: template-sync-validator
     template_version: "1.0.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 9869eb702dd930c687a430baf4e4b7078b8c5b554604e509986de3fb122de2f0
     category: validator
     lifecycle: per-task
     description: "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Respects the copilot frontmatter field in skills/*/SKILL.md to determine expected coverage."
@@ -1116,7 +1116,7 @@ agents:
     canonical_name: doc-code-drift-detector
     subagent_type: doc-code-drift-detector
     template_version: "1.0.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: b3cf7c6a8a8e1f7852341aab07bcfba88b9b3e51732c3a58d4c6a6daa2690605
     category: validator
     lifecycle: per-task
     description: "Internal validator -- invoked by quality-gate-orchestrator. Detects drift between docs/*.md pattern documentation and what scripts/skills actually implement. Flags outdated patterns, missing validations, and version mismatches."

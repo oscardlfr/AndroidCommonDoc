@@ -6,8 +6,8 @@ model: haiku
 domain: audit
 intent: [drift, doc-code, pattern]
 token_budget: 2000
-memory: project
 template_version: "1.0.0"
+memory: project
 ---
 
 You detect drift between AndroidCommonDoc's pattern documentation (`docs/*.md`) and the actual implementations in scripts and skills. Follow these steps in order, collecting findings as you go, then produce the structured report at the end.

@@ -2242,7 +2242,7 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Detects drift between docs/*.md pattern documentation and what scripts/skills actually implement. Flags outdated patterns, missing validations, and version mismatches.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:cb72130acd6a3379b459d28f036f6c4e9e1712b1246d90c8dfbd59713555fb49",
+      "hash": "sha256:515a04534e01c7ac72e692b5c29c20fddc47744678cff6fc0605b2db8f373a86",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-code-drift-detector",
@@ -2383,7 +2383,7 @@
       "description": "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b89f49ebb10ce7795ac1c174a86a79837c9b1743579347eec88c151bde59a50b",
+      "hash": "sha256:235bf7dedf9d61d4f70fd85985d7a19adc55b4d041f9eafc2e297abf84d45d08",
       "dependencies": [],
       "frontmatter": {
         "name": "full-audit-orchestrator",
@@ -2665,7 +2665,7 @@
       "description": "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:d55c4b465990b8778d5f086167f4153f2e8726b6937006e7d3ee330bc0a92a41",
+      "hash": "sha256:a313bd46917ebbc70024058bc2b8683fdc4673b2b4bfde8550fe60ed77f488a1",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gate-orchestrator",
@@ -2772,7 +2772,7 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that PowerShell and Bash script pairs are functionally equivalent. Checks flags, output format, and exit codes between scripts/ps1/ and scripts/sh/.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:2f6ea95ddc864740defa6fed7ee7fe65d852fd407fc145857ba4ddaaa4fca66f",
+      "hash": "sha256:41b28254e0cddf405d8d09b7617ea1e33d9b6f058d0eb4ac97593a6bbb169116",
       "dependencies": [],
       "frontmatter": {
         "name": "script-parity-validator",
@@ -2798,7 +2798,7 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Verifies that Claude commands in .claude/commands/ match their script implementations. Checks flags, arguments, and documented behavior against actual script parameters.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:8849c535af2e8619bc31475348d39cbe9caaea9a42de8482a1fa1847e09bb68e",
+      "hash": "sha256:dda89aacfd7a22857ac114325ba598b5b27ee9b2e26b8a81c940f01027fb2620",
       "dependencies": [],
       "frontmatter": {
         "name": "skill-script-alignment",
@@ -2824,7 +2824,7 @@
       "description": "Internal validator -- invoked by quality-gate-orchestrator. Validates that setup/templates/ and setup/copilot-templates/ are synchronized with .claude/commands/. Respects the copilot frontmatter field in skills/*/SKILL.md to determine expected coverage.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:85393e116975a4308994f4a95f02f89aff4fdfaab1d03b45ff8be559571027b9",
+      "hash": "sha256:c28643705a720af00c6d3c0f671ed270d402bc0c35a94c7b0776f219058c9f65",
       "dependencies": [],
       "frontmatter": {
         "name": "template-sync-validator",
