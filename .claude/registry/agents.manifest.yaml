@@ -1195,7 +1195,7 @@ agents:
     canonical_name: api-rate-limit-auditor
     subagent_type: api-rate-limit-auditor
     template_version: "1.0.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: f5a38dd7748e990c02a23c36b2666c72f7a58ab4659fe3e7ca95e9e3f531dd90
     category: auditor
     lifecycle: per-task
     description: "Scans HTTP clients for rate limit handling, retry-after headers, exponential backoff, and timeout configuration. Use when auditing API integration robustness."
@@ -1226,7 +1226,7 @@ agents:
     canonical_name: beta-readiness-agent
     subagent_type: beta-readiness-agent
     template_version: "1.1.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: 0f2d3b175bf0599b0bf07d8f041bcc0ebbe6bb68848dcd216b19ac8dda46fb66
     category: auditor
     lifecycle: per-task
     description: "One-time deep audit for beta readiness. Validates all SHIPPED features are tested, tier limits enforced, onboarding wired, error handling complete, and crash safety verified. Use before first beta release."
@@ -1267,7 +1267,7 @@ agents:
     canonical_name: privacy-auditor
     subagent_type: privacy-auditor
     template_version: "1.0.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: b0d6de5bca3f5173e54f27c1d2fc739e75066e6c0cfab99908b77b7a5025b61a
     category: auditor
     lifecycle: per-task
     description: "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits."

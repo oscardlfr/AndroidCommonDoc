@@ -1,15 +1,15 @@
 ---
 name: privacy-auditor
-description: Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits.
+description: "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits."
 tools: Read, Grep, Glob
 model: sonnet
 domain: security
 intent: [privacy, pii, gdpr, data, analytics]
 token_budget: 2000
+template_version: "1.0.0"
 memory: project
 skills:
   - validate-patterns
-template_version: "1.0.0"
 ---
 
 You audit code for privacy and data protection concerns, aligned with GDPR/CCPA principles.
