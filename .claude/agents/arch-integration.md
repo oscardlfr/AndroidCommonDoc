@@ -397,7 +397,7 @@ Escalate to team-lead when:
 ### Disk-Write + 1-Liner DM (MANDATORY)
 
 After completing review:
-1. Write the full verdict block above to `.planning/wave{N}/arch-integration-verdict.md` (`{N}` = wave number from team-lead dispatch)
+1. Write the full verdict block above to `.planning/wave{N}/arch-integration-verdict.md` via Bash heredoc (Write/Edit denied; see `docs/agents/agent-verdict-protocol.md` for the canonical heredoc snippet).
 2. `SendMessage(to="team-lead", message="APPROVE")` → team-lead does TaskUpdate only (no broadcast)
    OR `SendMessage(to="team-lead", message="ESCALATE: <1-sentence reason>")` → team-lead broadcasts with [ESCALATION] marker
    NEVER include the full verdict block in the DM — team-lead reads the file if needed.

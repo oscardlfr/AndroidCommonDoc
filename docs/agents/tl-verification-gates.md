@@ -51,8 +51,11 @@ TaskCreate(title="arch-integration verdict", status="in_progress")
 ```
 
 **On receiving `"APPROVE"` from arch-{role}**:
-1. `TaskUpdate(title="arch-{role} verdict", status="completed")` — TaskUpdate ONLY, no broadcast.
-2. `TaskList` → if all 3 verdict tasks = completed → proceed to Phase 3.
+1. **Verify verdict file**: glob `.planning/wave{N}/arch-{role}-verdict.md`. If missing → DM architect "verdict file not found at expected path; please write it before APPROVE." Do NOT TaskUpdate. Re-await reply.
+2. `TaskUpdate(title="arch-{role} verdict", status="completed")` — TaskUpdate ONLY, no broadcast.
+3. `TaskList` → if all 3 verdict tasks = completed → proceed to Phase 3.
+
+> **Defense-in-depth**: `.claude/hooks/architect-verdict-presence-gate.js` (PreToolUse SendMessage) blocks APPROVE if no verdict file exists on the architect side. The glob check above is the orchestrator-side complement.
 
 **On receiving `"ESCALATE: <reason>"` from arch-{role}**:
 1. Read `.planning/wave{N}/arch-{role}-verdict.md` for full details.
