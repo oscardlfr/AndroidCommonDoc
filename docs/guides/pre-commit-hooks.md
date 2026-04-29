@@ -89,6 +89,56 @@ git commit -m "docs(skills): update my-skill description"
 
 See `scripts/sh/rehash-registry.sh` for hash algorithm details.
 
+## The Manifest Drift Gate (W31.7 Phase 4 sub 3)
+
+Every active agent template under `setup/agent-templates/<name>.md` and its mirror at `.claude/agents/<name>.md` has a SHA-256 hash recorded in `.claude/registry/agents.manifest.yaml` (`template_frontmatter_sha256`). When either file is staged, the hook validates that the recorded hash is current.
+
+### How it works
+
+1. Hook detects staged `setup/agent-templates/<name>.md` or `.claude/agents/<name>.md`
+2. If no agent template is staged → Gate 2 not invoked
+3. If a template is staged → runs `node mcp-server/build/cli/generate-template.js --check --all`
+4. If 0 drift → exit 0, commit proceeds
+5. If drift detected → exit 1, commit blocked with `[MANIFEST]` error and remediation hint
+
+If the MCP server is not yet built, Gate 2 logs a notice and exits 0 (graceful skip — covered by bats test `(g)`). Run `cd mcp-server && npm run build` to enable Gate 2.
+
+### Commit blocked (manifest drift)
+
+```
+$ git add setup/agent-templates/advisor.md .claude/agents/advisor.md
+$ git commit -m "feat(agents): tweak advisor description"
+
+[MANIFEST] Agent template frontmatter has drifted from manifest baseline.
+  DRIFT  advisor — drift detected (template aligned: false, mirror aligned: false)
+
+[MANIFEST] Fix per drifted agent:
+[MANIFEST]   node mcp-server/build/cli/generate-template.js <agent-name> --update-manifest-hash
+[MANIFEST]   bash scripts/sh/rehash-registry.sh --project-root "$(pwd)"
+[MANIFEST] Then stage manifest + templates + mirrors + registry and retry commit.
+```
+
+### Fixing manifest drift
+
+```bash
+# 1. Regenerate the template AND bake the manifest hash atomically
+node mcp-server/build/cli/generate-template.js advisor --update-manifest-hash
+
+# 2. Propagate to skills/registry.json (separate hash system)
+bash scripts/sh/rehash-registry.sh --project-root "$(pwd)"
+
+# 3. Verify both clean
+node mcp-server/build/cli/generate-template.js --check --all
+bash scripts/sh/rehash-registry.sh --project-root "$(pwd)" --check
+
+# 4. Stage all 4 surfaces and retry commit
+git add setup/agent-templates/advisor.md .claude/agents/advisor.md \
+        .claude/registry/agents.manifest.yaml skills/registry.json
+git commit -m "feat(agents): tweak advisor description"
+```
+
+This gate complements the `manifest-drift-warn` CI job (now in BLOCK mode after PR #82) — local pre-commit catches drift before push, CI catches it as a backstop.
+
 ## `--verbose` flag
 
 To see hook decision logging on stderr:

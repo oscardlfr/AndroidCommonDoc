@@ -131,3 +131,125 @@ init_git_repo() {
     run bash "$HOOK_SCRIPT" "$WORK_DIR"
     [ "$status" -eq 0 ]
 }
+
+# ── Gate 2 cases: manifest frontmatter drift ────────────────────────────
+# These use mock generate-template.js binaries so the test fixtures don't
+# need to copy the entire mcp-server build into mktemp.
+
+# Helper: create a mock generate-template.js that exits with the given status
+# and emits a DRIFT line when status is non-zero.
+mock_generate_template() {
+    local exit_code="$1"
+    mkdir -p "$WORK_DIR/mcp-server/build/cli"
+    if [ "$exit_code" = "0" ]; then
+        cat > "$WORK_DIR/mcp-server/build/cli/generate-template.js" <<'JS'
+#!/usr/bin/env node
+console.log("Template generator — mock");
+console.log("  agents: 38  wrote: 0  noop: 38  drift: 0  error: 0");
+process.exit(0);
+JS
+    else
+        cat > "$WORK_DIR/mcp-server/build/cli/generate-template.js" <<'JS'
+#!/usr/bin/env node
+console.log("Template generator — mock (drift simulation)");
+console.log("  agents: 38  wrote: 0  noop: 36  drift: 2  error: 0");
+console.log("  DRIFT  fake-agent-1 — drift detected");
+console.log("  DRIFT  fake-agent-2 — drift detected");
+process.exit(1);
+JS
+    fi
+}
+
+# Helper: stage a fake agent template under setup/agent-templates/
+stage_agent_template() {
+    local name="$1"
+    mkdir -p "$WORK_DIR/setup/agent-templates"
+    cat > "$WORK_DIR/setup/agent-templates/$name.md" <<EOF
+---
+name: $name
+description: "test"
+---
+
+body content here.
+EOF
+    git -C "$WORK_DIR" add "setup/agent-templates/$name.md"
+}
+
+# ── case (f): non-agent-template files staged → Gate 2 NOT invoked ──────
+
+@test "(f) only kotlin staged — Gate 2 not invoked even when generate-template.js exists" {
+    init_git_repo
+    write_correct_registry
+    mock_generate_template 1   # would block IF invoked
+
+    mkdir -p "$WORK_DIR/src"
+    printf "class Foo\n" > "$WORK_DIR/src/Foo.kt"
+    git -C "$WORK_DIR" add src/Foo.kt
+
+    run bash "$HOOK_SCRIPT" "$WORK_DIR"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"[MANIFEST]"* ]]
+}
+
+# ── case (g): agent template staged + generate-template.js missing → skip ──
+
+@test "(g) agent template staged but generate-template.js not built — graceful skip" {
+    init_git_repo
+    write_correct_registry
+    stage_agent_template "test-agent"
+
+    # NO mock — generate-template.js does not exist
+    run bash "$HOOK_SCRIPT" "$WORK_DIR"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"[MANIFEST]"* ]]
+}
+
+# ── case (h): agent template staged + manifest clean → hook exits 0 ─────
+
+@test "(h) agent template staged + clean manifest — hook exits 0" {
+    init_git_repo
+    write_correct_registry
+    mock_generate_template 0
+    stage_agent_template "test-agent"
+
+    run bash "$HOOK_SCRIPT" "$WORK_DIR"
+    [ "$status" -eq 0 ]
+}
+
+# ── case (i): agent template staged + manifest drift → hook exits 1 ─────
+
+@test "(i) agent template staged + manifest drift — hook exits 1 with [MANIFEST]" {
+    init_git_repo
+    write_correct_registry
+    mock_generate_template 1
+    stage_agent_template "test-agent"
+
+    run bash "$HOOK_SCRIPT" "$WORK_DIR"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"[MANIFEST]"* ]]
+    [[ "$output" == *"drifted"* ]]
+    [[ "$output" == *"--update-manifest-hash"* ]]
+}
+
+# ── case (j): mirror at .claude/agents/ also triggers Gate 2 ────────────
+
+@test "(j) mirror staged at .claude/agents/ — Gate 2 invoked" {
+    init_git_repo
+    write_correct_registry
+    mock_generate_template 1   # drift simulation
+
+    mkdir -p "$WORK_DIR/.claude/agents"
+    cat > "$WORK_DIR/.claude/agents/test-agent.md" <<'EOF'
+---
+name: test-agent
+description: "test"
+---
+
+body.
+EOF
+    git -C "$WORK_DIR" add .claude/agents/test-agent.md
+
+    run bash "$HOOK_SCRIPT" "$WORK_DIR"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"[MANIFEST]"* ]]
+}
