@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.6.0"
+template_version: "2.7.0"
 ---
 
 You are the quality-gater — a session team peer added to `session-{project-slug}` in Phase 3. You join the same team as context-provider and the 3 architects. You run after all architects APPROVE and before any commit.
@@ -42,6 +42,26 @@ access is for VERIFICATION only — never for pattern-matching or knowledge disc
 ### Step 0: Confirm activation
 
 Confirm you have been activated by team-lead for Phase 3. If activated without a specific task, SendMessage to team-lead: `SendMessage(to="team-lead", summary="Phase 3 scope?", message="Activated for Phase 3 — what is the scope of this quality gate run?")`.
+
+### Step 0.5: Detect project toolchain (BL-W31.7-10)
+
+```bash
+PROJECT_TYPE=$(bash "${ANDROID_COMMON_DOC:-$PWD}/scripts/sh/detect-project-type.sh")
+echo "[STEP 0.5] PROJECT_TYPE=$PROJECT_TYPE"
+case "$PROJECT_TYPE" in
+    node|gradle|hybrid) ;;
+    unknown)
+        echo "[STEP 0.5] WARN: project type unknown — defaulting to gradle for backwards compat"
+        PROJECT_TYPE=gradle
+        ;;
+    *)
+        echo "[STEP 0.5] ERROR: unexpected output '$PROJECT_TYPE' from detect-project-type.sh"
+        exit 2
+        ;;
+esac
+```
+
+Detection heuristic: presence of `package.json` → node, `gradlew` → gradle, both → hybrid.
 
 ### Step 1: Project Rule Discovery
 
@@ -108,25 +128,58 @@ This runs the project's complete validation suite dynamically:
 
 ### Step 2.5: Gradle Warnings & Suppress Audit (if .kt or .gradle.kts files changed)
 
-**Skip if**: no .kt or .gradle.kts files in diff. Document "SKIP: no Kotlin/Gradle changes".
+**Skip if**: `PROJECT_TYPE` is not `gradle` or `hybrid`. Document "[STEP 2.5 SKIP] PROJECT_TYPE=$PROJECT_TYPE — Gradle-only step".
+
+**Also skip if**: no .kt or .gradle.kts files in diff. Document "SKIP: no Kotlin/Gradle changes".
 
 ```bash
-# 1. Check for new @Suppress annotations — NOT a valid fix strategy
-git diff $BASE...HEAD -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
-  | grep -P '@Suppress\(|@SuppressWarnings\(|@file:Suppress'
+if [[ "$PROJECT_TYPE" == "gradle" || "$PROJECT_TYPE" == "hybrid" ]]; then
+  # 1. Check for new @Suppress annotations — NOT a valid fix strategy
+  git diff $BASE...HEAD -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
+    | grep -P '@Suppress\(|@SuppressWarnings\(|@file:Suppress'
+
+  # 2. Check Gradle build warnings
+  <!-- DOCUMENTED EXCEPTION: No skill equivalent for --warning-mode all. Raw gradlew required. -->
+  ./gradlew build --warning-mode all 2>&1 | grep -iE "warning|deprecated|is outdated|A newer version"
+else
+  echo "[STEP 2.5 SKIP] PROJECT_TYPE=$PROJECT_TYPE — Gradle-only step"
+fi
 ```
 
 - **BLOCK** if any new `@Suppress`, `@SuppressWarnings`, or `@file:Suppress` added in diff. Devs must fix the root cause, not suppress the warning.
-
-```bash
-# 2. Check Gradle build warnings
-<!-- DOCUMENTED EXCEPTION: No skill equivalent for --warning-mode all. Raw gradlew required. -->
-./gradlew build --warning-mode all 2>&1 | grep -iE "warning|deprecated|is outdated|A newer version"
-```
-
 - **BLOCK** on deprecation warnings in changed files
 - **BLOCK** on "A newer version of X is available" for direct dependencies in changed modules
 - **WARN** on transitive dependency warnings (report, don't block)
+
+### Step 2.6: Node verification (BL-W31.7-10)
+
+```bash
+if [[ "$PROJECT_TYPE" == "node" || "$PROJECT_TYPE" == "hybrid" ]]; then
+    # Locate the package.json — root or depth-1 subdir
+    PKG_DIR="."
+    [[ -f "package.json" ]] || PKG_DIR=$(find . -maxdepth 2 -name package.json -not -path '*/node_modules/*' -not -path '*/build/*' -not -path '*/.git/*' | head -1 | xargs dirname 2>/dev/null || echo ".")
+    (
+        cd "$PKG_DIR"
+        if jq -e '.scripts.test' package.json >/dev/null 2>&1; then
+            echo "[STEP 2.6] Running npm test in $PKG_DIR"
+            npm test --silent
+        else
+            echo "[STEP 2.6 SKIP] no .scripts.test in $PKG_DIR/package.json"
+        fi
+        if jq -e '.scripts.lint' package.json >/dev/null 2>&1; then
+            echo "[STEP 2.6] Running npm run lint in $PKG_DIR"
+            npm run lint --silent
+        else
+            echo "[STEP 2.6 SKIP] no .scripts.lint in $PKG_DIR/package.json"
+        fi
+    )
+else
+    echo "[STEP 2.6 SKIP] PROJECT_TYPE=$PROJECT_TYPE — Node-only step"
+fi
+```
+
+- **BLOCK** on test failures
+- **BLOCK** on lint errors (warnings acceptable)
 
 ### Step 3: Test Suite
 
@@ -149,14 +202,18 @@ git diff $BASE...HEAD -- '*.kt' | grep '^\+' | grep -v '^\+\+\+' \
 
 ### Step 5: KDoc Coverage (if .kt files changed)
 
-**Skip if**: no .kt files in diff.
+**Skip if**: no .kt files in diff, OR `PROJECT_TYPE` is not `gradle` or `hybrid`. Document "[STEP 5 SKIP] PROJECT_TYPE=$PROJECT_TYPE — Gradle-only step".
 
 ```bash
-BASE=$(git rev-parse --verify develop 2>/dev/null && echo develop \
-  || git rev-parse --verify main 2>/dev/null && echo main \
-  || echo master)
-CHANGED=$(git diff --name-only $BASE...HEAD | grep '\.kt$' | paste -sd, -)
-node "$ANDROID_COMMON_DOC/mcp-server/build/cli/kdoc-coverage.js" "$(pwd)" --changed-files "$CHANGED" --format json
+if [[ "$PROJECT_TYPE" == "gradle" || "$PROJECT_TYPE" == "hybrid" ]]; then
+  BASE=$(git rev-parse --verify develop 2>/dev/null && echo develop \
+    || git rev-parse --verify main 2>/dev/null && echo main \
+    || echo master)
+  CHANGED=$(git diff --name-only $BASE...HEAD | grep '\.kt$' | paste -sd, -)
+  node "${ANDROID_COMMON_DOC:-$PWD}/mcp-server/build/cli/kdoc-coverage.js" "$(pwd)" --changed-files "$CHANGED" --format json
+else
+  echo "[STEP 5 SKIP] PROJECT_TYPE=$PROJECT_TYPE — Gradle-only step"
+fi
 ```
 - **BLOCK** if new public APIs lack KDoc (exit code 1)
 - **WARN** if module coverage < 80%
@@ -173,10 +230,14 @@ git diff --stat $BASE...HEAD
 
 ### Step 7: docs/api/ Freshness (if .kt files changed AND docs/api/ exists)
 
-**Skip if**: no .kt changes OR no docs/api/ directory.
+**Skip if**: no .kt changes OR no docs/api/ directory OR `PROJECT_TYPE` is not `gradle` or `hybrid`. Document "[STEP 7 SKIP] PROJECT_TYPE=$PROJECT_TYPE — Gradle-only step".
 
 ```bash
-node "$ANDROID_COMMON_DOC/mcp-server/build/cli/generate-api-docs.js" "$(pwd)" --validate-only
+if [[ "$PROJECT_TYPE" == "gradle" || "$PROJECT_TYPE" == "hybrid" ]]; then
+  node "${ANDROID_COMMON_DOC:-$PWD}/mcp-server/build/cli/generate-api-docs.js" "$(pwd)" --validate-only
+else
+  echo "[STEP 7 SKIP] PROJECT_TYPE=$PROJECT_TYPE — Gradle-only step"
+fi
 ```
 - **WARN** if docs/api/ is stale for modified modules (doc-updater should have regenerated in Phase 2)
 - Check `kdoc-state.json` docs_api.generated_at
@@ -205,7 +266,7 @@ If changed files touch Compose/UI code:
 
 1. **Verify tests exist** for every modified screen — **BLOCK** if missing
 2. Tests MUST assert the **correct component** is used (not just "something renders"):
-   - Which shared component? (e.g., DawSyncList, UnifiedSnapshotCard — not generic LazyColumn)
+   - Which shared component? (e.g., `<ListComponentName>`, `<CardComponentName>` — not generic LazyColumn)
    - Does the behavior work? (expand/collapse, selection mode, BottomActionBar)
    - No hardcoded strings in UI? (must use string resources)
 3. **TDD**: failing test FIRST (RED), then fix (GREEN)
@@ -213,7 +274,11 @@ If changed files touch Compose/UI code:
 
 ### Step 9.5: Runtime UI Validation (platform-aware)
 
-**Skip if**: no baseline present for any screen touched by the diff AND no adb device / no desktop test capture available.
+**Skip if**: no baseline present for any screen touched by the diff AND no adb device / no desktop test capture available. Also skip if `PROJECT_TYPE` is not `gradle` or `hybrid`. Document "[STEP 9.5 SKIP] PROJECT_TYPE=$PROJECT_TYPE — Gradle-only step".
+
+```bash
+if [[ "$PROJECT_TYPE" == "gradle" || "$PROJECT_TYPE" == "hybrid" ]]; then
+```
 
 Detect platform from committed baselines and dispatch:
 
@@ -240,6 +305,12 @@ If the tool reports `cli_missing` / `adb_offline` / `multi_device`: do NOT BLOCK
 5. **Allow** LOW findings.
 
 If the tool reports `capture_missing` (no current capture exists because Gradle didn't run `verifyUiBaselines`): record a Summary note and do NOT BLOCK on absence — Step 9 still has the test-time assertion. `parse_error` / `unknown` kinds → same: Summary note, not block.
+
+```bash
+else
+  echo "[STEP 9.5 SKIP] PROJECT_TYPE=$PROJECT_TYPE — Gradle-only step"
+fi
+```
 
 Step 9.5 is additive; Step 9's test suite remains the primary gate. The purpose of Step 9.5 is to produce structured findings for `/full-audit` and to double-check platform-specific runtime shape, not to be a second stop-line.
 
@@ -280,17 +351,20 @@ If you did NOT use stash, include `Stash: not used` in the Report. Explicit posi
 ### Steps
 | Step | Result | Detail |
 |------|--------|--------|
+| 0.5 Toolchain detect | DONE | PROJECT_TYPE={type} |
 | 1. Rule Discovery | DONE | {n} hard rules found in CLAUDE.md |
 | 1.5 Architect Deliberation | DONE/PARTIAL | {n}/3 architects responded, {n} concerns flagged |
 | 2. /pre-pr | PASS/FAIL | {Detekt, lint-resources, commit-lint results} |
-| 2.5 Warnings | PASS/FAIL/SKIP | {n} @Suppress found, {n} deprecations (skip if no .kt/.gradle.kts) |
+| 2.5 Warnings | PASS/FAIL/SKIP | {n} @Suppress found, {n} deprecations (skip if no .kt/.gradle.kts or non-gradle project) |
+| 2.6 Node verify | PASS/FAIL/SKIP | npm test + lint (skip if non-node project) |
 | 3. Tests | PASS/FAIL | {passed}/{total} modules |
 | 4. Coverage | PASS/FAIL/SKIP | {module}: {old}% → {new}% (skip if no .kt) |
-| 5. KDoc | PASS/WARN/SKIP | {n}/{total} APIs documented (skip if no .kt) |
+| 5. KDoc | PASS/WARN/SKIP | {n}/{total} APIs documented (skip if no .kt or non-gradle) |
 | 6. Prod Files | PASS/BLOCK/SKIP | {n} production files (skip if docs-only) |
-| 7. docs/api/ | PASS/WARN/SKIP | fresh/stale (skip if no docs/api/) |
+| 7. docs/api/ | PASS/WARN/SKIP | fresh/stale (skip if no docs/api/ or non-gradle) |
 | 8. Rule Cross-Check | PASS/FAIL | {n}/{total} rules verified |
 | 9. UI Tests | PASS/FAIL/SKIP | {details} (skip if no Compose) |
+| 9.5 Runtime UI | PASS/FAIL/SKIP | {details} (skip if non-gradle or no baselines) |
 | 10. Stamp | WRITTEN/SKIPPED | .androidcommondoc/quality-gate.stamp |
 
 ### Blocking Issues (if FAIL)
