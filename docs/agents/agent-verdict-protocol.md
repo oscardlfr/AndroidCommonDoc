@@ -20,9 +20,21 @@ Architects write a full verdict block to disk and send a 1-liner DM to team-lead
 
 After completing review for wave `{N}`:
 
-1. **Write verdict to** `.planning/wave{N}/arch-{role}-verdict.md`
+1. **Write verdict to** `.planning/wave{N}/arch-{role}-verdict.md` using a Bash heredoc — Write/Edit are denied by `architect-self-edit-gate.js`; this heredoc is the only mechanism. The path `.planning/wave*/arch-*-verdict.md` is whitelisted in `architect-bash-write-gate.js:82`.
+
+   ```bash
+   mkdir -p .planning/wave{N}/
+   cat <<'EOF' > .planning/wave{N}/arch-{role}-verdict.md
+   # arch-{role} verdict — wave {N}
+   {verdict block per the format spec below}
+   EOF
+   ```
+
    - `{N}` = wave number from team-lead dispatch (e.g., `wave22`)
    - `{role}` = `platform`, `testing`, or `integration`
+
+   team-lead MUST verify file presence before TaskUpdate (see `tl-verification-gates.md`).
+
 2. **SendMessage** to `team-lead`:
    - `"APPROVE"` — clean pass
    - `"ESCALATE: <1-sentence reason>"` — team-lead must decide

@@ -211,3 +211,70 @@ PYEOF
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── Regression: REDIRECT_RE must not false-match >= comparison operator ──────
+
+@test "allows heredoc to exempt verdict path with >= in body content" {
+  make_input "cat <<'EOF' > .planning/wave-foo/arch-platform-verdict.md
+bats coverage exceeds >=10 cases
+EOF" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "still blocks redirect to non-exempt path even with >= elsewhere in command" {
+  make_input "echo foo > docs/new.md && [ \$count >= 0 ]" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ── Heredoc-aware scanner: body content must not be scanned for redirects ────
+
+@test "allows heredoc to exempt path with regex literal in body" {
+  make_input "cat <<'EOF' > .planning/wave-foo/arch-platform-verdict.md
+fix: regex \`>{1,2}\` tightened
+EOF" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "allows heredoc to exempt path with redirect-like text in body" {
+  make_input "cat <<'EOF' > .planning/wave-foo/arch-platform-verdict.md
+blocked redirect like > /etc/passwd is illegal
+EOF" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "still blocks heredoc to NON-exempt path" {
+  make_input "cat <<'EOF' > /etc/passwd
+any content
+EOF" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "allows tab-stripped heredoc <<- to exempt path" {
+  make_input "	cat <<-'EOF' > .planning/wave-foo/arch-testing-verdict.md
+	content
+	EOF" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "blocks redirect AFTER heredoc terminator (multi-statement)" {
+  make_input "cat <<'EOF' > /tmp/ok
+data
+EOF
+echo leak > /etc/passwd" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "allows heredoc opener with double-quoted delimiter" {
+  make_input 'cat <<"EOF" > .planning/wave-foo/arch-integration-verdict.md
+content with $variable
+EOF' 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}

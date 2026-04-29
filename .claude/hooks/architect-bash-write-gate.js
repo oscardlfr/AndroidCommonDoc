@@ -56,7 +56,7 @@ process.stdin.on('end', () => {
 // ── Detection ────────────────────────────────────────────────────────────────
 
 const HEREDOC_RE = /<<-?\s*['"]?[A-Za-z_]\w*['"]?/;
-const REDIRECT_RE = /(?:^|[^0-9&>])>{1,2}\s*(['"]?)([^\s<>|&;'"]+)\1/g;
+const REDIRECT_RE = /(?:^|[^0-9&>])>{1,2}(?!=)\s*(['"]?)([^\s<>|&;'"]+)\1/g;
 const SED_INPLACE_RE = /\bsed\s+(?:[^|<>;&'"]*?(?:-i\b|--in-place\b))/;
 const AWK_INPLACE_RE = /\bawk\s+[^|<>;&'"]*?-i\s+inplace\b/;
 // `python -c "...open(<file>, 'w')..."` — covers both wrapping quote styles
@@ -85,11 +85,19 @@ function isExemptTarget(target) {
 }
 
 function detectViolation(cmd) {
-  if (HEREDOC_RE.test(cmd)) {
-    const target = firstNonExemptRedirectTarget(cmd);
-    if (target !== undefined) {
-      return { kind: 'heredoc redirect', target };
-    }
+  // Scan only non-body lines so heredoc body content is never misread as
+  // a redirect. The opener line (which contains the real target) is included.
+  const commandLines = splitCommandLines(cmd);
+
+  const redirectTargets = [];
+  for (const line of commandLines) {
+    collectRedirectTargets(line, redirectTargets);
+  }
+
+  const firstBadRedirect = redirectTargets.find(t => t && !isExemptTarget(t));
+  if (firstBadRedirect !== undefined) {
+    const isHeredoc = HEREDOC_RE.test(cmd);
+    return { kind: isHeredoc ? 'heredoc redirect' : 'shell redirect', target: firstBadRedirect };
   }
 
   if (SED_INPLACE_RE.test(cmd)) {
@@ -115,21 +123,43 @@ function detectViolation(cmd) {
     }
   }
 
-  const target = firstNonExemptRedirectTarget(cmd);
-  if (target !== undefined) {
-    return { kind: 'shell redirect', target };
-  }
-
   return null;
 }
 
-function firstNonExemptRedirectTarget(cmd) {
+// Returns only the non-body lines of a command (heredoc bodies are skipped).
+// Malformed heredoc (no terminator) → remaining lines treated as body and
+// skipped, which is fail-open (no false block on malformed input).
+function splitCommandLines(cmd) {
+  const lines = cmd.split('\n');
+  const result = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const hd = /<<(-?)\s*(?:'([^']+)'|"([^"]+)"|(\S+))/.exec(line);
+    if (hd) {
+      const dashed = hd[1] === '-';
+      const delim = hd[2] || hd[3] || hd[4];
+      result.push(line); // opener line: included (real redirect target is here)
+      i++;
+      // skip body lines until the terminating delimiter
+      while (i < lines.length) {
+        const bodyLine = lines[i];
+        const trimmed = dashed ? bodyLine.replace(/^\t+/, '') : bodyLine;
+        i++;
+        if (trimmed === delim) break;
+      }
+    } else {
+      result.push(line);
+      i++;
+    }
+  }
+  return result;
+}
+
+function collectRedirectTargets(line, targets) {
   const re = new RegExp(REDIRECT_RE.source, 'g');
   let m;
-  while ((m = re.exec(cmd)) !== null) {
-    const target = m[2];
-    if (!target) continue;
-    if (!isExemptTarget(target)) return target;
+  while ((m = re.exec(line)) !== null) {
+    if (m[2]) targets.push(m[2]);
   }
-  return undefined;
 }

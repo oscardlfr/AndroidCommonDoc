@@ -112,6 +112,11 @@
           {
             "type": "command",
             "command": "node .claude/hooks/addressee-liveness-gate.js"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/architect-verdict-presence-gate.js",
+            "timeout": 5
           }
         ]
       },
