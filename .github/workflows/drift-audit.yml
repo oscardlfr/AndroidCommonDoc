@@ -178,13 +178,26 @@ jobs:
         run: npm test -- --run
 
   manifest-drift-warn:
+    # NOTE: Job key + display name retained as `manifest-drift-warn` /
+    # `Manifest drift (WARN)` to preserve any branch-protection rules
+    # that reference the original Phase 2 check name. Behavior is now
+    # BLOCK (exit code propagates). Renaming the job is a follow-up PR
+    # once branch-protection rules are updated to match.
     name: Manifest drift (WARN)
-    # Phase 2 of the agents-manifest workflow (PR #71 shipped Phase 1).
-    # Compares `.claude/registry/agents.manifest.yaml` against agent template
-    # frontmatter and surfaces drift to the GitHub Actions step summary.
-    # WARN mode: this job NEVER fails the build, even when the validator
-    # detects errors. Phase 4 flips this to BLOCK by removing the final
-    # `exit 0` step and propagating the validator's exit code.
+    # Phase 4 of the agents-manifest workflow (PR #75 shipped Phase 3 round 1;
+    # PR #81 closed Phase 3 with 37/38 baselined). Compares
+    # `.claude/registry/agents.manifest.yaml` against agent template frontmatter
+    # and FAILS the build when drift is detected.
+    #
+    # BLOCK mode: validator exit code propagates directly. Errors fail CI.
+    # The 1 INFO finding for `feature-domain-specialist` (scaffold-exempt)
+    # is gated by the manifest's `skip` flag and does NOT count as an error.
+    #
+    # Phase 1 (PR #71): hand-edited manifest seed.
+    # Phase 2 (PR #72): WARN-mode validator (this job).
+    # Phase 3 (PRs #75–#81): 37/38 templates baselined with SHA-256 hashes.
+    # Phase 4 (this commit): WARN → BLOCK + pre-Agent-spawn hook (separate PR)
+    #                        + pre-commit hook (separate PR).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -201,7 +214,7 @@ jobs:
           npm ci --silent
           npm run build --silent
 
-      - name: Run manifest drift validator (WARN mode)
+      - name: Run manifest drift validator (BLOCK mode)
         id: validator
         run: |
           set +e
@@ -210,15 +223,14 @@ jobs:
           set -e
           echo "exit_code=$VALIDATOR_EXIT" >> "$GITHUB_OUTPUT"
           cat /tmp/manifest-drift.txt
-          if [ "$VALIDATOR_EXIT" -ne 0 ]; then
-            echo "::warning::Manifest validator exited $VALIDATOR_EXIT — see job summary for findings"
-          fi
+          # Propagate validator exit code — non-zero fails the job.
+          exit "$VALIDATOR_EXIT"
 
       - name: Post findings to job summary
         if: always()
         run: |
           {
-            echo "## Manifest drift (WARN mode)"
+            echo "## Manifest drift (BLOCK mode)"
             echo ""
             echo "Validator exit code: \`${{ steps.validator.outputs.exit_code }}\`"
             echo ""
@@ -238,11 +250,6 @@ jobs:
           name: manifest-drift-report
           path: /tmp/manifest-drift.txt
           retention-days: 14
-
-      # WARN mode: always succeed regardless of validator outcome.
-      # Phase 4 will remove this step and let the validator's exit propagate.
-      - name: WARN mode — do not fail the build
-        run: exit 0
 
   doc-cross-refs:
     name: docs/agents/ cross-references resolve
