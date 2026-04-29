@@ -101,6 +101,17 @@ interface ManifestAgentEntry {
     can_dispatch_to: string[];
     can_send_to: string[] | "*";
   };
+  /**
+   * Optional. Declares which project toolchains this agent can verify.
+   * Used by polyglot agents (notably quality-gater) to gate hardcoded
+   * Gradle/Kotlin or Node/TS verification steps. Field is descriptive —
+   * runtime detection still happens via `scripts/sh/detect-project-type.sh`
+   * at activation. Absent = `[any]` (legacy default, backwards compatible).
+   *
+   * Valid values: 'node' | 'gradle' | 'hybrid' | 'any'
+   * (BL-W31.7-10)
+   */
+  applicable_project_types?: string[];
 }
 
 interface InvariantRule {
@@ -130,6 +141,9 @@ const ARCHITECT_BANNED_TOOLS = new Set(["Write", "Edit", "Agent"]);
 
 /** Tools forbidden for context category (CONTEXT_PROVIDER_READ_ONLY). */
 const CONTEXT_BANNED_TOOLS = new Set(["Write", "Edit", "Agent"]);
+
+/** Allowed values for `applicable_project_types` (BL-W31.7-10). */
+const APPLICABLE_PROJECT_TYPES = new Set(["node", "gradle", "hybrid", "any"]);
 
 /**
  * Files inside `setup/agent-templates/` and `.claude/agents/` that are NOT
@@ -415,6 +429,34 @@ function checkInvariants(
         field: "tools.allowed",
         message: `CONTEXT_PROVIDER_READ_ONLY violated: context agent has banned tools [${violations.join(", ")}]`,
       });
+    }
+  }
+
+  // applicable_project_types (BL-W31.7-10) — optional field; warn if present
+  // and malformed. Field absent = [any] (default, no warning).
+  if (entry.applicable_project_types !== undefined) {
+    const apt = entry.applicable_project_types;
+    if (!Array.isArray(apt) || apt.length === 0) {
+      findings.push({
+        severity: "warning",
+        agent: canonical,
+        category: "schema",
+        field: "applicable_project_types",
+        message: `applicable_project_types must be a non-empty array; got ${JSON.stringify(apt)}`,
+      });
+    } else {
+      const invalid = apt.filter((t) => !APPLICABLE_PROJECT_TYPES.has(t));
+      if (invalid.length > 0) {
+        findings.push({
+          severity: "warning",
+          agent: canonical,
+          category: "schema",
+          field: "applicable_project_types",
+          expected: [...APPLICABLE_PROJECT_TYPES].join(" | "),
+          actual: invalid.join(", "),
+          message: `applicable_project_types contains invalid values: [${invalid.join(", ")}] — must be subset of [node, gradle, hybrid, any]`,
+        });
+      }
     }
   }
 

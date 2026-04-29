@@ -47,6 +47,8 @@ interface SyntheticEntry {
   model?: string;
   tools_allowed?: string[];
   spawn_method?: string;
+  /** BL-W31.7-10: optional manifest-only field. Pass raw YAML to inject malformed values. */
+  applicable_project_types?: string[] | string;
   /** Override frontmatter contents to introduce drift. */
   frontmatter?: Record<string, string | number>;
   /** Skip writing the template file (to test missing-file findings). */
