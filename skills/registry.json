@@ -2894,7 +2894,7 @@
       "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d2ed3991aaaf6533b62eea7a19dd0b9b0b33440994edd48b0b16bbd2cf0420ea",
+      "hash": "sha256:8b42284d5ba8324d7d0ec6285c0a526358d77a2b932ea79b55c27cb0113e6075",
       "dependencies": [],
       "frontmatter": {
         "name": "toolkit-specialist",
