@@ -1559,7 +1559,7 @@
       "description": "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:a8de3f141c2f0a3c6b5987ef38b5e85982f192ad62cd6d0699c4395e82faf7a5",
+      "hash": "sha256:18dcbf742c58f2ac0f8afbbd0ba818387477f0170589b30e963e1024a4c00f0f",
       "dependencies": [
         "scripts/sh/gradle-run.sh",
         "scripts/sh/ai-error-extractor.sh",
