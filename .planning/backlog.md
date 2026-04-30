@@ -498,7 +498,7 @@ W29 initially ran /pre-pr /check-outdated /audit-docs in L1 via test-specialist 
 ---
 
 ### BL-W31.7-11 — Manifest ABI (agent-API stability validator) (MEDIUM)
-**Status**: backlog
+**Status**: ✅ SHIPPED 2026-04-30 — PR #88 squash 1ea6721. Memory: `project_BL-W31.7-11_shipped.md`
 **Priority**: MEDIUM (consumer-side stability concern)
 **Source**: User question 2026-04-27 during Phase 3 round 1 wrap-up — "shouldn't we have something like Android's ABI?"
 
@@ -535,7 +535,7 @@ But it does NOT detect **breaking changes** that would invalidate downstream con
 ---
 
 ### BL-W31.7-10 — quality-gater hardcodes Gradle/Kotlin protocol — fails on L0 (HIGH)
-**Status**: backlog
+**Status**: ✅ SHIPPED 2026-04-30 — PR #86 squash 9fc3e0e. Memory: `project_BL-W31.7-10_shipped.md`
 **Priority**: HIGH (renders Phase 3 sequential gate unusable on L0 toolkit)
 **Source**: Wave 31.7 Phase 3 round 1 dogfood, 2026-04-27
 
@@ -569,7 +569,7 @@ This project (`AndroidCommonDoc`) is the L0 toolkit itself: Node.js MCP server +
 ---
 
 ### BL-W31.7-09 — Architect verdict-to-disk protocol gap (HIGH)
-**Status**: backlog
+**Status**: ✅ SHIPPED 2026-04-29 — PR #85 squash 29eab00. Memory: `project_BL-W31.7-09_shipped.md`
 **Priority**: HIGH (honesty + protocol integrity)
 **Source**: Wave 31.7 Phase 3 round 1 dogfood, 2026-04-27 — arch-platform fabricated disk-write claim
 
@@ -591,7 +591,7 @@ This project (`AndroidCommonDoc`) is the L0 toolkit itself: Node.js MCP server +
 ---
 
 ### BL-W31.7-08 — `toolkit-specialist` agent (mcp-server TS work)
-**Status**: backlog
+**Status**: ✅ SHIPPED 2026-04-30 — PR #87 squash a9886dd. Memory: `project_BL-W31.7-08_shipped.md`
 **Priority**: medium
 **Source**: Wave 31.7 Phase 3 round 1 plan validation (Plan agent surfaced gap during plan-mode design check, 2026-04-27)
 
@@ -608,3 +608,87 @@ This project (`AndroidCommonDoc`) is the L0 toolkit itself: Node.js MCP server +
 **Estimated effort**: 1-2 hours (template authoring + manifest entry + sync to L1/L2 if scoped that way).
 
 **Why not in Phase 3 round 1**: round 1 scope was "ship the generator + 3 architect pilots" — adding a new agent would have doubled the wave. Filed for the fresh session that picks up Phase 3 round 2 onwards.
+
+---
+
+## Wave 32 candidates (early — filed during BL-W31.7-12 wave, 2026-04-30)
+
+Four findings from BL-W31.7-11 dogfood retrospective (memory `project_BL-W31.7-11_shipped.md` lessons section). All deferred to W32 except BL-W32-01 (closed as OBSOLETE — verified absent from current codebase via grep `mcp-server/tests/wrappers` 2026-04-30).
+
+---
+
+### BL-W32-01 — Planner template stale bats path reference (LOW)
+**Status**: ✅ CLOSED (OBSOLETE) 2026-04-30 — verified `mcp-server/tests/wrappers` absent from repo (`grep -r mcp-server/tests/wrappers` returns 0 matches). Planner template already references correct paths via context-provider routing. No fix required.
+**Priority**: LOW (would have been: documentation accuracy)
+**Source**: BL-W31.7-11 lesson #1 — PLAN.md cited `mcp-server/tests/wrappers/` instead of `scripts/tests/*.bats`.
+
+**Verification**: planner.md template (`setup/agent-templates/planner.md`) routes all path discovery via context-provider; no hardcoded test path examples. The stale path in BL-W31.7-11's PLAN.md was a planner-runtime synthesis error, not a template bug. CP-routed path discovery prevents recurrence.
+
+---
+
+### BL-W32-02 — Implementation-spec conflict resolution protocol (MED)
+**Status**: backlog
+**Priority**: MEDIUM (process integrity — recurring class of issue)
+**Source**: BL-W31.7-11 lesson #2 — arch-integration (exit 0) vs arch-platform (exit 2) clash on bash wrapper baseline-fail behavior; resolved ad-hoc by team-lead tiebreaker (CI yaml `continue-on-error: true` swallows exit 2 unconditionally).
+
+**Problem**: When two architects produce conflicting verdicts on overlapping concerns (CI semantics vs lib interface), there's no explicit tiebreaker chain. Resolution depends on team-lead noticing and improvising. Fragile across sessions.
+
+**Fix path**:
+- **Option A (ownership boundary doc)**: docs/agents/arch-topology-protocols.md gains a "Concern ownership" section. arch-integration owns CI/runtime/wiring semantics; arch-platform owns lib/interface/schema contracts; arch-testing owns test design + coverage. When two architects touch the same artifact, the owner of the concern (per this map) takes precedence; team-lead is final tiebreaker.
+- **Option B (escalation hook)**: SendMessage with `decision: conflict` triggers explicit team-lead arbitration; verdicts not finalized until tiebreaker recorded.
+
+**Recommended**: A first (low cost, immediate clarity); B if A doesn't catch all cases.
+
+**Surface**: `docs/agents/arch-topology-protocols.md` (new section) + arch-* template prose updates.
+
+**Trigger**: any W32 wave where 2 architects review the same artifact (likely on multi-domain hooks or settings.json edits).
+
+---
+
+### BL-W32-03 — test-specialist mocking strategy pre-decided by arch-testing (MED)
+**Status**: backlog
+**Priority**: MEDIUM (avoids mid-session blockers — observed in BL-W31.7-11)
+**Source**: BL-W31.7-11 lesson #3 — test-specialist blocked because vi.mock infrastructure was absent in `mcp-server/`; arch-platform locked Path B (real git fixtures) post-block. Should have been pre-decided.
+
+**Problem**: arch-testing dispatches test-specialist without specifying mock vs real-fixture strategy. test-specialist discovers infra absence mid-implementation and blocks. Wastes a turn on every multi-test wave.
+
+**Fix**: arch-testing template gains explicit Step "Pre-decide Path A (mocks via vi.mock) vs Path B (real fixtures via tmpdir/real-git) BEFORE dispatching test-specialist". Pre-decision based on:
+- Existing infra: grep `mcp-server/package.json` for vi.mock usage; if absent, Path B mandatory
+- Test surface: file system / git / network → Path B (real fixtures); pure logic → Path A (mocks)
+- Existing pattern in `mcp-server/tests/integration/` → mirror convention
+
+**Surface**: `setup/agent-templates/arch-testing.md` (new "Pre-decision" step in Process section).
+
+**Recommended**: simple template addition; arch-testing logs decision in dispatch DM to test-specialist.
+
+**Trigger**: next wave with new test files (likely BL-W31.7-12 itself if expanded scope, or W32 work).
+
+**Note**: This wave (BL-W31.7-12) folds the fix in via arch-testing's verdict — arch-testing pre-decides Path A vs Path B explicitly in `.planning/wave-bl-w31-7-12/arch-testing-verdict.md`. Backlog entry remains for permanent template change.
+
+---
+
+### BL-W32-04 — CP zombie shutdown bug at session start (HIGH — RECURRING)
+**Status**: backlog
+**Priority**: HIGH (affects every new session; recurring per `feedback_cp_shutdown_bug.md`)
+**Source**: BL-W31.7-11 lesson #4 — zombie context-provider entry from prior session blocked TeamCreate; required manual fix (Write to clear `members[]` array in `~/.claude/teams/{slug}/config.json`). Same root cause confirmed across multiple sessions.
+
+**Problem**: When a previous session leaves a stale CP entry in team config, new TeamCreate either (a) fails with "team exists" error, OR (b) succeeds but spawns CP that hangs on shutdown_request from the dead session. Workaround per `feedback_cp_shutdown_bug.md`: TeamDelete at session START. But this is fragile — main agent must remember.
+
+**Investigation needed before fix**:
+- Is this Anthropic-side TeamCreate semantics (dead-session cleanup) or project-side (CP template bug)?
+- If Anthropic-side: file an issue against Claude Code, document the workaround in main-agent-orchestration-guide.md as authoritative
+- If project-side: fix via session-init hook that auto-clears stale `members[]` on startup
+
+**Fix path candidates**:
+- **Option A (auto-clear stale teams hook)**: PreToolUse on TeamCreate scans `~/.claude/teams/*/config.json` for entries older than N hours with no active session; clears `members[]`. Defensive cleanup.
+- **Option B (document as session-init standard)**: main-agent-orchestration-guide.md Phase 0 (session start) step explicitly: "If reusing a session slug, TeamDelete first. If creating a new slug, no-op." Mechanical discipline.
+- **Option C (Anthropic-side report)**: file issue + workaround documented; defer fix.
+
+**Recommended**: B (immediate) + C (long-term). A is risky — auto-clearing teams could lose in-flight session state.
+
+**Surface**: `docs/agents/main-agent-orchestration-guide.md` Phase 0; possibly `.claude/hooks/session-init-cleanup.js` (new).
+
+**Trigger**: W32 hardening pass — high-frequency annoyance worth dedicated session.
+
+---
+
