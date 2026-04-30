@@ -84,6 +84,28 @@ teardown() {
   [[ "$output" == *"--module-filter :core-network-ktor"* ]]
 }
 
+# ── Additional flag translation ───────────────────────────────────────────────
+
+@test "gradle-run: --coverage-tool maps to --coverage-tool" {
+  run bash "$SCRIPT" --dry-run --coverage-tool jacoco
+  [[ "$output" == *"--coverage-tool jacoco"* ]]
+}
+
+@test "gradle-run: --timeout maps to --timeout CLI flag" {
+  run bash "$SCRIPT" --dry-run --timeout 60
+  [[ "$output" == *"--timeout 60"* ]]
+}
+
+@test "gradle-run: --search-pattern flag emits deprecation warning" {
+  run bash "$SCRIPT" --dry-run --search-pattern foo
+  [[ "$output" == *"deprecated"* ]]
+}
+
+@test "gradle-run: --test-type all selects parallel subcommand" {
+  run bash "$SCRIPT" --dry-run --test-type all
+  [[ "$output" == *"parallel"* ]]
+}
+
 # ── Exit code propagation ─────────────────────────────────────────────────────
 
 @test "gradle-run: exit code propagated from kmp-test" {
