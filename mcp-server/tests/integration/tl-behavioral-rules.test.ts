@@ -262,7 +262,7 @@ describe('team-lead template structural invariants', () => {
     expect(agentCalls!.length).toBe(6);
   });
 
-  it('Phase 2 Core Specialists section has exactly 4 Agent() calls in the code block', () => {
+  it('Phase 2 Core Specialists section has exactly 5 Agent() calls in the code block', () => {
     // W32 naming audit: section header renamed "Phase 2 Core Devs" →
     // "Phase 2 Core Specialists" to align with the *-specialist agent
     // template names. Extract only the code block (between ``` delimiters)
@@ -272,7 +272,7 @@ describe('team-lead template structural invariants', () => {
     const codeBlock = codeBlockMatch ? codeBlockMatch[0] : '';
     const agentCalls = codeBlock.match(/Agent\(name=/g);
     expect(agentCalls).not.toBeNull();
-    expect(agentCalls!.length).toBe(4);
+    expect(agentCalls!.length).toBe(5);
   });
 });
 
