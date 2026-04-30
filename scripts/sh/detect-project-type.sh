@@ -17,9 +17,9 @@ set -euo pipefail
 #   - Neither -> unknown
 #
 # Usage:
-#   detect-project-type.sh                      # uses $PWD
-#   detect-project-type.sh --root /path/to/proj # uses given path
-#   detect-project-type.sh --help               # show this header
+#   detect-project-type.sh                              # uses $PWD
+#   detect-project-type.sh --project-root /path/to/proj # uses given path
+#   detect-project-type.sh --help                       # show this header
 #
 # Exit codes:
 #   0 = always (callers decide what to do with "unknown")
@@ -27,7 +27,7 @@ set -euo pipefail
 #
 # Output: single line on stdout — one of: node, gradle, hybrid, unknown
 
-ROOT="$PWD"
+PROJECT_ROOT="$PWD"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -35,12 +35,12 @@ while [[ $# -gt 0 ]]; do
             grep -E "^# " "$0" | sed -e 's/^# //' -e 's/^#//' | head -30
             exit 0
             ;;
-        --root)
-            ROOT="$2"
+        --project-root)
+            PROJECT_ROOT="$2"
             shift 2
             ;;
-        --root=*)
-            ROOT="${1#--root=}"
+        --project-root=*)
+            PROJECT_ROOT="${1#--project-root=}"
             shift
             ;;
         *)
@@ -50,31 +50,31 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ ! -d "$ROOT" ]]; then
-    echo "ERROR: root is not a directory: $ROOT" >&2
+if [[ ! -d "$PROJECT_ROOT" ]]; then
+    echo "ERROR: root is not a directory: $PROJECT_ROOT" >&2
     exit 2
 fi
 
 # Resolve symlinks so callers can pass either a real path or a link.
-ROOT="$(cd "$ROOT" 2>/dev/null && pwd -P)" || {
-    echo "ERROR: cannot resolve root: $ROOT" >&2
+PROJECT_ROOT="$(cd "$PROJECT_ROOT" 2>/dev/null && pwd -P)" || {
+    echo "ERROR: cannot resolve root: $PROJECT_ROOT" >&2
     exit 2
 }
 
 HAS_GRADLE=0
 HAS_NODE=0
 
-if [[ -f "$ROOT/settings.gradle.kts" || -f "$ROOT/settings.gradle" ]]; then
+if [[ -f "$PROJECT_ROOT/settings.gradle.kts" || -f "$PROJECT_ROOT/settings.gradle" ]]; then
     HAS_GRADLE=1
 fi
 
-if [[ -f "$ROOT/package.json" ]]; then
+if [[ -f "$PROJECT_ROOT/package.json" ]]; then
     HAS_NODE=1
 else
     # Depth-1 search: catches monorepos with package.json under
     # mcp-server/, web/, packages/, etc. We do not recurse deeper to avoid
     # false positives from node_modules or build outputs.
-    for sub in "$ROOT"/*/; do
+    for sub in "$PROJECT_ROOT"/*/; do
         [[ -d "$sub" ]] || continue
         case "$sub" in
             */node_modules/|*/build/|*/.git/|*/dist/|*/out/|*/target/) continue ;;

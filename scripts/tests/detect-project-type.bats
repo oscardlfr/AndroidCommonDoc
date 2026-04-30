@@ -24,7 +24,7 @@ teardown() {
 
 @test "node project (package.json at root)" {
     touch "$TMP/package.json"
-    run bash "$SCRIPT" --root "$TMP"
+    run bash "$SCRIPT" --project-root "$TMP"
     [ "$status" -eq 0 ]
     [ "$output" = "node" ]
 }
@@ -32,21 +32,21 @@ teardown() {
 @test "node project (package.json in depth-1 subdir like mcp-server/)" {
     mkdir -p "$TMP/mcp-server"
     touch "$TMP/mcp-server/package.json"
-    run bash "$SCRIPT" --root "$TMP"
+    run bash "$SCRIPT" --project-root "$TMP"
     [ "$status" -eq 0 ]
     [ "$output" = "node" ]
 }
 
 @test "gradle project (settings.gradle.kts at root)" {
     touch "$TMP/settings.gradle.kts"
-    run bash "$SCRIPT" --root "$TMP"
+    run bash "$SCRIPT" --project-root "$TMP"
     [ "$status" -eq 0 ]
     [ "$output" = "gradle" ]
 }
 
 @test "gradle project (legacy settings.gradle Groovy)" {
     touch "$TMP/settings.gradle"
-    run bash "$SCRIPT" --root "$TMP"
+    run bash "$SCRIPT" --project-root "$TMP"
     [ "$status" -eq 0 ]
     [ "$output" = "gradle" ]
 }
@@ -54,7 +54,7 @@ teardown() {
 @test "hybrid project (root package.json + settings.gradle.kts)" {
     touch "$TMP/package.json"
     touch "$TMP/settings.gradle.kts"
-    run bash "$SCRIPT" --root "$TMP"
+    run bash "$SCRIPT" --project-root "$TMP"
     [ "$status" -eq 0 ]
     [ "$output" = "hybrid" ]
 }
@@ -63,13 +63,13 @@ teardown() {
     touch "$TMP/settings.gradle.kts"
     mkdir -p "$TMP/web"
     touch "$TMP/web/package.json"
-    run bash "$SCRIPT" --root "$TMP"
+    run bash "$SCRIPT" --project-root "$TMP"
     [ "$status" -eq 0 ]
     [ "$output" = "hybrid" ]
 }
 
 @test "unknown (empty directory)" {
-    run bash "$SCRIPT" --root "$TMP"
+    run bash "$SCRIPT" --project-root "$TMP"
     [ "$status" -eq 0 ]
     [ "$output" = "unknown" ]
 }
@@ -79,7 +79,7 @@ teardown() {
     touch "$TMP/node_modules/package.json"
     mkdir -p "$TMP/build"
     touch "$TMP/build/package.json"
-    run bash "$SCRIPT" --root "$TMP"
+    run bash "$SCRIPT" --project-root "$TMP"
     [ "$status" -eq 0 ]
     [ "$output" = "unknown" ]
 }
@@ -94,9 +94,9 @@ teardown() {
     [ "$output" = "node" ]
 }
 
-@test "--root=PATH form (equals syntax)" {
+@test "--project-root=PATH form (equals syntax)" {
     touch "$TMP/package.json"
-    run bash "$SCRIPT" "--root=$TMP"
+    run bash "$SCRIPT" "--project-root=$TMP"
     [ "$status" -eq 0 ]
     [ "$output" = "node" ]
 }
@@ -115,7 +115,7 @@ teardown() {
 }
 
 @test "non-existent root exits 2" {
-    run bash "$SCRIPT" --root "/this/path/does/not/exist/$$"
+    run bash "$SCRIPT" --project-root "/this/path/does/not/exist/$$"
     [ "$status" -eq 2 ]
     [[ "$output" == *"not a directory"* ]]
 }
