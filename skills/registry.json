@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-29T22:29:07.136Z",
+  "generated": "2026-04-30T17:13:10.239Z",
   "l0_root": ".",
   "entries": [
     {
@@ -2884,6 +2884,40 @@
         "optional_capabilities": [
           "context7",
           "mcp-monitor"
+        ]
+      }
+    },
+    {
+      "name": "toolkit-specialist",
+      "type": "agent",
+      "path": ".claude/agents/toolkit-specialist.md",
+      "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
+      "category": "domain",
+      "tier": "extended",
+      "hash": "sha256:d2ed3991aaaf6533b62eea7a19dd0b9b0b33440994edd48b0b16bbd2cf0420ea",
+      "dependencies": [],
+      "frontmatter": {
+        "name": "toolkit-specialist",
+        "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
+        "tools": "Read, Write, Edit, Bash, SendMessage, mcp__androidcommondoc__code-metrics",
+        "model": "sonnet",
+        "domain": "development",
+        "intent": [
+          "typescript",
+          "mcp-server",
+          "mcp-tool",
+          "vitest",
+          "hooks",
+          "lib",
+          "ts-lib",
+          "validator"
+        ],
+        "token_budget": 3000,
+        "template_version": "1.0.0",
+        "memory": "project",
+        "skills": [
+          "test",
+          "validate-patterns"
         ]
       }
     },
