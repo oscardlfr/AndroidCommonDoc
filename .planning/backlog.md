@@ -667,6 +667,36 @@ Four findings from BL-W31.7-11 dogfood retrospective (memory `project_BL-W31.7-1
 
 ---
 
+### BL-W32-05 — Architect verdict gate regex inconsistency (MED — discovered 2026-04-30)
+**Status**: backlog
+**Priority**: MEDIUM (blocks architect verdict-to-disk for non-digit wave slugs)
+**Source**: BL-W31.7-12 wave, arch-integration verdict-write blocked
+
+**Problem**: Two architect-protection hooks use inconsistent regex for the `arch-*-verdict.md` exempt path:
+- `architect-self-edit-gate.js` line 21: `/\.planning[\\/]wave\d+[\\/]arch-[^/\\]+-verdict\.md$/` — requires digits-only suffix (`wave\d+`)
+- `architect-bash-write-gate.js` line 82: `/\.planning[\\/]wave[\w.-]+[\\/]arch-[^\s/\\]+-verdict\.md$/` — allows hyphenated slug (`wave[\w.-]+`)
+
+Wave directories with non-digit slugs (e.g., `wave-bl-w31-7-12`, `wave-bl-w32-NN`) are blocked by self-edit-gate but allowed by bash-write-gate. Architects relying on Bash heredoc work; architects relying on Write tool fail. arch-integration's BL-W31.7-12 verdict was blocked and required team-lead bypass.
+
+**Additional bug** (same hook file): `bash-write-gate.js` PYTHON_WRITE_RE blocks `python3 -c open(...,'w')` unconditionally without checking the exempt-target allowlist. Should mirror the heredoc-redirect path which DOES check exempt targets.
+
+**Fix**:
+1. Sync regex in `architect-self-edit-gate.js` line 21 to use `wave[\w.-]+` (matching bash-write-gate)
+2. Make `architect-bash-write-gate.js` PYTHON_WRITE_RE consult exempt-target allowlist before blocking
+3. Add bats coverage in `architect-self-edit-gate.bats` and `architect-bash-write-gate.bats` for non-digit wave slugs (`wave-bl-w31-7-12`, `wave-bl-w32-05`)
+
+**Surface**:
+- `.claude/hooks/architect-self-edit-gate.js` (line 21 regex)
+- `.claude/hooks/architect-bash-write-gate.js` (PYTHON_WRITE_RE handling)
+- `scripts/tests/architect-self-edit-gate.bats` (new bats case)
+- `scripts/tests/architect-bash-write-gate.bats` (new bats case)
+
+**Owner**: toolkit-specialist (per BL-W31.7-08 hook ownership scope)
+
+**Trigger**: W32 hardening sweep — affects every wave with hyphenated slug (which is most W30+ waves).
+
+---
+
 ### BL-W32-04 — CP zombie shutdown bug at session start (HIGH — RECURRING)
 **Status**: backlog
 **Priority**: HIGH (affects every new session; recurring per `feedback_cp_shutdown_bug.md`)

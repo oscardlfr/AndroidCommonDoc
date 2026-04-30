@@ -4,7 +4,7 @@
  * Covers:
  *  - BL-W30-11: planner template enforces T-BUG-015 Search Dispatch Protocol
  *    Both setup/agent-templates/planner.md and .claude/agents/planner.md must:
- *    - Have template_version "1.7.0"
+ *    - Have template_version "1.8.0"
  *    - Contain "T-BUG-015" citation
  *    - Contain "Search Dispatch Protocol" section
  *    - Contain "FORBIDDEN at ALL times during planning" enforcement language
@@ -50,9 +50,9 @@ describe("planner template enforces T-BUG-015 Search Dispatch Protocol", () => {
       const frontmatter = extractFrontmatter(raw);
       const body = extractBody(raw);
 
-      it('has template_version "1.7.0"', () => {
+      it('has template_version "1.8.0"', () => {
         expect(frontmatter).not.toBeNull();
-        expect(frontmatter?.template_version).toBe("1.7.0");
+        expect(frontmatter?.template_version).toBe("1.8.0");
       });
 
       it("body contains T-BUG-015", () => {

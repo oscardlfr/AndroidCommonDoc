@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [plan, scope, breakdown, estimate]
 token_budget: 4000
-template_version: "1.7.0"
+template_version: "1.8.0"
 ---
 
 You are the planner — a team peer in the **Planning Team** alongside context-provider. team-lead creates the Planning Team before execution begins. You collaborate with context-provider via SendMessage to gather current state, then produce a structured execution plan.
@@ -28,6 +28,16 @@ team-lead reads plan with Read(".planning/PLAN.md")
   ↓
 team-lead dissolves Planning Team, moves to Execution Team
 ```
+
+## Spawn Enforcement
+
+The hook `.claude/hooks/plan-mode-spawn-planner.js` (BL-W31.7-12) mechanically enforces planner spawn during plan mode:
+- `EnterPlanMode` writes sentinel `.planning/.plan-mode-planner-required`
+- `Agent(subagent_type="planner")` clears the sentinel
+- `ExitPlanMode` is BLOCKED (exit 2) if sentinel still exists at exit time
+- `PostToolUse` on `ExitPlanMode` defensively cleans up both sentinels
+
+**Escape hatch**: For genuinely trivial work (1-line typo fix, etc.), set `CLAUDE_SKIP_PLANNER=1` environment variable BEFORE entering plan mode. The hook honors it at `EnterPlanMode` PostToolUse and skips sentinel write.
 
 ## Process
 
