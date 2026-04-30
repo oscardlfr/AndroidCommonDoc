@@ -667,6 +667,72 @@ Four findings from BL-W31.7-11 dogfood retrospective (memory `project_BL-W31.7-1
 
 ---
 
+### BL-W32-06 — kmp-test-runner v0.6.2 adoption across L0/L1/L2 (HIGH — discovered 2026-04-30)
+**Status**: backlog
+**Priority**: HIGH (test runner unification; ~500 lines of obsolete gradle-run.sh code to retire)
+**Discovered**: 2026-04-30 by user during W31.7-12 closeout retrospective
+**Source**: kmp-test-runner shipped to npm + Gradle Plugin (GitHub Packages) at v0.6.2 since W31.5c trilogy. No repo currently consumes it.
+
+**Problem**: kmp-test-runner was extracted from this repo in W31.5b/c trilogy (npm + Gradle plugin) and reached v0.6.2 in standalone evolution. Three concrete gaps:
+
+1. **L0 skills still bundle gradle-run.sh** (`scripts/sh/gradle-run.sh`, 497 lines) — smart retry, daemon handling, Windows lock workaround, Kover fallback. Most/all of this is now duplicated by kmp-test-runner v0.6.2 which has the same surface. Bundled code is obsolete.
+
+2. **test-specialist agent template** (`setup/agent-templates/test-specialist.md`) instructs agents to use L0 skills (`/test`, `/coverage`, `/test-full-parallel`, `/test-changed`) which all wrap gradle-run.sh. Template never references kmp-test-runner — agents have no awareness of the canonical KMP test runner.
+
+3. **L1 (shared-kmp-libs) + L2 (DawSync)** have ZERO references to kmp-test-runner in build.gradle.kts / libs.versions.toml / settings.gradle.kts. Neither project consumes the Gradle plugin or npm CLI.
+
+**Scope of work** (4 sub-tasks, can ship as separate PRs):
+
+**BL-W32-06a** — L0 skills delegate to kmp-test-runner CLI
+- Replace `scripts/sh/gradle-run.sh` body with thin wrapper that calls `npx kmp-test-runner` (or `kmp-test-runner` if globally installed)
+- Update `/test`, `/coverage`, `/test-full-parallel`, `/test-changed` skills' Implementation sections
+- Preserve flag/parameter compatibility — wrapper translates L0 skill flags to kmp-test-runner CLI flags
+- Remove obsolete daemon-retry/Kover-fallback logic now handled by kmp-test-runner internally
+- Test: bats coverage for the thin wrapper + verify L1/L2 still work via the L0 skill
+
+**BL-W32-06b** — test-specialist template adopts kmp-test-runner
+- `setup/agent-templates/test-specialist.md` Process / Implementation Notes section: introduce kmp-test-runner as canonical KMP test runner; update "NEVER run ./gradlew directly" rationale (now: gradle-run.sh wraps kmp-test-runner; bypassing both defeats Windows lock + retry handling)
+- Bump test-specialist template_version per W31.7 manifest discipline; rebaseline SHA via generate-template
+- Add MIGRATIONS entry
+- Sync-l0 propagation to L1/L2
+
+**BL-W32-06c** — L1 (shared-kmp-libs) adopts Gradle plugin
+- Add `kmpTestRunner = "0.6.2"` to `gradle/libs.versions.toml` `[versions]`
+- Add plugin alias in `[plugins]`: `kmp-test-runner = { id = "io.github.oscardlfr.kmp-test-runner", version.ref = "kmpTestRunner" }`
+- Apply in `build.gradle.kts` (root or per-module per kmp-test-runner docs)
+- Update settings.gradle.kts pluginManagement to include GitHub Packages repo (per kmp-test-runner README)
+- Remove any module-local test runner customization that's now redundant
+- Verify: `/test core:domain` and full suite still pass; coverage reports still render
+
+**BL-W32-06d** — L2 (DawSync) adopts Gradle plugin
+- Same as 06c but for DawSync
+- Per memory `project_dawsync_local_only.md`: local FF only, no GitHub remote — adopt without PR cycle
+- Verify: desktop tests still pass; sidebar feature branch unaffected
+
+**Plus README update** (small, fold into 06a or separate):
+- README.md `## Wave History` already mentions W31.5 trilogy. Add a "Toolkit ecosystem" section citing kmp-test-runner v0.6.2 as the canonical test runner for KMP projects (npm `kmp-test-runner@0.6.2` + Gradle plugin `io.github.oscardlfr.kmp-test-runner:0.6.2`).
+- Cross-link to kmp-test-runner repo + GitHub Packages page
+
+**Verification across the migration**:
+- Bats: full L0 suite 864/864 still green after gradle-run.sh refactor
+- Vitest: 129/129 still green
+- L1: `/check-outdated`, `/pre-pr`, sample test runs green
+- L2: local desktop tests + coverage reports still render
+- No regression in Windows file-lock handling (kmp-test-runner v0.6.2 must inherit this — verify via local Windows test run)
+
+**Estimated effort**: 06a (~2h, biggest — script rewrite + bats); 06b (~1h, template + manifest dance); 06c+d (~30min each, mechanical). Total ~4h across 4 sub-PRs.
+
+**Sequencing**: 06a → 06b → 06c → 06d. Each blocks the next (template change references 06a's wrapper; L1/L2 adoption assumes template + skill are ready).
+
+**Risk**: kmp-test-runner v0.6.2 may not yet cover every edge case gradle-run.sh handles. Validation via L1 desktop suite + L2 sidebar branch is the canary. If an edge case surfaces, file as kmp-test-runner upstream issue and patch downstream — do NOT re-fork.
+
+**Cross-references**:
+- Memory `project_wave31.5_kmp_test_runner.md` — original extraction plan
+- Memory `project_wave31.5b_shipped.md` / `project_wave31.5c_shipped.md` — v0.1/0.2/0.3 shipped
+- Memory `feedback_kmp_test_runner_gitflow.md` — branch protection on kmp-test-runner
+
+---
+
 ### BL-W32-05 — Architect verdict gate regex inconsistency (MED — discovered 2026-04-30)
 **Status**: backlog
 **Priority**: MEDIUM (blocks architect verdict-to-disk for non-digit wave slugs)
