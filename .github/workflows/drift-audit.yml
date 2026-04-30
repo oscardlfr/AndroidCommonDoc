@@ -251,6 +251,104 @@ jobs:
           path: /tmp/manifest-drift.txt
           retention-days: 14
 
+  manifest-abi-warn:
+    # BL-W31.7-11 — Manifest ABI/API stability advisory.
+    #
+    # Diffs `.claude/registry/agents.manifest.yaml` at HEAD against a baseline
+    # ref and classifies each change as BREAKING | ADDITIVE | NEUTRAL.
+    # Complements `manifest-drift-warn` (which catches byte-level drift) with
+    # a semantic-impact classification. Both jobs can fire on the same PR —
+    # complementary signals, not redundant.
+    #
+    # WARN mode: validator exit code is captured and reported, but the job
+    # always exits 0. Promotion to BLOCK + branch-protection rule is a
+    # follow-up after 2–4 weeks of WARN-mode signal quality verification.
+    name: Manifest ABI (WARN)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Required: validator runs `git show <BASELINE_REF>:<path>` to load
+          # the baseline manifest. Shallow clones (default fetch-depth=1) lack
+          # historical refs and the show command would fail. Do NOT remove.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install + build MCP server
+        working-directory: mcp-server
+        run: |
+          npm ci --silent
+          npm run build --silent
+
+      - name: Resolve baseline ref
+        id: baseline
+        run: |
+          # PR events: base.ref = target branch (e.g. develop).
+          # push events: base.ref empty → fall through to ref_name (the pushed branch).
+          # workflow_dispatch: base.ref empty → ref_name = triggered branch.
+          BASELINE_REF="${{ github.event.pull_request.base.ref || github.ref_name }}"
+          echo "ref=$BASELINE_REF" >> "$GITHUB_OUTPUT"
+          echo "Resolved baseline ref: $BASELINE_REF"
+
+      - name: Run manifest ABI validator (WARN mode)
+        id: validator
+        run: |
+          set +e
+          bash scripts/sh/validate-manifest-abi.sh \
+            --baseline-ref "${{ steps.baseline.outputs.ref }}" \
+            --format summary > /tmp/manifest-abi.txt 2>&1
+          VALIDATOR_EXIT=$?
+          set -e
+          echo "exit_code=$VALIDATOR_EXIT" >> "$GITHUB_OUTPUT"
+          cat /tmp/manifest-abi.txt
+          # WARN mode: never fail the job, regardless of BREAKING / baseline errors.
+          # Promotion to BLOCK is a follow-up PR.
+          exit 0
+
+      - name: Capture JSON report (artifact)
+        if: always()
+        run: |
+          set +e
+          bash scripts/sh/validate-manifest-abi.sh \
+            --baseline-ref "${{ steps.baseline.outputs.ref }}" \
+            --format json > /tmp/manifest-abi.json 2>/dev/null
+          set -e
+          # Empty file is fine — artifact still uploads.
+          true
+
+      - name: Post findings to job summary
+        if: always()
+        run: |
+          {
+            echo "## Manifest ABI diff (WARN mode)"
+            echo ""
+            echo "Baseline ref: \`${{ steps.baseline.outputs.ref }}\`"
+            echo "Validator exit code: \`${{ steps.validator.outputs.exit_code }}\` (0=PASS, 1=BREAKING+strict, 2=invocation-error)"
+            echo ""
+            echo "<details><summary>Full validator output</summary>"
+            echo ""
+            echo '```'
+            cat /tmp/manifest-abi.txt 2>/dev/null || echo "(no output captured)"
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload validator reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-abi-report
+          path: |
+            /tmp/manifest-abi.txt
+            /tmp/manifest-abi.json
+          retention-days: 14
+
   doc-cross-refs:
     name: docs/agents/ cross-references resolve
     runs-on: ubuntu-latest
