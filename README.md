@@ -676,7 +676,7 @@ See [Team Topology](docs/agents/team-topology.md) for full details.
 
 ## Agents
 
-39 specialized agents in `.claude/agents/` + 17 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
+39 specialized agents in `.claude/agents/` + 39 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
 
 ### Production Agents (synced via /sync-l0)
 
