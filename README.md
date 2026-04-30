@@ -31,7 +31,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
 - **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, architecture guards, and dependency freshness
-- **38 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
+- **39 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
 - **38 agent templates** governing the workflow (canonical pattern: main agent IS team-lead, no separate `team-lead` subagent — see `docs/agents/main-agent-orchestration-guide.md`). Roster: 3 architects, 4 core specialists, 1 context-provider, 4 orchestrators (planner, quality-gater, full-audit-orchestrator, quality-gate-orchestrator), 5 validators, 7 auditors, 8 tool-class agents (codebase-mapper, researcher, advisor, debugger, verifier, etc.), 2 doc owners, 1 domain-specialist scaffold, 5 L1/L2 marketing/product templates. Manifest at `.claude/registry/agents.manifest.yaml` is the source of truth (PR #71); CI WARN-mode validator surfaces drift (PR #72). Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
 
 Install once, use across all your projects.
@@ -144,9 +144,9 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 | What | Destination | Count |
 |------|-------------|-------|
 | Skills | `.claude/skills/*/SKILL.md` | 61 |
-| Agents | `.claude/agents/*.md` | 38 |
+| Agents | `.claude/agents/*.md` | 39 |
 | Commands | `.claude/commands/*.md` | 59 |
-| **Total** | | **158 entries** |
+| **Total** | | **159 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -154,7 +154,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 158 L0 entries (61 skills + 38 agents + 59 commands) with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 159 L0 entries (61 skills + 39 agents + 59 commands) with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -602,19 +602,19 @@ Skills primarily useful when working on AndroidCommonDoc (L0) itself:
 
 ## 3-Phase Team Model
 
-Every non-trivial task flows through three sequential phases. Nine **session team peers** in `session-{project-slug}` carry context across phases: 5 spawned at session start + 4 core specialists at Phase 2. Planner and quality-gater are temporary.
+Every non-trivial task flows through three sequential phases. Ten **session team peers** in `session-{project-slug}` carry context across phases: 5 spawned at session start + 5 core specialists at Phase 2. Planner and quality-gater are temporary.
 
 ```
 Session start: TeamCreate("session-{project-slug}")
   context-provider, doc-updater, arch-testing, arch-platform, arch-integration
-Phase 2 start: +4 core specialists
-  test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist
+Phase 2 start: +5 core specialists
+  test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist
 
 Phase 1 — Planning               Phase 2 — Execution                Phase 3 — Quality Gate
 ┌─────────────────────┐          ┌──────────────────────────┐       ┌───────────────────────┐
 │ planner (temporary)  │          │ 9 session team peers:     │       │ quality-gater joins    │
 │ SendMessage to       │  ──→    │   5 from session start    │  ──→ │   session team         │
-│   context-provider   │          │   +4 core specialists     │       │ Consults architects    │
+│   context-provider   │          │   +5 core specialists     │       │ Consults architects    │
 │                      │          │ Architects assign work    │       │   and core specialists  │
 │ Output: .planning/   │          │   via SendMessage          │       │ Output: PASS / FAIL    │
 │   PLAN.md            │          │ team-lead spawns extras on       │       └───────────────────────┘
@@ -626,14 +626,14 @@ Phase 1 — Planning               Phase 2 — Execution                Phase 3 
 
 ### Agent Topology
 
-9 persistent session agents (5 at session start + 4 core specialists at Phase 2):
+10 persistent session agents (5 at session start + 5 core specialists at Phase 2):
 - `context-provider` — reads project state, answers queries from all agents
 - `doc-updater` — updates docs when agents request changes
 - `arch-testing` — verifies test quality, TDD compliance, coverage
 - `arch-platform` — verifies KMP patterns, source sets, expect/actual
 - `arch-integration` — verifies DI wiring, navigation, compilation
 
-Core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) are persistent session team peers — spawned at Phase 2 start, accumulate layer knowledge across waves. Extra specialists are disposable — spawned by team-lead on architect request, execute, return result, die.
+Core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist) are persistent session team peers — spawned at Phase 2 start, accumulate layer knowledge across waves. Extra specialists are disposable — spawned by team-lead on architect request, execute, return result, die.
 
 Quality gate: `quality-gater` deliberates with all 3 persistent architects (Step 1.5) before running automated checks (`/pre-pr`, tests, coverage). Pattern validation chain: specialist → architect → context-provider ensures architects gate every pattern query.
 
@@ -676,7 +676,7 @@ See [Team Topology](docs/agents/team-topology.md) for full details.
 
 ## Agents
 
-38 specialized agents in `.claude/agents/` + 16 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
+39 specialized agents in `.claude/agents/` + 17 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
 
 ### Production Agents (synced via /sync-l0)
 
@@ -1088,7 +1088,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 AndroidCommonDoc/
 +-- .claude/
 |   +-- commands/           # 59 Claude Code slash commands
-|   +-- agents/             # 38 specialized agents
+|   +-- agents/             # 39 specialized agents
 |   +-- hooks/              # Real-time enforcement hooks (8 hooks: Detekt, README, registry, quality-gate, doc-freshness, agent-delegation, plan-context)
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
