@@ -155,6 +155,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+      },
+      "1.8.0": {
+        "date": "2026-04-30",
+        "breaking": false,
+        "note": "Hook plan-mode-spawn-planner.js mechanically enforces planner spawn during plan mode (BL-W31.7-12). Body adds 'Spawn Enforcement' section documenting the gate + CLAUDE_SKIP_PLANNER=1 escape hatch for trivial tasks. Manifest spawn_method drift fix (TeamCreate-peer -> Agent) folded in same commit."
       }
     },
     "quality-gater": {

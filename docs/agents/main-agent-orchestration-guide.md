@@ -165,7 +165,7 @@ At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatche
 □ 5. arch-platform added to session team?                    → YES or STOP
 □ 6. arch-integration added to session team?                 → YES or STOP
 □ 7. quality-gater added to session team?                           → YES or STOP
-□ 8. Agent(planner) called for non-trivial tasks?            → YES or STOP
+□ 8. Agent(planner) called for non-trivial tasks?            → YES or STOP (ENFORCED by .claude/hooks/plan-mode-spawn-planner.js; escape: CLAUDE_SKIP_PLANNER=1)
 □ 9. test-specialist added to session team?              → YES or SKIP (Phase 2 not started)
 □ 10. ui-specialist added to session team?                → YES or SKIP (Phase 2 not started)
 □ 11. domain-model-specialist added to session team?     → YES or SKIP (Phase 2 not started)
@@ -179,6 +179,9 @@ At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatche
 For non-trivial tasks:
 1. **`EnterPlanMode()`** — plan-context.js injects MODULE_MAP.md + agents + skills as additional context. Note: the hook does NOT block team-lead writes — the no-self-write rule below is discipline-enforced, not hook-enforced. Planned hardening: BL-W31-00 (extend hook to block Write/Edit on `.planning/PLAN*.md` while plan mode is active).
 2. **Spawn planner**: `Agent(name="planner", team_name="session-{project-slug}", subagent_type="planner", prompt="...", run_in_background=true)` — `subagent_type` MUST be `"planner"` (lowercase, custom L0 agent with Read+Write+Bash+SendMessage), NOT `"Plan"` (capital-P built-in; read-only and cannot write plan files).
+
+**Hook enforcement (BL-W31.7-12)**: The hook `.claude/hooks/plan-mode-spawn-planner.js` mechanically blocks `ExitPlanMode` if planner has not been spawned via `Agent(subagent_type="planner")` during the current plan-mode session. Sentinel: `.planning/.plan-mode-planner-required`. Escape hatch: `CLAUDE_SKIP_PLANNER=1` env var (set BEFORE `EnterPlanMode`) for genuinely trivial work.
+
 3. Planner writes `.planning/PLAN.md` + `.planning/PLAN-W{N}.md` (planner is a subagent — outside plan mode scope, can write files normally)
 4. Present plan summary to user as text output (team-lead needs no file writes during planning)
 5. **On user approval**: call `ExitPlanMode()`
