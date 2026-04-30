@@ -15,6 +15,9 @@ jobs:
           npm install bats
           npx bats --version
 
+      - name: Install kmp-test-runner
+        run: npm install -g kmp-test-runner@0.6.2
+
       - name: Run shell tests
         run: npx bats scripts/tests/*.bats
 

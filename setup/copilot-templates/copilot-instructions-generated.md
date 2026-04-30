@@ -4,6 +4,10 @@
 
 Follow these patterns when writing Kotlin/KMP code in this project.
 
+## Context Rotation Guide
+
+- Key insight: Peers are expensive (context grows). Sub-agents are cheap (context is temporary). Use sub-agents for workers, peers only for coordinators.
+
 ## KMP Module Structure
 
 - Key insight: AGP 9.0+ has a known circular dependency bug with nested module paths. Always use flat module names.
@@ -13,6 +17,10 @@ Follow these patterns when writing Kotlin/KMP code in this project.
 - DON'T: BAD: Same JVM code duplicated -- maintenance burden and drift risk
 - DON'T: BAD: Same Foundation code duplicated
 - DON'T: BAD: java.io.* imports in commonMain -- won't compile on iOS/macOS
+
+## Dagger 2: Modular SDK Initialization
+
+- Key insight: `core.logger` is NOT Dagger resolving a dependency. It's plain Kotlin property access. Dagger generates the code that calls `provideSecurityService(coreApis)`, and inside that method, you manually pull what you need from the interface. This is the fundamental trade-off: you lose Dagger's automatic resolution across features, but gain the ability to compile features independently.
 
 ## Compose Resources: Troubleshooting
 
