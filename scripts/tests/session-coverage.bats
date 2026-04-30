@@ -1079,8 +1079,8 @@ teardown() {
     grep -q "^slug: spec-driven-workflow" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
-@test "README: counts match 38 agents, 61 skills" {
-    grep -q "38 specialized agents" "$README"
+@test "README: counts match 39 agents, 61 skills" {
+    grep -q "39 specialized agents" "$README"
     grep -q "61 canonical" "$README"
 }
 
@@ -1412,8 +1412,8 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
     grep -q "doc-templates" "$README" || grep -q "PRODUCT_SPEC" "$README"
 }
 
-@test "README: counts match 38 agents, 61 skills, 59 commands" {
-    grep -q "38 specialized agents" "$README"
+@test "README: counts match 39 agents, 61 skills, 59 commands" {
+    grep -q "39 specialized agents" "$README"
     grep -q "61 canonical" "$README"
     # 59 commands verified via sync table
 }
