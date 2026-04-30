@@ -828,8 +828,8 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.6.0"
-    template_frontmatter_sha256: 498ed51095e3846cb7c4c4fc9a0916215a83ff716f66eda780ad4541c3656281
+    template_version: "2.7.0"
+    template_frontmatter_sha256: 698d0a96bf7836c586780a27f84617ce3d597b121b3d270c0fb5e90416db79bb
     category: orchestrator
     lifecycle: ephemeral
     description: "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL."
@@ -877,10 +877,12 @@ agents:
     skills_referenced: []
     optional_capabilities: []
     memory: null
+    applicable_project_types: [node, gradle, hybrid]
     notes:
       - "Spawned ONLY in Phase 3 (post-architect APPROVE, pre-commit). Dies at session end."
       - "Dynamic rule discovery: reads CLAUDE.md + asks context-provider + runs `/pre-pr` (project's own validation pipeline)."
       - "T-BUG-015 Search Dispatch Protocol: pattern discovery via Grep/Glob/Read on docs/agents/templates is hook-blocked. Project-file Grep/Read still allowed."
+      - "BL-W31.7-10: Step 0.5 detects PROJECT_TYPE via scripts/sh/detect-project-type.sh; Steps 2.5/5/7/9.5 gate on gradle/hybrid; Step 2.6 gates on node/hybrid. Manifest applicable_project_types declares this coverage envelope."
     aliases: []
     superseded_by: null
     replaces: null

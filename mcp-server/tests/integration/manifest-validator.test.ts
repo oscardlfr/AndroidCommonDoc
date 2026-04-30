@@ -47,6 +47,8 @@ interface SyntheticEntry {
   model?: string;
   tools_allowed?: string[];
   spawn_method?: string;
+  /** BL-W31.7-10: optional manifest-only field. Pass raw YAML to inject malformed values. */
+  applicable_project_types?: string[] | string;
   /** Override frontmatter contents to introduce drift. */
   frontmatter?: Record<string, string | number>;
   /** Skip writing the template file (to test missing-file findings). */
@@ -98,6 +100,18 @@ function buildSyntheticProject(entries: SyntheticEntry[]): string {
     manifestLines.push("      dispatched_by: [team-lead]");
     manifestLines.push("      can_dispatch_to: []");
     manifestLines.push("      can_send_to: []");
+    if (e.applicable_project_types !== undefined) {
+      if (typeof e.applicable_project_types === "string") {
+        // Raw string form — inject verbatim for malformed-input testing.
+        manifestLines.push(`    applicable_project_types: ${e.applicable_project_types}`);
+      } else {
+        // Normal array form.
+        manifestLines.push("    applicable_project_types:");
+        for (const t of e.applicable_project_types) {
+          manifestLines.push(`      - ${t}`);
+        }
+      }
+    }
   }
 
   writeFileSync(
@@ -456,6 +470,109 @@ describe("validateManifest — file existence + orphan", () => {
       (f) => f.category === "orphan" && f.agent === "README",
     );
     expect(orphan).toBeUndefined();
+  });
+});
+
+// ── applicable_project_types validation ─────────────────────────────────────
+
+describe("validateManifest — applicable_project_types (BL-W31.7-10)", () => {
+  it("emits 0 findings for valid values [node, gradle]", () => {
+    const root = buildSyntheticProject([
+      {
+        canonical_name: "test-specialist",
+        tools_allowed: ["Read"],
+        applicable_project_types: ["node", "gradle"],
+      },
+    ]);
+    const r = validateManifest({ projectRoot: root });
+    const aptFindings = r.findings.filter(
+      (f) => f.field === "applicable_project_types",
+    );
+    expect(aptFindings).toHaveLength(0);
+  });
+
+  it("emits 0 findings for valid singleton [any]", () => {
+    const root = buildSyntheticProject([
+      {
+        canonical_name: "test-specialist",
+        tools_allowed: ["Read"],
+        applicable_project_types: ["any"],
+      },
+    ]);
+    const r = validateManifest({ projectRoot: root });
+    const aptFindings = r.findings.filter(
+      (f) => f.field === "applicable_project_types",
+    );
+    expect(aptFindings).toHaveLength(0);
+  });
+
+  it("emits exactly 1 warning for invalid value [node, kotlin]", () => {
+    const root = buildSyntheticProject([
+      {
+        canonical_name: "test-specialist",
+        tools_allowed: ["Read"],
+        applicable_project_types: ["node", "kotlin"],
+      },
+    ]);
+    const r = validateManifest({ projectRoot: root });
+    const aptFindings = r.findings.filter(
+      (f) => f.field === "applicable_project_types",
+    );
+    expect(aptFindings).toHaveLength(1);
+    expect(aptFindings[0].severity).toBe("warning");
+    expect(aptFindings[0].category).toBe("schema");
+    expect(aptFindings[0].agent).toBe("test-specialist");
+    expect(aptFindings[0].message).toContain("kotlin");
+  });
+
+  it("emits exactly 1 warning for empty array []", () => {
+    // Empty array: emit as raw YAML string "[]" so parser sees an empty array.
+    const root = buildSyntheticProject([
+      {
+        canonical_name: "test-specialist",
+        tools_allowed: ["Read"],
+        applicable_project_types: "[]",
+      },
+    ]);
+    const r = validateManifest({ projectRoot: root });
+    const aptFindings = r.findings.filter(
+      (f) => f.field === "applicable_project_types",
+    );
+    expect(aptFindings).toHaveLength(1);
+    expect(aptFindings[0].severity).toBe("warning");
+    expect(aptFindings[0].category).toBe("schema");
+    expect(aptFindings[0].agent).toBe("test-specialist");
+    expect(aptFindings[0].message).toContain("non-empty");
+  });
+
+  it("emits 0 findings when field is absent (default)", () => {
+    const root = buildSyntheticProject([
+      {
+        canonical_name: "test-specialist",
+        tools_allowed: ["Read"],
+        // applicable_project_types intentionally omitted
+      },
+    ]);
+    const r = validateManifest({ projectRoot: root });
+    const aptFindings = r.findings.filter(
+      (f) => f.field === "applicable_project_types",
+    );
+    expect(aptFindings).toHaveLength(0);
+  });
+
+  it("emits 0 findings for all four valid values [node, gradle, hybrid, any]", () => {
+    const root = buildSyntheticProject([
+      {
+        canonical_name: "test-specialist",
+        tools_allowed: ["Read"],
+        applicable_project_types: ["node", "gradle", "hybrid", "any"],
+      },
+    ]);
+    const r = validateManifest({ projectRoot: root });
+    const aptFindings = r.findings.filter(
+      (f) => f.field === "applicable_project_types",
+    );
+    expect(aptFindings).toHaveLength(0);
   });
 });
 

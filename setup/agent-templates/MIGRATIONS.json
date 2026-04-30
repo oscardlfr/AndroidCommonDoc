@@ -187,6 +187,16 @@
         "date": "2026-04-21",
         "breaking": false,
         "note": "Wave 26 BL-W26-01a: declare 3 MCP tools in frontmatter (validate-all, code-metrics, validate-doc-update) for deterministic validation."
+      },
+      "2.6.0": {
+        "date": "2026-04-28",
+        "breaking": false,
+        "note": "Wave 31.7 Phase 3 Round 7: added tool-use-analytics to frontmatter tools list."
+      },
+      "2.7.0": {
+        "date": "2026-04-29",
+        "breaking": false,
+        "note": "BL-W31.7-10: Step 0.5 project toolchain detection (node/gradle/hybrid/unknown); Step 2.6 Node lint+test; Steps 2.5/5/7/9.5 gated on PROJECT_TYPE; L2-bleed component names sanitized; $ANDROID_COMMON_DOC fallback added to Steps 5 and 7."
       }
     },
     "doc-migrator": {

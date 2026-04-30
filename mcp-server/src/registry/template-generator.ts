@@ -37,6 +37,12 @@ export interface ManifestAgentEntry {
   skills_referenced?: string[];
   optional_capabilities?: string[];
   memory?: string | null;
+  /**
+   * Optional. Manifest-only field — NOT emitted to template frontmatter.
+   * See `manifest-validator.ts` for the canonical type description and
+   * BL-W31.7-10 plan for the design rationale.
+   */
+  applicable_project_types?: string[];
 }
 
 /** Result of splitting a markdown file into its frontmatter and body. */

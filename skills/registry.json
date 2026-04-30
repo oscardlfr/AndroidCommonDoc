@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-26T22:59:13.433Z",
+  "generated": "2026-04-29T22:29:07.136Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1876,7 +1876,10 @@
           "library"
         ],
         "token_budget": 2000,
-        "template_version": "1.0.0"
+        "template_version": "1.0.0",
+        "skills": [
+          "decide"
+        ]
       }
     },
     {
@@ -1901,11 +1904,11 @@
           "http"
         ],
         "token_budget": 2000,
+        "template_version": "1.0.0",
         "memory": "project",
         "skills": [
           "validate-patterns"
-        ],
-        "template_version": "1.0.0"
+        ]
       }
     },
     {
@@ -2019,12 +2022,12 @@
           "onboarding"
         ],
         "token_budget": 3000,
+        "template_version": "1.1.0",
         "memory": "project",
         "skills": [
           "pre-pr",
           "test-full-parallel"
-        ],
-        "template_version": "1.1.0"
+        ]
       }
     },
     {
@@ -2050,10 +2053,10 @@
           "inventory"
         ],
         "token_budget": 2000,
+        "template_version": "1.1.0",
         "skills": [
           "map-codebase"
-        ],
-        "template_version": "1.1.0"
+        ]
       }
     },
     {
@@ -2070,8 +2073,6 @@
         "description": "Drafts developer-focused content for build-in-public marketing. Creates posts for Reddit, Twitter/X, forums, and changelogs. Customize {{PRODUCT_NAME}} and tone for your project.",
         "tools": "Read, Grep, Glob, WebSearch, SendMessage",
         "model": "sonnet",
-        "token_budget": 3000,
-        "template_version": "1.1.0",
         "domain": "marketing",
         "intent": [
           "post",
@@ -2080,7 +2081,9 @@
           "changelog",
           "marketing",
           "content"
-        ]
+        ],
+        "token_budget": 3000,
+        "template_version": "1.1.0"
       }
     },
     {
@@ -2130,15 +2133,15 @@
           "kmp"
         ],
         "token_budget": 2500,
+        "template_version": "1.0.1",
         "memory": "project",
-        "optional_capabilities": [
-          "context7",
-          "jina"
-        ],
         "skills": [
           "verify-kmp"
         ],
-        "template_version": "1.0.1"
+        "optional_capabilities": [
+          "context7",
+          "jina"
+        ]
       }
     },
     {
@@ -2196,11 +2199,12 @@
           "exception"
         ],
         "token_budget": 2500,
+        "template_version": "1.0.0",
         "skills": [
           "test",
-          "extract-errors"
-        ],
-        "template_version": "1.0.0"
+          "extract-errors",
+          "debug"
+        ]
       }
     },
     {
@@ -2225,14 +2229,14 @@
           "stale"
         ],
         "token_budget": 2000,
+        "template_version": "1.1.0",
         "memory": "project",
         "skills": [
           "audit-docs",
           "validate-patterns",
           "readme-audit",
           "doc-integrity"
-        ],
-        "template_version": "1.1.0"
+        ]
       }
     },
     {
@@ -2256,8 +2260,8 @@
           "pattern"
         ],
         "token_budget": 2000,
-        "memory": "project",
-        "template_version": "1.0.0"
+        "template_version": "1.0.0",
+        "memory": "project"
       }
     },
     {
@@ -2397,8 +2401,8 @@
           "wave"
         ],
         "token_budget": 4000,
-        "memory": "project",
-        "template_version": "1.0.0"
+        "template_version": "1.0.0",
+        "memory": "project"
       }
     },
     {
@@ -2423,17 +2427,17 @@
           "frontmatter"
         ],
         "token_budget": 3000,
-        "memory": "project",
-        "optional_capabilities": [
-          "mcp-gsd",
-          "context7",
-          "jina"
-        ],
         "template_version": "1.2.0",
+        "memory": "project",
         "skills": [
           "audit-l0",
           "audit-docs",
           "readme-audit"
+        ],
+        "optional_capabilities": [
+          "mcp-gsd",
+          "context7",
+          "jina"
         ]
       }
     },
@@ -2451,8 +2455,6 @@
         "description": "Designs landing page copy, structure, and conversion flow. Use when planning public-facing web presence, optimizing CTAs, or improving SEO for product pages.",
         "tools": "Read, Grep, Glob, WebSearch, SendMessage",
         "model": "sonnet",
-        "token_budget": 3000,
-        "template_version": "1.1.0",
         "domain": "marketing",
         "intent": [
           "landing",
@@ -2461,7 +2463,9 @@
           "copy",
           "seo",
           "cta"
-        ]
+        ],
+        "token_budget": 3000,
+        "template_version": "1.1.0"
       }
     },
     {
@@ -2597,11 +2601,11 @@
           "analytics"
         ],
         "token_budget": 2000,
+        "template_version": "1.0.0",
         "memory": "project",
         "skills": [
           "validate-patterns"
-        ],
-        "template_version": "1.0.0"
+        ]
       }
     },
     {
@@ -2644,8 +2648,6 @@
         "description": "Analyzes feature ideas against business goals using ICE scoring. Produces prioritized backlog with rationale. Customize {{PRODUCT_NAME}} and business constraints for your project.",
         "tools": "Read, Grep, Glob, WebSearch, WebFetch, SendMessage",
         "model": "sonnet",
-        "token_budget": 3000,
-        "template_version": "1.1.0",
         "domain": "business",
         "intent": [
           "prioritize",
@@ -2655,7 +2657,9 @@
           "backlog",
           "pricing",
           "tiers"
-        ]
+        ],
+        "token_budget": 3000,
+        "template_version": "1.1.0"
       }
     },
     {
@@ -2679,8 +2683,8 @@
           "validators"
         ],
         "token_budget": 3000,
-        "memory": "project",
-        "template_version": "1.0.0"
+        "template_version": "1.0.0",
+        "memory": "project"
       }
     },
     {
@@ -2690,7 +2694,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:5bda18f901ce3f5e252b6cb796c41419b11a96d06b8ea27a79d81f78113680a1",
+      "hash": "sha256:9c1a95e2e8b662ac938f36f638f1ab66aa998fe751eaa6427297e96c91b3bf27",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2706,7 +2710,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.6.0"
+        "template_version": "2.7.0"
       }
     },
     {
@@ -2731,12 +2735,12 @@
           "secrets"
         ],
         "token_budget": 2000,
+        "template_version": "1.1.0",
         "memory": "project",
         "skills": [
           "sbom",
           "verify-kmp"
-        ],
-        "template_version": "1.1.0"
+        ]
       }
     },
     {
@@ -2762,7 +2766,10 @@
           "learn"
         ],
         "token_budget": 2000,
-        "template_version": "1.0.0"
+        "template_version": "1.0.0",
+        "skills": [
+          "research"
+        ]
       }
     },
     {
@@ -2787,8 +2794,8 @@
           "script"
         ],
         "token_budget": 2000,
-        "memory": "project",
-        "template_version": "1.0.0"
+        "template_version": "1.0.0",
+        "memory": "project"
       }
     },
     {
@@ -2813,8 +2820,8 @@
           "command"
         ],
         "token_budget": 2000,
-        "memory": "project",
-        "template_version": "1.0.0"
+        "template_version": "1.0.0",
+        "memory": "project"
       }
     },
     {
@@ -2838,8 +2845,8 @@
           "copilot"
         ],
         "token_budget": 2500,
-        "memory": "project",
-        "template_version": "1.0.0"
+        "template_version": "1.0.0",
+        "memory": "project"
       }
     },
     {
@@ -2925,6 +2932,7 @@
         "name": "verifier",
         "description": "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.",
         "tools": "Read, Bash, Grep, Glob, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__find-pattern, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__module-health",
+        "model": "sonnet",
         "domain": "quality",
         "intent": [
           "verify",
@@ -2934,13 +2942,12 @@
           "check"
         ],
         "token_budget": 2000,
-        "model": "sonnet",
+        "template_version": "1.1.0",
         "skills": [
           "verify",
           "test",
           "validate-patterns"
-        ],
-        "template_version": "1.1.0"
+        ]
       }
     },
     {
