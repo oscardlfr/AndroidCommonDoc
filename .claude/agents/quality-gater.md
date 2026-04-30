@@ -61,7 +61,7 @@ case "$PROJECT_TYPE" in
 esac
 ```
 
-Detection heuristic: presence of `package.json` → node, `gradlew` → gradle, both → hybrid.
+Detection heuristic: presence of `package.json` (root or depth-1 subdir) → node; `settings.gradle{,.kts}` at root → gradle; both → hybrid.
 
 ### Step 1: Project Rule Discovery
 
