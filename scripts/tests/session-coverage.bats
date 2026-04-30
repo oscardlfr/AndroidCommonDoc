@@ -107,8 +107,8 @@ teardown() {
     grep -q "missingCov\|Batch partial" "$PS1_DIR/run-parallel-coverage-suite.ps1"
 }
 
-@test "parity: PS1 gradle-run has kover fallback" {
-    grep -q "fallback" "$PS1_DIR/gradle-run.ps1"
+@test "parity: PS1 gradle-run is kmp-test-runner wrapper" {
+    grep -q "kmp-test\|kmp_test" "$PS1_DIR/gradle-run.ps1"
 }
 
 # ===========================================================================
