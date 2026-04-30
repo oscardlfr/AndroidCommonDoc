@@ -5,6 +5,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W32-06a)
+- `scripts/sh/gradle-run.sh` + `scripts/ps1/gradle-run.ps1` refactored to thin wrappers (~75/~65 lines) around `kmp-test-runner@0.6.2` CLI (was 497/489 lines). Drops: 2-attempt daemon retry, Kover fallback chain, JDK detection, 15s heartbeat poll.
+- New `--dry-run` flag (additive): prints the constructed `kmp-test` command and exits 0. Useful for debugging flag translation.
+- `scripts/tests/gradle-run.bats` — 7 new bats cases for the kmp-test-runner wrapper.
+
+### Changed (BL-W32-06a)
+- `skills/test/SKILL.md` Windows implementation block simplified — flags pass through directly to `gradle-run.ps1`.
+- `.github/workflows/reusable-shell-tests.yml`: `npm install -g kmp-test-runner@0.6.2` step added before bats run.
+
+### Deprecated (BL-W32-06a)
+- `--platform` flag: warn-and-drop. Use `--test-type` instead.
+- `--search-pattern` flag: warn-and-drop. Use `kmp-test errors[].code` discriminator instead.
+
+### Known Gap (BL-W32-06a)
+- `shared-kmp-libs` composite-build daemon stop is not yet handled by `kmp-test-runner v0.6.2`. File upstream issue; resolve before BL-W32-06d L2 adoption. Add `KMP_GRADLE_TIMEOUT_MS` (milliseconds) env var as an escape hatch for Gradle watchdog override if needed.
+
 ### Added
 - **Context-provider adoption hook** (`.claude/hooks/context-provider-gate.js`): PreToolUse blocking gate on Grep/Glob/Bash — blocks tool calls unless the calling peer SendMessage'd context-provider first in the session. Session-level enforcement with agent_type-based exempt list.
 - **Context-provider consultation tracker** (`.claude/hooks/context-provider-consulted.js`): PostToolUse SendMessage hook — writes session flag when CP is addressed.
