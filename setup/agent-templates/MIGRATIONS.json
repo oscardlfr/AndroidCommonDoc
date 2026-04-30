@@ -912,6 +912,13 @@
         "breaking": false,
         "note": "Wave 25: declare MCP tools in frontmatter (code-metrics, find-pattern, validate-all, module-health)."
       }
+    },
+    "toolkit-specialist": {
+      "1.0.0": {
+        "date": "2026-04-30",
+        "breaking": false,
+        "note": "Initial toolkit-specialist (BL-W31.7-08) -- owns mcp-server TS, .claude/hooks/*.js, non-test shell tooling. Reports to arch-platform. Closes the gap surfaced in BL-W31.7-09 + BL-W31.7-10 where test-specialist stood in for TS source work."
+      }
     }
   }
 }

@@ -93,9 +93,9 @@ When the user task involves **pattern searching** (find files matching X, count 
 Why: L2 DawSync session (2026-04-18) — the main agent dispatched grep work directly to arch-platform instead of context-provider. arch-platform used `bash grep` (mechanically allowed since it has Bash). Result: search bypassed the curated knowledge layer. The Search Dispatch Protocol makes context-provider the entry point for all search-related work.
 
 ### FORBIDDEN Agent Launches (non-negotiable)
-- **FORBIDDEN**: Spawning core specialists outside Phase 2 start — the 4 core specialists are spawned exactly once when Phase 2 begins
+- **FORBIDDEN**: Spawning core specialists outside Phase 2 start — the 5 core specialists are spawned exactly once when Phase 2 begins
 - **FORBIDDEN**: Spawning extra specialists without a preceding architect SendMessage to team-lead explicitly requesting it. "I think this needs a specialist" is not sufficient — the architect must ask.
-- **The ONLY agents team-lead launches directly**: planner (Phase 1), session team setup agents (session start), 4 core specialists (Phase 2 start), quality-gater (Phase 3). Extra specialists require an architect SendMessage request.
+- **The ONLY agents team-lead launches directly**: planner (Phase 1), session team setup agents (session start), 5 core specialists (Phase 2 start), quality-gater (Phase 3). Extra specialists require an architect SendMessage request.
 
 ### Session Start: Session Team Setup (mandatory)
 
@@ -109,7 +109,7 @@ TeamCreate(team_name="session-{project-slug}")
 Agent(name="context-provider", team_name="session-{project-slug}", subagent_type="context-provider", prompt="You are context-provider for this session. Read docs/agents/agent-core-rules.md. Answer pattern/doc/rule queries on demand — load files when asked, never eagerly. NEVER write files. NEVER self-assign tasks. NEVER execute CI. Stay alive.", run_in_background=true)
 Agent(name="doc-updater", team_name="session-{project-slug}", subagent_type="doc-updater", prompt="You are doc-updater for this session. Read docs/agents/agent-core-rules.md. Update docs ONLY when team-lead explicitly dispatches you via SendMessage. NEVER self-assign tasks from TaskList. NEVER act without a team-lead dispatch. Stay alive.", run_in_background=true)
 Agent(name="arch-testing", team_name="session-{project-slug}", prompt="You are arch-testing for this session. Read docs/agents/agent-core-rules.md. Manage test-specialist, ui-specialist. Verify test quality, TDD, coverage. Report findings via SendMessage. Stay alive.", run_in_background=true)
-Agent(name="arch-platform", team_name="session-{project-slug}", prompt="You are arch-platform for this session. Read docs/agents/agent-core-rules.md. Manage domain-model-specialist, data-layer-specialist. Verify KMP patterns, encoding, source sets. Report findings via SendMessage. Stay alive.", run_in_background=true)
+Agent(name="arch-platform", team_name="session-{project-slug}", prompt="You are arch-platform for this session. Read docs/agents/agent-core-rules.md. Manage domain-model-specialist, data-layer-specialist, toolkit-specialist. Verify KMP patterns, encoding, source sets, TS architecture, validator schemas, hook patterns. Report findings via SendMessage. Stay alive.", run_in_background=true)
 Agent(name="arch-integration", team_name="session-{project-slug}", prompt="You are arch-integration for this session. Read docs/agents/agent-core-rules.md. Manage ui-specialist, data-layer-specialist. Verify DI, navigation, wiring, compilation. Report findings via SendMessage. Stay alive.", run_in_background=true)
 Agent(name="quality-gater", team_name="session-{project-slug}", run_in_background=true, prompt="You are quality-gater for this session. Read docs/agents/agent-core-rules.md. DORMANT until team-lead activates for Phase 3. When activated, read CLAUDE.md and project rules dynamically. Consult context-provider for project rules. Stay alive.")
 ```
@@ -123,6 +123,7 @@ Agent(name="test-specialist", team_name="session-{project-slug}", run_in_backgro
 Agent(name="ui-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are ui-specialist for this session. Read docs/agents/agent-core-rules.md. Your reporting architect is arch-testing. FIRST ACTION: SendMessage(to='context-provider', summary='gate ack'). Stay alive.")
 Agent(name="domain-model-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are domain-model-specialist for this session. Read docs/agents/agent-core-rules.md. Your reporting architect is arch-platform. FIRST ACTION: SendMessage(to='context-provider', summary='gate ack'). Stay alive.")
 Agent(name="data-layer-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are data-layer-specialist for this session. Read docs/agents/agent-core-rules.md. Your reporting architects are arch-platform and arch-integration. FIRST ACTION: SendMessage(to='context-provider', summary='gate ack'). Stay alive.")
+Agent(name="toolkit-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are toolkit-specialist for this session. Read docs/agents/agent-core-rules.md. Your reporting architect is arch-platform. FIRST ACTION: SendMessage(to='context-provider', summary='gate ack'). Stay alive.")
 ```
 
 ### Phase 2 Core Specialists — Session Context + Routing
@@ -169,6 +170,7 @@ At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatche
 □ 10. ui-specialist added to session team?                → YES or SKIP (Phase 2 not started)
 □ 11. domain-model-specialist added to session team?     → YES or SKIP (Phase 2 not started)
 □ 12. data-layer-specialist added to session team?       → YES or SKIP (Phase 2 not started)
+□ 13. toolkit-specialist added to session team?          → YES or SKIP (Phase 2 not started)
 ```
 
 **If ANY checkbox is NO → STOP. Do not respond to user tasks. Do not plan. Do not use Agent(). Fix the failing checkbox first, then re-verify ALL from the top.**
@@ -181,7 +183,7 @@ For non-trivial tasks:
 4. Present plan summary to user as text output (team-lead needs no file writes during planning)
 5. **On user approval**: call `ExitPlanMode()`
 6. **⛔ MANDATORY Phase 2 Topology Activation Gate (Bug #8 — Wave 26 regression fix)**: AFTER `ExitPlanMode()` and BEFORE any architect EXECUTE dispatch:
-   - **Spawn the 4 core specialists** exactly once using the "Phase 2 Core Specialists" spawn block above (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist). Even if the task appears to be "just metadata" / "just frontmatter" / "just a one-liner" — spawn the specialists. No exceptions.
+   - **Spawn the 5 core specialists** exactly once using the "Phase 2 Core Specialists" spawn block above (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist). Even if the task appears to be "just metadata" / "just frontmatter" / "just a one-liner" — spawn the specialists. No exceptions.
    - **Architect EXECUTE dispatches MUST include the mandate**: `"Your EXECUTE output is SendMessage-to-specialist with edit spec. You MUST NOT use Write or Edit on source/template/test files yourself. If you self-edit, the wave is rolled back."`
    - **Verification after architect APPROVE**: The main agent runs `rtk git log --format='%an' <commit-range>` and confirms commits are authored by the specialist layer (per SendMessage ownership trail), not exclusively by the architect layer. If architects self-edited: STOP, reset, re-dispatch through specialists, update `feedback_plan_mode_exit_topology.md` memory with the violation details.
    - Why this gate exists: Wave 26 BL-W26-01a shipped with 100% architect-authored edits and 0 specialists dispatched. User flagged: "no devs are working and all work has been done by the architects" (literal quote preserved — "devs" was the user's term at the time). Architects hold `Read` + mediation tools only; they do NOT self-implement.
@@ -198,7 +200,7 @@ Exception: simple tasks (< 5K tokens, clear path) → plan inline without EnterP
 | Role | Agents | Managed by |
 |------|--------|------------|
 | **Architects** | `arch-testing`, `arch-platform`, `arch-integration` | main agent (session team peers) |
-| **Specialists** | `test-specialist`, `ui-specialist`, `data-layer-specialist`, `domain-model-specialist` | Architects (session team peers for core; main agent spawns extras) |
+| **Specialists** | `test-specialist`, `ui-specialist`, `data-layer-specialist`, `domain-model-specialist`, `toolkit-specialist` | Architects (session team peers for core; main agent spawns extras) |
 | **Guardians** | `release-guardian-agent`, `cross-platform-validator`, `privacy-auditor`, `api-rate-limit-auditor`, `doc-alignment-agent` | Architects, main agent |
 | **Cross-cutting** | `context-provider`, `doc-updater` | main agent (session team peers) |
 | **Quality Gate** | `quality-gater` | team-lead (session team peer, Phase 3) |
@@ -207,6 +209,18 @@ Exception: simple tasks (< 5K tokens, clear path) → plan inline without EnterP
 | **Business** | `{{product-strategist}}`, `{{content-creator}}`, `{{landing-page-strategist}}` | team-lead (sub-agents for cross-dept) |
 
 {{CUSTOMIZE: Add project-specific specialists and guardians here}}
+
+### Specialist Ownership Map
+
+| Specialist | Surface | Reports to |
+|-----------|---------|------------|
+| `test-specialist` | `mcp-server/tests/**`, `scripts/tests/*.bats`, all vitest/bats files | `arch-testing` |
+| `ui-specialist` | Compose UI, Material3, accessibility | `arch-testing` |
+| `domain-model-specialist` | Domain interfaces, use cases, domain models | `arch-platform` |
+| `data-layer-specialist` | Repositories, database, network, caching | `arch-platform`, `arch-integration` |
+| `toolkit-specialist` | `mcp-server/src/**`, `.claude/hooks/**`, `scripts/sh/*.sh`, `scripts/ps1/*.ps1` | `arch-platform` |
+
+**Routing for TS/hooks/scripts work:** edits to `mcp-server/src/**`, `.claude/hooks/**.js`, `scripts/sh/*.sh`, or `scripts/ps1/*.ps1` → `toolkit-specialist`. Vitest cases under `mcp-server/tests/**` or bats cases under `scripts/tests/*.bats` → `test-specialist` (dispatched by arch-testing as usual). A TS source change requiring a test follows: toolkit-specialist edits src → messages arch-testing → arch-testing dispatches test-specialist for the test.
 
 ## Verification Before Done
 - **TDD-first for bug fixes**: (1) test-specialist writes failing test, (2) verify fails, (3) specialist fixes, (4) arch-testing verifies pass

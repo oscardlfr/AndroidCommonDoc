@@ -283,7 +283,7 @@ agents:
     replaces: null
 
   # ============================================================
-  # CORE SPECIALISTS (4/4) — implement work, own code edits
+  # CORE SPECIALISTS (5/5) — implement work, own code edits
   # ============================================================
 
   test-specialist:
@@ -510,6 +510,65 @@ agents:
       - "Owns Compose UI files (composables, previews, strings, themes)."
       - "Per BL-W31.5-02 resolution: in no-UI waves, this specialist is NOT spawned; doc-owner work routes via doc-updater instead."
       - "Pattern queries route through reporting architect → context-provider chain."
+    aliases: []
+    superseded_by: null
+    replaces: null
+
+  toolkit-specialist:
+    canonical_name: toolkit-specialist
+    subagent_type: toolkit-specialist
+    template_version: "1.0.0"
+    template_frontmatter_sha256: 6fcc512235480c2f683e72543223c8d36bd6503cb4a9a5a27bfdd0f5858098fb
+    category: core-specialist
+    lifecycle: ephemeral
+    description: "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain)."
+    domain: development
+    intent: [typescript, mcp-server, mcp-tool, vitest, hooks, lib, ts-lib, validator]
+    runtime:
+      model: sonnet
+      token_budget: 3000
+    tools:
+      allowed:
+        - Read
+        - Write
+        - Edit
+        - Bash
+        - SendMessage
+        - mcp__androidcommondoc__code-metrics
+      banned:
+        top_level: [Agent]
+        bash_subcommands: [grep, rg, find, ag, ack, fd]
+        grep_patterns: ["*"]
+        glob_patterns: ["docs/**"]
+        read_patterns: ["docs/**"]
+        mcp_tools_blocked: [mcp__androidcommondoc__find-pattern]
+    dispatch:
+      spawn_method: Agent
+      dispatched_by: [team-lead]
+      can_dispatch_to: []
+      can_send_to:
+        - team-lead
+        - arch-platform
+        - arch-testing
+        - arch-integration
+        - context-provider
+        - doc-updater
+    gates:
+      - id: cp_consultation
+        type: pre_action_gate
+        triggers: [Grep, Glob, Read, "Bash:grep", "Bash:rg", "Bash:find"]
+        resolution: "SendMessage(to=context-provider, summary='gate ack') as first action on spawn"
+        enforcement: hook
+        hook_path: ".claude/hooks/context-provider-gate.js"
+    skills_referenced: [test, validate-patterns]
+    optional_capabilities: []
+    memory: project
+    notes:
+      - "Persistent core-specialist (Phase 2). Reports to arch-platform; arch-testing dispatches test-specialist for vitest/bats coverage of toolkit-specialist's edits."
+      - "Owns: mcp-server/src/**, .claude/hooks/**, scripts/sh/*.sh, scripts/ps1/*.ps1. Does NOT touch mcp-server/tests/** or scripts/tests/*.bats (test-specialist's domain)."
+      - "no-console.log rule mechanically enforced via mcp-server/eslint.config.mjs. Exception: CLI scripts under mcp-server/src/cli/ may opt out via /* eslint-disable no-console */ at file head."
+      - "Standard pattern-query chain: toolkit-specialist → arch-platform → context-provider. Direct CP contact ONLY for the per-session gate ack on spawn."
+      - "BL-W31.7-08 introduced this agent (2026-04-30). Closes the gap surfaced in BL-W31.7-09 + BL-W31.7-10 where test-specialist stood in for TS source work."
     aliases: []
     superseded_by: null
     replaces: null
