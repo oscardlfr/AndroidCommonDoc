@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-30T17:13:10.239Z",
+  "generated": "2026-05-01T11:56:48.249Z",
   "l0_root": ".",
   "entries": [
     {
@@ -785,14 +785,14 @@
       "name": "init-session",
       "type": "skill",
       "path": "skills/init-session/SKILL.md",
-      "description": "Show project context — available agents, skills, modules, and business docs.",
+      "description": "Show project context dashboard. Optionally orchestrates session-team setup with --orchestrate <slug> flag (BL-W32-07).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:63043eee0f9ab462af591dfe73022a8feca8b7571578aa79bf4148c42a706aa5",
+      "hash": "sha256:6d8c843efd32202a504370924bd7893ea9349730eb7591d18f05816f22af4b45",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",
-        "description": "Show project context — available agents, skills, modules, and business docs.",
+        "description": "Show project context dashboard. Optionally orchestrates session-team setup with --orchestrate <slug> flag (BL-W32-07).",
         "intent": [
           "session",
           "init",
@@ -1834,7 +1834,7 @@
       "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a5ab7ae30a801ca1f9bad5d3f51b2c67ce8ffcce9e660aed6bfb4733ff4442b0",
+      "hash": "sha256:8998eb929daf562db2608e604598fdf36bd695f7a2cee367c91c45bff9580b17",
       "dependencies": [],
       "frontmatter": {
         "name": "work",
@@ -2527,14 +2527,14 @@
       "name": "planner",
       "type": "agent",
       "path": ".claude/agents/planner.md",
-      "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
+      "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7f38c457190108afd1c14c513d19512d87359461d06447a29a99aa24ebe2550e",
+      "hash": "sha256:2c21b51ba7d027df0a075287264bd7cac6e381eaa04450872b47a698b9e3b1b4",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
-        "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
+        "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
         "tools": "Read, Write, Bash, SendMessage",
         "model": "sonnet",
         "domain": "development",
@@ -2545,7 +2545,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.7.0"
+        "template_version": "1.9.0"
       }
     },
     {
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.12.0",
+        "template_version": "1.13.0",
         "memory": "project",
         "skills": [
           "test",

@@ -124,27 +124,46 @@ process.stdin.on('end', () => {
     .update(normalized, 'utf8')
     .digest('hex');
 
-  if (computed === baseline) process.exit(0);
+  if (computed !== baseline) {
+    process.stdout.write(
+      JSON.stringify({
+        decision: 'block',
+        reason:
+          '[agent-spawn-validator] Template setup/agent-templates/' +
+          subagentType +
+          '.md frontmatter SHA-256 has drifted from the manifest baseline.\n' +
+          'Baseline: ' +
+          baseline +
+          '\n' +
+          'Computed: ' +
+          computed +
+          '\n' +
+          'Fix: run `node mcp-server/build/cli/generate-template.js ' +
+          subagentType +
+          ' --update-manifest-hash` and `bash scripts/sh/rehash-registry.sh --project-root .`, then commit.',
+      }),
+    );
+    process.exit(2);
+  }
 
-  process.stdout.write(
-    JSON.stringify({
-      decision: 'block',
-      reason:
-        '[agent-spawn-validator] Template setup/agent-templates/' +
-        subagentType +
-        '.md frontmatter SHA-256 has drifted from the manifest baseline.\n' +
-        'Baseline: ' +
-        baseline +
-        '\n' +
-        'Computed: ' +
-        computed +
-        '\n' +
-        'Fix: run `node mcp-server/build/cli/generate-template.js ' +
-        subagentType +
-        ' --update-manifest-hash` and `bash scripts/sh/rehash-registry.sh --project-root .`, then commit.',
-    }),
-  );
-  process.exit(2);
+  // Check 3 — TeamCreate-peer enforcement
+  // If the manifest classifies this agent as a TeamCreate-peer, require that the
+  // spawn includes team_name and name parameters. Guards against accidental
+  // subagent spawns of agents intended to live as session peers (BL-W32-07).
+  const spawnMethod = agent?.dispatch?.spawn_method;  // optional chaining mandatory (dispatch may be absent)
+  if (spawnMethod === 'TeamCreate-peer') {
+    const teamName = data.tool_input?.team_name;
+    const agentName = data.tool_input?.name;
+    if (!teamName || !agentName) {
+      process.stdout.write(JSON.stringify({
+        decision: 'block',
+        reason: '[agent-spawn-validator] Agent "' + subagentType + '" has spawn_method=TeamCreate-peer in manifest but was called without team_name and/or name. Use: Agent(subagent_type="' + subagentType + '", team_name="session-{slug}", name="' + subagentType + '")'
+      }));
+      process.exit(2);
+    }
+  }
+
+  process.exit(0);
 });
 
 // Extract the YAML block between the first two `---` markers, mirroring

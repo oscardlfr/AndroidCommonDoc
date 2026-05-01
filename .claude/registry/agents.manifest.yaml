@@ -1603,11 +1603,11 @@ agents:
   planner:
     canonical_name: planner
     subagent_type: planner
-    template_version: "1.8.0"
-    template_frontmatter_sha256: 8c6dc8c269642ea6fafd827530aa9212d8ea948039c235caea94a853d1fe9174
+    template_version: "1.9.0"
+    template_frontmatter_sha256: 7e5d366cb38c5d841cf52bf7cad069f0be31b52db68875b91ee7a210144c9d47
     category: orchestrator
     lifecycle: ephemeral
-    description: "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team."
+    description: "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage."
     domain: development
     intent: [plan, scope, breakdown, estimate]
     runtime:
@@ -1618,7 +1618,7 @@ agents:
       banned:
         top_level: [Agent, Edit, Grep, Glob]
     dispatch:
-      spawn_method: Agent
+      spawn_method: TeamCreate-peer
       dispatched_by: [team-lead]
       can_dispatch_to: []
       can_send_to:

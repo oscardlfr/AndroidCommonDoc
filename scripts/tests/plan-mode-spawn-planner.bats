@@ -40,8 +40,8 @@ teardown() {
 @test "EnterPlanMode then Agent planner spawn then ExitPlanMode succeeds" {
   # PostToolUse EnterPlanMode writes sentinel
   run bash -c "echo '{\"tool_name\":\"EnterPlanMode\",\"tool_input\":{}}' | node '$HOOK'"
-  # PostToolUse Agent with subagent_type planner deletes sentinel
-  run bash -c "echo '{\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\"}}' | node '$HOOK'"
+  # PostToolUse Agent with subagent_type planner + peer fields deletes sentinel
+  run bash -c "echo '{\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\",\"team_name\":\"session-test\",\"name\":\"planner\"}}' | node '$HOOK'"
   # PreToolUse ExitPlanMode must succeed — sentinel gone
   run bash -c "echo '{\"tool_name\":\"ExitPlanMode\",\"tool_input\":{}}' | node '$HOOK'"
   [ "$status" -eq 0 ]
@@ -84,10 +84,10 @@ teardown() {
 @test "multiple planner Agent spawns are idempotent — ExitPlanMode still succeeds" {
   # PostToolUse EnterPlanMode
   run bash -c "echo '{\"tool_name\":\"EnterPlanMode\",\"tool_input\":{}}' | node '$HOOK'"
-  # First planner spawn — deletes sentinel
-  run bash -c "echo '{\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\"}}' | node '$HOOK'"
+  # First planner spawn (peer syntax) — deletes sentinel
+  run bash -c "echo '{\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\",\"team_name\":\"session-test\",\"name\":\"planner\"}}' | node '$HOOK'"
   # Second planner spawn — sentinel already gone, must not re-create it
-  run bash -c "echo '{\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\"}}' | node '$HOOK'"
+  run bash -c "echo '{\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\",\"team_name\":\"session-test\",\"name\":\"planner\"}}' | node '$HOOK'"
   # ExitPlanMode must succeed
   run bash -c "echo '{\"tool_name\":\"ExitPlanMode\",\"tool_input\":{}}' | node '$HOOK'"
   [ "$status" -eq 0 ]
@@ -109,4 +109,59 @@ teardown() {
 @test "fails open on malformed JSON input" {
   run bash -c "echo 'not-valid-json' | node '$HOOK'"
   [ "$status" -eq 0 ]
+}
+
+# ── Case A: peer-spawn (team_name + name) clears sentinel ───────────────────
+
+@test "Agent(subagent_type=planner, team_name, name=planner) clears sentinel" {
+  run bash -c "echo '{\"tool_name\":\"EnterPlanMode\",\"tool_input\":{},\"cwd\":\"$PROJECT_ROOT\"}' | node '$HOOK'"
+  run bash -c "echo '{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\",\"team_name\":\"session-test\",\"name\":\"planner\"},\"cwd\":\"$PROJECT_ROOT\"}' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [ ! -f "$SENTINEL" ]
+}
+
+# ── Case B: bare subagent_type without team_name is blocked ─────────────────
+
+@test "bare Agent(subagent_type=planner) without team_name is blocked" {
+  run bash -c "echo '{\"tool_name\":\"EnterPlanMode\",\"tool_input\":{}}' | node '$HOOK'"
+  run bash -c "echo '{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\"},\"cwd\":\"$PROJECT_ROOT\"}' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'block'* ]]
+  [[ "$output" == *'team_name'* ]]
+  [ -f "$SENTINEL" ]
+}
+
+# ── Case B2: empty team_name is blocked ─────────────────────────────────────
+
+@test "Agent(subagent_type=planner, team_name=\"\", name=planner) blocked" {
+  run bash -c "echo '{\"tool_name\":\"EnterPlanMode\",\"tool_input\":{}}' | node '$HOOK'"
+  run bash -c "echo '{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\",\"team_name\":\"\",\"name\":\"planner\"},\"cwd\":\"$PROJECT_ROOT\"}' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [ -f "$SENTINEL" ]
+}
+
+# ── Case C: wrong name is blocked ───────────────────────────────────────────
+
+@test "Agent(subagent_type=planner, team_name=session-test, name=wrong) blocked" {
+  run bash -c "echo '{\"tool_name\":\"EnterPlanMode\",\"tool_input\":{}}' | node '$HOOK'"
+  run bash -c "echo '{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\",\"team_name\":\"session-test\",\"name\":\"wrong\"},\"cwd\":\"$PROJECT_ROOT\"}' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [ -f "$SENTINEL" ]
+}
+
+# ── Case C2: name=null is blocked ───────────────────────────────────────────
+
+@test "Agent(subagent_type=planner, team_name=session-test, name=null) blocked" {
+  run bash -c "echo '{\"tool_name\":\"EnterPlanMode\",\"tool_input\":{}}' | node '$HOOK'"
+  run bash -c "echo '{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\",\"team_name\":\"session-test\",\"name\":null},\"cwd\":\"$PROJECT_ROOT\"}' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [ -f "$SENTINEL" ]
+}
+
+# ── Case D: CLAUDE_SKIP_PLANNER=1 still respected ───────────────────────────
+
+@test "CLAUDE_SKIP_PLANNER=1 suppresses sentinel write on EnterPlanMode" {
+  run env CLAUDE_SKIP_PLANNER=1 bash -c "echo '{\"tool_name\":\"EnterPlanMode\",\"tool_input\":{}}' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [ ! -f "$SENTINEL" ]
 }

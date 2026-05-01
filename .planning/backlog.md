@@ -761,6 +761,8 @@ Wave directories with non-digit slugs (e.g., `wave-bl-w31-7-12`, `wave-bl-w32-NN
 
 **Trigger**: W32 hardening sweep — affects every wave with hyphenated slug (which is most W30+ waves).
 
+**Live evidence (2026-05-01, BL-W32-07 PREP)**: arch-testing was blocked from writing their verdict file during BL-W32-07 PREP. The exact invocation was a Python heredoc Bash call targeting `.planning/wave-bl-w32-07/arch-testing-verdict.md`. The exempt-path allowlist in `architect-bash-write-gate.js` does NOT cover PYTHON_WRITE_RE (python3 -c open(...,'w')) — it only checks the heredoc/redirect code path. Result: arch-testing's Write tool was blocked, their Python heredoc Bash was also blocked, and team-lead had to relay the verdict content to doc-updater for scribing. This is the second confirmed incident (first: BL-W31.7-12 arch-integration, same wave-slug pattern). Confirms both bugs are active: (1) `architect-self-edit-gate.js` wave\d+ regex miss AND (2) PYTHON_WRITE_RE exempt-target gap.
+
 ---
 
 ### BL-W32-04 — CP zombie shutdown bug at session start (HIGH — RECURRING)

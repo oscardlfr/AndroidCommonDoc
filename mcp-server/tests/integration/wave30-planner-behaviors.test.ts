@@ -50,9 +50,9 @@ describe("planner template enforces T-BUG-015 Search Dispatch Protocol", () => {
       const frontmatter = extractFrontmatter(raw);
       const body = extractBody(raw);
 
-      it('has template_version "1.8.0"', () => {
+      it('has template_version "1.9.0"', () => {
         expect(frontmatter).not.toBeNull();
-        expect(frontmatter?.template_version).toBe("1.8.0");
+        expect(frontmatter?.template_version).toBe("1.9.0");
       });
 
       it("body contains T-BUG-015", () => {

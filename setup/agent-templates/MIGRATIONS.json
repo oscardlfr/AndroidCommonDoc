@@ -160,6 +160,12 @@
         "date": "2026-04-30",
         "breaking": false,
         "note": "Hook plan-mode-spawn-planner.js mechanically enforces planner spawn during plan mode (BL-W31.7-12). Body adds 'Spawn Enforcement' section documenting the gate + CLAUDE_SKIP_PLANNER=1 escape hatch for trivial tasks. Manifest spawn_method drift fix (TeamCreate-peer -> Agent) folded in same commit."
+      },
+      "1.9.0": {
+        "date": "2026-05-01",
+        "breaking": true,
+        "note": "BL-W32-07: reverts BL-W31.7-12 planner spawn_method regression (Agent -> TeamCreate-peer). manifest-abi-validator.ts L164 classifies dispatch.spawn_method changes as BREAKING regardless of direction. Runtime impact: pure documentation alignment (no consumer mechanically depends on the field per BL-W31.7-12 verdict). Template L17 updated to session-{slug} team diagram, L36 updated to canonical peer-spawn syntax including required team_name + name fields.",
+        "migration_hint": "Spawn planner as TeamCreate peer: Agent(subagent_type=\"planner\", team_name=\"session-{slug}\", name=\"planner\"). Bare Agent(subagent_type=\"planner\") is now blocked by plan-mode-spawn-planner.js tightened check (BL-W32-07 Gap 3 hook fix)."
       }
     },
     "quality-gater": {
