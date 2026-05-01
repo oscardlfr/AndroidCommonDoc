@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-05-01T17:18:36.716Z",
+  "generated": "2026-05-01T17:31:49.391Z",
   "l0_root": ".",
   "entries": [
     {
@@ -2358,10 +2358,10 @@
       "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d6890ed1a4c48d98064d3210d7fa7b5a7f6a619b2175d42f5243de64ee95c46c",
+      "hash": "sha256:091efa16e1ae6cc9eb2241135ac9c721c8b5480e7f0a981dfb034b18c9a0f03d",
       "dependencies": [],
       "frontmatter": {
-        "name": "{{DOMAIN}}-specialist",
+        "name": "feature-domain-specialist",
         "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
         "tools": "Read, Grep, Glob, Bash",
         "model": "sonnet",
