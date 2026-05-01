@@ -37,3 +37,15 @@ make_input() {
   run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
   [ "$status" -eq 0 ]
 }
+
+@test "allows arch-* Write to hyphenated wave verdict file (wave-bl-w32-05)" {
+  make_input Write '/project/.planning/wave-bl-w32-05/arch-platform-verdict.md' 'arch-platform'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "allows arch-* Write to dotted wave verdict file (wave31.7)" {
+  make_input Write '/project/.planning/wave31.7/arch-testing-verdict.md' 'arch-testing'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
