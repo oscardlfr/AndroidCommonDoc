@@ -631,6 +631,11 @@
         "date": "2026-04-25",
         "breaking": false,
         "note": "W31.6 Group B: Add first-line BANNED-TOOLS banner (Grep tool, Glob on docs/**, Read on docs/**, Bash grep/find/rg, find-pattern MCP -- all FORBIDDEN). Hook in context-provider-gate.js now mechanically blocks Grep/Glob on docs/** paths."
+      },
+      "1.13.0": {
+        "date": "2026-05-01",
+        "breaking": false,
+        "note": "BL-W32-06b: Add kmp-test-runner v0.6.2 section — detection cascade, flag table, exit codes, deprecated flags, JSON envelope option-ii pointer. Thin-wrapper nature of gradle-run.sh made explicit."
       }
     },
     "ui-specialist": {

@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.12.0"
+template_version: "1.13.0"
 memory: project
 skills:
   - test
@@ -127,6 +127,40 @@ If `monitor-sources` MCP tool is available (`mcp-monitor`):
 **Why:** Scripts handle Windows file locks, daemon management, Kover fallbacks, RTK token optimization, and parallel execution. Direct Gradle calls skip all of this and waste tokens on verbose output.
 
 **NEVER use `./gradlew` directly.** If a skill or script appears broken, SendMessage to arch-testing with the failure â€” do not bypass. Bypassing skills defeats Windows lock handling, Kover fallbacks, and RTK optimization, and masks bugs in the skill layer.
+
+---
+
+## kmp-test-runner v0.6.2 (canonical KMP test runner)
+
+`gradle-run.sh` is a thin wrapper around `kmp-test-runner v0.6.2` — all daemon
+retry, Kover fallback, and JDK detection logic lives inside the runner, not the
+script.
+
+**Detection cascade** (automatic, no action required):
+1. Global binary `kmp-test` if installed (`npm install -g kmp-test-runner@0.6.2`)
+2. Fallback: `npx kmp-test-runner@0.6.2` (slower on first run, no install needed)
+
+**Supported flags passed through `gradle-run.sh`:**
+
+| Flag | Values / notes |
+|------|----------------|
+| `--project-root <path>` | Project root — defaults to `pwd` |
+| `--test-type <type>` | `all` \| `common` \| `desktop` \| `androidUnit` \| `androidInstrumented` |
+| `--skip-coverage` | Passes `--no-coverage` to kmp-test |
+| `--coverage-tool <tool>` | Passed through verbatim |
+| `--timeout <s>` | Execution timeout in seconds |
+| `--dry-run` | Prints constructed command, exits 0 |
+| `<module>` | Positional — maps to `--module-filter` |
+| `--` | Remaining args passed through verbatim |
+
+**Deprecated flags** (warn + ignore — do not use):
+- `--platform` — replaced by `--test-type`
+- `--search-pattern` — replaced by `errors[].code` discriminator in JSON output
+
+**Exit codes**: `0` success · `1` test failure · `2` build error · `3` env error
+
+For the full JSON envelope schema — including `errors[].code` discriminator values —
+run `npx kmp-test-runner@0.6.2 --help` or consult the kmp-test-runner package docs.
 
 ---
 
