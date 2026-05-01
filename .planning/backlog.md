@@ -788,3 +788,70 @@ Wave directories with non-digit slugs (e.g., `wave-bl-w31-7-12`, `wave-bl-w32-NN
 
 ---
 
+### BL-W32-07 — Spawn-pattern coherence: peer-vs-subagent across templates + skills (HIGH — discovered 2026-05-01)
+**Status**: backlog
+**Priority**: HIGH (every session affected; observed during BL-W32-06b where main agent spawned planner + 3 architects as fresh subagents instead of session peers, breaking persistence and burning tokens)
+**Source**: User-reported during BL-W32-06b PREP phase 2026-05-01. User: "es un bug que has añadido a la template de los agentes — deben ser team peers". Investigation surfaced 5+ coherence gaps across templates, manifest, hooks, and skills.
+
+**Problem**: The "spawn 6 session peers + planner peer" pattern is documented in `docs/agents/main-agent-orchestration-guide.md` L24 but is INCONSISTENTLY enforced across the rest of the toolkit:
+
+1. **`setup/agent-templates/planner.md` L36**: Spawn Enforcement section example uses `Agent(subagent_type="planner")` (subagent syntax) but template self-describes (L12) as "team peer in the Planning Team alongside context-provider". Example teaches the wrong pattern.
+
+2. **`.claude/registry/agents.manifest.yaml` L1621** (planner entry): `spawn_method: Agent` — codifies subagent spawn. This was changed from `TeamCreate-peer` → `Agent` in BL-W31.7-12 and labeled a "drift fix" in memory `project_BL-W31.7-12_shipped.md`. The "fix" was a regression — it made the manifest match wrong reality instead of fixing reality. Manifest line 1632 description still says "Phase 1 peer with context-provider" — internally contradictory.
+
+3. **W31.7-12 hook `.claude/hooks/plan-mode-spawn-planner.js`**: only checks `subagent_type=planner` is present, satisfied by EITHER peer or subagent spawn. Does NOT enforce peer-vs-subagent intent.
+
+4. **`skills/work/SKILL.md` L94/L102/L104/L105**: routing actions use verb "Delegate to {agent} agent" without specifying peer-vs-subagent. When the target IS a session peer (doc-updater, context-provider, architects), routing should use `SendMessage(to="...")` against the existing peer, NOT a fresh `Agent()` spawn that creates a duplicate.
+
+5. **`skills/work/SKILL.md` L108-111**: business agents use explicit `Agent(...)` subagent syntax — inconsistent with peer model for the rest.
+
+6. **`skills/work/SKILL.md` L111**: routes "implement/feature/build/wave" keywords to "Read `team-lead` template, act as team-lead" — but `team-lead.md` was retired W31.6 in favor of `docs/agents/main-agent-orchestration-guide.md`. Stale reference.
+
+7. **`skills/init-session/SKILL.md`** (entire file): purely informational dashboard. Does NOT invoke session-team setup. Orchestration guide HARD GATE at L30 says "Session setup blocks ALL work" — but no skill orchestrates this. Main agent must manually `TeamCreate` + spawn 6 peers, easy to forget.
+
+**Impact during BL-W32-06b** (live observation): main agent spawned 1 researcher (subagent — not in team), 1 planner (subagent — wrong pattern), 3 architects (subagents in background — wrong pattern, broke persistence). Burned ~50-70 minutes of session time + 100k+ tokens before user caught it. Architect verdicts WERE produced (saved to disk so wave could continue), but the post-EXECUTE conversation phase loses peer addressability — test-specialist cannot SendMessage architects for live questions.
+
+**Fix path** (multi-step):
+
+A. **planner.md** (toolkit owner: doc-updater): Fix L36 example to peer syntax. Either:
+   - `Agent(subagent_type="planner", team_name="planning-{slug}", name="planner")` if Planning Team subteam intended, OR
+   - `Agent(subagent_type="planner", team_name="session-{slug}", name="planner")` if planner joins existing session team
+   Decide which is canonical, fix the example, bump template_version.
+
+B. **agents.manifest.yaml planner entry** (toolkit owner: doc-updater + arch-platform): revert `spawn_method: Agent` → `spawn_method: TeamCreate-peer`. File MIGRATIONS entry. Run `generate-template.js --update-manifest-hash planner` to rebaseline.
+
+C. **`.claude/hooks/plan-mode-spawn-planner.js`** (toolkit owner: toolkit-specialist): extend hook to verify `team_name` + `name` are set on `Agent(subagent_type="planner")` invocation. If missing, block ExitPlanMode with explanatory error.
+
+D. **Optional new hook `agent-spawn-peer-validator.js`** (toolkit-specialist): for EVERY Agent spawn where `subagent_type` matches a manifest entry with `spawn_method: TeamCreate-peer`, verify `team_name` + `name` are set. Block if not. Single hook covers all 6 session-peer agents + planner.
+
+E. **skills/work/SKILL.md** (doc-updater):
+   - L94/L102/L104/L105: rewrite "Delegate to {peer-agent}" routes to detect if peer is alive in current session team → use `SendMessage(to="...")` if alive, `Agent(team_name=..., name=...)` if not.
+   - L108-111: business agents — decide whether they should be peers (probably no, business agents are ephemeral per session). Document explicitly.
+   - L111: replace "Read `team-lead` template" with "Read `docs/agents/main-agent-orchestration-guide.md`".
+
+F. **skills/init-session/SKILL.md** (doc-updater) — MAJOR DECISION:
+   - Option F1: extend /init-session to invoke session-team setup at the START (TeamCreate + spawn 6 peers + pre-flight checklist), then dashboard. Makes /init-session the canonical session-start command.
+   - Option F2: create new `/session-setup` skill (or rename existing). /init-session stays read-only dashboard. Orchestration guide HARD GATE at L30 references the new skill.
+   - Recommend F1 — fewer skills, single canonical entry point.
+
+G. **Hook tests** (test-specialist): add bats coverage for new peer-validator hook, including `Agent(subagent_type="arch-platform")` blocked vs `Agent(subagent_type="arch-platform", team_name="...", name="arch-platform")` allowed.
+
+**Surface**:
+- `setup/agent-templates/planner.md` L12, L36
+- `.claude/agents/planner.md` (mirror)
+- `.claude/registry/agents.manifest.yaml` L1621, L1632
+- `.claude/hooks/plan-mode-spawn-planner.js`
+- `.claude/hooks/agent-spawn-peer-validator.js` (new, optional)
+- `skills/work/SKILL.md` L94, L102, L104, L105, L108-111, L111
+- `skills/init-session/SKILL.md` (entire)
+- `setup/agent-templates/MIGRATIONS.json` (planner entry)
+- `scripts/tests/agent-spawn-peer-validator.bats` (new, if hook added)
+
+**Owner**: toolkit-specialist (hook + manifest), doc-updater (template + skills), arch-platform (manifest contract review)
+
+**Trigger**: HIGH-priority W32 hardening — fix BEFORE next major orchestration session. Filed during BL-W32-06b 2026-05-01.
+
+**Also closes**: similar pattern bug for arch-* spawn (orchestration guide L24 says spawn 6 session peers at session start — no skill enforces this either).
+
+---
+
