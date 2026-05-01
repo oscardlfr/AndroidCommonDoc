@@ -884,3 +884,83 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 
 ---
 
+### BL-W32-08 — main-agent-orchestration-guide.md L1/L2 propagation (MED — Phase 2 scope)
+**Status**: backlog
+**Priority**: MEDIUM (sync hygiene — no functional gap)
+**Source**: BL-W32-04 wave (PR #97 squash 0d6c5a1) added Phase 0 — Session start section to L0; L1 (shared-kmp-libs) + L2 (DawSync) copies remain at the pre-W32 version.
+
+**Problem**: `docs/agents/main-agent-orchestration-guide.md` is consumed by L1/L2 via `/sync-l0`. After BL-W32-04 added the Phase 0 section, L1/L2 copies are out of date. Operators on L1/L2 sessions will still hit the old "TeamCreate without TeamDelete" footgun until the doc propagates.
+
+**Fix path**: `/sync-l0` from develop @ 0d6c5a1 (or later) — the skill auto-copies docs/agents/ files to consuming repos. Verify post-sync that L1 + L2 copies contain the `## Phase 0 — Session start` heading.
+
+**Surface**:
+- L1 (shared-kmp-libs): `docs/agents/main-agent-orchestration-guide.md`
+- L2 (DawSync): `docs/agents/main-agent-orchestration-guide.md`
+
+**Sequencing**: bundle into BL-W32 Phase 2 sync wave (single `/sync-l0` per repo also closes BL-W32-05 + BL-W32-07 propagation — see `.planning/wave-bl-w32-phase2-prompt.md`).
+
+**Trigger**: Phase 2 wave (next session).
+
+---
+
+### BL-W32-09 — arch-platform.md + arch-integration.md template extraction (MED — pre-existing over-cap)
+**Status**: backlog
+**Priority**: MEDIUM (technical debt — pre-existing 17-line cap violation per template, exposed during BL-W32-02 review)
+**Source**: arch-platform PREP verdict, BL-W32-phase1 wave (`.planning/wave-bl-w32-phase1/arch-platform-verdict.md` AMENDMENT B). Doc-updater confirmed post-insertion 419 lines for both templates (cap 400).
+
+**Problem**: `setup/agent-templates/arch-platform.md` and `setup/agent-templates/arch-integration.md` are both at **419 lines** — 19 over the 400-line agent-template cap. This is pre-existing technical debt: the templates were already at 417 lines before BL-W32-02 added 2 lines of concern-ownership prose each. The wave didn't introduce the violation but did push the count further over the cap.
+
+**Why it didn't block BL-W32-phase1**: arch-platform's amendment was MANDATORY for tracking but explicitly NON-BLOCKING — the incremental delta (3 lines) was minimal, the pre-existing violation must be tracked separately.
+
+**Fix path**:
+- Identify candidate sections in each template that are stable boilerplate or duplicated across architects (e.g., Core Dev Communication, Per-Dispatch Validation, Topology Protocols).
+- Extract into shared sub-doc(s) under `docs/agents/` (e.g., `docs/agents/architect-shared-protocols.md` or per-architect dispatch-protocol sub-docs already in place).
+- Replace inline prose with cross-reference `See [docs/agents/X.md § Y]`.
+- Target: ≤380 lines post-extraction (20-line headroom for future additions).
+
+**Surface**:
+- `setup/agent-templates/arch-platform.md` (419 → ≤380)
+- `setup/agent-templates/arch-integration.md` (419 → ≤380)
+- `.claude/agents/arch-platform.md` + `.claude/agents/arch-integration.md` mirrors
+- `docs/agents/architect-shared-protocols.md` or extension of existing sub-docs
+- `setup/agent-templates/MIGRATIONS.json` per-template version bumps
+- Registry rehash
+
+**Risk**: extraction must preserve reading flow — arch-* templates are operator-facing. Hub-doc + cross-reference pattern (W31.6 retirement of team-lead.md is the precedent) is the canonical approach.
+
+**Estimated effort**: ~2-3h. 1 wave. arch-platform PREP review required (they own template_version + manifest discipline).
+
+**Trigger**: post-W32 hardening wave or Phase 2 follow-up. Not blocking.
+
+---
+
+### BL-W32-10 — main-agent-orchestration-guide.md hub-split (MED — pre-existing over-cap)
+**Status**: backlog
+**Priority**: MEDIUM (technical debt — pre-existing sub-doc cap violation, exposed during BL-W32-04 review)
+**Source**: context-provider pre-write check, BL-W32-phase1 wave. Doc-updater confirmed post-insertion 328 lines (cap 300 for sub-docs in `docs/agents/`).
+
+**Problem**: `docs/agents/main-agent-orchestration-guide.md` is at **328 lines** — 28 over the 300-line sub-doc cap (per CLAUDE.md doc size limits). Pre-existing: the file was already at 320 lines before BL-W32-04 added 8 lines of Phase 0 content.
+
+**Why it didn't block BL-W32-phase1**: pre-existing violation, doc-only change with no functional impact.
+
+**Fix path**: hub-split per the canonical L0 doc pattern (CLAUDE.md):
+- Hub (`main-agent-orchestration-guide.md`) → ≤100 lines: navigation + glossary + section index only, zero implementation detail.
+- Sub-docs (already partially extracted: `tl-session-setup.md`, `tl-dispatch-topology.md`, `tl-phase-execution.md`, etc.) — extract remaining content from the hub into focused ≤300-line sub-docs.
+- Candidates for further extraction:
+  - "Phase 0 — Session start" → could move to `tl-session-setup.md` if it grows
+  - "Operating Mode → FORBIDDEN/ALLOWED Actions" → potential `tl-operating-mode.md` sub-doc
+  - "Ingestion-Request Handler" → already a sub-doc candidate (mostly self-contained)
+
+**Surface**:
+- `docs/agents/main-agent-orchestration-guide.md` (328 → ≤100 lines, hub format)
+- New sub-doc(s) under `docs/agents/`
+- All cross-references from architect templates + skill files updated
+
+**Risk**: this doc is the canonical session protocol. Operators read it on every session start. Splitting must preserve reading flow — strong navigation hub + clear sub-doc names mandatory.
+
+**Estimated effort**: ~3-4h. arch-integration PREP review required (they own doc structure / cross-cuts that consume this guide).
+
+**Trigger**: post-W32 hardening wave. Not blocking. Often paired with BL-W32-09 since both are template/doc extraction patterns.
+
+---
+
