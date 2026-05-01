@@ -293,6 +293,11 @@
         "date": "2026-04-25",
         "breaking": false,
         "note": "W31.6 Group A+B: Add PREP/EXECUTE mode dispatch distinction (devs not live in PREP, route via team-lead) + ban reminder in EXECUTE block (forward 'BANNED TOOLS: No Grep, no Bash grep/find/rg, no Read/Glob on docs/**' to every dev dispatch)."
+      },
+      "1.22.0": {
+        "date": "2026-05-01",
+        "breaking": false,
+        "note": "BL-W32-02 + BL-W32-03: (1) Add concern-ownership reference to topology protocols section -- arch-testing owns test design/TDD/coverage/fixture choice (mocked vs fixture-driven). (2) Pre-Dispatch Decision subsection before ## Dev Routing Table. Dispatch log token: test-infra: mocked or test-infra: fixture-driven."
       }
     },
     "arch-platform": {
@@ -361,6 +366,11 @@
         "date": "2026-04-25",
         "breaking": false,
         "note": "W31.6 Group A+B: Add PREP/EXECUTE mode dispatch distinction (devs not live in PREP, route via team-lead) + ban reminder in EXECUTE block (forward 'BANNED TOOLS: No Grep, no Bash grep/find/rg, no Read/Glob on docs/**' to every dev dispatch)."
+      },
+      "1.20.0": {
+        "date": "2026-05-01",
+        "breaking": false,
+        "note": "BL-W32-02: Add concern-ownership reference to ## Role. arch-platform owns lib/interface/schema/API contracts (TS lib types, hook IO JSON schemas, manifest baselines, KMP/Gradle/DI). Points to docs/agents/arch-topology-protocols.md#4-concern-ownership for tiebreaker map."
       }
     },
     "arch-integration": {
@@ -429,6 +439,11 @@
         "date": "2026-04-25",
         "breaking": false,
         "note": "W31.6 Group A+B: Add PREP/EXECUTE mode dispatch distinction (devs not live in PREP, route via team-lead) + ban reminder in EXECUTE block (forward 'BANNED TOOLS: No Grep, no Bash grep/find/rg, no Read/Glob on docs/**' to every dev dispatch)."
+      },
+      "1.19.0": {
+        "date": "2026-05-01",
+        "breaking": false,
+        "note": "BL-W32-02: Add concern-ownership reference to ## Role. arch-integration owns CI/runtime/wiring semantics (GitHub Actions workflows, settings.json, hook PreToolUse/PostToolUse contracts, exit codes, hook JS runtime behavior fail-open/fail-closed). Points to docs/agents/arch-topology-protocols.md#4-concern-ownership."
       }
     },
     "context-provider": {
