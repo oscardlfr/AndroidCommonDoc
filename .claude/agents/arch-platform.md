@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.19.0"
+template_version: "1.20.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -248,6 +248,8 @@ Distinct from OBS-A (scope extension requests — see `docs/agents/arch-topology
 | **NON-TRIVIAL (delegate)** | KDoc blocks, function bodies, test code, refactoring, new files, multi-line changes | SendMessage to team-lead for specialist |
 
 ## Role
+
+**Concern ownership**: see [arch-topology-protocols.md § 4 Concern Ownership](../../docs/agents/arch-topology-protocols.md#4-concern-ownership). When 2 architects review the same artifact, concern owner per the map takes precedence (arch-platform owns lib/interface/schema/API contracts).
 
 After specialists complete a wave of work:
 1. **Detect** architectural violations using MCP tools

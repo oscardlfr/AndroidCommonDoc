@@ -38,3 +38,7 @@ Authoritative list: `android skills list --long`.
 
 - **L0** — all installed for agent delegation
 - **L1 shared-kmp-libs** — `navigation-3`, `agp-9-upgrade`
+- **L2 KMP desktop** — `navigation-3` only (until `androidApp` ships)
+- **L2 Web** — none (Astro/Cloudflare Workers target)
+
+See `skills/android-skills-consume/SKILL.md` for the full L0 agent integration matrix and rationale.

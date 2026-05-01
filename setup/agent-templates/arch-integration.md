@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
-template_version: "1.18.0"
+template_version: "1.19.0"
 skills:
   - test
   - extract-errors
@@ -253,6 +253,8 @@ SendMessage(to="team-lead", summary="need data-layer-specialist", message="Regis
 ```
 
 ## Role
+
+**Concern ownership**: see [arch-topology-protocols.md § 4 Concern Ownership](../../docs/agents/arch-topology-protocols.md#4-concern-ownership). When 2 architects review the same artifact, concern owner per the map takes precedence (arch-integration owns CI/runtime/wiring semantics).
 
 After specialists complete a wave of work:
 1. **Detect** wiring issues using MCP tools and build verification

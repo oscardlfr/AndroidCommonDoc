@@ -635,7 +635,7 @@ Four findings from BL-W31.7-11 dogfood retrospective (memory `project_BL-W31.7-1
 - **BL-W32-06c** (HIGH) — kmp-test-runner v0.6.2 adoption in L1 (shared-kmp-libs).
 - **BL-W32-06d** (HIGH) — kmp-test-runner v0.6.2 adoption in L2 (DawSync).
 
-Phase 1 closes when BL-W32-02/03/04 are SHIPPED. Phase 2 prompt filed at `.planning/wave-bl-w32-phase2-prompt.md` once Phase 1 closes.
+Phase 1 CLOSED — BL-W32-02/03/04 SHIPPED via PR #97 (2026-05-01). Phase 2 prompt to be filed as `.planning/wave-bl-w32-phase2-prompt.md`.
 
 ---
 
@@ -649,7 +649,7 @@ Phase 1 closes when BL-W32-02/03/04 are SHIPPED. Phase 2 prompt filed at `.plann
 ---
 
 ### BL-W32-02 — Implementation-spec conflict resolution protocol (MED)
-**Status**: backlog
+**Status**: SHIPPED — PR #97 (feature/bl-w32-phase1, develop)
 **Priority**: MEDIUM (process integrity — recurring class of issue)
 **Source**: BL-W31.7-11 lesson #2 — arch-integration (exit 0) vs arch-platform (exit 2) clash on bash wrapper baseline-fail behavior; resolved ad-hoc by team-lead tiebreaker (CI yaml `continue-on-error: true` swallows exit 2 unconditionally).
 
@@ -668,7 +668,7 @@ Phase 1 closes when BL-W32-02/03/04 are SHIPPED. Phase 2 prompt filed at `.plann
 ---
 
 ### BL-W32-03 — test-specialist mocking strategy pre-decided by arch-testing (MED)
-**Status**: backlog
+**Status**: SHIPPED — PR #97 (feature/bl-w32-phase1, develop)
 **Priority**: MEDIUM (avoids mid-session blockers — observed in BL-W31.7-11)
 **Source**: BL-W31.7-11 lesson #3 — test-specialist blocked because vi.mock infrastructure was absent in `mcp-server/`; arch-platform locked Path B (real git fixtures) post-block. Should have been pre-decided.
 
@@ -793,7 +793,7 @@ Wave directories with non-digit slugs (e.g., `wave-bl-w31-7-12`, `wave-bl-w32-NN
 ---
 
 ### BL-W32-04 — CP zombie shutdown bug at session start (HIGH — RECURRING)
-**Status**: backlog
+**Status**: SHIPPED — PR #97 (feature/bl-w32-phase1, develop)
 **Priority**: HIGH (affects every new session; recurring per `feedback_cp_shutdown_bug.md`)
 **Source**: BL-W31.7-11 lesson #4 — zombie context-provider entry from prior session blocked TeamCreate; required manual fix (Write to clear `members[]` array in `~/.claude/teams/{slug}/config.json`). Same root cause confirmed across multiple sessions.
 

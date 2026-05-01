@@ -107,6 +107,18 @@ The same pattern applies to dev specialists (test-specialist, ui-specialist, dat
 
 team-lead (team-lead) has its own corollary: the **Search Dispatch Protocol** — when a user task involves pattern matching, route to context-provider FIRST and then dispatch to architect with results-as-input. Never dispatch to an architect with "use grep to find X".
 
+## 4. Concern Ownership
+
+Three concern domains; one owner each. When two architects review the same artifact, the **owner of the concern takes precedence**; team-lead is final tiebreaker.
+
+| Concern | Owner | Examples |
+|---|---|---|
+| CI / runtime / wiring semantics | arch-integration | GitHub Actions workflows, settings.json, hook PreToolUse/PostToolUse contracts, exit codes propagated by CI, hook JS runtime behavior (fail-open vs fail-closed, audit-log writes) |
+| Lib / interface / schema / API contracts | arch-platform | TS lib types, hook input/output JSON schemas, manifest baselines, KMP/Gradle/DI/module structure |
+| Test design + coverage | arch-testing | bats structure, Vitest patterns, fixture choice (mocked vs fixture-driven), TDD compliance |
+
+**Tiebreaker**: when an artifact spans 2 concerns, the owner of the **dominant concern** takes precedence. If both architects claim equal ownership, team-lead arbitrates. Example: bash hook with CI exit-code semantics → arch-integration owns the exit code; arch-platform owns the JSON schema input/output the hook consumes.
+
 ## Cross-references
 
 - Template reference: each architect template (arch-platform, arch-testing, arch-integration) references this doc in its OBS-A and Reporter Protocol sections and keeps an abridged actionable checklist inline.

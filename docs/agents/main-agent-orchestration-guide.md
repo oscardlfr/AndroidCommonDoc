@@ -97,6 +97,14 @@ Why: L2 DawSync session (2026-04-18) — the main agent dispatched grep work dir
 - **FORBIDDEN**: Spawning extra specialists without a preceding architect SendMessage to team-lead explicitly requesting it. "I think this needs a specialist" is not sufficient — the architect must ask.
 - **The ONLY agents team-lead launches directly**: planner (Phase 1), session team setup agents (session start), 5 core specialists (Phase 2 start), quality-gater (Phase 3). Extra specialists require an architect SendMessage request.
 
+## Phase 0 — Session start
+
+**If reusing a session slug**: run `TeamDelete(team_name="session-{slug}")` BEFORE `TeamCreate`. This clears stale `members[]` from the prior session entry in `~/.claude/teams/{slug}/config.json`.
+
+**If creating a new slug**: no-op. Proceed directly to `TeamCreate`.
+
+**Why**: stale CP entries in the team config cause `TeamCreate` to either fail with "team exists" OR silently spawn a CP peer that hangs on `shutdown_request` from the dead session. This is a known platform behavior — not a CP template bug. See `feedback_cp_shutdown_bug.md` for incident history. Option A (auto-clear hook) is deferred per BL-W32-04 backlog — mechanical discipline (this rule) is the immediate fix.
+
 ### Session Start: Session Team Setup (mandatory)
 
 **Project slug**: derive from the project root directory name, lowercased with hyphens. Examples: `dawsync`, `shared-kmp-libs`, `androidcommondoc`. This prevents team name collisions when multiple Claude Code sessions run simultaneously.

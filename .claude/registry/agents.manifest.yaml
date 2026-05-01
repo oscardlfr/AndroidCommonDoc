@@ -126,8 +126,8 @@ agents:
   arch-platform:
     canonical_name: arch-platform
     subagent_type: arch-platform
-    template_version: "1.19.0"
-    template_frontmatter_sha256: d4c72c96b402d431fc1d7356782aa34691332716d424fb553a6d107cc47a8cba
+    template_version: "1.20.0"
+    template_frontmatter_sha256: aaea4efed8aed2dbb371ed42d88b615c571451150d98db6412e73727cb917a0e
     category: architect
     lifecycle: ephemeral
     description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -181,8 +181,8 @@ agents:
   arch-testing:
     canonical_name: arch-testing
     subagent_type: arch-testing
-    template_version: "1.21.0"
-    template_frontmatter_sha256: 392c30c958e74e6c199d09bd08690b109912a4cd2faf6e54b7d32c62e2a9e185
+    template_version: "1.22.0"
+    template_frontmatter_sha256: 967d9159fb8697d356427363658a32b2b0cd36793c3b48fb3096c0f1fef8ba0c
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -233,8 +233,8 @@ agents:
   arch-integration:
     canonical_name: arch-integration
     subagent_type: arch-integration
-    template_version: "1.18.0"
-    template_frontmatter_sha256: 329fd8749b942c1db6ac68a58a1a2d99d5d19a0e72c14e6542e80eb91bcc86fb
+    template_version: "1.19.0"
+    template_frontmatter_sha256: 51636411001553ff725db14d9f4fb94667f63f067559d798eff201bdebeb55f1
     category: architect
     lifecycle: ephemeral
     description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -1883,7 +1883,7 @@ agents:
     canonical_name: feature-domain-specialist
     subagent_type: feature-domain-specialist
     template_version: "1.1.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: f971931f8fbf25f138c7b7b747f468755b9bbda640913b6b1b80af6bbe05c9e3
     category: domain-specialist
     lifecycle: per-task
     description: "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}."
