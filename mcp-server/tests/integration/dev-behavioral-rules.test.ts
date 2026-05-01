@@ -158,9 +158,18 @@ describe('dev template structural invariants', () => {
   ];
 
   it('all 4 dev templates are at most 300 lines', () => {
+    // BL-W32-06b (2026-05-01): bumped 315→350 to accommodate test-specialist.md kmp-test-runner v0.6.2
+    // awareness section (+27 lines, line 136-163). Other 3 dev templates (ui/data/domain) remain ≤315.
+    const PER_TEMPLATE_LIMIT: Record<string, number> = {
+      'test-specialist.md': 350,
+      'ui-specialist.md': 315,
+      'domain-model-specialist.md': 315,
+      'data-layer-specialist.md': 315,
+    };
     for (const t of DEV_TEMPLATES) {
       const c = fs.readFileSync(path.join(TEMPLATES_DIR, t), 'utf-8');
-      expect(c.trimEnd().split('\n').length, `${t} must be ≤315 lines`).toBeLessThanOrEqual(315)  // W31.6: +14-line BANNED-TOOLS banner;
+      const limit = PER_TEMPLATE_LIMIT[t] ?? 315;
+      expect(c.trimEnd().split('\n').length, `${t} must be ≤${limit} lines`).toBeLessThanOrEqual(limit);  // W31.6: +14-line BANNED-TOOLS banner;
     }
   });
 
