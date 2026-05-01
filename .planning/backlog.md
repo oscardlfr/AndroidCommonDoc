@@ -617,6 +617,28 @@ Four findings from BL-W31.7-11 dogfood retrospective (memory `project_BL-W31.7-1
 
 ---
 
+### W32 closeout plan (filed 2026-05-01 after BL-W32-05 SHIPPED)
+
+**Rationale**: avoid N-1 round-trips by knocking out remaining L0-only fixes first, then doing one consolidated L0→L1/L2 sync wave.
+
+**Phase 1 — L0-only fixes** (next session, single batch — see prompt at `.planning/wave-bl-w32-phase1-prompt.md`):
+
+- **BL-W32-04** (HIGH, RECURRING) — CP zombie shutdown bug at session start.
+- **BL-W32-02** (MED) — Implementation-spec conflict resolution protocol (concern ownership map).
+- **BL-W32-03** (MED) — test-specialist mocking strategy pre-decided by arch-testing.
+
+**Phase 2 — Consolidated L0→L1/L2 sync** (after Phase 1 ships, 1 wave + 1 PR per consuming repo):
+
+- **BL-W32-05** propagation — architect-bash-write-gate exempt-target gap fix → L1 (shared-kmp-libs) + L2 (DawSync).
+- **BL-W32-07** propagation — spawn-pattern coherence (PR #93) → L1 + L2.
+- **BL-W32-08** (TBD filed) — `docs/agents/main-agent-orchestration-guide.md` propagation → L1 + L2.
+- **BL-W32-06c** (HIGH) — kmp-test-runner v0.6.2 adoption in L1 (shared-kmp-libs).
+- **BL-W32-06d** (HIGH) — kmp-test-runner v0.6.2 adoption in L2 (DawSync).
+
+Phase 1 closes when BL-W32-02/03/04 are SHIPPED. Phase 2 prompt filed at `.planning/wave-bl-w32-phase2-prompt.md` once Phase 1 closes.
+
+---
+
 ### BL-W32-01 — Planner template stale bats path reference (LOW)
 **Status**: ✅ CLOSED (OBSOLETE) 2026-04-30 — verified `mcp-server/tests/wrappers` absent from repo (`grep -r mcp-server/tests/wrappers` returns 0 matches). Planner template already references correct paths via context-provider routing. No fix required.
 **Priority**: LOW (would have been: documentation accuracy)
