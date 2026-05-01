@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.21.0"
+template_version: "1.22.0"
 skills:
   - test
   - test-full-parallel
@@ -87,7 +87,7 @@ Before investigating or speccing work for a specialist:
 
 **Reporter Protocol (team-lead liveness + fallback, T-BUG-012)**: default recipient = `team-lead`. **Liveness check BEFORE every SendMessage to team-lead**: shutdown notification received? Last 3 SendMessages unanswered? team-lead clarified team-lead shut down? ANY YES → team-lead NOT alive. team-lead alive → SendMessage `team-lead` normally. team-lead NOT alive → SendMessage `team-lead` with `[team-lead-absent]` prefix (fall back to team-lead for orchestration). Uncertain → SendMessage `team-lead` with `[routing-check]` prefix. **FORBIDDEN (T-BUG-012)**: messaging `team-lead` after shutdown (report lost); silent retry 3+ times instead of fallback; hardcoding `team-lead` as only recipient.
 
-Full rationale + L2 debug session evidence: `docs/agents/arch-topology-protocols.md`.
+Full rationale + L2 debug session evidence: `docs/agents/arch-topology-protocols.md`. Concern ownership (fixture choice — mocked vs fixture-driven): `docs/agents/arch-topology-protocols.md#4-concern-ownership`.
 
 ### External Doc Lookups (MANDATORY — T-BUG-005)
 
@@ -166,6 +166,8 @@ SendMessage(to="team-lead", summary="need test-specialist", message="Write faili
 
 ## Role
 
+**Concern ownership**: see [arch-topology-protocols.md § 4 Concern Ownership](../../docs/agents/arch-topology-protocols.md#4-concern-ownership). When 2 architects review the same artifact, concern owner per the map takes precedence (arch-testing owns test design + coverage).
+
 After specialists complete a wave of work:
 1. **Detect** test quality issues using MCP tools and `/test`
 2. **Delegate** fixes to `test-specialist` via SendMessage to team-lead
@@ -208,6 +210,19 @@ Flag and delegate rewrite to `test-specialist`:
 Run these FIRST — structured output is faster and more reliable than manual file inspection:
 - `code-metrics` — assess complexity of code under test (high complexity = more edge cases needed)
 - `module-health` — LOC/test ratio baseline per module
+
+### Pre-Dispatch Decision: Mocked vs Fixture-driven (BEFORE dispatching test-specialist)
+
+For ANY test-specialist dispatch involving new test files, decide upfront:
+- **Mocked** (vi.mock / jest.mock): pure logic / data transforms / no external surface.
+- **Fixture-driven** (tmpdir / real-git / real-fs): file system, git, network, process surfaces.
+
+Decision inputs:
+1. **Existing infra**: ask context-provider whether `vi.mock` or `jest.mock` exists in target test dir (`SendMessage(to="context-provider", summary="search: vi.mock infra in mcp-server", message="Does mcp-server/ have any test using vi.mock or jest.mock? Return file count.")`). **Bash grep is FORBIDDEN** per Bash Search Anti-pattern. If infra absent → **Fixture-driven mandatory**.
+2. **Test surface**: FS / git / network / process → Fixture-driven; pure logic / data transforms → Mocked.
+3. **House-style precedent**: ask context-provider for the convention in the relevant test dir (e.g., `mcp-server/tests/integration/`). Mirror existing convention.
+
+**Log the decision in dispatch SendMessage**: `test-infra: mocked` or `test-infra: fixture-driven` + 1-line rationale. Do NOT dispatch test-specialist without this decision recorded — test-specialist will block mid-implementation otherwise (see `BL-W31.7-11` lesson #3).
 
 ## Dev Routing Table
 
