@@ -71,6 +71,12 @@ const PYTHON_WRITE_RE = /\bpython3?\s+-c\b[^|;&]*?open\s*\([^)]*['"]w[+ab]?['"]/
 // blocks above filter out.
 const PYTHON_HEREDOC_WRITE_RE =
   /\bpython3?\s+<<-?\s*['"]?[A-Za-z_]\w*['"]?[\s\S]*?open\s*\([^)]*['"]w[+ab]?['"]/;
+// Captures the file path from `open('<path>', 'w')` positional-arg form.
+// Declare WITHOUT /g — each call site uses new RegExp(PYTHON_OPEN_TARGET_RE.source, 'g')
+// to reset lastIndex state. Mirrors tee handler pattern at line 119.
+// kind: "python -c open(...,'w')"  — used by both shell and heredoc forms below.
+//        "python <<EOF open(...,'w')" — distinct kind for heredoc bypass form.
+const PYTHON_OPEN_TARGET_RE = /\bopen\s*\(\s*['"]([^'"]+)['"][^)]*['"]w[+ab]?['"]/;
 const TEE_WRITE_RE = /\btee\s+(?:-a\s+|--append\s+)?(['"]?)([^-\s|<>;&'"]+)\1/;
 
 function isExemptTarget(target) {
@@ -109,11 +115,33 @@ function detectViolation(cmd) {
   }
 
   if (PYTHON_WRITE_RE.test(cmd)) {
-    return { kind: "python -c open(...,'w')" };
+    let foundTarget = false;
+    for (const match of cmd.matchAll(new RegExp(PYTHON_OPEN_TARGET_RE.source, 'g'))) {
+      foundTarget = true;
+      const target = match[1];
+      if (target && !isExemptTarget(target)) {
+        return { kind: "python -c open(...,'w')", target };
+      }
+    }
+    if (!foundTarget) {
+      // Defensive: PYTHON_WRITE_RE matched but no capture — block conservatively.
+      return { kind: "python -c open(...,'w')", target: '<inline>' };
+    }
   }
 
   if (PYTHON_HEREDOC_WRITE_RE.test(cmd)) {
-    return { kind: "python <<EOF open(...,'w')" };
+    let foundTarget = false;
+    for (const match of cmd.matchAll(new RegExp(PYTHON_OPEN_TARGET_RE.source, 'g'))) {
+      foundTarget = true;
+      const target = match[1];
+      if (target && !isExemptTarget(target)) {
+        return { kind: "python <<EOF open(...,'w')", target };
+      }
+    }
+    if (!foundTarget) {
+      // Defensive: PYTHON_HEREDOC_WRITE_RE matched but no capture — block conservatively.
+      return { kind: "python <<EOF open(...,'w')", target: '<inline>' };
+    }
   }
 
   for (const match of cmd.matchAll(new RegExp(TEE_WRITE_RE.source, 'g'))) {

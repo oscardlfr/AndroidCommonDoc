@@ -90,6 +90,46 @@ PYEOF" 'arch-platform'
   [[ "$output" == *"python <<EOF"* ]]
 }
 
+@test "blocks python3 -c open(<non-exempt>,'w')" {
+  make_input "python3 -c \"open('docs/leak.md','w').write('x')\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"python -c"* ]]
+}
+
+@test "allows python3 -c open(<exempt verdict path>,'w')" {
+  make_input "python3 -c \"open('.planning/wave-bl-w32-05/arch-platform-verdict.md','w').write('APPROVE')\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "allows python3 -c open(<exempt>,'wb') binary write mode" {
+  make_input "python3 -c \"open('.planning/wave-bl-w32-05/arch-platform-verdict.md','wb').write(b'x')\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "allows python3 <<EOF heredoc open(<exempt verdict path>,'w')" {
+  make_input "python3 << 'PYEOF'
+with open('.planning/wave-bl-w32-05/arch-testing-verdict.md', 'w') as f:
+    f.write('APPROVE')
+PYEOF" 'arch-testing'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "blocks python3 <<EOF heredoc open(<non-exempt>,'w') even if exempt path also present" {
+  make_input "python3 << 'PYEOF'
+with open('/tmp/ok.txt', 'w') as a:
+    a.write('safe')
+with open('docs/leak.md', 'w') as b:
+    b.write('leak')
+PYEOF" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"python <<EOF"* ]]
+}
+
 @test "blocks plain shell redirect to project file" {
   make_input "echo body > docs/new.md" 'arch-integration'
   run_hook
@@ -122,6 +162,14 @@ PYEOF" 'arch-platform'
   make_input "cat > .planning/wave31.7/arch-platform-verdict.md <<EOF
 APPROVE
 EOF" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "allows redirect to hyphenated wave verdict path (wave-bl-w32-05)" {
+  make_input "cat > .planning/wave-bl-w32-05/arch-integration-verdict.md <<EOF
+APPROVE
+EOF" 'arch-integration'
   run_hook
   [ "$status" -eq 0 ]
 }
