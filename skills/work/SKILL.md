@@ -84,6 +84,21 @@ Check if `$ARGUMENTS` contains cross-department signals:
 
 If no cross-department signal detected, fall through to Level 1.
 
+## Peer-Aware Routing (W32-07)
+
+Before routing to a peer-eligible agent, detect the active session and check peer aliveness:
+
+```bash
+slug=$(ls -td ~/.claude/teams/session-* 2>/dev/null | head -1 | { read p; [ -n "$p" ] && basename "$p" || echo ""; })
+```
+
+If `slug` is non-empty AND `~/.claude/teams/$slug/config.json` lists `{target}` as alive member:
+  → `SendMessage(to="{target}", ...)`
+Else:
+  → `Agent(subagent_type="{target}", team_name="session-{slug-or-new}", name="{target}")`
+
+Fallback slug if none exists: `session-$(date +%s | tail -c 8)` (portable; sha256sum may be absent on macOS).
+
 ### Level 1 — Deterministic Keyword Rules (instant, 0 tokens)
 
 Match `$ARGUMENTS` against these patterns in order. First match wins:
@@ -91,7 +106,7 @@ Match `$ARGUMENTS` against these patterns in order. First match wins:
 | Pattern | Route |
 |---------|-------|
 | `\b(bug\|error\|fix\|broken\|crash)\b` | `/debug` |
-| `\b(test\|coverage\|benchmark)\b` | Delegate to `test-specialist` agent |
+| `\b(test\|coverage\|benchmark)\b` | Peer-aware delegate to `test-specialist` ** |
 | `\b(review\|PR\|pull request)\b` | `/review-pr` |
 | `\b(research\|investigate\|explore)\b` | `/research` |
 | `\b(decide\|choose\|compare\|tradeoff)\b` | `/decide` |
@@ -99,26 +114,27 @@ Match `$ARGUMENTS` against these patterns in order. First match wins:
 | `\b(map\|architecture\|modules\|inventory)\b` | `/map-codebase` |
 | `\b(pre-pr\|validate\|ready to merge)\b` | `/pre-pr` |
 | `\b(note\|idea\|remember)\b` | `/note` |
-| `\b(ui\|compose\|screen\|component)\b` | Delegate to `ui-specialist` agent |
+| `\b(ui\|compose\|screen\|component)\b` | Peer-aware delegate to `ui-specialist` ** |
 | `\b(audit\|quality)\b` | `/audit` |
-| `\b(doc\|documentation\|update docs)\b` | Delegate to `doc-updater` agent |
-| `\b(context\|pattern\|lookup\|what exists)\b` | Delegate to `context-provider` agent |
-| `\b(domain\|model\|sealed\|data class)\b` | Delegate to `domain-model-specialist` agent |
-| `\b(data layer\|repository\|encoding)\b` | Delegate to `data-layer-specialist` agent |
+| `\b(doc\|documentation\|update docs)\b` | Peer-aware delegate to `doc-updater` ** |
+| `\b(context\|pattern\|lookup\|what exists)\b` | Peer-aware delegate to `context-provider` ** |
+| `\b(domain\|model\|sealed\|data class)\b` | Peer-aware delegate to `domain-model-specialist` ** |
+| `\b(data layer\|repository\|encoding)\b` | Peer-aware delegate to `data-layer-specialist` ** |
 | `\b(prioritize\|roadmap\|features\|backlog)\b` | Agent(`product-strategist`) * |
 | `\b(post\|blog\|social\|marketing\|content)\b` | Agent(`content-creator`) * |
 | `\b(landing\|page\|conversion\|copy\|seo)\b` | Agent(`landing-page-strategist`) * |
-| `\b(implement\|feature\|build\|scope\|plan\|execute\|wave)\b` | Read `team-lead` template, act as team-lead (in-process) *** |
+| `\b(implement\|feature\|build\|scope\|plan\|execute\|wave)\b` | Act as main-context orchestrator (in-process per W31.6) *** |
 
 \* Business agents are opt-in. If the agent doesn't exist in `.claude/agents/`, fall through to Level 2.
-\*** T-BUG-010: `team-lead` MUST run in-process (main conversation), NEVER via `Agent()`. Sub-agents cannot TeamCreate or spawn reliably. Read `.claude/agents/team-lead.md` and act as team-lead directly.
+\** Use Peer-Aware Routing block above — SendMessage if peer is alive, else Agent peer-spawn.
+\*** T-BUG-010: orchestrator MUST run in-process (main conversation), NEVER via `Agent()`. Sub-agents cannot TeamCreate or spawn reliably (Claude Code bug #31977). Per W31.6 canonical pattern, the main agent IS the team-lead. Steps: (1) TeamCreate session-{slug}, (2) Spawn 6 core peers as Agent peer-spawns (subagent_type=X, team_name="session-{slug}", name=X), (3) Run pre-flight checklist, (4) Dispatch work with scope_doc_path.
 
 ### Level 2 — Frontmatter Discovery (if no Level 1 match)
 
 1. Scan `.claude/agents/*.md` for `intent:` frontmatter
 2. Match keywords in user description against intent arrays
 3. If match found → suggest that agent
-4. If no match → read `.claude/agents/team-lead.md`, act as team-lead in-process
+4. If no match → act as main-context orchestrator (in-process per W31.6 — see footnote ***)
 
 ## Dev Spawn First-Action Protocol
 
@@ -165,6 +181,7 @@ Proceed? (y/n)
 
 ## Notes
 
+- Session naming: `session-{slug}` is the canonical convention shared with `/init-session --orchestrate <slug>` (BL-W32-07). Use the same slug for both commands in a session.
 - Level 1 is checked first — it is instant and deterministic
 - Level 2 only runs when Level 1 has no match
 - **Before routing to any agent, verify it exists** in `.claude/agents/` — if not, fall through
@@ -183,9 +200,9 @@ Proceed? (y/n)
 
 ## Orchestrator Safety Rule
 
-**NEVER** spawn orchestrator agents (`team-lead`, `quality-gater`) via `Agent()`. These agents need `TeamCreate`, `TeamDelete`, and `Agent` tools which only work at the top-level process.
+**NEVER** spawn orchestrator agents (`quality-gater` or the main orchestrator role) via `Agent()`. These agents need `TeamCreate`, `TeamDelete`, and `Agent` tools which only work at the top-level process.
 
 When routing to an orchestrator:
-1. Read the agent's template from `.claude/agents/{name}.md`
-2. Follow its instructions as the main Claude process
-3. The agent acts **in-process**, not as a sub-agent
+1. Act in-process as the main-context orchestrator (W31.6 canonical pattern — main agent IS the team-lead; no separate team-lead template to read)
+2. Follow the inline steps from footnote ***: TeamCreate session-{slug}, spawn 6 core peers, run pre-flight checklist, dispatch work
+3. The orchestrator role executes **in-process**, not as a sub-agent (T-BUG-010 / Claude Code bug #31977)

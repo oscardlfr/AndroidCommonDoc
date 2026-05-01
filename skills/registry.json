@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-05-01T11:50:35.674Z",
+  "generated": "2026-05-01T11:56:48.249Z",
   "l0_root": ".",
   "entries": [
     {
@@ -785,14 +785,14 @@
       "name": "init-session",
       "type": "skill",
       "path": "skills/init-session/SKILL.md",
-      "description": "Show project context — available agents, skills, modules, and business docs.",
+      "description": "Show project context dashboard. Optionally orchestrates session-team setup with --orchestrate <slug> flag (BL-W32-07).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:63043eee0f9ab462af591dfe73022a8feca8b7571578aa79bf4148c42a706aa5",
+      "hash": "sha256:6d8c843efd32202a504370924bd7893ea9349730eb7591d18f05816f22af4b45",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",
-        "description": "Show project context — available agents, skills, modules, and business docs.",
+        "description": "Show project context dashboard. Optionally orchestrates session-team setup with --orchestrate <slug> flag (BL-W32-07).",
         "intent": [
           "session",
           "init",
@@ -1834,7 +1834,7 @@
       "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a5ab7ae30a801ca1f9bad5d3f51b2c67ce8ffcce9e660aed6bfb4733ff4442b0",
+      "hash": "sha256:8998eb929daf562db2608e604598fdf36bd695f7a2cee367c91c45bff9580b17",
       "dependencies": [],
       "frontmatter": {
         "name": "work",
