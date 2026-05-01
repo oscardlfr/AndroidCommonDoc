@@ -1,5 +1,5 @@
 ---
-name: "{{DOMAIN}}-specialist"
+name: feature-domain-specialist
 description: "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}."
 tools: Read, Grep, Glob, Bash
 model: sonnet

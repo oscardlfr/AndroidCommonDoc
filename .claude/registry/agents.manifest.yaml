@@ -1883,7 +1883,7 @@ agents:
     canonical_name: feature-domain-specialist
     subagent_type: feature-domain-specialist
     template_version: "1.1.0"
-    template_frontmatter_sha256: null
+    template_frontmatter_sha256: f971931f8fbf25f138c7b7b747f468755b9bbda640913b6b1b80af6bbe05c9e3
     category: domain-specialist
     lifecycle: per-task
     description: "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}."
