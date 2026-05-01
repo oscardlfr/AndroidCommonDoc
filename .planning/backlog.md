@@ -733,9 +733,9 @@ Four findings from BL-W31.7-11 dogfood retrospective (memory `project_BL-W31.7-1
 
 ---
 
-### BL-W32-05 — Architect verdict gate regex inconsistency (MED — discovered 2026-04-30)
-**Status**: backlog
-**Priority**: MEDIUM (blocks architect verdict-to-disk for non-digit wave slugs)
+### BL-W32-05 — Architect verdict gate regex inconsistency (SHIPPED 2026-05-01)
+**Status**: SHIPPED — PR #94 (squash c132fde, develop)
+**Priority**: MEDIUM (was — now resolved)
 **Source**: BL-W31.7-12 wave, arch-integration verdict-write blocked
 
 **Problem**: Two architect-protection hooks use inconsistent regex for the `arch-*-verdict.md` exempt path:
@@ -762,6 +762,11 @@ Wave directories with non-digit slugs (e.g., `wave-bl-w31-7-12`, `wave-bl-w32-NN
 **Trigger**: W32 hardening sweep — affects every wave with hyphenated slug (which is most W30+ waves).
 
 **Live evidence (2026-05-01, BL-W32-07 PREP)**: arch-testing was blocked from writing their verdict file during BL-W32-07 PREP. The exact invocation was a Python heredoc Bash call targeting `.planning/wave-bl-w32-07/arch-testing-verdict.md`. The exempt-path allowlist in `architect-bash-write-gate.js` does NOT cover PYTHON_WRITE_RE (python3 -c open(...,'w')) — it only checks the heredoc/redirect code path. Result: arch-testing's Write tool was blocked, their Python heredoc Bash was also blocked, and team-lead had to relay the verdict content to doc-updater for scribing. This is the second confirmed incident (first: BL-W31.7-12 arch-integration, same wave-slug pattern). Confirms both bugs are active: (1) `architect-self-edit-gate.js` wave\d+ regex miss AND (2) PYTHON_WRITE_RE exempt-target gap.
+
+**Resolution**:
+- `architect-bash-write-gate.js` PYTHON_WRITE_RE / PYTHON_HEREDOC_WRITE_RE branches now extract open() target via PYTHON_OPEN_TARGET_RE and consult `isExemptTarget()`. Zero-match conservative fallback blocks with `target: '<inline>'` (per arch-platform amendment).
+- `architect-self-edit-gate.js` line 21 regex synced from `wave\d+` → `wave[\w.-]+` (matches bash-write-gate companion). Hyphenated/dotted wave slugs (`wave-bl-w32-05`, `wave31.7`) now allowed for verdict files.
+- Tests: bats +8 (36 → 44). Architect verdicts: arch-platform REVISE → applied; arch-testing APPROVE +3 amendments → applied; arch-integration APPROVE clean.
 
 ---
 
