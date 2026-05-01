@@ -15,15 +15,19 @@ setup_file() {
   fi
 }
 
-# JSON envelope builder. Args: <tool_name> <subagent_type | "">
+# JSON envelope builder. Args: <tool_name> <subagent_type | ""> [team_name] [name]
 make_input() {
-  local tool="$1" sub="${2-}"
-  python3 - "$tool" "$sub" "$INPUT_FILE" <<'PYEOF'
+  local tool="$1" sub="${2-}" team_name="${3-}" agent_name="${4-}"
+  python3 - "$tool" "$sub" "$team_name" "$agent_name" "$INPUT_FILE" <<'PYEOF'
 import json, sys
-tool, sub, path = sys.argv[1], sys.argv[2], sys.argv[3]
+tool, sub, team_name, agent_name, path = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
 payload = {"tool_name": tool, "tool_input": {}}
 if sub:
     payload["tool_input"]["subagent_type"] = sub
+if team_name:
+    payload["tool_input"]["team_name"] = team_name
+if agent_name:
+    payload["tool_input"]["name"] = agent_name
 with open(path, "w", encoding="utf-8") as f:
     json.dump(payload, f)
 PYEOF
@@ -139,5 +143,62 @@ run_hook() {
   make_input "Task" "advisor"
   run_hook
   mv "$BATS_TEST_TMPDIR/advisor.bak" "$PROJECT_ROOT/setup/agent-templates/advisor.md"
+  [ "$status" -eq 0 ]
+}
+
+# ── Check 3 — TeamCreate-peer enforcement ──────────────────────────────────
+
+@test "Check 3: arch-platform with team_name+name allowed" {
+  make_input "Agent" "arch-platform" "session-test" "arch-platform"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "Check 3: arch-platform without team_name blocked" {
+  make_input "Agent" "arch-platform"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'TeamCreate-peer'* ]]
+  [[ "$output" == *'arch-platform'* ]]
+}
+
+@test "Check 3: agent with no dispatch key in manifest passes through (fail-open)" {
+  # Create a temporary project root with a minimal manifest (agent without dispatch key)
+  # and a stub yaml loader path so the hook can parse it.
+  local tmp_root="$BATS_TEST_TMPDIR/fake-root"
+  mkdir -p "$tmp_root/.claude/registry"
+  mkdir -p "$tmp_root/mcp-server/node_modules"
+  # Symlink the real yaml module so the hook can load it
+  ln -sfn "$PROJECT_ROOT/mcp-server/node_modules/yaml" "$tmp_root/mcp-server/node_modules/yaml"
+  cat > "$tmp_root/.claude/registry/agents.manifest.yaml" <<'YAML'
+manifest:
+  version: 1
+agents:
+  test-no-dispatch:
+    canonical_name: test-no-dispatch
+    subagent_type: test-no-dispatch
+    template_frontmatter_sha256: skip
+YAML
+  python3 - "Agent" "test-no-dispatch" "$INPUT_FILE" <<'PYEOF'
+import json, sys
+tool, sub, path = sys.argv[1], sys.argv[2], sys.argv[3]
+payload = {"tool_name": tool, "tool_input": {"subagent_type": sub}}
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+PYEOF
+  run bash -c "cd '$tmp_root' && CLAUDE_PROJECT_DIR='$tmp_root' cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "Check 3: regular subagent (advisor, spawn_method=Agent) without team_name passes through" {
+  # advisor has spawn_method: Agent in manifest — Check 3 must NOT fire
+  make_input "Agent" "advisor"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "Check 3: planner with peer params passes full chain (manifest + SHA + Check 3)" {
+  make_input "Agent" "planner" "session-test" "planner"
+  run_hook
   [ "$status" -eq 0 ]
 }

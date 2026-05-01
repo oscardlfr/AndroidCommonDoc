@@ -35,7 +35,18 @@ process.stdin.on('end', () => {
   if (toolName === 'Agent') {
     const subagentType = data.tool_input?.subagent_type;
     if (subagentType === 'planner') {
-      try { fs.unlinkSync(sentinelPath); } catch (_) {}
+      const teamName = data.tool_input?.team_name;
+      const agentName = data.tool_input?.name;
+      if (teamName && agentName === 'planner') {
+        try { fs.unlinkSync(sentinelPath); } catch (_) {}
+        process.exit(0);
+      }
+      // Bare or wrong-name spawn: do NOT clear sentinel, block with explanation
+      process.stdout.write(JSON.stringify({
+        decision: 'block',
+        reason: '[plan-mode-spawn-planner] planner must be spawned as TeamCreate-peer: Agent(subagent_type="planner", team_name="session-{slug}", name="planner"). Bare Agent(subagent_type="planner") does not satisfy the sentinel.'
+      }));
+      process.exit(2);
     }
     process.exit(0);
   }
