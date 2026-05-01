@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-30T17:13:10.239Z",
+  "generated": "2026-05-01T11:50:35.674Z",
   "l0_root": ".",
   "entries": [
     {
@@ -2527,14 +2527,14 @@
       "name": "planner",
       "type": "agent",
       "path": ".claude/agents/planner.md",
-      "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
+      "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7f38c457190108afd1c14c513d19512d87359461d06447a29a99aa24ebe2550e",
+      "hash": "sha256:2c21b51ba7d027df0a075287264bd7cac6e381eaa04450872b47a698b9e3b1b4",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
-        "description": "Planning Team peer. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider in the Planning Team.",
+        "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
         "tools": "Read, Write, Bash, SendMessage",
         "model": "sonnet",
         "domain": "development",
@@ -2545,7 +2545,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.7.0"
+        "template_version": "1.9.0"
       }
     },
     {
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.12.0",
+        "template_version": "1.13.0",
         "memory": "project",
         "skills": [
           "test",
