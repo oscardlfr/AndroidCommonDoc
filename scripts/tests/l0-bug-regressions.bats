@@ -261,10 +261,6 @@ LIB_DIR="$SH_DIR/lib"
     grep -q "ExcludeCoverage" scripts/ps1/run-parallel-coverage-suite.ps1
 }
 
-@test "regression: PS1 has ExcludeCoverage parameter" {
-    grep -q "ExcludeCoverage" scripts/ps1/run-parallel-coverage-suite.ps1
-}
-
 # ---------------------------------------------------------------------------
 # Bug 20: local keyword used outside function in main script body
 # ---------------------------------------------------------------------------
