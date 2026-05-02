@@ -1023,3 +1023,158 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 
 ---
 
+## L1-reported (BL-W34 PR1, repo oscardlfr/shared-kmp-libs, date 2026-05-02). Triage in next session.
+
+### BL-W32-13 — commit-lint scope list rejects compound module names (HIGH — L1-reported)
+**Status**: backlog
+**Priority**: HIGH
+**Source**: BL-W34 PR1 CI failure — https://github.com/oscardlfr/shared-kmp-libs/actions/runs/25257865869/job/74060138699
+
+**Symptom**: PR CI fails "Commit Lint" check when commit uses a compound module-name scope (e.g. `feat(core-error-sdk):`). The `valid_scopes` list in `.github/workflows/reusable-commit-lint.yml` is single-word only; compound names with hyphens are rejected.
+
+**Root cause**: `.github/workflows/reusable-commit-lint.yml` valid_scopes uses a single-word list. The convention that scopes must be single-word is implicit and not documented anywhere in the commit-lint skill output or warning text.
+
+**Fix candidates**:
+- (A) Regex match in workflow accepting `^(core|error|sdk|...)([-][a-z0-9]+)*$` — allow hyphenated module names
+- (B) Auto-derive valid scopes from `settings.gradle.kts` at runtime — authoritative but complex
+- (C) Document single-word convention in commit-lint skill output + add warning text — lowest effort
+
+**Files**: `.github/workflows/reusable-commit-lint.yml` + optionally `.claude/commands/commit-lint.md`
+
+**Trigger**: next wave touching CI config or commit-lint workflow; HIGH because it blocks PRs in L1.
+
+---
+
+### BL-W32-14 — doc-updater agent doesn't close commit loop autonomously (MEDIUM — L1-reported)
+**Status**: backlog
+**Priority**: MEDIUM
+**Source**: BL-W34 PR1 — 2 occurrences (drafted ADR-0005 without committing; then refused `--amend` on unpushed HEAD)
+
+**Symptom**: doc-updater writes/edits files but doesn't stage+commit until a 2nd explicit dispatch. When `git commit --amend --no-edit` is attempted on an unpushed HEAD it responds "state mismatch, please clarify" instead of proceeding.
+
+**Root cause**: doc-updater system prompt lacks commit-loop-closure guidance and amend-on-unpushed semantics. The agent doesn't distinguish between amending already-pushed history (destructive — must escalate) vs. amending an unpushed local HEAD (safe — proceed).
+
+**Fix**: Add to doc-updater template:
+- After writing/editing files: ALWAYS `git add` + `git status` + `git commit` (or `--amend` if explicitly told to)
+- Amend on unpushed HEAD is safe: verify via `git log @{upstream}..HEAD`; if HEAD is unpushed, amend freely
+- Only escalate amend if `git log @{upstream}..HEAD` shows the commit is already pushed
+
+**Files**: `.claude/agents/doc-updater.md` + `setup/agent-templates/doc-updater.md`
+
+**Trigger**: next doc-updater template wave or standalone MEDIUM fix.
+
+---
+
+### BL-W32-15 — Specialist Edit tool clash with zero-Read rule (MEDIUM — L1-reported)
+**Status**: backlog
+**Priority**: MEDIUM
+**Source**: BL-W34 PR1 — module-lifecycle dispatched to edit `settings.gradle.kts` (155 lines); Edit failed precondition; specialist correctly escalated
+
+**Symptom**: A specialist with zero-Read budget cannot satisfy the Edit tool's "must Read before editing" precondition. Team-lead must read the file and paste ~12kB inline; specialist Write-overwrites instead of Edit-patching.
+
+**Root cause**: `feedback_specialist_zero_direct_reads` rule doesn't address the Edit-precondition case. Edit requires a prior Read to verify the `old_string` matches; with zero-Read budget, this is impossible.
+
+**Fix candidates**:
+- (A) Document escalation path: "Edit-prereq Read missing → escalate to team-lead for inline content via Write" — preserves strict zero-Read budget
+- (B) Relax to: "specialists may Read a single file ONCE if it's the immediate target of a planned Edit; this Read does not count toward pattern-discovery/exploration budget"
+
+**Files**: memory `feedback_specialist_zero_direct_reads.md` + all agent templates with Edit tool in toolset
+
+**Trigger**: next agent template wave or memory update session.
+
+---
+
+### BL-W32-16 — JDK environment handling not documented in specialist templates (LOW — L1-reported)
+**Status**: backlog
+**Priority**: LOW
+**Source**: BL-W34 PR1 — data-layer-specialist compile passed but exec failed (`UnsupportedClassVersionError`); JAVA_HOME=JDK 17, project requires JDK 21+
+
+**Symptom**: Specialist runs `./gradlew :module:test` → `UnsupportedClassVersionError`. Doesn't know to check JAVA_HOME or query project memory for JDK requirement.
+
+**Workaround used**: team-lead provided JDK 23 path (`C:\Program Files\Eclipse Adoptium\jdk-23.0.2.7-hotspot`); specialist re-ran with inline override.
+
+**Fix**: Add to all gradle-running specialist templates a "Common Gradle errors → fixes (try in order before escalating)" section:
+1. Query context-provider for "project JDK requirement" memory
+2. Override inline: `JAVA_HOME="<path>" ./gradlew ...`
+3. Common Windows path: `C:\Program Files\Eclipse Adoptium\jdk-<version>-hotspot`
+4. Escalate with full error output if above fails
+
+**Files**: data-layer-specialist, ui-specialist, test-specialist, module-lifecycle, and any other template that invokes Gradle
+
+**Trigger**: next specialist template wave.
+
+---
+
+### BL-W32-17 — kotlin-reflect gotcha in commonTest hierarchy tests (LOW — L1-reported)
+**Status**: backlog
+**Priority**: LOW
+**Source**: BL-W34 PR1 commit 2 (RED tests) — `DependencyResolutionException::class.sealedSubclasses` failed to compile on `:core-error-sdk:compileTestKotlinDesktop`
+
+**Symptom**: test-specialist uses `KClass.sealedSubclasses` in commonTest → JVM compile fails: "Call uses reflection API which is not found in compilation classpath. Make sure you have kotlin-reflect.jar"
+
+**Workaround used**: dropped reflection check, replaced with manual `List<Parent> = listOf(...)` enumeration + `assertEquals(N, instances.size)` — compile-time IS-A via type parameter + runtime count.
+
+**Fix**: Add to test-specialist template and/or `docs/testing/testing-hub.md`:
+- For sealed hierarchy "shape" tests in foundation modules: DO NOT use `KClass.sealedSubclasses` (requires kotlin-reflect ~3MB on JVM classpath; not available in commonTest by default)
+- DO use manual `List<Parent> = listOf(ConcreteA(), ConcreteB(), ...)` enumeration — equivalent coverage without reflection dependency
+
+**Files**: `.claude/agents/test-specialist.md` or `docs/testing/testing-hub.md`
+
+**Trigger**: next test-specialist template wave or testing-patterns doc update.
+
+---
+
+### BL-W32-18 — quality-gater miscounts tests (8 vs 9) (LOW — L1-reported)
+**Status**: backlog
+**Priority**: LOW
+**Source**: BL-W34 PR1 — `DependencyResolutionExceptionTest.kt` has 9 `@Test` annotations (verified `grep -c "@Test"`); quality-gater reported "8/8"
+
+**Symptom**: quality-gater undercounts tests when parsing Gradle stdout. Likely cause: a test with a backtick-wrapped name containing unusual chars (e.g. `` `DependencyResolutionException is sealed with exactly 8 subtypes` ``) is dropped by stdout parser.
+
+**Fix**: Prefer parsing JUnit XML report (`build/test-results/desktopTest/TEST-*.xml`) instead of Gradle stdout — more robust against unusual test names, backtick identifiers, and multi-line output.
+
+**Files**: `.claude/agents/quality-gater.md` or its subscript that counts tests
+
+**Trigger**: next quality-gater update wave.
+
+---
+
+### BL-W32-19 — doc-updater renames files between draft and commit without reporting (LOW — L1-reported)
+**Status**: backlog
+**Priority**: LOW
+**Source**: BL-W34 PR1 — doc-updater reported "Created: docs/adr/ADR-0005-core-error-sdk-independent-hierarchy.md"; actual committed filename: `docs/adr/ADR-0005-bl-w34-option-b-independent-di-exception-hierarchy.md`
+
+**Symptom**: doc-updater silently renames a file between draft and final commit without mentioning it. The filename in the update report doesn't match `git show --stat HEAD`.
+
+**Fix**: Add to doc-updater template — "If you rename a file between draft and final commit, your report MUST include: original draft filename, final committed filename, reason for rename. The 'files written' list in your report must exactly match `git show --stat HEAD` output."
+
+**Files**: `.claude/agents/doc-updater.md` + `setup/agent-templates/doc-updater.md`
+
+**Trigger**: next doc-updater template wave.
+
+---
+
+### BL-W32-20 — Tooling artifacts pollute working tree (LOW — L1-reported)
+**Status**: backlog
+**Priority**: LOW
+**Source**: BL-W34 PR1 — every `./gradlew ...` modifies `.androidcommondoc/audit-log.jsonl` and `.androidcommondoc/kdoc-state.json`; specialists must manually exclude from commits
+
+**Symptom**: `git status` after any Gradle run in any consumer project shows `.androidcommondoc/audit-log.jsonl` and `.androidcommondoc/kdoc-state.json` modified. Not gitignored; pollutes every commit if specialist runs `git add .`.
+
+**Root cause**: L0 `/sync-l0` propagation does not include gitignore entries for these tooling artifacts. Already documented in another consumer as `project_audit_log_drift_followup`; L0 should ship with these gitignored by default.
+
+**Fix**: Add to the `.gitignore` template propagated by `/sync-l0`:
+```
+# AndroidCommonDoc tooling artifacts (runtime cache + telemetry)
+.androidcommondoc/audit-log.jsonl
+.androidcommondoc/kdoc-state.json
+.androidcommondoc/*.jsonl
+.androidcommondoc/*-state.json
+```
+
+**Files**: `.gitignore` template in L0 (propagated by `/sync-l0` to L1/L2)
+
+**Trigger**: next `/sync-l0` wave or standalone gitignore fix.
+
+---
+
