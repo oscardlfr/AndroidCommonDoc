@@ -689,8 +689,8 @@ Phase 1 CLOSED — BL-W32-02/03/04 SHIPPED via PR #97 (2026-05-01). Phase 2 prom
 
 ---
 
-### BL-W32-06 — kmp-test-runner v0.6.2 adoption across L0/L1/L2 (HIGH — discovered 2026-04-30)
-**Status**: backlog
+### BL-W32-06 — kmp-test-runner v0.7.0 adoption across L0/L1/L2 (HIGH — discovered 2026-04-30)
+**Status**: SHIPPED (sub-tasks: 06a ✓ PR #91, 06b ✓ PR #92, 06e ✓ PR #100; 06c/06d open — L1/L2 Gradle plugin adoption)
 **Priority**: HIGH (test runner unification; ~500 lines of obsolete gradle-run.sh code to retire)
 **Discovered**: 2026-04-30 by user during W31.7-12 closeout retrospective
 **Source**: kmp-test-runner shipped to npm + Gradle Plugin (GitHub Packages) at v0.6.2 since W31.5c trilogy. No repo currently consumes it.
@@ -965,7 +965,7 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ---
 
 ### BL-W32-11 — docs/agents LOW-severity drift cleanup (LOW — cosmetic + 2-month stale)
-**Status**: backlog
+**Status**: SHIPPED ✓ PR #100 (README ## Coverage Workflow integration-only rewrite covers the kmp-test-runner runner reference item; remaining cosmetic items deferred to next docs-cleanup wave)
 **Priority**: LOW (cosmetic — none of these block any workflow)
 **Source**: doc-alignment-agent drift report from `wave-l0-doc-refresh` (2026-05-02). HIGH + critical MEDIUM items shipped in PR #99; the items below were intentionally deferred per the wave's "no new files / additive only" constraint.
 
@@ -996,6 +996,30 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 **Trigger**: next scheduled docs-cleanup wave OR fold into next architect-template wave when one of the affected files needs a substantive change anyway. Do NOT prioritize over functional work.
 
 **Drift report archived at**: `.planning/wave-l0-doc-refresh/docs-agents-drift-report.md` (gitignored — preserved as evidence; can be re-run via doc-alignment-agent).
+
+---
+
+### BL-W32-12 — architect-bash-write-gate exempt-target detection misses pathlib.Path.write_text() form (HIGH — discovered 2026-05-02)
+**Status**: backlog
+**Priority**: HIGH (live incident: arch-testing verdict-write blocked during BL-W32-06e despite path being in exempt list)
+**Discovered**: 2026-05-02 during BL-W32-06e EXECUTE phase (arch-testing verdict-to-disk attempt)
+**Source**: BL-W32-05 explicitly noted this detector as "no incident data" and deferred. BL-W32-06e provided the first live incident.
+
+**Problem**: `architect-bash-write-gate.js` `PYTHON_OPEN_TARGET_RE` matches `open('path', ...)` forms but does NOT match `pathlib.Path('path').write_text(...)` or `Path('path').write_text(...)`. When an arch-* agent uses the pathlib form to write a verdict file (e.g. `.planning/wave-bl-w32-06e/arch-testing-verdict.md`), the hook's `isExemptTarget()` check is never reached — the regex fails to extract the path, falls through to the conservative fallback, and blocks the write.
+
+**Fix**:
+- Extend `PYTHON_OPEN_TARGET_RE` in `architect-bash-write-gate.js` to also match:
+  - `Path('...').write_text(`
+  - `pathlib.Path('...').write_text(`
+  - `Path("...").write_text(` and double-quote variants
+- Mirror the exempt-target check pattern already used by the tee and redirect handlers
+- Add bats coverage for the pathlib forms in the same fix commit (both exempt and non-exempt path variants)
+
+**Scope**: `architect-bash-write-gate.js` only. `architect-self-edit-gate.js` is not affected (it operates on Edit/Write tool calls, not Bash Python snippets).
+
+**Estimated effort**: ~1h. Small regex extension + bats cases. toolkit-specialist owns the hook; arch-testing validates bats path.
+
+**Trigger**: next wave touching `architect-bash-write-gate.js` OR standalone HIGH fix wave.
 
 ---
 
