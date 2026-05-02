@@ -487,9 +487,9 @@ Gradle plugins and utilities shipped in `tools/` — installable independently f
 
 Install via `/setup --dokka-plugin yes` (wizard W10) or manually — see the [standalone plugin repo](https://github.com/oscardlfr/dokka-markdown-plugin#readme) and the pattern doc at [`docs/gradle/dokka-markdown-plugin.md`](docs/gradle/dokka-markdown-plugin.md).
 
-### kmp-test-runner v0.6.2 — test orchestration runner
+### kmp-test-runner v0.7.0 — test orchestration runner
 
-`@oscardlfr/kmp-test-runner` is the canonical runner for Gradle test execution across the L0/L1/L2 chain. AndroidCommonDoc consumes it via thin shell wrappers (`scripts/sh/gradle-run.sh` 100 lines, `scripts/ps1/gradle-run.ps1` 106 lines) which delegate retry semantics, daemon management, kover coverage, and Windows file-lock recovery to the runner. **Skills using it**: `/test`, `/coverage`, `/test-full-parallel`, `/test-changed`. **Adoption**: L0 ✓ (BL-W32-06a, PR #91), L1 in progress (Phase 2 verification, shared-kmp-libs), L2 pending. For runner CLI usage, retry policies, and configuration see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme).
+`@oscardlfr/kmp-test-runner` is the canonical runner for Gradle test execution across the L0/L1/L2 chain. AndroidCommonDoc consumes it via thin shell wrappers: `gradle-run.sh/.ps1` (~100 lines each, BL-W32-06a) for single-module runs, and `run-parallel-coverage-suite.sh/.ps1` + `run-changed-modules-tests.sh/.ps1` (BL-W32-06e) for parallel suite and changed-module flows. The wrappers delegate retry semantics, daemon management, Kover coverage, and Windows file-lock recovery to the runner. **Skills using it**: `/test`, `/coverage`, `/test-full-parallel`, `/test-full`, `/test-changed`. **Adoption**: L0 ✓ (BL-W32-06a/06e), L1 in progress (shared-kmp-libs), L2 pending. For runner CLI usage, retry policies, and configuration see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme).
 
 ---
 
@@ -949,12 +949,12 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `check-doc-freshness` | Verify pattern doc version references against versions manifest (calls check-freshness) |
 | `check-version-sync` | Version catalog diff between projects -- or against `versions-manifest.json` directly |
 | `generate-sbom` | CycloneDX SBOM generation via Gradle plugin |
-| `gradle-run` | Thin wrapper over `kmp-test-runner` v0.6.2 (smart retry, daemon management, OOM recovery handled by external CLI) |
+| `gradle-run` | Thin wrapper over `kmp-test-runner` v0.7.0 (smart retry, daemon management, OOM recovery handled by external CLI) |
 | `lint-resources` | String resource naming convention enforcement |
 | `pattern-lint` | **Deterministic code pattern checks** -- 8 grep-based rules (CancellationException, MutableSharedFlow, forbidden imports, println, TODO crash, runBlocking, GlobalScope, System.currentTimeMillis) |
 | `run-android-tests` | Instrumented test orchestration on device/emulator |
 | `run-changed-modules-tests` | Git diff-based module detection + selective test execution |
-| `run-parallel-coverage-suite` | Parallel test execution + per-module coverage (auto-detect JaCoCo/Kover) + kover task fallback retry + XML parsing + markdown report. `--exclude-coverage` for test-utility modules, auto-excludes `*:testing`, `konsist-guard`, etc. |
+| `run-parallel-coverage-suite` | Thin wrapper over kmp-test-runner v0.7.0 for parallel test execution + L0 coverage-full-report.md generation. `--exclude-coverage` for test-utility modules, auto-excludes `*:testing`, `konsist-guard`, etc. For runner internals see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme). |
 | `scan-sbom` | CVE scanning via Trivy |
 | `verify-kmp-packages` | KMP source set validation and import checking |
 
