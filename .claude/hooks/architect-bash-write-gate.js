@@ -8,6 +8,7 @@
 //   - in-place awk          awk -i inplace ...
 //   - python file write     python3 -c "open('foo','w').write(...)"
 //   - python heredoc write  python3 <<'EOF' ... open('foo','w') ... EOF
+//   - pathlib write         Path('foo').write_text(...) / pathlib.Path('foo').write_bytes(...)
 //   - tee to file           tee foo.md (without /dev/null)
 //   - plain redirect        > file or >> file to a project path
 //
@@ -77,6 +78,12 @@ const PYTHON_HEREDOC_WRITE_RE =
 // kind: "python -c open(...,'w')"  — used by both shell and heredoc forms below.
 //        "python <<EOF open(...,'w')" — distinct kind for heredoc bypass form.
 const PYTHON_OPEN_TARGET_RE = /\bopen\s*\(\s*['"]([^'"]+)['"][^)]*['"]w[+ab]?['"]/;
+// Captures the file path from `Path('<path>').write_text(` and `pathlib.Path(...)` forms.
+// Backreference \1 enforces quote consistency (single or double, not mixed).
+// Does NOT match: variable args Path(var), raw strings Path(r'...'), f-strings Path(f'...').
+// Conservative: those unmatched forms fall through to no-violation (fail-open).
+// Declare WITHOUT /g — call sites use new RegExp(PATHLIB_WRITE_RE.source, 'g').
+const PATHLIB_WRITE_RE = /(?:pathlib\.)?Path\s*\(\s*(["'])([^"']+)\1\s*\)\.(?:write_text|write_bytes)\s*\(/;
 const TEE_WRITE_RE = /\btee\s+(?:-a\s+|--append\s+)?(['"]?)([^-\s|<>;&'"]+)\1/;
 
 function isExemptTarget(target) {
@@ -141,6 +148,21 @@ function detectViolation(cmd) {
     if (!foundTarget) {
       // Defensive: PYTHON_HEREDOC_WRITE_RE matched but no capture — block conservatively.
       return { kind: "python <<EOF open(...,'w')", target: '<inline>' };
+    }
+  }
+
+  if (PATHLIB_WRITE_RE.test(cmd)) {
+    let foundTarget = false;
+    for (const match of cmd.matchAll(new RegExp(PATHLIB_WRITE_RE.source, 'g'))) {
+      foundTarget = true;
+      const target = match[2]; // group 1 = quote char, group 2 = path
+      if (target && !isExemptTarget(target)) {
+        return { kind: "python pathlib.Path(...).write_text()", target };
+      }
+    }
+    if (!foundTarget) {
+      // Defensive: PATHLIB_WRITE_RE matched but no capture — block conservatively.
+      return { kind: "python pathlib.Path(...).write_text()", target: '<inline>' };
     }
   }
 

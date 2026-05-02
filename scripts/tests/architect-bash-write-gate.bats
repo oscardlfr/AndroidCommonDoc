@@ -326,3 +326,67 @@ EOF' 'arch-platform'
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── pathlib.Path.write_text() / write_bytes() detector ──────────────────────
+# BL-W32-12: PATHLIB_WRITE_RE catches Path(...).write_text/write_bytes bypasses.
+# Standalone regex (no python3 -c anchor needed). Feeds through isExemptTarget().
+# Backreference enforces quote consistency. Conservative block on f-string (fail-open).
+
+@test "pathlib write_text to /dev/null is exempt" {
+  make_input "Path('/dev/null').write_text('x')" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "pathlib write_text to /tmp path is exempt" {
+  make_input "pathlib.Path('/tmp/foo.txt').write_text('x')" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "pathlib write_text to verdict path is exempt" {
+  make_input "Path('.planning/wave-bl-w33-l1-triage/arch-platform-pr3-verdict.md').write_text('x')" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "pathlib write_text to source file is blocked" {
+  make_input 'Path("src/main.py").write_text("x")' 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"pathlib.Path"* ]]
+}
+
+@test "pathlib write_text to doc file is blocked" {
+  make_input 'pathlib.Path("docs/foo.md").write_text("x")' 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"pathlib.Path"* ]]
+}
+
+@test "pathlib write_text double-quote exempt /dev/null passes (cross-quote variant)" {
+  # Uses python3 directly to avoid MSYS path translation of double-quoted /dev/null.
+  python3 - "$INPUT_FILE" <<'PYEOF'
+import json, sys
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "tool_name": "Bash",
+        "tool_input": {"command": "Path(\"/dev/null\").write_text(\"x\")"},
+        "agent_type": "arch-platform",
+    }, f)
+PYEOF
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "pathlib write_text f-string path is not matched by regex (fail-open per arch-platform)" {
+  make_input "Path(f'/tmp/{var}').write_text('x')" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "pathlib write_bytes to /tmp path is exempt (write_bytes alternation)" {
+  make_input "Path('/tmp/baz').write_bytes(b'x')" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
