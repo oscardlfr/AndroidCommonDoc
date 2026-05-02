@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-05-02T14:06:56.711Z",
+  "generated": "2026-05-02T17:13:35.044Z",
   "l0_root": ".",
   "entries": [
     {
@@ -400,7 +400,7 @@
       "description": "Analyze test coverage gaps from existing data without running tests. Use when asked to check coverage or find untested code.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:058f6123143dfdd5d340edbee76d10e163e3b8fdcba5e480882b4724dfa04399",
+      "hash": "sha256:036463d6ebca08c98cbd856cdc0c90c8ce23c00d0d5dd627b1a374d4c753ee27",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -1593,7 +1593,7 @@
       "description": "Run tests only on modules with uncommitted changes. Use when asked to test changed files or run a quick pre-commit check.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:c5375ad48c67ba2f42e76aa31946daa191643f93a9a73d0525ffd4da7a304f54",
+      "hash": "sha256:f43f3ced27148d26b5a3ee4af739ad76a79f9ec2497fb8f29a57d1f516d12094",
       "dependencies": [
         "scripts/sh/run-changed-modules-tests.sh",
         "scripts/ps1/run-changed-modules-tests.ps1"
@@ -1657,7 +1657,7 @@
       "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:076bf5129d75ce5e0d5d776df93e4b6092cc6480b80d306663b81b3e15156ce3",
+      "hash": "sha256:f490d90f4f399a6c94caf4a786d6a0220d3f438c380ca33f3544b5fad962d874",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"

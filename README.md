@@ -1196,7 +1196,7 @@ AndroidCommonDoc/
 
 ## Coverage Workflow
 
-`/test-full-parallel` orchestrates a complete test + coverage cycle via `run-parallel-coverage-suite.sh` — a single script that handles everything from daemon management to gap analysis:
+`/test-full-parallel` orchestrates a complete test + coverage cycle via `run-parallel-coverage-suite.sh` — a thin wrapper around [kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner) v0.7.0:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -1204,42 +1204,19 @@ AndroidCommonDoc/
 │  run-parallel-coverage-suite.sh --project-root . --coverage-tool auto│
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  1. DAEMON MANAGEMENT                                               │
-│     --fresh-daemon → stop daemons + wipe build/reports/kover|jacoco │
-│     --java-home <path> → override JAVA_HOME for Gradle execution   │
-│     Auto-detects: gradle.properties org.gradle.java.home            │
-│     Warns if jvmToolchain version ≠ current JAVA_HOME               │
+│  1. DELEGATE TO kmp-test-runner v0.7.0                              │
+│     kmp-test-runner parallel --project-root .                       │
+│     Handles: module discovery, Gradle invocation, daemon mgmt,      │
+│     timeout watchdog, Kover/JaCoCo fallback retry                   │
+│     See: https://github.com/oscardlfr/kmp-test-runner               │
 │                                                                     │
-│  2. DISCOVER MODULES + EXCLUDE                                      │
-│     Scan settings.gradle.kts → detect KMP vs Android → filter       │
-│     --module-filter "core:*"  --coverage-only  --include-shared     │
-│     --exclude-coverage "core:testing,konsist-guard"                 │
-│     Auto-excludes: *:testing, *:test-fakes, konsist-guard, etc.    │
-│                                                                     │
-│  3. BUILD TASK LISTS (per-module coverage detection)                │
-│     coverage-detect.sh checks: build.gradle.kts → report dirs →    │
-│       root buildscript → build-logic/ → gradle/libs.versions.toml  │
-│     Auto-detect test type (common|androidUnit|desktop) per module   │
-│     --test-type all  → run every variant                            │
-│                                                                     │
-│  4. RUN TESTS (single Gradle invocation)                            │
-│     gradlew :mod:test :mod:koverXmlReport --parallel --continue     │
-│     --rerun-tasks (coverage phase only — avoids stale XMLs)         │
-│     --max-workers N  --timeout 600                                  │
-│                                                                     │
-│  4b. KOVER RECOVERY (if batch partial — e.g. 3/18 XMLs)            │
-│     Retry missing modules with task fallbacks:                      │
-│     koverXmlReportDesktop → koverXmlReport → koverXmlReportDebug   │
-│                                                                     │
-│  5. PARSE COVERAGE (lib/coverage-detect.sh)                         │
-│     Auto-detect JaCoCo vs Kover → parse XML → per-module metrics    │
-│     --coverage-tool jacoco|kover|auto|none                          │
-│                                                                     │
-│  6. GENERATE REPORT → coverage-full-report.md                       │
+│  2. POST-PROCESS RESULTS (L0 glue)                                  │
+│     Parse runner JSON → generate coverage-full-report.md            │
 │     Per-module: instruction%, branch%, missed lines, uncovered fns  │
 │     --min-missed-lines 5  --output-file custom-report.md            │
+│     --coverage-tool jacoco|kover|auto|none                          │
 │                                                                     │
-│  7. COVERAGE GAPS                                                   │
+│  3. COVERAGE GAPS                                                   │
 │     Files with lowest coverage → input for /auto-cover              │
 │                                                                     │
 └──────────────────────────┬──────────────────────────────────────────┘
@@ -1253,9 +1230,9 @@ The same script powers all coverage skills:
 
 | Skill | What It Runs | Gradle Invocations |
 |-------|-------------|-------------------|
-| `/test-full-parallel` | Full flow: tests + coverage + report | 1 (parallel) |
-| `/test-full` | Same flow, sequential execution | 1 per module |
-| `/coverage` | Steps 5-7 only (parse existing XMLs) | 0 |
+| `/test-full-parallel` | Full flow: tests + coverage + report | 1 (parallel, via runner) |
+| `/test-full` | Same flow, sequential execution | 1 per module (via runner) |
+| `/coverage` | Steps 2-3 only (parse existing XMLs) | 0 |
 | `/auto-cover` | Reads report → generates tests for gaps | 0 + 1 per new test |
 
 All skills accept `--coverage-tool jacoco|kover|auto|none` and `--exclude-coverage <modules>`.
