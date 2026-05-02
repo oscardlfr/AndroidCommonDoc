@@ -241,22 +241,11 @@ _setup_git_repo() {
     [ "$count" -eq 0 ]
 }
 
-@test "run-parallel-coverage-suite.sh: mod_summary_lookup uses TMPDIR fallback" {
-    grep -q 'TMPDIR' "$COVERAGE_SCRIPT"
-}
-
-@test "run-parallel-coverage-suite.sh: --fresh-daemon cleans coverage cache" {
-    # --fresh-daemon should remove kover/jacoco report dirs, not just stop daemons
-    grep -q "kover" "$COVERAGE_SCRIPT"
-    grep -q "jacoco" "$COVERAGE_SCRIPT"
-    grep -A5 "FRESH_DAEMON" "$COVERAGE_SCRIPT" | grep -q "rm -rf\|Clean"
-}
-
-@test "run-parallel-coverage-suite.ps1: -FreshDaemon cleans coverage cache" {
-    PS1_SCRIPT="$BATS_TEST_DIRNAME/../ps1/run-parallel-coverage-suite.ps1"
-    [ -f "$PS1_SCRIPT" ] || skip "PS1 script not found"
-    grep -A10 "FreshDaemon" "$PS1_SCRIPT" | grep -q "kover\|Remove-Item"
-}
+# DELETED: mod_summary_lookup uses TMPDIR fallback (579)
+# DELETED: --fresh-daemon cleans coverage cache SH (580) + PS1 (581)
+# mod_summary_lookup TMPDIR pattern removed in thin-wrap.
+# --fresh-daemon / -FreshDaemon cache-clean logic is fat-script internal;
+# thin-wrap emits a user warning when flag passed (GAP-01); no cache-clean code remains.
 
 @test "run-parallel-coverage-suite.sh: coverage phase does NOT use --rerun-tasks" {
     # --rerun-tasks removed: core-storage-secure fails on re-execution

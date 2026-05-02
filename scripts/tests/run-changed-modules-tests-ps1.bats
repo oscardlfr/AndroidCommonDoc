@@ -1,10 +1,9 @@
 #!/usr/bin/env bats
 #
-# Bats RED tests for scripts/ps1/run-changed-modules-tests.ps1 thin-wrap.
-# test-infra: mocked — kmp-test binary shim via PATH injection (Option A).
-#   - kmp-test (bash) + kmp-test.cmd (Windows .cmd delegate → bash shim)
-#   - Per-case: $env:PATH = "$WIN_FAKE_BIN;$env:PATH" injected before & $WIN_SCRIPT
-# All cases must FAIL RED against current fat script.
+# Bats tests for scripts/ps1/run-changed-modules-tests.ps1 thin-wrap.
+# test-infra: mocked — kmp-test binary shim via PATH injection.
+#   Windows: kmp-test.cmd delegate → bash shim; PATH separator = ;
+#   Linux:   bash shim directly (pwsh on Linux executes shebanged scripts); PATH separator = :
 #
 # arch-testing V2 cases: 5 required.
 
@@ -33,11 +32,14 @@ esac
 SHIM
   chmod +x "$FAKE_BIN/kmp-test"
 
-  # .cmd shim: delegates to bash shim so pwsh can execute it as a command
-  cat > "$FAKE_BIN/kmp-test.cmd" <<'CMD'
+  # On Windows (cygpath available): add .cmd delegate so pwsh finds the shim.
+  # On Linux: pwsh executes the bash shim directly via shebang + exec bit.
+  if command -v cygpath >/dev/null 2>&1; then
+    cat > "$FAKE_BIN/kmp-test.cmd" <<'CMD'
 @echo off
 bash "%~dp0kmp-test" %*
 CMD
+  fi
 
   echo 'rootProject.name = "test"' > "$FAKE_PROJECT/settings.gradle.kts"
 
@@ -48,14 +50,18 @@ CMD
     PWSH="powershell.exe"
   fi
 
-  # Convert paths for PowerShell on Windows
+  # Convert paths and choose PATH separator per OS.
+  # Windows (cygpath): Windows paths + ; separator.
+  # Linux: Unix paths + : separator.
   WIN_SCRIPT="$SCRIPT"
   WIN_PROJECT="$FAKE_PROJECT"
   WIN_FAKE_BIN="$FAKE_BIN"
+  PATH_SEP=":"
   if command -v cygpath >/dev/null 2>&1; then
     WIN_SCRIPT="$(cygpath -w "$SCRIPT")"
     WIN_PROJECT="$(cygpath -w "$FAKE_PROJECT")"
     WIN_FAKE_BIN="$(cygpath -w "$FAKE_BIN")"
+    PATH_SEP=";"
   fi
 }
 
@@ -69,7 +75,7 @@ teardown() {
 
 @test "run-changed-modules-tests.ps1: happy path invokes kmp-test changed subcommand" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN$PATH_SEP' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
     2>&1
   [ "$status" -eq 0 ]
   [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
@@ -80,7 +86,7 @@ teardown() {
 
 @test "run-changed-modules-tests.ps1: -StagedOnly forwarded to kmp-test changed" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -StagedOnly" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN$PATH_SEP' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -StagedOnly" \
     2>&1
   [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
   grep -q "\-\-staged-only" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
@@ -90,7 +96,7 @@ teardown() {
 
 @test "run-changed-modules-tests.ps1: -IncludeShared passes --project-root for shared-kmp-libs" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -IncludeShared" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN$PATH_SEP' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -IncludeShared" \
     2>&1
   [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
   grep -q "shared-kmp-libs" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
@@ -100,7 +106,7 @@ teardown() {
 
 @test "run-changed-modules-tests.ps1: -ShowModulesOnly maps to kmp-test changed --dry-run" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -ShowModulesOnly" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN$PATH_SEP' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -ShowModulesOnly" \
     2>&1
   [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
   grep -q "\-\-dry-run" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
@@ -110,11 +116,12 @@ teardown() {
 # ── Case 5: missing kmp-test binary — non-zero exit + error message ──────────
 
 @test "run-changed-modules-tests.ps1: missing kmp-test exits non-zero with error" {
-  local empty_win_dir
-  empty_win_dir="${BATS_TEST_TMPDIR}/empty-path-$$"
-  mkdir -p "$empty_win_dir"
+  local empty_dir
+  empty_dir="${BATS_TEST_TMPDIR}/empty-path-$$"
+  mkdir -p "$empty_dir"
+  local empty_win_dir="$empty_dir"
   if command -v cygpath >/dev/null 2>&1; then
-    empty_win_dir="$(cygpath -w "$empty_win_dir")"
+    empty_win_dir="$(cygpath -w "$empty_dir")"
   fi
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
     -Command "\$env:PATH = '$empty_win_dir'; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \

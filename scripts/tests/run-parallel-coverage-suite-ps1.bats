@@ -1,10 +1,10 @@
 #!/usr/bin/env bats
 #
-# Bats RED tests for scripts/ps1/run-parallel-coverage-suite.ps1 thin-wrap.
-# test-infra: mocked — kmp-test binary shim via PATH injection (Option A).
-#   - kmp-test (bash) + kmp-test.cmd (Windows .cmd delegate → bash shim)
-#   - Per-case: $env:PATH = "$WIN_FAKE_BIN;$env:PATH" injected before & $WIN_SCRIPT
-# All cases must FAIL RED against current fat script.
+# Bats tests for scripts/ps1/run-parallel-coverage-suite.ps1 thin-wrap.
+# test-infra: mocked — kmp-test binary shim via PATH injection.
+#   Windows: kmp-test.cmd delegate → bash shim; PATH separator = ;
+#   Linux:   bash shim directly (pwsh on Linux executes shebanged scripts); PATH separator = :
+# Per-case: $env:PATH = "$WIN_FAKE_BIN<sep>$env:PATH" injected before & $WIN_SCRIPT
 #
 # arch-testing V2 cases: 5 required + 1 split = 6 total.
 
@@ -36,11 +36,14 @@ esac
 SHIM
   chmod +x "$FAKE_BIN/kmp-test"
 
-  # .cmd shim: delegates to bash shim so pwsh can execute it as a command
-  cat > "$FAKE_BIN/kmp-test.cmd" <<'CMD'
+  # On Windows (cygpath available): add .cmd delegate so pwsh finds the shim.
+  # On Linux: pwsh executes the bash shim directly via shebang + exec bit.
+  if command -v cygpath >/dev/null 2>&1; then
+    cat > "$FAKE_BIN/kmp-test.cmd" <<'CMD'
 @echo off
 bash "%~dp0kmp-test" %*
 CMD
+  fi
 
   echo 'rootProject.name = "test"' > "$FAKE_PROJECT/settings.gradle.kts"
 
@@ -51,14 +54,18 @@ CMD
     PWSH="powershell.exe"
   fi
 
-  # Convert paths for PowerShell on Windows (cygpath if available)
+  # Convert paths and choose PATH separator per OS.
+  # Windows (cygpath): Windows paths + ; separator.
+  # Linux: Unix paths + : separator.
   WIN_SCRIPT="$SCRIPT"
   WIN_PROJECT="$FAKE_PROJECT"
   WIN_FAKE_BIN="$FAKE_BIN"
+  PATH_SEP=":"
   if command -v cygpath >/dev/null 2>&1; then
     WIN_SCRIPT="$(cygpath -w "$SCRIPT")"
     WIN_PROJECT="$(cygpath -w "$FAKE_PROJECT")"
     WIN_FAKE_BIN="$(cygpath -w "$FAKE_BIN")"
+    PATH_SEP=";"
   fi
 }
 
@@ -72,7 +79,7 @@ teardown() {
 
 @test "run-parallel-coverage-suite.ps1: happy path invokes kmp-test parallel --json" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN$PATH_SEP' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
     2>&1
   [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
   grep -q "parallel" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
@@ -83,7 +90,7 @@ teardown() {
 
 @test "run-parallel-coverage-suite.ps1: happy path — coverage-full-report.md contains AI-Optimized Summary" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN$PATH_SEP' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
     2>&1
   [ -f "$FAKE_PROJECT/coverage-full-report.md" ]
   grep -q "## AI-Optimized Summary" "$FAKE_PROJECT/coverage-full-report.md"
@@ -95,7 +102,7 @@ teardown() {
 
 @test "run-parallel-coverage-suite.ps1: -SkipTests invokes kmp-test coverage subcommand" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -SkipTests" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN$PATH_SEP' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -SkipTests" \
     2>&1
   [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
   grep -qE "^coverage|coverage " "${BATS_TEST_TMPDIR}/kmp-test-args.log"
@@ -106,7 +113,7 @@ teardown() {
 
 @test "run-parallel-coverage-suite.ps1: -DryRun echoes DRY-RUN line to stdout; kmp-test not invoked" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -DryRun" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN$PATH_SEP' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -DryRun" \
     2>&1
   [ "$status" -eq 0 ]
   [[ "$output" == *"DRY-RUN: kmp-test"* ]]
@@ -117,11 +124,12 @@ teardown() {
 # ── Case 4: missing kmp-test binary — non-zero exit + error message ──────────
 
 @test "run-parallel-coverage-suite.ps1: missing kmp-test exits non-zero with error" {
-  local empty_win_dir
-  empty_win_dir="${BATS_TEST_TMPDIR}/empty-path-$$"
-  mkdir -p "$empty_win_dir"
+  local empty_dir
+  empty_dir="${BATS_TEST_TMPDIR}/empty-path-$$"
+  mkdir -p "$empty_dir"
+  local empty_win_dir="$empty_dir"
   if command -v cygpath >/dev/null 2>&1; then
-    empty_win_dir="$(cygpath -w "$empty_win_dir")"
+    empty_win_dir="$(cygpath -w "$empty_dir")"
   fi
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
     -Command "\$env:PATH = '$empty_win_dir'; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
@@ -135,7 +143,7 @@ teardown() {
 
 @test "run-parallel-coverage-suite.ps1: -ExcludeCoverage translates to --exclude-modules with deprecation warning" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -ExcludeCoverage 'core-foo,core-bar'" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN$PATH_SEP' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -ExcludeCoverage 'core-foo,core-bar'" \
     2>&1
   [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
   grep -q "\-\-exclude-modules" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
