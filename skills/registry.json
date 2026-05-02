@@ -3076,7 +3076,7 @@
       "description": "Validate Conventional Commits",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7dbb319833eb97d006f8293168128a5f87b1299c0bdb7f2ff3530813cb43479b",
+      "hash": "sha256:9c85608904e2fa84503abf637bc09d402c1c24f0c85ed8928d4963b9fda49161",
       "dependencies": [],
       "frontmatter": {}
     },
