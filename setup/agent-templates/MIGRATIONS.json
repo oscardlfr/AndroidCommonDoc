@@ -208,6 +208,11 @@
         "date": "2026-04-29",
         "breaking": false,
         "note": "BL-W31.7-10: Step 0.5 project toolchain detection (node/gradle/hybrid/unknown); Step 2.6 Node lint+test; Steps 2.5/5/7/9.5 gated on PROJECT_TYPE; L2-bleed component names sanitized; $ANDROID_COMMON_DOC fallback added to Steps 5 and 7."
+      },
+      "2.8.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W32-16: Common Gradle Error Triage section. BL-W32-18: JUnit XML count guidance (TEST-*.xml not *.xml). Step 9.5 extracted to docs/agents/quality-gater-runtime-ui-validation.md"
       }
     },
     "doc-migrator": {
@@ -580,6 +585,11 @@
         "date": "2026-04-26",
         "breaking": false,
         "note": "Add SendMessage to tools (was missing despite Per-Session Gate body requirement). Surfaced during Phase 1 agents-manifest audit."
+      },
+      "1.2.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W32-16: Common Gradle Error Triage section appended"
       }
     },
     "module-lifecycle": {
@@ -597,6 +607,11 @@
         "date": "2026-04-26",
         "breaking": false,
         "note": "Add SendMessage to tools (was missing despite body line 20 requiring SendMessage to arch-platform). Surfaced during Phase 1 agents-manifest audit."
+      },
+      "1.2.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W32-16: Common Gradle Error Triage section before Done Criteria"
       }
     },
     "feature-domain-specialist": {
@@ -672,6 +687,11 @@
         "date": "2026-05-02",
         "breaking": false,
         "note": "BL-W33 PR4: Add BL-W32-15 Edit precondition escalation path"
+      },
+      "1.15.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W32-16: Common Gradle Error Triage section (UnsupportedClassVersionError triage before Done Criteria)"
       }
     },
     "ui-specialist": {
@@ -725,6 +745,11 @@
         "date": "2026-05-02",
         "breaking": false,
         "note": "BL-W33 PR4: Add BL-W32-15 Edit precondition escalation path"
+      },
+      "1.14.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W32-16: Common Gradle Error Triage section (UnsupportedClassVersionError triage before Done Criteria)"
       }
     },
     "domain-model-specialist": {
@@ -925,6 +950,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system quality gate orchestrator agent."
+      },
+      "1.1.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W32-16: Common Gradle Error Triage section appended"
       }
     },
     "release-guardian-agent": {
@@ -937,6 +967,11 @@
         "date": "2026-04-21",
         "breaking": false,
         "note": "Wave 26: declare MCP tools in frontmatter (scan-secrets, proguard-validator, check-version-sync)."
+      },
+      "1.2.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W32-16: Common Gradle Error Triage section appended"
       }
     },
     "researcher": {
