@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Context window management for TeamCreate teams: rotation, archiving, team-lead-as-relay, anti-patterns"
-version: 1
-last_updated: "2026-03"
+version: 2
+last_updated: "2026-05"
 assumes_read: autonomous-multi-agent-workflow
 token_budget: 1500
 ---
@@ -36,7 +36,7 @@ How to manage context window growth in TeamCreate teams. Covers signals, rotatio
 
 ## Signals: When Context Is Growing Too Large
 
-- Team has run **3+ waves** without archiving (9-peer sessions generate context faster)
+- Team has run **3+ waves** without archiving (10-peer sessions generate context faster)
 - team-lead summarizes findings in **3+ paragraphs** (should be 1-2 sentences)
 - Architects report patterns **already mentioned** in previous waves
 - Tool calls take noticeably longer (context overhead)
@@ -66,7 +66,7 @@ Remaining: 1 ESCALATED issue — navigation restructuring needs design decision.
 
 ### 3. Re-Spawn Session Team Peers
 
-For long sessions (**5+ waves** with 9 peers, 7+ waves with 5 peers), re-spawn with **SAME name AND SAME team_name** to replace the old peer in-team:
+For long sessions (**5+ waves** with 10 peers, 7+ waves with 5 peers), re-spawn with **SAME name AND SAME team_name** to replace the old peer in-team:
 
 ```
 Agent(name="arch-platform", team_name="session-{project-slug}", prompt="...", run_in_background=true)
@@ -80,7 +80,7 @@ If the task changes scope entirely (e.g., from bug fixes to new feature), create
 1. `SendMessage(to="doc-updater", ...)` — archive current team's findings
 2. Dissolve current team
 3. `TeamCreate(team_name="session-{project-slug}")` — new session team, clean slate
-4. Re-add all 9 session team peers with fresh context (5 at session start, 4 core specialists when Phase 2 resumes)
+4. Re-add all 10 session team peers with fresh context (5 at session start, 5 core specialists when Phase 2 resumes)
 
 ### 5. Sub-Agent Over Peer When Possible
 
@@ -140,7 +140,7 @@ When relaying findings between agents (architect → team-lead → architect), u
 |-----------|--------------|----------------|----------------|-------------------|
 | Orchestrator (team-lead) | ~5K | ~195K | 200K | Never (session lifetime) |
 | Architect | ~4K | ~196K | 200K | 7+ waves |
-| Core specialist | ~3K | ~197K | 200K | 5+ waves (9-peer) / 7+ waves (5-peer) |
+| Core specialist | ~3K | ~197K | 200K | 5+ waves (10-peer) / 7+ waves (5-peer) |
 | Extra specialist | ~2K | ~198K | 200K | Dies after architect verification |
 | Shared service | ~2K | ~198K | 200K | 7+ waves |
 
@@ -150,13 +150,13 @@ When relaying findings between agents (architect → team-lead → architect), u
 
 ## Conditional Team Composition
 
-Default session team (9 peers in `session-{project-slug}`: 5 at session start + 4 core specialists at Phase 2):
+Default session team (10 peers in `session-{project-slug}`: 5 at session start + 5 core specialists at Phase 2):
 ```
 Session start:
   TeamCreate("session-{project-slug}")
   + context-provider + doc-updater + arch-testing + arch-platform + arch-integration
 Phase 2 start:
-  + test-specialist + ui-specialist + domain-model-specialist + data-layer-specialist
+  + test-specialist + ui-specialist + domain-model-specialist + data-layer-specialist + toolkit-specialist
 ```
 
 Add ONLY when in scope:
@@ -173,7 +173,7 @@ Add ONLY when in scope:
 
 | Anti-pattern | Why it's bad | Fix |
 |-------------|-------------|-----|
-| 7+ waves (9-peer) / 10+ waves (5-peer) | Context grows to 60K+ tokens | Re-spawn peers with same name/team_name, or dissolve/recreate |
+| 7+ waves (10-peer) / 10+ waves (5-peer) | Context grows to 60K+ tokens | Re-spawn peers with same name/team_name, or dissolve/recreate |
 | Extra specialists as team peers | Extras accumulate context they don't need | Core specialists are peers; extras are sub-agents via team-lead (no team_name) |
 | team-lead reading full verdicts | Verdict prose bloats team-lead context | Architects: 3-line summary first, details on request |
 | Not calling doc-updater between waves | Findings lost if session crashes | Archive to disk every 3-5 waves |

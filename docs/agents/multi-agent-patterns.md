@@ -123,9 +123,9 @@ Orchestrators and architects as peers. Workers spawned on demand as sub-agents.
 
 **Key**: Peers need ongoing coordination (cross-verify, cross-dept requests). Sub-agents are workers — they receive task, execute, return.
 
-**Session team peers**: `context-provider`, `doc-updater`, and all 3 architects are added at session start; 4 core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist) join at Phase 2 start. All 9 stay alive across phases. See [Team Topology](team-topology.md).
+**Session team peers**: `context-provider`, `doc-updater`, and all 3 architects are added at session start; 5 core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist) join at Phase 2 start. All 10 stay alive across phases. See [Team Topology](team-topology.md).
 
-**3-Phase Model**: The default topology uses 3 sequential phases (Planning → Execution → Quality Gate) with 9 persistent session team peers (5 at session start + 4 core specialists at Phase 2). Planner and quality-gater are temporary. See [Team Topology](team-topology.md) for the full model.
+**3-Phase Model**: The default topology uses 3 sequential phases (Planning → Execution → Quality Gate) with 10 persistent session team peers (5 at session start + 5 core specialists at Phase 2). Planner is temporary. See [Team Topology](team-topology.md) for the full model.
 
 **Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies and team-lead-as-relay pattern.
 
