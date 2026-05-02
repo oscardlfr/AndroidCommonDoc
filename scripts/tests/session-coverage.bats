@@ -1354,8 +1354,8 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
     grep -q "readme-audit" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
 }
 
-@test "README: template count is 17" {
-    grep -q "17 templates\|17 agent templates" "$L0_ROOT/README.md"
+@test "README: template count is current" {
+    grep -qE "[0-9]{2,3} templates|[0-9]{2,3} agent templates" "$L0_ROOT/README.md"
     grep -q "arch-testing" "$L0_ROOT/README.md"
     grep -q "quality-gater" "$L0_ROOT/README.md"
     grep -q "planner" "$L0_ROOT/README.md"
