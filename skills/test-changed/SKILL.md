@@ -113,6 +113,10 @@ if ($coverageTool -ne "") { $params.CoverageTool = $coverageTool }
 **On no changes:**
 - "No changed modules detected" message
 
+## Runner
+
+This skill operates on changed-file detection via `run-changed-modules-tests.sh`/`run-changed-modules-tests.ps1`; the underlying test runner (when this skill triggers test execution) is `kmp-test-runner` v0.6.2 invoked via `gradle-run.sh` (Linux/macOS, in `scripts/sh/`) or `gradle-run.ps1` (Windows, in `scripts/ps1/`). See [oscardlfr/kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner#readme) for runner internals.
+
 ## Cross-References
 
 - Pattern: `docs/testing-patterns.md`
