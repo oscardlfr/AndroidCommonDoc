@@ -21,6 +21,14 @@ jobs:
       - name: Run shell tests
         run: npx bats scripts/tests/*.bats
 
+      - name: Run Node.js hook tests
+        run: |
+          set -e
+          for f in scripts/tests/*.test.js; do
+            echo "Running $f..."
+            node "$f"
+          done
+
       - name: Upload test results on failure
         if: failure()
         uses: actions/upload-artifact@v5

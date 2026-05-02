@@ -67,10 +67,10 @@ assert.ok(t4.line.input_summary.startsWith('context-provider:'), 'T4: input_summ
 assert.ok(t4.line.input_summary.length <= 80, 'T4: input_summary <= 80 chars');
 console.log('T4 SendMessage: PASS');
 
-// T5: cp_bypass_blocked — marker file present
-const marker = path.join(os.tmpdir(), 'claude-cp-blocked-sess2.flag');
+// T5: cp_bypass_blocked — marker file present, correct agentId suffix
+const marker = path.join(os.tmpdir(), 'claude-cp-blocked-sess2-test-agent.flag');
 fs.writeFileSync(marker, '1');
-const t5 = runHook({ tool_name: 'Grep', tool_input: { pattern: 'test' }, session_id: 'sess2' });
+const t5 = runHook({ tool_name: 'Grep', tool_input: { pattern: 'test' }, session_id: 'sess2', agent_id: 'test-agent' });
 assert.strictEqual(t5.status, 0, 'T5: hook must exit 0');
 assert.ok(t5.line, 'T5: log line must exist');
 assert.strictEqual(t5.line.cp_bypass_blocked, true, 'T5: cp_bypass_blocked true when marker present');
@@ -108,5 +108,48 @@ const t10 = runHook({ tool_name: 'Bash', tool_input: { command: 'echo t10' }, se
 assert.ok(t10.line, 'T10: log line must exist');
 assert.strictEqual(t10.line.agent_type, 'arch-platform', 'T10: agent_type field correct');
 console.log('T10 agent_type field: PASS');
+
+// T11: non-blockable tool (SendMessage) with marker present — must NOT consume marker
+const t11Marker = path.join(os.tmpdir(), 'claude-cp-blocked-sess5-test-agent.flag');
+fs.writeFileSync(t11Marker, '1');
+const t11 = runHook({ tool_name: 'SendMessage', tool_input: { to: 'arch-platform', summary: 'query' }, session_id: 'sess5', agent_id: 'test-agent' });
+assert.strictEqual(t11.status, 0, 'T11: hook must exit 0');
+assert.ok(t11.line, 'T11: log line must exist');
+assert.strictEqual(t11.line.cp_bypass_blocked, false, 'T11: cp_bypass_blocked false for non-blockable tool');
+assert.ok(fs.existsSync(t11Marker), 'T11: marker STILL PRESENT after non-blockable tool');
+try { fs.unlinkSync(t11Marker); } catch {}
+console.log('T11 non-blockable tool does not consume marker: PASS');
+
+// T12: Read tool with marker for WRONG agentId — must NOT consume marker
+const t12Marker = path.join(os.tmpdir(), 'claude-cp-blocked-sess6-other-agent.flag');
+fs.writeFileSync(t12Marker, '1');
+const t12 = runHook({ tool_name: 'Read', tool_input: { file_path: '/some/path' }, session_id: 'sess6', agent_id: 'read-agent' });
+assert.strictEqual(t12.status, 0, 'T12: hook must exit 0');
+assert.ok(t12.line, 'T12: log line must exist');
+assert.strictEqual(t12.line.cp_bypass_blocked, false, 'T12: cp_bypass_blocked false for wrong agentId marker');
+assert.ok(fs.existsSync(t12Marker), 'T12: wrong-agentId marker STILL PRESENT after hook');
+try { fs.unlinkSync(t12Marker); } catch {}
+console.log('T12 wrong agentId marker not consumed: PASS');
+
+// T13: Read tool with correct agentId marker — must consume and return true
+const t13Marker = path.join(os.tmpdir(), 'claude-cp-blocked-sess3-read-agent.flag');
+fs.writeFileSync(t13Marker, '1');
+const t13 = runHook({ tool_name: 'Read', tool_input: { file_path: '/some/path' }, session_id: 'sess3', agent_id: 'read-agent' });
+assert.strictEqual(t13.status, 0, 'T13: hook must exit 0');
+assert.ok(t13.line, 'T13: log line must exist');
+assert.strictEqual(t13.line.cp_bypass_blocked, true, 'T13: cp_bypass_blocked true for Read with correct agentId');
+assert.ok(!fs.existsSync(t13Marker), 'T13: marker deleted after read');
+console.log('T13 Read correct agentId consumed: PASS');
+
+// T14: absent agent_id — fallback to 'unknown' (arch-platform BINDING: data.agent_id || 'unknown')
+// Marker: claude-cp-blocked-sess4-unknown.flag (reconciles arch-platform 'unknown' over arch-testing '' assumption)
+const t14Marker = path.join(os.tmpdir(), 'claude-cp-blocked-sess4-unknown.flag');
+fs.writeFileSync(t14Marker, '1');
+const t14 = runHook({ tool_name: 'Bash', tool_input: { command: 'echo t14' }, session_id: 'sess4' });
+assert.strictEqual(t14.status, 0, 'T14: hook must exit 0');
+assert.ok(t14.line, 'T14: log line must exist');
+assert.strictEqual(t14.line.cp_bypass_blocked, true, 'T14: cp_bypass_blocked true when agent_id absent (unknown fallback)');
+assert.ok(!fs.existsSync(t14Marker), 'T14: marker deleted after read');
+console.log('T14 absent agent_id unknown fallback: PASS');
 
 console.log('\nAll tool-use-logger tests passed.');

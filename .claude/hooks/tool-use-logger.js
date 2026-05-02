@@ -54,11 +54,16 @@ process.stdin.on('end', () => {
     const success = (data.tool_response?.error == null);
 
     // ── cp_bypass_blocked ────────────────────────────────────────────────────
+    const BLOCKABLE_TOOLS = new Set(['Bash', 'Grep', 'Glob', 'Read']);
     let cpBypassBlocked = false;
-    const markerPath = path.join(os.tmpdir(), `claude-cp-blocked-${sessionId}.flag`);
-    if (fs.existsSync(markerPath)) {
-      cpBypassBlocked = true;
-      try { fs.unlinkSync(markerPath); } catch {}
+    if (BLOCKABLE_TOOLS.has(toolName)) {
+      const tmpDir = process.env.TMPDIR || process.env.TMP || os.tmpdir();
+      const agentId = String(data.agent_id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '-');
+      const markerPath = path.join(tmpDir, `claude-cp-blocked-${sessionId}-${agentId}.flag`);
+      if (fs.existsSync(markerPath)) {
+        cpBypassBlocked = true;
+        try { fs.unlinkSync(markerPath); } catch {}
+      }
     }
 
     // ── Build entry ──────────────────────────────────────────────────────────
