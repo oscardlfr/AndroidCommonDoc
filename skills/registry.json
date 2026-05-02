@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-05-02T19:36:18.192Z",
+  "generated": "2026-05-02T20:19:19.138Z",
   "l0_root": ".",
   "entries": [
     {
@@ -2500,7 +2500,7 @@
       "description": "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:efceaa2a68bf9e81b3a0fa02d799d64efe546193cec8287277e7b1f5fedf9d6e",
+      "hash": "sha256:c6f6e0e139a923ad89c5824ae9d4165a9ca728c6f7b8240d6edeb98e3fc8c4e7",
       "dependencies": [],
       "frontmatter": {
         "name": "module-lifecycle",
@@ -2515,7 +2515,7 @@
           "lifecycle"
         ],
         "token_budget": 2000,
-        "template_version": "1.1.1",
+        "template_version": "1.2.0",
         "memory": "project",
         "skills": [
           "verify-kmp",
@@ -2555,7 +2555,7 @@
       "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2498878d0e334dbd5bdfc6932653af5cb0f24a24d6711995ad013be9e013fcef",
+      "hash": "sha256:69d1c676473270f88f3d977c57a458efd2c6e440c3bb1d9a1c5a569cb3395485",
       "dependencies": [],
       "frontmatter": {
         "name": "platform-auditor",
@@ -2570,7 +2570,7 @@
           "audit"
         ],
         "token_budget": 2000,
-        "template_version": "1.1.1",
+        "template_version": "1.2.0",
         "memory": "project",
         "skills": [
           "verify-kmp",
@@ -2669,7 +2669,7 @@
       "description": "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:a313bd46917ebbc70024058bc2b8683fdc4673b2b4bfde8550fe60ed77f488a1",
+      "hash": "sha256:ec2d7c179a29296f4f08758b116778f41ade822e14f18070321b783994baea24",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gate-orchestrator",
@@ -2683,7 +2683,7 @@
           "validators"
         ],
         "token_budget": 3000,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "memory": "project"
       }
     },
@@ -2694,7 +2694,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9c1a95e2e8b662ac938f36f638f1ab66aa998fe751eaa6427297e96c91b3bf27",
+      "hash": "sha256:589b8e7561ab29a1b8784b6dabf3f3ad3e1fdee08d3b61b67773433b33dc5f40",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2710,7 +2710,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.7.0"
+        "template_version": "2.8.0"
       }
     },
     {
@@ -2720,7 +2720,7 @@
       "description": "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:65760f4dbbe8e46c51a56ee222a3e4bddb1bf377b53cd0caa5d505577f1d2588",
+      "hash": "sha256:f5d66bf78a1e647361533703d59cd30e71155716882824aaf2e720285e77741d",
       "dependencies": [],
       "frontmatter": {
         "name": "release-guardian-agent",
@@ -2735,7 +2735,7 @@
           "secrets"
         ],
         "token_budget": 2000,
-        "template_version": "1.1.0",
+        "template_version": "1.2.0",
         "memory": "project",
         "skills": [
           "sbom",
@@ -2856,7 +2856,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:a0640fdd4ab4b5e4db2244db8acffa66add6943ac1f098b7978abb200cf0896e",
+      "hash": "sha256:d1e9ea04c2505f51a50c402cfd7b2c0d2647ac9640a0105437db360164001fb3",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.14.0",
+        "template_version": "1.15.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2928,7 +2928,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:4aed8f41fa32396e86a0a14eaa8b9389744a918ddc18d2f86c0d4c938442df1e",
+      "hash": "sha256:823b69d9fe5698799d159448e02499797e23d1ecdd1509067bbf5339727767d8",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2943,7 +2943,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.13.0",
+        "template_version": "1.14.0",
         "memory": "project",
         "skills": [
           "accessibility",

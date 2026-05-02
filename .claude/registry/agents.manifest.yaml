@@ -289,8 +289,8 @@ agents:
   test-specialist:
     canonical_name: test-specialist
     subagent_type: test-specialist
-    template_version: "1.14.0"
-    template_frontmatter_sha256: 2b725d008b2364fabd4be07f80880e2ccd3fa4a3693a273c6122520ae72268c9
+    template_version: "1.15.0"
+    template_frontmatter_sha256: dd0294da72abd23c2eedbf7cbe206460d34648d013a2c5de5f028c77c12ab5c0
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation."
@@ -459,8 +459,8 @@ agents:
   ui-specialist:
     canonical_name: ui-specialist
     subagent_type: ui-specialist
-    template_version: "1.13.0"
-    template_frontmatter_sha256: 8d0d61178af158b3fcedcebde8c52c7b97e24d05f02778df92dc14e058721c6f
+    template_version: "1.14.0"
+    template_frontmatter_sha256: b62195f00137aba22b4b1f78c079436b4c3f096e3d0fd81d853cdb5da5b2ddbb
     category: core-specialist
     lifecycle: ephemeral
     description: "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations."
@@ -846,8 +846,8 @@ agents:
   quality-gate-orchestrator:
     canonical_name: quality-gate-orchestrator
     subagent_type: quality-gate-orchestrator
-    template_version: "1.0.0"
-    template_frontmatter_sha256: b1c8cb04901f6d92c9d486574bc3e7b567d726842de9214a0f50c5858e65bfa7
+    template_version: "1.1.0"
+    template_frontmatter_sha256: 328859b804bd2e072764bdd457a197ae72e49ea23f7648699ea843463b4ce752
     category: orchestrator
     lifecycle: per-task
     description: "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement."
@@ -887,8 +887,8 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.7.0"
-    template_frontmatter_sha256: 698d0a96bf7836c586780a27f84617ce3d597b121b3d270c0fb5e90416db79bb
+    template_version: "2.8.0"
+    template_frontmatter_sha256: 45ab2073bbb5248ffd8b7114549900b0f6f54b71f4ac866f094e9ddab14e28d1
     category: orchestrator
     lifecycle: ephemeral
     description: "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL."
@@ -1359,8 +1359,8 @@ agents:
   platform-auditor:
     canonical_name: platform-auditor
     subagent_type: platform-auditor
-    template_version: "1.1.1"
-    template_frontmatter_sha256: 08f2b33382f0aa24521c8f515f93b0ca242b3878a8afc2ed980e89890e05499f
+    template_version: "1.2.0"
+    template_frontmatter_sha256: 2866caf1665bb36c5e8892c26fa67669092fd94d2f05bc7dbec1b676524fbcb0
     category: auditor
     lifecycle: per-task
     description: "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks."
@@ -1393,8 +1393,8 @@ agents:
   release-guardian-agent:
     canonical_name: release-guardian-agent
     subagent_type: release-guardian-agent
-    template_version: "1.1.0"
-    template_frontmatter_sha256: 683dd7fb2c526dc515d0ea75c8311ca69b62b8658246068cd3f43b1c492634b0
+    template_version: "1.2.0"
+    template_frontmatter_sha256: 7eaa07c6c01b71d12b22b532cd611f27cb1643b77819b5ae7427e8c1776d8a57
     category: auditor
     lifecycle: per-task
     description: "Pre-publish scan for debug flags, dev URLs, placeholder text, secrets, and disabled security. Use before any release build."
@@ -1839,8 +1839,8 @@ agents:
   module-lifecycle:
     canonical_name: module-lifecycle
     subagent_type: module-lifecycle
-    template_version: "1.1.1"
-    template_frontmatter_sha256: a4a976287201ee10896f53cb44137c65ce6f23f1fc8c8586fabb01e9e0dd1485
+    template_version: "1.2.0"
+    template_frontmatter_sha256: 70cecf5b88926d629a2c6c86918ac58380cf2d5d3ff6875898eeab55942cd73c
     category: tool
     lifecycle: per-task
     description: "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules."
