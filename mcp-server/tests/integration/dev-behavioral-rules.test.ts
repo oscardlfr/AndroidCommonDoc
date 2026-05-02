@@ -161,9 +161,10 @@ describe('dev template structural invariants', () => {
     // BL-W32-06b (2026-05-01): bumped 315→350 to accommodate test-specialist.md kmp-test-runner v0.6.2
     // awareness section (+27 lines, line 136-163). Other 3 dev templates (ui/data/domain) remain ≤315.
     // BL-W33 PR4 (2026-05-02): bumped 350→360 for BL-W32-15 Edit precondition escalation block (+6 lines).
-    // BL-W34-D: extract escalation pattern to docs/ to restore 350 limit.
+    // BL-W33 PR5 (2026-05-02): bumped 360→370 for BL-W32-16 Common Gradle Error Triage block (+8 lines).
+    // BL-W34-D: extract escalation + JDK env patterns to docs/ to restore 350 limit.
     const PER_TEMPLATE_LIMIT: Record<string, number> = {
-      'test-specialist.md': 360,
+      'test-specialist.md': 370,
       'ui-specialist.md': 315,
       'domain-model-specialist.md': 315,
       'data-layer-specialist.md': 315,
