@@ -37,6 +37,10 @@ Each message MUST match: `<type>[optional scope][!]: <description>`
 
 Valid types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
 
+### Valid Scopes
+
+> **Note (BL-W32-13):** Compound module scopes are accepted — the base token must be in `valid_scopes`, followed by optional hyphenated suffixes. Example: `feat(core-error-sdk): ...` passes when `core` is a valid scope.
+
 ### Step 3 -- Validate Rules
 
 | Severity | Rule |
