@@ -1,11 +1,12 @@
 #!/usr/bin/env bats
 #
 # Bats RED tests for scripts/ps1/run-parallel-coverage-suite.ps1 thin-wrap.
-# test-infra: mocked — kmp-test binary shim via PATH injection.
-# Uses pwsh -Command invocation (matching gradle-run.ps1 BL-W32-06a precedent).
+# test-infra: mocked — kmp-test binary shim via PATH injection (Option A).
+#   - kmp-test (bash) + kmp-test.cmd (Windows .cmd delegate → bash shim)
+#   - Per-case: $env:PATH = "$WIN_FAKE_BIN;$env:PATH" injected before & $WIN_SCRIPT
 # All cases must FAIL RED against current fat script.
 #
-# arch-testing V2 cases: 5 required (mirror of sh cases 1-5).
+# arch-testing V2 cases: 5 required + 1 split = 6 total.
 
 SCRIPT="$BATS_TEST_DIRNAME/../ps1/run-parallel-coverage-suite.ps1"
 
@@ -18,25 +19,28 @@ setup() {
   FAKE_PROJECT="${BATS_TEST_TMPDIR}/fake-project-$$"
   mkdir -p "$FAKE_BIN" "$FAKE_PROJECT"
 
-  # kmp-test shim records args, emits JSON, exits 0
+  # Bash shim: records args, emits JSON fixture per subcommand
   cat > "$FAKE_BIN/kmp-test" <<'SHIM'
 #!/usr/bin/env bash
 echo "$@" >> "${BATS_TEST_TMPDIR}/kmp-test-args.log"
 case "$1" in
   parallel)
     echo '{"tool":"kmp-test","subcommand":"parallel","version":"0.7.0","project_root":"/tmp/fake","exit_code":0,"duration_ms":5000,"tests":{"total":42,"passed":42,"failed":0,"skipped":0},"modules":["core-foo"],"coverage":{"tool":"kover","missed_lines":0},"errors":[],"warnings":[],"skipped":[]}'
-    exit 0
-    ;;
+    exit 0 ;;
   coverage)
     echo '{"tool":"kmp-test","subcommand":"coverage","version":"0.7.0","project_root":"/tmp/fake","exit_code":0,"duration_ms":1000,"tests":{"total":0,"passed":0,"failed":0,"skipped":0},"modules":["core-foo"],"coverage":{"tool":"kover","missed_lines":0},"errors":[],"warnings":[],"skipped":[]}'
-    exit 0
-    ;;
+    exit 0 ;;
   *)
-    exit 0
-    ;;
+    exit 0 ;;
 esac
 SHIM
   chmod +x "$FAKE_BIN/kmp-test"
+
+  # .cmd shim: delegates to bash shim so pwsh can execute it as a command
+  cat > "$FAKE_BIN/kmp-test.cmd" <<'CMD'
+@echo off
+bash "%~dp0kmp-test" %*
+CMD
 
   echo 'rootProject.name = "test"' > "$FAKE_PROJECT/settings.gradle.kts"
 
@@ -64,21 +68,22 @@ teardown() {
          "${BATS_TEST_TMPDIR}/kmp-test-args.log" 2>/dev/null || true
 }
 
-# ── Case 1: happy path — kmp-test parallel --json invoked; report has AI-Summary ──
+# ── Case 1a: happy path — kmp-test parallel --json invoked ───────────────────
 
 @test "run-parallel-coverage-suite.ps1: happy path invokes kmp-test parallel --json" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "& '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
     2>&1
-  # Thin-wrap must call kmp-test with 'parallel' and '--json'
   [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
   grep -q "parallel" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
   grep -q "\-\-json" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
 }
 
+# ── Case 1b: happy path — coverage-full-report.md contains AI-Summary block ──
+
 @test "run-parallel-coverage-suite.ps1: happy path — coverage-full-report.md contains AI-Optimized Summary" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "& '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
     2>&1
   [ -f "$FAKE_PROJECT/coverage-full-report.md" ]
   grep -q "## AI-Optimized Summary" "$FAKE_PROJECT/coverage-full-report.md"
@@ -86,28 +91,25 @@ teardown() {
   grep -q "CLASSES_ANALYZED=" "$FAKE_PROJECT/coverage-full-report.md"
 }
 
-# ── Case 2: -SkipTests — invokes kmp-test coverage (NOT parallel) ──────────
+# ── Case 2: -SkipTests — invokes kmp-test coverage (NOT parallel) ────────────
 
 @test "run-parallel-coverage-suite.ps1: -SkipTests invokes kmp-test coverage subcommand" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "& '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -SkipTests" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -SkipTests" \
     2>&1
   [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
   grep -qE "^coverage|coverage " "${BATS_TEST_TMPDIR}/kmp-test-args.log"
   ! grep -qE "^parallel|parallel --" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
 }
 
-# ── Case 3: -DryRun — Strategy A: wrapper echoes DRY-RUN line; does NOT invoke kmp-test ──
-# arch-testing addendum: wrapper exits 0 without invoking runner; grep stdout for DRY-RUN line.
+# ── Case 3: -DryRun — Strategy A: wrapper echoes DRY-RUN; kmp-test NOT invoked ──
 
 @test "run-parallel-coverage-suite.ps1: -DryRun echoes DRY-RUN line to stdout; kmp-test not invoked" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "& '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -DryRun" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -DryRun" \
     2>&1
   [ "$status" -eq 0 ]
-  # Wrapper must print DRY-RUN: kmp-test <subcommand> to stdout (Strategy A)
   [[ "$output" == *"DRY-RUN: kmp-test"* ]]
-  # kmp-test must NOT have been invoked
   ! [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
   ! [ -f "$FAKE_PROJECT/coverage-full-report.md" ]
 }
@@ -115,11 +117,14 @@ teardown() {
 # ── Case 4: missing kmp-test binary — non-zero exit + error message ──────────
 
 @test "run-parallel-coverage-suite.ps1: missing kmp-test exits non-zero with error" {
-  local empty_dir="${BATS_TEST_TMPDIR}/empty-path-$$"
-  mkdir -p "$empty_dir"
-  # Run with a PATH that has no kmp-test
+  local empty_win_dir
+  empty_win_dir="${BATS_TEST_TMPDIR}/empty-path-$$"
+  mkdir -p "$empty_win_dir"
+  if command -v cygpath >/dev/null 2>&1; then
+    empty_win_dir="$(cygpath -w "$empty_win_dir")"
+  fi
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "\$env:PATH = '$empty_dir'; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
+    -Command "\$env:PATH = '$empty_win_dir'; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT'" \
     2>&1
   [ "$status" -ne 0 ]
   [[ "$output" == *"kmp-test"* ]]
@@ -130,7 +135,7 @@ teardown() {
 
 @test "run-parallel-coverage-suite.ps1: -ExcludeCoverage translates to --exclude-modules with deprecation warning" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-    -Command "& '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -ExcludeCoverage 'core-foo,core-bar'" \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN;' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -ExcludeCoverage 'core-foo,core-bar'" \
     2>&1
   [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
   grep -q "\-\-exclude-modules" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
