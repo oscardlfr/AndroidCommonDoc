@@ -225,6 +225,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+      },
+      "1.3.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W33 PR4: Add BL-W32-15 Edit precondition escalation path"
       }
     },
     "arch-testing": {
@@ -493,6 +498,11 @@
         "date": "2026-04-21",
         "breaking": false,
         "note": "Wave 25: declare 8 MCP tools in frontmatter (ingest-content, search-docs, validate-doc-update, validate-doc-structure, check-doc-patterns, audit-docs, check-version-sync, suggest-docs). New §5 Ingestion Handler -- receives approved-by-user payload from team-lead, runs ingest-content MCP tool, writes docs/{cat}/{slug}.md."
+      },
+      "2.6.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W33 PR4: Add BL-W32-14 commit-loop discipline + BL-W32-15 Edit precondition + BL-W32-19 rename reporting"
       }
     },
     "product-strategist": {
@@ -657,6 +667,11 @@
         "date": "2026-05-01",
         "breaking": false,
         "note": "BL-W32-06b: Add kmp-test-runner v0.6.2 section — detection cascade, flag table, exit codes, deprecated flags, JSON envelope option-ii pointer. Thin-wrapper nature of gradle-run.sh made explicit."
+      },
+      "1.14.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W33 PR4: Add BL-W32-15 Edit precondition escalation path"
       }
     },
     "ui-specialist": {
@@ -705,6 +720,11 @@
         "date": "2026-04-25",
         "breaking": false,
         "note": "W31.6 Group B: Add first-line BANNED-TOOLS banner (Grep tool, Glob on docs/**, Read on docs/**, Bash grep/find/rg, find-pattern MCP -- all FORBIDDEN). Hook in context-provider-gate.js now mechanically blocks Grep/Glob on docs/** paths."
+      },
+      "1.13.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W33 PR4: Add BL-W32-15 Edit precondition escalation path"
       }
     },
     "domain-model-specialist": {
@@ -743,6 +763,11 @@
         "date": "2026-04-25",
         "breaking": false,
         "note": "W31.6 Group B: Add first-line BANNED-TOOLS banner (Grep tool, Glob on docs/**, Read on docs/**, Bash grep/find/rg, find-pattern MCP -- all FORBIDDEN). Hook in context-provider-gate.js now mechanically blocks Grep/Glob on docs/** paths."
+      },
+      "1.11.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W33 PR4: Add BL-W32-15 Edit precondition escalation path"
       }
     },
     "data-layer-specialist": {
@@ -781,6 +806,11 @@
         "date": "2026-04-25",
         "breaking": false,
         "note": "W31.6 Group B: Add first-line BANNED-TOOLS banner (Grep tool, Glob on docs/**, Read on docs/**, Bash grep/find/rg, find-pattern MCP -- all FORBIDDEN). Hook in context-provider-gate.js now mechanically blocks Grep/Glob on docs/** paths."
+      },
+      "1.11.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W33 PR4: Add BL-W32-15 Edit precondition escalation path"
       }
     },
     "advisor": {
@@ -838,6 +868,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system systematic debugger agent."
+      },
+      "1.1.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W33 PR4: Add BL-W32-15 Edit precondition escalation path"
       }
     },
     "doc-alignment-agent": {
@@ -949,6 +984,11 @@
         "date": "2026-04-30",
         "breaking": false,
         "note": "Initial toolkit-specialist (BL-W31.7-08) -- owns mcp-server TS, .claude/hooks/*.js, non-test shell tooling. Reports to arch-platform. Closes the gap surfaced in BL-W31.7-09 + BL-W31.7-10 where test-specialist stood in for TS source work."
+      },
+      "1.1.0": {
+        "date": "2026-05-02",
+        "breaking": false,
+        "note": "BL-W33 PR4: Add BL-W32-15 Edit precondition escalation path"
       }
     }
   }
