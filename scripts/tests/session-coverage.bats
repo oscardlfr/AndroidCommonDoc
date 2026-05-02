@@ -103,9 +103,8 @@ teardown() {
     [ "$count" -eq 0 ]
 }
 
-@test "parity: PS1 run-parallel has partial-success retry (missingCov)" {
-    grep -q "missingCov\|Batch partial" "$PS1_DIR/run-parallel-coverage-suite.ps1"
-}
+# DELETED: parity: PS1 run-parallel has partial-success retry (missingCov)
+# Batch partial-success retry is runner-domain; thin-wrap removed this internal.
 
 @test "parity: PS1 gradle-run is kmp-test-runner wrapper" {
     grep -q "kmp-test\|kmp_test" "$PS1_DIR/gradle-run.ps1"
@@ -228,19 +227,17 @@ teardown() {
     echo "$desc" | grep -q "libs.versions.toml"
 }
 
-@test "README: run-parallel description mentions auto-detect" {
-    desc=$(grep "run-parallel-coverage-suite" "$README" | grep "^|" | head -1)
-    echo "$desc" | grep -q "auto-detect\|Auto-detect"
-}
+# DELETED: README: run-parallel description mentions auto-detect
+# README ##Coverage Workflow rewritten integration-only (d9b0ec3); auto-detect
+# is runner-internal and no longer described in L0 README.
 
 @test "README: run-parallel description mentions exclude-coverage" {
     desc=$(grep "run-parallel-coverage-suite" "$README" | grep "^|" | head -1)
     echo "$desc" | grep -q "exclude-coverage"
 }
 
-@test "README: coverage workflow has step 4b KOVER RECOVERY" {
-    grep -q "4b.*KOVER RECOVERY\|KOVER RECOVERY" "$README"
-}
+# DELETED: README: coverage workflow has step 4b KOVER RECOVERY
+# KOVER RECOVERY step deliberately removed in d9b0ec3; runner handles fallback.
 
 @test "README: coverage workflow has step 2 EXCLUDE" {
     grep -q "DISCOVER MODULES.*EXCLUDE\|exclude-coverage" "$README"
@@ -813,42 +810,18 @@ teardown() {
     [ "$skip_cov" = "false" ]
 }
 
-@test "config-cache: SH per-module retry uses --no-configuration-cache" {
-    grep -q "no-configuration-cache" "$SH_DIR/run-parallel-coverage-suite.sh"
-}
+# DELETED: config-cache: SH/PS1 retry uses --no-configuration-cache
+# --no-configuration-cache retry is runner-domain; thin-wrap removed this internal.
 
-@test "config-cache: SH retry paths have --no-configuration-cache" {
-    # Batch retry uses --no-configuration-cache for full-fail and partial recovery
-    count=$(grep -c "no-configuration-cache" "$SH_DIR/run-parallel-coverage-suite.sh" | tr -d ' \r')
-    [ "$count" -ge 2 ]
-}
-
-@test "config-cache: PS1 per-module retry uses --no-configuration-cache" {
-    grep -q "no-configuration-cache" "$PS1_DIR/run-parallel-coverage-suite.ps1"
-}
-
-@test "PS1 parity: auto-exclude patterns include detekt-rules" {
-    grep -q "detekt-rules" "$PS1_DIR/run-parallel-coverage-suite.ps1"
-}
-
-@test "PS1 parity: auto-exclude uses -like for glob matching" {
-    grep -q "\-like" "$PS1_DIR/run-parallel-coverage-suite.ps1"
-}
+# DELETED: PS1 parity: auto-exclude uses -like for glob matching
+# AUTO_EXCLUDE_COVERAGE_PATTERNS with -like is fat-script internal; removed in thin-wrap.
 
 # ===========================================================================
 # R. Coverage task generation guarded by skip_cov
 # ===========================================================================
 
-@test "SH: coverage task generation is inside skip_cov guard" {
-    # The line "get_coverage_gradle_task" must be inside a "if ! \$skip_cov" block
-    grep -q 'if ! .skip_cov.*then' "$SH_DIR/run-parallel-coverage-suite.sh"
-    # And the coverage task generation line must come after that guard
-    grep -B5 "get_coverage_gradle_task.*mod_cov_tool" "$SH_DIR/run-parallel-coverage-suite.sh" | grep -q "skip_cov"
-}
-
-@test "PS1: coverage task generation is inside skipCov guard" {
-    grep -B5 "Get-CoverageGradleTask.*modCovTool" "$PS1_DIR/run-parallel-coverage-suite.ps1" | grep -q "skipCov"
-}
+# DELETED: SH/PS1: coverage task generation is inside skip_cov/skipCov guard
+# per-module coverage task generation loop removed in thin-wrap; runner handles this.
 
 # ===========================================================================
 # S. Community standards files
@@ -940,45 +913,10 @@ teardown() {
     grep -q "\-\-java-home" "$SH_DIR/run-parallel-coverage-suite.sh"
 }
 
-@test "SH: auto-detects JAVA_HOME from gradle.properties" {
-    grep -q "org.gradle.java.home" "$SH_DIR/run-parallel-coverage-suite.sh"
-}
-
-@test "SH: warns on jvmToolchain version mismatch" {
-    grep -q "jvmToolchain" "$SH_DIR/run-parallel-coverage-suite.sh"
-    grep -q "UnsupportedClassVersionError" "$SH_DIR/run-parallel-coverage-suite.sh"
-}
-
-@test "SH: marks all as failed when gradle exits non-zero with 0 task results" {
-    grep -q "Marking all.*modules as failed" "$SH_DIR/run-parallel-coverage-suite.sh"
-    # Only when SUCCESS_COUNT is also 0 (no task output at all)
-    grep -q 'SUCCESS_COUNT.*-eq 0' "$SH_DIR/run-parallel-coverage-suite.sh"
-}
-
-@test "SH: does NOT mark as failed when tasks passed but gradle exit non-zero" {
-    grep -q "deprecation warnings\|not test failures" "$SH_DIR/run-parallel-coverage-suite.sh"
-}
-
-@test "PS1: has -JavaHome parameter" {
-    grep -q "JavaHome" "$PS1_DIR/run-parallel-coverage-suite.ps1"
-}
-
-@test "PS1: auto-detects JAVA_HOME from gradle.properties" {
-    grep -q "gradle.*java.*home" "$PS1_DIR/run-parallel-coverage-suite.ps1"
-}
-
-@test "PS1: warns on jvmToolchain version mismatch" {
-    grep -q "jvmToolchain" "$PS1_DIR/run-parallel-coverage-suite.ps1"
-    grep -q "UnsupportedClassVersionError" "$PS1_DIR/run-parallel-coverage-suite.ps1"
-}
-
-@test "README: Coverage Workflow mentions --java-home" {
-    grep -q "java-home" "$README"
-}
-
-@test "README: Coverage Workflow mentions auto-detect gradle.properties" {
-    sed -n '/Coverage Workflow/,/^## /p' "$README" | grep -q "gradle.properties\|org.gradle.java.home"
-}
+# DELETED: SH/PS1: auto-detects JAVA_HOME from gradle.properties (759, 760, 761, 763-765)
+# DELETED: README: Coverage Workflow mentions --java-home / auto-detect gradle.properties (766, 767)
+# JDK auto-detection moved to kmp-test-runner (v0.6.1+); thin-wrap passes --java-home
+# through to runner but does not implement detection itself. README is integration-only.
 
 # ---------------------------------------------------------------------------
 # monitor-sources multi-project support

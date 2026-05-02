@@ -102,64 +102,8 @@ run_with_timeout() {
     }
 }
 
-# ── Process pattern validation (static analysis) ─────────────────────────
-
-@test "ps1: does NOT use Start-Process with -RedirectStandardOutput" {
-    # The root cause pattern — should not exist anymore
-    ! grep -q "Start-Process.*-RedirectStandardOutput" "$SCRIPT"
-}
-
-@test "ps1: uses System.Diagnostics.Process for Gradle execution" {
-    grep -q "System.Diagnostics.ProcessStartInfo" "$SCRIPT"
-    grep -q "System.Diagnostics.Process" "$SCRIPT"
-}
-
-@test "ps1: uses async ReadToEndAsync for stdout/stderr capture" {
-    grep -q "ReadToEndAsync" "$SCRIPT"
-}
-
-@test "ps1: disposes process after completion" {
-    grep -q '\.Dispose()' "$SCRIPT"
-}
-
-@test "ps1: still has timeout watchdog loop" {
-    grep -q 'HasExited' "$SCRIPT"
-    grep -q 'Timeout' "$SCRIPT"
-    grep -q 'TIMEOUT.*Killing' "$SCRIPT"
-}
-
-# ── Parity with bash version ─────────────────────────────────────────────
-
-@test "parity: bash version uses background subshell (not Start-Process)" {
-    local bash_script="$BATS_TEST_DIRNAME/../sh/run-parallel-coverage-suite.sh"
-    [ -f "$bash_script" ] || skip "bash script not found"
-
-    # Bash should use ( ... ) & pattern
-    grep -q '&$' "$bash_script"
-    grep -q 'GRADLE_PID' "$bash_script"
-    grep -q 'wait.*GRADLE_PID' "$bash_script"
-}
-
-@test "parity: both scripts have timeout watchdog" {
-    local bash_script="$BATS_TEST_DIRNAME/../sh/run-parallel-coverage-suite.sh"
-    [ -f "$bash_script" ] || skip "bash script not found"
-
-    grep -q "TIMEOUT" "$bash_script"
-    grep -q "Timeout" "$SCRIPT"
-}
-
-@test "parity: both scripts have daemon recovery on timeout" {
-    local bash_script="$BATS_TEST_DIRNAME/../sh/run-parallel-coverage-suite.sh"
-    [ -f "$bash_script" ] || skip "bash script not found"
-
-    grep -q "RECOVERY.*Stopping daemons" "$bash_script"
-    grep -q "RECOVERY.*Stopping daemons" "$SCRIPT"
-}
-
-@test "parity: both scripts clean up temp files" {
-    local bash_script="$BATS_TEST_DIRNAME/../sh/run-parallel-coverage-suite.sh"
-    [ -f "$bash_script" ] || skip "bash script not found"
-
-    grep -q 'rm -f.*TEMP_LOG' "$bash_script"
-    grep -q 'Remove-Item.*tempLog' "$SCRIPT"
-}
+# ── Process pattern validation (DELETED — fat-script internal) ───────────────
+# System.Diagnostics.Process, ReadToEndAsync, Dispose, HasExited watchdog,
+# GRADLE_PID background subshell, daemon recovery, TEMP_LOG cleanup:
+# all removed in thin-wrap. Thin-wrap delegates execution to kmp-test runner.
+# ps1 thin-wrap = invoke kmp-test.cmd + PATH injection; no in-process Gradle exec.

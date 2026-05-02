@@ -1,20 +1,16 @@
 #!/usr/bin/env bash
-# BL-W32-06a: Thin wrapper around kmp-test-runner v0.6.2.
+# BL-W32-06a: Thin wrapper around kmp-test-runner v0.7.0.
 # Replaces the 497-line self-contained runner (daemon retry, Kover fallback,
 # JDK detection). All of that logic is now inside kmp-test-runner internals.
-#
-# NOTE: shared-kmp-libs composite-build daemon stop is not yet handled by
-# kmp-test-runner v0.6.2 (file upstream issue + ship in v0.6.3 before
-# BL-W32-06d L2 adoption).
 set -euo pipefail
 
 # --- Detection cascade ------------------------------------------------------ #
 if command -v kmp-test >/dev/null 2>&1; then
   KMP_TEST_CMD="kmp-test"
 elif command -v npx >/dev/null 2>&1; then
-  KMP_TEST_CMD="npx kmp-test-runner@0.6.2"
+  KMP_TEST_CMD="npx kmp-test-runner@0.7.0"
 else
-  echo "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.6.2" >&2
+  echo "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.7.0" >&2
   exit 1
 fi
 
@@ -45,7 +41,7 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       echo "Usage: gradle-run.sh [options] [<module>]"
       echo ""
-      echo "Thin wrapper around kmp-test-runner v0.6.2 (kmp-test)."
+      echo "Thin wrapper around kmp-test-runner v0.7.0 (kmp-test)."
       echo ""
       echo "Options:"
       echo "  --project-root <path>     Project root (default: pwd)"

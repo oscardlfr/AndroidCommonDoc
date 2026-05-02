@@ -243,39 +243,18 @@ LIB_DIR="$SH_DIR/lib"
 }
 
 # ---------------------------------------------------------------------------
-# Bug 18: coverage batch partial → per-module retry with kover fallbacks
+# Bug 18: coverage retry (DELETED — thin-wrap delegates to kmp-test runner;
+# Kover retry/batch-recovery are runner-domain, not L0 glue)
 # ---------------------------------------------------------------------------
-
-@test "regression: coverage suite retries missing modules after partial batch" {
-    grep -q "retrying.*per-module\|recovered via\|Batch partial" scripts/sh/run-parallel-coverage-suite.sh
-}
-
-@test "regression: coverage suite uses batch recovery for missing modules" {
-    grep -q "Batch partial\|Batch recovery\|retrying as single batch" scripts/sh/run-parallel-coverage-suite.sh
-}
-
-@test "regression: coverage suite retries with --no-configuration-cache on full failure" {
-    grep -q "no-configuration-cache" scripts/sh/run-parallel-coverage-suite.sh
-}
 
 # ---------------------------------------------------------------------------
 # Bug 19: --exclude-coverage flag + auto-exclude patterns
+# CLI flag --exclude-coverage still exists in thin-wrap (translated to
+# --exclude-modules on runner); AUTO_EXCLUDE_COVERAGE_PATTERNS internals removed.
 # ---------------------------------------------------------------------------
 
 @test "regression: coverage suite has --exclude-coverage flag" {
     grep -q "\-\-exclude-coverage" scripts/sh/run-parallel-coverage-suite.sh
-}
-
-@test "regression: coverage suite has AUTO_EXCLUDE_COVERAGE_PATTERNS" {
-    grep -q "AUTO_EXCLUDE_COVERAGE_PATTERNS" scripts/sh/run-parallel-coverage-suite.sh
-}
-
-@test "regression: auto-exclude patterns include testing modules" {
-    grep "AUTO_EXCLUDE_COVERAGE_PATTERNS" scripts/sh/run-parallel-coverage-suite.sh | grep -q "testing"
-}
-
-@test "regression: auto-exclude patterns include konsist-guard" {
-    grep "AUTO_EXCLUDE_COVERAGE_PATTERNS" scripts/sh/run-parallel-coverage-suite.sh | grep -q "konsist"
 }
 
 @test "regression: PS1 has ExcludeCoverage parameter" {
