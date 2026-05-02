@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [compose, ui, accessibility, material3]
 token_budget: 3000
-template_version: "1.12.0"
+template_version: "1.13.0"
 memory: project
 skills:
   - accessibility
@@ -66,6 +66,15 @@ Before each Edit tool call:
 **Pre-Edit file-path confirmation**: Before ANY Edit call, echo the target file path in your response. Compare byte-for-byte against the file path in the original dispatch. If they differ by even one character, STOP â€” ask architect for clarification. Do NOT 'correct' the path using context or similar files. Use the dispatch path verbatim. If the dispatched file doesn't exist, STOP and report the gap â€” do NOT redirect to a similar existing file.
 
 **Post-Edit verification echo** (prevents reporting drift): After any Edit call, Read the file you just modified to confirm the change is present. In your task report, state verbatim: 'Edit applied to: <exact-path>. Verified via Read: <grep confirmation or line count delta>.' This catches the case where Edit succeeded but the specialist's post-action context drifts to a different (recently-worked-on) file when reporting results.
+
+## Edit Tool Precondition (BL-W32-15)
+
+Edit tool precondition: Edit requires a prior Read of the target file in the same session.
+If that Read was not performed (zero-Read budget context), do NOT attempt Edit.
+Instead, escalate to team-lead: provide file path + intended change as a diff-formatted
+block. team-lead will relay via Write with full content.
+Note: in zero-Read budget contexts, the Post-Edit verification Read is also prohibited.
+The escalation path replaces the entire Edit + verify cycle.
 
 ## Revert Compliance Protocol (HARD STOP)
 
