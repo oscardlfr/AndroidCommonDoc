@@ -1,56 +1,39 @@
 #!/usr/bin/env powershell
 <#
 .SYNOPSIS
-    Run tests only on modules with uncommitted git changes.
-
-.DESCRIPTION
-    Detects modules with uncommitted changes (staged, unstaged, or untracked files)
-    and runs tests only on those modules. Uses run-parallel-coverage-suite.ps1 for
-    actual test execution.
-
-    DETECTION LOGIC:
-    - Uses `git status --porcelain` to find changed files
-    - Maps file paths to Gradle modules
-    - Filters out modules without build.gradle.kts
-    - Optionally includes shared-kmp-libs changes
+    Thin wrapper around kmp-test-runner v0.7.0 changed subcommand (BL-W32-06e).
+    Replaces 274-line script that delegated to run-parallel-coverage-suite.ps1.
+    Git change detection, module-to-path mapping, and test dispatch are now
+    inside kmp-test-runner internals. L0 retains: -IncludeShared glue,
+    -ShowModulesOnly → --dry-run translation, wrapper -DryRun echo,
+    -ExcludeCoverage deprecation warning.
 
 .PARAMETER ProjectRoot
     Path to the project root. Required.
 
 .PARAMETER IncludeShared
-    Include changes in shared-kmp-libs when detecting modules.
+    Include changes in shared-kmp-libs.
 
 .PARAMETER TestType
-    Test type to run: "all", "common", "androidUnit", "androidInstrumented", "desktop".
-    Default: auto-detect based on project type.
+    Test type: all | common | androidUnit | androidInstrumented | desktop.
 
 .PARAMETER StagedOnly
-    Only consider staged files (git add). Ignores unstaged and untracked.
+    Only consider staged files (git add).
 
 .PARAMETER ShowModulesOnly
-    Show detected modules without running tests. Useful for verification.
-
-.PARAMETER MaxFailures
-    Stop after N test failures. 0 = run all modules regardless of failures.
+    Show detected modules without running tests (maps to kmp-test changed --dry-run).
 
 .PARAMETER MinMissedLines
-    Minimum missed lines to include a class in gaps report.
+    Min missed lines for gaps report. Default: 0.
 
-.EXAMPLE
-    # Run tests on changed modules
-    ./run-changed-modules-tests.ps1 -ProjectRoot "C:\Projects\MyApp"
+.PARAMETER CoverageTool
+    Coverage tool: jacoco | kover | auto | none.
 
-.EXAMPLE
-    # Show which modules have changes (dry run)
-    ./run-changed-modules-tests.ps1 -ProjectRoot "C:\Projects\MyApp" -ShowModulesOnly
+.PARAMETER ExcludeCoverage
+    DEPRECATED — translates to --exclude-modules.
 
-.EXAMPLE
-    # Only staged files, include shared-kmp-libs
-    ./run-changed-modules-tests.ps1 -ProjectRoot "C:\Projects\MyApp" -StagedOnly -IncludeShared
-
-.NOTES
-    Author: AndroidCommonDoc
-    Version: 1.0.0
+.PARAMETER DryRun
+    Print assembled kmp-test command to stdout, exit 0. No runner invocation.
 #>
 
 param(
@@ -58,217 +41,61 @@ param(
     [string]$ProjectRoot,
 
     [switch]$IncludeShared,
-    [ValidateSet("all", "common", "androidUnit", "androidInstrumented", "desktop")]
     [string]$TestType = "",
     [switch]$StagedOnly,
     [switch]$ShowModulesOnly,
-    [int]$MaxFailures = 0,
     [int]$MinMissedLines = 0,
-    [ValidateSet("jacoco", "kover", "auto", "none", "")]
     [string]$CoverageTool = "",
-    [string]$ExcludeCoverage = ""
+    [string]$ExcludeCoverage = "",
+    [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# ============================================================================
-# GIT CHANGE DETECTION
-# ============================================================================
+$sharedRoot = "C:\Users\34645\AndroidStudioProjects\shared-kmp-libs"
 
-function Get-ChangedFiles {
-    param(
-        [string]$ProjectRoot,
-        [switch]$StagedOnly
-    )
-
-    Push-Location $ProjectRoot
-    try {
-        if ($StagedOnly) {
-            # Only staged files
-            $files = git diff --cached --name-only 2>$null
-        } else {
-            # All changes: staged + unstaged + untracked
-            $rawOutput = git status --porcelain 2>$null
-            $files = @()
-            foreach ($line in $rawOutput) {
-                if ($line -match '^\s*[MADRCU?!]+\s+(.+)$') {
-                    $filePath = $Matches[1] -replace '"', ''
-                    # Handle renamed files (old -> new format)
-                    if ($filePath -match ' -> ') {
-                        $filePath = ($filePath -split ' -> ')[1]
-                    }
-                    $files += $filePath
-                }
-            }
-        }
-        return $files | Where-Object { $_ }
-    } finally {
-        Pop-Location
-    }
+# --- Deprecation warning ----------------------------------------------------- #
+if ($ExcludeCoverage -ne "") {
+    Write-Warning "WARNING: -ExcludeCoverage deprecated — degraded to --exclude-modules; tests will be skipped instead of just excluded from coverage. See GAP-05."
 }
 
-function Get-ModuleFromFile {
-    param(
-        [string]$FilePath,
-        [string]$ProjectRoot
-    )
-
-    # Split path into parts
-    $parts = $FilePath.Split('/', '\') | Where-Object { $_ }
-
-    if ($parts.Count -lt 2) {
-        return $null
-    }
-
-    # Pattern 1: Nested modules (core/domain, feature/home, shared/model)
-    $nestedPrefixes = @('core', 'feature', 'shared', 'data', 'ui', 'common')
-    if ($parts[0] -in $nestedPrefixes) {
-        $modulePath = Join-Path $ProjectRoot "$($parts[0])/$($parts[1])"
-        if (Test-Path (Join-Path $modulePath "build.gradle.kts")) {
-            return ":$($parts[0]):$($parts[1])"
-        }
-    }
-
-    # Pattern 2: Flat modules with prefix (core-domain, feature-home)
-    if ($parts[0] -match '^(core|feature|shared|data|ui)-') {
-        $modulePath = Join-Path $ProjectRoot $parts[0]
-        if (Test-Path (Join-Path $modulePath "build.gradle.kts")) {
-            return ":$($parts[0])"
-        }
-    }
-
-    # Pattern 3: App modules (app, androidApp, desktopApp)
-    if ($parts[0] -in @('app', 'androidApp', 'desktopApp', 'iosApp')) {
-        $modulePath = Join-Path $ProjectRoot $parts[0]
-        if (Test-Path (Join-Path $modulePath "build.gradle.kts")) {
-            return ":$($parts[0])"
-        }
-    }
-
-    # Pattern 4: Direct module at root level
-    $modulePath = Join-Path $ProjectRoot $parts[0]
-    if (Test-Path (Join-Path $modulePath "build.gradle.kts")) {
-        return ":$($parts[0])"
-    }
-
-    return $null
-}
-
-function Find-ChangedModules {
-    param(
-        [string]$ProjectRoot,
-        [switch]$StagedOnly,
-        [switch]$IncludeShared
-    )
-
-    $changedFiles = Get-ChangedFiles -ProjectRoot $ProjectRoot -StagedOnly:$StagedOnly
-    $modules = @{}
-
-    foreach ($file in $changedFiles) {
-        $module = Get-ModuleFromFile -FilePath $file -ProjectRoot $ProjectRoot
-
-        if ($module) {
-            # Track module with sample file
-            if (-not $modules.ContainsKey($module)) {
-                $modules[$module] = @()
-            }
-            $modules[$module] += $file
-        }
-    }
-
-    # Filter out shared-kmp-libs if not included
-    if (-not $IncludeShared) {
-        $filteredModules = @{}
-        foreach ($key in $modules.Keys) {
-            if ($key -notmatch 'shared-kmp-libs') {
-                $filteredModules[$key] = $modules[$key]
-            }
-        }
-        $modules = $filteredModules
-    }
-
-    return $modules
-}
-
-# ============================================================================
-# MAIN EXECUTION
-# ============================================================================
-
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Test Changed Modules" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Project: $ProjectRoot" -ForegroundColor White
-Write-Host "Mode: $(if ($StagedOnly) { 'Staged only' } else { 'All changes' })" -ForegroundColor White
-Write-Host ""
-
-# Verify git repository
-Push-Location $ProjectRoot
-$isGitRepo = git rev-parse --is-inside-work-tree 2>$null
-Pop-Location
-
-if ($isGitRepo -ne "true") {
-    Write-Host "ERROR: Not a git repository: $ProjectRoot" -ForegroundColor Red
+# --- Detection cascade ------------------------------------------------------- #
+$kmpTestCmd = $null
+if (Get-Command kmp-test -ErrorAction SilentlyContinue) {
+    $kmpTestCmd = "kmp-test"
+} elseif (Get-Command npx -ErrorAction SilentlyContinue) {
+    $kmpTestCmd = "npx kmp-test-runner@0.7.0"
+} else {
+    Write-Error "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.7.0"
     exit 1
 }
 
-# Find changed modules
-$changedModules = Find-ChangedModules -ProjectRoot $ProjectRoot `
-    -StagedOnly:$StagedOnly -IncludeShared:$IncludeShared
+# --- Build argument list ----------------------------------------------------- #
+$cmdArgs = @("changed", "--project-root", $ProjectRoot)
+if ($StagedOnly)              { $cmdArgs += "--staged-only" }
+if ($ShowModulesOnly)         { $cmdArgs += "--dry-run" }
+if ($TestType -ne "")         { $cmdArgs += @("--test-type", $TestType) }
+if ($CoverageTool -ne "")     { $cmdArgs += @("--coverage-tool", $CoverageTool) }
+if ($MinMissedLines -gt 0)    { $cmdArgs += @("--min-missed-lines", "$MinMissedLines") }
+if ($ExcludeCoverage -ne "")  { $cmdArgs += @("--exclude-modules", $ExcludeCoverage) }
 
-if ($changedModules.Count -eq 0) {
-    Write-Host "No modules with uncommitted changes detected." -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "Possible reasons:" -ForegroundColor Gray
-    Write-Host "  - No changes in module source directories" -ForegroundColor Gray
-    Write-Host "  - Changes only in non-module files (root scripts, etc.)" -ForegroundColor Gray
-    Write-Host "  - Use --include-shared to include shared-kmp-libs changes" -ForegroundColor Gray
-    exit 0
-}
-
-# Display detected modules
-Write-Host "Modules with changes:" -ForegroundColor Cyan
-foreach ($module in ($changedModules.Keys | Sort-Object)) {
-    $fileCount = $changedModules[$module].Count
-    Write-Host "  $module" -ForegroundColor White -NoNewline
-    Write-Host " ($fileCount files)" -ForegroundColor Gray
-}
-Write-Host ""
-
-if ($ShowModulesOnly) {
-    Write-Host "Dry run - no tests executed." -ForegroundColor Yellow
-    exit 0
-}
-
-# Build module filter for run-parallel-coverage-suite.ps1
-$moduleFilter = ($changedModules.Keys | Sort-Object) -join ','
-
-Write-Host "Running tests on: $moduleFilter" -ForegroundColor Cyan
-Write-Host ""
-
-# Execute tests using existing script
-$params = @{
-    ProjectRoot = $ProjectRoot
-    ModuleFilter = $moduleFilter
-    MaxFailures = $MaxFailures
-    MinMissedLines = $MinMissedLines
-}
-
-if ($TestType -ne "") {
-    $params.TestType = $TestType
-}
-
+# -IncludeShared: pass shared-kmp-libs root so runner detects changes there
 if ($IncludeShared) {
-    $params.IncludeShared = $true
+    $cmdArgs += @("--project-root", $sharedRoot)
 }
 
-if ($CoverageTool -ne "") {
-    $params.CoverageTool = $CoverageTool
+# --- Wrapper -DryRun (Strategy A — arch-testing addendum) -------------------- #
+# Echo assembled command to stdout, exit 0, NO runner invocation.
+if ($DryRun) {
+    Write-Host "DRY-RUN: $kmpTestCmd $($cmdArgs -join ' ')"
+    exit 0
 }
 
-if ($ExcludeCoverage -ne "") {
-    $params.ExcludeCoverage = $ExcludeCoverage
+# --- Invoke runner ----------------------------------------------------------- #
+if ($kmpTestCmd -match " ") {
+    $parts = $kmpTestCmd -split " ", 2
+    & $parts[0] $parts[1] @cmdArgs
+} else {
+    & $kmpTestCmd @cmdArgs
 }
-
-& "$ScriptRoot/run-parallel-coverage-suite.ps1" @params
+exit $LASTEXITCODE
