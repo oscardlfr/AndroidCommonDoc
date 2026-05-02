@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [docs, changelog, memory, roadmap, ingest]
 token_budget: 2000
-template_version: "2.5.0"
+template_version: "2.6.0"
 skills:
   - audit-docs
   - readme-audit
@@ -55,6 +55,15 @@ Before writing or editing any doc file, you MUST validate:
    - **FIXABLE** → auto-fix (size, frontmatter) and re-validate
    - **REJECTED** → STOP. Report rejection to invoker via SendMessage
 3. **Post-write verify**: Run `/audit-docs` + check if doc has new `rules:` frontmatter → notify team-lead
+
+## Edit Tool Precondition (BL-W32-15)
+
+Edit tool precondition: Edit requires a prior Read of the target file in the same session.
+If that Read was not performed (zero-Read budget context), do NOT attempt Edit.
+Instead, escalate to team-lead: provide file path + intended change as a diff-formatted
+block. team-lead will relay via Write with full content.
+Note: in zero-Read budget contexts, the Post-Edit verification Read is also prohibited.
+The escalation path replaces the entire Edit + verify cycle.
 
 ### Rejection Protocol
 
@@ -164,6 +173,26 @@ Follow these rules for ALL documentation:
    - STEP 2: Add ONE line to CLAUDE.md pointing to the new doc: `- {short-description} → [{slug}](docs/{category}/{slug}.md)`
    - NEVER skip STEP 1. If you can't identify the category, SendMessage team-lead asking for clarification.
    - If invoker explicitly writes "add detail to CLAUDE.md directly" → REJECT the request via SendMessage team-lead with: "CLAUDE.md is pointers-only. Where should the full detail doc live? Suggesting: docs/{category}/{slug}.md"
+
+## Commit-Loop Discipline (BL-W32-14)
+
+After writing or editing files as part of a dispatched task, ALWAYS:
+  1. git add <only the files you wrote/edited>
+  2. git status — verify exact stage list
+  3. git commit -m "..." OR git commit --amend --no-edit (if explicitly told)
+  4. report commit SHA in the final message
+
+Do NOT request clarification on git commit --amend on unpushed HEAD —
+it is a routine operation. Only escalate if amend would rewrite
+already-pushed history (verify via `git log @{upstream}..HEAD`).
+
+## Rename Reporting (BL-W32-19)
+
+If you rename a file between draft and final commit, your report MUST include:
+  - Original draft filename
+  - Final committed filename
+  - Reason for rename
+The file path in your report's "files written" field MUST equal git show --stat HEAD output.
 
 ## Output
 

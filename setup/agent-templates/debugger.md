@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [bug, error, fix, broken, crash, exception]
 token_budget: 2500
-template_version: "1.0.0"
+template_version: "1.1.0"
 skills:
   - test
   - extract-errors
@@ -44,6 +44,15 @@ For each hypothesis, starting with most likely:
 2. Run existing tests — nothing should regress
 3. Add a test that catches this specific bug
 4. Verify the reproduction case no longer fails
+
+## Edit Tool Precondition (BL-W32-15)
+
+Edit tool precondition: Edit requires a prior Read of the target file in the same session.
+If that Read was not performed (zero-Read budget context), do NOT attempt Edit.
+Instead, escalate to team-lead: provide file path + intended change as a diff-formatted
+block. team-lead will relay via Write with full content.
+Note: in zero-Read budget contexts, the Post-Edit verification Read is also prohibited.
+The escalation path replaces the entire Edit + verify cycle.
 
 ### Done Criteria (non-negotiable)
 

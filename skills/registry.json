@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-05-02T17:13:35.044Z",
+  "generated": "2026-05-02T19:36:18.192Z",
   "l0_root": ".",
   "entries": [
     {
@@ -2151,7 +2151,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c6b9387ae67c939b321e155a5780d1e299f39c0bfcd42df229a3e0f77a23abcf",
+      "hash": "sha256:2a59581d52348d0b3ab7ad5f5171a8e23a6cfe21ac5fdbbf5c7accc3e8475d49",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -2167,7 +2167,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.10.0",
+        "template_version": "1.11.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2182,7 +2182,7 @@
       "description": "Scientific debugging with hypothesis testing and evidence gathering. Use when investigating bugs that need systematic root cause analysis.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c05f670b2e247e099c96e0d6ec2d4de191700c3fce04cd8d65cfa82320678746",
+      "hash": "sha256:72aa9699f50fa01ec744de31c39cf7bd415d8323fea696023b94cfccfdb5b295",
       "dependencies": [],
       "frontmatter": {
         "name": "debugger",
@@ -2199,7 +2199,7 @@
           "exception"
         ],
         "token_budget": 2500,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "skills": [
           "test",
           "extract-errors",
@@ -2271,7 +2271,7 @@
       "description": "Sporadic team agent for migrating project docs to L0 patterns. Triggered by QG frontmatter failures, doc-alignment drift, or manual /audit-docs. Creates hubs, splits oversized docs, adds frontmatter, fixes references.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:322b6fd555202179409cff421842cd2f8dbe79dc0ea600524206d507cb819dbd",
+      "hash": "sha256:5806e3e2a08473dcbdf56671a2ff5e5a8d2c67be272d4414c7cf8d9f61ede060",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-migrator",
@@ -2287,7 +2287,7 @@
           "hub"
         ],
         "token_budget": 4000,
-        "template_version": "1.2.0"
+        "template_version": "1.3.0"
       }
     },
     {
@@ -2297,7 +2297,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:d369b43e97d9670b6e158d41f1be226ca6fd6165481e60aa47f7fad40450efbd",
+      "hash": "sha256:eed9d1ce3163a95a65d4840dc7533e10f5829c695faf53d69d439da350b50375",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2313,7 +2313,7 @@
           "ingest"
         ],
         "token_budget": 2000,
-        "template_version": "2.5.0",
+        "template_version": "2.6.0",
         "skills": [
           "audit-docs",
           "readme-audit",
@@ -2328,7 +2328,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c4e6a68703cacc30367aebb98a34e2b03705ec16577dd0bd649dec1490382781",
+      "hash": "sha256:1388ad75a76c1e7824ad0c4ef5a5e064e21aa482de489d93994330c50d891d28",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2343,7 +2343,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.10.0",
+        "template_version": "1.11.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2856,7 +2856,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:37cfa4ad9371bb2dc7309d9bca77525d2ccdacaf79aa31a58777afa61df95ac7",
+      "hash": "sha256:a0640fdd4ab4b5e4db2244db8acffa66add6943ac1f098b7978abb200cf0896e",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.13.0",
+        "template_version": "1.14.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2894,7 +2894,7 @@
       "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8b42284d5ba8324d7d0ec6285c0a526358d77a2b932ea79b55c27cb0113e6075",
+      "hash": "sha256:409f531455d3d2a67b2e713af066199a40112a0b4d39646c0f3ea6fa5b7d07d9",
       "dependencies": [],
       "frontmatter": {
         "name": "toolkit-specialist",
@@ -2913,7 +2913,7 @@
           "validator"
         ],
         "token_budget": 3000,
-        "template_version": "1.0.0",
+        "template_version": "1.1.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2928,7 +2928,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:37360ea57c0433e761e56f5adb006e0b63ed9b99d30af19037fcb963afe0cd85",
+      "hash": "sha256:4aed8f41fa32396e86a0a14eaa8b9389744a918ddc18d2f86c0d4c938442df1e",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2943,7 +2943,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.12.0",
+        "template_version": "1.13.0",
         "memory": "project",
         "skills": [
           "accessibility",
