@@ -76,4 +76,4 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 - Official Anthropic skills enhance agents — reference them with capability detection (use when available)
 - Department heads are session-level agents (`claude --agent`), NOT sub-agents
 - Cross-department context via `context-provider`, NOT by calling other department leads
-- **MCP tools must be declared in `tools:` frontmatter** to be callable (Wave 25 fix). Prose references alone don't load schemas — the harness only exposes what's listed. 10 core agents wired; see [agent-core-rules](agent-core-rules.md) §8.
+- **MCP tools must be declared in `tools:` frontmatter** to be callable (Wave 25 fix). Prose references alone don't load schemas — the harness only exposes what's listed. 11 core agents wired; see [agent-core-rules](agent-core-rules.md) §8.
