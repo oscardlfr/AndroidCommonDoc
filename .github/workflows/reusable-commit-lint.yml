@@ -60,7 +60,7 @@ jobs:
           # Build scope pattern
           if [ -n "$VALID_SCOPES" ]; then
             SCOPE_LIST=$(echo "$VALID_SCOPES" | tr ',' '|')
-            SCOPE_PATTERN="(\(($SCOPE_LIST)\))?"
+            SCOPE_PATTERN="(\(($SCOPE_LIST)(-[a-z0-9]+)*\))?"
           else
             SCOPE_PATTERN="(\([a-z0-9/_-]+\))?"
           fi
