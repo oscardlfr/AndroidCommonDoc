@@ -11,6 +11,8 @@ description: "Per-dispatch validation rules for arch-testing: scope gate, patter
 
 Per-dispatch rules that run during every wave. Referenced from [arch-testing](../../setup/agent-templates/arch-testing.md).
 
+> **Pre-dispatch decision** (BL-W32-03): Before dispatching test-specialist, arch-testing MUST determine whether the test surface calls for mocked infrastructure or fixture-driven infrastructure. See the `### Pre-Dispatch Decision: mocked vs fixture-driven` section in [arch-testing template](../../setup/agent-templates/arch-testing.md) for the 3 decision inputs and the required `test-infra: mocked/fixture-driven` dispatch token.
+
 ### Per-Dispatch Validation (Wave 9 — runs on EVERY dispatch)
 
 Distinct from the Scope Validation Gate above (pre-task, session start). These 3 checks run EVERY time you SendMessage to a specialist.

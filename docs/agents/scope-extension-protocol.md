@@ -164,7 +164,7 @@ arch-testing commits out-of-scope changes with scope change buried in a large di
 
 When designing a new architect-class agent, audit it against all three hooks: any tool the agent uses must satisfy each gate's contract.
 
-Test coverage lives in `scripts/tests/architect-self-edit-gate.bats` (5 tests) and `scripts/tests/architect-bash-write-gate.bats` (23 tests). The scope-gate test surface is integration-tested via the `scope-extension-protocol` Vitest suite.
+Test coverage lives in `scripts/tests/architect-self-edit-gate.bats` (7 tests) and `scripts/tests/architect-bash-write-gate.bats` (37 tests). The scope-gate test surface is integration-tested via the `scope-extension-protocol` Vitest suite.
 
 ## Relationship to Other Patterns
 

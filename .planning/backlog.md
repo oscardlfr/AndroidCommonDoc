@@ -964,3 +964,38 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 
 ---
 
+### BL-W32-11 — docs/agents LOW-severity drift cleanup (LOW — cosmetic + 2-month stale)
+**Status**: backlog
+**Priority**: LOW (cosmetic — none of these block any workflow)
+**Source**: doc-alignment-agent drift report from `wave-l0-doc-refresh` (2026-05-02). HIGH + critical MEDIUM items shipped in PR #99; the items below were intentionally deferred per the wave's "no new files / additive only" constraint.
+
+**Items deferred from PR #99 drift report**:
+
+1. **`docs/agents/tl-model-profiles.md` line 125** — cross-reference to deprecated `setup/agent-templates/team-lead.md`. Should reference `docs/agents/main-agent-orchestration-guide.md` (canonical pattern post-W31.6 retirement).
+2. **`docs/agents/spec-driven-workflow.md` lines 19-22, 100-101** — Multi-Session Departments table + L1/L2 table both list `team-lead` as Development command / template. Should note the canonical pattern is the main agent.
+3. **`docs/agents/claude-md-template.md` line 163** — references `.claude/agents/team-lead.md (canonical definitions)`. team-lead retired W31.6.
+4. **`docs/agents/capability-detection.md`** — missing standard frontmatter fields (`last_updated`, `version`). Cosmetic.
+5. **`docs/agents/quality-gate-protocol.md`** — Step 3 runs `/test-full-parallel --fresh-daemon` but doesn't mention kmp-test-runner v0.6.2 as the underlying runner (BL-W32-06a/-06b). Skill wraps this transparently; informational only.
+6. **`docs/agents/arch-dispatch-modes.md` frontmatter `last_updated: "2026-04-20"`** — bump to current date. Content still accurate.
+7. **`docs/agents/claude-code-workflow.md` line 163** — three-layer L0→L1→L2 sync diagram doesn't reflect agent-mirror propagation (W29 enhancement).
+8. **`docs/agents/tl-dispatch-topology.md` lines 115-130** — DawSync L2-specific module paths leaked into L0 doc. Should be removed; L0 docs do not hardcode L2 module paths.
+9. **`docs/agents/context-provider-adoption-hooks.md` line 74** — references "tool #47 in registry" for `tool-use-analytics`. Number likely stale after multiple MCP additions.
+
+**Plus 2 stale standalone files** (also deferred):
+
+10. **`docs/agents/data-handoff-patterns.md`** — `last_updated: "2026-03"`. 2 months stale. Content functional but past the 90-day freshness threshold.
+11. **`docs/agents/script-vs-agent-decision.md`** — no `last_updated` frontmatter. 2+ months stale based on git blame.
+12. **`docs/agents/agent-consumption-guide.md`** — `last_updated: "2026-03"`. Past 90-day threshold.
+
+**Surface**: 12 files in `docs/agents/`. All edits surgical (frontmatter bumps, line replacements, 1-2 line deletions).
+
+**Constraints**: same as PR #99 — no new files, additive/cosmetic only. Conventional commit scope `docs(agents)`.
+
+**Estimated effort**: ~30-45 min. doc-updater can handle. No architect PREP needed (LOW severity, zero blast radius).
+
+**Trigger**: next scheduled docs-cleanup wave OR fold into next architect-template wave when one of the affected files needs a substantive change anyway. Do NOT prioritize over functional work.
+
+**Drift report archived at**: `.planning/wave-l0-doc-refresh/docs-agents-drift-report.md` (gitignored — preserved as evidence; can be re-run via doc-alignment-agent).
+
+---
+

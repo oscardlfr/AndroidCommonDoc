@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "team-lead session setup: Phase 2 core specialist spawning, selective spawning, rotation protocol, context management, architect routing."
-version: 1
-last_updated: "2026-04"
+version: 2
+last_updated: "2026-05"
 assumes_read: team-topology, tl-phase-execution
 token_budget: 1500
 ---
@@ -20,12 +20,13 @@ Reference for team-lead's session initialization: Phase 2 core specialist spawni
 
 ## Phase 2 Core Specialists
 
-When Phase 2 execution begins, team-lead spawns 4 core specialists as named session team members:
+When Phase 2 execution begins, team-lead spawns 5 core specialists as named session team members:
 ```
 Agent(name="test-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are test-specialist for this session. Your reporting architect is arch-testing. Ask arch-testing for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
 Agent(name="ui-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are ui-specialist for this session. Your reporting architect is arch-testing. Ask arch-testing for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
 Agent(name="domain-model-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are domain-model-specialist for this session. Your reporting architect is arch-platform. Ask arch-platform for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
 Agent(name="data-layer-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are data-layer-specialist for this session. Your reporting architects are arch-platform and arch-integration. Ask them for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
+Agent(name="toolkit-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are toolkit-specialist for this session. Your reporting architect is arch-platform. Ask arch-platform for patterns via SendMessage — NEVER contact context-provider directly. Stay alive across all waves.")
 ```
 
 **Selective spawning (MANDATORY — evaluate BEFORE any Agent() call)**: You MUST produce a scope evaluation table BEFORE calling Agent() to spawn any core specialist. Format:
@@ -37,7 +38,7 @@ Agent(name="data-layer-specialist", team_name="session-{project-slug}", run_in_b
 | domain | {count} | YES/SKIP |
 | data | {count} | YES/SKIP |
 
-Skip specialists with zero tasks. Do NOT default to spawning all 4. Log skipped specialists: "Skipping {name} — no work in sprint scope". Architects can still request a skipped specialist mid-sprint via SendMessage to team-lead.
+Skip specialists with zero tasks. Do NOT default to spawning all 5. Log skipped specialists: "Skipping {name} — no work in sprint scope". Architects can still request a skipped specialist mid-sprint via SendMessage to team-lead.
 
 > 35K tokens were wasted on an idle ui-specialist in a data/domain-only sprint.
 
@@ -77,7 +78,7 @@ Architects handle ALL investigation, code reading, and delegation to devs/guardi
 
 ## Session Team Setup Patterns
 
-**Use `TeamCreate("session-{project-slug}")` at session start. 6 core agents join at session start; 4 core specialists join at Phase 2 start.**
+**Use `TeamCreate("session-{project-slug}")` at session start. 6 core agents join at session start; 5 core specialists join at Phase 2 start.**
 
 ```
 // CORRECT — session peers reach each other via SendMessage
@@ -95,7 +96,7 @@ Bash("claude --print '...'")
 
 Per Anthropic agent-teams canonical doc: the main agent IS the team lead. No separate team-lead subagent needed.
 
-The main agent spawns all 11 session peers directly:
+The main agent spawns all 12 session peers directly:
 
 ```
 TeamCreate("session-{project-slug}")
@@ -111,6 +112,7 @@ Agent(name="data-layer-specialist", team_name="session-{project-slug}", ...)
 Agent(name="domain-model-specialist", team_name="session-{project-slug}", ...)
 Agent(name="ui-specialist", team_name="session-{project-slug}", ...)
 Agent(name="test-specialist", team_name="session-{project-slug}", ...)
+Agent(name="toolkit-specialist", team_name="session-{project-slug}", ...)
 // Quality gate peer
 Agent(name="quality-gater", team_name="session-{project-slug}", ...)
 ```
@@ -119,4 +121,4 @@ In this pattern, all peers are live from session start. PREP/EXECUTE distinction
 
 **Legacy pattern (deferred to W31.7+)**: nested spawning where arch-platform/arch-integration/arch-testing spawn devs after PREP phase. Still supported via PREP/EXECUTE distinction in arch templates. Will be replaced when BL-W31.7-01 ships.
 
-**PREP/EXECUTE distinction in arch templates**: legacy compatibility — required when team-lead runs as a subagent and devs are not yet live when architects receive their Phase 1 dispatch. Obsolete in canonical pattern (all peers live from session start).
+**PREP/EXECUTE distinction in arch templates**: Still ENFORCED — see [arch-dispatch-modes.md](arch-dispatch-modes.md) and the architect templates for current PREP/EXECUTE semantics. In the canonical pattern (all peers live from session start) architects still receive PREP dispatches in Phase 1 and EXECUTE dispatches in Phase 2; the distinction governs whether devs are available to receive sub-dispatches.

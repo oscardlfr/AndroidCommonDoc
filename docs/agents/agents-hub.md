@@ -7,8 +7,8 @@ status: active
 layer: L0
 category: agents
 description: "Agent workflow hub: CLAUDE.md template, team-lead model, agent delegation, multi-agent patterns, agent consumption"
-version: 1
-last_updated: "2026-03"
+version: 2
+last_updated: "2026-05"
 monitor_urls:
   - url: "https://docs.anthropic.com/en/docs/claude-code/overview"
     type: doc-page
@@ -28,7 +28,8 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [claude-md-template](claude-md-template.md) | Boris Cherny-style CLAUDE.md template — the 4-pillar structure for all projects |
 | [claude-code-workflow](claude-code-workflow.md) | Team Lead adaptive model, skill usage, verification, release workflow |
 | [multi-agent-patterns](multi-agent-patterns.md) | Topology (chain/fan-out/orchestrator), agent design rules, failure handling, cost control |
-| [team-topology](team-topology.md) | 3-phase model with 9 session team peers (5 at start + 4 core specialists) — Planning → Execution → Quality Gate |
+| [arch-topology-protocols](arch-topology-protocols.md) | Architect topology: concern-ownership map (§4), cross-architect coordination, tiebreaker chain (BL-W32-02) |
+| [team-topology](team-topology.md) | 3-phase model with 10 session team peers (5 at start + 5 core specialists) — Planning → Execution → Quality Gate |
 | [data-handoff-patterns](data-handoff-patterns.md) | Structured markers, severity convention, prose fallback, test gaming detection |
 | [agent-consumption-guide](agent-consumption-guide.md) | How agents load and use pattern docs (frontmatter, assumes_read, hub scanning) |
 | [capability-detection](capability-detection.md) | Graceful degradation for optional tools in agent definitions |
@@ -51,11 +52,11 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 
 ## Key Concepts
 
-- **3-Phase Model** = Planning → Execution → Quality Gate. Nine **session team peers** in `session-{project-slug}` carry context across phases: 5 at session start + 4 persistent core specialists at Phase 2. Planner and quality-gater are temporary.
-- **Session team peers** = context-provider, doc-updater, arch-testing, arch-platform, arch-integration (session start) + test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist (Phase 2 start). All alive for the session.
+- **3-Phase Model** = Planning → Execution → Quality Gate. Ten **session team peers** in `session-{project-slug}` carry context across phases: 5 at session start + 5 persistent core specialists at Phase 2. Planner is temporary.
+- **Session team peers** = context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater (session start) + test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist (Phase 2 start). All alive for the session.
 - **CLAUDE.md** = workflow instructions (< 80 lines). Contains Agent Roster → triggers agent delegation.
 - **`.claude/agents/`** = canonical agent definitions. Synced via `/sync-l0`.
-- **team-lead** = orchestrator. NEVER codes — orchestrates 3-phase teams, spawns 4 core specialists at Phase 2 start, spawns extras on architect request. Pattern validation chain: specialist → architect → context-provider.
+- **team-lead** = orchestrator. NEVER codes — orchestrates 3-phase teams, spawns 5 core specialists at Phase 2 start, spawns extras on architect request. Pattern validation chain: specialist → architect → context-provider.
 - **quality-gater** = dynamic rule discovery. Reads CLAUDE.md for project rules, runs `/pre-pr`, cross-checks every rule.
 - **planner** = temporary agent in `planning-{project-slug}` team. Uses `SendMessage(to="context-provider")` for project state. Writes plan to `.planning/PLAN.md`.
 - **Doc Integrity** = `/doc-integrity` pipeline: kdoc-coverage → check-doc-patterns → docs/api freshness → audit-docs. State in `kdoc-state.json`.
@@ -75,4 +76,4 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 - Official Anthropic skills enhance agents — reference them with capability detection (use when available)
 - Department heads are session-level agents (`claude --agent`), NOT sub-agents
 - Cross-department context via `context-provider`, NOT by calling other department leads
-- **MCP tools must be declared in `tools:` frontmatter** to be callable (Wave 25 fix). Prose references alone don't load schemas — the harness only exposes what's listed. 10 core agents wired; see [agent-core-rules](agent-core-rules.md) §8.
+- **MCP tools must be declared in `tools:` frontmatter** to be callable (Wave 25 fix). Prose references alone don't load schemas — the harness only exposes what's listed. 11 core agents wired; see [agent-core-rules](agent-core-rules.md) §8.

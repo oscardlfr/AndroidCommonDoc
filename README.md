@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 46 tools wired into agent frontmatter (Wave 25: 10 core agents — team-lead, 3 architects, context-provider, doc-updater, doc-alignment, codebase-mapper, beta-readiness, l0-coherence-auditor, verifier — now declare MCP tools explicitly so the harness loads their schemas), a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 17 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring and user-gated ingestion loop (context-provider → team-lead approval → doc-updater → `ingest-content` MCP tool) -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 46 tools wired into agent frontmatter (Wave 25: 10 core agents — team-lead, 3 architects, context-provider, doc-updater, doc-alignment, codebase-mapper, beta-readiness, l0-coherence-auditor, verifier — now declare MCP tools explicitly so the harness loads their schemas), a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 39 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring and user-gated ingestion loop (context-provider → team-lead approval → doc-updater → `ingest-content` MCP tool) -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
@@ -24,6 +24,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Detekt rules** that enforce architecture patterns at build time -- 23 hand-written + 5 generated AST-only rules (28 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, security patterns, and testing anti-patterns
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **[Dokka Markdown Plugin](https://github.com/oscardlfr/dokka-markdown-plugin)** — transforms KDoc into L0-compliant structured markdown (`docs/api/*.md`) with 14-field YAML frontmatter, content-addressed hashes for CI drift detection, and first-class KMP expect/actual handling. Standalone repo, MIT-licensed.
+- **[kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner)** — npm CLI (`@oscardlfr/kmp-test-runner` v0.6.2) that owns Gradle test orchestration. Invoked by `/test`, `/coverage`, `/test-full-parallel`, `/test-changed` skills via the `gradle-run.sh` (Linux/macOS, in `scripts/sh/`) or `gradle-run.ps1` (Windows, in `scripts/ps1/`) thin wrappers. Standalone repo, Apache-2.0.
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
 - **MCP server** with 46 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions. **Wave 25 fix**: all 46 tools are now callable by the 10 core agents (previously prose-only — agents described MCP usage but the harness never loaded the schemas). One tool is intentionally L2-only (`android-cli-bridge`, for DawSync/WakeTheCave)
@@ -32,7 +33,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
 - **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, architecture guards, and dependency freshness
 - **39 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
-- **38 agent templates** governing the workflow (canonical pattern: main agent IS team-lead, no separate `team-lead` subagent — see `docs/agents/main-agent-orchestration-guide.md`). Roster: 3 architects, 4 core specialists, 1 context-provider, 4 orchestrators (planner, quality-gater, full-audit-orchestrator, quality-gate-orchestrator), 5 validators, 7 auditors, 8 tool-class agents (codebase-mapper, researcher, advisor, debugger, verifier, etc.), 2 doc owners, 1 domain-specialist scaffold, 5 L1/L2 marketing/product templates. Manifest at `.claude/registry/agents.manifest.yaml` is the source of truth (PR #71); CI WARN-mode validator surfaces drift (PR #72). Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
+- **39 agent templates** governing the workflow (canonical pattern: main agent IS team-lead, no separate `team-lead` subagent — see `docs/agents/main-agent-orchestration-guide.md`). Roster: 3 architects, 5 core specialists (domain/data/ui/test + toolkit-specialist), 1 context-provider, 4 orchestrators (planner, quality-gater, full-audit-orchestrator, quality-gate-orchestrator), 5 validators, 7 auditors, 8 tool-class agents (codebase-mapper, researcher, advisor, debugger, verifier, etc.), 2 doc owners, 1 domain-specialist scaffold, 5 L1/L2 marketing/product templates. Manifest at `.claude/registry/agents.manifest.yaml` is the source of truth (PR #71); CI WARN-mode validator surfaces drift (PR #72). Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
 
 Install once, use across all your projects.
 
@@ -44,6 +45,29 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 
 | Wave | Date | PR | Theme |
 |------|------|----|-------|
+| BL-W32 Phase 2 prep | 2026-05-01 | [#98](https://github.com/oscardlfr/AndroidCommonDoc/pull/98) | file BL-W32-08/-09/-10 backlog entries |
+| BL-W32 Phase 1 | 2026-05-01 | [#97](https://github.com/oscardlfr/AndroidCommonDoc/pull/97) | 3 L0 fixes: CP zombie (TeamDelete-on-reuse), concern-ownership map in arch-topology-protocols.md, arch-testing pre-dispatch decision (mocked vs fixture-driven); 3 architect templates bumped; Phase 1 CLOSED |
+| BL-W32 closeout plan | 2026-05-01 | [#96](https://github.com/oscardlfr/AndroidCommonDoc/pull/96) | phase 1 (L0) + phase 2 (sync) plan |
+| BL-W32-05 SHIPPED | 2026-05-01 | [#95](https://github.com/oscardlfr/AndroidCommonDoc/pull/95) | SHIPPED marker + PR ref + wave history update |
+| BL-W32-05 | 2026-05-01 | [#94](https://github.com/oscardlfr/AndroidCommonDoc/pull/94) | architect verdict gate regex consistency: PYTHON_WRITE_RE exempt-target gap + self-edit-gate `wave\d+` slug sync; bats +8 (44 total); 20/20 CI on 2nd push |
+| BL-W32-07 | 2026-05-01 | [#93](https://github.com/oscardlfr/AndroidCommonDoc/pull/93) | spawn-pattern coherence: planner template 1.9.0 + manifest TeamCreate-peer revert + hooks Check 3 + 4 stale ref fixes + /init-session --orchestrate flag |
+| BL-W32-06b | 2026-05-01 | [#92](https://github.com/oscardlfr/AndroidCommonDoc/pull/92) | test-specialist 1.12.0→1.13.0 + 27-line kmp-test-runner v0.6.2 awareness section + L1/L2 propagation |
+| BL-W32-06a | 2026-05-01 | [#91](https://github.com/oscardlfr/AndroidCommonDoc/pull/91) | gradle-run.sh/.ps1 thin-wrap kmp-test-runner v0.6.2 (497→101 / 489→99 lines); arch-platform caught `--timeout` env-var bug |
+| BL-W32-06 filed | 2026-05-01 | [#90](https://github.com/oscardlfr/AndroidCommonDoc/pull/90) | file BL-W32-06: kmp-test-runner v0.6.2 adoption (4 sub-tasks) |
+| BL-W31.7-12 | 2026-04-30 | [#89](https://github.com/oscardlfr/AndroidCommonDoc/pull/89) | planner peer auto-spawn enforcement (PreToolUse:ExitPlanMode block) + planner 1.8.0 + spawn_method drift fix; **W31.7 thread CLOSED (12/12)** |
+| BL-W31.7-11 | 2026-04-30 | [#88](https://github.com/oscardlfr/AndroidCommonDoc/pull/88) | manifest ABI/API stability validator (BREAKING/ADDITIVE/NEUTRAL classifier) + manifest-abi-warn CI job (WARN); 45 new tests |
+| BL-W31.7-08 | 2026-04-30 | [#87](https://github.com/oscardlfr/AndroidCommonDoc/pull/87) | new toolkit-specialist agent (5th core specialist) for mcp-server TS/hooks/non-test scripts; 39 agents total |
+| BL-W31.7-10 | 2026-04-30 | [#86](https://github.com/oscardlfr/AndroidCommonDoc/pull/86) | quality-gater project-type detection (Step 0.5 + applicable_project_types manifest field) + 5 Wave-30 hooks exec-bit fix |
+| BL-W31.7-09 | 2026-04-29 | [#85](https://github.com/oscardlfr/AndroidCommonDoc/pull/85) | architect verdict-to-disk protocol enforcement (A+B+C) + heredoc-aware scanner refactor |
+| W31.7 Phase 4 sub-3 | 2026-04-29 | [#84](https://github.com/oscardlfr/AndroidCommonDoc/pull/84) | pre-commit hook chains manifest drift gate |
+| W31.7 Phase 4 sub-2 | 2026-04-29 | [#83](https://github.com/oscardlfr/AndroidCommonDoc/pull/83) | pre-Agent-spawn validator hook |
+| W31.7 Phase 4 sub-1 | 2026-04-29 | [#82](https://github.com/oscardlfr/AndroidCommonDoc/pull/82) | flip manifest drift validator WARN → BLOCK |
+| W31.7 P3 r7 | 2026-04-28 | [#81](https://github.com/oscardlfr/AndroidCommonDoc/pull/81) | canonicalize 8 tools+marketing agents (Phase 3 closer); 37/38 baselined (97%) |
+| W31.7 P3 r6 | 2026-04-28 | [#80](https://github.com/oscardlfr/AndroidCommonDoc/pull/80) | canonicalize 3 Tier 3 security/release auditors (26→29/38) |
+| W31.7 P3 r5 | 2026-04-28 | [#79](https://github.com/oscardlfr/AndroidCommonDoc/pull/79) | canonicalize 2 orchestrators + 4 internal validators (20→26/38) |
+| W31.7 P3 r4 | 2026-04-28 | [#78](https://github.com/oscardlfr/AndroidCommonDoc/pull/78) | canonicalize 4 Tier 1 auditors (first DRIFT round, 16→20/38) |
+| W31.7 P3 r3 | 2026-04-28 | [#77](https://github.com/oscardlfr/AndroidCommonDoc/pull/77) | bake SHA-256 baselines for 5 NOOP agents (11→16/38) |
+| W31.7 P3 r2 | 2026-04-28 | [#76](https://github.com/oscardlfr/AndroidCommonDoc/pull/76) | bake SHA-256 baselines for 8 NOOP agents (3→11/38) |
 | 31.7 P3 r1 | 2026-04-27 | [#75](https://github.com/oscardlfr/AndroidCommonDoc/pull/75) | agent template generator from manifest: `template-generator.ts` lib + `generate-template.ts` CLI + bash/PS1 wrappers; pilot regenerates 3 architects with manifest-anchored SHA-256 baselines via surgical line-based writer; 65 new tests (54 vitest + 11 bats); 16/38 agents canonical, 22 pending future rounds → Phase 4 |
 | 31.7 | 2026-04-26 → 04-27 | [#71](https://github.com/oscardlfr/AndroidCommonDoc/pull/71), [#72](https://github.com/oscardlfr/AndroidCommonDoc/pull/72), [#73](https://github.com/oscardlfr/AndroidCommonDoc/pull/73), [#74](https://github.com/oscardlfr/AndroidCommonDoc/pull/74) | agents-manifest workflow: Phase 1 seed (38/38 agents + 5 invariants), Phase 2 CI validators in WARN mode (manifest-validator.ts + drift-audit job), `architect-bash-write-gate.js` hook closing the W31.5 Bash bypass (BL-W31.7-07), and W31.7 closeout housekeeping |
 | 31.6 | 2026-04-25 | [#69](https://github.com/oscardlfr/AndroidCommonDoc/pull/69) | agent-template cleanup + canonical pattern alignment; team-lead.md retired in favor of `docs/agents/main-agent-orchestration-guide.md` (main agent IS team-lead) |
@@ -462,6 +486,10 @@ Gradle plugins and utilities shipped in `tools/` — installable independently f
 | 2.1.x | any | any | 17+ | Unsupported |
 
 Install via `/setup --dokka-plugin yes` (wizard W10) or manually — see the [standalone plugin repo](https://github.com/oscardlfr/dokka-markdown-plugin#readme) and the pattern doc at [`docs/gradle/dokka-markdown-plugin.md`](docs/gradle/dokka-markdown-plugin.md).
+
+### kmp-test-runner v0.6.2 — test orchestration runner
+
+`@oscardlfr/kmp-test-runner` is the canonical runner for Gradle test execution across the L0/L1/L2 chain. AndroidCommonDoc consumes it via thin shell wrappers (`scripts/sh/gradle-run.sh` 100 lines, `scripts/ps1/gradle-run.ps1` 106 lines) which delegate retry semantics, daemon management, kover coverage, and Windows file-lock recovery to the runner. **Skills using it**: `/test`, `/coverage`, `/test-full-parallel`, `/test-changed`. **Adoption**: L0 ✓ (BL-W32-06a, PR #91), L1 in progress (Phase 2 verification, shared-kmp-libs), L2 pending. For runner CLI usage, retry policies, and configuration see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme).
 
 ---
 
@@ -921,7 +949,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `check-doc-freshness` | Verify pattern doc version references against versions manifest (calls check-freshness) |
 | `check-version-sync` | Version catalog diff between projects -- or against `versions-manifest.json` directly |
 | `generate-sbom` | CycloneDX SBOM generation via Gradle plugin |
-| `gradle-run` | Gradle execution with retry, timeout, OOM recovery, and daemon management |
+| `gradle-run` | Thin wrapper over `kmp-test-runner` v0.6.2 (smart retry, daemon management, OOM recovery handled by external CLI) |
 | `lint-resources` | String resource naming convention enforcement |
 | `pattern-lint` | **Deterministic code pattern checks** -- 8 grep-based rules (CancellationException, MutableSharedFlow, forbidden imports, println, TODO crash, runBlocking, GlobalScope, System.currentTimeMillis) |
 | `run-android-tests` | Instrumented test orchestration on device/emulator |
@@ -969,7 +997,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-15 domain hubs, 88+ sub-docs, 23 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+16 domain hubs, 66 sub-docs, 23 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 

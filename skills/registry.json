@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-05-01T17:31:49.391Z",
+  "generated": "2026-05-02T14:06:56.711Z",
   "l0_root": ".",
   "entries": [
     {
@@ -400,7 +400,7 @@
       "description": "Analyze test coverage gaps from existing data without running tests. Use when asked to check coverage or find untested code.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:6eacf16e6276a790757d219cdb15b6198a6b486603c0ac9a148ad8f2c015a0ad",
+      "hash": "sha256:058f6123143dfdd5d340edbee76d10e163e3b8fdcba5e480882b4724dfa04399",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -1559,7 +1559,7 @@
       "description": "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:18dcbf742c58f2ac0f8afbbd0ba818387477f0170589b30e963e1024a4c00f0f",
+      "hash": "sha256:29bd98d373a92c5f03a3f0e1ea6705e4ee45792fe0eb165a164f7f4ccbf98544",
       "dependencies": [
         "scripts/sh/gradle-run.sh",
         "scripts/sh/ai-error-extractor.sh",
@@ -1593,7 +1593,7 @@
       "description": "Run tests only on modules with uncommitted changes. Use when asked to test changed files or run a quick pre-commit check.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:115abe52162328c6aa4826e5aaf6d8de2f7fd0d7e202cfc2f207f18e35984549",
+      "hash": "sha256:c5375ad48c67ba2f42e76aa31946daa191643f93a9a73d0525ffd4da7a304f54",
       "dependencies": [
         "scripts/sh/run-changed-modules-tests.sh",
         "scripts/ps1/run-changed-modules-tests.ps1"
@@ -1657,7 +1657,7 @@
       "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:0c5ae754c6d11c0f26a44430626789f509a1ea84b7294a4c0df3bed75f36fb13",
+      "hash": "sha256:076bf5129d75ce5e0d5d776df93e4b6092cc6480b80d306663b81b3e15156ce3",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"

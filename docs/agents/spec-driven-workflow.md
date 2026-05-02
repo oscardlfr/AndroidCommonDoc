@@ -40,8 +40,8 @@ All delegation uses the `Agent` tool. Never Bash + `claude` CLI.
 2. Human asks Claude: "/work implement feature X" or "@team-lead ..."
 3. team-lead orchestrates 3 sequential phases per task:
 
-   Session start: team-lead creates TeamCreate("session-{project-slug}") with 5 peers:
-     context-provider, doc-updater, arch-testing, arch-platform, arch-integration
+   Session start: team-lead creates TeamCreate("session-{project-slug}") with 6 peers:
+     context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
 
    Phase 1 — Planning (temporary planner):
      planner SendMessage(to="context-provider"), writes plan to .planning/PLAN.md
@@ -49,6 +49,7 @@ All delegation uses the `Agent` tool. Never Bash + `claude` CLI.
 
    Phase 2 — Execution (session team peers — no new TeamCreate):
      Architects detect → team-lead dispatches devs (sub-agents) → architects cross-verify
+     5 core specialists join at Phase 2 start: test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist
      All 3 APPROVE → proceed to Phase 3
 
    Phase 3 — Quality Gate (temporary quality-gater joins session team):

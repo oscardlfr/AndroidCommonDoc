@@ -185,7 +185,7 @@ At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatche
 
 ### Planning Phase (EnterPlanMode gate)
 For non-trivial tasks:
-1. **`EnterPlanMode()`** — plan-context.js injects MODULE_MAP.md + agents + skills as additional context. Note: the hook does NOT block team-lead writes — the no-self-write rule below is discipline-enforced, not hook-enforced. Planned hardening: BL-W31-00 (extend hook to block Write/Edit on `.planning/PLAN*.md` while plan mode is active).
+1. **`EnterPlanMode()`** — plan-context.js injects MODULE_MAP.md + agents + skills as additional context. Note: the hook does NOT block team-lead writes — the no-self-write rule below is discipline-enforced, not hook-enforced.
 2. **Spawn planner**: `Agent(name="planner", team_name="session-{project-slug}", subagent_type="planner", prompt="...", run_in_background=true)` — `subagent_type` MUST be `"planner"` (lowercase, custom L0 agent with Read+Write+Bash+SendMessage), NOT `"Plan"` (capital-P built-in; read-only and cannot write plan files).
 
 **Hook enforcement (BL-W31.7-12)**: The hook `.claude/hooks/plan-mode-spawn-planner.js` mechanically blocks `ExitPlanMode` if planner has not been spawned via `Agent(subagent_type="planner")` during the current plan-mode session. Sentinel: `.planning/.plan-mode-planner-required`. Escape hatch: `CLAUDE_SKIP_PLANNER=1` env var (set BEFORE `EnterPlanMode`) for genuinely trivial work.
