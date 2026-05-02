@@ -122,13 +122,17 @@ teardown() {
   ! grep -qE "^parallel|parallel --" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
 }
 
-# ── Case 3: --dry-run — forwards --dry-run; no report written ────────────────
+# ── Case 3: --dry-run — Strategy A: wrapper echoes DRY-RUN line; does NOT invoke kmp-test ──
+# arch-testing addendum: wrapper exits 0 without invoking runner; grep stdout for DRY-RUN line.
 
-@test "run-parallel-coverage-suite.sh: --dry-run forwards flag to kmp-test; no report file" {
+@test "run-parallel-coverage-suite.sh: --dry-run echoes DRY-RUN line to stdout; kmp-test not invoked" {
   run env PATH="$FAKE_BIN:$PATH" bash "$SCRIPT" --project-root "$FAKE_PROJECT" --dry-run
-  [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
-  grep -q "\-\-dry-run" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
-  # Thin-wrap must NOT write coverage-full-report.md on --dry-run
+  [ "$status" -eq 0 ]
+  # Wrapper must print DRY-RUN: kmp-test <subcommand> to stdout (Strategy A)
+  [[ "$output" == *"DRY-RUN: kmp-test"* ]]
+  # kmp-test must NOT have been invoked (no args log written)
+  ! [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
+  # No report written
   ! [ -f "$FAKE_PROJECT/coverage-full-report.md" ]
 }
 

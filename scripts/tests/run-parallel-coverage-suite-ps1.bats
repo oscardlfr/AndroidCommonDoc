@@ -97,14 +97,18 @@ teardown() {
   ! grep -qE "^parallel|parallel --" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
 }
 
-# ── Case 3: -DryRun — forwards --dry-run; no report written ──────────────────
+# ── Case 3: -DryRun — Strategy A: wrapper echoes DRY-RUN line; does NOT invoke kmp-test ──
+# arch-testing addendum: wrapper exits 0 without invoking runner; grep stdout for DRY-RUN line.
 
-@test "run-parallel-coverage-suite.ps1: -DryRun forwards flag to kmp-test; no report file" {
+@test "run-parallel-coverage-suite.ps1: -DryRun echoes DRY-RUN line to stdout; kmp-test not invoked" {
   run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
     -Command "& '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -DryRun" \
     2>&1
-  [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
-  grep -q "\-\-dry-run" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
+  [ "$status" -eq 0 ]
+  # Wrapper must print DRY-RUN: kmp-test <subcommand> to stdout (Strategy A)
+  [[ "$output" == *"DRY-RUN: kmp-test"* ]]
+  # kmp-test must NOT have been invoked
+  ! [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
   ! [ -f "$FAKE_PROJECT/coverage-full-report.md" ]
 }
 
