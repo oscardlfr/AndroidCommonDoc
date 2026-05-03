@@ -49,6 +49,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [Agent Core Rules](agent-core-rules.md) | Universal rules for all session agents |
 | [Agent Verdict Protocol](agent-verdict-protocol.md) | Architect verdict format + disk-write + 1-liner DM pattern |
 | [Ingestion Loop](ingestion-loop.md) | External-source → L0 docs: context-provider flag → team-lead user-approval → doc-updater `ingest-content` (Wave 25 — closes T-BUG-005) |
+| [local-first-skills-pattern](local-first-skills-pattern.md) | When to deploy a skill locally (L1) before promoting to L0; lifecycle stages and promotion criteria |
 
 ## Key Concepts
 
