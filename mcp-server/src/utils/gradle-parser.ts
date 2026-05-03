@@ -142,3 +142,36 @@ export async function findHardcodedVersions(
 
   return hardcoded;
 }
+
+// ── Packaging type detection ─────────────────────────────────────────────────
+
+/** Maps a module's applied plugin IDs to its output packaging type. */
+export type PackagingType = "aar" | "jar" | "kmp" | "app" | "unknown";
+
+const AAR_PLUGINS = new Set(["com.android.library"]);
+const APP_PLUGINS = new Set(["com.android.application"]);
+const JAR_PLUGINS = new Set(["org.jetbrains.kotlin.jvm", "java-library", "java"]);
+const KMP_PLUGINS = new Set([
+  "org.jetbrains.kotlin.multiplatform",
+  "com.android.kotlin.multiplatform.library",
+]);
+
+/**
+ * Classify a module's packaging type from its applied plugin IDs.
+ * Uses first-match priority: AAR > APP > KMP > JAR > unknown.
+ */
+export function detectPackagingType(pluginIds: string[]): PackagingType {
+  for (const id of pluginIds) {
+    if (AAR_PLUGINS.has(id)) return "aar";
+  }
+  for (const id of pluginIds) {
+    if (APP_PLUGINS.has(id)) return "app";
+  }
+  for (const id of pluginIds) {
+    if (KMP_PLUGINS.has(id)) return "kmp";
+  }
+  for (const id of pluginIds) {
+    if (JAR_PLUGINS.has(id)) return "jar";
+  }
+  return "unknown";
+}
