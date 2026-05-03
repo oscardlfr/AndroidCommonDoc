@@ -1,0 +1,3 @@
+-keep class com.example.test.SealedParent { *; }
+-keep class com.example.test.SubtypeA { *; }
+-keep class com.example.test.SubtypeB { *; }

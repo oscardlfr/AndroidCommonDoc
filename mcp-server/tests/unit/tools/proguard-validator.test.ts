@@ -19,9 +19,11 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerProguardValidatorTool } from "../../../src/tools/proguard-validator.js";
 import { RateLimiter } from "../../../src/utils/rate-limiter.js";
-import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, rmSync, existsSync, copyFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+
+const FIXTURES_DIR = path.join(__dirname, "..", "fixtures", "proguard");
 
 // ── Test fixture management ──────────────────────────────────────────────────
 
@@ -495,5 +497,282 @@ dependencies {
     expect(text).toContain("**Missing proguard files:**");
     expect(text).toContain("**Missing library rules:**");
     expect(text).toContain("### Issues Found");
+  });
+
+  // ── AGP 9 global directive checks ──────────────────────────────────────────
+
+  it("case 1: AGP 9 confirmed directive (-dontobfuscate) in consumer-rules.pro reports ERROR violation", async () => {
+    writeSettings([":lib"]);
+    writeModuleBuild(
+      ":lib",
+      `
+plugins {
+    id("com.android.library")
+}
+android {
+    defaultConfig {
+        consumerProguardFiles("consumer-rules.pro")
+    }
+}
+`,
+    );
+    copyFileSync(
+      path.join(FIXTURES_DIR, "consumer-rules-agp9-invalid.pro"),
+      path.join(PROJECT_ROOT, "lib", "consumer-rules.pro"),
+    );
+
+    const result = await callTool({
+      project_root: PROJECT_ROOT,
+      check_agp9_globals: true,
+    });
+
+    const text = extractText(result);
+    const json = extractJson(text) as {
+      modules: Array<{ agp9_global_errors?: string[]; agp9_global_warnings?: string[] }>;
+      summary: { total_agp9_violations?: number };
+    };
+
+    const libModule = json.modules.find((_, i) => i === 0);
+    const errors = libModule?.agp9_global_errors ?? [];
+    expect(errors.length).toBeGreaterThanOrEqual(1);
+    const errorText = errors.join(" ");
+    expect(errorText).toMatch(/-dontobfuscate|-dontoptimize/);
+  });
+
+  it("case 2: AGP 9 plausible directive (-allowaccessmodification) in consumer-rules.pro reports WARN", async () => {
+    writeSettings([":lib"]);
+    writeModuleBuild(
+      ":lib",
+      `
+plugins {
+    id("com.android.library")
+}
+android {
+    defaultConfig {
+        consumerProguardFiles("consumer-rules.pro")
+    }
+}
+`,
+    );
+    copyFileSync(
+      path.join(FIXTURES_DIR, "consumer-rules-agp9-invalid.pro"),
+      path.join(PROJECT_ROOT, "lib", "consumer-rules.pro"),
+    );
+
+    const result = await callTool({
+      project_root: PROJECT_ROOT,
+      check_agp9_globals: true,
+    });
+
+    const text = extractText(result);
+    const json = extractJson(text) as {
+      modules: Array<{ agp9_global_errors?: string[]; agp9_global_warnings?: string[] }>;
+    };
+
+    const libModule = json.modules[0];
+    const warnings = libModule?.agp9_global_warnings ?? [];
+    expect(warnings.length).toBeGreaterThanOrEqual(1);
+    const warnText = warnings.join(" ");
+    expect(warnText).toMatch(/-allowaccessmodification|-optimizations|-optimizationpasses|-dontusemixedcaseclassnames/);
+  });
+
+  it("case 3: AGP 9 directives in proguard-rules.pro (non-consumer) are not flagged", async () => {
+    writeSettings([":app"]);
+    writeModuleBuild(
+      ":app",
+      `
+plugins {
+    id("com.android.application")
+}
+android {
+    buildTypes {
+        release {
+            proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
+        }
+    }
+}
+`,
+    );
+    copyFileSync(
+      path.join(FIXTURES_DIR, "proguard-rules-ok.pro"),
+      path.join(PROJECT_ROOT, "app", "proguard-rules.pro"),
+    );
+
+    const result = await callTool({
+      project_root: PROJECT_ROOT,
+      check_agp9_globals: true,
+    });
+
+    const text = extractText(result);
+    const json = extractJson(text) as {
+      modules: Array<{ agp9_global_errors?: string[]; agp9_global_warnings?: string[] }>;
+      summary: { total_agp9_violations?: number };
+    };
+
+    const appModule = json.modules[0];
+    const errors = appModule?.agp9_global_errors ?? [];
+    const warnings = appModule?.agp9_global_warnings ?? [];
+    expect(errors).toHaveLength(0);
+    expect(warnings).toHaveLength(0);
+  });
+
+  // ── Packaging type checks ─────────────────────────────────────────────────
+
+  it("case 4: consumerProguardFiles in com.android.library module is valid (no violation)", async () => {
+    writeSettings([":core:lib"]);
+    writeModuleBuild(
+      ":core:lib",
+      `
+plugins {
+    id("com.android.library")
+}
+android {
+    defaultConfig {
+        consumerProguardFiles("consumer-rules.pro")
+    }
+}
+`,
+    );
+
+    const result = await callTool({
+      project_root: PROJECT_ROOT,
+      check_packaging_type: true,
+    });
+
+    const text = extractText(result);
+    const json = extractJson(text) as {
+      modules: Array<{ packaging_type_violation?: string | null }>;
+      summary: { total_packaging_type_violations?: number };
+    };
+
+    const libModule = json.modules[0];
+    expect(libModule?.packaging_type_violation ?? null).toBeNull();
+    expect(json.summary?.total_packaging_type_violations ?? 0).toBe(0);
+  });
+
+  it("case 5: consumerProguardFiles in org.jetbrains.kotlin.jvm module is a silent no-op (violation)", async () => {
+    writeSettings([":core:utils"]);
+    writeModuleBuild(
+      ":core:utils",
+      `
+plugins {
+    kotlin("jvm")
+}
+android {
+    defaultConfig {
+        consumerProguardFiles("consumer-rules.pro")
+    }
+}
+`,
+    );
+
+    const result = await callTool({
+      project_root: PROJECT_ROOT,
+      check_packaging_type: true,
+    });
+
+    const text = extractText(result);
+    const json = extractJson(text) as {
+      modules: Array<{ packaging_type_violation?: string | null }>;
+      summary: { total_packaging_type_violations?: number };
+    };
+
+    const utilsModule = json.modules[0];
+    expect(utilsModule?.packaging_type_violation).toBeTruthy();
+    expect(json.summary?.total_packaging_type_violations ?? 0).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── Sealed class keep checks ─────────────────────────────────────────────
+
+  it("case 6: sealed class with all subtypes kept reports no violations", async () => {
+    writeSettings([":feature"]);
+    writeModuleBuild(
+      ":feature",
+      `
+plugins {
+    id("com.android.library")
+}
+android {
+    buildTypes {
+        release {
+            proguardFiles("proguard-rules.pro")
+        }
+    }
+}
+`,
+    );
+    const featureDir = path.join(PROJECT_ROOT, "feature");
+    const srcDir = path.join(featureDir, "src", "main", "kotlin", "com", "example", "test");
+    mkdirSync(srcDir, { recursive: true });
+    copyFileSync(
+      path.join(FIXTURES_DIR, "SealedParent.kt"),
+      path.join(srcDir, "SealedParent.kt"),
+    );
+    copyFileSync(
+      path.join(FIXTURES_DIR, "proguard-rules-with-keeps.pro"),
+      path.join(featureDir, "proguard-rules.pro"),
+    );
+
+    const result = await callTool({
+      project_root: PROJECT_ROOT,
+      sealed_parents: ["com.example.test.SealedParent"],
+    });
+
+    const text = extractText(result);
+    const json = extractJson(text) as {
+      modules: Array<{ sealed_keep_violations?: string[] }>;
+      summary: { total_sealed_keep_violations?: number };
+    };
+
+    const featureModule = json.modules[0];
+    expect(featureModule?.sealed_keep_violations ?? []).toHaveLength(0);
+    expect(json.summary?.total_sealed_keep_violations ?? 0).toBe(0);
+  });
+
+  it("case 7: sealed class with missing subtype keep reports WARN violation", async () => {
+    writeSettings([":feature"]);
+    writeModuleBuild(
+      ":feature",
+      `
+plugins {
+    id("com.android.library")
+}
+android {
+    buildTypes {
+        release {
+            proguardFiles("proguard-rules.pro")
+        }
+    }
+}
+`,
+    );
+    const featureDir = path.join(PROJECT_ROOT, "feature");
+    const srcDir = path.join(featureDir, "src", "main", "kotlin", "com", "example", "test");
+    mkdirSync(srcDir, { recursive: true });
+    copyFileSync(
+      path.join(FIXTURES_DIR, "SealedParent.kt"),
+      path.join(srcDir, "SealedParent.kt"),
+    );
+    copyFileSync(
+      path.join(FIXTURES_DIR, "proguard-rules-missing-keeps.pro"),
+      path.join(featureDir, "proguard-rules.pro"),
+    );
+
+    const result = await callTool({
+      project_root: PROJECT_ROOT,
+      sealed_parents: ["com.example.test.SealedParent"],
+    });
+
+    const text = extractText(result);
+    const json = extractJson(text) as {
+      modules: Array<{ sealed_keep_violations?: string[] }>;
+      summary: { total_sealed_keep_violations?: number };
+    };
+
+    const featureModule = json.modules[0];
+    const violations = featureModule?.sealed_keep_violations ?? [];
+    expect(violations.length).toBeGreaterThanOrEqual(1);
+    expect(violations.join(" ")).toContain("SubtypeB");
+    expect(json.summary?.total_sealed_keep_violations ?? 0).toBeGreaterThanOrEqual(1);
   });
 });
