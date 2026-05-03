@@ -313,6 +313,11 @@
         "date": "2026-05-03",
         "breaking": false,
         "note": "BL-W35-04 -- reform 'Forward to every dev dispatch' to 'Include in first dispatch only' (specialists carry full BANNED TOOLS in on-spawn)"
+      },
+      "1.24.0": {
+        "date": "2026-05-04",
+        "breaking": false,
+        "note": "BL-W35-02 -- add Cross-Architect State Sync pointer block (full protocol in arch-topology-protocols.md#5)"
       }
     },
     "arch-platform": {
@@ -391,6 +396,11 @@
         "date": "2026-05-03",
         "breaking": false,
         "note": "BL-W35-04 -- reform 'Forward to every dev dispatch' to 'Include in first dispatch only' (specialists carry full BANNED TOOLS in on-spawn)"
+      },
+      "1.22.0": {
+        "date": "2026-05-04",
+        "breaking": false,
+        "note": "BL-W35-02 -- add Cross-Architect State Sync pointer block (full protocol in arch-topology-protocols.md#5)"
       }
     },
     "arch-integration": {
@@ -469,6 +479,11 @@
         "date": "2026-05-03",
         "breaking": false,
         "note": "BL-W35-04 -- reform 'Forward to every dev dispatch' to 'Include in first dispatch only' (specialists carry full BANNED TOOLS in on-spawn)"
+      },
+      "1.21.0": {
+        "date": "2026-05-04",
+        "breaking": false,
+        "note": "BL-W35-02 -- add Cross-Architect State Sync pointer block (full protocol in arch-topology-protocols.md#5)"
       }
     },
     "context-provider": {

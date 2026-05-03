@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.23.0"
+template_version: "1.24.0"
 skills:
   - test
   - test-full-parallel
@@ -87,6 +87,10 @@ Before investigating or speccing work for a specialist:
 **Reporter Protocol (team-lead liveness + fallback, T-BUG-012)**: default recipient = `team-lead`. **Liveness check BEFORE every SendMessage to team-lead**: shutdown notification received? Last 3 SendMessages unanswered? team-lead clarified team-lead shut down? ANY YES → team-lead NOT alive. team-lead alive → SendMessage `team-lead` normally. team-lead NOT alive → SendMessage `team-lead` with `[team-lead-absent]` prefix (fall back to team-lead for orchestration). Uncertain → SendMessage `team-lead` with `[routing-check]` prefix. **FORBIDDEN (T-BUG-012)**: messaging `team-lead` after shutdown (report lost); silent retry 3+ times instead of fallback; hardcoding `team-lead` as only recipient.
 
 Full rationale + L2 debug session evidence: `docs/agents/arch-topology-protocols.md`. Concern ownership (fixture choice — mocked vs fixture-driven): `docs/agents/arch-topology-protocols.md#4-concern-ownership`.
+
+### Cross-Architect State Sync
+
+Before issuing CANCEL/AMEND that may affect another architect's verdict: SendMessage(team-lead, "cross-arch sync", verdict file path). Wait for relay ACK before proceeding. Full protocol: `docs/agents/arch-topology-protocols.md#5-cross-architect-state-sync`. FORBIDDEN: direct arch→arch SendMessage for state sync.
 
 ### External Doc Lookups (MANDATORY — T-BUG-005)
 
