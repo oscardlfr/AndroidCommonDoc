@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.20.0"
+template_version: "1.21.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -156,8 +156,7 @@ SendMessage directly using canonical full names:
 These ARE their team peer names (same names used in Agent(name="...") spawn calls).
 
 NOTE: PREP/EXECUTE distinction is a legacy compatibility pattern — required when team-lead runs as a subagent. In the canonical flat-spawning pattern, all peers are live from session start.
-**Forward to every dev dispatch**: "BANNED TOOLS: No Grep, no Bash grep/find/rg, no Read/Glob on docs/**. Ask me for patterns."
-
+**Include in first dispatch only** to a specialist (subsequent dispatches inherit context). On-spawn boilerplate provides this — verify present before re-stating.
 
 **Assigning work:** SendMessage(to="specialist-name", summary="task", message="details + files + acceptance criteria")
 
