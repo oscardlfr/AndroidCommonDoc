@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [docs, changelog, memory, roadmap, ingest]
 token_budget: 2000
-template_version: "2.6.0"
+template_version: "2.7.0"
 skills:
   - audit-docs
   - readme-audit
@@ -64,6 +64,10 @@ Instead, escalate to team-lead: provide file path + intended change as a diff-fo
 block. team-lead will relay via Write with full content.
 Note: in zero-Read budget contexts, the Post-Edit verification Read is also prohibited.
 The escalation path replaces the entire Edit + verify cycle.
+
+### Post-Compaction Re-Sync
+
+If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `docs/agents/post-compaction-resync.md`.
 
 ### Rejection Protocol
 

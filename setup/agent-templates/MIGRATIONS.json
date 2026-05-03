@@ -166,6 +166,11 @@
         "breaking": true,
         "note": "BL-W32-07: reverts BL-W31.7-12 planner spawn_method regression (Agent -> TeamCreate-peer). manifest-abi-validator.ts L164 classifies dispatch.spawn_method changes as BREAKING regardless of direction. Runtime impact: pure documentation alignment (no consumer mechanically depends on the field per BL-W31.7-12 verdict). Template L17 updated to session-{slug} team diagram, L36 updated to canonical peer-spawn syntax including required team_name + name fields.",
         "migration_hint": "Spawn planner as TeamCreate peer: Agent(subagent_type=\"planner\", team_name=\"session-{slug}\", name=\"planner\"). Bare Agent(subagent_type=\"planner\") is now blocked by plan-mode-spawn-planner.js tightened check (BL-W32-07 Gap 3 hook fix)."
+      },
+      "1.10.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
       }
     },
     "quality-gater": {
@@ -213,6 +218,11 @@
         "date": "2026-05-02",
         "breaking": false,
         "note": "BL-W32-16: Common Gradle Error Triage section. BL-W32-18: JUnit XML count guidance (TEST-*.xml not *.xml). Step 9.5 extracted to docs/agents/quality-gater-runtime-ui-validation.md"
+      },
+      "2.9.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
       }
     },
     "doc-migrator": {
@@ -318,6 +328,11 @@
         "date": "2026-05-04",
         "breaking": false,
         "note": "BL-W35-02 -- add Cross-Architect State Sync pointer block (full protocol in arch-topology-protocols.md#5)"
+      },
+      "1.25.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
       }
     },
     "arch-platform": {
@@ -401,6 +416,11 @@
         "date": "2026-05-04",
         "breaking": false,
         "note": "BL-W35-02 -- add Cross-Architect State Sync pointer block (full protocol in arch-topology-protocols.md#5)"
+      },
+      "1.23.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
       }
     },
     "arch-integration": {
@@ -484,6 +504,11 @@
         "date": "2026-05-04",
         "breaking": false,
         "note": "BL-W35-02 -- add Cross-Architect State Sync pointer block (full protocol in arch-topology-protocols.md#5)"
+      },
+      "1.22.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
       }
     },
     "context-provider": {
@@ -511,6 +536,11 @@
         "date": "2026-04-21",
         "breaking": false,
         "note": "Wave 25: v3.0.0 Spawn Protocol pattern pre-cache + 10 MCP tools declared + ingestion-request protocol to team-lead (T-BUG-005 closed half). v3.1.0: minor copy updates + MCP tool list expansion."
+      },
+      "3.2.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
       }
     },
     "doc-updater": {
@@ -538,6 +568,11 @@
         "date": "2026-05-02",
         "breaking": false,
         "note": "BL-W33 PR4: Add BL-W32-14 commit-loop discipline + BL-W32-15 Edit precondition + BL-W32-19 rename reporting"
+      },
+      "2.7.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
       }
     },
     "product-strategist": {
@@ -722,6 +757,11 @@
         "date": "2026-05-02",
         "breaking": false,
         "note": "BL-W32-16: Common Gradle Error Triage section (UnsupportedClassVersionError triage before Done Criteria)"
+      },
+      "1.16.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
       }
     },
     "ui-specialist": {
@@ -780,6 +820,11 @@
         "date": "2026-05-02",
         "breaking": false,
         "note": "BL-W32-16: Common Gradle Error Triage section (UnsupportedClassVersionError triage before Done Criteria)"
+      },
+      "1.15.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
       }
     },
     "domain-model-specialist": {
@@ -823,6 +868,11 @@
         "date": "2026-05-02",
         "breaking": false,
         "note": "BL-W33 PR4: Add BL-W32-15 Edit precondition escalation path"
+      },
+      "1.12.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
       }
     },
     "data-layer-specialist": {
@@ -866,6 +916,11 @@
         "date": "2026-05-02",
         "breaking": false,
         "note": "BL-W33 PR4: Add BL-W32-15 Edit precondition escalation path"
+      },
+      "1.12.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
       }
     },
     "advisor": {
@@ -1054,6 +1109,11 @@
         "date": "2026-05-02",
         "breaking": false,
         "note": "BL-W33 PR4: Add BL-W32-15 Edit precondition escalation path"
+      },
+      "1.2.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
       }
     }
   }
