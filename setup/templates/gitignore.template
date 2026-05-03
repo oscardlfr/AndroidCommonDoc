@@ -25,6 +25,8 @@ coverage-full-report.md        # coverage-full skill output
 coverage-gap-report.md         # coverage gap analysis
 coverage-build.log             # coverage run logs
 .androidcommondoc/audit-log.jsonl  # sync audit log (use merge=union, not ignore — but allow local edits)
+.androidcommondoc/tool-use-log.jsonl  # tool-use logger output (BL-W31.5+ runtime metrics)
+.androidcommondoc/kdoc-state.json     # check-outdated cache (TOML parser state v2)
 
 # ── Agent memory + session state (user-local, never commit) ────────────────
 .claude/agent-memory/

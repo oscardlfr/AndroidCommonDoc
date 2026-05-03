@@ -202,6 +202,8 @@ describe("T-BUG-008: comprehensive .gitignore template shipped", () => {
       ".planning/",
       ".gradle/",
       "build/",
+      "tool-use-log.jsonl",
+      "kdoc-state.json",
     ]) {
       expect(content).toContain(pattern);
     }
