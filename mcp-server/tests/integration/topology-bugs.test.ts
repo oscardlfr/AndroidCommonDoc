@@ -517,3 +517,40 @@ describe("T-BUG-017: all arch-* templates reformed to 'first dispatch only'", ()
     });
   }
 });
+
+// ── T-BUG-018: Cross-Architect State Sync protocol ───────────────────────────
+
+describe("T-BUG-018: Cross-Architect State Sync protocol in arch-topology-protocols.md and arch templates", () => {
+  const DOCS_DIR = path.join(ROOT, "docs/agents");
+  const protocolsPath = path.join(DOCS_DIR, "arch-topology-protocols.md");
+  const protocolsContent = fs.readFileSync(protocolsPath, "utf-8");
+
+  it("arch-topology-protocols.md has '## 5. Cross-Architect State Sync' heading", () => {
+    expect(protocolsContent).toContain("## 5. Cross-Architect State Sync");
+  });
+
+  it("arch-topology-protocols.md has FORBIDDEN + canonical relay anti-pattern guard", () => {
+    expect(protocolsContent).toMatch(/\*\*FORBIDDEN\*\*[\s\S]*?Direct arch-X.*arch-Y SendMessage/);
+  });
+
+  for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
+    it(`${name} has '### Cross-Architect State Sync' heading`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toContain("### Cross-Architect State Sync");
+      }
+    });
+
+    it(`${name} references arch-topology-protocols.md#5-cross-architect-state-sync`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toContain("arch-topology-protocols.md#5-cross-architect-state-sync");
+      }
+    });
+
+    it(`${name} setup/ and .claude/agents/ copies are byte-identical`, () => {
+      const { claude, template } = readAgent(name);
+      expect(claude).toBe(template);
+    });
+  }
+});

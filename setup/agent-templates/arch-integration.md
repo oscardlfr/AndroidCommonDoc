@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
-template_version: "1.20.0"
+template_version: "1.21.0"
 skills:
   - test
   - extract-errors
@@ -83,7 +83,8 @@ Default recipient = `team-lead`. **Liveness check BEFORE every SendMessage to te
 **FORBIDDEN (T-BUG-012)**: messaging `team-lead` after shutdown (report lost); silent retry 3+ times instead of fallback; hardcoding `team-lead` as only recipient.
 
 Full rationale: `docs/agents/arch-topology-protocols.md#2-reporter-protocol--team-lead-liveness-check--team-lead-fallback-t-bug-012`.
-
+### Cross-Architect State Sync
+Before issuing CANCEL/AMEND that may affect another architect's verdict: SendMessage(team-lead, "cross-arch sync", verdict file path). Wait for relay ACK before proceeding. Full protocol: `docs/agents/arch-topology-protocols.md#5-cross-architect-state-sync`. FORBIDDEN: direct arch→arch SendMessage for state sync.
 ### External Doc Lookups (MANDATORY — T-BUG-005)
 
 No WebFetch in tools. ALL external docs go through context-provider:

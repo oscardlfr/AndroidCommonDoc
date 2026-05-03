@@ -119,6 +119,54 @@ Three concern domains; one owner each. When two architects review the same artif
 
 **Tiebreaker**: when an artifact spans 2 concerns, the owner of the **dominant concern** takes precedence. If both architects claim equal ownership, team-lead arbitrates. Example: bash hook with CI exit-code semantics → arch-integration owns the exit code; arch-platform owns the JSON schema input/output the hook consumes.
 
+## 5. Cross-Architect State Sync
+
+**Trigger**: When you (arch-X) issue a CANCEL or AMEND that retroactively changes the scope
+of a task you previously approved, AND another architect (arch-Y) has already issued a verdict
+on a DEPENDENT or OVERLAPPING task, arch-Y's prior verdict may be stale. Their downstream
+review or specialist dispatch could proceed on outdated assumptions.
+
+**Examples**:
+- arch-testing CANCELS T7b "add proguard-core dep" → arch-platform's T7a "configure ProGuard
+  rules" verdict is now misaligned (the dep it depends on no longer exists).
+- arch-integration AMENDS T3 "use sealed UiState" → arch-platform's T4 verdict on the calling
+  component reference is stale.
+
+**Required action** (when arch-X issues CANCEL/AMEND):
+
+1. **Self-check**: does this CANCEL/AMEND affect any task another architect previously approved
+   or amended? Read `.planning/<wave>/arch-*-pr<N>-verdict.md` to compare scopes.
+2. **Relay request**: if yes, SendMessage to team-lead with this exact shape:
+   ```
+   to: team-lead
+   summary: cross-arch sync — CANCEL/AMEND of T{N} affects arch-Y verdict
+   message: CANCEL/AMEND of T{N} (rationale: ...) affects arch-Y's prior verdict at
+   .planning/<wave>/arch-Y-pr<N>-verdict.md (their decision: APPROVE/AMEND on T{M}).
+   Please relay so arch-Y can re-validate before downstream dispatch proceeds.
+   ```
+3. **Wait for relay**: do NOT proceed with downstream dispatch until team-lead confirms
+   arch-Y has acknowledged the new state.
+
+**team-lead relay**:
+- On receipt of cross-arch sync request, team-lead reads arch-X's verdict file + arch-Y's
+  verdict file.
+- Sends quoted SendMessage to arch-Y with the original text from arch-X (verbatim, not
+  paraphrased).
+- arch-Y acknowledges via SendMessage to team-lead with one of: "ACK — verdict still valid
+  (no change)", "ACK — verdict stale, re-issuing AMEND on T{M}", or "ESCALATE — conflict
+  between my verdict and arch-X's amend, need orchestrator decision".
+
+**FORBIDDEN**:
+- Direct arch-X → arch-Y SendMessage for state sync. team-lead is the canonical relay
+  (peer-to-peer creates dispatch tree fragmentation; team-lead has full session context).
+- Issuing CANCEL/AMEND silently and assuming arch-Y will figure it out. The wave prompt's
+  L1 audit #4 documents that this exact silent assumption broke a wave.
+
+**Cross-reference**: pairs with `feedback_specialist_override_architect_amendment.md`
+(specialist→architect amendment binding) and Section 2 Reporter Protocol (team-lead absent
+fallback). When team-lead is absent, fall back to direct arch-X → arch-Y SendMessage with
+verdict file paths attached.
+
 ## Cross-references
 
 - Template reference: each architect template (arch-platform, arch-testing, arch-integration) references this doc in its OBS-A and Reporter Protocol sections and keeps an abridged actionable checklist inline.
