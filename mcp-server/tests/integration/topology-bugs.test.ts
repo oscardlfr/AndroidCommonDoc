@@ -554,3 +554,67 @@ describe("T-BUG-018: Cross-Architect State Sync protocol in arch-topology-protoc
     });
   }
 });
+
+// ── T-BUG-019: Post-Compaction Re-Sync protocol ──────────────────────────────
+
+describe("T-BUG-019: Post-Compaction Re-Sync protocol present in doc + all agent templates", () => {
+  it("docs/agents/post-compaction-resync.md exists", () => {
+    const docPath = path.join(ROOT, "docs/agents/post-compaction-resync.md");
+    expect(fs.existsSync(docPath)).toBe(true);
+  });
+
+  it("post-compaction-resync.md contains required protocol sections", () => {
+    const content = fs.readFileSync(
+      path.join(ROOT, "docs/agents/post-compaction-resync.md"),
+      "utf-8"
+    );
+    expect(content).toMatch(/## Symptoms/);
+    expect(content).toMatch(/## Re-Sync Steps/);
+    expect(content).toMatch(/## When NOT to Re-Sync/);
+    expect(content).toMatch(/Anti-Pattern.*Silent Reset|FORBIDDEN.*silent/i);
+  });
+
+  it("agents-hub.md contains post-compaction-resync row", () => {
+    const content = fs.readFileSync(
+      path.join(ROOT, "docs/agents/agents-hub.md"),
+      "utf-8"
+    );
+    expect(content).toMatch(/post-compaction-resync/);
+  });
+
+  const ALL_TEMPLATES = [
+    "arch-platform.md",
+    "arch-testing.md",
+    "arch-integration.md",
+    "test-specialist.md",
+    "ui-specialist.md",
+    "toolkit-specialist.md",
+    "domain-model-specialist.md",
+    "data-layer-specialist.md",
+    "planner.md",
+    "context-provider.md",
+    "doc-updater.md",
+    "quality-gater.md",
+  ];
+
+  for (const name of ALL_TEMPLATES) {
+    it(`${name} has '### Post-Compaction Re-Sync' heading`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toMatch(/### Post-Compaction Re-Sync/);
+      }
+    });
+
+    it(`${name} references post-compaction-resync.md`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toMatch(/post-compaction-resync\.md/);
+      }
+    });
+
+    it(`${name} setup/ and .claude/agents/ copies are byte-identical`, () => {
+      const { claude, template } = readAgent(name);
+      expect(claude).toBe(template);
+    });
+  }
+});

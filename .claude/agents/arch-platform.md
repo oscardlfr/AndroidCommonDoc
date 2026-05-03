@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.22.0"
+template_version: "1.23.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -85,6 +85,8 @@ Default recipient = `team-lead`. **Liveness check BEFORE every SendMessage to te
 Full rationale: `docs/agents/arch-topology-protocols.md#2-reporter-protocol--team-lead-liveness-check--team-lead-fallback-t-bug-012`.
 ### Cross-Architect State Sync
 Before issuing CANCEL/AMEND that may affect another architect's verdict: SendMessage(team-lead, "cross-arch sync", verdict file path). Wait for relay ACK before proceeding. Full protocol: `docs/agents/arch-topology-protocols.md#5-cross-architect-state-sync`. FORBIDDEN: direct arch→arch SendMessage for state sync.
+### Post-Compaction Re-Sync
+If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `docs/agents/post-compaction-resync.md`.
 ### External Doc Lookups (MANDATORY — T-BUG-005)
 
 No WebFetch in tools. ALL external docs go through context-provider:

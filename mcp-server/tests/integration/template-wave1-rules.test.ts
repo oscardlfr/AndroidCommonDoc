@@ -119,22 +119,22 @@ describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in team-lead or sub-docs'
 // 8. Wave 1: template_version bumped in architects
 // ---------------------------------------------------------------------------
 describe('Wave 1: template_version bumped in architects', () => {
-  it('arch-testing.md template_version is "1.24.0"', () => {
-    // BL-W35-02: bumped from 1.23.0 → 1.24.0 (cross-arch cancel/amend relay protocol)
+  it('arch-testing.md template_version is "1.25.0"', () => {
+    // BL-W35-03: bumped from 1.24.0 → 1.25.0 (post-compaction re-sync protocol)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.24.0"/);
+    expect(content).toMatch(/template_version:\s*"1.25.0"/);
   });
 
-  it('arch-platform.md template_version is "1.22.0"', () => {
-    // BL-W35-02: bumped from 1.21.0 → 1.22.0 (cross-arch cancel/amend relay protocol)
+  it('arch-platform.md template_version is "1.23.0"', () => {
+    // BL-W35-03: bumped from 1.22.0 → 1.23.0 (post-compaction re-sync protocol)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.22.0"/);
+    expect(content).toMatch(/template_version:\s*"1.23.0"/);
   });
 
-  it('arch-integration.md template_version is "1.21.0"', () => {
-    // BL-W35-02: bumped from 1.20.0 → 1.21.0 (cross-arch cancel/amend relay protocol)
+  it('arch-integration.md template_version is "1.22.0"', () => {
+    // BL-W35-03: bumped from 1.21.0 → 1.22.0 (post-compaction re-sync protocol)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.21.0"/);
+    expect(content).toMatch(/template_version:\s*"1.22.0"/);
   });
 
   it('MIGRATIONS.json has W31.6 RETIRED entry for team-lead (W31.6: retired)', () => {

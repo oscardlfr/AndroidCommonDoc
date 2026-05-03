@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.24.0"
+template_version: "1.25.0"
 skills:
   - test
   - test-full-parallel
@@ -91,6 +91,10 @@ Full rationale + L2 debug session evidence: `docs/agents/arch-topology-protocols
 ### Cross-Architect State Sync
 
 Before issuing CANCEL/AMEND that may affect another architect's verdict: SendMessage(team-lead, "cross-arch sync", verdict file path). Wait for relay ACK before proceeding. Full protocol: `docs/agents/arch-topology-protocols.md#5-cross-architect-state-sync`. FORBIDDEN: direct arch→arch SendMessage for state sync.
+
+### Post-Compaction Re-Sync
+
+If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `docs/agents/post-compaction-resync.md`.
 
 ### External Doc Lookups (MANDATORY — T-BUG-005)
 

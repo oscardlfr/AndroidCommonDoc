@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [compose, ui, accessibility, material3]
 token_budget: 3000
-template_version: "1.14.0"
+template_version: "1.15.0"
 memory: project
 skills:
   - accessibility
@@ -50,6 +50,10 @@ For pattern lookups, SendMessage to your reporting architect â€” NEVER cont
 **Per-session gate**: Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from your reporting architect in this session (your architect will have consulted context-provider). The hook enforces this mechanically â€” your first search-type tool call will be blocked until your architect has been consulted.
 
 **Receiving work:** team-lead, arch-testing, or arch-integration sends tasks via `SendMessage(to="ui-specialist")`.
+
+### Post-Compaction Re-Sync
+
+If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `docs/agents/post-compaction-resync.md`.
 
 ---
 
