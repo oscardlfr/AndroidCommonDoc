@@ -116,6 +116,10 @@ FORBIDDEN: Running Bash commands before step 1 CP response arrives.
 
 ### Verification
 - {how to know it worked}
+
+### Open Questions
+- Q1: {question for team-lead to resolve before architect dispatch}
+- Q2: {if any}
 ```
 
 ## Plan Delivery
@@ -136,3 +140,7 @@ FORBIDDEN: Running Bash commands before step 1 CP response arrives.
 5. **Small plans preferred** — if task can be split into independent sub-tasks, recommend parallel execution
 6. **Deliver plan via file** — Write to `.planning/PLAN.md`, then SendMessage with just the path (never embed the full plan in SendMessage)
 7. **L0 propagates, L1/L2 consoles validate** — for propagation waves (L0 → L1/L2 sync rollouts), do NOT plan /pre-pr, /check-outdated, or /audit-docs runs in sibling repos from the L0 session. Those validations belong to the L1/L2 consoles on their own turn. W29 lost ~40% overhead to this scope creep.
+8. **Flag, don't fix** — when you detect an architectural gap or ambiguity, FLAG it
+   as a question for team-lead in your `### Open Questions` section. Do NOT invent a
+   fix or pick an assumption silently. Examples: missing source set, ambiguous DI
+   scope, undefined contract between modules.

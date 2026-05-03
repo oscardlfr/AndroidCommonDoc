@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-05-02T20:19:19.138Z",
+  "generated": "2026-05-03T22:31:34.079Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1918,7 +1918,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1bb8bc3c37d0c01699baae37ea47461223859fc63df0fb5b6a45b78fefa75897",
+      "hash": "sha256:e4638a4d1fb3f11ac23211f35434ede7b172559de9bce599bb236a2d6633d2c3",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1934,7 +1934,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.19.0",
+        "template_version": "1.20.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1948,7 +1948,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1b3bb7fd9a6a8c86c8bf9b1c114d1a4402022f84953ecb8e5fa8428eb2da9d8e",
+      "hash": "sha256:92c0de1b3ef4c76f48913d8f525c73d751cec9cf2fbea38dbc456cc9ecde6144",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1963,7 +1963,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.20.0",
+        "template_version": "1.21.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1977,7 +1977,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:afe1b451ef00391acea71a659a08b12aa36b39fa808788121d74b56192295059",
+      "hash": "sha256:e7be20fcfddcc1264439010bf59597b535a4012e02bf62bca33537a612876fa8",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1992,7 +1992,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.22.0",
+        "template_version": "1.23.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2530,7 +2530,7 @@
       "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2c21b51ba7d027df0a075287264bd7cac6e381eaa04450872b47a698b9e3b1b4",
+      "hash": "sha256:7776028d3d47f034e2b7cf5445332f25f83341e18d7b901dfb8c5d98049c257b",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",

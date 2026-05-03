@@ -466,3 +466,54 @@ describe("frontmatter guard: docs sources are string entries (not objects)", () 
     expect(violations, violations.join("\n")).toEqual([]);
   });
 });
+
+// ── T-BUG-016: planner "Flag, don't fix" rule + Open Questions section ──────
+
+describe("T-BUG-016: planner has Flag-don't-fix rule + Open Questions output format", () => {
+  it("planner.md (both copies) contains Rule 8 'Flag, don't fix'", () => {
+    const { claude, template } = readAgent("planner.md");
+    for (const content of [claude, template]) {
+      expect(content).toMatch(/Flag, don't fix/);
+      expect(content).toMatch(/Do NOT invent a fix|do NOT invent/i);
+    }
+  });
+
+  it("planner.md output format contains ### Open Questions heading", () => {
+    const { claude, template } = readAgent("planner.md");
+    for (const content of [claude, template]) {
+      expect(content).toMatch(/### Open Questions/);
+      expect(content).toMatch(/Q1:/);
+    }
+  });
+
+  it("planner.md setup/ and .claude/agents/ copies are byte-identical", () => {
+    const { claude, template } = readAgent("planner.md");
+    expect(claude).toBe(template);
+  });
+});
+
+// ── T-BUG-017: arch-* "first dispatch only" (no more "Forward to every") ────
+
+describe("T-BUG-017: all arch-* templates reformed to 'first dispatch only'", () => {
+  for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
+    it(`${name} does NOT contain 'Forward to every dev dispatch'`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).not.toMatch(/Forward to every dev dispatch/);
+      }
+    });
+
+    it(`${name} contains 'first dispatch only' reform language`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toMatch(/first dispatch only/i);
+        expect(content).toMatch(/On-spawn boilerplate/i);
+      }
+    });
+
+    it(`${name} setup/ and .claude/agents/ copies are byte-identical`, () => {
+      const { claude, template } = readAgent(name);
+      expect(claude).toBe(template);
+    });
+  }
+});

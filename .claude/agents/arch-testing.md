@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.22.0"
+template_version: "1.23.0"
 skills:
   - test
   - test-full-parallel
@@ -48,8 +48,7 @@ SendMessage directly using canonical full names:
 These ARE their team peer names (same names used in Agent(name="...") spawn calls).
 
 NOTE: PREP/EXECUTE distinction is a legacy compatibility pattern — required when team-lead runs as a subagent. In the canonical flat-spawning pattern, all peers are live from session start.
-**Forward to every dev dispatch**: "BANNED TOOLS: No Grep, no Bash grep/find/rg, no Read/Glob on docs/**. Ask me for patterns."
-
+**Include in first dispatch only** to a specialist (subsequent dispatches inherit context). On-spawn boilerplate provides this — verify present before re-stating.
 
 - **Query context** (use liberally): `SendMessage(to="context-provider", ...)` for L0 patterns, cross-project info
 - **Pre-fetch context before requesting specialists**: Query context-provider first, include in team-lead request
