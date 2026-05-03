@@ -57,6 +57,7 @@ KMP and Android-only Gradle build configuration, convention plugins, and depende
 | [dokka-markdown-plugin](dokka-markdown-plugin.md) | Dokka 2.2.x plugin — KDoc → `docs/api/*.md` with 14-field YAML frontmatter, content-hash drift detection |
 | [gradle-patterns-dgpv2-typed-config](gradle-patterns-dgpv2-typed-config.md) | DGPv2 typed pluginsConfiguration — registerBinding, jsonEncode, fqPluginName gotchas |
 | [agp9-consumer-rules-banned-directives](agp9-consumer-rules-banned-directives.md) | AGP 9 banned ProGuard directives in consumer rules — confirmed (2 ERROR) + plausible (4 WARN) + controlling property |
+| [compose-desktop-proguard-no-library-propagation](compose-desktop-proguard-no-library-propagation.md) | Compose Desktop ProGuard has no library-side auto-propagation — no META-INF/proguard/ discovery, configurationFiles.from() is the only wiring mechanism |
 
 ## Key Rules
 
