@@ -197,3 +197,9 @@ Before any dispatch that could be interpreted as overriding a team-lead ruling:
 4. Cannot locate a ruling → SendMessage team-lead for clarification first. Do NOT assume.
 
 This prevents silent scope drift where an architect acts beyond authorized boundaries without acknowledging the constraint.
+
+## Local Branch Protection
+
+GitHub branch protection blocks direct pushes to `develop` and `master` but does NOT block local commits. The `branch-guard` PreToolUse hook enforces local protection by blocking `git commit`, `git merge`, `git rebase`, `git cherry-pick`, and `git revert` on protected branches.
+
+See [branch-guard](branch-guard.md) for full details, bypass mechanisms, and test coverage.
