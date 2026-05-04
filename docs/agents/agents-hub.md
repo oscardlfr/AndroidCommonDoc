@@ -51,6 +51,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [Ingestion Loop](ingestion-loop.md) | External-source → L0 docs: context-provider flag → team-lead user-approval → doc-updater `ingest-content` (Wave 25 — closes T-BUG-005) |
 | [local-first-skills-pattern](local-first-skills-pattern.md) | When to deploy a skill locally (L1) before promoting to L0; lifecycle stages and promotion criteria |
 | [post-compaction-resync](post-compaction-resync.md) | Protocol for agent-side state recovery after context compaction |
+| [branch-guard](branch-guard.md) | PreToolUse hook that blocks write-git ops on `develop`/`master` (BL-W35-08) |
 
 ## Key Concepts
 

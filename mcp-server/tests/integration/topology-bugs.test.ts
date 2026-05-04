@@ -702,3 +702,47 @@ describe("T-BUG-021: context-provider-gate has per-specialist arch-response flag
     });
   }
 });
+
+// ── T-BUG-022: branch-guard hook blocks protected-branch git ops ─────────────
+
+describe("T-BUG-022: branch-guard hook blocks protected-branch git ops", () => {
+  const HOOK = path.join(ROOT, ".claude/hooks/branch-guard.js");
+
+  it("branch-guard.js exists", () => {
+    expect(fs.existsSync(HOOK)).toBe(true);
+  });
+
+  it("branch-guard.js references BL-W35-08 fix tag", () => {
+    expect(fs.readFileSync(HOOK, "utf-8")).toMatch(/BL-W35-08/);
+  });
+
+  it("branch-guard.js lists develop and master as protected branches", () => {
+    const c = fs.readFileSync(HOOK, "utf-8");
+    expect(c).toMatch(/develop/);
+    expect(c).toMatch(/master/);
+  });
+
+  it("branch-guard.js is registered in settings.json PreToolUse Bash hooks", () => {
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(ROOT, ".claude/settings.json"), "utf-8")
+    );
+    const bashHooks = (settings.hooks?.PreToolUse ?? []).find(
+      (h: any) => h.matcher === "Bash"
+    );
+    expect(
+      (bashHooks?.hooks ?? []).some((h: any) =>
+        h.command.includes("branch-guard.js")
+      )
+    ).toBe(true);
+  });
+
+  it("branch-guard.js has fail-open try/catch", () => {
+    const c = fs.readFileSync(HOOK, "utf-8");
+    expect(c).toMatch(/try\s*\{/);
+    expect(c).toMatch(/catch/);
+  });
+
+  it("branch-guard.js has CLAUDE_BRANCH_GUARD_DISABLED env var bypass", () => {
+    expect(fs.readFileSync(HOOK, "utf-8")).toMatch(/CLAUDE_BRANCH_GUARD_DISABLED/);
+  });
+});
