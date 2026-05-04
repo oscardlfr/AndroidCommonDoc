@@ -1,28 +1,10 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-05-03 (post BL-W34)
+> **Last updated**: 2026-05-04 (post BL-W35)
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
 ## Active (proposed wave order)
-
-### Wave 35 — L0 dogfood topology hardening (HIGH urgency, ~4-8h)
-
-L1 (shared-kmp-libs) dogfooded BL-W34 → 6 confirmed bugs in L0 templates/protocols (audit at end of BL-W34 session 2026-05-03). Plus 1 recurring bug from BL-W31.5.
-
-| ID | Severity | Item | Source |
-|----|----------|------|--------|
-| BL-W35-01 | HIGH | planner template "flag gaps, don't invent fixes" rule | L1 audit #2 |
-| BL-W35-02 | HIGH | cross-architect cancel/amend relay (`docs/agents/arch-topology-protocols.md`) | L1 audit #4 |
-| BL-W35-03 | HIGH | post-compaction re-sync protocol (template addendum × 4-5 agents) | L1 audit #7 |
-| BL-W35-04 | MED | arch-testing "first dispatch only" + specialist on-spawn boilerplate | L1 audit #3 |
-| BL-W35-05 | LOW | CP defensive `task_assignment` guard | L1 audit #6 |
-| BL-W35-06 | HIGH | dev pattern-search recurring bug (BL-W31.5-04 fold) | `project_dev_pattern_search_recurring_bug.md` |
-| BL-W35-07 | MED | architect activation protocol scope_doc explicit (Wave 19 #5 + L1 audit #5 fold) | `project_wave19_topology_debt.md` #5 |
-| BL-W35-08 | HIGH | pre-commit branch guard hook (block direct commits to `develop`/`master`) | 2026-05-03 incident: parallel session committed directly to local develop — GitHub branch protection only blocks pushes, not local commits |
-
-**Prompt scaffold**: `.planning/wave-bl-w35-l0-dogfood-topology-prompt.md` (local, gitignored).
-**Recommended bundling**: 6 PRs (template fixes / cross-arch protocol / re-sync / CP+activation / dev-search investigation / branch guard hook).
 
 ### Wave 36 — BL-W34 deferred bundle (MED urgency, ~3-6h)
 
@@ -107,11 +89,11 @@ Items filed during BL-W34 wave; atomic test/template fixes.
 
 ## Shipped (recent)
 
+- **BL-W35** (2026-05-04) — L0 dogfood topology hardening, 6 PRs (#112-#117) addressing 7 bugs + 1 incident — `project_wave_bl_w35_l0_dogfood_topology_shipped.md`
 - **BL-W34** (2026-05-03) — L1 security prep, 3 PRs (#107 / #108 / #109) — `project_wave_bl_w34_l1_security_prep_shipped.md`
 - **BL-W33** (2026-05-02) — L1 reports triage, 5 PRs (#101-#105) — `project_wave_bl_w33_shipped.md`
 - **BL-W32-06e** (2026-05-02) — Script dedup PR #100 — `project_BL-W32-06e_shipped.md`
 - **l0-doc-refresh** (2026-05-02) — PR #99 — `project_l0_doc_refresh_shipped.md`
-- **BL-W32-04 phase1** (2026-05-01) — PR #97 — `project_BL-W32-04_shipped.md`
 
 For full wave history: `git log` + memory `project_*shipped.md` files.
 
