@@ -290,7 +290,7 @@ agents:
     canonical_name: test-specialist
     subagent_type: test-specialist
     template_version: "1.18.0"
-    template_frontmatter_sha256: de89eaaf950d66db771b65fb8a87401f21f386d8c5c367fde10e079b8e87a6eb
+    template_frontmatter_sha256: 0f8930c2e465f53a5bd7624df0c4ec9380aef5d5c2283cfd1a4f8f2db5e76c79
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation."
