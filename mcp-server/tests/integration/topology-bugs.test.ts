@@ -746,3 +746,70 @@ describe("T-BUG-022: branch-guard hook blocks protected-branch git ops", () => {
     expect(fs.readFileSync(HOOK, "utf-8")).toMatch(/CLAUDE_BRANCH_GUARD_DISABLED/);
   });
 });
+
+// ── T-BUG-023: structural prose invariants for planner + registry hook ──────
+
+describe("T-BUG-023: planner structural prose invariants", () => {
+  const PLANNER = path.join(ROOT, ".claude/agents/planner.md");
+
+  it("planner.md exists", () => {
+    expect(fs.existsSync(PLANNER)).toBe(true);
+  });
+
+  it("planner.md has Rule 8 (Flag, don't fix) in Rules section", () => {
+    const c = fs.readFileSync(PLANNER, "utf-8");
+    expect(c).toMatch(/8\.\s+\*\*Flag/i);
+  });
+
+  it("planner.md has Per-Session Gate FORBIDDEN language for pre-CP Bash", () => {
+    const c = fs.readFileSync(PLANNER, "utf-8");
+    expect(c).toMatch(/FORBIDDEN.*Running Bash/i);
+  });
+
+  it("planner.md Search Dispatch Protocol blocks Grep/Glob/Read at planning time", () => {
+    const c = fs.readFileSync(PLANNER, "utf-8");
+    expect(c).toMatch(/FORBIDDEN\b.*(?:planning|plan mode)/i);
+  });
+
+  it("planner.md has at least 2 FORBIDDEN occurrences (structural density)", () => {
+    const c = fs.readFileSync(PLANNER, "utf-8");
+    const count = (c.match(/FORBIDDEN/g) || []).length;
+    expect(count).toBeGreaterThanOrEqual(2);
+  });
+
+  it("planner.md setup/ and .claude/agents/ copies are byte-identical", () => {
+    const source = fs.readFileSync(path.join(ROOT, "setup/agent-templates/planner.md"), "utf-8");
+    const copy = fs.readFileSync(PLANNER, "utf-8");
+    expect(source).toBe(copy);
+  });
+});
+
+describe("T-BUG-023: registry-pre-commit hook structural invariants", () => {
+  const HOOK = path.join(ROOT, ".claude/hooks/registry-pre-commit.sh");
+
+  it("registry-pre-commit.sh exists", () => {
+    expect(fs.existsSync(HOOK)).toBe(true);
+  });
+
+  it("registry-pre-commit.sh has strict mode (set -euo pipefail)", () => {
+    expect(fs.readFileSync(HOOK, "utf-8")).toMatch(/set -euo pipefail/);
+  });
+
+  it("registry-pre-commit.sh targets .claude/agents/ path filter", () => {
+    expect(fs.readFileSync(HOOK, "utf-8")).toMatch(/\.claude\/agents\//);
+  });
+
+  it("registry-pre-commit.sh is registered in settings.json PreToolUse Bash hooks", () => {
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(ROOT, ".claude/settings.json"), "utf-8")
+    );
+    const bashHooks = (settings.hooks?.PreToolUse ?? []).find(
+      (h: any) => h.matcher === "Bash"
+    );
+    expect(
+      (bashHooks?.hooks ?? []).some((h: any) =>
+        h.command.includes("registry-pre-commit.sh")
+      )
+    ).toBe(true);
+  });
+});
