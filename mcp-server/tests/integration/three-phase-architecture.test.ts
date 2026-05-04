@@ -308,12 +308,34 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
   });
 
-  it('arch-platform has template version 1.25.0', () => {
-    expect(platformContent).toContain('template_version: "1.25.0"');
+  it('arch-platform has template version 1.26.0', () => {
+    // BL-W41 PR1: bumped from 1.25.0 → 1.26.0 (Section H Authoring Rule)
+    expect(platformContent).toContain('template_version: "1.26.0"');
   });
 
   it('arch-integration has template version 1.24.0', () => {
     expect(integrationContent).toContain('template_version: "1.24.0"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3e. Arch-Platform — Section H Authoring Rule (BL-W41 PR1)
+// ---------------------------------------------------------------------------
+describe('arch-platform — Section H Authoring Rule', () => {
+  const platformContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
+  const subDocPath = path.join(ROOT, 'docs/agents/arch-platform-section-h-rule.md');
+  const subDocContent = fs.readFileSync(subDocPath, 'utf-8');
+
+  it('arch-platform template contains Section H Authoring Rule pointer', () => {
+    expect(platformContent).toContain('Section H Authoring Rule (MANDATORY');
+  });
+
+  it('arch-platform template contains pointer to sub-doc', () => {
+    expect(platformContent).toContain('Full spec: docs/agents/arch-platform-section-h-rule.md');
+  });
+
+  it('sub-doc contains structural rule: template_version bump requires agents.manifest.yaml', () => {
+    expect(subDocContent).toMatch(/template_version[\s\S]{0,600}agents\.manifest\.yaml/);
   });
 });
 

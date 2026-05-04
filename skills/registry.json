@@ -1948,7 +1948,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:27f2e6dd7528fcdcf420b61bd01f225a983bd49324ff9d792490d2c043d83f98",
+      "hash": "sha256:cd0917a9788f57896cc1f460a6d957bf3344af01b84cfa26fcccb6f92bc5699e",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
