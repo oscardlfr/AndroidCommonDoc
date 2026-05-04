@@ -163,11 +163,12 @@ describe('dev template structural invariants', () => {
     // BL-W33 PR4 (2026-05-02): bumped 350→360 for BL-W32-15 Edit precondition escalation block (+6 lines).
     // BL-W33 PR5 (2026-05-02): bumped 360→370 for BL-W32-16 Common Gradle Error Triage block (+8 lines).
     // BL-W34-D: extract escalation + JDK env patterns to docs/ to restore 350 limit.
+    // BL-W40 PR3 (2026-05-04): +7 lines (Numbered Step Gate) — ui 315→322, domain 215→222, data 208→215.
     const PER_TEMPLATE_LIMIT: Record<string, number> = {
       'test-specialist.md': 370,
-      'ui-specialist.md': 315,
-      'domain-model-specialist.md': 315,
-      'data-layer-specialist.md': 315,
+      'ui-specialist.md': 322,
+      'domain-model-specialist.md': 214,
+      'data-layer-specialist.md': 208,
     };
     for (const t of DEV_TEMPLATES) {
       const c = fs.readFileSync(path.join(TEMPLATES_DIR, t), 'utf-8');

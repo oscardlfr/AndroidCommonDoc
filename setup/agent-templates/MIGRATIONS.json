@@ -792,6 +792,11 @@
         "date": "2026-05-04",
         "summary": "Extract VM testing, coverage targets, and JDK env triage to docs/agents/ sub-docs; replace with inline pointer blocks. Trim from 369 to ≤350 lines.",
         "breaking": false
+      },
+      "1.19.0": {
+        "date": "2026-05-04",
+        "summary": "BL-W40 PR3: add Numbered Step Gate to Team Identity section",
+        "breaking": false
       }
     },
     "ui-specialist": {
@@ -860,6 +865,11 @@
         "date": "2026-05-04",
         "summary": "BL-W35-06 C2: add self-template read ban to BANNED TOOLS section",
         "breaking": false
+      },
+      "1.17.0": {
+        "date": "2026-05-04",
+        "summary": "BL-W40 PR3: add Numbered Step Gate to Team Identity section",
+        "breaking": false
       }
     },
     "domain-model-specialist": {
@@ -913,6 +923,11 @@
         "date": "2026-05-04",
         "summary": "BL-W35-06 C2: add self-template read ban to BANNED TOOLS section",
         "breaking": false
+      },
+      "1.14.0": {
+        "date": "2026-05-04",
+        "summary": "BL-W40 PR3: add Numbered Step Gate to Team Identity section",
+        "breaking": false
       }
     },
     "data-layer-specialist": {
@@ -965,6 +980,11 @@
       "1.13.0": {
         "date": "2026-05-04",
         "summary": "BL-W35-06 C2: add self-template read ban to BANNED TOOLS section",
+        "breaking": false
+      },
+      "1.14.0": {
+        "date": "2026-05-04",
+        "summary": "BL-W40 PR3: add Numbered Step Gate to Team Identity section",
         "breaking": false
       }
     },
