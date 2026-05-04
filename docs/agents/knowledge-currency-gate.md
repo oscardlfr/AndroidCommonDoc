@@ -14,3 +14,5 @@ Before asserting ANY KMP platform constraint or capability claim:
 3. If CP doc contradicts your training data → trust the doc. Do not override.
 
 **Why**: Pre-2024 training data has known false negatives (e.g. "macOS file IO unsupported" — WRONG as of kotlinx-io 1.x). This gate prevents stale constraints from being encoded as architectural verdicts.
+
+**Primary source**: `docs/architecture/kmp-features-2026.md` — authoritative KMP platform capability reference. Always ask context-provider to load this doc when verifying KMP claims.

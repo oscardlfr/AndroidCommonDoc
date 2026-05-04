@@ -342,6 +342,8 @@ Before requesting ANY constructor/function signature change via team-lead:
 ## Knowledge Currency Gate (MANDATORY — W31)
 
 Full protocol: docs/agents/knowledge-currency-gate.md
+Primary source: docs/architecture/kmp-features-2026.md
+{{CUSTOMIZE: Add project-specific guardian calls here}}
 
 ## Cross-Architect Verification
 
