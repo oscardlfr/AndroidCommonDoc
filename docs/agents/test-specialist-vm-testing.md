@@ -1,9 +1,10 @@
 ---
-scope: test-specialist
-category: agents
+scope: [agents]
+sources: [androidcommondoc]
+targets: [all]
 slug: test-specialist-vm-testing
-sources: [setup/agent-templates/test-specialist.md]
-targets: []
+category: agents
+description: "High-dep ViewModel testing pattern (compile-time RED concept, VM factory). Extracted from test-specialist template body for L1/L2 propagation."
 ---
 
 # test-specialist-vm-testing — High-Dep ViewModel Testing

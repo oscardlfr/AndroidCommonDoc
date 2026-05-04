@@ -1,9 +1,10 @@
 ---
-scope: test-specialist
-category: agents
+scope: [agents]
+sources: [androidcommondoc]
+targets: [all]
 slug: test-specialist-jdk-env
-sources: [setup/agent-templates/test-specialist.md]
-targets: []
+category: agents
+description: "Common Gradle error triage (UnsupportedClassVersionError, JAVA_HOME override). Extracted from test-specialist template body."
 ---
 
 # test-specialist-jdk-env — Common Gradle Error Triage (BL-W32-16)

@@ -1,9 +1,10 @@
 ---
-scope: test-specialist
-category: agents
+scope: [agents]
+sources: [androidcommondoc]
+targets: [all]
 slug: test-specialist-coverage-targets
-sources: [setup/agent-templates/test-specialist.md]
-targets: []
+category: agents
+description: "Test coverage targets table (instruction/branch/line minimums per layer). Extracted from test-specialist template body for L1/L2 propagation."
 ---
 
 # test-specialist-coverage-targets — Coverage Targets (minimum)
