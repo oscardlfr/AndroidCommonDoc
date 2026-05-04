@@ -1,24 +1,10 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-05-04 (post BL-W35)
+> **Last updated**: 2026-05-04 (post BL-W36)
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
 ## Active (proposed wave order)
-
-### Wave 36 — BL-W34 deferred bundle (MED urgency, ~3-6h)
-
-Items filed during BL-W34 wave; atomic test/template fixes.
-
-| ID | Severity | Item |
-|----|----------|------|
-| BL-W34-G | HIGH | `context-provider-gate.test.js` F1 fix (failing test, clean env failure) |
-| BL-W34-F | HIGH | `context-provider-consulted.test.js` per-agent vs session scope drift |
-| BL-W34-H | MED | auto-bump version assertions on registry rehash (recurring PR4+PR5 fixup pattern) |
-| BL-W34-D | MED | extract escalation + JDK env from test-specialist (restore 350-line limit) |
-| BL-W34-C | MED | Vitest assertions for template prose rules |
-
-**Source**: `project_wave_bl_w34_l1_security_prep_shipped.md` deferred section.
 
 ### Wave 37 — Cross-repo sync (waits for L1 BL-W35 completion, ~4-6h)
 
@@ -27,6 +13,7 @@ Items filed during BL-W34 wave; atomic test/template fixes.
 | BL-W34-A | HIGH | L1 sync tool-use-logger.js Bug 1 (cross-repo coordination) |
 | BL-W34-B | HIGH | L1 CI parity (Node test runner extension to reusable-shell-tests) |
 | BL-W34-E | MED | per-tool-call marker nonces (researcher's deferred CP-bypass fix) |
+| BL-W36-01 | MED | arch-bash-write-gate regex gap — `wave\d+` doesn't cover `wave-bl-w36-bl-w34-deferred` (letter-suffix slugs); broaden to `wave[-\w]+`. Hit 3× during BL-W36 — required main-agent file copy from `/tmp` |
 
 ### Wave 38 — Ingestion bundle (LOW urgency, ~2-4h)
 
@@ -48,6 +35,9 @@ Items filed during BL-W34 wave; atomic test/template fixes.
 | W19-#3 | MED | session teardown hook (TeamDelete on session end) |
 | W19-#4 | MED | `/work` skill rewrite for 3-phase topology |
 | W19-#6 | MED | PREP/EXECUTE dispatch modes (verify partial Wave 23 ship) |
+| BL-W36-02 | MED | test-specialist sub-docs vm-testing (10 lines) + coverage-targets (8 lines) are stub-sized per `doc-migrator.md:157`. Consider consolidating into a single `test-specialist-patterns.md` sub-doc or merging back to template (if line budget allows) |
+| BL-W36-03 | LOW | MIGRATIONS.json field divergence — older entries use `note`, recent (1.16.0/1.17.0/1.18.0) use `summary`. Normalize in cleanup pass |
+| BL-W36-04 | LOW | quality-gater stash-test methodology gave false "pre-existing" verdict on PR4 manifest-validator failures (actually PR4-introduced version mismatch). Investigate stash hygiene or replace with `git diff develop` baseline check |
 | Housekeeping | LOW | `.gsd/agents/` gitignore decision, `l0-manifest.json` source vs output, `material-3-skill/` triage, lingering remote branches |
 | Modularization paso 2 | LOW | rewrite "Target architecture" section in `.planning/MODULARIZATION-PLAN.md` (~1h) |
 
@@ -89,11 +79,11 @@ Items filed during BL-W34 wave; atomic test/template fixes.
 
 ## Shipped (recent)
 
+- **BL-W36** (2026-05-04) — BL-W34 deferred bundle, 4 PRs (#119-#122). PR1 BL-W34-G closed as RESOLVED by PR #116 Amendment C (no PR needed). Filed BL-W36-01..04 findings — `project_wave_bl_w36_bl_w34_deferred_shipped.md`
 - **BL-W35** (2026-05-04) — L0 dogfood topology hardening, 6 PRs (#112-#117) addressing 7 bugs + 1 incident — `project_wave_bl_w35_l0_dogfood_topology_shipped.md`
 - **BL-W34** (2026-05-03) — L1 security prep, 3 PRs (#107 / #108 / #109) — `project_wave_bl_w34_l1_security_prep_shipped.md`
 - **BL-W33** (2026-05-02) — L1 reports triage, 5 PRs (#101-#105) — `project_wave_bl_w33_shipped.md`
 - **BL-W32-06e** (2026-05-02) — Script dedup PR #100 — `project_BL-W32-06e_shipped.md`
-- **l0-doc-refresh** (2026-05-02) — PR #99 — `project_l0_doc_refresh_shipped.md`
 
 For full wave history: `git log` + memory `project_*shipped.md` files.
 
