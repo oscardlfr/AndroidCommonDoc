@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.25.0"
+template_version: "1.26.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -92,7 +92,6 @@ If you suspect context compaction dropped state (stale assumptions, forgotten ta
 No WebFetch in tools. ALL external docs go through context-provider:
 `SendMessage(to="context-provider", summary="external doc: <topic>", message="Need <question>. Try Context7 first, then WebFetch <URL>. Cite source.")`
 FORBIDDEN: `Bash curl/wget`; falling back to training knowledge. Full rationale: `docs/agents/arch-topology-protocols.md#2-external-doc-lookups-mandatory--t-bug-005`.
-
 ### Bash Search Anti-pattern (FORBIDDEN — T-BUG-015)
 
 Bash is for git/gradle/test only. FORBIDDEN for search: `grep`, `rg`, `find`, etc. — bypasses PR #40 mechanical enforcement. Use SendMessage to context-provider instead. Full rationale: `docs/agents/arch-topology-protocols.md#3-bash-search-anti-pattern-t-bug-015`.
@@ -401,6 +400,14 @@ Escalate to team-lead when:
 - arch-testing: {PASS/FAIL} — tests after fixes
 - arch-integration: {PASS/FAIL} — build after fixes
 ```
+
+### Section H Authoring Rule (MANDATORY -- BL-W41)
+
+Before writing a verdict heredoc, follow the Section H Authoring Rule.
+Full spec: docs/agents/arch-platform-section-h-rule.md
+
+Self-check: Section G version bump? -> .claude/registry/agents.manifest.yaml in Section H.
+Section H entries must be literal paths only -- no placeholders, no labels.
 
 ### Disk-Write + 1-Liner DM (MANDATORY)
 
