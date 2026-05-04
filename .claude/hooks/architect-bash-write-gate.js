@@ -92,7 +92,7 @@ function isExemptTarget(target) {
   if (target.startsWith('/dev/')) return true;
   if (target.startsWith('/tmp/') || target === '/tmp') return true;
   if (target.startsWith('$TMPDIR/') || target.startsWith('${TMPDIR}/')) return true;
-  if (/\.planning[\\/]wave[\w.-]+[\\/]arch-[^\s/\\]+-verdict\.md$/.test(target)) return true;
+  if (/\.planning[\\/]wave[\w.-]+[\\/](?:pr\d+-)?arch-[^\s/\\]+-verdict\.md$/.test(target)) return true;
   if (/\.androidcommondoc[\\/]audit-log\.jsonl$/.test(target)) return true;
   return false;
 }
