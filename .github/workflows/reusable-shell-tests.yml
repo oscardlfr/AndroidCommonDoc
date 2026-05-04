@@ -24,19 +24,16 @@ jobs:
       - name: Run Node.js hook tests
         run: |
           set -e
-          # BL-W34: 2 pre-existing test files have spec-drift bugs and never ran in CI before.
-          # Re-enable each once its design decision is resolved (per-agent vs session flag scope, etc.).
-          # See BL-W34 backlog entries for details.
-          SKIP_PATTERNS=(
-            "context-provider-consulted"  # BL-W34: hook writes session flag, test expects per-agent
-            "context-provider-gate"        # BL-W34: F1 test fails on clean env (pre-existing)
-          )
+          # SKIP_PATTERNS: keep empty unless a test ships drifted and needs a temporary skip.
+          # BL-W37 PR4 (BL-W34-E) re-enabled context-provider-consulted/gate tests after
+          # observability fix landed; both pass clean.
+          SKIP_PATTERNS=()
           for f in scripts/tests/*.test.js; do
             skip=0
             for pat in "${SKIP_PATTERNS[@]}"; do
               if [[ "$f" == *"$pat"* ]]; then skip=1; break; fi
             done
-            if [[ $skip -eq 1 ]]; then echo "SKIP $f (BL-W34)"; continue; fi
+            if [[ $skip -eq 1 ]]; then echo "SKIP $f"; continue; fi
             echo "Running $f..."
             node "$f"
           done
