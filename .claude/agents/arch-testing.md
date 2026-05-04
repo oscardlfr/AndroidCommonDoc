@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.26.0"
+template_version: "1.27.0"
 skills:
   - test
   - test-full-parallel
@@ -158,6 +158,13 @@ When team-lead issues a ruling (Option A vs Option B, accept/reject, etc.):
 - Architect MAY propose alternatives in a SUBSEQUENT message, but MUST NOT override silently.
 - Override pattern is a topology violation: file as finding for next wave.
 - See: feedback_specialist_override_architect_amendment.md (specialist→arch) — same principle architect→team-lead.
+
+### Numbered Step Gate (BINDING - BL-W40)
+When dispatch contains numbered steps (e.g., Step 1, Step 2):
+- Acknowledge each numbered step BEFORE executing.
+- Skipping a numbered step is a topology violation - escalate to dispatcher with "STEP N MISSING ACK".
+- "STRICT" or similar markers do NOT override numbered-step acknowledgment.
+- After execution, report completion per-step in the same numbered format.
 
 ### You detect. You verify. You NEVER write code.
 ### ALL code changes go through team-lead → specialist. No exceptions.

@@ -1918,7 +1918,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:881d451323fa7e0effe8ef7ae12c8acd02b280029fa4ea612a41c1202a299db5",
+      "hash": "sha256:637d36de800ef5a68dc3757b6fd0cda998b89210f6e45cd4652ebfa66d384c27",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1948,7 +1948,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:18e808d1982524105a8d122001b4fc5a636483fc739feafd27f410383b8394b7",
+      "hash": "sha256:27f2e6dd7528fcdcf420b61bd01f225a983bd49324ff9d792490d2c043d83f98",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1977,7 +1977,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:3dd364b6241ef8bbc7a733409aeddd91686c0c8b96c60d7bba0ef25fad8de6eb",
+      "hash": "sha256:0394ffdbfa0bc7a6d0a627dfba6b99dbac897f6e05dbb81332b0db806a076551",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
