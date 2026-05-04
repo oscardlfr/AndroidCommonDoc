@@ -618,3 +618,26 @@ describe("T-BUG-019: Post-Compaction Re-Sync protocol present in doc + all agent
     });
   }
 });
+
+// ── T-BUG-020: context-provider Refusing Task Assignments guard ──────────────
+
+describe("T-BUG-020: context-provider has task-assignment refusal guard", () => {
+  it("context-provider.md (both copies) has '## Refusing Task Assignments' heading", () => {
+    const { claude, template } = readAgent("context-provider.md");
+    for (const content of [claude, template]) {
+      expect(content).toMatch(/## Refusing Task Assignments/);
+    }
+  });
+
+  it("context-provider.md contains read-only rejection token", () => {
+    const { claude, template } = readAgent("context-provider.md");
+    for (const content of [claude, template]) {
+      expect(content).toMatch(/context-provider is read-only/);
+    }
+  });
+
+  it("context-provider.md setup/ and .claude/agents/ copies are byte-identical", () => {
+    const { claude, template } = readAgent("context-provider.md");
+    expect(claude).toBe(template);
+  });
+});

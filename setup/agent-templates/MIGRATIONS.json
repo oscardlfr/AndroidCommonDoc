@@ -541,6 +541,11 @@
         "date": "2026-05-03",
         "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
         "breaking": false
+      },
+      "3.3.0": {
+        "date": "2026-05-03",
+        "summary": "BL-W35-05: add Refusing Task Assignments guard section",
+        "breaking": false
       }
     },
     "doc-updater": {
