@@ -390,3 +390,41 @@ PYEOF
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── BL-W36-01: pr-prefixed verdict filenames ────────────────────────────────
+# Tests that architect-bash-write-gate.js exempt regex accepts the new
+# pr\d+-arch-*-verdict.md prefix-style filename convention used in multi-PR
+# waves (in addition to the existing arch-*-verdict.md convention).
+# See .planning/wave-bl-w37-cross-repo-sync/PR3-PLAN.md for context.
+
+@test "pathlib write_text to pr-prefixed verdict path is exempt" {
+  make_input "Path('.planning/wave-bl-w37-cross-repo-sync/pr3-arch-platform-verdict.md').write_text('x')" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "pathlib write_text to pr1-prefixed testing verdict path is exempt" {
+  make_input "Path('.planning/wave-bl-w37-cross-repo-sync/pr1-arch-testing-verdict.md').write_text('x')" 'arch-testing'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "pathlib write_text to pr12-prefixed verdict path is exempt (multi-digit)" {
+  make_input "Path('.planning/wave-bl-w37-cross-repo-sync/pr12-arch-integration-verdict.md').write_text('x')" 'arch-integration'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "pathlib write_text to pr-prefixed file without -verdict suffix is blocked" {
+  make_input "Path('.planning/wave-bl-w37/pr5-arch-platform-something.md').write_text('x')" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"pathlib.Path"* ]]
+}
+
+@test "pathlib write_text to prx-prefixed (non-digit) verdict path is blocked" {
+  make_input "Path('.planning/wave-bl-w37/prx-arch-platform-verdict.md').write_text('x')" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"pathlib.Path"* ]]
+}
