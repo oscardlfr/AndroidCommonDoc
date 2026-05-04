@@ -86,9 +86,27 @@ process.stdin.on('end', () => {
               const agentFlag = path.join(tmpDir,
                 'claude-arch-responded-' + sessionId + '-' + sanitizeId(agentType) + '.flag');
               allowed = fs.existsSync(agentFlag);
+              if (allowed) {
+                try {
+                  const raw = fs.readFileSync(agentFlag, 'utf8');
+                  const meta = JSON.parse(raw);
+                  process.stderr.write(
+                    `[CP-GATE] session=${sessionId} flag_writer=${meta.written_by} flag_ts=${meta.ts} tool=${toolName}\n`
+                  );
+                } catch { /* legacy ISO string — ignore */ }
+              }
             } else {
               const flagPath = path.join(tmpDir, 'claude-cp-consulted-' + sessionId + '.flag');
               allowed = fs.existsSync(flagPath);
+              if (allowed) {
+                try {
+                  const raw = fs.readFileSync(flagPath, 'utf8');
+                  const meta = JSON.parse(raw);
+                  process.stderr.write(
+                    `[CP-GATE] session=${sessionId} flag_writer=${meta.written_by} flag_ts=${meta.ts} tool=${toolName}\n`
+                  );
+                } catch { /* legacy ISO string — ignore */ }
+              }
             }
             if (!allowed) {
               process.stdout.write(JSON.stringify({
@@ -124,12 +142,30 @@ process.stdin.on('end', () => {
     if (isSpecialist) {
       const agentFlag = path.join(tmpDir,
         'claude-arch-responded-' + sessionId + '-' + sanitizeId(agentType) + '.flag');
-      if (fs.existsSync(agentFlag)) process.exit(0); // arch has responded — allow
+      if (fs.existsSync(agentFlag)) {
+        try {
+          const raw = fs.readFileSync(agentFlag, 'utf8');
+          const meta = JSON.parse(raw);
+          process.stderr.write(
+            `[CP-GATE] session=${sessionId} flag_writer=${meta.written_by} flag_ts=${meta.ts} tool=${toolName}\n`
+          );
+        } catch { /* legacy ISO string — ignore */ }
+        process.exit(0); // arch has responded — allow
+      }
       // No arch-response flag: fall through to block
     } else {
       // Non-specialist, non-exempt: use global session flag
       const flagPath = path.join(tmpDir, 'claude-cp-consulted-' + sessionId + '.flag');
-      if (fs.existsSync(flagPath)) process.exit(0);
+      if (fs.existsSync(flagPath)) {
+        try {
+          const raw = fs.readFileSync(flagPath, 'utf8');
+          const meta = JSON.parse(raw);
+          process.stderr.write(
+            `[CP-GATE] session=${sessionId} flag_writer=${meta.written_by} flag_ts=${meta.ts} tool=${toolName}\n`
+          );
+        } catch { /* legacy ISO string — ignore */ }
+        process.exit(0);
+      }
     }
 
     // 4. Block — write per-agent block marker for logger and emit decision
