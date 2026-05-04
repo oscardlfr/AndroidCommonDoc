@@ -641,3 +641,64 @@ describe("T-BUG-020: context-provider has task-assignment refusal guard", () => 
     expect(claude).toBe(template);
   });
 });
+
+// T-BUG-021: 15 it() assertions (4 gate + 1 consulted + 5x2 templates)
+// ── T-BUG-021: CP gate per-agent-type arch-response flag (BL-W35-06) ─────────
+
+describe("T-BUG-021: context-provider-gate has per-specialist arch-response flag check", () => {
+  const GATE_HOOK = path.join(ROOT, ".claude/hooks/context-provider-gate.js");
+  const CONSULTED_HOOK = path.join(ROOT, ".claude/hooks/context-provider-consulted.js");
+
+  it("context-provider-gate.js references BL-W35-06 fix tag", () => {
+    const content = fs.readFileSync(GATE_HOOK, "utf-8");
+    expect(content).toMatch(/BL-W35-06/);
+  });
+
+  it("context-provider-gate.js has SPECIALIST_NAMES list with all 5 specialists", () => {
+    const content = fs.readFileSync(GATE_HOOK, "utf-8");
+    expect(content).toMatch(/test-specialist/);
+    expect(content).toMatch(/toolkit-specialist/);
+    expect(content).toMatch(/ui-specialist/);
+    expect(content).toMatch(/domain-model-specialist/);
+    expect(content).toMatch(/data-layer-specialist/);
+  });
+
+  it("context-provider-gate.js has CLAUDE_CP_GATE_DISABLED env var bypass", () => {
+    const content = fs.readFileSync(GATE_HOOK, "utf-8");
+    expect(content).toMatch(/CLAUDE_CP_GATE_DISABLED/);
+  });
+
+  it("context-provider-gate.js has claude-arch-responded flag pattern", () => {
+    const content = fs.readFileSync(GATE_HOOK, "utf-8");
+    expect(content).toMatch(/claude-arch-responded/);
+  });
+
+  it("context-provider-consulted.js has ARCH_PREFIXES + SPECIALIST_NAMES write logic", () => {
+    const content = fs.readFileSync(CONSULTED_HOOK, "utf-8");
+    expect(content).toMatch(/ARCH_PREFIXES/);
+    expect(content).toMatch(/SPECIALIST_NAMES/);
+    expect(content).toMatch(/claude-arch-responded/);
+  });
+
+  const SPECIALIST_TEMPLATES = [
+    "test-specialist.md",
+    "toolkit-specialist.md",
+    "ui-specialist.md",
+    "domain-model-specialist.md",
+    "data-layer-specialist.md",
+  ];
+
+  for (const name of SPECIALIST_TEMPLATES) {
+    it(`${name} BANNED TOOLS includes self-template read ban (C2)`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        expect(content).toMatch(/Reading your own agent template.*FORBIDDEN/i);
+      }
+    });
+
+    it(`${name} setup/ and .claude/agents/ copies are byte-identical`, () => {
+      const { claude, template } = readAgent(name);
+      expect(claude).toBe(template);
+    });
+  }
+});
