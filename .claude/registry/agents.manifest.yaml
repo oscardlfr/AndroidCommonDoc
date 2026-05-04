@@ -580,8 +580,8 @@ agents:
   context-provider:
     canonical_name: context-provider
     subagent_type: context-provider
-    template_version: "3.2.0"
-    template_frontmatter_sha256: a6ba4c07740e3861bc0b85e97a9473a0d644f56135d3ca0efb786859e257b077
+    template_version: "3.3.0"
+    template_frontmatter_sha256: a77f7a16c7c903faf9402be9f31e0c95681cb401cc07212c5e20af10dceaa48e
     category: context
     lifecycle: persistent
     description: "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only."
