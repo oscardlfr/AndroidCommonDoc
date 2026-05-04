@@ -4,7 +4,7 @@ slug: main-agent-orchestration-guide
 scope: L0
 sources: ["W31.6 retirement of setup/agent-templates/team-lead.md", "docs/agents/tl-session-setup.md", "docs/agents/tl-dispatch-topology.md"]
 targets: [main agent]
-version: 1.0.0
+version: 1.1.0
 description: "Orchestration guide for the main agent running a session: team topology, phase protocol, architect routing, quality gates."
 ---
 
@@ -232,6 +232,28 @@ Exception: simple tasks (< 5K tokens, clear path) → plan inline without EnterP
 | `toolkit-specialist` | `mcp-server/src/**`, `.claude/hooks/**`, `scripts/sh/*.sh`, `scripts/ps1/*.ps1` | `arch-platform` |
 
 **Routing for TS/hooks/scripts work:** edits to `mcp-server/src/**`, `.claude/hooks/**.js`, `scripts/sh/*.sh`, or `scripts/ps1/*.ps1` → `toolkit-specialist`. Vitest cases under `mcp-server/tests/**` or bats cases under `scripts/tests/*.bats` → `test-specialist` (dispatched by arch-testing as usual). A TS source change requiring a test follows: toolkit-specialist edits src → messages arch-testing → arch-testing dispatches test-specialist for the test.
+
+
+## PM/Project-Manager Absent Mode
+
+The W31.6 canonical pattern makes the **main agent the orchestrator** — no separate `team-lead` peer is needed. When a PM peer IS spawned but becomes absent (idle/shutdown/timeout), use this fallback chain.
+
+### Liveness Check
+Before routing to a PM peer in the same session:
+1. Did you receive a shutdown notification from the PM peer? → PM is NOT alive.
+2. Has the PM peer failed to acknowledge your last 3 SendMessages? → PM is NOT alive.
+3. Did the PM peer clarify it has shut down and the main agent should orchestrate? → PM is NOT alive.
+
+### Routing
+- **No PM peer spawned** (W31.6 default): main agent IS the orchestrator. When delegating: `architect > specialist`. NEVER route main agent → specialist directly.
+- **PM peer alive**: route to PM peer as normal.
+- **PM peer NOT alive**: main agent takes orchestration. Re-route pending work via architects. NEVER dispatch directly to specialists — `architect > specialist` chain is mandatory.
+- **Uncertain**: send with summary prefix `[routing-check]` asking the PM peer to confirm liveness. Do NOT guess.
+
+### FORBIDDEN
+- Routing work to a specialist directly when no PM peer is alive — architects mediate ALL specialist dispatches.
+- Silently retrying the PM peer 3+ times with no answer — take orchestration and flag to user.
+- Spawning a new PM peer mid-session to replace a shutdown one — orchestrate directly instead.
 
 ## Verification Before Done
 - **TDD-first for bug fixes**: (1) test-specialist writes failing test, (2) verify fails, (3) specialist fixes, (4) arch-testing verifies pass
