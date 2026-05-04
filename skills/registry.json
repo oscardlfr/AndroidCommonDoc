@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-05-04T12:20:27.429Z",
+  "generated": "2026-05-04T17:43:49.217Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1918,7 +1918,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:3c3e89aa11521197d3378084ca301338e8cbd2695ae84a6625412e50b605b23c",
+      "hash": "sha256:881d451323fa7e0effe8ef7ae12c8acd02b280029fa4ea612a41c1202a299db5",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1934,7 +1934,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.22.0",
+        "template_version": "1.23.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1948,7 +1948,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f44cd8acb262a95b7e2030711d15b32e1500a0fd98d01d22a199e14eb50c80b7",
+      "hash": "sha256:18e808d1982524105a8d122001b4fc5a636483fc739feafd27f410383b8394b7",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1963,7 +1963,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.23.0",
+        "template_version": "1.24.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1977,7 +1977,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:d0bc4ff252d77d3e9936be80cd3d95464091a4cde157861869ea667a39e8d0c7",
+      "hash": "sha256:3dd364b6241ef8bbc7a733409aeddd91686c0c8b96c60d7bba0ef25fad8de6eb",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1992,7 +1992,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.25.0",
+        "template_version": "1.26.0",
         "skills": [
           "test",
           "test-full-parallel",

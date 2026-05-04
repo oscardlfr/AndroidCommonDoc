@@ -333,6 +333,11 @@
         "date": "2026-05-03",
         "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
         "breaking": false
+      },
+      "1.26.0": {
+        "date": "2026-05-04",
+        "summary": "BL-W40 PR1: add Team-Lead Ruling Finality gate",
+        "breaking": false
       }
     },
     "arch-platform": {
@@ -421,6 +426,11 @@
         "date": "2026-05-03",
         "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
         "breaking": false
+      },
+      "1.24.0": {
+        "date": "2026-05-04",
+        "summary": "BL-W40 PR1: add Team-Lead Ruling Finality gate",
+        "breaking": false
       }
     },
     "arch-integration": {
@@ -508,6 +518,11 @@
       "1.22.0": {
         "date": "2026-05-03",
         "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
+        "breaking": false
+      },
+      "1.23.0": {
+        "date": "2026-05-04",
+        "summary": "BL-W40 PR1: add Team-Lead Ruling Finality gate",
         "breaking": false
       }
     },
