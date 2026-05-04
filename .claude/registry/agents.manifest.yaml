@@ -289,8 +289,8 @@ agents:
   test-specialist:
     canonical_name: test-specialist
     subagent_type: test-specialist
-    template_version: "1.18.0"
-    template_frontmatter_sha256: 0f8930c2e465f53a5bd7624df0c4ec9380aef5d5c2283cfd1a4f8f2db5e76c79
+    template_version: "1.19.0"
+    template_frontmatter_sha256: 2a4384aa5e71f97572cf62d6589435bd8cbb4960b982c74fe69d612e702222b2
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation."
@@ -346,8 +346,8 @@ agents:
   data-layer-specialist:
     canonical_name: data-layer-specialist
     subagent_type: data-layer-specialist
-    template_version: "1.13.0"
-    template_frontmatter_sha256: 69120d4dc921e757c6bd2cf5d467ac2629d3164efc96aa5aa3832cca690486be
+    template_version: "1.14.0"
+    template_frontmatter_sha256: 7b1ab8b4984d1a06b21d79fdf15ad211c5415fe8d480dc0471386d9fb002893f
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration."
@@ -403,8 +403,8 @@ agents:
   domain-model-specialist:
     canonical_name: domain-model-specialist
     subagent_type: domain-model-specialist
-    template_version: "1.13.0"
-    template_frontmatter_sha256: e1718b2b0ea2941896d1c583c8030ea9efe4f622c9c6a0583ca1730595a094ed
+    template_version: "1.14.0"
+    template_frontmatter_sha256: 2a9d09b0b6ee5a9a52ef2be0da5265133fc6bb527a85a4609c8ad49b06e22fed
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements domain layer — models, use cases, business logic. Reports to arch-platform."
@@ -459,8 +459,8 @@ agents:
   ui-specialist:
     canonical_name: ui-specialist
     subagent_type: ui-specialist
-    template_version: "1.16.0"
-    template_frontmatter_sha256: baef88e982fb2902ee7a45f5f905c591b4bd7cdc0a2f2d59e9a63a3e0e004cb5
+    template_version: "1.17.0"
+    template_frontmatter_sha256: 87ffa13151abfaa3e587055964a56ecadd9a5b58dc02cf4a22508755d0da469a
     category: core-specialist
     lifecycle: ephemeral
     description: "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations."

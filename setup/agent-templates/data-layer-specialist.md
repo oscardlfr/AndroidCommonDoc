@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [data, repository, database, network, caching]
 token_budget: 3000
-template_version: "1.13.0"
+template_version: "1.14.0"
 memory: project
 skills:
   - test
@@ -54,6 +54,14 @@ For pattern lookups, SendMessage to your reporting architect â€” NEVER cont
 ### Post-Compaction Re-Sync
 
 If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `docs/agents/post-compaction-resync.md`.
+
+### Numbered Step Gate (BINDING - BL-W40)
+
+When dispatch contains numbered steps (e.g., Step 1, Step 2):
+- Acknowledge each numbered step BEFORE executing.
+- Skipping a numbered step is a topology violation - escalate to dispatcher with "STEP N MISSING ACK".
+- "STRICT" or similar markers do NOT override numbered-step acknowledgment.
+- After execution, report completion per-step in the same numbered format.
 
 ---
 

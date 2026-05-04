@@ -2151,7 +2151,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:bf8c671a93f67f38509c303a9101bdc53bdd40994b3ee5ffb6c81a3574d4d0e3",
+      "hash": "sha256:d9d6c10871fd696cf0b25d1add6403779293d7a93350d2796ab9c10c2dcbc9d9",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -2328,7 +2328,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6f2ca40cc41076b579a4f0e1a108d409e7f686a64e54fa833e6d705892a50349",
+      "hash": "sha256:1e565cd1de5472a36de7d7513f2dee3369b1d7d46083d2bd6f51896b19b9497b",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2856,7 +2856,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:7cef9683cc67e60f5442ada0f7700dccb783c2ec154bc3cf8193ca122052628e",
+      "hash": "sha256:2a84c725463415c5d550012dea0ee61c095363906f0c89b7ef86834bb36fe97e",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2928,7 +2928,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:0d8cd209b83f9b4467a9bbba66a7475452e8b18323677048da5e0061c3fd87a1",
+      "hash": "sha256:d916ef9484db15a64d05d6656a8e548440c7978d742f4eaeca4871e95feb9283",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
