@@ -18,93 +18,145 @@ function sanitize(id) {
   return String(id).replace(/[^a-zA-Z0-9_-]/g, '-');
 }
 
-function flagPath(sessionId, agentId) {
-  return path.join(os.tmpdir(), `claude-cp-consulted-${sessionId}-${sanitize(agentId)}.flag`);
+function flagPath(sessionId) {
+  return path.join(os.tmpdir(), `claude-cp-consulted-${sessionId}.flag`);
 }
 
-function clearFlag(sessionId, agentId) {
-  try { fs.unlinkSync(flagPath(sessionId, agentId)); } catch {}
+function clearFlag(sessionId) {
+  try { fs.unlinkSync(flagPath(sessionId)); } catch {}
 }
 
-// TC1: SendMessage to context-provider from arch-platform → flag created for arch-platform only
-clearFlag('t1', 'arch-platform');
-clearFlag('t1', 'arch-testing');
+// TC1: SendMessage to context-provider → session flag written (session-scoped, not per-agent)
+clearFlag('t1');
 runHook({
   tool_name: 'SendMessage',
   tool_input: { to: 'context-provider', message: 'query' },
   session_id: 't1',
-  agent_id: 'arch-platform'
+  agent_type: 'arch-platform'
 });
-assert.ok(fs.existsSync(flagPath('t1', 'arch-platform')), 'TC1: flag must exist for arch-platform');
-assert.ok(!fs.existsSync(flagPath('t1', 'arch-testing')), 'TC1: flag must NOT exist for arch-testing (per-agent isolation)');
-console.log('TC1 SendMessage to context-provider creates per-sender flag: PASS');
+assert.ok(fs.existsSync(flagPath('t1')), 'TC1: session flag must exist after arch-platform sends to context-provider');
+console.log('TC1 SendMessage to context-provider creates session flag: PASS');
 
-// TC2: SendMessage to context-provider-2 (suffix) → flag created for sender
-clearFlag('t2', 'arch-platform');
+// TC2: SendMessage to context-provider-2 (suffix) → session flag created
+clearFlag('t2');
 runHook({
   tool_name: 'SendMessage',
   tool_input: { to: 'context-provider-2', message: 'query' },
   session_id: 't2',
-  agent_id: 'arch-platform'
+  agent_type: 'arch-platform'
 });
-assert.ok(fs.existsSync(flagPath('t2', 'arch-platform')), 'TC2: suffix match must create per-sender flag');
-console.log('TC2 SendMessage to context-provider-2 creates per-sender flag: PASS');
+assert.ok(fs.existsSync(flagPath('t2')), 'TC2: suffix match must create session flag');
+console.log('TC2 SendMessage to context-provider-2 creates session flag: PASS');
 
-// TC3: SendMessage to arch-testing → no flag
-clearFlag('t3', 'arch-platform');
+// TC3: SendMessage to arch-testing → no session flag
+clearFlag('t3');
 runHook({
   tool_name: 'SendMessage',
   tool_input: { to: 'arch-testing', message: 'verify' },
   session_id: 't3',
-  agent_id: 'arch-platform'
+  agent_type: 'arch-platform'
 });
-assert.ok(!fs.existsSync(flagPath('t3', 'arch-platform')), 'TC3: non-CP message must not create flag');
+assert.ok(!fs.existsSync(flagPath('t3')), 'TC3: non-CP message must not create session flag');
 console.log('TC3 SendMessage to arch-testing does not create flag: PASS');
 
-// TC4: invalid JSON → exit 0, no crash
+// TC4: invalid JSON → exit 0, no crash, no stale flag written
+const sid4 = 'tc4-malf';
 const r = runHook('bad json');
 assert.strictEqual(r.status, 0, 'TC4: fail open on bad JSON');
-console.log('TC4 invalid JSON fail-open: PASS');
+const tc4FlagPath = path.join(os.tmpdir(), `claude-cp-consulted-${sid4}.flag`);
+try { fs.unlinkSync(tc4FlagPath); } catch {}
+assert.ok(!fs.existsSync(tc4FlagPath), 'TC4: no flag written for malformed JSON');
+console.log('TC4 invalid JSON fail-open + no flag written: PASS');
 
-// TC5: Two different senders in same session → each gets own flag
-clearFlag('t5', 'arch-platform');
-clearFlag('t5', 'arch-testing');
+// TC5: Two different senders in same session → ONE shared session flag (session-scoped)
+clearFlag('t5');
 runHook({
   tool_name: 'SendMessage',
   tool_input: { to: 'context-provider', message: 'q1' },
   session_id: 't5',
-  agent_id: 'arch-platform'
+  agent_type: 'arch-platform'
 });
 runHook({
   tool_name: 'SendMessage',
   tool_input: { to: 'context-provider', message: 'q2' },
   session_id: 't5',
-  agent_id: 'arch-testing'
+  agent_type: 'arch-testing'
 });
-assert.ok(fs.existsSync(flagPath('t5', 'arch-platform')), 'TC5: arch-platform has flag');
-assert.ok(fs.existsSync(flagPath('t5', 'arch-testing')), 'TC5: arch-testing has flag');
-console.log('TC5 two senders same session each get own flag: PASS');
+assert.ok(fs.existsSync(flagPath('t5')), 'TC5: one shared session flag exists after two senders');
+console.log('TC5 two senders same session share one session flag: PASS');
 
-// TC6: missing agent_id → fallback to 'unknown' as sender
-clearFlag('t6', 'unknown');
+// TC6: missing agent_type → session flag still written (session-scoped)
+clearFlag('t6');
 runHook({
   tool_name: 'SendMessage',
   tool_input: { to: 'context-provider', message: 'q' },
   session_id: 't6'
-  // no agent_id
+  // no agent_type
 });
-assert.ok(fs.existsSync(flagPath('t6', 'unknown')), 'TC6: missing agent_id falls back to unknown');
-console.log('TC6 missing agent_id fallback to unknown: PASS');
+assert.ok(fs.existsSync(flagPath('t6')), 'TC6: missing agent_type still writes session flag');
+console.log('TC6 missing agent_type still writes session flag: PASS');
 
-// TC7: agent_id with special chars (@, /) is sanitized
-clearFlag('t7', 'arch-platform-wave18');
+// TC7: session_id with special chars — session flag still written
+clearFlag('t7');
 runHook({
   tool_name: 'SendMessage',
   tool_input: { to: 'context-provider', message: 'q' },
   session_id: 't7',
-  agent_id: 'arch-platform@wave18'
+  agent_type: 'arch-platform@wave18'
 });
-assert.ok(fs.existsSync(flagPath('t7', 'arch-platform-wave18')), 'TC7: special chars in agent_id are sanitized');
-console.log('TC7 agent_id sanitization (@ to -): PASS');
+assert.ok(fs.existsSync(flagPath('t7')), 'TC7: session flag written regardless of agent_type format');
+console.log('TC7 session flag written regardless of agent_type format: PASS');
+
+// TC8-TC11: arch-response flag — written when arch → specialist
+function archFlagPath(sessionId, to) {
+  return path.join(os.tmpdir(), `claude-arch-responded-${sessionId}-${sanitize(to)}.flag`);
+}
+function clearArchFlag(sessionId, to) {
+  try { fs.unlinkSync(archFlagPath(sessionId, to)); } catch {}
+}
+
+// TC8: arch-platform → test-specialist → arch-response flag written
+clearArchFlag('t8', 'test-specialist');
+runHook({
+  tool_name: 'SendMessage',
+  tool_input: { to: 'test-specialist', message: 'dispatch' },
+  session_id: 't8',
+  agent_type: 'arch-platform'
+});
+assert.ok(fs.existsSync(archFlagPath('t8', 'test-specialist')), 'TC8: arch-platform→test-specialist writes arch-response flag');
+console.log('TC8 arch-platform→test-specialist writes arch-response flag: PASS');
+
+// TC9: arch-testing → toolkit-specialist → arch-response flag written
+clearArchFlag('t9', 'toolkit-specialist');
+runHook({
+  tool_name: 'SendMessage',
+  tool_input: { to: 'toolkit-specialist', message: 'dispatch' },
+  session_id: 't9',
+  agent_type: 'arch-testing'
+});
+assert.ok(fs.existsSync(archFlagPath('t9', 'toolkit-specialist')), 'TC9: arch-testing→toolkit-specialist writes arch-response flag');
+console.log('TC9 arch-testing→toolkit-specialist writes arch-response flag: PASS');
+
+// TC10: non-arch sender → specialist → NO arch-response flag
+clearArchFlag('t10', 'test-specialist');
+runHook({
+  tool_name: 'SendMessage',
+  tool_input: { to: 'test-specialist', message: 'query' },
+  session_id: 't10',
+  agent_type: 'planner'
+});
+assert.ok(!fs.existsSync(archFlagPath('t10', 'test-specialist')), 'TC10: non-arch sender does not write arch-response flag');
+console.log('TC10 non-arch sender no arch-response flag: PASS');
+
+// TC11: arch → non-specialist (arch-testing) → NO arch-response flag
+clearArchFlag('t11', 'arch-testing');
+runHook({
+  tool_name: 'SendMessage',
+  tool_input: { to: 'arch-testing', message: 'query' },
+  session_id: 't11',
+  agent_type: 'arch-platform'
+});
+assert.ok(!fs.existsSync(archFlagPath('t11', 'arch-testing')), 'TC11: arch→arch does not write arch-response flag');
+console.log('TC11 arch→arch no arch-response flag: PASS');
 
 console.log('\nAll context-provider-consulted tests passed.');
