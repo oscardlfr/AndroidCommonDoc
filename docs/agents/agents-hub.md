@@ -52,6 +52,9 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [local-first-skills-pattern](local-first-skills-pattern.md) | When to deploy a skill locally (L1) before promoting to L0; lifecycle stages and promotion criteria |
 | [post-compaction-resync](post-compaction-resync.md) | Protocol for agent-side state recovery after context compaction |
 | [branch-guard](branch-guard.md) | PreToolUse hook that blocks write-git ops on `develop`/`master` (BL-W35-08) |
+| [test-specialist-coverage-targets](test-specialist-coverage-targets.md) | test-specialist minimum coverage targets by layer (model/domain/data/db/UI) |
+| [test-specialist-jdk-env](test-specialist-jdk-env.md) | test-specialist JDK env triage: UnsupportedClassVersionError, JAVA_HOME override steps (BL-W32-16) |
+| [test-specialist-vm-testing](test-specialist-vm-testing.md) | test-specialist high-dep ViewModel testing: factory pattern, compile-time RED signal |
 
 ## Key Concepts
 

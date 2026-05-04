@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.17.0"
+template_version: "1.18.0"
 memory: project
 skills:
   - test
@@ -196,14 +196,7 @@ Before writing or modifying ANY test, consult the relevant pattern doc. ALL test
 **NEVER invent patterns.** If uncertain which doc applies, SendMessage to arch-testing.
 
 ## High-Dep ViewModel Testing (MANDATORY)
-
-For ViewModels with 5+ constructor dependencies: NEVER write a test that constructs a local flow to mirror VM behavior. The test MUST instantiate the VM class directly (via a factory helper with stubs) and read the VM's actual property. If the VM has >5 deps, create a `createMinimal{ViewModelName}()` factory that stubs all non-focal deps with the simplest possible fakes. Do NOT substitute the VM instantiation with a local flow that replays the production logic â€” this is test gaming.
-
-When VM has >10 deps + hardwired DI, explicitly DISCOURAGE VM-level unit tests and REDIRECT to composable-layer tests. Document "test at the layer where the bug is visible" as canonical pattern.
-
-BUG 4 used **compile-time RED** via nullable type parameter â€” stronger than runtime RED. TDD discipline preserved structurally. 3-state GREEN tests verify null/false/true rendering post-fix. Accepted as valid TDD pattern for cases where runtime RED is architecturally infeasible (high-dep VMs + hardwired DI).
-
-**L0 implication**: Template explicitly recognizes compile-gate RED as a valid TDD signal. Current template implies RED = a failing test assertion. For type-system-level bugs (wrong nullability, wrong sealed variant, wrong type), a compile error IS the RED signal and should be accepted as such by arch-testing.
+Full pattern: `docs/agents/test-specialist-vm-testing.md`.
 
 ## Core Identity: Quality Auditor (not Test Writer)
 
@@ -288,23 +281,10 @@ If you discover a bug during your task â€” whether you caused it or not â�
 - **NEVER** dismiss a bug as "pre-existing" and move on silently. This is a professional project â€” leaving known broken behavior unreported is unacceptable.
 
 ## Coverage Targets (minimum)
-
-| Layer | Target | E2E Required |
-|-------|--------|-------------|
-| Model layer | 100% | YES |
-| Domain layer | 100% | YES |
-| Data layer | 99%+ | YES |
-| Database layer | 99%+ | YES |
-| Design system | 95% | No |
-| Feature/UI modules | 95%+ | Compose tests required |
+Full targets table: `docs/agents/test-specialist-coverage-targets.md`.
 
 ## Common Gradle Error Triage (BL-W32-16)
-
-UnsupportedClassVersionError / class version mismatch:
-  1. Query context-provider for "project JDK requirement" memory - get correct major version
-  2. If JAVA_HOME mismatches, override inline: JAVA_HOME="<path>" <gradle-invocation>
-  3. Windows path example: Eclipse Adoptium JDK install dir (query context-provider for exact path)
-  4. If still failing after JAVA_HOME override, escalate to team-lead with full Gradle output
+Full triage steps: `docs/agents/test-specialist-jdk-env.md`.
 
 ## Done Criteria
 

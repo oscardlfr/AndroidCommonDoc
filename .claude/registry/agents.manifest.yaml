@@ -289,7 +289,7 @@ agents:
   test-specialist:
     canonical_name: test-specialist
     subagent_type: test-specialist
-    template_version: "1.17.0"
+    template_version: "1.18.0"
     template_frontmatter_sha256: de89eaaf950d66db771b65fb8a87401f21f386d8c5c367fde10e079b8e87a6eb
     category: core-specialist
     lifecycle: ephemeral
