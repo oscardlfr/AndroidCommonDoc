@@ -43,8 +43,7 @@ describe('agent template size limits', () => {
     .filter(f => f.endsWith('.md') && f !== 'README.md');
 
   // arch-int/platform have ≤425 operational tolerance (BL-W35-09 cleanup scheduled)
-  // BL-W41 PR1 cap exception: arch-platform bumped to 432 (6-line Section H pointer, sub-doc extracted)
-  const ARCH_INT_PLATFORM_LIMIT = 432;
+  const ARCH_INT_PLATFORM_LIMIT = 425;
   const STANDARD_LIMIT = 420;
 
   for (const template of templates) {

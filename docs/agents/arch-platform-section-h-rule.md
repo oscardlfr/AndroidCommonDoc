@@ -3,6 +3,7 @@ category: agents
 slug: arch-platform-section-h-rule
 scope: arch-platform verdict authoring
 sources: [BL-W40-FIND-01, BL-W40-FIND-02]
+targets: [setup/agent-templates/arch-platform.md, .claude/agents/arch-platform.md]
 ---
 
 # Section H Authoring Rule (MANDATORY -- BL-W41)

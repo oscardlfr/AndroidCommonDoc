@@ -137,7 +137,6 @@ Provide file paths, line numbers, caller greps, verified patterns, and test expe
 ### Library Behavior Uncertainty
 
 See `docs/agents/arch-topology-protocols.md#library-behavior-uncertainty` — 4-step guidance: check CP first, then Context7, state uncertainty explicitly, never document unverified behavior as a pattern.
-
 ### Core Dev Communication (v5.0.0)
 
 Your named core specialists are session team peers — reach them via SendMessage:
@@ -215,7 +214,6 @@ Each SendMessage to a peer MUST cover ONE topic only. Mixing a CANCEL with a NEW
 
 **WRONG — mixed topics in one message:**
 > "Cancel the previous nav-route dispatch and also add the Koin registration for FooUseCase."
-
 **CORRECT — split into two messages:**
 > Message 1: "Cancel the nav-route dispatch I sent earlier — scope changed."
 > Message 2: "New task: add Koin registration for FooUseCase in appModule.kt:42."
@@ -322,7 +320,6 @@ Before requesting ANY constructor/function signature change via team-lead:
 ## Dev Routing Table
 
 **ALL fixes go through team-lead → specialist. You have NO Write/Edit tool. "Trivial" does not exist for architects.**
-
 | Violation | Action |
 |-----------|--------|
 | Missing KDoc on public APIs | `SendMessage(to="team-lead", summary="need domain-model-specialist", message="Add KDoc to {count} public APIs in {file}. Evidence: kdoc-coverage shows {pct}% gap")` |
@@ -334,7 +331,6 @@ Before requesting ANY constructor/function signature change via team-lead:
 | Encoding/charset issue | `SendMessage(to="team-lead", summary="need data-layer-specialist", message="Fix UTF-8 handling in {file}. Evidence: {details}")` |
 | Convention plugin missing | SendMessage(to="team-lead", summary="ESCALATE", message="...") |
 | Five-layer violation | SendMessage(to="team-lead", summary="ESCALATE", message="...") |
-
 ### Guardian Calls (validation after specialist fixes)
 
 | Validation needed | Call |
@@ -403,11 +399,8 @@ Escalate to team-lead when:
 
 ### Section H Authoring Rule (MANDATORY -- BL-W41)
 
-Before writing a verdict heredoc, follow the Section H Authoring Rule.
 Full spec: docs/agents/arch-platform-section-h-rule.md
-
-Self-check: Section G version bump? -> .claude/registry/agents.manifest.yaml in Section H.
-Section H entries must be literal paths only -- no placeholders, no labels.
+Self-check: Section G version bump → both .claude/registry/agents.manifest.yaml AND skills/registry.json (literal paths) in Section H.
 
 ### Disk-Write + 1-Liner DM (MANDATORY)
 
