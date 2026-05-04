@@ -23,24 +23,37 @@ function sanitize(id) {
   return String(id).replace(/[^a-zA-Z0-9_-]/g, '-');
 }
 
-function flagPath(sessionId, agentId) {
-  return path.join(os.tmpdir(), `claude-cp-consulted-${sessionId}-${sanitize(agentId)}.flag`);
+function sessionFlagPath(sessionId) {
+  return path.join(os.tmpdir(), `claude-cp-consulted-${sessionId}.flag`);
 }
 
-function clearFlag(sessionId, agentId) {
-  try { fs.unlinkSync(flagPath(sessionId, agentId)); } catch {}
+function archResponseFlagPath(sessionId, agentType) {
+  return path.join(os.tmpdir(), `claude-arch-responded-${sessionId}-${sanitize(agentType)}.flag`);
 }
 
-function writeFlag(sessionId, agentId) {
-  fs.writeFileSync(flagPath(sessionId, agentId), new Date().toISOString());
+function writeSessionFlag(sessionId) {
+  fs.writeFileSync(sessionFlagPath(sessionId), new Date().toISOString());
 }
 
-// F1: Grep, arch-platform, no flag → BLOCK (exit 2)
-clearFlag('s1', 'arch-platform');
+function clearSessionFlag(sessionId) {
+  try { fs.unlinkSync(sessionFlagPath(sessionId)); } catch {}
+}
+
+function writeArchResponseFlag(sessionId, agentType) {
+  fs.writeFileSync(archResponseFlagPath(sessionId, agentType), new Date().toISOString());
+}
+
+function clearArchResponseFlag(sessionId, agentType) {
+  try { fs.unlinkSync(archResponseFlagPath(sessionId, agentType)); } catch {}
+}
+
+// F1: Grep on docs path, arch-platform, no flag → BLOCK (exit 2)
+clearSessionFlag('s1');
 const f1 = runHook({
   tool_name: 'Grep',
-  tool_input: { pattern: 'test' },
+  tool_input: { pattern: 'test', path: '/project/docs/di/di-patterns-modules.md' },
   session_id: 's1',
+  agent_type: 'arch-platform',
   agent_id: 'arch-platform'
 });
 assert.strictEqual(f1.exit, 2, 'F1: should block');
@@ -50,20 +63,21 @@ assert.ok(
 );
 console.log('F1 Grep no-flag block: PASS');
 
-// F2: Grep, arch-platform, flag exists → ALLOW (exit 0)
-writeFlag('s2', 'arch-platform');
+// F2: Grep on docs path, arch-platform, session flag exists → ALLOW (exit 0)
+writeSessionFlag('s2');
 const f2 = runHook({
   tool_name: 'Grep',
-  tool_input: { pattern: 'test' },
+  tool_input: { pattern: 'test', path: '/project/docs/di/di-patterns-modules.md' },
   session_id: 's2',
+  agent_type: 'arch-platform',
   agent_id: 'arch-platform'
 });
-assert.strictEqual(f2.exit, 0, 'F2: should allow when flag exists');
-clearFlag('s2', 'arch-platform');
-console.log('F2 Grep with flag allow: PASS');
+assert.strictEqual(f2.exit, 0, 'F2: should allow when session flag exists');
+clearSessionFlag('s2');
+console.log('F2 Grep with session flag allow: PASS');
 
 // F3: Grep, context-provider agent_type, no flag → ALLOW (exempt via agent_type)
-clearFlag('s3', 'context-provider');
+clearSessionFlag('s3');
 const f3 = runHook({
   tool_name: 'Grep',
   tool_input: { pattern: 'test' },
@@ -75,7 +89,7 @@ assert.strictEqual(f3.exit, 0, 'F3: context-provider exempt');
 console.log('F3 context-provider exempt: PASS');
 
 // F4: Grep, team-lead agent_type, no flag → ALLOW (exempt via agent_type)
-clearFlag('s4', 'team-lead');
+clearSessionFlag('s4');
 const f4 = runHook({
   tool_name: 'Grep',
   tool_input: { pattern: 'test' },
@@ -87,7 +101,7 @@ assert.strictEqual(f4.exit, 0, 'F4: team-lead exempt');
 console.log('F4 team-lead exempt: PASS');
 
 // F5: Bash with ./gradlew build, arch-platform, no flag → ALLOW (non-search bash)
-clearFlag('s5', 'arch-platform');
+clearSessionFlag('s5');
 const f5 = runHook({
   tool_name: 'Bash',
   tool_input: { command: './gradlew build' },
@@ -98,7 +112,7 @@ assert.strictEqual(f5.exit, 0, 'F5: non-search bash should allow');
 console.log('F5 non-search Bash allow: PASS');
 
 // F6: Bash with grep, arch-platform, no flag → BLOCK
-clearFlag('s6', 'arch-platform');
+clearSessionFlag('s6');
 const f6 = runHook({
   tool_name: 'Bash',
   tool_input: { command: 'grep -r libs.lifecycle .' },
@@ -114,7 +128,7 @@ assert.strictEqual(f7.exit, 0, 'F7: invalid JSON must fail open');
 console.log('F7 invalid JSON fail-open: PASS');
 
 // F8: context-provider-2 agent_type suffix → ALLOW (exempt via agent_type prefix match)
-clearFlag('s8', 'context-provider-2');
+clearSessionFlag('s8');
 const f8 = runHook({
   tool_name: 'Grep',
   tool_input: { pattern: 'test' },
@@ -125,68 +139,52 @@ const f8 = runHook({
 assert.strictEqual(f8.exit, 0, 'F8: context-provider-2 suffix exempt');
 console.log('F8 context-provider-2 suffix exempt: PASS');
 
-// F9: NEW — per-agent isolation: arch-platform has flag, arch-testing does NOT → arch-testing blocked
-writeFlag('s9', 'arch-platform');
-clearFlag('s9', 'arch-testing');
+// F9: BL-W35-06 -- specialist blocked when only session CP flag set (no arch-response flag)
+writeSessionFlag('s9');
+clearArchResponseFlag('s9', 'test-specialist');
 const f9 = runHook({
   tool_name: 'Grep',
-  tool_input: { pattern: 'test' },
+  tool_input: { pattern: 'test', path: '/project/docs/di/di-patterns-modules.md' },
   session_id: 's9',
-  agent_id: 'arch-testing'
+  agent_type: 'test-specialist',
+  agent_id: 'test-specialist'
 });
-assert.strictEqual(f9.exit, 2, 'F9: arch-testing blocked even though arch-platform has flag (per-agent isolation)');
-clearFlag('s9', 'arch-platform');
-console.log('F9 per-agent isolation (session-wide bypass prevented): PASS');
+assert.strictEqual(f9.exit, 2, 'F9 BL-W35-06: specialist blocked when only session CP flag set');
+clearSessionFlag('s9');
+console.log('F9 specialist blocked without arch-response flag (BL-W35-06): PASS');
 
-// F10: NEW — two agents same session, each needs own flag
-writeFlag('s10', 'arch-platform');
-writeFlag('s10', 'arch-testing');
-clearFlag('s10', 'domain-model-specialist');
-const f10a = runHook({
+// F10: BL-W35-06 -- specialist allowed when arch-response flag set
+writeArchResponseFlag('s10', 'test-specialist');
+const f10 = runHook({
   tool_name: 'Grep',
-  tool_input: { pattern: 'x' },
+  tool_input: { pattern: 'test', path: '/project/docs/di/di-patterns-modules.md' },
   session_id: 's10',
-  agent_id: 'arch-platform'
+  agent_type: 'test-specialist',
+  agent_id: 'test-specialist'
 });
-const f10b = runHook({
-  tool_name: 'Grep',
-  tool_input: { pattern: 'x' },
-  session_id: 's10',
-  agent_id: 'arch-testing'
-});
-const f10c = runHook({
-  tool_name: 'Grep',
-  tool_input: { pattern: 'x' },
-  session_id: 's10',
-  agent_id: 'domain-model-specialist'
-});
-assert.strictEqual(f10a.exit, 0, 'F10: arch-platform allowed (has flag)');
-assert.strictEqual(f10b.exit, 0, 'F10: arch-testing allowed (has flag)');
-assert.strictEqual(f10c.exit, 2, 'F10: domain-model-specialist blocked (no flag)');
-clearFlag('s10', 'arch-platform');
-clearFlag('s10', 'arch-testing');
-console.log('F10 per-agent flags independent in same session: PASS');
+assert.strictEqual(f10.exit, 0, 'F10 BL-W35-06: specialist allowed when arch-response flag set');
+clearArchResponseFlag('s10', 'test-specialist');
+console.log('F10 specialist allowed with arch-response flag (BL-W35-06): PASS');
 
-// F11: NEW — agent_id with special chars (@) sanitized in path lookup
-const agentRaw = 'arch-platform@wave18';
-const agentSanitized = 'arch-platform-wave18';
-clearFlag('s11', agentSanitized);
-writeFlag('s11', agentSanitized);
+// F11: BL-W35-06 -- arch-response flag with hyphen in agent_type passes sanitize() correctly
+const specialistWithHyphen = 'data-layer-specialist';
+writeArchResponseFlag('s11', specialistWithHyphen);
 const f11 = runHook({
   tool_name: 'Grep',
-  tool_input: { pattern: 'x' },
+  tool_input: { pattern: 'x', path: '/project/docs/di/di-patterns-modules.md' },
   session_id: 's11',
-  agent_id: agentRaw
+  agent_type: specialistWithHyphen,
+  agent_id: specialistWithHyphen
 });
-assert.strictEqual(f11.exit, 0, 'F11: sanitized agent_id matches flag');
-clearFlag('s11', agentSanitized);
-console.log('F11 agent_id sanitization path lookup: PASS');
+assert.strictEqual(f11.exit, 0, 'F11: hyphenated specialist agent_type matches arch-response flag path');
+clearArchResponseFlag('s11', specialistWithHyphen);
+console.log('F11 arch-response flag with hyphenated agent_type (BL-W35-06): PASS');
 
 // F12: NEW — block reason does not reference hardcoded context-provider-2
-clearFlag('s12', 'arch-platform');
+clearSessionFlag('s12');
 const f12 = runHook({
   tool_name: 'Grep',
-  tool_input: { pattern: 'x' },
+  tool_input: { pattern: 'x', path: '/project/docs/di/di-patterns-modules.md' },
   session_id: 's12',
   agent_id: 'arch-platform'
 });
