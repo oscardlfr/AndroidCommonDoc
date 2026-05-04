@@ -772,6 +772,11 @@
         "date": "2026-05-04",
         "summary": "BL-W35-06 C2: add self-template read ban to BANNED TOOLS section",
         "breaking": false
+      },
+      "1.18.0": {
+        "date": "2026-05-04",
+        "summary": "Extract VM testing, coverage targets, and JDK env triage to docs/agents/ sub-docs; replace with inline pointer blocks. Trim from 369 to ≤350 lines.",
+        "breaking": false
       }
     },
     "ui-specialist": {
