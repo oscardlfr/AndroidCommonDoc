@@ -33,7 +33,13 @@ process.stdin.on('end', () => {
     // Write flag only when SendMessage targets context-provider (any suffix)
     if (to === 'context-provider' || to.startsWith('context-provider-')) {
       const flagPath = path.join(os.tmpdir(), `claude-cp-consulted-${sessionId}.flag`);
-      fs.writeFileSync(flagPath, new Date().toISOString());
+      const payload = JSON.stringify({
+        written_by: data.agent_type || 'unknown',
+        agent_id: data.agent_id || 'unknown',
+        session_id: sessionId,
+        ts: new Date().toISOString()
+      });
+      fs.writeFileSync(flagPath, payload);
     }
 
     // BL-W35-06: per-agent-type arch-response flag — written when arch → specialist
@@ -48,7 +54,13 @@ process.stdin.on('end', () => {
     if (isArchSender && isSpecialistRecipient) {
       const agentFlag = path.join(os.tmpdir(),
         `claude-arch-responded-${sessionId}-${sanitizeId(to)}.flag`);
-      fs.writeFileSync(agentFlag, new Date().toISOString());
+      const archPayload = JSON.stringify({
+        written_by: senderType,
+        agent_id: data.agent_id || 'unknown',
+        session_id: sessionId,
+        ts: new Date().toISOString()
+      });
+      fs.writeFileSync(agentFlag, archPayload);
     }
   } catch (e) {
     // Silent — PostToolUse, never block

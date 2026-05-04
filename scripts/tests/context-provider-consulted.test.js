@@ -159,4 +159,25 @@ runHook({
 assert.ok(!fs.existsSync(archFlagPath('t11', 'arch-testing')), 'TC11: arch→arch does not write arch-response flag');
 console.log('TC11 arch→arch no arch-response flag: PASS');
 
+// TC12: JSON shape assertion — written_by, agent_id, session_id, ts are strings; agent_id matches input
+const sid12 = 'tc12-json';
+clearFlag(sid12);
+runHook({
+  tool_name: 'SendMessage',
+  tool_input: { to: 'context-provider', message: 'query' },
+  session_id: sid12,
+  agent_id: 'arch-platform-abc',
+  agent_type: 'arch-platform'
+});
+assert.ok(fs.existsSync(flagPath(sid12)), 'TC12: session flag must exist');
+const content12 = fs.readFileSync(flagPath(sid12), 'utf8');
+const meta12 = JSON.parse(content12);
+assert.strictEqual(typeof meta12.written_by, 'string', 'TC12: written_by must be a string');
+assert.strictEqual(typeof meta12.agent_id, 'string', 'TC12: agent_id must be a string');
+assert.strictEqual(typeof meta12.session_id, 'string', 'TC12: session_id must be a string');
+assert.strictEqual(typeof meta12.ts, 'string', 'TC12: ts must be a string');
+assert.strictEqual(meta12.agent_id, 'arch-platform-abc', 'TC12: agent_id must match input payload');
+clearFlag(sid12);
+console.log('TC12 JSON shape assertion (written_by/agent_id/session_id/ts + agent_id match): PASS');
+
 console.log('\nAll context-provider-consulted tests passed.');

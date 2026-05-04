@@ -47,6 +47,10 @@ function clearArchResponseFlag(sessionId, agentType) {
   try { fs.unlinkSync(archResponseFlagPath(sessionId, agentType)); } catch {}
 }
 
+function writeJsonSessionFlag(sessionId, payload) {
+  fs.writeFileSync(sessionFlagPath(sessionId), JSON.stringify(payload));
+}
+
 // F1: Grep on docs path, arch-platform, no flag → BLOCK (exit 2)
 clearSessionFlag('s1');
 const f1 = runHook({
@@ -192,5 +196,45 @@ assert.strictEqual(f12.exit, 2, 'F12: blocked');
 assert.ok(!f12.stdout.includes('context-provider-2'), 'F12: reason must not hardcode context-provider-2 suffix');
 assert.ok(f12.stdout.includes('context-provider'), 'F12: reason references context-provider generally');
 console.log('F12 block reason generic (no hardcoded -2): PASS');
+
+// F13: JSON-format flag → gate exits 0 and emits [CP-GATE] audit log
+const sid13 = 's13-json';
+clearSessionFlag(sid13);
+writeJsonSessionFlag(sid13, {
+  written_by: 'context-provider-consulted',
+  agent_id: 'arch-platform-abc',
+  session_id: sid13,
+  ts: new Date().toISOString()
+});
+const f13 = runHook({
+  tool_name: 'Grep',
+  tool_input: { pattern: 'test', path: '/project/docs/di/di-patterns-modules.md' },
+  session_id: sid13,
+  agent_type: 'arch-platform',
+  agent_id: 'arch-platform-abc'
+});
+assert.strictEqual(f13.exit, 0, 'F13: gate must exit 0 when JSON-format flag exists');
+assert.ok(f13.stderr.includes('[CP-GATE]'), 'F13: stderr must contain [CP-GATE]');
+assert.ok(f13.stderr.includes('session='), 'F13: stderr must contain session=');
+assert.ok(f13.stderr.includes('flag_writer='), 'F13: stderr must contain flag_writer=');
+assert.ok(f13.stderr.includes('flag_ts='), 'F13: stderr must contain flag_ts=');
+assert.ok(f13.stderr.includes('tool='), 'F13: stderr must contain tool=');
+clearSessionFlag(sid13);
+console.log('F13 JSON-format flag gate exits 0 + [CP-GATE] stderr audit: PASS');
+
+// F14: Legacy bare ISO string flag → gate STILL exits 0 (try/catch swallows JSON parse failure)
+const sid14 = 's14-legacy';
+clearSessionFlag(sid14);
+writeSessionFlag(sid14);
+const f14 = runHook({
+  tool_name: 'Grep',
+  tool_input: { pattern: 'test', path: '/project/docs/di/di-patterns-modules.md' },
+  session_id: sid14,
+  agent_type: 'arch-platform',
+  agent_id: 'arch-platform'
+});
+assert.strictEqual(f14.exit, 0, 'F14: legacy ISO-string flag must still allow (JSON parse failure swallowed)');
+clearSessionFlag(sid14);
+console.log('F14 legacy ISO-string flag still exits 0 (legacy compat): PASS');
 
 console.log('\nAll context-provider-gate tests passed.');
