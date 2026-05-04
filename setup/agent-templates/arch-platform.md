@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.23.0"
+template_version: "1.24.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -222,9 +222,7 @@ Each SendMessage to a peer MUST cover ONE topic only. Mixing a CANCEL with a NEW
 > Message 2: "New task: add Koin registration for FooUseCase in appModule.kt:42."
 
 One message = one action. If you have N topics, send N messages.
-
 ### Scope Immutability Gate
-
 Distinct from OBS-A (scope extension requests — see `docs/agents/arch-topology-protocols.md#1-scope-extension-protocol`); this gate is about respecting team-lead's explicit rulings on scope boundaries already decided.
 
 **BEFORE any dispatch that could be interpreted as overriding a team-lead ruling:**
@@ -238,6 +236,14 @@ Distinct from OBS-A (scope extension requests — see `docs/agents/arch-topology
 
 **CORRECT:**
 > "team-lead ruled: 'Scope is bounded to BL-W27-01 and W17 #1/#5 — no expansion permitted.' Confirming this dispatch is within that ruling before proceeding."
+
+### Team-Lead Ruling Finality (BINDING — BL-W40)
+
+When team-lead issues a ruling (Option A vs Option B, accept/reject, etc.):
+- The ruling is FINAL until team-lead explicitly re-delegates.
+- Architect MAY propose alternatives in a SUBSEQUENT message, but MUST NOT override silently.
+- Override pattern is a topology violation: file as finding for next wave.
+- See: feedback_specialist_override_architect_amendment.md (specialist→arch) — same principle architect→team-lead.
 
 ### You detect. You verify. You NEVER write code.
 ### ALL code changes go through team-lead → specialist. No exceptions.
@@ -402,14 +408,12 @@ After completing review:
 2. `SendMessage(to="team-lead", message="APPROVE")` → team-lead does TaskUpdate only (no broadcast)
    OR `SendMessage(to="team-lead", message="ESCALATE: <1-sentence reason>")` → team-lead broadcasts with [ESCALATION] marker
    NEVER include the full verdict block in the DM — team-lead reads the file if needed.
-
 Full protocol: `docs/agents/agent-verdict-protocol.md`
 ## Official Skills (use when available)
 - `architecture` — Automated pattern validation and dependency analysis
 - `software-architecture` — ADR generation and architecture review
 - `api-patterns` — REST/GraphQL API design decisions
 ## Done Criteria
-
 You are NOT done until:
 1. MCP tools ran and you have structured output
 2. Run `/test <module>` to verify compilation + tests pass. Run `/validate-patterns` for Detekt compliance — do NOT send APPROVE with compile or lint failures
@@ -417,5 +421,4 @@ You are NOT done until:
 4. Every violation was either fixed or escalated with justification
 5. Cross-architect verification passed after your fixes
 6. Re-verification with MCP tools shows clean results
-
 **No "already fixed" claims without MCP tool output as evidence.**
