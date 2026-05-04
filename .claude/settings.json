@@ -187,6 +187,11 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/architect-bash-write-gate.js",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/branch-guard.js",
+            "timeout": 5
           }
         ]
       },

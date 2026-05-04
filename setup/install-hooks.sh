@@ -101,6 +101,7 @@ fi
 # Validate hook scripts exist
 HOOK_POST_WRITE="$HOOKS_DIR/detekt-post-write.sh"
 HOOK_PRE_COMMIT="$HOOKS_DIR/detekt-pre-commit.sh"
+HOOK_BRANCH_GUARD="$HOOKS_DIR/branch-guard.js"
 
 if [ ! -f "$HOOK_POST_WRITE" ]; then
     log_err "Post-write hook not found: $HOOK_POST_WRITE"
@@ -110,8 +111,12 @@ if [ ! -f "$HOOK_PRE_COMMIT" ]; then
     log_err "Pre-commit hook not found: $HOOK_PRE_COMMIT"
     exit 1
 fi
+if [ ! -f "$HOOK_BRANCH_GUARD" ]; then
+    log_err "Branch guard hook not found: $HOOK_BRANCH_GUARD"
+    exit 1
+fi
 
-log_ok "Found hook scripts: detekt-post-write.sh, detekt-pre-commit.sh"
+log_ok "Found hook scripts: detekt-post-write.sh, detekt-pre-commit.sh, branch-guard.js"
 echo ""
 
 # Discover or parse projects
@@ -163,7 +168,7 @@ for project in "${PROJECT_LIST[@]}"; do
         mkdir -p "$target_hooks_dir"
     fi
 
-    for hook_file in "$HOOK_POST_WRITE" "$HOOK_PRE_COMMIT"; do
+    for hook_file in "$HOOK_POST_WRITE" "$HOOK_PRE_COMMIT" "$HOOK_BRANCH_GUARD"; do
         hook_name="$(basename "$hook_file")"
         target_path="$target_hooks_dir/$hook_name"
 

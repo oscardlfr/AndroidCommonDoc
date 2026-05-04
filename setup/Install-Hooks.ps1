@@ -218,6 +218,7 @@ Write-Host "Mode: $Mode" -ForegroundColor White
 # Validate hook scripts exist
 $hookPostWrite = Join-Path $HooksDir "detekt-post-write.sh"
 $hookPreCommit = Join-Path $HooksDir "detekt-pre-commit.sh"
+$hookBranchGuard = Join-Path $HooksDir "branch-guard.js"
 
 if (-not (Test-Path $hookPostWrite)) {
     Write-Error "Post-write hook not found: $hookPostWrite"
@@ -227,8 +228,12 @@ if (-not (Test-Path $hookPreCommit)) {
     Write-Error "Pre-commit hook not found: $hookPreCommit"
     exit 1
 }
+if (-not (Test-Path $hookBranchGuard)) {
+    Write-Error "Branch guard hook not found: $hookBranchGuard"
+    exit 1
+}
 
-Write-Host "Hook scripts found: detekt-post-write.sh, detekt-pre-commit.sh" -ForegroundColor Green
+Write-Host "Hook scripts found: detekt-post-write.sh, detekt-pre-commit.sh, branch-guard.js" -ForegroundColor Green
 
 # Discover or filter projects
 if ($Projects.Count -gt 0) {
@@ -272,7 +277,7 @@ foreach ($project in $allProjects) {
     Write-Host "  Path: $projectDir" -ForegroundColor Gray
 
     # --- Step 1: Copy hook scripts ---
-    foreach ($hookFile in @($hookPostWrite, $hookPreCommit)) {
+    foreach ($hookFile in @($hookPostWrite, $hookPreCommit, $hookBranchGuard)) {
         $hookName = Split-Path -Leaf $hookFile
         $targetPath = Join-Path $targetHooksDir $hookName
 
