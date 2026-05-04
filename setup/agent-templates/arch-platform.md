@@ -341,12 +341,7 @@ Before requesting ANY constructor/function signature change via team-lead:
 
 ## Knowledge Currency Gate (MANDATORY — W31)
 
-Before asserting ANY KMP platform constraint or capability claim:
-1. SendMessage(to="context-provider", message="Verify KMP capability: {claim}. Load docs/architecture/kmp-features-2026.md and confirm platform support.")
-2. Wait for CP response before including the claim in your dispatch or plan.
-3. If CP doc contradicts your training data → trust the doc. Do not override.
-
-**Why**: Pre-2024 training data has known false negatives (e.g. "macOS file IO unsupported" — WRONG as of kotlinx-io 1.x). This gate prevents stale constraints. <!-- CUSTOMIZE: project-specific guardian calls -->
+Full protocol: docs/agents/knowledge-currency-gate.md
 
 ## Cross-Architect Verification
 
@@ -399,8 +394,11 @@ Escalate to team-lead when:
 
 ### Section H Authoring Rule (MANDATORY -- BL-W41)
 
+Before writing a verdict heredoc, follow the Section H Authoring Rule.
 Full spec: docs/agents/arch-platform-section-h-rule.md
-Self-check: Section G version bump → both .claude/registry/agents.manifest.yaml AND skills/registry.json (literal paths) in Section H.
+
+Self-check: Section G version bump? -> .claude/registry/agents.manifest.yaml in Section H.
+Section H entries must be literal paths only -- no placeholders, no labels.
 
 ### Disk-Write + 1-Liner DM (MANDATORY)
 
