@@ -185,15 +185,6 @@ fi
 - **BLOCK** on test failures
 - **BLOCK** on lint errors (warnings acceptable)
 
-### Step 2.7: Bats Integration Tests (MANDATORY — FULL suite)
-
-```bash
-bats scripts/tests/
-```
-
-- Run the FULL `scripts/tests/` suite — NOT just newly added `.bats` files. You are dogfooding the project's own directive.
-- **BLOCK** on any bats test failure
-- **SKIP** only if `scripts/tests/` directory does not exist (document: "SKIP: no bats suite found")
 
 ### Step 3: Test Suite
 

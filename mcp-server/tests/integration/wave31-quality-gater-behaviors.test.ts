@@ -4,7 +4,7 @@
  * Covers:
  *  - W31-01: quality-gater template enforces T-BUG-015 Search Dispatch Protocol
  *    Both setup/agent-templates/quality-gater.md and .claude/agents/quality-gater.md must:
- *    - Have template_version "2.7.0" (bumped from BL-W31.7-10 baseline "2.6.0")
+ *    - Have template_version "2.10.0" (bumped from BL-W31.7-10 baseline "2.6.0")
  *    - Contain "T-BUG-015" citation
  *    - Contain "FORBIDDEN" enforcement language
  *    - Contain "context-provider" in the FORBIDDEN block
@@ -81,9 +81,9 @@ describe("quality-gater template enforces T-BUG-015 Search Dispatch Protocol", (
     expect(agentRaw).toBe(setupRaw);
   });
 
-  it('template_version is "2.9.0" (higher than BL-W31.7-10 baseline "2.6.0")', () => {
+  it('template_version is "2.10.0" (higher than BL-W31.7-10 baseline "2.6.0")', () => {
     expect(setupFrontmatter).not.toBeNull();
-    expect(setupFrontmatter?.template_version).toBe("2.9.0");
+    expect(setupFrontmatter?.template_version).toBe("2.10.0");
   });
 
   it("FORBIDDEN block appears before Phase 3 execution steps (Step 0)", () => {
