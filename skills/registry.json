@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-05-05T13:53:04.553Z",
+  "generated": "2026-05-05T16:28:37.524Z",
   "l0_root": ".",
   "entries": [
     {
@@ -2297,7 +2297,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:cf4bcc2605719fa7eb0bfb28ccee4198406ccfe966b301e374544bcd0bab584e",
+      "hash": "sha256:29c0990ff756147b1b0fcea9240f335149eb00c864ce3d9a5eb62cef4d90f1b3",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2313,7 +2313,7 @@
           "ingest"
         ],
         "token_budget": 2000,
-        "template_version": "2.7.0",
+        "template_version": "2.8.0",
         "skills": [
           "audit-docs",
           "readme-audit",
@@ -2694,7 +2694,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ca8baaa5fe5a7d270fae947514d4ec93c7b594bc82a905ac57367ee8efb03e38",
+      "hash": "sha256:f75b798ea299b4d6755171854bc63a6f707d6bdac97e2e409661ca2fdfde101c",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2710,7 +2710,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.9.0"
+        "template_version": "2.10.0"
       }
     },
     {
@@ -2894,7 +2894,7 @@
       "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:22247313a350d855d3b614d83b7b7652f4f26f3967d1ff4e7bfb77d7d65adc90",
+      "hash": "sha256:4365af6841b4fa7cf40a2d3a93c07f89b5109e6e5fab7e65f77a7cde078c014b",
       "dependencies": [],
       "frontmatter": {
         "name": "toolkit-specialist",
@@ -2913,7 +2913,7 @@
           "validator"
         ],
         "token_budget": 3000,
-        "template_version": "1.3.0",
+        "template_version": "1.4.0",
         "memory": "project",
         "skills": [
           "test",
