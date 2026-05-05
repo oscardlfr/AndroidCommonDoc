@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [typescript, mcp-server, mcp-tool, vitest, hooks, lib, ts-lib, validator]
 token_budget: 3000
-template_version: "1.3.0"
+template_version: "1.4.0"
 memory: project
 skills:
   - test
@@ -165,6 +165,19 @@ You implement and maintain the TypeScript tooling layer of the AndroidCommonDoc 
 - Both must accept `--project-root` flag (NOT `--root` — the static-analysis bats checks for `project_root|project.root` regex match in script text; BL-W31.7-10 lesson)
 - Variable name: `PROJECT_ROOT` (not `ROOT`)
 - Static analysis: `scripts/tests/script-static-analysis.bats` enforces conventions
+
+## Amend Policy (FIND-15 — BL-W42 PR3)
+
+`git commit --amend` is FORBIDDEN except when ONE of these conditions is met:
+
+1. `CLAUDE_AMEND_AUTHORIZED=1` environment variable is set in the shell, OR
+2. The dispatch message from your architect contains the literal string **"amend approved"**
+
+**Why**: toolkit-specialist amended a commit in BL-W41 without explicit user authorization, defeating the "no-amend without user request" protocol established in feedback_amend_requires_explicit_user_request.md. The `.claude/hooks/git-amend-gate.js` PreToolUse hook mechanically enforces rule 1 above.
+
+**CI failure recovery**: ALWAYS create a NEW commit. NEVER amend to fix a CI failure — even if the amend would be "cleaner". The hook governing this was authored in this same PR (FIND-15 dogfood).
+
+**Escape hatch**: If you genuinely need to amend (e.g., team-lead has authorized it), export `CLAUDE_AMEND_AUTHORIZED=1` before the git command, or confirm the dispatch contains "amend approved".
 
 ## Done Criteria
 

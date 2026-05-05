@@ -517,8 +517,8 @@ agents:
   toolkit-specialist:
     canonical_name: toolkit-specialist
     subagent_type: toolkit-specialist
-    template_version: "1.3.0"
-    template_frontmatter_sha256: 3c441445ae6a3e30898bfe4fc54948dae973fcc4d749a00e10d4ea786af2ed3a
+    template_version: "1.4.0"
+    template_frontmatter_sha256: b452e754c9274bc84cad57b60cd855cd2c93b8c26ddfae23fe150a53a6ae27a8
     category: core-specialist
     lifecycle: ephemeral
     description: "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain)."
