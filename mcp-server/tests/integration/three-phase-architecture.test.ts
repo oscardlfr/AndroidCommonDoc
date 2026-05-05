@@ -316,9 +316,9 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
   });
 
-  it('arch-platform has template version 1.26.0', () => {
-    // BL-W41 PR1: bumped from 1.25.0 → 1.26.0 (Section H Authoring Rule)
-    expect(platformContent).toContain('template_version: "1.26.0"');
+  it('arch-platform has template version 1.27.0', () => {
+    // BL-W42 PR2: bumped from 1.26.0 → 1.27.0 (Pre-Execute Authoring Checklist)
+    expect(platformContent).toContain('template_version: "1.27.0"');
   });
 
   it('arch-integration has template version 1.24.0', () => {
@@ -327,19 +327,19 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3e. Arch-Platform — Section H Authoring Rule (BL-W41 PR1)
+// 3e. Arch-Platform — Pre-Execute Authoring Checklist (BL-W42 PR2)
 // ---------------------------------------------------------------------------
-describe('arch-platform — Section H Authoring Rule', () => {
+describe('arch-platform — Pre-Execute Authoring Checklist', () => {
   const platformContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
   const subDocPath = path.join(ROOT, 'docs/agents/arch-platform-section-h-rule.md');
   const subDocContent = fs.readFileSync(subDocPath, 'utf-8');
 
-  it('arch-platform template contains Section H Authoring Rule pointer', () => {
-    expect(platformContent).toContain('Section H Authoring Rule (MANDATORY');
+  it('arch-platform template contains Pre-Execute Authoring Checklist pointer', () => {
+    expect(platformContent).toContain('Pre-Execute Authoring Checklist');
   });
 
-  it('arch-platform template contains pointer to sub-doc', () => {
-    expect(platformContent).toContain('Full spec: docs/agents/arch-platform-section-h-rule.md');
+  it('arch-platform template contains pointer to checklist sub-doc', () => {
+    expect(platformContent).toContain('docs/agents/arch-platform-prep-authoring-checklist.md');
   });
 
   it('sub-doc contains structural rule: template_version bump requires agents.manifest.yaml', () => {

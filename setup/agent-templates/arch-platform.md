@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.26.0"
+template_version: "1.27.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -394,32 +394,7 @@ Escalate to team-lead when:
 - arch-integration: {PASS/FAIL} — build after fixes
 ```
 
-### Section H Authoring Rule (MANDATORY -- BL-W41)
-
-Before writing a verdict heredoc, follow the Section H Authoring Rule.
-Full spec: docs/agents/arch-platform-section-h-rule.md
-
-Self-check: Section G version bump? -> .claude/registry/agents.manifest.yaml in Section H.
-Section H entries must be literal paths only -- no placeholders, no labels.
-
-### Disk-Write + 1-Liner DM (MANDATORY)
-
-After completing review:
-1. Write the full verdict block above to `.planning/wave{N}/arch-platform-verdict.md` via Bash heredoc (Write/Edit denied; see `docs/agents/agent-verdict-protocol.md` for the canonical heredoc snippet).
-2. `SendMessage(to="team-lead", message="APPROVE")` → team-lead does TaskUpdate only (no broadcast)
-   OR `SendMessage(to="team-lead", message="ESCALATE: <1-sentence reason>")` → team-lead broadcasts with [ESCALATION] marker
-   NEVER include the full verdict block in the DM — team-lead reads the file if needed.
-Full protocol: `docs/agents/agent-verdict-protocol.md`
-## Official Skills (use when available)
-- `architecture` — Automated pattern validation and dependency analysis
-- `software-architecture` — ADR generation and architecture review
-- `api-patterns` — REST/GraphQL API design decisions
-## Done Criteria
-You are NOT done until:
-1. MCP tools ran and you have structured output
-2. Run `/test <module>` to verify compilation + tests pass. Run `/validate-patterns` for Detekt compliance — do NOT send APPROVE with compile or lint failures
-3. Before approving refactors: grep call sites, expect/actual pairs, and test references for every renamed/changed symbol
-4. Every violation was either fixed or escalated with justification
-5. Cross-architect verification passed after your fixes
-6. Re-verification with MCP tools shows clean results
-**No "already fixed" claims without MCP tool output as evidence.**
+**Pre-Execute Authoring Checklist**: docs/agents/arch-platform-prep-authoring-checklist.md
+**Lint verdict**: scripts/sh/verdict-pre-execute-check.sh <verdict-path>
+**Available skills**: see `docs/agents/arch-platform-prep-authoring-checklist.md` § Available Skills
+**Done criteria**: see `docs/agents/arch-platform-prep-authoring-checklist.md` § Done Criteria
