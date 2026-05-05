@@ -518,7 +518,7 @@ export async function generateRegistry(
 
   return {
     version: 1,
-    generated: new Date().toISOString(),
+    generated: "deterministic",
     l0_root: ".",
     entries: [...skills, ...agents, ...commands],
   };

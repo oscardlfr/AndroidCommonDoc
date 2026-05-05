@@ -407,9 +407,7 @@ describe("skill-registry", () => {
       const registry = await generateRegistry(tmpDir);
 
       expect(registry.version).toBe(1);
-      expect(registry.generated).toMatch(
-        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
-      );
+      expect(registry.generated).toBe("deterministic");
       expect(registry.l0_root).toBe(".");
       expect(registry.entries).toHaveLength(3);
 
