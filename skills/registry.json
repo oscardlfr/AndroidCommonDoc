@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-05-04T17:43:49.217Z",
+  "generated": "2026-05-05T08:34:30.717Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1934,7 +1934,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.23.0",
+        "template_version": "1.24.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1963,7 +1963,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.24.0",
+        "template_version": "1.26.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1977,7 +1977,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:0394ffdbfa0bc7a6d0a627dfba6b99dbac897f6e05dbb81332b0db806a076551",
+      "hash": "sha256:c95d55e2c7e41747833105cec1c4f1dac73917dd2359bbb9c549e16a4100b24a",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1992,7 +1992,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.26.0",
+        "template_version": "1.28.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2167,7 +2167,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.13.0",
+        "template_version": "1.14.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2343,7 +2343,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.13.0",
+        "template_version": "1.14.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.18.0",
+        "template_version": "1.19.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2943,7 +2943,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.16.0",
+        "template_version": "1.17.0",
         "memory": "project",
         "skills": [
           "accessibility",

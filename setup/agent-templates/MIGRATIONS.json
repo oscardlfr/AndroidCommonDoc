@@ -343,6 +343,11 @@
         "date": "2026-05-04",
         "summary": "BL-W40 PR4: add Numbered Step Gate",
         "breaking": false
+      },
+      "1.28.0": {
+        "date": "2026-05-05",
+        "breaking": false,
+        "note": "Add before/after delta protocol to arch-testing template (BL-W41 PR2)"
       }
     },
     "arch-platform": {

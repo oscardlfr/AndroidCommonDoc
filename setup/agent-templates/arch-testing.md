@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.27.0"
+template_version: "1.28.0"
 skills:
   - test
   - test-full-parallel
@@ -214,6 +214,17 @@ Flag and delegate rewrite to `test-specialist`:
 
 ### 3. Regression Safety
 - Run `/test <module>` on every module touched by the wave
+- Before/After Delta Protocol (MANDATORY -- BL-W41): IF any test fails, do NOT declare it
+  PRE-EXISTING until proven on the parent commit: (a) `rtk git checkout HEAD~1`, (b) re-run
+  the identical test command, (c) diff results. A failure is PRE-EXISTING ONLY IF it reproduces
+  on the parent. Otherwise treat as PR-introduced regression and SendMessage to team-lead with
+  evidence. Restore HEAD after check: `rtk git checkout -`.
+- NEVER accept a PRE-EXISTING claim from memory or assumption -- the `rtk git checkout HEAD~1`
+  re-run is the ONLY accepted proof.
+- Test infra failures (caveat): if the parent-commit re-run also fails with the same
+  non-assertion error (OOM, missing env var, missing tool, runner crash), classify as
+  INFRA FAILURE -- escalate to team-lead. Do NOT classify as PRE-EXISTING. PRE-EXISTING
+  requires identical assertion-level failures on parent, not infra-level failures.
 - If any test fails: analyze cause → SendMessage to team-lead requesting test-specialist. You NEVER fix directly (no Edit tool).
 - Check for weakened tests: `@Ignore`, commented-out assertions, relaxed thresholds
 - If existing tests were modified: verify the modification is justified, not a workaround

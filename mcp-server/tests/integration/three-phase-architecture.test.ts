@@ -264,8 +264,8 @@ describe('tl-phase-execution sub-doc — extracted phase protocol', () => {
 describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
-  it('template version 1.27.0', () => {
-    expect(archContent).toContain('template_version: "1.27.0"');
+  it('template version 1.28.0', () => {
+    expect(archContent).toContain('template_version: "1.28.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -282,6 +282,14 @@ describe('arch-testing template — Bash safety and version', () => {
 
   it('instructs to use declared skills not raw gradlew', () => {
     expect(archContent).toMatch(/use the declared skills|Never.*gradlew.*directly/i);
+  });
+
+  it('arch-testing Regression Safety requires before/after delta on PRE-EXISTING claims', () => {
+    expect(archContent).toMatch(/parent.of.HEAD|checkout.*parent|parent.*commit/i);
+  });
+
+  it('arch-testing delta check is MANDATORY before accepting PRE-EXISTING', () => {
+    expect(archContent).toMatch(/PRE-EXISTING[\s\S]{0,400}parent|parent[\s\S]{0,400}PRE-EXISTING/i);
   });
 });
 
@@ -909,8 +917,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toContain('template_version: "1.10.0"');
   });
 
-  it('arch-testing version 1.27.0', () => {
-    expect(testingContent).toContain('template_version: "1.27.0"');
+  it('arch-testing version 1.28.0', () => {
+    expect(testingContent).toContain('template_version: "1.28.0"');
   });
 });
 
