@@ -428,3 +428,52 @@ PYEOF
   [ "$status" -eq 2 ]
   [[ "$output" == *"pathlib.Path"* ]]
 }
+
+# ── Structural tokenizer: REDIRECT_RE false-positive regression suite ────────
+# These scenarios verify that the structural bash tokenizer does NOT
+# false-positive on -> arrows, --flag> patterns, >=, >>= and &> sequences.
+
+@test "allows arch-* echo with -> arrow in message (no real redirect)" {
+  make_input "echo 'sending message agent -> arch-platform'" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "allows arch-* command with -> arrow and pipe (no file redirect)" {
+  make_input "git log --oneline | grep 'A -> B' | head -5" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "allows arch-* command with >= comparison in shell arithmetic" {
+  make_input "if [ \$count -ge 10 ]; then echo ok; fi" 'arch-integration'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "allows arch-* command with >>= shift-assign-like token (no file target)" {
+  make_input "echo 'state >>= 2 shifts bits'" 'arch-testing'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "still blocks real redirect even when -> arrow appears in the same command" {
+  make_input "echo 'A -> B' > docs/output.md" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"shell redirect"* ]]
+}
+
+@test "allows arch-* heredoc where body contains -> arrow lines" {
+  make_input "cat <<'EOF' > .planning/wave-foo/arch-platform-verdict.md
+flow: A -> B -> C
+EOF" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "allows arch-* &> stderr+stdout redirect to /dev/null" {
+  make_input "noisy_cmd &>/dev/null" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
