@@ -402,3 +402,57 @@ jobs:
             echo "✅ All active docs have required frontmatter"
           fi
           exit $FAIL
+
+  topology-gate:
+    name: Wave Topology Gate (WARN)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install + build MCP server
+        working-directory: mcp-server
+        run: |
+          npm ci --silent
+          npm run build --silent
+
+      - name: Run wave topology validator (WARN mode)
+        id: validator
+        run: |
+          set +e
+          node mcp-server/build/cli/validate-wave-topology.js > /tmp/topology-gate.txt 2>&1
+          VALIDATOR_EXIT=$?
+          set -e
+          echo "exit_code=$VALIDATOR_EXIT" >> "$GITHUB_OUTPUT"
+          cat /tmp/topology-gate.txt
+          exit 0
+
+      - name: Post findings to job summary
+        if: always()
+        run: |
+          {
+            echo "## Wave topology gate (WARN mode)"
+            echo ""
+            echo "Validator exit code: \`${{ steps.validator.outputs.exit_code }}\`"
+            echo ""
+            echo "<details><summary>Full validator output</summary>"
+            echo ""
+            echo '```'
+            cat /tmp/topology-gate.txt 2>/dev/null || echo "(no output captured)"
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload topology gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: topology-gate-report
+          path: /tmp/topology-gate.txt
+          retention-days: 14
