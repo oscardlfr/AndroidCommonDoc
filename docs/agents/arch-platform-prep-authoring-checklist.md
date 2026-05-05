@@ -14,9 +14,28 @@ Run this checklist before emitting `APPROVED-PREP` on any verdict. Automation: `
 
 When bumping `template_version` in Section G, enumerate ALL references to the old version across related files.
 
+**Step 1a — Version string grep:**
+
 Run: `rtk grep -rn "<old_version>" mcp-server/tests/ setup/agent-templates/ MIGRATIONS.json`
 
-Every hit must be listed in Section H of the verdict. Unlisted hits = FAIL.
+**Step 1b — Section headers, anchor links, and pointer paths (FIND-12 extension):**
+
+Version-only grep misses non-version references that break when content is extracted or restructured. Also grep for:
+
+```bash
+# Section headers that reference the agent or section being changed
+rtk grep -rn "## <SectionName>\|### <SectionName>" mcp-server/tests/ scripts/ docs/
+
+# Anchor links / slug references (e.g., #manifest-rehash-discipline)
+rtk grep -rn "#<anchor-slug>" mcp-server/tests/ scripts/ docs/
+
+# Pointer paths removed by extraction (e.g., "setup/agent-templates/doc-updater.md#SectionName")
+rtk grep -rn "<template-filename>#" mcp-server/tests/ scripts/ docs/
+```
+
+Every hit (version OR non-version) must be listed in Section H of the verdict. Unlisted hits = FAIL.
+
+Reference: `memory/feedback_cross_file_scan_non_version_strings.md`
 
 Automation function: `check_cross_file_pins` in `scripts/sh/verdict-pre-execute-check.sh`.
 

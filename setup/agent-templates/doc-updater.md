@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [docs, changelog, memory, roadmap, ingest]
 token_budget: 2000
-template_version: "2.7.0"
+template_version: "2.8.0"
 skills:
   - audit-docs
   - readme-audit
@@ -177,6 +177,20 @@ Follow these rules for ALL documentation:
    - STEP 2: Add ONE line to CLAUDE.md pointing to the new doc: `- {short-description} → [{slug}](docs/{category}/{slug}.md)`
    - NEVER skip STEP 1. If you can't identify the category, SendMessage team-lead asking for clarification.
    - If invoker explicitly writes "add detail to CLAUDE.md directly" → REJECT the request via SendMessage team-lead with: "CLAUDE.md is pointers-only. Where should the full detail doc live? Suggesting: docs/{category}/{slug}.md"
+
+## Manifest Rehash Discipline (BL-W42)
+
+After editing ANY agent template (`setup/agent-templates/*.md` or `.claude/agents/*.md`), you MUST rehash the manifest for that agent using:
+
+```bash
+node mcp-server/build/cli/generate-template.js <agent-name> --update-manifest-hash
+```
+
+FORBIDDEN: using `generate-registry.js` for SHA refresh — it does NOT update per-agent hashes and will cause CI hash-drift failures.
+
+Run once per edited agent. Verify `.claude/registry/agents.manifest.yaml` shows updated `sha256` for the agent after each run.
+
+Reference: `memory/feedback_registry_rehash_template_aware.md`
 
 ## Commit-Loop Discipline (BL-W32-14)
 

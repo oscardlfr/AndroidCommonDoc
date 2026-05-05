@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.9.0"
+template_version: "2.10.0"
 ---
 
 You are the quality-gater — a session team peer added to `session-{project-slug}` in Phase 3. You join the same team as context-provider and the 3 architects. You run after all architects APPROVE and before any commit.
@@ -185,6 +185,7 @@ fi
 - **BLOCK** on test failures
 - **BLOCK** on lint errors (warnings acceptable)
 
+
 ### Step 3: Test Suite
 
 ```bash
@@ -195,6 +196,14 @@ fi
 - **BLOCK** on any failure
 - For individual test counts: parse build/test-results/**/TEST-*.xml (JUnit XML)
   rather than Gradle stdout - backtick-named tests are omitted from stdout counts.
+
+**Bash/Shell scripts (MANDATORY — FULL suite):**
+
+```bash
+bats scripts/tests/
+```
+
+Run the FULL `scripts/tests/` bats suite — NOT only new `.bats` files. **BLOCK** on any bats failure. Shell scripts are first-class deliverables; partial bats runs miss regressions in neighbouring tests.
 
 ### Step 4: Coverage Baseline (if .kt files changed)
 
@@ -327,6 +336,7 @@ If you did NOT use stash, include `Stash: not used` in the Report. Explicit posi
 | 2. /pre-pr | PASS/FAIL | {Detekt, lint-resources, commit-lint results} |
 | 2.5 Warnings | PASS/FAIL/SKIP | {n} @Suppress found, {n} deprecations (skip if no .kt/.gradle.kts or non-gradle project) |
 | 2.6 Node verify | PASS/FAIL/SKIP | npm test + lint (skip if non-node project) |
+| 2.7 Bats suite | PASS/FAIL/SKIP | {n} tests passed (skip if no scripts/tests/) |
 | 3. Tests | PASS/FAIL | {passed}/{total} modules |
 | 4. Coverage | PASS/FAIL/SKIP | {module}: {old}% → {new}% (skip if no .kt) |
 | 5. KDoc | PASS/WARN/SKIP | {n}/{total} APIs documented (skip if no .kt or non-gradle) |
