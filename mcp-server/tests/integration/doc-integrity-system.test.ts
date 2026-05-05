@@ -275,8 +275,8 @@ describe('doc-updater template', () => {
     expect(content).toContain('generated: true');
   });
 
-  it('template version bumped to 2.8.0', () => {
-    expect(content).toContain('template_version: "2.8.0"');
+  it('template version bumped to 2.9.0', () => {
+    expect(content).toContain('template_version: "2.9.0"');
   });
 });
 
