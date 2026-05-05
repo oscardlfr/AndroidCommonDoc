@@ -223,6 +223,11 @@
         "date": "2026-05-03",
         "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
         "breaking": false
+      },
+      "2.10.0": {
+        "date": "2026-05-05",
+        "breaking": false,
+        "note": "BL-W42 PR3: add Step 2.7 FULL bats suite directive (bats scripts/tests/); add 2.7 row to Report table"
       }
     },
     "doc-migrator": {
@@ -623,6 +628,11 @@
         "date": "2026-05-03",
         "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
         "breaking": false
+      },
+      "2.8.0": {
+        "date": "2026-05-05",
+        "breaking": false,
+        "note": "BL-W42 PR3: add Manifest Rehash section (generate-template.js --update-manifest-hash; forbid generate-registry.js for SHA refresh)"
       }
     },
     "product-strategist": {
