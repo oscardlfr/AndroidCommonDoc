@@ -621,6 +621,83 @@ describe("CLI subprocess — exit codes", () => {
   });
 });
 
+// ── --from-disk flag ─────────────────────────────────────────────────────────
+
+describe("CLI --from-disk", () => {
+  it("E.1 happy path: exits 0, template+mirror unchanged, manifest sha256 written", () => {
+    const root = buildSyntheticProject([
+      { canonical_name: "test-agent", includeHashField: true },
+    ]);
+    const templatePath = path.join(root, "setup/agent-templates/test-agent.md");
+    const mirrorPath = path.join(root, ".claude/agents/test-agent.md");
+
+    const templateBefore = readFileSync(templatePath);
+    const mirrorBefore = readFileSync(mirrorPath);
+
+    const r = runCli(["--from-disk", "test-agent", root]);
+    expect(r.exitCode).toBe(0);
+
+    expect(Buffer.compare(readFileSync(templatePath), templateBefore)).toBe(0);
+    expect(Buffer.compare(readFileSync(mirrorPath), mirrorBefore)).toBe(0);
+
+    const manifestContent = readFileSync(
+      path.join(root, ".claude/registry/agents.manifest.yaml"),
+      "utf-8",
+    );
+    expect(manifestContent).toMatch(/template_frontmatter_sha256: [0-9a-f]{64}/);
+  });
+
+  it("E.2 drift correction: replaces stale hash with correct sha256 from on-disk content", () => {
+    const root = buildSyntheticProject([
+      { canonical_name: "test-agent", includeHashField: true },
+    ]);
+    const manifestPath = path.join(root, ".claude/registry/agents.manifest.yaml");
+    const staleHash = "a".repeat(64);
+
+    // Inject a stale hash into the manifest
+    const manifestContent = readFileSync(manifestPath, "utf-8");
+    const injected = manifestContent.replace(
+      "template_frontmatter_sha256: null",
+      `template_frontmatter_sha256: ${staleHash}`,
+    );
+    writeFileSync(manifestPath, injected, "utf-8");
+
+    const r = runCli(["--from-disk", "test-agent", root]);
+    expect(r.exitCode).toBe(0);
+
+    const updated = readFileSync(manifestPath, "utf-8");
+    expect(updated).not.toContain(staleHash);
+    expect(updated).toMatch(/template_frontmatter_sha256: [0-9a-f]{64}/);
+  });
+
+  it("E.3 conflict guard: --from-disk + --check exits 2 with 'incompatible' in stderr", () => {
+    const root = buildSyntheticProject([
+      { canonical_name: "test-agent", includeHashField: true },
+    ]);
+    const r = runCli(["--from-disk", "--check", "test-agent", root]);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toContain("incompatible");
+  });
+
+  it("E.4 conflict guard: --from-disk + --update-manifest-hash exits 2 with 'incompatible' in stderr", () => {
+    const root = buildSyntheticProject([
+      { canonical_name: "test-agent", includeHashField: true },
+    ]);
+    const r = runCli(["--from-disk", "--update-manifest-hash", "test-agent", root]);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toContain("incompatible");
+  });
+
+  it("E.5 missing template: exits 2 with error indication when template file absent", () => {
+    const root = buildSyntheticProject([
+      { canonical_name: "test-agent", includeHashField: true, skipTemplate: true },
+    ]);
+    const r = runCli(["--from-disk", "test-agent", root]);
+    expect(r.exitCode).toBe(2);
+    expect(r.stdout + r.stderr).toMatch(/error/i);
+  });
+});
+
 // ── Live project smoke ────────────────────────────────────────────────────────
 
 describe("live project smoke", () => {
