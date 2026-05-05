@@ -290,7 +290,7 @@ agents:
     canonical_name: test-specialist
     subagent_type: test-specialist
     template_version: "1.19.0"
-    template_frontmatter_sha256: 2a4384aa5e71f97572cf62d6589435bd8cbb4960b982c74fe69d612e702222b2
+    template_frontmatter_sha256: fc5f9c146c7dfb7e97bc54d95892f5c430b48c0be7460e0747e41fe4c63c73e5
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation."
@@ -347,7 +347,7 @@ agents:
     canonical_name: data-layer-specialist
     subagent_type: data-layer-specialist
     template_version: "1.14.0"
-    template_frontmatter_sha256: 7b1ab8b4984d1a06b21d79fdf15ad211c5415fe8d480dc0471386d9fb002893f
+    template_frontmatter_sha256: 904498241f2b79561b4f5661cb316beb7e2f4795683dc597d0f434beebe89119
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration."
@@ -404,7 +404,7 @@ agents:
     canonical_name: domain-model-specialist
     subagent_type: domain-model-specialist
     template_version: "1.14.0"
-    template_frontmatter_sha256: 2a9d09b0b6ee5a9a52ef2be0da5265133fc6bb527a85a4609c8ad49b06e22fed
+    template_frontmatter_sha256: c73cd4c9bd83c6233d5d4228555a69569e2af78fae6a125a72ade73601e9c028
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements domain layer — models, use cases, business logic. Reports to arch-platform."
@@ -460,7 +460,7 @@ agents:
     canonical_name: ui-specialist
     subagent_type: ui-specialist
     template_version: "1.17.0"
-    template_frontmatter_sha256: 87ffa13151abfaa3e587055964a56ecadd9a5b58dc02cf4a22508755d0da469a
+    template_frontmatter_sha256: 5e21c9179afe991fce93bcea15db1dbc6c3e73cb076905173d259cda1ac0f3f0
     category: core-specialist
     lifecycle: ephemeral
     description: "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations."
@@ -517,8 +517,8 @@ agents:
   toolkit-specialist:
     canonical_name: toolkit-specialist
     subagent_type: toolkit-specialist
-    template_version: "1.3.0"
-    template_frontmatter_sha256: 3c441445ae6a3e30898bfe4fc54948dae973fcc4d749a00e10d4ea786af2ed3a
+    template_version: "1.4.0"
+    template_frontmatter_sha256: b452e754c9274bc84cad57b60cd855cd2c93b8c26ddfae23fe150a53a6ae27a8
     category: core-specialist
     lifecycle: ephemeral
     description: "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain)."
@@ -638,8 +638,8 @@ agents:
   doc-updater:
     canonical_name: doc-updater
     subagent_type: doc-updater
-    template_version: "2.7.0"
-    template_frontmatter_sha256: a40fe172bb417819a270129e358a6fbe6256ddfc5293c75367c9da9b5a24b131
+    template_version: "2.8.0"
+    template_frontmatter_sha256: f58b317e8aa297ea415996278d8637783c05c6da9951763d1b371ce2294be993
     category: doc-owner
     lifecycle: persistent
     description: "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure)."
@@ -887,8 +887,8 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.9.0"
-    template_frontmatter_sha256: c5383259bf03808db79c48298dcde8e2f96adec196a4ed922198bfe417dd8e14
+    template_version: "2.10.0"
+    template_frontmatter_sha256: 422e10c9e29887e7f38ff2ed21a13d227e665175165ac15edba6da89840f695a
     category: orchestrator
     lifecycle: ephemeral
     description: "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL."
