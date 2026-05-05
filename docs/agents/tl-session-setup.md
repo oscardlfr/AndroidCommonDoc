@@ -122,3 +122,22 @@ In this pattern, all peers are live from session start. PREP/EXECUTE distinction
 **Legacy pattern (deferred to W31.7+)**: nested spawning where arch-platform/arch-integration/arch-testing spawn devs after PREP phase. Still supported via PREP/EXECUTE distinction in arch templates. Will be replaced when BL-W31.7-01 ships.
 
 **PREP/EXECUTE distinction in arch templates**: Still ENFORCED — see [arch-dispatch-modes.md](arch-dispatch-modes.md) and the architect templates for current PREP/EXECUTE semantics. In the canonical pattern (all peers live from session start) architects still receive PREP dispatches in Phase 1 and EXECUTE dispatches in Phase 2; the distinction governs whether devs are available to receive sub-dispatches.
+
+## Wave Slug Propagation (FIND-18 fix, BL-W42 PR1)
+
+The wave slug (e.g., `bl-w42-pr1`) is used by hooks to locate PLAN.md and the quality-gate sentinel.
+
+**MANDATORY: export slug BEFORE starting your session shell, NOT inline in commands:**
+
+```bash
+export CLAUDE_WAVE_SLUG=bl-w42-pr1   # set once in terminal; hooks pick it up
+```
+
+**Fallback detection order:**
+1. `CLAUDE_WAVE_SLUG` env var (canonical)
+2. Git branch: `feature/{slug}` → strip `feature/` prefix
+3. Alias scan: single `.planning/wave-*/PLAN.md` presence (last resort)
+
+**Quality-gate sentinel location (FIND-17 fix):** `.claude/wave-quality-gates/{slug}.md`
+NOT in `.planning/wave-{slug}/quality-gate.md` (gitignored by `.gitignore:54`).
+Create sentinel BEFORE first `git push` on the feature branch.

@@ -52,6 +52,8 @@ tmp/
 # pattern at line 47 only matches depth 1; subdirs need their own rules).
 .planning/verdicts/
 .planning/wave*/
+# Note: wave quality-gate sentinels live in .claude/wave-quality-gates/ (tracked)
+# NOT in .planning/wave-*/ — see FIND-17 fix (BL-W42 PR1).
 
 # ── Local agent memory & settings (per-user) ──
 .claude/agent-memory/

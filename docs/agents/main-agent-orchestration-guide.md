@@ -43,7 +43,7 @@ The main agent (when orchestrating a session) orchestrates the project: plan sco
 
 ### Per-Session Gate
 
-**Per-session gate**: Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from context-provider in this session. The hook enforces this mechanically — your first search-type tool call will be blocked until CP has been consulted.
+**Per-session gate**: Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from context-provider in this session. The hook enforces this mechanically — your first search-type tool call will be blocked until CP has been consulted. Wave slug propagation + quality-gate sentinel location: see [tl-session-setup § Wave Slug Propagation](tl-session-setup.md#wave-slug-propagation-find-18-fix-bl-w42-pr1) (FIND-17/18 fix).
 
 ## Operating Mode
 

@@ -3,8 +3,12 @@
  * CLI entrypoint for validate-wave-topology.
  *
  * Validates wave planning directory structure against wave-topology.yaml
- * phase gate config. Reports missing PLAN.md and quality-gate.md sentinels
+ * phase gate config. Reports missing PLAN.md and quality-gate sentinels
  * across all .planning/wave-{slug}/ directories.
+ *
+ * Sentinel location is read from wave-topology.yaml phase_gates config
+ * (FIND-17 fix, BL-W42 PR1): sentinels live in .claude/wave-quality-gates/{slug}.md
+ * rather than the gitignored .planning/wave-{slug}/quality-gate.md.
  *
  * Usage:
  *   node build/cli/validate-wave-topology.js [PROJECT_ROOT] [options]
@@ -101,6 +105,24 @@ interface TopologyResult {
   findingsBySeverity: { error: number; warn: number; info: number };
 }
 
+interface PhaseGateConfig {
+  plan_required_before_arch_dispatch?: boolean;
+  quality_gate_required_before_push?: boolean;
+  sentinel_dir?: string;
+  sentinel_filename_template?: string;
+}
+
+function resolveSentinelPath(
+  projectRoot: string,
+  slug: string,
+  phaseGates: PhaseGateConfig,
+): string {
+  const sentinelDir = phaseGates.sentinel_dir ?? ".claude/wave-quality-gates";
+  const template = phaseGates.sentinel_filename_template ?? "{slug}.md";
+  const filename = template.replace("{slug}", slug);
+  return path.join(projectRoot, sentinelDir, filename);
+}
+
 function validateWaveTopology(projectRoot: string): TopologyResult {
   const findings: TopologyFinding[] = [];
 
@@ -126,7 +148,7 @@ function validateWaveTopology(projectRoot: string): TopologyResult {
     return buildResult(findings);
   }
 
-  const phaseGates = (topology.phase_gates ?? {}) as Record<string, boolean>;
+  const phaseGates = (topology.phase_gates ?? {}) as PhaseGateConfig;
   const planRequired = phaseGates.plan_required_before_arch_dispatch === true;
   const qualityGateRequired = phaseGates.quality_gate_required_before_push === true;
 
@@ -146,6 +168,7 @@ function validateWaveTopology(projectRoot: string): TopologyResult {
 
   for (const waveDir of waveDirs) {
     const wavePath = path.join(planningDir, waveDir);
+    const slug = waveDir.slice("wave-".length);
 
     if (planRequired && !existsSync(path.join(wavePath, "PLAN.md"))) {
       findings.push({
@@ -155,12 +178,15 @@ function validateWaveTopology(projectRoot: string): TopologyResult {
       });
     }
 
-    if (qualityGateRequired && !existsSync(path.join(wavePath, "quality-gate.md"))) {
-      findings.push({
-        severity: "warn",
-        category: "phase-gate",
-        message: `${waveDir}: quality-gate.md missing (quality_gate_required_before_push = true)`,
-      });
+    if (qualityGateRequired) {
+      const sentinelPath = resolveSentinelPath(projectRoot, slug, phaseGates);
+      if (!existsSync(sentinelPath)) {
+        findings.push({
+          severity: "warn",
+          category: "phase-gate",
+          message: `${waveDir}: quality-gate sentinel missing (quality_gate_required_before_push = true)\n  Expected: ${path.relative(projectRoot, sentinelPath)}`,
+        });
+      }
     }
   }
 
