@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # Read PreToolUse JSON from stdin
-INPUT=$(cat /dev/stdin)
+INPUT=$(cat)
 
 # Extract command from tool input
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty') || exit 0

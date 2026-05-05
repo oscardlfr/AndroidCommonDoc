@@ -49,3 +49,27 @@ make_input() {
   run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
   [ "$status" -eq 0 ]
 }
+
+@test "allows pr3- prefixed arch-platform verdict file (single-digit)" {
+  make_input Write '/project/.planning/wave-bl-w42-pr4/pr3-arch-platform-verdict.md' 'arch-platform'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "allows pr10- prefixed arch-integration verdict file (multi-digit)" {
+  make_input Write '/project/.planning/wave-bl-w42-pr4/pr10-arch-integration-verdict.md' 'arch-integration'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "blocks pr3-foo-verdict file (non-arch prefix)" {
+  make_input Write '/project/.planning/wave-bl-w42-pr4/pr3-foo-verdict.md' 'arch-platform'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
+
+@test "allows legacy arch-testing-verdict file (no pr prefix)" {
+  make_input Write '/project/.planning/wave-bl-w42-pr4/arch-testing-verdict.md' 'arch-testing'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+}

@@ -57,7 +57,6 @@ process.stdin.on('end', () => {
 // ── Detection ────────────────────────────────────────────────────────────────
 
 const HEREDOC_RE = /<<-?\s*['"]?[A-Za-z_]\w*['"]?/;
-const REDIRECT_RE = /(?:^|[^0-9&>])>{1,2}(?!=)\s*(['"]?)([^\s<>|&;'"]+)\1/g;
 const SED_INPLACE_RE = /\bsed\s+(?:[^|<>;&'"]*?(?:-i\b|--in-place\b))/;
 const AWK_INPLACE_RE = /\bawk\s+[^|<>;&'"]*?-i\s+inplace\b/;
 // `python -c "...open(<file>, 'w')..."` — covers both wrapping quote styles
@@ -206,10 +205,98 @@ function splitCommandLines(cmd) {
   return result;
 }
 
+// Structural bash tokenizer: walks the line character-by-character, tracking
+// quote state and skipping over non-redirect > characters (e.g. -> arrows,
+// --flag> patterns, >= comparisons, >>= shift-assign, 2>&1 fd duplication).
+// Only yields targets for genuine shell output redirects: >/>> preceded by an
+// optional fd digit (or nothing) and NOT preceded by -, =, another >, or &.
 function collectRedirectTargets(line, targets) {
-  const re = new RegExp(REDIRECT_RE.source, 'g');
-  let m;
-  while ((m = re.exec(line)) !== null) {
-    if (m[2]) targets.push(m[2]);
+  const len = line.length;
+  let i = 0;
+  while (i < len) {
+    const ch = line[i];
+
+    // Skip single-quoted strings (no escapes inside '...')
+    if (ch === "'") {
+      i++;
+      while (i < len && line[i] !== "'") i++;
+      i++; // closing quote
+      continue;
+    }
+
+    // Skip double-quoted strings (handle \" escapes)
+    if (ch === '"') {
+      i++;
+      while (i < len && line[i] !== '"') {
+        if (line[i] === '\\') i++; // skip escaped char
+        i++;
+      }
+      i++; // closing quote
+      continue;
+    }
+
+    // Look for > redirect operator
+    if (ch === '>') {
+      // Determine what precedes the >
+      const prev = i > 0 ? line[i - 1] : '';
+
+      // Reject: -> arrow, --flag>, >= comparison, >>= shift, 2>&1 fd-dup &>
+      if (prev === '-' || prev === '=' || prev === '>' || prev === '&') {
+        i++;
+        continue;
+      }
+
+      // Accept: optional leading digit (fd number like 2>) or word boundary
+      // prev is digit (fd redirect like 2>), space, ;, |, (, or start-of-line
+      const isValidPreceding = prev === '' || /[\d\s;|(]/.test(prev);
+      if (!isValidPreceding) {
+        i++;
+        continue;
+      }
+
+      // Skip optional second > (>>)
+      let j = i + 1;
+      if (j < len && line[j] === '>') j++;
+
+      // Reject >= (append-assign or comparison)
+      if (j < len && line[j] === '=') {
+        i++;
+        continue;
+      }
+
+      // Reject >& fd duplication (e.g. >&2, 2>&1)
+      if (j < len && line[j] === '&') {
+        i++;
+        continue;
+      }
+
+      // Skip whitespace after >
+      while (j < len && (line[j] === ' ' || line[j] === '\t')) j++;
+
+      if (j >= len) { i++; continue; }
+
+      // Extract the target token (up to whitespace, |, ;, &, <, >)
+      const startQ = line[j];
+      let target = '';
+      if (startQ === "'" || startQ === '"') {
+        // Quoted target
+        j++;
+        while (j < len && line[j] !== startQ) {
+          if (startQ === '"' && line[j] === '\\') j++;
+          target += line[j++];
+        }
+        j++; // closing quote
+      } else {
+        while (j < len && !/[\s|;&<>]/.test(line[j])) {
+          target += line[j++];
+        }
+      }
+
+      if (target) targets.push(target);
+      i = j;
+      continue;
+    }
+
+    i++;
   }
 }

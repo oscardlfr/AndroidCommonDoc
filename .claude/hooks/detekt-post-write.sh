@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # Read PostToolUse JSON from stdin
-INPUT=$(cat /dev/stdin)
+INPUT=$(cat)
 
 # Extract file path from tool input
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty') || exit 0
