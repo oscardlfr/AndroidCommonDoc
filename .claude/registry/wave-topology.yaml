@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=./wave-topology.schema.json
 manifest:
-  version: 1
+  version: 2
   description: "Mandatory peer list and phase gate rules for session-* teams"
 session_prefix: "session-*"
 mandatory_peers:
@@ -14,3 +14,7 @@ mandatory_peers:
 phase_gates:
   plan_required_before_arch_dispatch: true
   quality_gate_required_before_push: true
+  # FIND-17 fix (BL-W42 PR1): sentinel moved from gitignored .planning/wave-*/
+  # to tracked .claude/wave-quality-gates/ directory.
+  sentinel_dir: ".claude/wave-quality-gates"
+  sentinel_filename_template: "{slug}.md"

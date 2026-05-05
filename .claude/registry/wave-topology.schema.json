@@ -10,7 +10,15 @@
       "type": "object",
       "properties": {
         "plan_required_before_arch_dispatch": { "type": "boolean" },
-        "quality_gate_required_before_push": { "type": "boolean" }
+        "quality_gate_required_before_push": { "type": "boolean" },
+        "sentinel_dir": {
+          "type": "string",
+          "description": "Directory (relative to project root) where wave quality-gate sentinels are stored. Default: .claude/wave-quality-gates"
+        },
+        "sentinel_filename_template": {
+          "type": "string",
+          "description": "Filename template for quality-gate sentinels. {slug} is replaced with the wave slug. Default: {slug}.md"
+        }
       }
     }
   }
