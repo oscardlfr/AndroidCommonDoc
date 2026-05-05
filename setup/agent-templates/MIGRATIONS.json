@@ -842,6 +842,11 @@
         "date": "2026-05-04",
         "summary": "BL-W40 PR3: add Numbered Step Gate to Team Identity section",
         "breaking": false
+      },
+      "1.20.0": {
+        "date": "2026-05-05",
+        "breaking": false,
+        "note": "BL-W42 PR5: update kmp-test-runner version pins v0.6.2->v0.8.1 at lines 155/157/162/163/185. Add MANDATE: use /test skill or kmp-test-runner CLI. Add FORBID: raw gradlew test / gradle test / :module:test."
       }
     },
     "ui-specialist": {
