@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-05-05T08:34:30.717Z",
+  "generated": "2026-05-05T13:53:04.553Z",
   "l0_root": ".",
   "entries": [
     {
@@ -1948,7 +1948,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:cd0917a9788f57896cc1f460a6d957bf3344af01b84cfa26fcccb6f92bc5699e",
+      "hash": "sha256:e9c171f155a04084d45efbc08cdf8eb267aedba730c8a47ce487137e0c1ab6dc",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1963,7 +1963,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.26.0",
+        "template_version": "1.27.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"

@@ -446,6 +446,16 @@
         "date": "2026-05-04",
         "summary": "BL-W40 PR4: add Numbered Step Gate",
         "breaking": false
+      },
+      "1.26.0": {
+        "date": "2026-05-05",
+        "summary": "BL-W41 PR1: Section H Authoring Rule",
+        "breaking": false
+      },
+      "1.27.0": {
+        "date": "2026-05-05",
+        "summary": "BL-W42 PR2: Pre-Execute Authoring Checklist (extract to sub-doc)",
+        "breaking": false
       }
     },
     "arch-integration": {
