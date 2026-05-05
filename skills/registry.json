@@ -2297,7 +2297,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:29c0990ff756147b1b0fcea9240f335149eb00c864ce3d9a5eb62cef4d90f1b3",
+      "hash": "sha256:8baf1c0674aa2f51f17ee7e13ed4c6a09ab759c11eafa38dbb36afe3a7c6c82b",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2856,7 +2856,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:2a84c725463415c5d550012dea0ee61c095363906f0c89b7ef86834bb36fe97e",
+      "hash": "sha256:5a3613366c7c773b727e6af053ab23d2bfaf6c1b3a4353ee85221e0bc3115c7e",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",

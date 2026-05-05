@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W42 — Topology Hardening Pack, PRs #135-#139)
+- **Knowledge Currency Gate** (`.claude/hooks/knowledge-currency-gate.js`): PreToolUse SendMessage gate — blocks arch-platform/arch-testing from sending KMP-keyword messages unless `KMP_CURRENCY_CHECKED=1` env or `[KMP_CURRENCY_CHECKED]` inline marker is set. Closes FIND-06.
+- **N=3 Retry-on-Fail Discriminator** (`scripts/sh/before-after-delta.sh`): Runs test command 3x; classifies FLAKY (2/3 pass, exit 0), REGRESSION (0/3 pass, exit 1), SUSPICIOUS (1/3 pass, exit 2). Closes FIND-07.
+- **doc-updater SUPERSEDES Dispatch Protocol** (`setup/agent-templates/doc-updater.md` v2.9.0): When mid-execute SendMessage carries `SUPERSEDES PRIOR DISPATCH` header, doc-updater aborts, validates `superseded_at` ISO field, re-reads dispatch and scope_doc from scratch. Closes FIND-10.
+- **kmp-test-runner v0.8.1 enforcement hook** (`.claude/hooks/kmp-test-runner-gate.js`): PreToolUse Bash gate — blocks `./gradlew test`, `gradle test`, `:module:test` invocations. Bypass: `KMP_TEST_RUNNER_BYPASS=1` or `[KMP_TEST_RUNNER_BYPASS]` inline. Closes BL-W42 PR5 backlog.
+- **test-specialist v0.8.1 pins** (`setup/agent-templates/test-specialist.md` v1.20.0): Updated kmp-test-runner version pins v0.6.2→v0.8.1; added MANDATE/FORBID block for raw gradle invocations.
+- **Verdict pre-execute checklist** (`docs/agents/verdict-pre-execute-checklist.md`): Binding gate before any architect EXECUTE dispatch. Closes FIND-08/09/11/12/16/19 (PR2).
+- **Amend discipline hardening** (`setup/agent-templates/doc-updater.md` v2.8.0, PR3): `git commit --amend` requires explicit user authorization, not architect dispatch. Closes FIND-15.
+- **Bash hook hardening + REDIRECT_RE fix** (PR4): stderr noise cleanup + structural fix for redirect regex. Closes FIND-13/17/18.
+
 ### Added (BL-W32-06a)
 - `scripts/sh/gradle-run.sh` + `scripts/ps1/gradle-run.ps1` refactored to thin wrappers (~75/~65 lines) around `kmp-test-runner@0.6.2` CLI (was 497/489 lines). Drops: 2-attempt daemon retry, Kover fallback chain, JDK detection, 15s heartbeat poll.
 - New `--dry-run` flag (additive): prints the constructed `kmp-test` command and exits 0. Useful for debugging flag translation.
