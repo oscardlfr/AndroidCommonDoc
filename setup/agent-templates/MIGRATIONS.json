@@ -633,6 +633,11 @@
         "date": "2026-05-05",
         "breaking": false,
         "note": "BL-W42 PR3: add Manifest Rehash section (generate-template.js --update-manifest-hash; forbid generate-registry.js for SHA refresh)"
+      },
+      "2.9.0": {
+        "date": "2026-05-05",
+        "breaking": false,
+        "note": "FIND-10 (BL-W42 PR5): add SUPERSEDES Dispatch Protocol -- when mid-execute SendMessage carries 'SUPERSEDES PRIOR DISPATCH' header, doc-updater MUST abort current work, re-read dispatch from scratch, and verify superseded_at timestamp before proceeding"
       }
     },
     "product-strategist": {

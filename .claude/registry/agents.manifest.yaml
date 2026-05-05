@@ -638,8 +638,8 @@ agents:
   doc-updater:
     canonical_name: doc-updater
     subagent_type: doc-updater
-    template_version: "2.8.0"
-    template_frontmatter_sha256: f58b317e8aa297ea415996278d8637783c05c6da9951763d1b371ce2294be993
+    template_version: "2.9.0"
+    template_frontmatter_sha256: 9fd47dccb3879b264dd84f4928dde714884881a9dd66c10f13053f59266e5668
     category: doc-owner
     lifecycle: persistent
     description: "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure)."

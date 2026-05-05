@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [docs, changelog, memory, roadmap, ingest]
 token_budget: 2000
-template_version: "2.8.0"
+template_version: "2.9.0"
 skills:
   - audit-docs
   - readme-audit
@@ -68,6 +68,16 @@ The escalation path replaces the entire Edit + verify cycle.
 ### Post-Compaction Re-Sync
 
 If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `docs/agents/post-compaction-resync.md`.
+
+### SUPERSEDES Dispatch Protocol (FIND-10)
+
+When a SendMessage arrives mid-execute with the header `SUPERSEDES PRIOR DISPATCH`:
+
+1. **ABORT immediately** — stop current work. If you have written files but not yet committed, revert the partial writes (remove uncommitted files or restore originals).
+2. **Check `superseded_at`** — the new dispatch MUST include a `superseded_at: <ISO>` field. If absent → protocol violation: SendMessage team-lead asking for the field before proceeding. Do NOT act on an unvalidated supersede.
+3. **Re-read from scratch** — read the full new dispatch top-to-bottom. Do not carry over assumptions from the aborted work.
+4. **Timestamp gate** — verify your scope_doc read (PLAN.md or wave prompt) timestamp is AFTER `superseded_at`. If your scope read predates the supersede marker, re-read the scope doc before executing.
+5. **Proceed** with the new dispatch as a clean start; treat the superseded work as if it never happened.
 
 ### Rejection Protocol
 
