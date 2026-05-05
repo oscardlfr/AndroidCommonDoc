@@ -46,6 +46,7 @@ interface CliOptions {
   all: boolean;
   check: boolean;
   updateManifestHash: boolean;
+  fromDisk: boolean;
   format: "summary" | "json";
 }
 
@@ -59,6 +60,7 @@ function printUsage(stream: NodeJS.WriteStream = process.stderr): void {
       "  --check                 Read-only; exit 1 if generated output != current file\n" +
       "  --all                   Batch over every manifest entry\n" +
       "  --update-manifest-hash  Compute SHA-256 + write to manifest in same pass\n" +
+      "  --from-disk             Hash from on-disk template; no template/mirror write\n" +
       "  --format summary|json   Output format (default: summary)\n" +
       "  --help, -h              Show this message\n\n" +
       "Exit codes:\n" +
@@ -79,6 +81,7 @@ function parseArgs(argv: string[]): CliOptions | null {
   let all = false;
   let check = false;
   let updateManifestHash = false;
+  let fromDisk = false;
   let format: "summary" | "json" = "summary";
   let positionalSeen = 0;
 
@@ -90,6 +93,8 @@ function parseArgs(argv: string[]): CliOptions | null {
       check = true;
     } else if (arg === "--update-manifest-hash") {
       updateManifestHash = true;
+    } else if (arg === "--from-disk") {
+      fromDisk = true;
     } else if (arg === "--format") {
       const next = args[i + 1];
       if (next !== "summary" && next !== "json") {
@@ -128,6 +133,16 @@ function parseArgs(argv: string[]): CliOptions | null {
     }
   }
 
+  if (fromDisk && check) {
+    process.stderr.write("ERROR: --from-disk and --check are incompatible\n");
+    process.exit(2);
+  }
+
+  if (fromDisk && updateManifestHash) {
+    process.stderr.write("ERROR: --from-disk and --update-manifest-hash are incompatible\n");
+    process.exit(2);
+  }
+
   if (!all && agentName === null) {
     process.stderr.write(
       "ERROR: must pass either <agent-name> or --all\n",
@@ -135,7 +150,7 @@ function parseArgs(argv: string[]): CliOptions | null {
     process.exit(2);
   }
 
-  return { projectRoot, agentName, all, check, updateManifestHash, format };
+  return { projectRoot, agentName, all, check, updateManifestHash, fromDisk, format };
 }
 
 // ── Manifest I/O ─────────────────────────────────────────────────────────────
@@ -226,6 +241,7 @@ interface ProcessOptions {
   manifestPath: string;
   check: boolean;
   updateManifestHash: boolean;
+  fromDisk: boolean;
 }
 
 function processAgent(
@@ -242,6 +258,35 @@ function processAgent(
     templatePath,
     mirrorPath,
   };
+
+  if (opts.fromDisk) {
+    if (!existsSync(templatePath)) {
+      result.status = "error";
+      result.message = `template missing: ${path.relative(opts.projectRoot, templatePath)}`;
+      return result;
+    }
+    const raw = readFileSync(templatePath, "utf-8");
+    const split = splitFrontmatterAndBody(raw);
+    if (!split) {
+      result.status = "error";
+      result.message = `cannot parse frontmatter from ${path.relative(opts.projectRoot, templatePath)}`;
+      return result;
+    }
+    const sha256 = computeFrontmatterSha256(split.yamlBlock);
+    result.sha256 = sha256;
+    if (entry.template_frontmatter_sha256 === sha256) {
+      result.status = "noop";
+    } else {
+      try {
+        writeManifestHash(opts.manifestPath, agentName, sha256);
+        result.status = "wrote";
+      } catch (err) {
+        result.status = "error";
+        result.message = `manifest hash update failed: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    }
+    return result;
+  }
 
   // Existing template required — body is preserved from it.
   if (!existsSync(templatePath)) {
@@ -392,6 +437,7 @@ async function main(): Promise<void> {
     manifestPath,
     check: opts.check,
     updateManifestHash: opts.updateManifestHash,
+    fromDisk: opts.fromDisk,
   };
 
   const results: AgentResult[] = [];
