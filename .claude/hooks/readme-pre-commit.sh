@@ -3,7 +3,7 @@
 # All non-JSON output goes to stderr. Only valid JSON (or nothing) goes to stdout.
 set -euo pipefail
 
-INPUT=$(cat /dev/stdin)
+INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty') || exit 0
 [ -z "$COMMAND" ] && exit 0
 [[ "$COMMAND" =~ git\ commit ]] || exit 0
