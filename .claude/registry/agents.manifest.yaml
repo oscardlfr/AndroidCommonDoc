@@ -181,8 +181,8 @@ agents:
   arch-testing:
     canonical_name: arch-testing
     subagent_type: arch-testing
-    template_version: "1.27.0"
-    template_frontmatter_sha256: adda62c0eea394042240fb9f93fd35b2b00a29ad05f62c49a71ebeca11602b45
+    template_version: "1.28.0"
+    template_frontmatter_sha256: d7f22761b4da5808eef5cb7f033bb14db94e779ee4f76138ad04a9b549eb88ab
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
