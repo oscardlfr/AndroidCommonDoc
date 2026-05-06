@@ -2151,7 +2151,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d9d6c10871fd696cf0b25d1add6403779293d7a93350d2796ab9c10c2dcbc9d9",
+      "hash": "sha256:7169ce20c694b7bb98e572e16eff6315780a8743413a08233754a387424b2d40",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -2167,7 +2167,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.14.0",
+        "template_version": "1.15.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2328,7 +2328,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1e565cd1de5472a36de7d7513f2dee3369b1d7d46083d2bd6f51896b19b9497b",
+      "hash": "sha256:3f943c401477a3fb1e15b81df1528eb2a1ed67bfa5daca239232ce5d6740ff2b",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2343,7 +2343,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.14.0",
+        "template_version": "1.15.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2856,7 +2856,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:5a3613366c7c773b727e6af053ab23d2bfaf6c1b3a4353ee85221e0bc3115c7e",
+      "hash": "sha256:e1235e041b4923491f04f9651053bc5e208a648742f032e53a039166845599e1",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.20.0",
+        "template_version": "1.21.0",
         "memory": "project",
         "skills": [
           "test",

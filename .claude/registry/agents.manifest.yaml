@@ -289,8 +289,8 @@ agents:
   test-specialist:
     canonical_name: test-specialist
     subagent_type: test-specialist
-    template_version: "1.20.0"
-    template_frontmatter_sha256: 91e4e4d844dbb518e6c0a0c2789e84d7030e1900ea56544fae72e1fdbc5d4e87
+    template_version: "1.21.0"
+    template_frontmatter_sha256: 6f44d8bccb364ed3d4720995a5a63630627db1144790a31f03943314d1a95328
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation."
@@ -346,8 +346,8 @@ agents:
   data-layer-specialist:
     canonical_name: data-layer-specialist
     subagent_type: data-layer-specialist
-    template_version: "1.14.0"
-    template_frontmatter_sha256: 904498241f2b79561b4f5661cb316beb7e2f4795683dc597d0f434beebe89119
+    template_version: "1.15.0"
+    template_frontmatter_sha256: aa37f95561a59f1d8dfc29e419e38899e5ff622ac3aef6ba5690bf5095e870e9
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration."
@@ -403,8 +403,8 @@ agents:
   domain-model-specialist:
     canonical_name: domain-model-specialist
     subagent_type: domain-model-specialist
-    template_version: "1.14.0"
-    template_frontmatter_sha256: c73cd4c9bd83c6233d5d4228555a69569e2af78fae6a125a72ade73601e9c028
+    template_version: "1.15.0"
+    template_frontmatter_sha256: f3aaa79e68094ce276fc9c56c056017ccf8d052e830c081e1bafa07bdc2f7fe9
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements domain layer — models, use cases, business logic. Reports to arch-platform."
