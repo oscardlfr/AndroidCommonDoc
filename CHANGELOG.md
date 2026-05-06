@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W43 — Architect Topology Hardening, PRs #140-#143)
+- **arch-bash-write-gate cross-verify exempt** (`scripts/sh/quality-gate-pre-pr.sh`, `scripts/sh/architect-bash-write-gate.sh`): Extends exempt regex to allow architects to read/write `pr*-arch-*-cross-verify.md` files when validating peer verdicts. Closes W43-01.
+- **substring-gate hook-bypass-recursive-pattern doc + bats** (`docs/guides/hook-bypass-recursive-pattern.md`, `scripts/tests/hook-bypass-recursive-pattern.bats`): Documents the recursive-bootstrap edge case where bypass markers in prose Bash text fire the gate they should bypass. 3 new bats cases. Closes W43-02.
+- **premature-execution-gate hook** (`.claude/hooks/premature-execution-gate.js`, `scripts/tests/premature-execution-gate.bats`): PreToolUse gate blocks specialist Write/Edit/Bash before architect publishes APPROVED-PREP verdict. 9 bats cases. Subject set: 6 specialists + doc-updater. Bypass: WAVE_PREP_BYPASS=1 env or [PREMATURE_EXEC_BYPASS] inline. Closes W43-03 (HIGH, recurring).
+
 ### Added (BL-W42 — Topology Hardening Pack, PRs #135-#139)
 - **Knowledge Currency Gate** (`.claude/hooks/knowledge-currency-gate.js`): PreToolUse SendMessage gate — blocks arch-platform/arch-testing from sending KMP-keyword messages unless `KMP_CURRENCY_CHECKED=1` env or `[KMP_CURRENCY_CHECKED]` inline marker is set. Closes FIND-06.
 - **N=3 Retry-on-Fail Discriminator** (`scripts/sh/before-after-delta.sh`): Runs test command 3x; classifies FLAKY (2/3 pass, exit 0), REGRESSION (0/3 pass, exit 1), SUSPICIOUS (1/3 pass, exit 2). Closes FIND-07.

@@ -63,6 +63,7 @@ tmp/
 .androidcommondoc/upstream-cache/
 .androidcommondoc/audit-log.jsonl
 .kmp-test-runner-cache/
+**/.kmp-test-runner/
 
 # ── Crash dumps ──
 *.stackdump
