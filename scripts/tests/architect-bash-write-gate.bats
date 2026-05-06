@@ -472,6 +472,54 @@ EOF" 'arch-platform'
   [ "$status" -eq 0 ]
 }
 
+# ── BL-W43-01: cross-verify path exemption ──────────────────────────────────
+# Tests that architect-bash-write-gate.js exempt regex accepts the
+# arch-*-cross-verify.md filename family (and pr\d+-prefixed variants)
+# in addition to the existing arch-*-verdict.md family.
+# Fixes: BL-W42 PR5 arch-integration was blocked writing cross-verify files.
+# Current regex (line 94) only covers verdict; these 4 ALLOW cases are RED
+# until toolkit-specialist extends the alternation to (verdict|cross-verify).
+
+@test "BL-W43-01: heredoc redirect to arch-integration-cross-verify.md is exempt" {
+  make_input "cat <<'EOF' > .planning/wave-bl-w43/arch-integration-cross-verify.md
+cross-verify content
+EOF" 'arch-integration'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "BL-W43-01: heredoc redirect to pr1-prefixed cross-verify.md is exempt" {
+  make_input "cat <<'EOF' > .planning/wave-bl-w43/pr1-arch-platform-cross-verify.md
+cross-verify content
+EOF" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "BL-W43-01: pathlib write_text to pr12-prefixed cross-verify.md is exempt (multi-digit)" {
+  make_input "Path('.planning/wave-bl-w43/pr12-arch-testing-cross-verify.md').write_text('x')" 'arch-testing'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "BL-W43-01: plain redirect to arch-integration-cross-verify.md is exempt" {
+  make_input "echo 'content' > .planning/wave-bl-w43/arch-integration-cross-verify.md" 'arch-integration'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "BL-W43-01: arch-platform-cross-check.md (wrong suffix) is blocked" {
+  make_input "Path('.planning/wave-bl-w43/arch-platform-cross-check.md').write_text('x')" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "BL-W43-01: arch-cross-verify.md (missing role segment) is blocked" {
+  make_input "Path('.planning/wave-bl-w43/arch-cross-verify.md').write_text('x')" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
 @test "allows arch-* &> stderr+stdout redirect to /dev/null" {
   make_input "noisy_cmd &>/dev/null" 'arch-platform'
   run_hook

@@ -73,3 +73,23 @@ make_input() {
   run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
   [ "$status" -eq 0 ]
 }
+
+# ── BL-W43-01: cross-verify path exemption ──────────────────────────────────
+
+@test "allows arch-* Write to cross-verify file (no pr prefix)" {
+  make_input Write '/project/.planning/wave-bl-w43/arch-testing-cross-verify.md' 'arch-testing'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "allows arch-* Write to pr-prefixed cross-verify file" {
+  make_input Write '/project/.planning/wave-bl-w43/pr1-arch-platform-cross-verify.md' 'arch-platform'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "blocks arch-* Write to cross-check.md (wrong suffix, not cross-verify)" {
+  make_input Write '/project/.planning/wave-bl-w43/arch-platform-cross-check.md' 'arch-platform'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
