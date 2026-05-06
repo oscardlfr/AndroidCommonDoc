@@ -165,6 +165,11 @@
           },
           {
             "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/premature-execution-gate.js",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/plan-context.js",
             "timeout": 5
           }
@@ -196,6 +201,11 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/architect-bash-write-gate.js",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/premature-execution-gate.js",
             "timeout": 5
           },
           {
