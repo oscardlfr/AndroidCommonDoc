@@ -525,3 +525,58 @@ EOF" 'arch-platform'
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── W44-01: Windows-aware isExemptTarget ────────────────────────────────────
+# Tests that os.tmpdir() normalization correctly exempts Windows temp paths
+# and correctly blocks non-temp Windows project paths.
+# Windows temp path - update if machine changes
+
+@test "W44-01: allows redirect to Windows temp path (forward-slash form)" {
+  make_input "echo result > C:/Users/34645/AppData/Local/Temp/foo.txt" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "W44-01: allows redirect to Windows temp path (backslash form)" {
+  make_input 'echo result > C:\Users\34645\AppData\Local\Temp\foo.txt' 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "W44-01: allows redirect to /tmp/foo.txt (POSIX /tmp/ regression)" {
+  make_input "echo result > /tmp/foo.txt" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "W44-01: allows redirect to \$TMPDIR/foo.txt (env var regression)" {
+  make_input 'echo result > $TMPDIR/foo.txt' 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "W44-01: allows redirect to /dev/null (stream sink regression)" {
+  make_input "noisy_cmd > /dev/null" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "W44-01: blocks redirect to Windows project path (non-temp)" {
+  make_input "echo result > C:/Users/34645/AndroidStudioProjects/foo.js" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"shell redirect"* ]]
+}
+
+@test "W44-01: allows tee to Windows temp path (forward-slash form)" {
+  make_input "some_cmd | tee C:/Users/34645/AppData/Local/Temp/debug.log" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "W44-01: blocks tee to Windows project path" {
+  make_input "some_cmd | tee C:/Users/34645/AndroidStudioProjects/some-file.md" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"tee write"* ]]
+}
