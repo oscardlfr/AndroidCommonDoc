@@ -17,8 +17,8 @@ process.stdin.on('end', () => {
     if (!['Write', 'Edit'].includes(toolName)) process.exit(0);
     if (!agentType.startsWith('arch-')) process.exit(0);
 
-    // Exempt: verdict files only (.planning/wave{slug}/[pr\d+-]arch-*-verdict.md)
-    if (/[\\/]\.planning[\\/]wave[\w.-]+[\\/](?:pr\d+-)?arch-[^/\\]+-verdict\.md$/.test(filePath)) {
+    // Exempt: verdict + cross-verify files (.planning/wave{slug}/[pr\d+-]arch-*-{verdict,cross-verify}.md)
+    if (/[\\/]\.planning[\\/]wave[\w.-]+[\\/](?:pr\d+-)?arch-[^/\\]+-(?:verdict|cross-verify)\.md$/.test(filePath)) {
       process.exit(0);
     }
 

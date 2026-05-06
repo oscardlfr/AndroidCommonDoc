@@ -20,7 +20,7 @@ Architects write a full verdict block to disk and send a 1-liner DM to team-lead
 
 After completing review for wave `{N}`:
 
-1. **Write verdict to** `.planning/wave{N}/arch-{role}-verdict.md` using a Bash heredoc — Write/Edit are denied by `architect-self-edit-gate.js`; this heredoc is the only mechanism. The path `.planning/wave*/arch-*-verdict.md` is whitelisted in `architect-bash-write-gate.js:82`.
+1. **Write verdict to** `.planning/wave{N}/arch-{role}-verdict.md` using a Bash heredoc — Write/Edit are denied by `architect-self-edit-gate.js`; this heredoc is the only mechanism. The path `.planning/wave*/arch-*-{verdict,cross-verify}.md` is whitelisted in `architect-bash-write-gate.js:95`.
 
    ```bash
    mkdir -p .planning/wave{N}/

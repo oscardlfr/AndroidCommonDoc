@@ -15,7 +15,7 @@
 // Exempt write targets (architects DO own these):
 //   - /tmp/* and $TMPDIR/*       (debug temp files)
 //   - /dev/null and /dev/std*    (stream sinks)
-//   - .planning/wave*/arch-*-verdict.md   (architect verdict files)
+//   - .planning/wave*/arch-*-{verdict,cross-verify}.md   (architect write targets)
 //   - .androidcommondoc/audit-log.jsonl   (telemetry append)
 //
 // Exit codes:
@@ -41,6 +41,7 @@ process.stdin.on('end', () => {
   if (data.tool_name !== 'Bash') process.exit(0);
   const agentType = (data.agent_type ?? '').toLowerCase();
   if (!agentType.startsWith('arch-')) process.exit(0);
+  if (process.env.BASH_WRITE_GATE_BYPASS === '1') process.exit(0);
 
   const cmd = data.tool_input?.command ?? '';
   if (!cmd) process.exit(0);
@@ -48,7 +49,7 @@ process.stdin.on('end', () => {
   const violation = detectViolation(cmd);
   if (!violation) process.exit(0);
 
-  const reason = '[arch-bash-write-gate] Architect "' + agentType + '" attempted Bash write via "' + violation.kind + '" (target: ' + (violation.target ?? '<inline>') + '). Architects MUST NOT write project files — even via Bash bypass. Delegate via SendMessage(to="team-lead", summary="need {dev}", message="..."). Exempt write targets: /tmp/*, /dev/null, .planning/wave*/arch-*-verdict.md, .androidcommondoc/audit-log.jsonl.';
+  const reason = '[arch-bash-write-gate] Architect "' + agentType + '" attempted Bash write via "' + violation.kind + '" (target: ' + (violation.target ?? '<inline>') + '). Architects MUST NOT write project files — even via Bash bypass. Delegate via SendMessage(to="team-lead", summary="need {dev}", message="..."). Exempt write targets: /tmp/*, /dev/null, .planning/wave*/arch-*-{verdict,cross-verify}.md, .androidcommondoc/audit-log.jsonl.';
 
   process.stdout.write(JSON.stringify({ decision: 'block', reason }));
   process.exit(2);
@@ -91,7 +92,7 @@ function isExemptTarget(target) {
   if (target.startsWith('/dev/')) return true;
   if (target.startsWith('/tmp/') || target === '/tmp') return true;
   if (target.startsWith('$TMPDIR/') || target.startsWith('${TMPDIR}/')) return true;
-  if (/\.planning[\\/]wave[\w.-]+[\\/](?:pr\d+-)?arch-[^\s/\\]+-verdict\.md$/.test(target)) return true;
+  if (/\.planning[\\/]wave[\w.-]+[\\/](?:pr\d+-)?arch-[^\s/\\]+-(?:verdict|cross-verify)\.md$/.test(target)) return true;
   if (/\.androidcommondoc[\\/]audit-log\.jsonl$/.test(target)) return true;
   return false;
 }

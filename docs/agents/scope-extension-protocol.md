@@ -159,8 +159,8 @@ arch-testing commits out-of-scope changes with scope change buried in a large di
 | Hook | Trigger | Blocks |
 |------|---------|--------|
 | `architect-scope-gate.js` | `PreToolUse` on `Write`/`Edit` | Out-of-scope file edits (this doc) |
-| `architect-self-edit-gate.js` | `PreToolUse` on `Write`/`Edit` | Any source/template edit by `arch-*` agents — only `.planning/wave*/arch-*-verdict.md` allowed |
-| `architect-bash-write-gate.js` | `PreToolUse` on `Bash` | Bash bypass patterns: heredoc redirect, `sed -i`, `awk -i inplace`, `python -c open(...,'w')`, `python <<EOF` heredoc with `open(...,'w')`, `tee` to file, plain `>`/`>>` shell redirect. Exempt targets: `/tmp/*`, `$TMPDIR/*`, `/dev/null`, `/dev/std*`, `.planning/wave*/arch-*-verdict.md`, `.androidcommondoc/audit-log.jsonl` |
+| `architect-self-edit-gate.js` | `PreToolUse` on `Write`/`Edit` | Any source/template edit by `arch-*` agents — only `.planning/wave*/arch-*-{verdict,cross-verify}.md` allowed |
+| `architect-bash-write-gate.js` | `PreToolUse` on `Bash` | Bash bypass patterns: heredoc redirect, `sed -i`, `awk -i inplace`, `python -c open(...,'w')`, `python <<EOF` heredoc with `open(...,'w')`, `tee` to file, plain `>`/`>>` shell redirect. Exempt targets: `/tmp/*`, `$TMPDIR/*`, `/dev/null`, `/dev/std*`, `.planning/wave*/arch-*-{verdict,cross-verify}.md`, `.androidcommondoc/audit-log.jsonl` |
 
 When designing a new architect-class agent, audit it against all three hooks: any tool the agent uses must satisfy each gate's contract.
 
