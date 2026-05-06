@@ -31,6 +31,7 @@ process.stdin.on('end', () => {
   // Env bypass
   if (process.env.KMP_TEST_RUNNER_BYPASS === '1') process.exit(0);
 
+  // Inline bypass: set when PR body / commit message references blocked patterns as prose.
   // Inline marker bypass
   if (command.includes('[KMP_TEST_RUNNER_BYPASS]')) process.exit(0);
 
