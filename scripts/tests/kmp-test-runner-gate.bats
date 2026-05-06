@@ -58,3 +58,28 @@ run_hook() {
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── BL-W43-02: inline bypass and prose-reference behavior ───────────────────
+# Regression coverage for the substring-gate recursive-bootstrap pattern.
+# kmp-test-runner-gate uses command.includes() which fires on prose references
+# (e.g., PR body text) as well as real invocations. The inline marker
+# [KMP_TEST_RUNNER_BYPASS] is the escape hatch for prose-reference contexts.
+# BL-W42 PR5 was the canonical incident. NO hook logic changed in W43-02.
+
+@test "BL-W43-02: PASS: inline [KMP_TEST_RUNNER_BYPASS] marker bypasses block" {
+  make_input './gradlew test # [KMP_TEST_RUNNER_BYPASS]'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "BL-W43-02: BLOCK: gh pr create body with gradlew test (no bypass — by design)" {
+  make_input "gh pr create --title 'foo' --body 'run ./gradlew test to verify'"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "BL-W43-02: PASS: gh pr create body with gradlew test + inline marker" {
+  make_input "gh pr create --title 'foo' --body 'run ./gradlew test to verify # [KMP_TEST_RUNNER_BYPASS]'"
+  run_hook
+  [ "$status" -eq 0 ]
+}
