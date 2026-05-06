@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.20.0"
+template_version: "1.21.0"
 memory: project
 skills:
   - test
@@ -296,7 +296,12 @@ If you discover a bug during your task â€” whether you caused it or not â�
 Full targets table: `docs/agents/test-specialist-coverage-targets.md`.
 
 ## Common Gradle Error Triage (BL-W32-16)
-Full triage steps: `docs/agents/test-specialist-jdk-env.md`.
+
+UnsupportedClassVersionError / class version mismatch:
+  1. Query context-provider for "project JDK requirement" memory - get correct major version
+  2. If JAVA_HOME mismatches, override inline: JAVA_HOME="<path>" <gradle-invocation>
+  3. Windows path example: Eclipse Adoptium JDK install dir (query context-provider for exact path)
+  4. If still failing after JAVA_HOME override, escalate to team-lead with full Gradle output
 
 ## Done Criteria
 
