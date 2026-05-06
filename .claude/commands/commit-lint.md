@@ -39,7 +39,7 @@ Valid types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`
 
 ### Valid Scopes
 
-> **Note (BL-W32-13):** Compound module scopes are accepted — the base token must be in `valid_scopes`, followed by optional hyphenated suffixes. Example: `feat(core-error-sdk): ...` passes when `core` is a valid scope.
+> **Note (BL-W32-13):** Compound module scopes are accepted. List the first hyphen-delimited segment in `valid_scopes`. The workflow appends any number of additional hyphen-segments automatically. Examples: `feat(core-error-sdk)` passes when `core` is in `valid_scopes`; `feat(core-json-api)` passes when `core` is in `valid_scopes`; `fix(network-ktor)` passes when `network` is in `valid_scopes`. Callers do NOT need to enumerate every compound module name.
 
 ### Step 3 -- Validate Rules
 
