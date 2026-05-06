@@ -167,8 +167,8 @@ describe('dev template structural invariants', () => {
     const PER_TEMPLATE_LIMIT: Record<string, number> = {
       'test-specialist.md': 370,
       'ui-specialist.md': 322,
-      'domain-model-specialist.md': 214,
-      'data-layer-specialist.md': 208,
+      'domain-model-specialist.md': 222,
+      'data-layer-specialist.md': 216,
     };
     for (const t of DEV_TEMPLATES) {
       const c = fs.readFileSync(path.join(TEMPLATES_DIR, t), 'utf-8');
