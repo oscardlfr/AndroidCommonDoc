@@ -720,6 +720,11 @@
         "date": "2026-05-02",
         "breaking": false,
         "note": "BL-W32-16: Common Gradle Error Triage section appended"
+      },
+      "1.2.1": {
+        "date": "2026-05-07",
+        "breaking": false,
+        "note": "BL-W26-01: declare 4 mcp__androidcommondoc__* tools in frontmatter (dependency-graph, verify-kmp-packages, gradle-config-lint, module-health) for cross-module coherence audits."
       }
     },
     "module-lifecycle": {
@@ -1086,6 +1091,11 @@
         "date": "2026-04-26",
         "breaking": false,
         "note": "Add SendMessage to tools (was relying on fragile session-flag inheritance from parent session). Surfaced during Phase 1 agents-manifest audit."
+      },
+      "1.0.2": {
+        "date": "2026-05-07",
+        "breaking": false,
+        "note": "BL-W26-01: declare 3 mcp__androidcommondoc__* tools in frontmatter (verify-kmp-packages, string-completeness, dependency-graph) for cross-platform parity validation."
       }
     },
     "debugger": {
@@ -1124,6 +1134,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system full audit orchestrator agent."
+      },
+      "1.0.1": {
+        "date": "2026-05-07",
+        "breaking": false,
+        "note": "BL-W26-01: declare 14 mcp__androidcommondoc__* tools in frontmatter (audit-docs, audit-report, findings-report, validate-all/agents/skills/doc-structure, code-metrics, scan-secrets, dependency-graph, gradle-config-lint, module-health, verify-kmp-packages, string-completeness, pattern-coverage) for full-audit orchestrator scope."
       }
     },
     "l0-coherence-auditor": {
@@ -1143,6 +1158,11 @@
         "date": "2026-04-20",
         "breaking": false,
         "note": "W24-P4: Initial agent mirror -- portability chain. Mirrors system privacy and PII auditor agent."
+      },
+      "1.0.1": {
+        "date": "2026-05-07",
+        "breaking": false,
+        "note": "BL-W26-01: declare 1 mcp__androidcommondoc__* tool in frontmatter (scan-secrets) for PII and encrypted-storage audits."
       }
     },
     "quality-gate-orchestrator": {
@@ -1155,6 +1175,11 @@
         "date": "2026-05-02",
         "breaking": false,
         "note": "BL-W32-16: Common Gradle Error Triage section appended"
+      },
+      "1.1.1": {
+        "date": "2026-05-07",
+        "breaking": false,
+        "note": "BL-W26-01: declare 10 mcp__androidcommondoc__* tools in frontmatter (validate-all/agents/skills/doc-structure/claude-md, audit-docs, script-parity, check-doc-patterns, check-doc-freshness, pattern-coverage) for 5-gate quality validation."
       }
     },
     "release-guardian-agent": {
