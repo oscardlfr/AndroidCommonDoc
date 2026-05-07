@@ -2,12 +2,47 @@
 
 > Created: 2026-04-21
 > Scope: items intentionally deferred during Wave 25 to keep blast radius manageable. Each entry has a trigger condition for when it should be picked up.
+> **Last validated against codebase: 2026-05-06 (post BL-W43 close)**
+
+---
+
+## ⭐ Current state (validated 2026-05-06)
+
+This summary is the authoritative live view. Older sections below are kept as historical reference.
+
+### ✅ SHIPPED — verified against codebase 2026-05-06 (close these)
+
+| Item | Evidence |
+|---|---|
+| W17-#16 catalog `--module-paths` | `scripts/sh/catalog-coverage-check.sh` (`MODULE_PATHS` flag, 8 matches) |
+| W17-#14 pre-commit compile-fail hook | `.git/hooks/compile-fail-pre-commit.sh` installed |
+| W17-#19 specialist [DEV NOTE] guidance | 5 specialist templates have it |
+| W17-#4 K/N interop @Suppress allowlist | `skills/pre-pr/SKILL.md:99` documents the exemption |
+| W17-#11 / #17 KMP features ref doc | `docs/architecture/kmp-features-2026.md` (78 lines, last_verified 2026-04-24) |
+| BL-W32-14 doc-updater commit-loop closure + amend-on-unpushed | `setup/agent-templates/doc-updater.md:210-215` |
+| BL-W32-15 Edit zero-Read clash resolution | 8 templates reference zero-Read budget guidance |
+| BL-W32-17 kotlin-reflect / sealedSubclasses gotcha | `docs/testing/testing-hub.md` |
+| BL-W32-18 quality-gater XML test count | `setup/agent-templates/quality-gater.md:197` (parse `build/test-results/**/TEST-*.xml`) |
+| BL-W32-19 doc-updater rename reporting | `setup/agent-templates/doc-updater.md:223` |
+| BL-W32-20 .androidcommondoc gitignore | `.gitignore` lines 63-64, 82 |
+| BL-W26-05 .planning historical files | RESOLVED W30 (left-as-is decision) |
+
+### ✅ ALL OPEN ITEMS CLOSED — BL-W44 Sessions 1+2 complete (2026-05-07)
+
+All 8 open items from the previous snapshot are now SHIPPED or DROPPED.
+
+### 📅 Calendar / triggered-only (no action this session)
+
+- **BL-W36** `/release-build-verify` L1→L0 promotion eval — re-evaluate ~2026-07-03 (BL-W38)
+- **Plugin v0.2.1** dokka-markdown-plugin — triggered-only (Maven Central publish / downstream request / W33+ adoption)
+
+---
 
 ## Wave 26 candidates (MCP wiring round 2)
 
 ### BL-W26-01: Wire MCP tools into 28 remaining agents
 
-**Status**: backlog
+**Status**: ~~backlog~~ ✅ SHIPPED BL-W44-S2 PR #150 (2026-05-07) — 5 agents: cross-platform-validator, platform-auditor, privacy-auditor, full-audit-orchestrator, quality-gate-orchestrator
 **Priority**: medium
 **Deferred from**: Wave 25 Task #2
 
@@ -38,7 +73,7 @@ Wave 25 wired MCP tools into the 10 core agents that referenced them in prose. T
 
 ### BL-W26-02: Level B — skill-leak-check script
 
-**Status**: backlog
+**Status**: ~~backlog~~ ✅ SHIPPED BL-W44-S2 PR #151 (2026-05-07) — scripts/sh/skill-leak-check.sh + bats + /metrics wiring
 **Priority**: medium
 **Deferred from**: Wave 25 Task #13 (Level A shipped)
 
@@ -57,9 +92,9 @@ Level A aggregates `skill_name` from tool-use-log. Level B adds **alternative-pa
 
 **Effort**: ~2 hours (map + detection script + /metrics wiring).
 
-### BL-W26-03: Level C — retroactive intent-matching analysis
+### ~~BL-W26-03~~: ~~Level C — retroactive intent-matching analysis~~ DROP
 
-**Status**: backlog
+**Status**: ~~backlog~~ **DROP** (BL-W44-S2)
 **Priority**: low
 **Deferred from**: Wave 25 Task #13
 
@@ -81,9 +116,9 @@ For each completed session, look at the task intent (from prompt / PLAN.md) and 
 **Status**: RESOLVED (2026-04-24, W30 Round 5)
 **Resolution**: .gsd/agents/ already gitignored (.gitignore:68). material-3-skill/ never existed. Agent mirrors near-parity — 1 orphan (project-manager.md in .claude/ only) + 3 missing .claude/ copies (data-layer-specialist, domain-model-specialist, team-lead). Forward constraint recorded in CLAUDE.md.
 
-### BL-W26-05: Align `.planning/` historical plan files
+### ~~BL-W26-05~~: ~~Align `.planning/` historical plan files~~ RESOLVED
 
-**Status**: backlog
+**Status**: ~~backlog~~ **RESOLVED W30** (PR #65, left-as-is decision)
 **Priority**: low
 
 `.planning/` contains historical plan files referencing the old `project-manager` name. These are session-scoped plan history — renaming would rewrite historical record. Option A: leave as-is (historical record). Option B: add a top-level note in each file: "Wave 25: role renamed to team-lead". Currently: left as-is.
@@ -1178,3 +1213,10 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 
 ---
 
+---
+
+## BL-W44 Session 2 — CLOSED 2026-05-07
+
+PRs: #150 (BL-W26-01 MCP tools frontmatter × 5 agents), #151 (BL-W26-02 skill-leak-check + /metrics wire)
+Closed: BL-W26-01, BL-W26-02, BL-W26-03 (DROP), BL-W26-05 (RESOLVED W30)
+Findings: copilot-templates rogue (recurring; reverted twice); arch-bash-write-gate doesn't exempt .claude/wave-quality-gates/ (architects need main-agent intermediary); validate-agent-templates.sh Check 7 substring-grep bug (false-positive PASS for some MIGRATIONS misses); doc-updater self-stamped sentinel placeholder (vs quality-gater stamping).
