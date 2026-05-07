@@ -583,3 +583,40 @@ EOF" 'arch-platform'
   [ "$status" -eq 2 ]
   [[ "$output" == *"tee write"* ]]
 }
+
+# ── BL-W44-S2: .claude/wave-quality-gates/arch-*.md is exempt ───────────────
+# Tests that architect-bash-write-gate.js exempts arch-prefixed wave-quality-gate
+# verdict files that architects write, while blocking sentinel files (no arch- prefix)
+# and arbitrary project paths.
+
+@test "BL-W44-S2: allows redirect to .claude/wave-quality-gates/arch-platform-prep-bl-w44-s2-pr1.md" {
+  make_input "echo 'APPROVED' > .claude/wave-quality-gates/arch-platform-prep-bl-w44-s2-pr1.md" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "BL-W44-S2: allows redirect to .claude/wave-quality-gates/arch-testing-verify-bl-w44-s2-pr2.md" {
+  make_input "echo 'APPROVED' > .claude/wave-quality-gates/arch-testing-verify-bl-w44-s2-pr2.md" 'arch-testing'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "BL-W44-S2: allows redirect to .claude/wave-quality-gates/arch-integration-light-bl-w44-s2-pr3.md" {
+  make_input "echo 'APPROVED' > .claude/wave-quality-gates/arch-integration-light-bl-w44-s2-pr3.md" 'arch-integration'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "BL-W44-S2: blocks redirect to .claude/wave-quality-gates/bl-w44-s2-pr1.md (sentinel, no arch- prefix)" {
+  make_input "echo 'stub' > .claude/wave-quality-gates/bl-w44-s2-pr1.md" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"shell redirect"* ]]
+}
+
+@test "BL-W44-S2: blocks redirect to docs/agents/foo.md (arbitrary project path)" {
+  make_input "echo 'content' > docs/agents/foo.md" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"shell redirect"* ]]
+}
