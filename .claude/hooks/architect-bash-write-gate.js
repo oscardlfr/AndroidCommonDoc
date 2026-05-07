@@ -13,7 +13,8 @@
 //   - plain redirect        > file or >> file to a project path
 //
 // Exempt write targets (architects DO own these):
-//   - /tmp/* and $TMPDIR/*       (debug temp files)
+//   - os.tmpdir()/*              (debug temp files, cross-platform — Windows + POSIX)
+//   - /tmp/* and $TMPDIR/*       (debug temp files, POSIX literal fallback)
 //   - /dev/null and /dev/std*    (stream sinks)
 //   - .planning/wave*/arch-*-{verdict,cross-verify}.md   (architect write targets)
 //   - .androidcommondoc/audit-log.jsonl   (telemetry append)
@@ -23,6 +24,13 @@
 //   2 = block (with `decision: block` + `reason` JSON on stdout)
 //
 // Wired in .claude/settings.json under PreToolUse → Bash matcher.
+
+const os = require('os');
+const OS_TMPDIR = os.tmpdir();
+
+function normalizePath(p) {
+  return p.replace(/\\/g, '/');
+}
 
 let input = '';
 const stdinTimeout = setTimeout(() => process.exit(0), 5000);
@@ -90,6 +98,9 @@ function isExemptTarget(target) {
   if (!target) return false;
   if (target === '/dev/null') return true;
   if (target.startsWith('/dev/')) return true;
+  const norm = normalizePath(target);
+  const normTmp = normalizePath(OS_TMPDIR);
+  if (norm.startsWith(normTmp + '/') || norm === normTmp) return true;
   if (target.startsWith('/tmp/') || target === '/tmp') return true;
   if (target.startsWith('$TMPDIR/') || target.startsWith('${TMPDIR}/')) return true;
   if (/\.planning[\\/]wave[\w.-]+[\\/](?:pr\d+-)?arch-[^\s/\\]+-(?:verdict|cross-verify)\.md$/.test(target)) return true;
