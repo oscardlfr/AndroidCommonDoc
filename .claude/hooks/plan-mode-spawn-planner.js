@@ -2,6 +2,38 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
+
+/**
+ * Resolve project root reliably regardless of process.cwd().
+ * Uses execFileSync (no shell, no injection risk) for git rev-parse,
+ * then falls back to walking up from cwd.
+ */
+function resolveProjectRoot(cwd) {
+  try {
+    const root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 3000,
+    }).toString().trim();
+    if (root && fs.existsSync(root)) return root;
+  } catch (_) {}
+
+  // Walk-up fallback: nearest ancestor with .git or mcp-server/package.json
+  let dir = cwd;
+  for (let i = 0; i < 10; i++) {
+    if (
+      fs.existsSync(path.join(dir, '.git')) ||
+      fs.existsSync(path.join(dir, 'mcp-server', 'package.json'))
+    ) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return cwd;
+}
 
 let input = '';
 const stdinTimeout = setTimeout(() => process.exit(0), 5000);
@@ -20,7 +52,8 @@ process.stdin.on('end', () => {
   const toolName = data.tool_name || '';
   const hookEvent = data.hook_event_name || '';
   const cwd = data.cwd || process.cwd();
-  const sentinelPath = path.join(cwd, '.planning', '.plan-mode-planner-required');
+  const projectRoot = resolveProjectRoot(cwd);
+  const sentinelPath = path.join(projectRoot, '.planning', '.plan-mode-planner-required');
 
   if (toolName === 'EnterPlanMode') {
     if (process.env.CLAUDE_SKIP_PLANNER === '1') {
