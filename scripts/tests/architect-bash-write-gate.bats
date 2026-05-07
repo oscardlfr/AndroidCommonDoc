@@ -532,12 +532,14 @@ EOF" 'arch-platform'
 # Windows temp path - update if machine changes
 
 @test "W44-01: allows redirect to Windows temp path (forward-slash form)" {
+  [[ "$OSTYPE" == "msys"* || "$OSTYPE" == "cygwin"* || "$OS" == "Windows_NT" ]] || skip "Windows-only test (Linux CI exercises /tmp regression case)"
   make_input "echo result > C:/Users/34645/AppData/Local/Temp/foo.txt" 'arch-platform'
   run_hook
   [ "$status" -eq 0 ]
 }
 
 @test "W44-01: allows redirect to Windows temp path (backslash form)" {
+  [[ "$OSTYPE" == "msys"* || "$OSTYPE" == "cygwin"* || "$OS" == "Windows_NT" ]] || skip "Windows-only test (Linux CI exercises /tmp regression case)"
   make_input 'echo result > C:\Users\34645\AppData\Local\Temp\foo.txt' 'arch-platform'
   run_hook
   [ "$status" -eq 0 ]
@@ -569,6 +571,7 @@ EOF" 'arch-platform'
 }
 
 @test "W44-01: allows tee to Windows temp path (forward-slash form)" {
+  [[ "$OSTYPE" == "msys"* || "$OSTYPE" == "cygwin"* || "$OS" == "Windows_NT" ]] || skip "Windows-only test (Linux CI exercises /tmp regression case)"
   make_input "some_cmd | tee C:/Users/34645/AppData/Local/Temp/debug.log" 'arch-platform'
   run_hook
   [ "$status" -eq 0 ]
