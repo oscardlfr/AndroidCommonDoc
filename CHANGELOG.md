@@ -5,6 +5,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W44 — Process Hardening + Windows Support, PRs #145-#149)
+- **commit-lint compound scope clarification** (`docs/commands/commit-lint.md`): Clarifies
+  that only the first hyphen-delimited segment must be in valid_scopes; subsequent segments
+  are appended automatically. Closes BL-W32-13.
+- **Gradle error triage block in 3 specialist templates** (`setup/agent-templates/test-specialist.md`
+  v1.21.0, `data-layer-specialist.md` v1.15.0, `domain-model-specialist.md` v1.15.0): Inline
+  4-step UnsupportedClassVersionError triage replaces pointer-to-subdoc pattern (specialists
+  cannot read docs/** per banned tools). Closes BL-W32-16.
+- **Windows-aware isExemptTarget in architect-bash-write-gate** (`.claude/hooks/architect-bash-write-gate.js`):
+  Adds `os.tmpdir()` dynamic check + `normalizePath()` helper. Windows temp paths
+  (`C:Users...AppDataLocalTemp`) now exempt. Closes W44-01.
+- **wave-phase-gate Rule A narrowed** (`.claude/hooks/wave-phase-gate.js`): Replaces
+  substring match with `isGatedCommand()` prefix match — body prose no longer triggers.
+  Adds `WAVE_PHASE_GATE_BYPASS=1` env var (consistent with other gates). Closes W44-02.
+- **hook-bypass-recursive-pattern doc extended** (`docs/guides/hook-bypass-recursive-pattern.md`):
+  Adds wave-phase-gate.js bypass pattern and WAVE_PHASE_GATE_BYPASS=1 documentation.
+  Closes W44-03.
+
 ### Added (BL-W43 — Architect Topology Hardening, PRs #140-#143)
 - **arch-bash-write-gate cross-verify exempt** (`scripts/sh/quality-gate-pre-pr.sh`, `scripts/sh/architect-bash-write-gate.sh`): Extends exempt regex to allow architects to read/write `pr*-arch-*-cross-verify.md` files when validating peer verdicts. Closes W43-01.
 - **substring-gate hook-bypass-recursive-pattern doc + bats** (`docs/guides/hook-bypass-recursive-pattern.md`, `scripts/tests/hook-bypass-recursive-pattern.bats`): Documents the recursive-bootstrap edge case where bypass markers in prose Bash text fire the gate they should bypass. 3 new bats cases. Closes W43-02.

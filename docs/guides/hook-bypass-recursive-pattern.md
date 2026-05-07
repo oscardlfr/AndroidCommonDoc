@@ -6,7 +6,7 @@ slug: hook-bypass-recursive-pattern
 status: active
 layer: L0
 category: guides
-description: "Bypass env vars for PreToolUse gate hooks: when gate-blocking strings appear legitimately in commit messages, PR bodies, or CHANGELOG entries"
+description: "Bypass env vars for PreToolUse gate hooks: when gate-blocking strings appear legitimately in commit messages, PR bodies, or CHANGELOG entries. Covers kmp-test-runner-gate, architect-bash-write-gate, and wave-phase-gate."
 version: 1
 last_updated: "2026-05"
 ---
@@ -34,6 +34,7 @@ The same pattern applies to any gate using `command.includes()` or `grep` agains
 | `.claude/hooks/kmp-test-runner-gate.js` | `gradlew test`, `gradle test`, `:module:test` | `KMP_TEST_RUNNER_BYPASS=1` env var OR `[KMP_TEST_RUNNER_BYPASS]` inline marker in command |
 | `.claude/hooks/quality-gate-pre-commit.sh` | triggers on `git commit` when stamp missing/stale/FAIL | No env bypass — re-run `/pre-pr` or quality-gater to refresh stamp before committing |
 | `.claude/hooks/architect-bash-write-gate.js` | heredoc/redirect write patterns in Bash | `BASH_WRITE_GATE_BYPASS=1` (introduced BL-W43 PR1 for meta-recursive waves that edit hook files) |
+| `.claude/hooks/wave-phase-gate.js` | `git push`, `gh pr create` (command-start only — body prose exempt after BL-W44 PR4) | `WAVE_PHASE_GATE_BYPASS=1` env var |
 
 ## When You Must Use Bypass
 
@@ -45,6 +46,7 @@ Set the bypass before any Bash command whose string representation will contain 
 | `gh pr create --body` containing blocked pattern | `kmp-test-runner-gate.js` | Set `KMP_TEST_RUNNER_BYPASS=1` or add `[KMP_TEST_RUNNER_BYPASS]` to body |
 | Architect verdict describing `gradlew test` gate behavior | `kmp-test-runner-gate.js` | Add `[KMP_TEST_RUNNER_BYPASS]` inline marker |
 | Wave ships a new gate hook; PR title/body mentions it | hook being shipped | Set that hook's bypass env var |
+| Creating PR for wave-phase-gate changes | `wave-phase-gate.js` | Set `WAVE_PHASE_GATE_BYPASS=1` |
 
 **Canonical incident**: BL-W42 PR5 — `gh pr create` for the kmp-test-runner enforcement PR was blocked because the PR body described the very pattern being enforced. Resolution: `KMP_TEST_RUNNER_BYPASS=1 gh pr create ...`. Documented in memory `project_wave_bl_w42_pr5_shipped.md`.
 
@@ -64,6 +66,23 @@ gh pr create --body "[KMP_TEST_RUNNER_BYPASS] ships enforcement..."
 ```
 
 Unset or scope the env var immediately after — do not leave it set across unrelated commands.
+
+### wave-phase-gate.js
+
+Rule A gates `git push` and `gh pr create` when they appear as the leading command token.
+After BL-W44 PR4, body prose is no longer matched — only actual command invocations trigger.
+
+```bash
+# Env var bypass (required when creating a PR about wave-phase-gate itself)
+WAVE_PHASE_GATE_BYPASS=1 gh pr create --title "fix(scripts): narrow wave-phase-gate Rule A" --body "$(cat <<EOF
+ships isGatedCommand() prefix match for gh pr create and git push
+EOF
+)"
+```
+
+Canonical scenario: shipping PR4 (wave-phase-gate changes) requires bypassing the gate
+because the gh pr create command itself triggers Rule A. Set `WAVE_PHASE_GATE_BYPASS=1`
+for the duration of that single command, then unset.
 
 ### quality-gate-pre-commit.sh
 
