@@ -1,12 +1,12 @@
 ---
 name: privacy-auditor
 description: "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits."
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, mcp__androidcommondoc__scan-secrets
 model: sonnet
 domain: security
 intent: [privacy, pii, gdpr, data, analytics]
 token_budget: 2000
-template_version: "1.0.0"
+template_version: "1.0.1"
 memory: project
 skills:
   - validate-patterns

@@ -794,8 +794,8 @@ agents:
   full-audit-orchestrator:
     canonical_name: full-audit-orchestrator
     subagent_type: full-audit-orchestrator
-    template_version: "1.0.0"
-    template_frontmatter_sha256: de6f5bd076deb30182103796eae3062558baa5ecfbdb2924a28ff39e15043279
+    template_version: "1.0.1"
+    template_frontmatter_sha256: 28ef3e1b534ec625ded494b907a306437c47245e32d75c5c06fae563b5fc1d55
     category: orchestrator
     lifecycle: per-task
     description: "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking."
@@ -812,6 +812,21 @@ agents:
         - Bash
         - Agent
         - Write
+        - mcp__androidcommondoc__audit-docs
+        - mcp__androidcommondoc__audit-report
+        - mcp__androidcommondoc__findings-report
+        - mcp__androidcommondoc__validate-all
+        - mcp__androidcommondoc__validate-agents
+        - mcp__androidcommondoc__validate-skills
+        - mcp__androidcommondoc__validate-doc-structure
+        - mcp__androidcommondoc__code-metrics
+        - mcp__androidcommondoc__scan-secrets
+        - mcp__androidcommondoc__dependency-graph
+        - mcp__androidcommondoc__gradle-config-lint
+        - mcp__androidcommondoc__module-health
+        - mcp__androidcommondoc__verify-kmp-packages
+        - mcp__androidcommondoc__string-completeness
+        - mcp__androidcommondoc__pattern-coverage
       banned:
         top_level: []
         bash_subcommands: []
@@ -846,8 +861,8 @@ agents:
   quality-gate-orchestrator:
     canonical_name: quality-gate-orchestrator
     subagent_type: quality-gate-orchestrator
-    template_version: "1.1.0"
-    template_frontmatter_sha256: 328859b804bd2e072764bdd457a197ae72e49ea23f7648699ea843463b4ce752
+    template_version: "1.1.1"
+    template_frontmatter_sha256: ed11122c13198c6e241f581cfd3226318a7357793af1fb84ac8c4fc7594697cc
     category: orchestrator
     lifecycle: per-task
     description: "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement."
@@ -862,6 +877,16 @@ agents:
         - Grep
         - Glob
         - Bash
+        - mcp__androidcommondoc__validate-all
+        - mcp__androidcommondoc__validate-agents
+        - mcp__androidcommondoc__validate-skills
+        - mcp__androidcommondoc__validate-doc-structure
+        - mcp__androidcommondoc__validate-claude-md
+        - mcp__androidcommondoc__audit-docs
+        - mcp__androidcommondoc__script-parity
+        - mcp__androidcommondoc__check-doc-patterns
+        - mcp__androidcommondoc__check-doc-freshness
+        - mcp__androidcommondoc__pattern-coverage
       banned:
         top_level: [Agent, Write, Edit, SendMessage]
         bash_subcommands: []
@@ -1327,8 +1352,8 @@ agents:
   privacy-auditor:
     canonical_name: privacy-auditor
     subagent_type: privacy-auditor
-    template_version: "1.0.0"
-    template_frontmatter_sha256: b0d6de5bca3f5173e54f27c1d2fc739e75066e6c0cfab99908b77b7a5025b61a
+    template_version: "1.0.1"
+    template_frontmatter_sha256: 3bfa2e66e6466d9165d147ac56dec70d62a0d6b741b99a1e69c71cf3405c44a1
     category: auditor
     lifecycle: per-task
     description: "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits."
@@ -1338,7 +1363,7 @@ agents:
       model: sonnet
       token_budget: 2000
     tools:
-      allowed: [Read, Grep, Glob]
+      allowed: [Read, Grep, Glob, mcp__androidcommondoc__scan-secrets]
       banned:
         top_level: [Agent, Write, Edit, Bash, SendMessage]
     dispatch:
@@ -1359,8 +1384,8 @@ agents:
   platform-auditor:
     canonical_name: platform-auditor
     subagent_type: platform-auditor
-    template_version: "1.2.0"
-    template_frontmatter_sha256: 2866caf1665bb36c5e8892c26fa67669092fd94d2f05bc7dbec1b676524fbcb0
+    template_version: "1.2.1"
+    template_frontmatter_sha256: 798d854d17a60c948932bf9f84af9267b70cf20e0c028f2222d6a008d127fa35
     category: auditor
     lifecycle: per-task
     description: "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks."
@@ -1370,7 +1395,7 @@ agents:
       model: sonnet
       token_budget: 2000
     tools:
-      allowed: [Read, Grep, Glob, Bash, SendMessage]
+      allowed: [Read, Grep, Glob, Bash, SendMessage, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__module-health]
       banned:
         top_level: [Agent, Write, Edit]
     dispatch:
@@ -1800,8 +1825,8 @@ agents:
   cross-platform-validator:
     canonical_name: cross-platform-validator
     subagent_type: cross-platform-validator
-    template_version: "1.0.1"
-    template_frontmatter_sha256: 7130c6916d33ad865cfd3fff62c94dabf2fa828405564f8bdef1a0ce490bf024
+    template_version: "1.0.2"
+    template_frontmatter_sha256: 1e3f3d93bd9c57bb99b95af7189f561c807efbbfeafdac17ae2bb2ae2e2847ca
     category: validator
     lifecycle: per-task
     description: "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features."
@@ -1811,7 +1836,7 @@ agents:
       model: sonnet
       token_budget: 2500
     tools:
-      allowed: [Read, Grep, Glob, SendMessage]
+      allowed: [Read, Grep, Glob, SendMessage, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__string-completeness, mcp__androidcommondoc__dependency-graph]
       banned:
         top_level: [Agent, Write, Edit, Bash]
     dispatch:
