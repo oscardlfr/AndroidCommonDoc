@@ -1,12 +1,12 @@
 ---
 name: quality-gate-orchestrator
 description: "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement."
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__validate-agents, mcp__androidcommondoc__validate-skills, mcp__androidcommondoc__validate-doc-structure, mcp__androidcommondoc__validate-claude-md, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__script-parity, mcp__androidcommondoc__check-doc-patterns, mcp__androidcommondoc__check-doc-freshness, mcp__androidcommondoc__pattern-coverage
 model: sonnet
 domain: audit
 intent: [quality-gate, consistency, validators]
 token_budget: 3000
-template_version: "1.1.0"
+template_version: "1.1.1"
 memory: project
 ---
 

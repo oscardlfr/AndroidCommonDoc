@@ -1,12 +1,12 @@
 ---
 name: platform-auditor
 description: "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks."
-tools: Read, Grep, Glob, Bash, SendMessage
+tools: Read, Grep, Glob, Bash, SendMessage, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__module-health
 model: sonnet
 domain: quality
 intent: [coherence, cross-module, architecture, audit]
 token_budget: 2000
-template_version: "1.2.0"
+template_version: "1.2.1"
 memory: project
 skills:
   - verify-kmp

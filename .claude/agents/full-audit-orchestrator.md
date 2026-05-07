@@ -1,12 +1,12 @@
 ---
 name: full-audit-orchestrator
 description: "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking."
-tools: Read, Grep, Glob, Bash, Agent, Write
+tools: Read, Grep, Glob, Bash, Agent, Write, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__audit-report, mcp__androidcommondoc__findings-report, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__validate-agents, mcp__androidcommondoc__validate-skills, mcp__androidcommondoc__validate-doc-structure, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__scan-secrets, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__module-health, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__string-completeness, mcp__androidcommondoc__pattern-coverage
 model: sonnet
 domain: audit
 intent: [full-audit, quality-gate, wave]
 token_budget: 4000
-template_version: "1.0.0"
+template_version: "1.0.1"
 memory: project
 ---
 

@@ -2118,12 +2118,12 @@
       "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:1a11f9a8b6fdc5ad0987dcf29861b73dfb711cc7fe056fc93da292d5ce4c28d7",
+      "hash": "sha256:d68af1dc7d23c4b06491f070bd45a6f95dafd6c4d0e46fa1e50231b030dc3c62",
       "dependencies": [],
       "frontmatter": {
         "name": "cross-platform-validator",
         "description": "Validates feature parity across Android, Desktop, iOS, and macOS platforms. Checks expect/actual, routes, DI, strings, and navigation. Use before releases or after adding cross-platform features.",
-        "tools": "Read, Grep, Glob, SendMessage",
+        "tools": "Read, Grep, Glob, SendMessage, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__string-completeness, mcp__androidcommondoc__dependency-graph",
         "model": "sonnet",
         "domain": "quality",
         "intent": [
@@ -2133,7 +2133,7 @@
           "kmp"
         ],
         "token_budget": 2500,
-        "template_version": "1.0.1",
+        "template_version": "1.0.2",
         "memory": "project",
         "skills": [
           "verify-kmp"
@@ -2387,12 +2387,12 @@
       "description": "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:235bf7dedf9d61d4f70fd85985d7a19adc55b4d041f9eafc2e297abf84d45d08",
+      "hash": "sha256:5567eb43e6eaac4d31e295d118bf53f5d3414a57d90fa0218b8ea01436833bbe",
       "dependencies": [],
       "frontmatter": {
         "name": "full-audit-orchestrator",
         "description": "Orchestrates the unified /full-audit skill. Executes checks in waves, collects structured findings from agents and scripts, runs 3-pass deduplication, and produces consolidated report with resolution tracking.",
-        "tools": "Read, Grep, Glob, Bash, Agent, Write",
+        "tools": "Read, Grep, Glob, Bash, Agent, Write, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__audit-report, mcp__androidcommondoc__findings-report, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__validate-agents, mcp__androidcommondoc__validate-skills, mcp__androidcommondoc__validate-doc-structure, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__scan-secrets, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__module-health, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__string-completeness, mcp__androidcommondoc__pattern-coverage",
         "model": "sonnet",
         "domain": "audit",
         "intent": [
@@ -2401,7 +2401,7 @@
           "wave"
         ],
         "token_budget": 4000,
-        "template_version": "1.0.0",
+        "template_version": "1.0.1",
         "memory": "project"
       }
     },
@@ -2555,12 +2555,12 @@
       "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:69d1c676473270f88f3d977c57a458efd2c6e440c3bb1d9a1c5a569cb3395485",
+      "hash": "sha256:157d060ab9c522a225d16783644507018ce8bdcb7cc9eacdcc3cd6aaaaac4d6a",
       "dependencies": [],
       "frontmatter": {
         "name": "platform-auditor",
         "description": "Audits cross-module coherence across domain clusters in {{PROJECT_NAME}}. Use when changes span multiple clusters or for periodic architecture health checks.",
-        "tools": "Read, Grep, Glob, Bash, SendMessage",
+        "tools": "Read, Grep, Glob, Bash, SendMessage, mcp__androidcommondoc__dependency-graph, mcp__androidcommondoc__verify-kmp-packages, mcp__androidcommondoc__gradle-config-lint, mcp__androidcommondoc__module-health",
         "model": "sonnet",
         "domain": "quality",
         "intent": [
@@ -2570,7 +2570,7 @@
           "audit"
         ],
         "token_budget": 2000,
-        "template_version": "1.2.0",
+        "template_version": "1.2.1",
         "memory": "project",
         "skills": [
           "verify-kmp",
@@ -2585,12 +2585,12 @@
       "description": "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:240e281401d1f2ad46dd9c0fec7abb1f85567e33cdfaebf2a816efc12c9fe5c1",
+      "hash": "sha256:e9925565388c5fa3f208838a7e0bb2225d8f79c53e6612eeb35a54cf2547ddcc",
       "dependencies": [],
       "frontmatter": {
         "name": "privacy-auditor",
         "description": "Audits code for privacy concerns -- PII in logs, analytics consent, encrypted storage, and data retention policies. Use when reviewing data handling or before compliance audits.",
-        "tools": "Read, Grep, Glob",
+        "tools": "Read, Grep, Glob, mcp__androidcommondoc__scan-secrets",
         "model": "sonnet",
         "domain": "security",
         "intent": [
@@ -2601,7 +2601,7 @@
           "analytics"
         ],
         "token_budget": 2000,
-        "template_version": "1.0.0",
+        "template_version": "1.0.1",
         "memory": "project",
         "skills": [
           "validate-patterns"
@@ -2669,12 +2669,12 @@
       "description": "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement.",
       "category": "architecture",
       "tier": "extended",
-      "hash": "sha256:ec2d7c179a29296f4f08758b116778f41ade822e14f18070321b783994baea24",
+      "hash": "sha256:03f655667806a1c9e959c232a8c9d39b1d8cb64adc190c500a81e136589b49cd",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gate-orchestrator",
         "description": "Internal validator -- invoked for quality gate runs. Unified quality gate that performs all 4 individual gate checks (script-parity, skill-script-alignment, template-sync, doc-code-drift) and produces a single pass/fail report with token cost measurement.",
-        "tools": "Read, Grep, Glob, Bash",
+        "tools": "Read, Grep, Glob, Bash, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__validate-agents, mcp__androidcommondoc__validate-skills, mcp__androidcommondoc__validate-doc-structure, mcp__androidcommondoc__validate-claude-md, mcp__androidcommondoc__audit-docs, mcp__androidcommondoc__script-parity, mcp__androidcommondoc__check-doc-patterns, mcp__androidcommondoc__check-doc-freshness, mcp__androidcommondoc__pattern-coverage",
         "model": "sonnet",
         "domain": "audit",
         "intent": [
@@ -2683,7 +2683,7 @@
           "validators"
         ],
         "token_budget": 3000,
-        "template_version": "1.1.0",
+        "template_version": "1.1.1",
         "memory": "project"
       }
     },
