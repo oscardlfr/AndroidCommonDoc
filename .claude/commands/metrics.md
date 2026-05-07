@@ -20,7 +20,11 @@ Produces a 3-section dashboard by invoking two MCP tools and merging their outpu
    - `format`: `"markdown"`
    - `weeks_lookback`: 4
 
-3. Merge both outputs into ONE markdown dashboard with these three sections:
+3. Merge both outputs into ONE markdown dashboard with these three sections (plus Section 4 from step 3b):
+
+3b. Run `skill-leak-check` analytics:
+   - Execute `scripts/sh/skill-leak-check.sh --project-root <project_root>` (or `scripts/ps1/skill-leak-check.ps1` on Windows)
+   - Merge output into Section 4 — Skill Leak Report of the dashboard
 
 ### Section 1 — Runtime Tool Usage
 Output from `tool-use-analytics`: top tools table, MCP/Context7/our-MCP call counts, CP bypass count, dead tools list.
@@ -34,6 +38,9 @@ Compute and display:
 - **Dead tools**: list from `tool-use-analytics.dead_tools` — if non-empty, print `⚠ Dead tools detected (0 calls in lookback window): {list}`
 - **Context7 vs our-MCP ratio**: `context7_calls / (our_mcp_calls + context7_calls)` as a percentage
 - **Top 5 most-used skills**: from `skill-usage-analytics` skills array, top 5 by run_count
+
+### Section 4 — Skill Leak Report
+Output from `skill-leak-check.sh`: total Bash calls analyzed, leak count, and per-agent table of raw commands that have skill/MCP alternatives.
 
 ## Log rotation note
 If `tool-use-analytics` output warns about log size (> 10 MB), rotate before next session:

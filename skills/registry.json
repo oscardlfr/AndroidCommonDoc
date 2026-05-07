@@ -3329,8 +3329,11 @@
       "description": "Show unified agent/tool/skill/MCP usage dashboard — combines runtime tool-use log with skill/audit runs",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:d005e1beedfa4645a294b7e069f0e64e0f18c95aa4dc2c9d02db9687e5a565d8",
-      "dependencies": [],
+      "hash": "sha256:9102d322fd2aa28dd43fb4a9cb4611284143684e660f800ea7c583e71774da3d",
+      "dependencies": [
+        "scripts/sh/skill-leak-check.sh",
+        "scripts/ps1/skill-leak-check.ps1"
+      ],
       "frontmatter": {
         "description": "Show unified agent/tool/skill/MCP usage dashboard — combines runtime tool-use log with skill/audit runs",
         "intent": "observability"
