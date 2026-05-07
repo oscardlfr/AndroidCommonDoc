@@ -84,7 +84,15 @@ process.stdin.on('end', () => {
     // ── Rule A: Bash — block git push / gh pr create if sentinel missing ──
     if (toolName === 'Bash') {
       const command = data.tool_input?.command || '';
-      if (!/git push|gh pr create/.test(command)) process.exit(0);
+      if (process.env.WAVE_PHASE_GATE_BYPASS === '1') process.exit(0);
+      function isGatedCommand(cmd) {
+        const stripped = cmd.trim()
+          .replace(/^(?:[A-Z_][A-Z0-9_]*=[^\s]+\s+)+/, "")
+          .replace(/^rtk\s+/, "")
+          .replace(/^sudo\s+/, "");
+        return /^git\s+push\b/.test(stripped) || /^gh\s+pr\s+create\b/.test(stripped);
+      }
+      if (!isGatedCommand(command)) process.exit(0);
 
       const slug = getWaveSlug(projectRoot);
       if (!slug) process.exit(0); // cannot determine wave context — fail-open
