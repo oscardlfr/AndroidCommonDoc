@@ -37,7 +37,6 @@ jobs:
           path: .androidcommondoc-toolkit
           sparse-checkout: |
             scripts/sh/copilot-parity.sh
-            adapters/copilot-adapter.sh
 
       - name: Resolve script paths
         id: scripts
