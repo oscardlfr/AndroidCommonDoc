@@ -12,6 +12,7 @@ import { describe, it, expect } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
 import { parse as parseYaml } from "yaml";
+import { readOrchestrationGuide } from "../helpers/orchestration-guide.js";
 
 const ROOT = path.resolve(__dirname, "../../..");
 const AGENTS_DIR = path.join(ROOT, ".claude/agents");
@@ -279,8 +280,8 @@ describe("T-BUG-010: team-lead.md retired W31.6 — main-agent-orchestration-gui
   });
 
   it("main-agent-orchestration-guide.md confirms Agent(name='team-lead') is FORBIDDEN", () => {
-    const guidePath = path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md");
-    const guideContent = fs.readFileSync(guidePath, "utf-8");
+    // BL-W45 hub-split: content may be in tl-* sub-docs
+    const guideContent = readOrchestrationGuide();
     expect(guideContent).toMatch(/T-BUG-010/);
     expect(guideContent).toMatch(/FORBIDDEN.*team-lead|Agent\(name="team-lead"/);
   });
@@ -399,8 +400,8 @@ describe("T-BUG-015: Bash search anti-pattern + Search Dispatch Protocol", () =>
 
   // W31.6: team-lead.md retired. Search Dispatch Protocol is in main-agent-orchestration-guide.md
   it("main-agent-orchestration-guide.md has Search Dispatch Protocol — T-BUG-015", () => {
-    const guidePath = path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md");
-    const guideContent = fs.readFileSync(guidePath, "utf-8");
+    // BL-W45 hub-split: content may be in tl-* sub-docs
+    const guideContent = readOrchestrationGuide();
     expect(guideContent).toMatch(/T-BUG-015/);
     expect(guideContent).toMatch(/Search Dispatch Protocol/);
     expect(guideContent).toMatch(/context-provider FIRST|SendMessage to context-provider.*Wait|Route through context-provider/i);

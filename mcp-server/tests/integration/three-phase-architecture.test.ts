@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import { readOrchestrationGuide } from '../helpers/orchestration-guide.js';
 
 const ROOT = path.resolve(__dirname, '../../..');
 const TEMPLATES_DIR = path.join(ROOT, 'setup/agent-templates');
@@ -62,23 +63,10 @@ describe('agent template size limits', () => {
 // 3. Team Lead — 3-phase model
 // ---------------------------------------------------------------------------
 describe('team-lead template — 3-phase model', () => {
-  // W31.6: team-lead.md retired. Redirect to main-agent-orchestration-guide.md (canonical orchestration doc).
-  const content = fs.readFileSync(path.join(ROOT, 'docs/agents/main-agent-orchestration-guide.md'), 'utf-8');
-
-  // Hub refactor: team-lead content may be split across sub-docs in docs/agents/
-  const pmSubdocs = [
-    'tl-session-setup.md',
-    'tl-dispatch-topology.md',
-    'tl-verification-gates.md',
-    'tl-quality-doc-pipeline.md',
-  ];
-  const docsAgentsDir = path.join(ROOT, 'docs/agents');
-  const subdocContent = pmSubdocs
-    .map(f => path.join(docsAgentsDir, f))
-    .filter(p => fs.existsSync(p))
-    .map(p => fs.readFileSync(p, 'utf-8'))
-    .join('\n');
-  const combinedPM = content + '\n' + subdocContent;
+  // W31.6: team-lead.md retired. Hub-split (BL-W45): content spread across tl-* sub-docs.
+  // readOrchestrationGuide() returns hub + all tl-* sub-docs concatenated.
+  const content = readOrchestrationGuide();
+  const combinedPM = content;
 
   it('has 3-Phase Execution Model section', () => {
     expect(content).toMatch(/3-Phase Execution Model/i);

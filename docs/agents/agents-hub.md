@@ -55,6 +55,14 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [test-specialist-coverage-targets](test-specialist-coverage-targets.md) | test-specialist minimum coverage targets by layer (model/domain/data/db/UI) |
 | [test-specialist-jdk-env](test-specialist-jdk-env.md) | test-specialist JDK env triage: UnsupportedClassVersionError, JAVA_HOME override steps (BL-W32-16) |
 | [test-specialist-vm-testing](test-specialist-vm-testing.md) | test-specialist high-dep ViewModel testing: factory pattern, compile-time RED signal |
+| [tl-session-start](tl-session-start.md) | **REQUIRED AT SESSION START** — T-BUG-010, HARD GATEs, FORBIDDEN/ALLOWED mode, Phase 0 spawn blocks, pre-flight checklist, planning phase gate |
+| [tl-agent-roster](tl-agent-roster.md) | Agent roster + specialist ownership map: all roles, surfaces, reporting chains, TS/hooks routing |
+| [tl-pm-absent-mode](tl-pm-absent-mode.md) | PM/Project-Manager Absent Mode: liveness check, routing fallback, FORBIDDEN actions |
+| [tl-verification-done-criteria](tl-verification-done-criteria.md) | Verification-before-done: TDD gate, doc check, security auditor routing |
+| [tl-git-workflow](tl-git-workflow.md) | Mandatory git workflow: branch protection, commit discipline, script invocation, RTK prefix |
+| [tl-skills-mcp-tools](tl-skills-mcp-tools.md) | L0 skills, MCP tools, and official skills reference |
+| [tl-release-workflow](tl-release-workflow.md) | Release workflow, post-change checklist, findings protocol |
+| [tl-ingestion-request-handler](tl-ingestion-request-handler.md) | Ingestion-request handler: context-provider → user approval → doc-updater pipeline |
 
 ## Key Concepts
 

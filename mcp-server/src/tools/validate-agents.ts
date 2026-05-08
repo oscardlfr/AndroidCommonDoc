@@ -95,9 +95,11 @@ function getBody(content: string): string {
   return parts.length >= 3 ? parts.slice(2).join("---") : "";
 }
 
-/** Strip fenced code blocks from body */
-function stripCodeFences(body: string): string {
-  return body.replace(/```[\s\S]*?```/g, "");
+/** Strip fenced code blocks and inline backtick spans from body */
+export function stripCodeFences(body: string): string {
+  return body
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`[^`\n]+`/g, "");
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +322,7 @@ function validateSizeLimits(
   files: Array<{ name: string; content: string }>,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const MAX_LINES = 400;
+  const MAX_LINES = 425; // W31.6: arch templates need PREP/EXECUTE blocks + ban reminders
 
   for (const file of files) {
     const lines = file.content.split("\n").length;

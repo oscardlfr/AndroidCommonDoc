@@ -13,6 +13,7 @@ import { describe, it, expect } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
 import { parse as parseYaml } from "yaml";
+import { readOrchestrationGuide } from "../helpers/orchestration-guide.js";
 
 const ROOT = path.resolve(__dirname, "../../..");
 const AGENTS_DIR = path.join(ROOT, ".claude/agents");
@@ -116,18 +117,20 @@ describe("S8: team-lead template has Token Meter + retrospective rule", () => {
 
 describe("5.16.0 hotfix: team-lead session setup uses subagent_type on peer spawns", () => {
   it("main-agent-orchestration-guide.md spawns context-provider with subagent_type (W31.6)", () => {
-    // team-lead.md retired W31.6 — content in main-agent-orchestration-guide.md
-    const raw = fs.readFileSync(path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md"), "utf-8");
+    // BL-W45 hub-split: content may be in tl-* sub-docs
+    const raw = readOrchestrationGuide();
     expect(raw).toMatch(/subagent_type="context-provider"/);
   });
 
   it("main-agent-orchestration-guide.md spawns doc-updater with subagent_type (W31.6)", () => {
-    const raw = fs.readFileSync(path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md"), "utf-8");
+    // BL-W45 hub-split: content may be in tl-* sub-docs
+    const raw = readOrchestrationGuide();
     expect(raw).toMatch(/subagent_type="doc-updater"/);
   });
 
   it("main-agent-orchestration-guide.md has NEVER self-assign guard for context-provider (W31.6)", () => {
-    const raw = fs.readFileSync(path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md"), "utf-8");
+    // BL-W45 hub-split: content may be in tl-* sub-docs
+    const raw = readOrchestrationGuide();
     expect(raw).toMatch(/NEVER self-assign|NEVER.*write files|read-only/i);
   });
 });
@@ -191,8 +194,8 @@ describe("arch-dispatch-modes.md content integrity", () => {
 
 describe("Bug #3: team-lead session setup calls TeamDelete before TeamCreate (Wave 24)", () => {
   it("main-agent-orchestration-guide.md has TeamDelete before TeamCreate in session start block (W31.6)", () => {
-    // team-lead.md retired W31.6 — content in main-agent-orchestration-guide.md
-    const raw = fs.readFileSync(path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md"), "utf-8");
+    // BL-W45 hub-split: content may be in tl-* sub-docs
+    const raw = readOrchestrationGuide();
     const deleteIdx = raw.indexOf("TeamDelete(team_name=");
     const createIdx = raw.indexOf("TeamCreate(team_name=");
     expect(deleteIdx, "TeamDelete must appear before TeamCreate").toBeGreaterThanOrEqual(0);
@@ -201,7 +204,8 @@ describe("Bug #3: team-lead session setup calls TeamDelete before TeamCreate (Wa
   });
 
   it("main-agent-orchestration-guide.md pre-flight checklist has step 0 for TeamDelete (W31.6)", () => {
-    const raw = fs.readFileSync(path.join(ROOT, "docs/agents/main-agent-orchestration-guide.md"), "utf-8");
+    // BL-W45 hub-split: content may be in tl-* sub-docs
+    const raw = readOrchestrationGuide();
     expect(raw).toMatch(/0\..*TeamDelete.*Bug #3/);
   });
 
