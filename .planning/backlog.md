@@ -2,7 +2,7 @@
 
 > Created: 2026-04-21
 > Scope: items intentionally deferred during Wave 25 to keep blast radius manageable. Each entry has a trigger condition for when it should be picked up.
-> **Last validated against codebase: 2026-05-06 (post BL-W43 close)**
+> **Last validated against codebase: 2026-05-08 (post BL-W45 close)**
 
 ---
 
@@ -27,9 +27,22 @@ This summary is the authoritative live view. Older sections below are kept as hi
 | BL-W32-20 .androidcommondoc gitignore | `.gitignore` lines 63-64, 82 |
 | BL-W26-05 .planning historical files | RESOLVED W30 (left-as-is decision) |
 
-### ✅ ALL OPEN ITEMS CLOSED — BL-W44 Sessions 1+2 complete (2026-05-07)
+### ✅ BL-W45 SHIPPED (2026-05-08) — closes 4 + 11 of 31 BL-W44-S2 audit findings
 
-All 8 open items from the previous snapshot are now SHIPPED or DROPPED.
+**L0 PRs**:
+- PR1 #154 (metadata): closes BL-W32-07 + BL-W32-13 + BL-W32-16 + INV-b runtime fix (kmp-test-runner v0.7.0→v0.8.1 in 4 active scripts) + INV-c (12 README + 1 CLAUDE.md count fixes) + INV-d (adapters + new copilot-templates-regen guide) + INV-i (backlog drift) + INV-k (8 rtk deny rules) + Q1 cleanup (delete readme-pre-commit.sh + 4 doc refs)
+- PR2 #155 (code+doc-split): closes BL-W32-09 + BL-W32-10 + INV-e (validate-agents.ts stripCodeFences inline backticks) + INV-f (cap policy 400→425) + INV-g (compile-fail-pre-commit.sh registered) + INV-j (orchestration guide hub-split 351→33 lines, 8 new tl-* sub-docs)
+
+**L1/L2 sync (PR3)**:
+- shared-kmp-libs PR #46 MERGED (4 MCP-frontmatter agents + 14 tl-* sub-docs)
+- WakeTheCave local commit 29bec99 (same propagation)
+- DawSync DEFERRED (130+ in-flight files; manual sync post-cleanup)
+
+**Closes BL-W32-08** (orchestration-guide L1/L2 propagation).
+
+### 🔍 OPEN — BL-W45 wave-close audit (2026-05-08, 15 findings)
+
+Full audit report: `.planning/wave-bl-w45/FULL-AUDIT-POST-WAVE.md` (2H/7M/6L). Plus 4 deferred items from BL-W45 sessions: plan-mode regression, arch-bash-write-gate false-positive on `node -e` body, shell script `validate-agent-templates.sh` parity gap (TS does inline-backtick strip, sh doesn't), WakeTheCave git-root anomaly. **All deferred to next session for clean-context investigation + fix.**
 
 ### 📅 Calendar / triggered-only (no action this session)
 
@@ -853,7 +866,7 @@ Wave directories with non-digit slugs (e.g., `wave-bl-w31-7-12`, `wave-bl-w32-NN
 ---
 
 ### BL-W32-07 — Spawn-pattern coherence: peer-vs-subagent across templates + skills (HIGH — discovered 2026-05-01)
-**Status**: backlog
+**Status**: SHIPPED (BL-W45 PR1 #154 + investigation INV-a). Hook gaps 3+5 confirmed CLOSED at L73 (`teamName && agentName === 'planner'`). Stale phrasing in `skills/work/SKILL.md` L198 fixed.
 **Priority**: HIGH (every session affected; observed during BL-W32-06b where main agent spawned planner + 3 architects as fresh subagents instead of session peers, breaking persistence and burning tokens)
 **Source**: User-reported during BL-W32-06b PREP phase 2026-05-01. User: "es un bug que has añadido a la template de los agentes — deben ser team peers". Investigation surfaced 5+ coherence gaps across templates, manifest, hooks, and skills.
 
@@ -920,7 +933,7 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ---
 
 ### BL-W32-08 — main-agent-orchestration-guide.md L1/L2 propagation (MED — Phase 2 scope)
-**Status**: backlog
+**Status**: SHIPPED (BL-W45 PR3). Propagated to L1 (shared-kmp-libs PR #46) + L2 WakeTheCave (local 29bec99) + 8 new BL-W45 tl-* sub-docs. DawSync deferred (130+ in-flight files; manual sync post-cleanup).
 **Priority**: MEDIUM (sync hygiene — no functional gap)
 **Source**: BL-W32-04 wave (PR #97 squash 0d6c5a1) added Phase 0 — Session start section to L0; L1 (shared-kmp-libs) + L2 (DawSync) copies remain at the pre-W32 version.
 
@@ -939,7 +952,7 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ---
 
 ### BL-W32-09 — arch-platform.md + arch-integration.md template extraction (MED — pre-existing over-cap)
-**Status**: backlog
+**Status**: SHIPPED (BL-W45 PR2 #155 INV-f). Cap canonicalized 400→425 (W31.6 evidence-based). arch-platform 400, arch-integration 425, arch-testing 416 — all within new cap. CLAUDE.md L56 + validate-agents.ts MAX_LINES updated.
 **Priority**: MEDIUM (technical debt — pre-existing 17-line cap violation per template, exposed during BL-W32-02 review)
 **Source**: arch-platform PREP verdict, BL-W32-phase1 wave (`.planning/wave-bl-w32-phase1/arch-platform-verdict.md` AMENDMENT B). Doc-updater confirmed post-insertion 419 lines for both templates (cap 400).
 
@@ -970,7 +983,7 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ---
 
 ### BL-W32-10 — main-agent-orchestration-guide.md hub-split (MED — pre-existing over-cap)
-**Status**: backlog
+**Status**: SHIPPED (BL-W45 PR2 #155 INV-j). Hub split 351→33 lines (≤100 target ACHIEVED). 8 new tl-* sub-docs extracted (tl-session-start, tl-agent-roster, tl-pm-absent-mode, tl-verification-done-criteria, tl-git-workflow, tl-skills-mcp-tools, tl-release-workflow, tl-ingestion-request-handler). 51 Vitest + 11 bats failures fixed via shared `readOrchestrationGuide()` / `cat_orchestration_guide` helpers.
 **Priority**: MEDIUM (technical debt — pre-existing sub-doc cap violation, exposed during BL-W32-04 review)
 **Source**: context-provider pre-write check, BL-W32-phase1 wave. Doc-updater confirmed post-insertion 328 lines (cap 300 for sub-docs in `docs/agents/`).
 

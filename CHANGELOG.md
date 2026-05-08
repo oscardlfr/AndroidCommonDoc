@@ -5,6 +5,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W45 — Alignment Debt Cleanup, PRs #154-#155 + L1 #46)
+- **Runtime fix: kmp-test-runner v0.8.1 in 4 active scripts** (`scripts/sh/gradle-run.sh`, `run-changed-modules-tests.sh`, `run-parallel-coverage-suite.sh`, `scripts/ps1/gradle-run.ps1`): Active runtime invocations were calling wrong binary (v0.7.0). Closes INV-b.
+- **8 rtk-prefixed deny rules** (`.claude/settings.json`): Covers force-push (3 HIGH: rtk push --force, push -f, rtk push -f) + 5 MEDIUM (rtk clean -f, rtk checkout main/master, rtk merge master/main). Closes INV-k.
+- **16 README count fixes + 1 CLAUDE.md** (scripts 39/5, hooks 26 wired, registry 162, tests 1078, agents 20, templates 40, sub-docs 68, etc.). Closes INV-c.
+- **adapters/README.md + new docs/guides/copilot-templates-regen.md**: claude-adapter.sh marked deprecated; new guide doc resolves dead bats reference. Closes INV-d.
+- **stripCodeFences inline backtick handling** (`mcp-server/src/tools/validate-agents.ts`): Extends function to strip inline backtick spans in addition to fenced blocks. Kills 8 false-positive tool-body-xref WARNs across 4 agents. Closes INV-e.
+- **Cap policy canonicalized 400→425** (`mcp-server/src/tools/validate-agents.ts` MAX_LINES + `CLAUDE.md` L56): W31.6 evidence-based bump (arch templates need PREP/EXECUTE blocks). Closes INV-f + BL-W32-09.
+- **compile-fail-pre-commit.sh registered** (`.claude/settings.json`): PreToolUse Bash hook catches error() patterns in staged .kt files. Closes INV-g.
+- **Orchestration guide HUB-SPLIT: 351→33 lines** (`docs/agents/main-agent-orchestration-guide.md`): 8 new tl-* sub-docs preserving full info per "hubs over compression" rule (tl-session-start, tl-agent-roster, tl-pm-absent-mode, tl-verification-done-criteria, tl-git-workflow, tl-skills-mcp-tools, tl-release-workflow, tl-ingestion-request-handler). Vitest helper `readOrchestrationGuide()` + bats helper `cat_orchestration_guide` resolve 51+11 test failures. Closes INV-j + BL-W32-10.
+- **L1/L2 propagation**: shared-kmp-libs PR #46 (4 MCP-frontmatter agents + 14 tl-* sub-docs) + WakeTheCave local. DawSync deferred. Closes BL-W32-08.
+
+### Removed (BL-W45)
+- **`.claude/hooks/readme-pre-commit.sh`**: Hook tested fragile count formulas (3+ inconsistent across docs). Manual `/readme-audit --fix` preferred until autogen wave. Cleaned 4 stale doc references (README L507, readme-audit-fix-guide L36+L130, skills/readme-audit/SKILL.md L67+L83, .gsd/KNOWLEDGE.md). 5 obsolete bats @tests removed (4 in l0-bug-functional + 1 in sh-hooks-stdin-resilience).
+
 ### Added (BL-W44 — Process Hardening + Windows Support, PRs #145-#149)
 - **commit-lint compound scope clarification** (`docs/commands/commit-lint.md`): Clarifies
   that only the first hyphen-delimited segment must be in valid_scopes; subsequent segments
