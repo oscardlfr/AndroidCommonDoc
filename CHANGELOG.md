@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W46 PR1 — Post-W45 Audit Cleanup)
+- **agents-hub.md 7 missing sub-doc entries** (`docs/agents/agents-hub.md`): Restores hub discovery for arch-platform-prep-authoring-checklist, arch-platform-section-h-rule, arch-testing-dispatch-protocol, context-provider-adoption-hooks, knowledge-currency-gate, main-agent-orchestration-guide, quality-gater-runtime-ui-validation. Also updates stale "11 core agents" → "20 core agents" in hub Rules section. Closes H-02.
+- **README count fixes post-PR2** (`README.md`): sub-docs 68 (unchanged), guides 24→25, agent-workflow 37→45, hooks 26/28→27/27, bats 1078→1085. Closes M-03/04/05.
+- **guides-hub.md 2 missing entries** (`docs/guides/guides-hub.md`): compose-semantic-diff.md + jdk-toolchain.md. Closes M-06.
+- **Placeholder links in readme-audit-fix-guide** (`docs/guides/readme-audit-fix-guide.md`): Wrapped `<slug>` and `<hub-name>` inline example links in double-backtick code spans to silence link checker. Closes M-07.
+- **agent-core-rules.md count fix** (`docs/agents/agent-core-rules.md:80`): "11 core agents" → "20 core agents" (BL-W26-01 + BL-W44-S2 additions); dropped stale per-agent parenthetical to avoid tool-count drift. Closes L-02.
+
+## [1.4.0] - 2026-05-08
+
 ### Added (BL-W45 — Alignment Debt Cleanup, PRs #154-#155 + L1 #46)
 - **Runtime fix: kmp-test-runner v0.8.1 in 4 active scripts** (`scripts/sh/gradle-run.sh`, `run-changed-modules-tests.sh`, `run-parallel-coverage-suite.sh`, `scripts/ps1/gradle-run.ps1`): Active runtime invocations were calling wrong binary (v0.7.0). Closes INV-b.
 - **8 rtk-prefixed deny rules** (`.claude/settings.json`): Covers force-push (3 HIGH: rtk push --force, push -f, rtk push -f) + 5 MEDIUM (rtk clean -f, rtk checkout main/master, rtk merge master/main). Closes INV-k.
@@ -18,6 +27,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Removed (BL-W45)
 - **`.claude/hooks/readme-pre-commit.sh`**: Hook tested fragile count formulas (3+ inconsistent across docs). Manual `/readme-audit --fix` preferred until autogen wave. Cleaned 4 stale doc references (README L507, readme-audit-fix-guide L36+L130, skills/readme-audit/SKILL.md L67+L83, .gsd/KNOWLEDGE.md). 5 obsolete bats @tests removed (4 in l0-bug-functional + 1 in sh-hooks-stdin-resilience).
+
+## [1.3.0] - 2026-05-07
 
 ### Added (BL-W44 — Process Hardening + Windows Support, PRs #145-#149)
 - **commit-lint compound scope clarification** (`docs/commands/commit-lint.md`): Clarifies
@@ -36,6 +47,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **hook-bypass-recursive-pattern doc extended** (`docs/guides/hook-bypass-recursive-pattern.md`):
   Adds wave-phase-gate.js bypass pattern and WAVE_PHASE_GATE_BYPASS=1 documentation.
   Closes W44-03.
+
+### Added (BL-W44-S2 — Retrospective Fixes + BL-W26 Closures, PRs #150-#153)
+- **MCP tools frontmatter × 5 audit/validator agents** (`setup/agent-templates/`): cross-platform-validator, platform-auditor, privacy-auditor, full-audit-orchestrator, quality-gate-orchestrator gain `tools:` declarations (BL-W26-01 closure). Agents now callable by harness without ToolSearch workaround.
+- **skill-leak-check.sh + .ps1 + /metrics Step 3b** (`scripts/sh/skill-leak-check.sh`, `scripts/ps1/skill-leak-check.ps1`): 37 bats cases; wired into `/metrics` dashboard. Closes BL-W26-02.
+- **4 retrospective hook + lint + generator fixes**: planner sentinel resolves to git root (cwd-relative bug); architect-bash-write-gate exempts `arch-*.md` verdict files; validate-agent-templates Check 7 uses `jq -e tuple` (was buggy substring grep); adapters/ generation headers restored + bats expectations corrected.
+- **MIGRATIONS.json backfill**: 4 missing entries surfaced by jq tuple lint cascade; encoding fix via Write tool (Windows curly-quote autocorrect bug).
 
 ### Added (BL-W43 — Architect Topology Hardening, PRs #140-#143)
 - **arch-bash-write-gate cross-verify exempt** (`scripts/sh/quality-gate-pre-pr.sh`, `scripts/sh/architect-bash-write-gate.sh`): Extends exempt regex to allow architects to read/write `pr*-arch-*-cross-verify.md` files when validating peer verdicts. Closes W43-01.

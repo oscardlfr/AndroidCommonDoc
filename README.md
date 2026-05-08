@@ -996,7 +996,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-16 domain hubs, 68 sub-docs, 24 guides, 37 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+16 domain hubs, 68 sub-docs, 25 guides, 45 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1116,7 +1116,7 @@ AndroidCommonDoc/
 +-- .claude/
 |   +-- commands/           # 59 Claude Code slash commands
 |   +-- agents/             # 39 specialized agents
-|   +-- hooks/              # Real-time enforcement hooks (26 hooks wired, 28 on disk)
+|   +-- hooks/              # Real-time enforcement hooks (27 hooks wired, 27 on disk)
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
 |   +-- */SKILL.md          # 61 canonical skill definitions
@@ -1178,7 +1178,7 @@ AndroidCommonDoc/
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
 |   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
-+-- docs/                   # 16 domain hubs, 68 sub-docs, 24 guides, 37 agent workflow docs
++-- docs/                   # 16 domain hubs, 68 sub-docs, 25 guides, 45 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/
