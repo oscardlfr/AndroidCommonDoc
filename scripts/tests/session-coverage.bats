@@ -763,8 +763,8 @@ teardown() {
     sed -n '/What gets synced/,/^### /p' "$README" | grep -qi "not synced"
 }
 
-@test "README: docs count is 88+ sub-docs" {
-    grep -q "88+ sub-docs" "$README"
+@test "README: docs count is 68 sub-docs" {
+    grep -q "68 sub-docs" "$README"
 }
 
 @test "README: vitest count is 1634" {
