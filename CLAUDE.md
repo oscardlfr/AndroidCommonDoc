@@ -53,7 +53,7 @@
 ### Doc size limits (MUST split, never extend)
 - Hub docs **≤100 lines**: navigation + glossary only, zero implementation detail
 - Sub-docs **≤300 lines**: one focused topic. At 250+ → plan your split
-- Agent templates **≤400 lines** — orchestrators are more complex than docs. Extract domain knowledge into `.claude/docs/` sub-docs if approaching limit
+- Agent templates **≤425 lines** — orchestrators are more complex than docs. Extract domain knowledge into `.claude/docs/` sub-docs if approaching limit (W31.6 bump: arch templates need PREP/EXECUTE blocks + ban reminders)
 - Splitting is the design pattern. Never compress content to fit — create hub + sub-docs
 
 ### Pattern docs need YAML frontmatter

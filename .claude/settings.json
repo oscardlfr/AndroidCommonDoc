@@ -235,6 +235,10 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/kmp-test-runner-gate.js",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/compile-fail-pre-commit.sh"
           }
         ]
       },

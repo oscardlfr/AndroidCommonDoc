@@ -12,6 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import { readOrchestrationGuide } from '../helpers/orchestration-guide.js';
 
 const ROOT = path.resolve(__dirname, '../../..');
 const TEMPLATES_DIR = path.join(ROOT, 'setup/agent-templates');
@@ -60,7 +61,7 @@ function bodyContent(content: string): string {
 // Load template once
 // ---------------------------------------------------------------------------
 
-const content = fs.readFileSync(PM_TEMPLATE, 'utf-8');
+const content = readOrchestrationGuide();
 const body = bodyContent(content);
 
 // ---------------------------------------------------------------------------
@@ -68,11 +69,17 @@ const body = bodyContent(content);
 // ---------------------------------------------------------------------------
 
 describe('HARD GATE position', () => {
-  // Extract ~5 lines after the HARD GATE line for content checks
-  const hardGateLine = lineOf(content, 'HARD GATE');
+  // Extract ~20 lines after the HARD GATE heading for content checks.
+  // BL-W45 hub-split: HARD GATE block moved to tl-session-start.md sub-doc;
+  // combined content is large so we skip past the table row mention and find
+  // the actual HARD GATE heading (contains ⛔ or "Session setup blocks").
   const contentLines = content.split('\n');
+  const hardGateHeadingIdx = contentLines.findIndex(
+    l => l.includes('HARD GATE') && (l.includes('⛔') || l.includes('Session setup'))
+  );
+  const hardGateLine = hardGateHeadingIdx >= 0 ? hardGateHeadingIdx + 1 : lineOf(content, 'HARD GATE');
   const hardGateText = hardGateLine > 0
-    ? contentLines.slice(hardGateLine - 1, hardGateLine + 5).join('\n')
+    ? contentLines.slice(hardGateLine - 1, hardGateLine + 20).join('\n')
     : '';
 
   const bodyLines = body.split('\n');
@@ -223,8 +230,10 @@ describe('team-lead template structural invariants', () => {
   const lines = content.split('\n');
   const bodyLines = body.split('\n');
 
-  it('Template is at most 400 lines', () => {
-    expect(lines.length).toBeLessThanOrEqual(400);
+  it('Orchestration guide hub is at most 400 lines (BL-W45: sub-docs excluded from limit)', () => {
+    // BL-W45 hub-split: combined content is large. Check only the hub doc itself.
+    const hubContent = fs.readFileSync(PM_GUIDE, 'utf-8');
+    expect(hubContent.split('\n').length).toBeLessThanOrEqual(400);
   });
 
   it('main-agent-orchestration-guide.md has version field in frontmatter (W31.6: not a subagent template)', () => {

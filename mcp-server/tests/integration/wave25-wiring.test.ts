@@ -15,6 +15,7 @@ import { describe, it, expect } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
 import { parse as parseYaml } from "yaml";
+import { readOrchestrationGuide } from "../helpers/orchestration-guide.js";
 
 const ROOT = path.resolve(__dirname, "../../..");
 const AGENTS_DIR = path.join(ROOT, ".claude/agents");
@@ -182,9 +183,8 @@ describe("Wave 25: ingestion loop is fully wired", () => {
   });
 
   it("main-agent-orchestration-guide.md has Ingestion-Request Handler section (W31.6)", () => {
-    // team-lead.md retired W31.6 — content moved to main-agent-orchestration-guide.md
-    const guidePath = path.join(DOCS_AGENTS_DIR, "main-agent-orchestration-guide.md");
-    const raw = fs.readFileSync(guidePath, "utf-8");
+    // BL-W45 hub-split: content may be in tl-* sub-docs
+    const raw = readOrchestrationGuide();
     expect(raw).toMatch(/Ingestion-?Request Handler/i);
     expect(raw).toMatch(/approved_by:\s*user/);
   });

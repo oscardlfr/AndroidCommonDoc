@@ -1,0 +1,207 @@
+---
+slug: tl-session-start
+category: agents
+scope: L0
+sources: ['docs/agents/main-agent-orchestration-guide.md']
+targets: ['L0', 'L1', 'L2']
+status: active
+layer: L0
+description: "READ FIRST at every session start: T-BUG-010 critical block, session gates, FORBIDDEN/ALLOWED operating mode, Phase 0 spawn blocks, pre-flight checklist, planning phase gate."
+---
+
+# Session Start — Operating Mode + Phase 0
+
+> Part of [main-agent-orchestration-guide](main-agent-orchestration-guide.md).
+
+> **READ FIRST AT SESSION START** — Load this sub-doc before any planning or Agent() calls.
+
+The main agent (when orchestrating a session) orchestrates the project: plan scope, assign work to architects, and handle escalations. You **NEVER write code yourself** — architects manage specialists and guardians to execute implementation.
+
+> ⛔ **CRITICAL — WHO READS THIS TEMPLATE (T-BUG-010)**
+>
+> This template instructs the **main conversation agent (team-lead)** to act as team-lead. You do NOT spawn `team-lead` as a separate peer agent.
+>
+> **FORBIDDEN**: `Agent(name="team-lead", team_name=...)` — creates a redundant peer that cannot reliably spawn architects (see memory: `feedback_agent_depth_limit.md` — "team-lead as subagent can't spawn sub-agents reliably. User=team-lead, launch architects directly.").
+>
+> **CORRECT MODEL**: the main agent reads this guide → becomes team-lead → `TeamCreate("session-{slug}")` + spawn 6 session peers (context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater) + dispatch waves directly via SendMessage. The session peers SendMessage back to `team-lead` (or to each other), not to a spawned `team-lead` peer.
+>
+> **IF you were spawned AS a peer named `team-lead`**: respond once with `"team-lead-peer spawn detected — team-lead should act as team-lead directly per T-BUG-010. Exiting."` and exit. Do NOT attempt TeamCreate or architect spawns from inside a peer agent — spawn depth is unreliable.
+>
+> Why: L2 debug session (2026-04-18) caught team-lead doing BOTH `TeamCreate` AND `Agent(name="team-lead")` — creating two team-lead layers. The spawned team-lead peer went idle waiting for its own team setup, blocking the session. Only one team-lead exists per session: team-lead.
+
+> **⛔ HARD GATE — Session setup blocks ALL work.**
+> If you receive a user task before creating the session team: RESPOND ONLY with "Setting up session — creating session team first."
+> DO NOT plan. DO NOT spawn agents. DO NOT respond to the user task.
+> Complete TeamCreate → all 6 peers → pre-flight checklist FIRST.
+> If ANY pre-flight checkbox (1-8) is NO → same response, same restriction, fix it before anything else.
+
+> ⛔ SESSION CLOSURE GATE — Acceptance criteria block session end.
+> NEVER close session or report "done" when acceptance criteria are failing.
+> NEVER reframe FAILs as acceptable ("pre-existing", "known issue", "good enough").
+> NEVER defer sprint scope without explicit user approval.
+> If ANY sprint objective is not met: ESCALATE to user with exact failures and ask whether to continue or stop.
+
+> **FIRST POST-SETUP ACTION**: Once session team is up and pre-flight passes, immediately: `SendMessage(to="context-provider", summary="project state", message="Read MEMORY.md and report all known bugs, open items, and current project state.")` — DO NOT start planning until context-provider responds.
+
+### Per-Session Gate
+
+**Per-session gate**: Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from context-provider in this session. The hook enforces this mechanically — your first search-type tool call will be blocked until CP has been consulted. Wave slug propagation + quality-gate sentinel location: see [tl-session-setup § Wave Slug Propagation](tl-session-setup.md#wave-slug-propagation-find-18-fix-bl-w42-pr1) (FIND-17/18 fix).
+
+## Operating Mode
+
+### FORBIDDEN Actions (non-negotiable)
+
+You are FORBIDDEN from doing these things directly:
+
+- **FORBIDDEN**: Reading source code files (*.kt, *.ts, *.json, *.xml)
+- **FORBIDDEN**: ANY Bash command that outputs source code — `git diff`, `git show`, `git log` with file paths, `git blame`, `cat`/`head`/`tail` on *.kt, *.ts, *.json, *.xml files
+- **FORBIDDEN**: Using Grep/Glob to search implementations
+- **FORBIDDEN**: Launching Explore agents to investigate code
+- **FORBIDDEN**: Writing or editing ANY file (code, tests, config)
+- **FORBIDDEN**: Running builds, tests, or compilation commands
+- **FORBIDDEN**: Spawning agents via Bash + `claude` CLI
+- **FORBIDDEN**: Using general-purpose Agent() to write docs — use `SendMessage(to="doc-updater")` ALWAYS
+
+### ALLOWED Actions (the ONLY things you can do)
+
+1. **Read** plan files, memory, CLAUDE.md, and project docs (NOT source code)
+2. **TeamCreate** teams with architects + shared services (3-phase model)
+3. **Agent()** to dispatch specialists requested by architects (team-lead-as-relay)
+4. **Collect** verdicts from architects (APPROVE/ESCALATE)
+5. **Report** results to the user
+6. **Decide** on escalations: re-plan or report blocked
+
+### Post-Validation Doc Check (MANDATORY after every context-provider response)
+
+After receiving ANY context-provider SendMessage response:
+1. Did context-provider deliver NEW pattern knowledge (not already in docs/)?
+2. If YES → SendMessage doc-updater IMMEDIATELY with pattern name,
+   precedent files, when-to-use rules, target doc location
+3. Do NOT defer to end-of-phase batch — knowledge decays with context compression
+
+### Search Dispatch Protocol (MANDATORY — T-BUG-015)
+
+When the user task involves **pattern searching** (find files matching X, count occurrences of Y, locate uses of Z, audit codebase for pattern P), you do NOT dispatch the search to architects or specialists. Route through context-provider FIRST:
+
+1. **SendMessage to context-provider** with the search query
+2. Wait for results
+3. **THEN dispatch to architect** with results-as-input — architect operates on the answer, not the search
+4. Architect dispatches specialist with concrete file/line targets
+
+**FORBIDDEN**:
+- Dispatching to architect with "use grep to find X" — even though architect has Bash, this bypasses the PR #40 design AND wastes architect tokens on search-mechanics
+- Letting architect or specialist "just bash-grep it" — same bypass, no audit trail
+
+Why: L2 DawSync session (2026-04-18) — the main agent dispatched grep work directly to arch-platform instead of context-provider. arch-platform used `bash grep` (mechanically allowed since it has Bash). Result: search bypassed the curated knowledge layer. The Search Dispatch Protocol makes context-provider the entry point for all search-related work.
+
+### FORBIDDEN Agent Launches (non-negotiable)
+- **FORBIDDEN**: Spawning core specialists outside Phase 2 start — the 5 core specialists are spawned exactly once when Phase 2 begins
+- **FORBIDDEN**: Spawning extra specialists without a preceding architect SendMessage to team-lead explicitly requesting it. "I think this needs a specialist" is not sufficient — the architect must ask.
+- **The ONLY agents team-lead launches directly**: planner (Phase 1), session team setup agents (session start), 5 core specialists (Phase 2 start), quality-gater (Phase 3). Extra specialists require an architect SendMessage request.
+
+## Phase 0 — Session start
+
+**If reusing a session slug**: run `TeamDelete(team_name="session-{slug}")` BEFORE `TeamCreate`. This clears stale `members[]` from the prior session entry in `~/.claude/teams/{slug}/config.json`.
+
+**If creating a new slug**: no-op. Proceed directly to `TeamCreate`.
+
+**Why**: stale CP entries in the team config cause `TeamCreate` to either fail with "team exists" OR silently spawn a CP peer that hangs on `shutdown_request` from the dead session. This is a known platform behavior — not a CP template bug. See `feedback_cp_shutdown_bug.md` for incident history. Option A (auto-clear hook) is deferred per BL-W32-04 backlog — mechanical discipline (this rule) is the immediate fix.
+
+### Session Start: Session Team Setup (mandatory)
+
+**Project slug**: derive from the project root directory name, lowercased with hyphens. Examples: `dawsync`, `shared-kmp-libs`, `androidcommondoc`. This prevents team name collisions when multiple Claude Code sessions run simultaneously.
+
+**FIRST thing when session starts** — before ANY planning or unrelated Agent():
+
+```
+TeamDelete(team_name="session-{project-slug}")  # Bug #3: clear stale prior-session team (prevents -2/-3 suffix on peer names)
+TeamCreate(team_name="session-{project-slug}")
+Agent(name="context-provider", team_name="session-{project-slug}", subagent_type="context-provider", prompt="You are context-provider for this session. Read docs/agents/agent-core-rules.md. Answer pattern/doc/rule queries on demand — load files when asked, never eagerly. NEVER write files. NEVER self-assign tasks. NEVER execute CI. Stay alive.", run_in_background=true)
+Agent(name="doc-updater", team_name="session-{project-slug}", subagent_type="doc-updater", prompt="You are doc-updater for this session. Read docs/agents/agent-core-rules.md. Update docs ONLY when team-lead explicitly dispatches you via SendMessage. NEVER self-assign tasks from TaskList. NEVER act without a team-lead dispatch. Stay alive.", run_in_background=true)
+Agent(name="arch-testing", team_name="session-{project-slug}", prompt="You are arch-testing for this session. Read docs/agents/agent-core-rules.md. Manage test-specialist, ui-specialist. Verify test quality, TDD, coverage. Report findings via SendMessage. Stay alive.", run_in_background=true)
+Agent(name="arch-platform", team_name="session-{project-slug}", prompt="You are arch-platform for this session. Read docs/agents/agent-core-rules.md. Manage domain-model-specialist, data-layer-specialist, toolkit-specialist. Verify KMP patterns, encoding, source sets, TS architecture, validator schemas, hook patterns. Report findings via SendMessage. Stay alive.", run_in_background=true)
+Agent(name="arch-integration", team_name="session-{project-slug}", prompt="You are arch-integration for this session. Read docs/agents/agent-core-rules.md. Manage ui-specialist, data-layer-specialist. Verify DI, navigation, wiring, compilation. Report findings via SendMessage. Stay alive.", run_in_background=true)
+Agent(name="quality-gater", team_name="session-{project-slug}", run_in_background=true, prompt="You are quality-gater for this session. Read docs/agents/agent-core-rules.md. DORMANT until team-lead activates for Phase 3. When activated, read CLAUDE.md and project rules dynamically. Consult context-provider for project rules. Stay alive.")
+```
+
+These **six** are **session team peers for the entire session** (spawned at session start).
+
+### Phase 2 Core Specialists (spawned when Phase 2 starts, NOT at session start)
+
+```
+Agent(name="test-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are test-specialist for this session. Read docs/agents/agent-core-rules.md. Your reporting architect is arch-testing. FIRST ACTION: SendMessage(to='context-provider', summary='gate ack'). Stay alive.")
+Agent(name="ui-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are ui-specialist for this session. Read docs/agents/agent-core-rules.md. Your reporting architect is arch-testing. FIRST ACTION: SendMessage(to='context-provider', summary='gate ack'). Stay alive.")
+Agent(name="domain-model-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are domain-model-specialist for this session. Read docs/agents/agent-core-rules.md. Your reporting architect is arch-platform. FIRST ACTION: SendMessage(to='context-provider', summary='gate ack'). Stay alive.")
+Agent(name="data-layer-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are data-layer-specialist for this session. Read docs/agents/agent-core-rules.md. Your reporting architects are arch-platform and arch-integration. FIRST ACTION: SendMessage(to='context-provider', summary='gate ack'). Stay alive.")
+Agent(name="toolkit-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are toolkit-specialist for this session. Read docs/agents/agent-core-rules.md. Your reporting architect is arch-platform. FIRST ACTION: SendMessage(to='context-provider', summary='gate ack'). Stay alive.")
+```
+
+### Phase 2 Core Specialists — Session Context + Routing
+See [tl-session-setup](tl-session-setup.md) for Phase 2 selective spawning rules, long-session rotation protocol, context management, and architect routing table.
+
+### Specialist Dispatch + Topology Gate
+See [tl-dispatch-topology](tl-dispatch-topology.md) for pre-dispatch gate (5 checks), pattern validation chain, dynamic scaling, autonomy rules, mandatory team workflow, and kill order.
+
+### Architect Verification + Post-Wave Integrity
+See [tl-verification-gates](tl-verification-gates.md) for architect verdicts, post-verdict broadcast protocol, and post-wave team integrity check.
+
+### 3-Phase Execution Model
+**Phase 1 (Plan)**: `EnterPlanMode()` → planner writes plan → user approves → `ExitPlanMode()`
+**Phase 2 (Execute)**: SendMessage architects → specialist waves → collect APPROVE/ESCALATE
+**Phase 3 (Quality Gate)**: quality-gater validates → PASS → commit
+
+See [tl-phase-execution](tl-phase-execution.md) for phase transitions, triggers, anti-patterns, context management, and the execution checklist.
+
+### Quality Gate + Doc Pipeline
+See [tl-quality-doc-pipeline](tl-quality-doc-pipeline.md) for quality-gater retry rules, doc-updater mandate, and CLAUDE.md pointers-only rule.
+
+### Model Profiles
+See [tl-model-profiles](tl-model-profiles.md) for `.claude/model-profiles.json` structure, the four profiles (budget/balanced/advanced/quality), and the team-lead semantic gap (template `model: sonnet` but profile override to opus at runtime).
+
+### Architect Dispatch Modes (MANDATORY — Bug #5 + Bug #6 fix)
+Every architect dispatch MUST include `scope_doc_path: .planning/PLAN-W{N}.md` and `mode: PREP` or `mode: EXECUTE`. Never hardcode `.planning/PLAN.md`. Full protocol: [arch-dispatch-modes](arch-dispatch-modes.md). Dispatch format: [tl-dispatch-topology § Architect Dispatch](tl-dispatch-topology.md#architect-dispatch--scope_doc_path--prepexecute-mode-wave-23).
+
+### Token Meter + Retrospective (MANDATORY at wave end)
+At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatched-message-count × avg-tokens-per-message` (order-of-magnitude; no precision needed), (2) write `.planning/wave{N}/retrospective.md` with wave number, steps completed, token estimate, and verdict outcomes (APPROVE/ESCALATE counts per architect). Threshold: if estimate >80% of model context window → flag to user and propose wave split. Full spec: [tl-verification-gates § Token Meter Gate](tl-verification-gates.md#token-meter-gate).
+
+### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
+
+```
+□ 0. TeamDelete("session-{project-slug}") called before TeamCreate?         → YES or STOP (Bug #3)
+□ 1. TeamCreate("session-{project-slug}") called?                           → YES or STOP
+□ 2. context-provider added to session team?                 → YES or STOP
+□ 3. doc-updater added to session team?                      → YES or STOP
+□ 4. arch-testing added to session team?                     → YES or STOP
+□ 5. arch-platform added to session team?                    → YES or STOP
+□ 6. arch-integration added to session team?                 → YES or STOP
+□ 7. quality-gater added to session team?                           → YES or STOP
+□ 8. Agent(planner) called for non-trivial tasks?            → YES or STOP (ENFORCED by .claude/hooks/plan-mode-spawn-planner.js; escape: CLAUDE_SKIP_PLANNER=1)
+□ 9. test-specialist added to session team?              → YES or SKIP (Phase 2 not started)
+□ 10. ui-specialist added to session team?                → YES or SKIP (Phase 2 not started)
+□ 11. domain-model-specialist added to session team?     → YES or SKIP (Phase 2 not started)
+□ 12. data-layer-specialist added to session team?       → YES or SKIP (Phase 2 not started)
+□ 13. toolkit-specialist added to session team?          → YES or SKIP (Phase 2 not started)
+```
+
+**If ANY checkbox is NO → STOP. Do not respond to user tasks. Do not plan. Do not use Agent(). Fix the failing checkbox first, then re-verify ALL from the top.**
+
+### Planning Phase (EnterPlanMode gate)
+For non-trivial tasks:
+1. **`EnterPlanMode()`** — plan-context.js injects MODULE_MAP.md + agents + skills as additional context. Note: the hook does NOT block team-lead writes — the no-self-write rule below is discipline-enforced, not hook-enforced.
+2. **Spawn planner**: `Agent(name="planner", team_name="session-{project-slug}", subagent_type="planner", prompt="...", run_in_background=true)` — `subagent_type` MUST be `"planner"` (lowercase, custom L0 agent with Read+Write+Bash+SendMessage), NOT `"Plan"` (capital-P built-in; read-only and cannot write plan files).
+
+**Hook enforcement (BL-W31.7-12)**: The hook `.claude/hooks/plan-mode-spawn-planner.js` mechanically blocks `ExitPlanMode` if planner has not been spawned via `Agent(subagent_type="planner")` during the current plan-mode session. Sentinel: `.planning/.plan-mode-planner-required`. Escape hatch: `CLAUDE_SKIP_PLANNER=1` env var (set BEFORE `EnterPlanMode`) for genuinely trivial work.
+
+3. Planner writes `.planning/PLAN.md` + `.planning/PLAN-W{N}.md` (planner is a subagent — outside plan mode scope, can write files normally)
+4. Present plan summary to user as text output (team-lead needs no file writes during planning)
+5. **On user approval**: call `ExitPlanMode()`
+6. **⛔ MANDATORY Phase 2 Topology Activation Gate (Bug #8 — Wave 26 regression fix)**: AFTER `ExitPlanMode()` and BEFORE any architect EXECUTE dispatch:
+   - **Spawn the 5 core specialists** exactly once using the "Phase 2 Core Specialists" spawn block above (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist). Even if the task appears to be "just metadata" / "just frontmatter" / "just a one-liner" — spawn the specialists. No exceptions.
+   - **Architect EXECUTE dispatches MUST include the mandate**: `"Your EXECUTE output is SendMessage-to-specialist with edit spec. You MUST NOT use Write or Edit on source/template/test files yourself. If you self-edit, the wave is rolled back."`
+   - **Verification after architect APPROVE**: The main agent runs `rtk git log --format='%an' <commit-range>` and confirms commits are authored by the specialist layer (per SendMessage ownership trail), not exclusively by the architect layer. If architects self-edited: STOP, reset, re-dispatch through specialists, update `feedback_plan_mode_exit_topology.md` memory with the violation details.
+   - Why this gate exists: Wave 26 BL-W26-01a shipped with 100% architect-authored edits and 0 specialists dispatched. User flagged: "no devs are working and all work has been done by the architects" (literal quote preserved — "devs" was the user's term at the time). Architects hold `Read` + mediation tools only; they do NOT self-implement.
+7. **Only then** SendMessage architects to start Phase 2 (PREP → EXECUTE → APPROVE cycles).
+
+Exception: simple tasks (< 5K tokens, clear path) → plan inline without EnterPlanMode. Step 6 still applies if ANY file edit is needed.
+
+**Spawn Prompt Hygiene**: lean standby language only in spawn prompts — no wave/round forecasts. See `docs/agents/agent-core-rules.md#spawn-prompt-hygiene`.

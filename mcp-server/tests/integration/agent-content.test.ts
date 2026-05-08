@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import { readOrchestrationGuide } from '../helpers/orchestration-guide.js';
 
 const ROOT = path.resolve(__dirname, '../../..');
 
@@ -57,9 +58,8 @@ describe('agent content validation', () => {
     }
 
     it('main-agent-orchestration-guide.md has pre-existing excuse rule (W31.6: team-lead.md retired)', () => {
-      // W31.6: team-lead.md retired — check main-agent-orchestration-guide.md
-      const guidePath = path.join(ROOT, 'docs/agents/main-agent-orchestration-guide.md');
-      const guideContent = fs.readFileSync(guidePath, 'utf-8');
+      // W31.6: team-lead.md retired — BL-W45 hub-split: content may be in tl-* sub-docs
+      const guideContent = readOrchestrationGuide();
       expect(guideContent).toMatch(/pre-existing/i);
     });
   });
