@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Smoke tests for scripts/sh/gradle-run.sh — the kmp-test-runner v0.6.2 wrapper.
+# Smoke tests for scripts/sh/gradle-run.sh — the kmp-test-runner v0.8.1 wrapper.
 # Style: mirrors scripts/tests/generate-template.bats (BL-W32-06a).
 
 SCRIPT="$BATS_TEST_DIRNAME/../sh/gradle-run.sh"

@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 46 tools wired into agent frontmatter (Wave 25: 10 core agents — team-lead, 3 architects, context-provider, doc-updater, doc-alignment, codebase-mapper, beta-readiness, l0-coherence-auditor, verifier — now declare MCP tools explicitly so the harness loads their schemas), a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 39 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring and user-gated ingestion loop (context-provider → team-lead approval → doc-updater → `ingest-content` MCP tool) -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 46 tools wired into agent frontmatter (Wave 25: 20 core agents — team-lead, 3 architects, context-provider, doc-updater, doc-alignment, codebase-mapper, beta-readiness, l0-coherence-auditor, verifier — now declare MCP tools explicitly so the harness loads their schemas), a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 40 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring and user-gated ingestion loop (context-provider → team-lead approval → doc-updater → `ingest-content` MCP tool) -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
@@ -18,22 +18,22 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custo
 
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
-- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 25 cross-platform pairs + 7 Bash-only utilities
+- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 39 cross-platform pairs + 5 Bash-only utilities
 - **AI agent skills** for Claude Code and GitHub Copilot -- 61 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 23 hand-written + 5 generated AST-only rules (28 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, security patterns, and testing anti-patterns
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **[Dokka Markdown Plugin](https://github.com/oscardlfr/dokka-markdown-plugin)** — transforms KDoc into L0-compliant structured markdown (`docs/api/*.md`) with 14-field YAML frontmatter, content-addressed hashes for CI drift detection, and first-class KMP expect/actual handling. Standalone repo, MIT-licensed.
-- **[kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner)** — npm CLI (`@oscardlfr/kmp-test-runner` v0.6.2) that owns Gradle test orchestration. Invoked by `/test`, `/coverage`, `/test-full-parallel`, `/test-changed` skills via the `gradle-run.sh` (Linux/macOS, in `scripts/sh/`) or `gradle-run.ps1` (Windows, in `scripts/ps1/`) thin wrappers. Standalone repo, Apache-2.0.
+- **[kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner)** — npm CLI (`@oscardlfr/kmp-test-runner` v0.8.1) that owns Gradle test orchestration. Invoked by `/test`, `/coverage`, `/test-full-parallel`, `/test-changed` skills via the `gradle-run.sh` (Linux/macOS, in `scripts/sh/`) or `gradle-run.ps1` (Windows, in `scripts/ps1/`) thin wrappers. Standalone repo, Apache-2.0.
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
-- **MCP server** with 46 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions. **Wave 25 fix**: all 46 tools are now callable by the 10 core agents (previously prose-only — agents described MCP usage but the harness never loaded the schemas). One tool is intentionally L2-only (`android-cli-bridge`, for DawSync/WakeTheCave)
+- **MCP server** with 46 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions. **Wave 25 fix**: all 46 tools are now callable by the 20 core agents (previously prose-only — agents described MCP usage but the harness never loaded the schemas). One tool is intentionally L2-only (`android-cli-bridge`, for DawSync/WakeTheCave)
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
 - **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, architecture guards, and dependency freshness
 - **39 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
-- **39 agent templates** governing the workflow (canonical pattern: main agent IS team-lead, no separate `team-lead` subagent — see `docs/agents/main-agent-orchestration-guide.md`). Roster: 3 architects, 5 core specialists (domain/data/ui/test + toolkit-specialist), 1 context-provider, 4 orchestrators (planner, quality-gater, full-audit-orchestrator, quality-gate-orchestrator), 5 validators, 7 auditors, 8 tool-class agents (codebase-mapper, researcher, advisor, debugger, verifier, etc.), 2 doc owners, 1 domain-specialist scaffold, 5 L1/L2 marketing/product templates. Manifest at `.claude/registry/agents.manifest.yaml` is the source of truth (PR #71); CI WARN-mode validator surfaces drift (PR #72). Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
+- **40 agent templates** governing the workflow (canonical pattern: main agent IS team-lead, no separate `team-lead` subagent — see `docs/agents/main-agent-orchestration-guide.md`). Roster: 3 architects, 5 core specialists (domain/data/ui/test + toolkit-specialist), 1 context-provider, 4 orchestrators (planner, quality-gater, full-audit-orchestrator, quality-gate-orchestrator), 5 validators, 7 auditors, 8 tool-class agents (codebase-mapper, researcher, advisor, debugger, verifier, etc.), 2 doc owners, 1 domain-specialist scaffold, 5 L1/L2 marketing/product templates. Manifest at `.claude/registry/agents.manifest.yaml` is the source of truth (PR #71); CI WARN-mode validator surfaces drift (PR #72). Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
 
 Install once, use across all your projects.
 
@@ -178,7 +178,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 159 L0 entries (61 skills + 39 agents + 59 commands) with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 162 L0 entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -487,7 +487,7 @@ Gradle plugins and utilities shipped in `tools/` — installable independently f
 
 Install via `/setup --dokka-plugin yes` (wizard W10) or manually — see the [standalone plugin repo](https://github.com/oscardlfr/dokka-markdown-plugin#readme) and the pattern doc at [`docs/gradle/dokka-markdown-plugin.md`](docs/gradle/dokka-markdown-plugin.md).
 
-### kmp-test-runner v0.7.0 — test orchestration runner
+### kmp-test-runner v0.8.1 — test orchestration runner
 
 `@oscardlfr/kmp-test-runner` is the canonical runner for Gradle test execution across the L0/L1/L2 chain. AndroidCommonDoc consumes it via thin shell wrappers: `gradle-run.sh/.ps1` (~100 lines each, BL-W32-06a) for single-module runs, and `run-parallel-coverage-suite.sh/.ps1` + `run-changed-modules-tests.sh/.ps1` (BL-W32-06e) for parallel suite and changed-module flows. The wrappers delegate retry semantics, daemon management, Kover coverage, and Windows file-lock recovery to the runner. **Skills using it**: `/test`, `/coverage`, `/test-full-parallel`, `/test-full`, `/test-changed`. **Adoption**: L0 ✓ (BL-W32-06a/06e), L1 in progress (shared-kmp-libs), L2 pending. For runner CLI usage, retry policies, and configuration see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme).
 
@@ -504,7 +504,6 @@ Real-time pattern enforcement and context injection during AI-assisted developme
 | `plan-context.js` | Plan mode entry | Injects MODULE_MAP.md contents so the agent understands project structure during planning |
 | `doc-freshness-alert.js` | Session start | Warns when pattern docs are stale relative to upstream sources |
 | `agent-delegation-reminder.js` | Task start | Nudges the agent to delegate to specialized agents instead of doing everything inline |
-| `readme-pre-commit.sh` | PreToolUse (git commit) | Validates README counts match filesystem before commit |
 | `registry-pre-commit.sh` | PreToolUse (git commit) | Validates registry.json hashes before commit |
 | `quality-gate-pre-commit.sh` | PreToolUse (git commit) | Blocks commit unless a fresh quality-gate PASS stamp exists (30 min expiry) |
 
@@ -704,7 +703,7 @@ See [Team Topology](docs/agents/team-topology.md) for full details.
 
 ## Agents
 
-39 specialized agents in `.claude/agents/` + 39 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
+39 specialized agents in `.claude/agents/` + 40 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
 
 ### Production Agents (synced via /sync-l0)
 
@@ -937,7 +936,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Scripts
 
-25 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 10 Bash-only utilities (`catalog-coverage-check`, `check-agent-parity`, `check-detekt-coverage`, `install-git-hooks`, `pre-commit-hook`, `readme-audit`, `rehash-registry`, `scan-secrets`, `sync-gsd-agents`, `validate-agent-templates`).
+39 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 5 Bash-only utilities.
 
 ### Core Scripts
 
@@ -949,12 +948,12 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `check-doc-freshness` | Verify pattern doc version references against versions manifest (calls check-freshness) |
 | `check-version-sync` | Version catalog diff between projects -- or against `versions-manifest.json` directly |
 | `generate-sbom` | CycloneDX SBOM generation via Gradle plugin |
-| `gradle-run` | Thin wrapper over `kmp-test-runner` v0.7.0 (smart retry, daemon management, OOM recovery handled by external CLI) |
+| `gradle-run` | Thin wrapper over `kmp-test-runner` v0.8.1 (smart retry, daemon management, OOM recovery handled by external CLI) |
 | `lint-resources` | String resource naming convention enforcement |
 | `pattern-lint` | **Deterministic code pattern checks** -- 8 grep-based rules (CancellationException, MutableSharedFlow, forbidden imports, println, TODO crash, runBlocking, GlobalScope, System.currentTimeMillis) |
 | `run-android-tests` | Instrumented test orchestration on device/emulator |
 | `run-changed-modules-tests` | Git diff-based module detection + selective test execution |
-| `run-parallel-coverage-suite` | Thin wrapper over kmp-test-runner v0.7.0 for parallel test execution + L0 coverage-full-report.md generation. `--exclude-coverage` for test-utility modules, auto-excludes `*:testing`, `konsist-guard`, etc. For runner internals see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme). |
+| `run-parallel-coverage-suite` | Thin wrapper over kmp-test-runner v0.8.1 for parallel test execution + L0 coverage-full-report.md generation. `--exclude-coverage` for test-utility modules, auto-excludes `*:testing`, `konsist-guard`, etc. For runner internals see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme). |
 | `scan-sbom` | CVE scanning via Trivy |
 | `verify-kmp-packages` | KMP source set validation and import checking |
 
@@ -997,7 +996,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-16 domain hubs, 66 sub-docs, 23 guides, 12 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+16 domain hubs, 68 sub-docs, 24 guides, 37 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1117,19 +1116,19 @@ AndroidCommonDoc/
 +-- .claude/
 |   +-- commands/           # 59 Claude Code slash commands
 |   +-- agents/             # 39 specialized agents
-|   +-- hooks/              # Real-time enforcement hooks (8 hooks: Detekt, README, registry, quality-gate, doc-freshness, agent-delegation, plan-context)
+|   +-- hooks/              # Real-time enforcement hooks (26 hooks wired, 28 on disk)
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
 |   +-- */SKILL.md          # 61 canonical skill definitions
-|   +-- registry.json       # L0 registry (151 entries, SHA-256 hashes)
+|   +-- registry.json       # L0 registry (162 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
-|   +-- ps1/                # PowerShell (Windows) -- 25 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 35 scripts (25 cross-platform + 10 utilities)
+|   +-- ps1/                # PowerShell (Windows) -- 39 scripts
+|   +-- sh/                 # Bash (macOS/Linux) -- 44 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
-|   +-- tests/              # bats shell test suite (567 tests, 4 fixture XMLs)
+|   +-- tests/              # bats shell test suite (1078 tests, 4 fixture XMLs)
 +-- mcp-server/             # MCP server (46 tools, 3 prompts, dynamic resources)
 |   +-- src/
 |   |   +-- tools/          # 46 tools: validation, analysis, metrics, audit, sync, vault, doc integrity
@@ -1179,7 +1178,7 @@ AndroidCommonDoc/
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
 |   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
-+-- docs/                   # 15 hub docs, 88+ sub-docs, 17 guides, 12 agent workflow docs
++-- docs/                   # 16 domain hubs, 68 sub-docs, 24 guides, 37 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/
@@ -1196,7 +1195,7 @@ AndroidCommonDoc/
 
 ## Coverage Workflow
 
-`/test-full-parallel` orchestrates a complete test + coverage cycle via `run-parallel-coverage-suite.sh` — a thin wrapper around [kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner) v0.7.0:
+`/test-full-parallel` orchestrates a complete test + coverage cycle via `run-parallel-coverage-suite.sh` — a thin wrapper around [kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner) v0.8.1:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -1204,7 +1203,7 @@ AndroidCommonDoc/
 │  run-parallel-coverage-suite.sh --project-root . --coverage-tool auto│
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  1. DELEGATE TO kmp-test-runner v0.7.0                              │
+│  1. DELEGATE TO kmp-test-runner v0.8.1                              │
 │     kmp-test-runner parallel --project-root .                       │
 │     Handles: module discovery, Gradle invocation, daemon mgmt,      │
 │     timeout watchdog, Kover/JaCoCo fallback retry                   │

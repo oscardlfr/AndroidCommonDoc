@@ -1078,7 +1078,7 @@
       "description": "Audit README.md and AGENTS.md against the current state of the repo. Surfaces stale counts, missing table entries, phantom references, project tree drift, guide hub gaps, and prose number claims. Use --fix to auto-correct count headers, add missing rows, and remove phantom rows. Use before closing a milestone or when documentation feels stale.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:52569f7c493e5e110f5b19ff262272d6eb3b5cdfaa23a72c618aeae2fba5da22",
+      "hash": "sha256:21198977c6eecc582522bcf2561fb0ef6c9c243c7adf329fc514bb9c884fb36c",
       "dependencies": [
         "scripts/sh/readme-audit.sh"
       ],
@@ -1559,7 +1559,7 @@
       "description": "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:29bd98d373a92c5f03a3f0e1ea6705e4ee45792fe0eb165a164f7f4ccbf98544",
+      "hash": "sha256:8ab2fbb81456df78298b42c2b668ff63ef4be774138dde13d0c4ce59cc1bb10c",
       "dependencies": [
         "scripts/sh/gradle-run.sh",
         "scripts/sh/ai-error-extractor.sh",
@@ -1834,7 +1834,7 @@
       "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8998eb929daf562db2608e604598fdf36bd695f7a2cee367c91c45bff9580b17",
+      "hash": "sha256:5ecec816c7081eb1026363e80933242420fd13441c6d2740d8badc0645d03867",
       "dependencies": [],
       "frontmatter": {
         "name": "work",

@@ -109,7 +109,7 @@
 - Vault sync → `mcp-server/src/vault/` (transformer, moc-generator, wikilink-generator)
 - New skill → `skills/sync-vault/SKILL.md` as canonical example
 - L0→L1/L2 propagation → `skills/sync-l0/SKILL.md`
-- Pattern docs → `docs/` with category hubs (15 domains, 88+ sub-docs)
+- Pattern docs → `docs/` with category hubs (16 domains, 68+ sub-docs)
 - Upstream validation → `docs/guides/upstream-validation.md` (validate_upstream frontmatter)
 - Detekt rules → `detekt-rules/` + `docs/guides/detekt-config.md`
 - Spec-driven workflow → `docs/agents/spec-driven-workflow.md`

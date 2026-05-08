@@ -33,7 +33,7 @@ Exit codes:
 - `0` — zero HIGH findings.
 - `1` — one or more HIGH findings.
 
-The skill `/readme-audit` wraps this script with `--project-root "$(pwd)"`. The pre-commit hook `.claude/hooks/readme-pre-commit.sh` runs the audit and blocks commits on HIGH findings.
+The skill `/readme-audit` wraps this script with `--project-root "$(pwd)"`. Run `/readme-audit --fix` manually to repair count drift — count checking is not wired to a pre-commit hook.
 
 ## What `--fix` Auto-Fixes
 
@@ -127,6 +127,5 @@ Expanding `fix_findings()` to cover the gaps above is a known backlog item. This
 
 - Script: `scripts/sh/readme-audit.sh`
 - Skill: `skills/readme-audit/SKILL.md`
-- Pre-commit hook: `.claude/hooks/readme-pre-commit.sh`
 - Suppressions schema: [audit-suppressions](audit-suppressions.md)
 - Hub: [guides-hub](guides-hub.md)

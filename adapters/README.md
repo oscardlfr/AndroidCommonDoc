@@ -16,7 +16,7 @@ Each adapter is an independent Bash script. Adding a new AI tool requires only c
 
 | Adapter | Output Location | Format |
 |---------|----------------|--------|
-| `claude-adapter.sh` | `.claude/commands/*.md` | Claude Code slash commands |
+| `claude-adapter.sh` | `.claude/commands/*.md` | Claude Code slash commands — **DEPRECATED**: the current Claude flow uses `.claude/agents/` and `.claude/commands/` directly via registry; this adapter is no longer the primary generation path |
 | `copilot-adapter.sh` | `setup/copilot-templates/*.prompt.md` | GitHub Copilot agent prompts |
 
 ## Running

@@ -1,7 +1,7 @@
 #!/usr/bin/env powershell
 <#
 .SYNOPSIS
-    Thin wrapper around kmp-test-runner v0.7.0 (BL-W32-06a).
+    Thin wrapper around kmp-test-runner v0.8.1 (BL-W32-06a).
     Replaces the 489-line self-contained runner. All daemon retry, Kover
     fallback, and JDK detection logic is now inside kmp-test-runner internals.
 
@@ -62,9 +62,9 @@ $kmpTestCmd = $null
 if (Get-Command kmp-test -ErrorAction SilentlyContinue) {
     $kmpTestCmd = "kmp-test"
 } elseif (Get-Command npx -ErrorAction SilentlyContinue) {
-    $kmpTestCmd = "npx kmp-test-runner@0.7.0"
+    $kmpTestCmd = "npx kmp-test-runner@0.8.1"
 } else {
-    Write-Error "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.7.0"
+    Write-Error "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.8.1"
     exit 1
 }
 

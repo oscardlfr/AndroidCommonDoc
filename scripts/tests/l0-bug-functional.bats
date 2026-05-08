@@ -418,24 +418,3 @@ EOF
 @test "bug9: gradle-config-check grep -c piped through tr -d \\r" {
     grep "grep -c" "$SH_DIR/gradle-config-check.sh" | grep -q "tr -d"
 }
-
-# ===========================================================================
-# readme-pre-commit hook: functional check
-# ===========================================================================
-
-@test "readme-hook: hook script exists and is valid bash" {
-    [ -f ".claude/hooks/readme-pre-commit.sh" ]
-    bash -n ".claude/hooks/readme-pre-commit.sh"
-}
-
-@test "readme-hook: checks skills count" {
-    grep -q "skills" ".claude/hooks/readme-pre-commit.sh"
-}
-
-@test "readme-hook: checks agents count" {
-    grep -q "agents" ".claude/hooks/readme-pre-commit.sh"
-}
-
-@test "readme-hook: outputs deny JSON on failure" {
-    grep -q "permissionDecision.*deny" ".claude/hooks/readme-pre-commit.sh"
-}

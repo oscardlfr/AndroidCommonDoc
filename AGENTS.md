@@ -5,7 +5,7 @@ Reusable patterns, scripts, and AI skills for Kotlin Multiplatform projects targ
 ## Commands
 
 ```bash
-# Run tests for a single module (kmp-test-runner v0.7.0 wrapper — BL-W32-06a/06e)
+# Run tests for a single module (kmp-test-runner v0.8.1 wrapper — BL-W32-06a/06e)
 bash scripts/sh/gradle-run.sh --project-root "$(pwd)" core:domain
 
 # Run all tests with coverage
