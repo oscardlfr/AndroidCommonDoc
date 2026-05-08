@@ -63,6 +63,13 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [tl-skills-mcp-tools](tl-skills-mcp-tools.md) | L0 skills, MCP tools, and official skills reference |
 | [tl-release-workflow](tl-release-workflow.md) | Release workflow, post-change checklist, findings protocol |
 | [tl-ingestion-request-handler](tl-ingestion-request-handler.md) | Ingestion-request handler: context-provider → user approval → doc-updater pipeline |
+| [arch-platform-prep-authoring-checklist](arch-platform-prep-authoring-checklist.md) | arch-platform pre-execute authoring checklist: cross-file pin scan, scope doc read, verdict field requirements |
+| [arch-platform-section-h-rule](arch-platform-section-h-rule.md) | arch-platform Section H authoring rule: manifest yaml required when versions bump, literal paths only |
+| [arch-testing-dispatch-protocol](arch-testing-dispatch-protocol.md) | Per-dispatch validation rules for arch-testing: scope gate, pattern check, spec completeness, TDD order audit |
+| [context-provider-adoption-hooks](context-provider-adoption-hooks.md) | Context-provider adoption gate + tool-use observability layer (session-level enforcement) |
+| [knowledge-currency-gate](knowledge-currency-gate.md) | Knowledge currency gate: CP verification required before any KMP capability claim in arch dispatches |
+| [main-agent-orchestration-guide](main-agent-orchestration-guide.md) | Orchestration guide for the main agent: team topology, phase protocol, architect routing, quality gates |
+| [quality-gater-runtime-ui-validation](quality-gater-runtime-ui-validation.md) | quality-gater Step 9.5 — Runtime UI Validation: Android Layout Diff + Compose Semantic Diff dispatch |
 
 ## Key Concepts
 
@@ -79,15 +86,8 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 
 ## Rules
 
+See [agent-core-rules](agent-core-rules.md) for universal behavioral rules. Key constraints:
 - Agent Roster in CLAUDE.md is mandatory — without it, Claude Code uses generic agents
-- One responsibility per agent — split if doing multiple domains
-- Agents report findings; they don't modify code unless explicitly designed to
 - Script-first: if a regex can do it, don't make an agent for it
-- Architect team gates every wave — mini-orchestrators that detect, fix, cross-verify, then APPROVE/ESCALATE
-- Bug fixes require TDD — failing test first, then fix, then architect verification
 - team-lead orchestrates, NEVER codes — assigns to devs, launches architect gates
-- Agents classified as: Specialists (write code), Architects (verify+manage), Guardians (read-only audit)
-- Official Anthropic skills enhance agents — reference them with capability detection (use when available)
-- Department heads are session-level agents (`claude --agent`), NOT sub-agents
-- Cross-department context via `context-provider`, NOT by calling other department leads
-- **MCP tools must be declared in `tools:` frontmatter** to be callable (Wave 25 fix). Prose references alone don't load schemas — the harness only exposes what's listed. 11 core agents wired; see [agent-core-rules](agent-core-rules.md) §8.
+- **MCP tools must be declared in `tools:` frontmatter** to be callable (Wave 25 fix). 20 core agents wired; see [agent-core-rules](agent-core-rules.md) §8.

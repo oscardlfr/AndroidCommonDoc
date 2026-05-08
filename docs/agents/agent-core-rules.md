@@ -77,7 +77,7 @@ If you CALL a `mcp__androidcommondoc__<name>` tool, it MUST appear in your agent
 | `verify-kmp.ts` | `mcp__androidcommondoc__verify-kmp-packages` |
 | `check-freshness.ts` | `mcp__androidcommondoc__check-doc-freshness` |
 
-**Declared MCP tools (Wave 25)**: 11 core agents declare MCP tools — context-provider (9), team-lead (13), doc-updater (8), doc-alignment-agent (10), l0-coherence-auditor (7), arch-platform (7), beta-readiness-agent (5), arch-testing (5), codebase-mapper (5), arch-integration (4), verifier (4). See `setup/agent-templates/` for the canonical `tools:` lines.
+**Declared MCP tools (Wave 25+)**: 20 core agents declare MCP tools. See `setup/agent-templates/` for the canonical `tools:` lines per agent.
 
 **If a MCP tool you need is NOT in your frontmatter**: use `ToolSearch("select:mcp__androidcommondoc__<name>")` to load its schema on-demand. Reserve this for rare cross-domain calls — add the tool to your frontmatter if you use it regularly.
 
