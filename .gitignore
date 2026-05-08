@@ -45,6 +45,8 @@ tmp/
 
 # ── Session-local planning & feedback (not for sharing) ──
 .planning/*.md
+# Planner sentinel (written by plan-mode-spawn-planner.js hook, session-scoped)
+**/.planning/.plan-mode-planner-required
 # Wave 28+: canonical cross-session files are tracked
 !.planning/backlog.md
 !.planning/wave*-propagation-plan.md

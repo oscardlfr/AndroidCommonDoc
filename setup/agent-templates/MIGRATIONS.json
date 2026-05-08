@@ -852,6 +852,11 @@
         "date": "2026-05-05",
         "breaking": false,
         "note": "BL-W42 PR5: update kmp-test-runner version pins v0.6.2->v0.8.1 at lines 155/157/162/163/185. Add MANDATE: use /test skill or kmp-test-runner CLI. Add FORBID: raw gradlew test / gradle test / :module:test."
+      },
+      "1.21.0": {
+        "date": "2026-05-07",
+        "breaking": false,
+        "note": "BL-W32-16: inline Common Gradle Error Triage section (JDK mismatch UnsupportedClassVersionError triage steps). PR #146. Backfill: missing from registry, surfaced by BL-W44-S2 PR4 jq tuple lint."
       }
     },
     "ui-specialist": {
@@ -983,6 +988,11 @@
         "date": "2026-05-04",
         "summary": "BL-W40 PR3: add Numbered Step Gate to Team Identity section",
         "breaking": false
+      },
+      "1.15.0": {
+        "date": "2026-05-07",
+        "breaking": false,
+        "note": "BL-W32-16: inline Common Gradle Error Triage section (JDK mismatch UnsupportedClassVersionError triage steps). PR #146. Backfill: missing from registry, surfaced by BL-W44-S2 PR4 jq tuple lint."
       }
     },
     "data-layer-specialist": {
@@ -1041,6 +1051,11 @@
         "date": "2026-05-04",
         "summary": "BL-W40 PR3: add Numbered Step Gate to Team Identity section",
         "breaking": false
+      },
+      "1.15.0": {
+        "date": "2026-05-07",
+        "breaking": false,
+        "note": "BL-W32-16: inline Common Gradle Error Triage section (JDK mismatch UnsupportedClassVersionError triage steps). PR #146. Backfill: missing from registry, surfaced by BL-W44-S2 PR4 jq tuple lint."
       }
     },
     "advisor": {
@@ -1259,6 +1274,11 @@
         "date": "2026-05-04",
         "summary": "BL-W35-06 C2: add self-template read ban to BANNED TOOLS section",
         "breaking": false
+      },
+      "1.4.0": {
+        "date": "2026-05-05",
+        "breaking": false,
+        "note": "BL-W42 PR3: amend discipline policy (only amend on USER request; use follow-up commit otherwise) + git-amend-gate hook awareness. PR #137. Backfill: missing from registry, surfaced by BL-W44-S2 PR4 jq tuple lint."
       }
     }
   }

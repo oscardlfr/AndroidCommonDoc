@@ -9,6 +9,8 @@ source "$SCRIPT_DIR/lib/audit-append.sh" 2>/dev/null || true
 # Validates agent templates for structural correctness, role keyword contracts,
 # imperative instruction style, and tool-body cross-references.
 # All checks are pure grep/awk — no AI reasoning needed.
+# Check 7 (versioning) requires jq (preferred) or python3 (fallback) for tuple
+# validation of (agent-name, template-version) in MIGRATIONS.json.
 #
 # Usage:
 #   ./validate-agent-templates.sh [--templates-dir DIR] [--agents-dir DIR] [--show-details] [--check CHECK,...]
@@ -452,9 +454,27 @@ if should_run "version"; then
                 if [[ "$name" == *"{{"* ]]; then
                     continue
                 fi
-                # Verify version exists in MIGRATIONS.json
-                if ! grep -q "\"$ver\"" "$MIGRATIONS_FILE" 2>/dev/null || ! grep -q "\"$name\"" "$MIGRATIONS_FILE" 2>/dev/null; then
-                    detail "$fname: version $ver or name $name not in MIGRATIONS.json"
+                # Verify (name, version) TUPLE exists in MIGRATIONS.json.
+                # jq tuple lookup prevents the substring false-positive where version
+                # $ver exists for a DIFFERENT agent (BL-W44-S2 retro fix).
+                # Falls back to python3 if jq is unavailable.
+                tuple_found=false
+                if command -v jq &>/dev/null; then
+                    if jq -e --arg n "$name" --arg v "$ver" '.templates[$n][$v]' "$MIGRATIONS_FILE" >/dev/null 2>&1; then
+                        tuple_found=true
+                    fi
+                else
+                    tuple_found=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$MIGRATIONS_FILE'))
+    print('true' if d.get('templates', {}).get('$name', {}).get('$ver') is not None else 'false')
+except Exception:
+    print('false')
+" 2>/dev/null)
+                fi
+                if [[ "$tuple_found" != "true" ]]; then
+                    detail "$fname: (name=$name, version=$ver) tuple not registered in MIGRATIONS.json"
                     ver_errors=$((ver_errors + 1))
                 fi
             fi

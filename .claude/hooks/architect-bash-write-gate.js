@@ -18,6 +18,7 @@
 //   - /dev/null and /dev/std*    (stream sinks)
 //   - .planning/wave*/arch-*-{verdict,cross-verify}.md   (architect write targets)
 //   - .androidcommondoc/audit-log.jsonl   (telemetry append)
+//   - .claude/wave-quality-gates/arch-*.md   (architect verdict files — BL-W44-S2 fix)
 //
 // Exit codes:
 //   0 = allow (no violation, or non-arch agent, or non-Bash tool, or parse error)
@@ -57,7 +58,7 @@ process.stdin.on('end', () => {
   const violation = detectViolation(cmd);
   if (!violation) process.exit(0);
 
-  const reason = '[arch-bash-write-gate] Architect "' + agentType + '" attempted Bash write via "' + violation.kind + '" (target: ' + (violation.target ?? '<inline>') + '). Architects MUST NOT write project files — even via Bash bypass. Delegate via SendMessage(to="team-lead", summary="need {dev}", message="..."). Exempt write targets: /tmp/*, /dev/null, .planning/wave*/arch-*-{verdict,cross-verify}.md, .androidcommondoc/audit-log.jsonl.';
+  const reason = '[arch-bash-write-gate] Architect "' + agentType + '" attempted Bash write via "' + violation.kind + '" (target: ' + (violation.target ?? '<inline>') + '). Architects MUST NOT write project files — even via Bash bypass. Delegate via SendMessage(to="team-lead", summary="need {dev}", message="..."). Exempt write targets: /tmp/*, /dev/null, .planning/wave*/arch-*-{verdict,cross-verify}.md, .androidcommondoc/audit-log.jsonl, .claude/wave-quality-gates/arch-*.md.';
 
   process.stdout.write(JSON.stringify({ decision: 'block', reason }));
   process.exit(2);
@@ -105,6 +106,11 @@ function isExemptTarget(target) {
   if (target.startsWith('$TMPDIR/') || target.startsWith('${TMPDIR}/')) return true;
   if (/\.planning[\\/]wave[\w.-]+[\\/](?:pr\d+-)?arch-[^\s/\\]+-(?:verdict|cross-verify)\.md$/.test(target)) return true;
   if (/\.androidcommondoc[\\/]audit-log\.jsonl$/.test(target)) return true;
+  // Architect verdict files in .claude/wave-quality-gates/arch-*.md
+  // Pattern: **/.claude/wave-quality-gates/arch-<anything>.md
+  // Allows arch-platform-prep-bl-w44-s2-pr1.md, arch-testing-verify-*, etc.
+  // Does NOT allow bl-w44-s2-pr1.md (sentinel files — quality-gater writes those, not architects).
+  if (/(?:^|[\\/])\.claude[\\/]wave-quality-gates[\\/]arch-[^\s/\\]+\.md$/.test(norm)) return true;
   return false;
 }
 
