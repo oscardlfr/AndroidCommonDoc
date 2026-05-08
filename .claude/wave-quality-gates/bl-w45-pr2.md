@@ -64,3 +64,21 @@ None.
 - arch-testing: `.claude/wave-quality-gates/arch-testing-bl-w45-pr2.md` — APPROVE (2538/2538 Vitest, 35/35 bats)
 
 ### Stash: not used
+
+---
+
+## Fixup Addendum — 2026-05-08T20:02:21Z
+
+**Trigger**: Stamp expired (37 min). Fixup commit added:
+- `scripts/tests/lib/orchestration-guide.sh` (new helper)
+- `scripts/tests/session-coverage.bats` (11 @tests updated via helper)
+
+**Abbreviated sweep result**:
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| session-coverage.bats | PASS | 262/262 (0 failures) |
+| Vitest | PASS (carry-forward) | No TS changed in fixup — 2538/2538 still valid |
+| Stamp | RE-WRITTEN | 2026-05-08T20:02:21Z |
+
+Architect verdicts remain valid (fixup is hub-split bats continuation, same scope as approved PR2). No new AMENDs required.

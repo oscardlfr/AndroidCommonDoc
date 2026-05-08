@@ -20,6 +20,9 @@ README="$L0_ROOT/README.md"
 SETUP_SKILL="$L0_ROOT/skills/setup/SKILL.md"
 TOPOLOGY_DOC="$L0_ROOT/docs/architecture/layer-topology.md"
 
+# BL-W45 hub-split: orchestration guide content spread across tl-* sub-docs.
+source "$BATS_TEST_DIRNAME/lib/orchestration-guide.sh"
+
 setup() {
     source "$SH_LIB"
     WORK_DIR=$(mktemp -d)
@@ -1144,20 +1147,22 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 }
 
 @test "templates: team-lead NEVER writes code" {
-    grep -q "NEVER write code" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "NEVER writes code" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md" || grep -q "NEVER write code yourself" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    # BL-W45 hub-split: content may be in tl-* sub-docs
+    cat_orchestration_guide | grep -q "NEVER write code\|NEVER writes code\|NEVER write code yourself"
 }
 
 @test "templates: team-lead has agent roster with team roles" {
-    grep -q "Agent Roster" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "arch-testing" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "quality-gater" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "planner" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    # BL-W45 hub-split: content may be in tl-* sub-docs
+    cat_orchestration_guide | grep -q "Agent Roster"
+    cat_orchestration_guide | grep -q "arch-testing"
+    cat_orchestration_guide | grep -q "quality-gater"
+    cat_orchestration_guide | grep -q "planner"
 }
 
 @test "templates: team-lead delegates testing to skills" {
-    grep -q "/test" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "/test-full-parallel" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    # BL-W45 hub-split: content may be in tl-* sub-docs
+    cat_orchestration_guide | grep -q "/test"
+    cat_orchestration_guide | grep -q "/test-full-parallel"
 }
 
 @test "templates: arch-testing is mini-orchestrator with MCP tools" {
@@ -1195,32 +1200,25 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 }
 
 @test "templates: team-lead has architect verification gate" {
-    # Hub refactor: Architect Verification Gate text moved to tl-verification-gates.md sub-doc
-    # (Wave 25: pm-*.md renamed to tl-*.md + section title became "Architect Verification + Post-Wave Integrity")
-    local pm_combined
-    pm_combined=$(cat "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md")
-    for subdoc in tl-session-setup tl-dispatch-topology tl-verification-gates tl-quality-doc-pipeline tl-phase-execution; do
-        if [[ -f "$L0_ROOT/docs/agents/${subdoc}.md" ]]; then
-            pm_combined="$pm_combined
-$(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
-        fi
-    done
-    echo "$pm_combined" | grep -qE "Architect Verification"
-    grep -q "arch-testing" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "arch-platform" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "arch-integration" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "NEVER write code" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    # BL-W45 hub-split: use cat_orchestration_guide for all content checks
+    cat_orchestration_guide | grep -qE "Architect Verification"
+    cat_orchestration_guide | grep -q "arch-testing"
+    cat_orchestration_guide | grep -q "arch-platform"
+    cat_orchestration_guide | grep -q "arch-integration"
+    cat_orchestration_guide | grep -q "NEVER write code\|NEVER write code yourself"
 }
 
 @test "templates: team-lead has planning delegation" {
+    # BL-W45 hub-split: content may be in tl-* sub-docs
     # Wave 25: "Planning Delegation" section title became "Planning Phase (EnterPlanMode gate)"
-    grep -qE "Planning Phase|Planning Delegation" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "planner" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    cat_orchestration_guide | grep -qE "Planning Phase|Planning Delegation"
+    cat_orchestration_guide | grep -q "planner"
 }
 
 @test "templates: team-lead has TDD-first for bug fixes" {
-    grep -q "TDD-first for bug fixes" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "failing test" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    # BL-W45 hub-split: content may be in tl-* sub-docs
+    cat_orchestration_guide | grep -q "TDD-first for bug fixes"
+    cat_orchestration_guide | grep -q "failing test"
 }
 
 @test "templates: all architects can delegate and cross-verify" {
@@ -1243,9 +1241,10 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
 }
 
 @test "templates: team-lead has MCP tools section" {
-    grep -q "MCP Tools" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "verify-kmp-packages" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "35" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    # BL-W45 hub-split: content may be in tl-* sub-docs
+    cat_orchestration_guide | grep -q "MCP Tools"
+    cat_orchestration_guide | grep -q "verify-kmp-packages"
+    cat_orchestration_guide | grep -q "35"
 }
 
 @test "docs: agents-hub references 3-phase model and team topology" {
@@ -1286,10 +1285,11 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
 }
 
 @test "templates: team-lead has post-change checklist" {
-    grep -q "Post-Change Checklist" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "automatic" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "audit-docs" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "readme-audit" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    # BL-W45 hub-split: content may be in tl-* sub-docs
+    cat_orchestration_guide | grep -q "Post-Change Checklist"
+    cat_orchestration_guide | grep -q "automatic"
+    cat_orchestration_guide | grep -q "audit-docs"
+    cat_orchestration_guide | grep -q "readme-audit"
 }
 
 @test "README: template count is current" {
@@ -1300,9 +1300,10 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
 }
 
 @test "templates: team-lead references official anthropic skills" {
-    grep -q "Official Skills" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "tdd-workflow" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "security-review" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    # BL-W45 hub-split: content may be in tl-* sub-docs
+    cat_orchestration_guide | grep -q "Official Skills"
+    cat_orchestration_guide | grep -q "tdd-workflow"
+    cat_orchestration_guide | grep -q "security-review"
 }
 
 @test "agents: 12 agents reference official skills" {
@@ -1371,7 +1372,8 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
 }
 
 @test "arch: PM assigns to architects (not devs directly)" {
-    grep -q "assigns.*architects" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md" || grep -q "assign.*work.*architects" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    # BL-W45 hub-split: content may be in tl-* sub-docs
+    cat_orchestration_guide | grep -qE "assigns.*architects|assign.*work.*architects"
 }
 
 @test "arch: all architects have CUSTOMIZE markers for project guardians" {
@@ -1409,7 +1411,8 @@ $(cat "$L0_ROOT/docs/agents/${subdoc}.md")"
 }
 
 @test "arch: PM template forbids Bash+CLI spawning" {
-    grep -q "FORBIDDEN.*Bash.*cli\|Spawning agents via Bash" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    # BL-W45 hub-split: content may be in tl-* sub-docs
+    cat_orchestration_guide | grep -qE "FORBIDDEN.*Bash.*cli|Spawning agents via Bash"
 }
 
 @test "arch: architects are read-only (no Write/Edit, have SendMessage)" {
