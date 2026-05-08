@@ -34,6 +34,7 @@ Setup, configuration, and authoring guides for the L0/L1/L2 ecosystem.
 | [pre-commit-hooks](pre-commit-hooks.md) | Pre-commit hook installation and registry hash validation |
 | [readme-audit-fix-guide](readme-audit-fix-guide.md) | What `/readme-audit --fix` covers vs. silently skips, plus manual remediation checklist |
 | [hook-bypass-recursive-pattern](hook-bypass-recursive-pattern.md) | Bypass env vars for PreToolUse gate hooks: when gate-blocking strings appear in commit messages, PR bodies, or CHANGELOG entries |
+| [copilot-templates-regen](copilot-templates-regen.md) | How to regenerate GitHub Copilot prompt templates via `copilot-adapter.sh` after skill changes |
 
 ## Key Rules
 

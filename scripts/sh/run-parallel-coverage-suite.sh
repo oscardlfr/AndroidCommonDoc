@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BL-W32-06e: Thin wrapper around kmp-test-runner v0.7.0.
+# BL-W32-06e: Thin wrapper around kmp-test-runner v0.8.1.
 # Replaces the 1355-line self-contained runner. Gradle daemon retry, module
 # discovery, Kover/JaCoCo fallback, and parallel orchestration are now inside
 # kmp-test-runner internals. L0 retains: AI-Optimized Summary post-processor,
@@ -11,9 +11,9 @@ set -euo pipefail
 if command -v kmp-test >/dev/null 2>&1; then
   KMP_TEST_CMD="kmp-test"
 elif command -v npx >/dev/null 2>&1; then
-  KMP_TEST_CMD="npx kmp-test-runner@0.7.0"
+  KMP_TEST_CMD="npx kmp-test-runner@0.8.1"
 else
-  echo "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.7.0" >&2
+  echo "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.8.1" >&2
   exit 1
 fi
 
@@ -75,7 +75,7 @@ while [[ $# -gt 0 ]]; do
     --java-home)
       export JAVA_HOME="$2"; shift 2 ;;
     --fresh-daemon)
-      echo "WARNING: --fresh-daemon not supported by kmp-test-runner v0.7.0; flag ignored. See GAP-01." >&2
+      echo "WARNING: --fresh-daemon not supported by kmp-test-runner v0.8.1; flag ignored. See GAP-01." >&2
       shift ;;
     --exclude-coverage)
       echo "WARNING: --exclude-coverage deprecated — degraded to --exclude-modules; tests will be skipped instead of just excluded from coverage. See GAP-05." >&2
@@ -84,7 +84,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: run-parallel-coverage-suite.sh --project-root <path> [OPTIONS]"
       echo ""
-      echo "Thin wrapper around kmp-test-runner v0.7.0."
+      echo "Thin wrapper around kmp-test-runner v0.8.1."
       echo ""
       echo "Options:"
       echo "  --test-type <type>          all | common | desktop | androidUnit | androidInstrumented"

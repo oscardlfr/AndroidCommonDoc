@@ -64,7 +64,7 @@ Print the findings table. End with: "Run `/readme-audit --fix` to apply correcti
 - After adding skills, agents, tools, scripts, or guides
 - When the README feels stale
 
-The pre-commit hook `readme-pre-commit.sh` validates counts automatically on every commit and blocks if stale.
+Run `/readme-audit --fix` manually before commits to repair stale counts — count checking is not wired to a pre-commit hook.
 
 ## Implementation
 
@@ -80,7 +80,6 @@ The agent reads the audit report, identifies all findings, and applies fixes dir
 ## Cross-References
 
 - Script: `scripts/sh/readme-audit.sh`
-- Pre-commit hook: `.claude/hooks/readme-pre-commit.sh`
 - Registry: `skills/registry.json`
 - Skills: `skills/*/SKILL.md`
 - Agents: `.claude/agents/*.md`

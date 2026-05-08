@@ -85,16 +85,13 @@ The `androidcommondoc.toolkit` plugin must be applied to **each module individua
 
 ---
 
-## README Counts — Always Verified by Hook
+## README Counts — Run Manually Before Commits
 
-Three pre-commit hooks fire on every `git commit`:
+Two pre-commit hooks fire on every `git commit`:
 1. `detekt-pre-commit.sh` — Detekt pattern violations on staged .kt files
 2. `registry-pre-commit.sh` — Rehashes registry.json if skills/agents/commands changed
-3. `readme-pre-commit.sh` — **Blocks commit if README counts are stale** (skills, agents, rules, MCP tools, workflows, registry, commands)
 
-**Never commit without updating README counts.** The hook will deny the commit with a message listing which counts are wrong. Run `/readme-audit --fix` to repair.
-
-This exists because README count drift was a recurring issue — CI caught it too late.
+**README count checking is not hooked** — run `/readme-audit --fix` manually before committing to repair stale counts. README count drift was a recurring issue caught by CI, so check proactively.
 
 ---
 

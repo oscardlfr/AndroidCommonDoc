@@ -195,7 +195,7 @@ Proceed? (y/n)
 **MUST run in main context only. Spawning /work as a subagent causes Agent() tool loss (Claude Code bug #31977).**
 
 - Do NOT invoke `/work` as a subagent with team-lead as the subagent_type — this breaks TeamCreate and Agent() tool availability
-- /work reads the team-lead template and acts in-process — it IS the team-lead flow, not a caller of it
+- /work acts in-process as main-context orchestrator (W31.6 pattern) — team-lead.md was retired in W31.6
 - If you find yourself wanting to spawn /work as an Agent(), you are in the wrong process layer
 
 ## Orchestrator Safety Rule

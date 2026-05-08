@@ -79,7 +79,7 @@ if ($LASTEXITCODE -ne 0) {
 
 ## Runner
 
-This skill invokes `gradle-run.sh` (Linux/macOS, in `scripts/sh/`) or `gradle-run.ps1` (Windows, in `scripts/ps1/`), a thin wrapper around `kmp-test-runner` v0.6.2 — the canonical npm CLI that owns retry, daemon management, and kover coverage logic. See [oscardlfr/kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner#readme) for runner-level configuration.
+This skill invokes `gradle-run.sh` (Linux/macOS, in `scripts/sh/`) or `gradle-run.ps1` (Windows, in `scripts/ps1/`), a thin wrapper around `kmp-test-runner` v0.8.1 — the canonical npm CLI that owns retry, daemon management, and kover coverage logic. See [oscardlfr/kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner#readme) for runner-level configuration.
 
 ## Cross-References
 

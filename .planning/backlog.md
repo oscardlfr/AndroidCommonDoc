@@ -1061,7 +1061,7 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ## L1-reported (BL-W34 PR1, repo oscardlfr/shared-kmp-libs, date 2026-05-02). Triage in next session.
 
 ### BL-W32-13 — commit-lint scope list rejects compound module names (HIGH — L1-reported)
-**Status**: backlog
+**Status**: SHIPPED (BL-W44-S2, PR #152/#153)
 **Priority**: HIGH
 **Source**: BL-W34 PR1 CI failure — https://github.com/oscardlfr/shared-kmp-libs/actions/runs/25257865869/job/74060138699
 
@@ -1120,7 +1120,7 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ---
 
 ### BL-W32-16 — JDK environment handling not documented in specialist templates (LOW — L1-reported)
-**Status**: backlog
+**Status**: SHIPPED (BL-W44-S2, PR #152/#153)
 **Priority**: LOW
 **Source**: BL-W34 PR1 — data-layer-specialist compile passed but exec failed (`UnsupportedClassVersionError`); JAVA_HOME=JDK 17, project requires JDK 21+
 
