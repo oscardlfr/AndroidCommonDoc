@@ -33,6 +33,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ### Added (BL-W46 PR4 — Plan-Mode ENTRY Investigation, #160)
 - **Findings doc** (`.claude/wave-quality-gates/bl-w46-plan-mode-investigation.md`): Documents investigation of plan-mode ENTRY regression. EnterPlanMode hook confirmed present and correctly gated; no repro found in hook trace. Closes Deferred 1 as NOT-REPRODUCIBLE.
 
+### Fixed (BL-W32-12 — pathlib write_text security false-negative)
+- architect-bash-write-gate now correctly detects pathlib.Path.write_text()/write_bytes() inside `python3 -c "..."` wrappers with backslash-escaped inner quotes — closes a security false-negative where dangerous writes (e.g. `/etc/passwd`) bypassed the gate (BL-W32-12)
+
 ## [1.4.0] - 2026-05-08
 
 ### Added (BL-W45 — Alignment Debt Cleanup, PRs #154-#155 + L1 #46)
