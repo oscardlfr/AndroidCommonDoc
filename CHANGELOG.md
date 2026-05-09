@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W46.1 PR-B — README Counts + Version + Context-Provider Frontmatter, #162)
+- **README Recent Changes +14 rows** (`README.md`): BL-W33..W46 wave history (newest-first) added to the stale table (was last at BL-W32). Closes HIGH-2.
+- **README count fixes** (`README.md`): sub-docs 68→77 (2 places), skills 61 (canonical `find skills -name SKILL.md` count, 4 places), bats 1081 (actual @test count). Closes 3 MED.
+- **version.properties 1.3.0→1.4.0**: Aligns with CHANGELOG `[1.4.0] - 2026-05-08`. Closes MED.
+- **context-provider vault-status frontmatter** (`setup/agent-templates/context-provider.md`, `.claude/agents/context-provider.md`): `mcp__androidcommondoc__vault-status` added to `tools:` (body-xref gap, grep-confirmed at template:35). `template_version` 3.3.0→3.4.0. Manifest + MIGRATIONS.json + SHA rehashed. `validate-agent-templates.sh` ALL PASS. Closes MED.
+
 ### Added (BL-W46 PR1 — Post-W45 Audit Cleanup, #157)
 - **agents-hub.md 7 missing sub-doc entries** (`docs/agents/agents-hub.md`): Restores hub discovery for arch-platform-prep-authoring-checklist, arch-platform-section-h-rule, arch-testing-dispatch-protocol, context-provider-adoption-hooks, knowledge-currency-gate, main-agent-orchestration-guide, quality-gater-runtime-ui-validation. Also updates stale "11 core agents" → "20 core agents" in hub Rules section. Closes H-02.
 - **README count fixes post-PR2** (`README.md`): sub-docs 68 (unchanged), guides 24→25, agent-workflow 37→45, hooks 26/28→27/27, bats 1078→1085. Closes M-03/04/05.
