@@ -45,6 +45,19 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 
 | Wave | Date | PR | Theme |
 |------|------|----|-------|
+| BL-W46 | 2026-05-09 | [#157](https://github.com/oscardlfr/AndroidCommonDoc/pull/157)–[#161](https://github.com/oscardlfr/AndroidCommonDoc/pull/161) | Closed 16 BL-W45 audit findings + 4 deferred (3 fixed, 1 dropped). node -e gate exemption, sh backtick parity, getting-started frontmatter, plan-mode NOT-REPRODUCIBLE. |
+| BL-W45 | 2026-05-08 | [#154](https://github.com/oscardlfr/AndroidCommonDoc/pull/154)–[#156](https://github.com/oscardlfr/AndroidCommonDoc/pull/156) + L1 [#46](https://github.com/oscardlfr/shared-kmp-libs/pull/46) | Alignment debt cleanup. INV-a..k closed. Orchestration guide hub-split 351→33 lines, 8 tl-* sub-docs, kmp-test-runner v0.8.1. |
+| BL-W44-S2 | 2026-05-08 | [#150](https://github.com/oscardlfr/AndroidCommonDoc/pull/150)–[#153](https://github.com/oscardlfr/AndroidCommonDoc/pull/153) | BL-W26-01/02 closed. 5 agents gain MCP tools frontmatter. 4 retro fixes: planner sentinel, arch-bash-write-gate exemption, jq tuple lint, adapters headers. |
+| BL-W44 | 2026-05-07 | [#145](https://github.com/oscardlfr/AndroidCommonDoc/pull/145)–[#149](https://github.com/oscardlfr/AndroidCommonDoc/pull/149) | Process hardening + Windows support. architect-bash-write-gate Windows-aware, wave-phase-gate prefix match, WAVE_PHASE_GATE_BYPASS, BL-W32-13/16 closed. |
+| BL-W43 | 2026-05-06 | [#140](https://github.com/oscardlfr/AndroidCommonDoc/pull/140)–[#143](https://github.com/oscardlfr/AndroidCommonDoc/pull/143) | Architect topology hardening. premature-execution-gate hook, arch-*-gate cross-verify exempt, substring-gate doc + bats. |
+| BL-W42 | 2026-05-05 | [#135](https://github.com/oscardlfr/AndroidCommonDoc/pull/135)–[#139](https://github.com/oscardlfr/AndroidCommonDoc/pull/139) | Closed 14 BL-W41 findings. knowledge-currency-gate, kmp-test-runner-gate, before-after-delta hooks. SUPERSEDES protocol + v0.8.1 pins. |
+| BL-W41 | 2026-05-05 | [#131](https://github.com/oscardlfr/AndroidCommonDoc/pull/131)–[#134](https://github.com/oscardlfr/AndroidCommonDoc/pull/134) | Section H + delta protocol + --from-disk + 4-layer topology enforcement. 14 findings filed. |
+| BL-W40 | 2026-05-05 | [#127](https://github.com/oscardlfr/AndroidCommonDoc/pull/127)–[#130](https://github.com/oscardlfr/AndroidCommonDoc/pull/130) | Numbered Step Gate roll-out. Mid-session recovery; section-H manifest yaml fixup. |
+| BL-W37 | 2026-05-04 | [#124](https://github.com/oscardlfr/AndroidCommonDoc/pull/124), L1 [#41](https://github.com/oscardlfr/shared-kmp-libs/pull/41)/[#42](https://github.com/oscardlfr/shared-kmp-libs/pull/42), [#125](https://github.com/oscardlfr/AndroidCommonDoc/pull/125) | Cross-repo sync. arch-platform caught writer/reader desync PR1. PR4 pivoted nonces→observability. |
+| BL-W36 | 2026-05-04 | [#119](https://github.com/oscardlfr/AndroidCommonDoc/pull/119)–[#123](https://github.com/oscardlfr/AndroidCommonDoc/pull/123) | BL-W34 deferred items. 4 findings filed. PHASE 1 PREP pattern established. |
+| BL-W35 | 2026-05-04 | [#112](https://github.com/oscardlfr/AndroidCommonDoc/pull/112)–[#117](https://github.com/oscardlfr/AndroidCommonDoc/pull/117) | L0 dogfood topology. 7 bugs + 1 incident. Cross-arch sync protocol dogfooded twice. |
+| BL-W34 | 2026-05-03 | [#107](https://github.com/oscardlfr/AndroidCommonDoc/pull/107)–[#109](https://github.com/oscardlfr/AndroidCommonDoc/pull/109) | L1 security prep. gitignore, local-first-skills pattern, proguard-validator AGP 9 ext. |
+| BL-W33 | 2026-05-02 | [#101](https://github.com/oscardlfr/AndroidCommonDoc/pull/101)–[#105](https://github.com/oscardlfr/AndroidCommonDoc/pull/105) | 9 backlog items + 1 self-finding + 23 architect amendments closed. 8 BL-W34 entries filed. |
 | BL-W32 Phase 2 prep | 2026-05-01 | [#98](https://github.com/oscardlfr/AndroidCommonDoc/pull/98) | file BL-W32-08/-09/-10 backlog entries |
 | BL-W32 Phase 1 | 2026-05-01 | [#97](https://github.com/oscardlfr/AndroidCommonDoc/pull/97) | 3 L0 fixes: CP zombie (TeamDelete-on-reuse), concern-ownership map in arch-topology-protocols.md, arch-testing pre-dispatch decision (mocked vs fixture-driven); 3 architect templates bumped; Phase 1 CLOSED |
 | BL-W32 closeout plan | 2026-05-01 | [#96](https://github.com/oscardlfr/AndroidCommonDoc/pull/96) | phase 1 (L0) + phase 2 (sync) plan |
@@ -996,7 +1009,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-16 domain hubs, 68 sub-docs, 25 guides, 45 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+16 domain hubs, 77 sub-docs, 25 guides, 45 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1178,7 +1191,7 @@ AndroidCommonDoc/
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
 |   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
-+-- docs/                   # 16 domain hubs, 68 sub-docs, 25 guides, 45 agent workflow docs
++-- docs/                   # 16 domain hubs, 77 sub-docs, 25 guides, 45 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/

@@ -596,6 +596,11 @@
         "date": "2026-05-03",
         "summary": "BL-W35-05: add Refusing Task Assignments guard section",
         "breaking": false
+      },
+      "3.4.0": {
+        "date": "2026-05-09",
+        "summary": "BL-W46.1 PR-B: add mcp__androidcommondoc__vault-status to tools frontmatter (body-xref gap closure)",
+        "breaking": false
       }
     },
     "doc-updater": {
