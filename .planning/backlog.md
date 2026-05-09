@@ -40,6 +40,22 @@ This summary is the authoritative live view. Older sections below are kept as hi
 
 **Closes BL-W32-08** (orchestration-guide L1/L2 propagation).
 
+### ✅ BL-W46.1 SHIPPED (2026-05-09) — closes 8 deep-audit findings (2H+6M); 3 deferred
+
+| Finding | Status | PR |
+|---------|--------|----|
+| HIGH-1 L1 feature-domain-specialist SendMessage gap | ✅ CLOSED | PR-A shared-kmp-libs #47 |
+| HIGH-2 README Recent Changes 14 waves stale | ✅ CLOSED | PR-B #162 |
+| MED README bats count stale (1081) | ✅ CLOSED | PR-B #162 |
+| MED README sub-docs 68→77 | ✅ CLOSED | PR-B #162 |
+| MED README skills 61 (canonical SKILL.md count) | ✅ CLOSED | PR-B #162 |
+| MED context-provider vault-status frontmatter | ✅ CLOSED | PR-B #162 (template 3.4.0) |
+| MED 9 L1 agents stale (shared-kmp-libs) | ✅ CLOSED | PR-A shared-kmp-libs #47 |
+| MED version.properties 1.3.0→1.4.0 | ✅ CLOSED | PR-B #162 |
+| LOW 5 bash-only scripts not annotated | DEFERRED — low priority, out of BL-W46.1 scope |
+| LOW arch-integration at 425-line cap | MONITOR — not violated, no headroom |
+| LOW archive/ docs over 300 lines | DEFERRED — intentional preservation |
+
 ### ✅ BL-W32-12 SHIPPED (2026-05-09, PR #164) — pathlib write_text security false-negative
 
 - `architect-bash-write-gate.js` now correctly detects `pathlib.Path.write_text()/write_bytes()` inside `python3 -c "..."` wrappers with backslash-escaped inner quotes.
@@ -69,7 +85,7 @@ Full audit report: `.planning/wave-bl-w45/FULL-AUDIT-POST-WAVE.md` (2H/7M/6L). 4
 | L-09 GSD agent parity fail | SKIPPED (GSD not active per PLAN.md out-of-scope) |
 
 **4 BL-W45 deferred items resolved**:
-- Deferred 1 (plan-mode regression) — closed NOT-REPRODUCIBLE (PR4 #160 investigation)
+- ~~Deferred 1 (plan-mode regression) — closed NOT-REPRODUCIBLE (PR4 #160 investigation)~~ **REOPENED 2026-05-09** — PR4 closure was wrong. Real symptom: planner should auto-activate plan-mode + interactively ask the user clarifying questions (canonical Anthropic behavior per Context7 §9.3). PR4 only verified `ExitPlanMode` exit path, not entry/Q&A flow. Becomes **BL-W47 PR1**. See `.planning/BL-W47-PLAN.md`.
 - Deferred 2 (arch-bash-write-gate node -e false-positive) — ✅ FIXED (PR3 #159)
 - Deferred 3 (validate-agent-templates.sh backtick parity) — ✅ FIXED (PR2 #158)
 - Deferred 4 (WakeTheCave git-root anomaly) — DROPPED (WakeTheCave paused per user)
@@ -78,6 +94,22 @@ Full audit report: `.planning/wave-bl-w45/FULL-AUDIT-POST-WAVE.md` (2H/7M/6L). 4
 
 - **BL-W36** `/release-build-verify` L1→L0 promotion eval — re-evaluate ~2026-07-03 (BL-W38)
 - **Plugin v0.2.1** dokka-markdown-plugin — triggered-only (Maven Central publish / downstream request / W33+ adoption)
+
+### 🟡 BL-W47 Wave Plan — Adaptive Harness Redesign (PLANNED, fresh session required)
+
+**Status**: PLANNED — blueprint at `.planning/BL-W47-PLAN.md`. Research validated against Anthropic Context7 + Web sources at `.planning/RESEARCH-adaptive-harness.md` (296 lines, 9 sections).
+**Trigger**: requires its own clean session — DO NOT mix with cleanup waves.
+**Sequencing (mandatory)**: Step 1 (BL-W32-12 + this hygiene PR) → Step 2 (kmp-test-runner v0.9 incorporation) → Step 3+4 (L1+L2 sync with current W31.6 harness) → THEN BL-W47.
+
+| PR | Scope | Risk |
+|----|-------|------|
+| BL-W47 PR1 | Plan-mode interactive Q&A: planner template + tl-session-start.md + sentinel hook extension. **Reopens** BL-W46 PR4 Deferred-1. | LOW |
+| BL-W47 PR2 | `SubagentStart` hook + CP cache-slice export protocol (CP v3.5.0). Implements architect-orchestrated respawn-with-context-bundle. | MEDIUM |
+| BL-W47 PR3 | Verify SAME-name respawn behavior empirically (Context7 §9.4 says auto-resumes, not clears). Fix `tl-session-setup.md:53` rotation if confirmed broken. | HIGH |
+| BL-W47 PR4 | Adaptive fan-out: planner adds Spawn Table → team-lead spawns N indexed specialists → premature-execution-gate extension. **Folds in** BL-W31.7-01/02/05. | MEDIUM |
+| BL-W47 PR5 | Architect respawn-between-PRs protocol + pre-rotate brief format. | MEDIUM |
+
+**Inputs (HISTORICAL — do not execute verbatim)**: BL-W31.7-01..05 reframed entries below. They informed BL-W47 PR4 design but their original specs are anti-patterns per the research.
 
 ---
 
@@ -501,57 +533,55 @@ W29 initially ran /pre-pr /check-outdated /audit-docs in L1 via test-specialist 
 
 ---
 
-## Wave 31.7 — Canonical Pattern Deep Refactor (TRIAGED 2026-04-27)
+## Wave 31.7 — Canonical Pattern Deep Refactor (TRIAGED 2026-04-27 → REFRAMED 2026-05-09)
 
-> Items detectados en W31.6 al cotejar con doc canónica de Anthropic (https://code.claude.com/docs/en/agent-teams). **Triaged 2026-04-27 post-PR #73**: BL-07 SHIPPED, BL-06 partially addressed (audit complete), BL-01..05 deferred to a fresh session focused on Phase 3 / W31.8 since each requires a multi-hour design discussion.
+> Items detectados en W31.6 al cotejar con doc canónica de Anthropic (https://code.claude.com/docs/en/agent-teams). **Triaged 2026-04-27 post-PR #73**: BL-07 SHIPPED, BL-06 partially addressed (audit complete), BL-01..05 originally "deferred to fresh session".
+>
+> **REFRAMED 2026-05-09**: BL-W31.7-01..05 had rationale that did NOT reflect user vision. Rewritten as inputs to **BL-W47 — adaptive harness redesign** (see `.planning/BL-W47-PLAN.md` and section "BL-W47 Wave Plan" below). BL-W31.7-01..05 entries below kept as historical context only — DO NOT execute their rationale verbatim.
 
-### BL-W31.7-01 (DEFERRED — fresh session) — Flat-spawning real
+### BL-W31.7-01 (REFRAMED → BL-W47 inputs) — Flat-spawning real
 
-**Status**: Deferred to fresh session (post-Phase-3 milestone)
-**Priority**: HIGH
-**Spec**: Main spawnea los 4 devs core (data-layer-specialist, domain-model-specialist, ui-specialist, test-specialist) como peers desde Phase 1 — no nested via arquitectos. Arquitectos solo coordinan vía SendMessage a devs que ya son peers.
-**Impacto**: ~40 archivos afectados (todos los templates de arch + devs + docs/agents/*). Cambio profundo en cómo arquitectos dispatch trabajo.
-**Why deferred**: Architectural decision with broad blast radius — needs a dedicated planning session, not a closeout. Pairs naturally with BL-W31.7-05 (eliminar Phase 1/2/3 split).
-
----
-
-### BL-W31.7-02 (DEFERRED — fresh session) — Pull-model task claiming
-
-**Status**: Deferred to fresh session
-**Priority**: MEDIUM
-**Spec**: Peers idle ven TaskList y claiman tasks vía `TaskUpdate(owner=self)` en vez de push desde main vía `TaskUpdate(owner=other)`.
-**Impacto**: Reentrenar templates de todos los peers para añadir "check TaskList on idle, claim available tasks" en lugar de "wait for assignment".
-**Why deferred**: Push-model actual funciona; pull-model puede crear race conditions o tasks unclaimed. Necesita prototipo + observación antes de cambiar templates de prod.
+**Status**: Reframed 2026-05-09 — was misinterpreted as "main spawns 4 devs always". User vision is **adaptive topology**: spawn N specialists matched to task fan-out (1 / 2-4 / 10+ buckets per Anthropic docs). See `.planning/BL-W47-PLAN.md` PR4.
+**Priority**: HIGH (becomes BL-W47 PR4)
+**Original spec (HISTORICAL)**: Main spawnea los 4 devs core (data-layer-specialist, domain-model-specialist, ui-specialist, test-specialist) como peers desde Phase 1 — no nested via arquitectos. Arquitectos solo coordinan vía SendMessage a devs que ya son peers.
+**Why reframed**: Hardcoded "4 core devs" is the same trap as the current "always spawn full team" — anti-pattern per Context7 research (`.planning/RESEARCH-adaptive-harness.md` §9). True fix is adaptive fan-out driven by planner's Spawn Table.
 
 ---
 
-### BL-W31.7-03 (DEFERRED — fresh session) — Reducción de hooks
+### BL-W31.7-02 (REFRAMED → BL-W47 inputs) — Pull-model task claiming
 
-**Status**: Deferred to fresh session
-**Priority**: MEDIUM
-**Spec**: Auditar hooks (`context-provider-gate.js`, `scope-immutability-gate.js`, `addressee-liveness-gate.js`) y consolidar/eliminar redundantes. Doc canónica usa prompts y tools — no hooks bash.
-**Impacto**: Riesgo de regresión en enforcement (hooks bloquean violations mecánicamente, prompts solo guían).
-**Why deferred**: Necesitamos telemetría de cuántas violations cada hook ha bloqueado en últimas N waves antes de eliminar. `tool-use-analytics` MCP debe correrse primero.
+**Status**: Reframed 2026-05-09 — incorporated into BL-W47 PR4 (adaptive fan-out) as the dispatch mechanism for indexed specialists.
+**Priority**: MEDIUM (folds into BL-W47 PR4)
+**Original spec (HISTORICAL)**: Peers idle ven TaskList y claiman tasks vía `TaskUpdate(owner=self)` en vez de push desde main vía `TaskUpdate(owner=other)`.
+**Why reframed**: TaskList is per-session-lead per Anthropic docs (`.planning/RESEARCH-adaptive-harness.md` §9.1) — pull-model assumed shared TaskList that does NOT exist. Solution belongs inside BL-W47 PR4 spawn protocol, not as standalone retrofit.
 
 ---
 
-### BL-W31.7-04 (DEFERRED — fresh session) — Spawn-prompt diet pass 2
+### BL-W31.7-03 (REFRAMED → BL-W47 audit input) — Reducción de hooks
 
-**Status**: Deferred to fresh session
+**Status**: Reframed 2026-05-09 — becomes audit input for BL-W47 (which hooks survive adaptive topology).
+**Priority**: MEDIUM (folds into BL-W47 design discussion, not standalone PR)
+**Original spec (HISTORICAL)**: Auditar hooks (`context-provider-gate.js`, `scope-immutability-gate.js`, `addressee-liveness-gate.js`) y consolidar/eliminar redundantes. Doc canónica usa prompts y tools — no hooks bash.
+**Why reframed**: Hook reduction without an alternative enforcement mechanism is regression risk. BL-W47 PR2 introduces `SubagentStart` hook with `additionalContext` injection — the right replacement venue. Audit defers until BL-W47 lands.
+
+---
+
+### BL-W31.7-04 (UNCHANGED — orthogonal to BL-W47) — Spawn-prompt diet pass 2
+
+**Status**: STILL DEFERRED — orthogonal to BL-W47. Can run before, during, or after.
 **Priority**: MEDIUM
 **Spec**: Bajar payload de spawn prompts de KB → bytes. Wave 22 hizo pass 1 (~30% reducción). Faltan pass 2 y 3.
 **Impacto**: Reduce token cost por sesión.
-**Why deferred**: Touches cada spawn prompt — coordinated rewrite across templates. Más coherente como dedicated wave de polish.
+**Trigger**: standalone polish wave; not blocked by BL-W47.
 
 ---
 
-### BL-W31.7-05 (DEFERRED — fresh session) — Eliminar Phase 1/2/3 split
+### BL-W31.7-05 (REFRAMED → BL-W47 inputs) — Eliminar Phase 1/2/3 split
 
-**Status**: Deferred to fresh session (paired with BL-W31.7-01)
-**Priority**: MEDIUM
-**Spec**: Doc canónica no tiene fases. Refactorizar `tl-session-setup.md` y guías para "spawn equipo, empezar" — sin fases discretas.
-**Impacto**: Cambio de modelo mental significativo. Coordinación con doc-updater para reescribir guías.
-**Why deferred**: Diseño accoplado a BL-W31.7-01 (flat-spawning real). Decisión de juntarlos vs separarlos pertenece a la fresh session.
+**Status**: Reframed 2026-05-09 — folded into BL-W47 PR4 design (adaptive topology supersedes static phases).
+**Priority**: MEDIUM (folds into BL-W47 PR4)
+**Original spec (HISTORICAL)**: Doc canónica no tiene fases. Refactorizar `tl-session-setup.md` y guías para "spawn equipo, empezar" — sin fases discretas.
+**Why reframed**: Eliminating phases without a replacement coordination model is unsafe. BL-W47 PR4 introduces planner Spawn Table → architect-orchestrated dispatch as the new coordination primitive. Phase split lives or dies based on whether Spawn Table replaces it cleanly.
 
 ---
 
@@ -1125,7 +1155,7 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ---
 
 ### BL-W32-14 — doc-updater agent doesn't close commit loop autonomously (MEDIUM — L1-reported)
-**Status**: backlog
+**Status**: ✅ SHIPPED — see current-state line 22 (evidence: `setup/agent-templates/doc-updater.md:210-215`). This detail entry is a stale duplicate retained for historical context only.
 **Priority**: MEDIUM
 **Source**: BL-W34 PR1 — 2 occurrences (drafted ADR-0005 without committing; then refused `--amend` on unpushed HEAD)
 
@@ -1145,7 +1175,7 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ---
 
 ### BL-W32-15 — Specialist Edit tool clash with zero-Read rule (MEDIUM — L1-reported)
-**Status**: backlog
+**Status**: ✅ SHIPPED — see current-state line 23 (evidence: 8 specialist templates reference zero-Read budget guidance: toolkit-, test-, domain-model-, data-layer-, ui-, doc-updater, debugger, doc-migrator). This detail entry is a stale duplicate.
 **Priority**: MEDIUM
 **Source**: BL-W34 PR1 — module-lifecycle dispatched to edit `settings.gradle.kts` (155 lines); Edit failed precondition; specialist correctly escalated
 
@@ -1185,7 +1215,7 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ---
 
 ### BL-W32-17 — kotlin-reflect gotcha in commonTest hierarchy tests (LOW — L1-reported)
-**Status**: backlog
+**Status**: ✅ SHIPPED — see current-state line 24 (evidence: `docs/testing/testing-hub.md:86` warns against `KClass.sealedSubclasses` in commonTest). This detail entry is a stale duplicate.
 **Priority**: LOW
 **Source**: BL-W34 PR1 commit 2 (RED tests) — `DependencyResolutionException::class.sealedSubclasses` failed to compile on `:core-error-sdk:compileTestKotlinDesktop`
 
@@ -1204,7 +1234,7 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ---
 
 ### BL-W32-18 — quality-gater miscounts tests (8 vs 9) (LOW — L1-reported)
-**Status**: backlog
+**Status**: ✅ SHIPPED — see current-state line 25 (evidence: `setup/agent-templates/quality-gater.md:197` parses `build/test-results/**/TEST-*.xml` JUnit XML). This detail entry is a stale duplicate.
 **Priority**: LOW
 **Source**: BL-W34 PR1 — `DependencyResolutionExceptionTest.kt` has 9 `@Test` annotations (verified `grep -c "@Test"`); quality-gater reported "8/8"
 
@@ -1219,7 +1249,7 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ---
 
 ### BL-W32-19 — doc-updater renames files between draft and commit without reporting (LOW — L1-reported)
-**Status**: backlog
+**Status**: ✅ SHIPPED — see current-state line 26 (evidence: `setup/agent-templates/doc-updater.md:219-222` requires rename reporting). This detail entry is a stale duplicate.
 **Priority**: LOW
 **Source**: BL-W34 PR1 — doc-updater reported "Created: docs/adr/ADR-0005-core-error-sdk-independent-hierarchy.md"; actual committed filename: `docs/adr/ADR-0005-bl-w34-option-b-independent-di-exception-hierarchy.md`
 
@@ -1234,7 +1264,7 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ---
 
 ### BL-W32-20 — Tooling artifacts pollute working tree (LOW — L1-reported)
-**Status**: backlog
+**Status**: ✅ SHIPPED — see current-state line 27 (evidence: `.gitignore` lines 65-66, 84 ignore `.androidcommondoc/audit-log.jsonl`, `.androidcommondoc/upstream-cache/`, `.androidcommondoc/`). This detail entry is a stale duplicate.
 **Priority**: LOW
 **Source**: BL-W34 PR1 — every `./gradlew ...` modifies `.androidcommondoc/audit-log.jsonl` and `.androidcommondoc/kdoc-state.json`; specialists must manually exclude from commits
 
