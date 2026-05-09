@@ -1,12 +1,12 @@
 ---
 name: feature-domain-specialist
 description: "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}."
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, SendMessage
 model: sonnet
 domain: development
 intent: [domain, architecture, compliance]
 token_budget: 3000
-template_version: "1.1.0"
+template_version: "1.1.1"
 memory: project
 skills:
   - test

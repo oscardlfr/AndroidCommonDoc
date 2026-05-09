@@ -1,6 +1,12 @@
 ---
 title: "Step 7 — CI reusable workflows / Paso 7 — Workflows de CI reutilizables"
 slug: getting-started-ci-workflows
+scope: [guides, getting-started, ci]
+sources: [androidcommondoc]
+targets: [android, desktop, ios, jvm]
+status: active
+layer: L0
+parent: getting-started
 category: guides
 description: >
   Import the four reusable workflow_call workflows into any L1/L2 project

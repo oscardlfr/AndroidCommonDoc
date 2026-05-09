@@ -1,6 +1,12 @@
 ---
 title: "Step 5 — Configure Detekt per layer / Paso 5 — Configurar Detekt por capas"
 slug: getting-started-detekt-layers
+scope: [guides, getting-started, detekt]
+sources: [androidcommondoc, detekt]
+targets: [android, desktop, ios, jvm]
+status: active
+layer: L0
+parent: getting-started
 category: guides
 description: >
   Wire detekt-l0-base.yml as the baseline and create a project-level

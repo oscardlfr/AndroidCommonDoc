@@ -7,7 +7,7 @@
  * - Imperative instruction style (detects passive prose anti-patterns)
  * - Tool-body cross-reference (body tool references match frontmatter tools)
  * - Anti-pattern detection (missing triggers, Write on architects, named devs)
- * - Size limits (agents ≤400 lines)
+ * - Size limits (agents ≤425 lines)
  * - Migration version tracking (template_version present, in MIGRATIONS.json)
  *
  * Returns structured JSON with errors, warnings, and summary counts.

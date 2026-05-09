@@ -1,6 +1,12 @@
 ---
 title: "Step 2 — Connect a downstream project / Paso 2 — Conectar proyecto descendente"
 slug: getting-started-connect-project
+scope: [guides, getting-started, setup]
+sources: [androidcommondoc]
+targets: [android, desktop, ios, jvm]
+status: active
+layer: L0
+parent: getting-started
 category: guides
 description: >
   Use setup-toolkit.sh to install the Gradle convention plugin, Claude Code

@@ -136,13 +136,16 @@ get_body() {
 }
 
 # Check if line is inside a fenced code block
-# Returns list of body lines NOT inside code fences
+# Returns list of body lines NOT inside code fences, with inline backtick spans stripped.
+# Mirrors validate-agents.ts:stripCodeFences() — fenced blocks removed, then `inline` spans stripped.
 get_body_no_fences() {
     local file="$1"
-    get_body "$file" | awk '
+    local body
+    body=$(get_body "$file" | awk '
         /^```/ { fence = !fence; next }
         !fence { print }
-    '
+    ')
+    echo "$body" | sed 's/`[^`]*`//g'
 }
 
 echo -e "${CYAN}Agent Template Validator${RESET}"

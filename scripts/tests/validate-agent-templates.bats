@@ -101,6 +101,39 @@ EOF
   [[ "$output" == *"[FAIL]"* ]]
 }
 
+# ── Deferred-3: backtick-wrapped Agent() in body does NOT trigger xref WARN ───
+
+@test "Check 4: backtick-wrapped Agent() in body does NOT trigger xref WARN" {
+  local tdir="${BATS_TEST_TMPDIR:-/tmp}/vat-btick-$$"
+  local tfile="$tdir/agent-templates/agent-a.md"
+  mkdir -p "$tdir/agent-templates"
+
+  # Template declares tools: Read (no Agent) but body mentions `Agent()` inside backticks.
+  # After backtick strip, Agent( is gone → no xref mismatch.
+  cat > "$tfile" <<'EOF'
+---
+name: agent-a
+description: Test agent
+tools: Read
+model: claude-opus-4-5
+token_budget: 10000
+template_version: 1.0.0
+---
+
+## Role
+
+Use `Agent()` to spawn sub-agents — this is only a prose reference inside backticks.
+EOF
+
+  run bash "$SCRIPT" \
+    --templates-dir "$tdir/agent-templates" \
+    --check "tool-body-xref"
+
+  # Must exit 0 — backtick-wrapped Agent() must not produce WARN
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"WARN"* ]] && [[ "$output" != *"references 'Agent'"* ]]
+}
+
 # ── Check 7: MIGRATIONS.json missing → graceful skip ─────────────────────────
 
 @test "Check 7: MIGRATIONS.json missing → no error (graceful skip)" {
