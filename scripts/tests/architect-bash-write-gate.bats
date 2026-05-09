@@ -635,3 +635,206 @@ EOF" 'arch-platform'
   [ "$status" -eq 2 ]
   [[ "$output" == *"shell redirect"* ]]
 }
+
+# ── BL-W32-12 — pathlib.Path.write_text() exempt detection ──────────────────
+# Bug: SECURITY false-negative — PATHLIB_WRITE_RE backreference \1 requires a
+# literal " or ' to close the path, but cmd `python3 -c "pathlib.Path(\"<p>\")
+# .write_text(\"<d>\")"` has a backslash before each quote. The regex DOES NOT
+# MATCH this form at all → no violation detected → write ALLOWED unconditionally.
+# For exempt paths this is harmless (correct outcome by accident). For NON-EXEMPT
+# paths this is a security hole: dangerous writes via python3 -c wrapper bypass
+# the gate entirely.
+# Fix: extend PATHLIB_WRITE_RE so it matches the backslash-escaped form and
+# extracts the inner path, so isExemptTarget can correctly ALLOW exempt paths
+# and BLOCK non-exempt paths.
+# Pre-fix state (RED on master): the 2 BLOCK tests below FAIL (write goes through
+# unblocked). The 10 ALLOW tests pass for the wrong reason. Post-fix: all 12
+# tests pass for the right reason.
+
+# Unit: Path × single-quote inner × exempt verdict path → ALLOW
+@test "BL-W32-12: Path single-quote inner exempt verdict path → ALLOW" {
+  python3 - "$INPUT_FILE" <<'PYEOF'
+import json, sys
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "tool_name": "Bash",
+        "tool_input": {"command": "python3 -c 'import pathlib; Path(\".planning/wave-bl-w32-12-pathlib-write-text/arch-platform-verdict.md\").write_text(\"data\")'"},
+        "agent_type": "arch-platform",
+    }, f)
+PYEOF
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# Unit: pathlib.Path × double-quote-escaped inner × exempt verdict path → ALLOW (primary reproducer)
+@test "BL-W32-12: pathlib.Path double-quote-escaped inner exempt verdict path → ALLOW (primary reproducer)" {
+  python3 - "$INPUT_FILE" <<'PYEOF'
+import json, sys
+cmd = 'python3 -c "import pathlib; pathlib.Path(\\".planning/wave-bl-w32-12-pathlib-write-text/arch-platform-verdict.md\\").write_text(\\"data\\")"'
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "tool_name": "Bash",
+        "tool_input": {"command": cmd},
+        "agent_type": "arch-platform",
+    }, f)
+PYEOF
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# Unit: pathlib.Path × single-quote inner × exempt verdict path → ALLOW
+@test "BL-W32-12: pathlib.Path single-quote inner exempt verdict path → ALLOW" {
+  python3 - "$INPUT_FILE" <<'PYEOF'
+import json, sys
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "tool_name": "Bash",
+        "tool_input": {"command": "python3 -c 'pathlib.Path(\".planning/wave-bl-w32-12-pathlib-write-text/arch-testing-verdict.md\").write_text(\"ok\")'"},
+        "agent_type": "arch-testing",
+    }, f)
+PYEOF
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# Unit: pathlib.Path × double-quote-escaped inner × exempt testing verdict path → ALLOW
+@test "BL-W32-12: pathlib.Path double-quote-escaped inner testing verdict path → ALLOW" {
+  python3 - "$INPUT_FILE" <<'PYEOF'
+import json, sys
+cmd = 'python3 -c "pathlib.Path(\\".planning/wave-bl-w32-12-pathlib-write-text/arch-testing-verdict.md\\").write_text(\\"ok\\")"'
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "tool_name": "Bash",
+        "tool_input": {"command": cmd},
+        "agent_type": "arch-testing",
+    }, f)
+PYEOF
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# Unit: Path × single-quote inner × non-exempt /etc/passwd → BLOCK
+@test "BL-W32-12: Path single-quote inner non-exempt /etc/passwd → BLOCK" {
+  python3 - "$INPUT_FILE" <<'PYEOF'
+import json, sys
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "tool_name": "Bash",
+        "tool_input": {"command": "python3 -c 'Path(\"/etc/passwd\").write_text(\"evil\")'"},
+        "agent_type": "arch-platform",
+    }, f)
+PYEOF
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"pathlib.Path"* ]]
+}
+
+# Unit: pathlib.Path × double-quote-escaped inner × non-exempt /etc/shadow → BLOCK
+@test "BL-W32-12: pathlib.Path double-quote-escaped inner non-exempt /etc/shadow → BLOCK" {
+  python3 - "$INPUT_FILE" <<'PYEOF'
+import json, sys
+cmd = 'python3 -c "pathlib.Path(\\"/etc/shadow\\").write_text(\\"evil\\")"'
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "tool_name": "Bash",
+        "tool_input": {"command": cmd},
+        "agent_type": "arch-platform",
+    }, f)
+PYEOF
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"pathlib.Path"* ]]
+}
+
+# Unit: .claude/wave-quality-gates/arch-platform.md exempt via python3 -c wrapper → ALLOW
+@test "BL-W32-12: pathlib.Path double-quote-escaped .claude/wave-quality-gates/arch-platform.md → ALLOW" {
+  python3 - "$INPUT_FILE" <<'PYEOF'
+import json, sys
+cmd = 'python3 -c "pathlib.Path(\\".claude/wave-quality-gates/arch-platform-prep-bl-w32-12.md\\").write_text(\\"APPROVED\\")"'
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "tool_name": "Bash",
+        "tool_input": {"command": cmd},
+        "agent_type": "arch-platform",
+    }, f)
+PYEOF
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# Unit: write_bytes() variant with exempt verdict path via python3 -c wrapper → ALLOW
+@test "BL-W32-12: write_bytes double-quote-escaped inner exempt verdict path → ALLOW" {
+  python3 - "$INPUT_FILE" <<'PYEOF'
+import json, sys
+cmd = 'python3 -c "pathlib.Path(\\".planning/wave-bl-w32-12-pathlib-write-text/arch-platform-verdict.md\\").write_bytes(b\\"data\\")"'
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "tool_name": "Bash",
+        "tool_input": {"command": cmd},
+        "agent_type": "arch-platform",
+    }, f)
+PYEOF
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# Unit: regression — bare Path single-quote exempt verdict (no python3 -c wrapper) still ALLOW
+@test "BL-W32-12: regression — bare Path single-quote exempt verdict path still ALLOW" {
+  make_input "Path('.planning/wave-bl-w32-12-pathlib-write-text/arch-platform-verdict.md').write_text('ok')" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# Unit: pr-prefixed verdict via python3 -c double-quote-escaped form → ALLOW
+@test "BL-W32-12: pathlib.Path double-quote-escaped pr1-prefixed verdict path → ALLOW" {
+  python3 - "$INPUT_FILE" <<'PYEOF'
+import json, sys
+cmd = 'python3 -c "pathlib.Path(\\".planning/wave-bl-w32-12-pathlib-write-text/pr1-arch-platform-verdict.md\\").write_text(\\"data\\")"'
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "tool_name": "Bash",
+        "tool_input": {"command": cmd},
+        "agent_type": "arch-platform",
+    }, f)
+PYEOF
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# ── BL-W32-12 integration: hook stdin JSON ──────────────────────────────────
+
+# Integration 1: python3 -c with exempt verdict path → exit 0 (ALLOW)
+@test "BL-W32-12 integration: python3 -c exempt verdict path → exit 0 (ALLOW)" {
+  python3 - "$INPUT_FILE" <<'PYEOF'
+import json, sys
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": "python3 -c \"import pathlib; pathlib.Path(\\\".planning/wave-bl-w32-12-pathlib-write-text/arch-platform-verdict.md\\\").write_text(\\\"verdict data\\\")\""
+        },
+        "agent_type": "arch-platform",
+    }, f)
+PYEOF
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# Integration 2: python3 -c with /etc/passwd → exit 2 (BLOCK)
+@test "BL-W32-12 integration: python3 -c non-exempt /etc/passwd → exit 2 (BLOCK)" {
+  python3 - "$INPUT_FILE" <<'PYEOF'
+import json, sys
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": "python3 -c \"pathlib.Path(\\\"/etc/passwd\\\").write_text(\\\"evil\\\")\""
+        },
+        "agent_type": "arch-platform",
+    }, f)
+PYEOF
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"pathlib.Path"* ]]
+}
+

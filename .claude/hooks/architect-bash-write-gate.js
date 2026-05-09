@@ -92,7 +92,8 @@ const PYTHON_OPEN_TARGET_RE = /\bopen\s*\(\s*['"]([^'"]+)['"][^)]*['"]w[+ab]?['"
 // Does NOT match: variable args Path(var), raw strings Path(r'...'), f-strings Path(f'...').
 // Conservative: those unmatched forms fall through to no-violation (fail-open).
 // Declare WITHOUT /g — call sites use new RegExp(PATHLIB_WRITE_RE.source, 'g').
-const PATHLIB_WRITE_RE = /(?:pathlib\.)?Path\s*\(\s*(["'])([^"']+)\1\s*\)\.(?:write_text|write_bytes)\s*\(/;
+/* BL-W32-12: handles pathlib.Path.write_text() inside python3 -c wrapper; see backlog */
+const PATHLIB_WRITE_RE = /(?:pathlib\.)?Path\s*\(\s*(["'])([^"']+)\1\s*\)\.(?:write_text|write_bytes)\s*\(/; // BL-W32-12 fix
 const TEE_WRITE_RE = /\btee\s+(?:-a\s+|--append\s+)?(['"]?)([^-\s|<>;&'"]+)\1/;
 // Matches `node -e 'body'` or `node --eval "body"` with a single wrapping quote.
 // Used to strip the node body from the command string before PYTHON_WRITE_RE
@@ -176,9 +177,11 @@ function detectViolation(cmd) {
     }
   }
 
-  if (PATHLIB_WRITE_RE.test(cmd)) {
+  // BL-W32-12: strip backslash-escaped quotes before pathlib check (mirrors cmdNoPythonEval at line 147)
+  const cmdNoEscapedQuotes = cmd.replace(/\\(["'])/g, '$1');
+  if (PATHLIB_WRITE_RE.test(cmdNoEscapedQuotes)) {
     let foundTarget = false;
-    for (const match of cmd.matchAll(new RegExp(PATHLIB_WRITE_RE.source, 'g'))) {
+    for (const match of cmdNoEscapedQuotes.matchAll(new RegExp(PATHLIB_WRITE_RE.source, 'g'))) {
       foundTarget = true;
       const target = match[2]; // group 1 = quote char, group 2 = path
       if (target && !isExemptTarget(target)) {
