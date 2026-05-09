@@ -327,6 +327,21 @@ EOF' 'arch-platform'
   [ "$status" -eq 0 ]
 }
 
+# ── Regression: node -e body must not false-trigger PYTHON_WRITE_RE ──────────
+
+@test "allows node -e with open() or writeFileSync inside quoted body (Deferred-2)" {
+  make_input "node -e 'require(\"fs\").writeFileSync(\"foo.md\",\"data\")'" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "still blocks python3 -c open(<non-exempt>,'w') after node -e exemption" {
+  make_input "python3 -c \"open('bar.md','w').write('x')\"" 'arch-integration'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"python -c"* ]]
+}
+
 # ── pathlib.Path.write_text() / write_bytes() detector ──────────────────────
 # BL-W32-12: PATHLIB_WRITE_RE catches Path(...).write_text/write_bytes bypasses.
 # Standalone regex (no python3 -c anchor needed). Feeds through isExemptTarget().

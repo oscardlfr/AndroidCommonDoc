@@ -94,6 +94,10 @@ const PYTHON_OPEN_TARGET_RE = /\bopen\s*\(\s*['"]([^'"]+)['"][^)]*['"]w[+ab]?['"
 // Declare WITHOUT /g — call sites use new RegExp(PATHLIB_WRITE_RE.source, 'g').
 const PATHLIB_WRITE_RE = /(?:pathlib\.)?Path\s*\(\s*(["'])([^"']+)\1\s*\)\.(?:write_text|write_bytes)\s*\(/;
 const TEE_WRITE_RE = /\btee\s+(?:-a\s+|--append\s+)?(['"]?)([^-\s|<>;&'"]+)\1/;
+// Matches `node -e 'body'` or `node --eval "body"` with a single wrapping quote.
+// Used to strip the node body from the command string before PYTHON_WRITE_RE
+// checks run — the body may contain `open(` or `write` text that is not Python.
+const NODE_EVAL_RE = /\bnode\s+(?:-e|--eval)\s+(['"])[\s\S]*?\1/g;
 
 function isExemptTarget(target) {
   if (!target) return false;
@@ -138,9 +142,13 @@ function detectViolation(cmd) {
     return { kind: 'awk -i inplace' };
   }
 
-  if (PYTHON_WRITE_RE.test(cmd)) {
+  // Strip node -e / node --eval quoted bodies so their content (open(), write, etc.)
+  // does not false-trigger PYTHON_WRITE_RE or PYTHON_HEREDOC_WRITE_RE below.
+  const cmdNoPythonEval = cmd.replace(new RegExp(NODE_EVAL_RE.source, 'g'), '');
+
+  if (PYTHON_WRITE_RE.test(cmdNoPythonEval)) {
     let foundTarget = false;
-    for (const match of cmd.matchAll(new RegExp(PYTHON_OPEN_TARGET_RE.source, 'g'))) {
+    for (const match of cmdNoPythonEval.matchAll(new RegExp(PYTHON_OPEN_TARGET_RE.source, 'g'))) {
       foundTarget = true;
       const target = match[1];
       if (target && !isExemptTarget(target)) {
@@ -153,9 +161,9 @@ function detectViolation(cmd) {
     }
   }
 
-  if (PYTHON_HEREDOC_WRITE_RE.test(cmd)) {
+  if (PYTHON_HEREDOC_WRITE_RE.test(cmdNoPythonEval)) {
     let foundTarget = false;
-    for (const match of cmd.matchAll(new RegExp(PYTHON_OPEN_TARGET_RE.source, 'g'))) {
+    for (const match of cmdNoPythonEval.matchAll(new RegExp(PYTHON_OPEN_TARGET_RE.source, 'g'))) {
       foundTarget = true;
       const target = match[1];
       if (target && !isExemptTarget(target)) {
