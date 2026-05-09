@@ -40,9 +40,34 @@ This summary is the authoritative live view. Older sections below are kept as hi
 
 **Closes BL-W32-08** (orchestration-guide L1/L2 propagation).
 
-### 🔍 OPEN — BL-W45 wave-close audit (2026-05-08, 15 findings)
+### ✅ BL-W46 SHIPPED (2026-05-08) — closes all 16 BL-W45 audit findings + 4 deferred items
 
-Full audit report: `.planning/wave-bl-w45/FULL-AUDIT-POST-WAVE.md` (2H/7M/6L). Plus 4 deferred items from BL-W45 sessions: plan-mode regression, arch-bash-write-gate false-positive on `node -e` body, shell script `validate-agent-templates.sh` parity gap (TS does inline-backtick strip, sh doesn't), WakeTheCave git-root anomaly. **All deferred to next session for clean-context investigation + fix.**
+Full audit report: `.planning/wave-bl-w45/FULL-AUDIT-POST-WAVE.md` (2H/7M/6L). 4 PRs (#157-#160).
+
+| Finding | Status | PR |
+|---------|--------|----|
+| H-01 kmp-test-runner v0.7.0 in ps1 scripts | ✅ CLOSED | PR2 #158 |
+| H-02 agents-hub 7 missing sub-docs | ✅ CLOSED | PR1 #157 |
+| M-01 validate-agents error message "400" vs "425" | ✅ CLOSED | PR2 #158 |
+| M-02 arch-integration off-by-one tool measurement | ✅ CLOSED | PR2 #158 (monitor-only confirmed) |
+| M-03 README docs counts stale post-PR2 | ✅ CLOSED | PR1 #157 |
+| M-04 README hooks count stale post-PR1 | ✅ CLOSED | PR1 #157 |
+| M-05 README bats count stale post-PR2 | ✅ CLOSED | PR1 #157 |
+| M-06 guides-hub 2 missing entries | ✅ CLOSED | PR1 #157 |
+| M-07 readme-audit-fix-guide placeholder links | ✅ CLOSED | PR1 #157 |
+| L-01 validate-agents JSDoc "≤400" vs "≤425" | ✅ CLOSED | PR2 #158 |
+| L-02 agent-core-rules "11 core agents" stale | ✅ CLOSED | PR1 #157 |
+| L-03 "network" not in APPROVED_CATEGORIES | ✅ CLOSED | PR2 #158 |
+| L-06 CHANGELOG stale since 1.2.0 | ✅ CLOSED | PR1 #157 (backfilled v1.3.0+v1.4.0) |
+| L-07 getting-started docs frontmatter incomplete | ✅ CLOSED | PR2 #158 |
+| L-08 tool-body-xref 4 agents WARN | ✅ CLOSED | PR2 #158 |
+| L-09 GSD agent parity fail | SKIPPED (GSD not active per PLAN.md out-of-scope) |
+
+**4 BL-W45 deferred items resolved**:
+- Deferred 1 (plan-mode regression) — closed NOT-REPRODUCIBLE (PR4 #160 investigation)
+- Deferred 2 (arch-bash-write-gate node -e false-positive) — ✅ FIXED (PR3 #159)
+- Deferred 3 (validate-agent-templates.sh backtick parity) — ✅ FIXED (PR2 #158)
+- Deferred 4 (WakeTheCave git-root anomaly) — DROPPED (WakeTheCave paused per user)
 
 ### 📅 Calendar / triggered-only (no action this session)
 

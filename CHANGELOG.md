@@ -5,12 +5,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
-### Added (BL-W46 PR1 — Post-W45 Audit Cleanup)
+### Added (BL-W46 PR1 — Post-W45 Audit Cleanup, #157)
 - **agents-hub.md 7 missing sub-doc entries** (`docs/agents/agents-hub.md`): Restores hub discovery for arch-platform-prep-authoring-checklist, arch-platform-section-h-rule, arch-testing-dispatch-protocol, context-provider-adoption-hooks, knowledge-currency-gate, main-agent-orchestration-guide, quality-gater-runtime-ui-validation. Also updates stale "11 core agents" → "20 core agents" in hub Rules section. Closes H-02.
 - **README count fixes post-PR2** (`README.md`): sub-docs 68 (unchanged), guides 24→25, agent-workflow 37→45, hooks 26/28→27/27, bats 1078→1085. Closes M-03/04/05.
 - **guides-hub.md 2 missing entries** (`docs/guides/guides-hub.md`): compose-semantic-diff.md + jdk-toolchain.md. Closes M-06.
 - **Placeholder links in readme-audit-fix-guide** (`docs/guides/readme-audit-fix-guide.md`): Wrapped `<slug>` and `<hub-name>` inline example links in double-backtick code spans to silence link checker. Closes M-07.
 - **agent-core-rules.md count fix** (`docs/agents/agent-core-rules.md:80`): "11 core agents" → "20 core agents" (BL-W26-01 + BL-W44-S2 additions); dropped stale per-agent parenthetical to avoid tool-count drift. Closes L-02.
+
+### Added (BL-W46 PR2 — MCP Fixes + Shell Parity + Frontmatter, #158)
+- **validate-agents.ts JSDoc + error string corrected** (`mcp-server/src/tools/validate-agents.ts:10`): JSDoc "≤400" → "≤425 (≤400 non-orchestrators)"; error message "400" → "425". Closes M-01 + L-01.
+- **"network" added to APPROVED_CATEGORIES** (`mcp-server/src/tools/validate-doc-structure.ts:31`): Silences false-positive ERROR for `docs/network/` domain docs. Closes L-03.
+- **validate-agent-templates.sh inline backtick strip** (`scripts/sh/validate-agent-templates.sh`): `get_body_no_fences()` now strips inline backtick spans before tool-body cross-reference check, achieving parity with the TS `stripCodeFences()` inline strip added in BL-W45 PR2. Closes Deferred 3. New bats test: backtick-wrapped `Agent()` in body does NOT trigger WARN.
+- **kmp-test-runner v0.7.0→v0.8.1 in 2 ps1 scripts** (`scripts/ps1/run-changed-modules-tests.ps1`, `scripts/ps1/run-parallel-coverage-suite.ps1`): Mirrors the BL-W45 PR1 sh fix that was missed for ps1 pairs. Closes H-01.
+- **getting-started 9-doc frontmatter** (`docs/guides/getting-started/01` through `09`): Adds `scope`, `sources`, `targets`, `status: active`, `layer: L0`, `parent: getting-started` to all 9 getting-started guide files. Closes L-07.
+- **feature-domain-specialist L-08 fix** (`setup/agent-templates/feature-domain-specialist.md`, `.claude/agents/feature-domain-specialist.md`): Adds `SendMessage` to `tools:` frontmatter (grep-confirmed usage). Registry manifest updated. Closes L-08.
+
+### Added (BL-W46 PR3 — architect-bash-write-gate node -e Fix, #159)
+- **NODE_EVAL_RE exemption in architect-bash-write-gate** (`.claude/hooks/architect-bash-write-gate.js`): `detectViolation()` now strips single-quoted `node -e '...'` body before pattern checks, preventing false-positive fires when the `node -e` payload contains `open(`/`write` keywords. Python detection unaffected. Closes Deferred 2.
+- **2 new bats cases** (`tests/architect-bash-write-gate.bats`): `node -e 'require("fs").writeFileSync()'` must NOT fire; `python3 -c 'open("bar.md","w")'` still MUST fire.
+
+### Added (BL-W46 PR4 — Plan-Mode ENTRY Investigation, #160)
+- **Findings doc** (`.claude/wave-quality-gates/bl-w46-plan-mode-investigation.md`): Documents investigation of plan-mode ENTRY regression. EnterPlanMode hook confirmed present and correctly gated; no repro found in hook trace. Closes Deferred 1 as NOT-REPRODUCIBLE.
 
 ## [1.4.0] - 2026-05-08
 
