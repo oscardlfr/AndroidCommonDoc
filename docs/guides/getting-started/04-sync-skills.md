@@ -1,6 +1,12 @@
 ---
 title: "Step 4 — Sync skills / Paso 4 — Sincronizar habilidades"
 slug: getting-started-sync-skills
+scope: [guides, getting-started, sync]
+sources: [androidcommondoc]
+targets: [android, desktop, ios, jvm]
+status: active
+layer: L0
+parent: getting-started
 category: guides
 description: >
   Run /sync-l0 or the CLI to materialise L0 skills, agents, and commands

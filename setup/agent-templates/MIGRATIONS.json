@@ -759,6 +759,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+      },
+      "1.1.1": {
+        "date": "2026-05-08",
+        "breaking": false,
+        "note": "BL-W46 L-08: add SendMessage to tools: frontmatter (body uses SendMessage directive at L21)"
       }
     },
     "test-specialist": {

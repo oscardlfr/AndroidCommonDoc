@@ -1,6 +1,12 @@
 ---
 title: "Step 1 — Install L0 / Paso 1 — Instalar L0"
 slug: getting-started-install-l0
+scope: [guides, getting-started, setup]
+sources: [androidcommondoc]
+targets: [android, desktop, ios, jvm]
+status: active
+layer: L0
+parent: getting-started
 category: guides
 description: >
   Clone AndroidCommonDoc, set the environment variable, compile the Detekt

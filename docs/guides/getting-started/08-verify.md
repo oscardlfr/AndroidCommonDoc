@@ -1,6 +1,12 @@
 ---
 title: "Step 8 — Verify and troubleshoot / Paso 8 — Verificar y resolver problemas"
 slug: getting-started-verify
+scope: [guides, getting-started, verification]
+sources: [androidcommondoc]
+targets: [android, desktop, ios, jvm]
+status: active
+layer: L0
+parent: getting-started
 category: guides
 description: >
   Verification checklist and troubleshooting table for a complete L0/L1/L2

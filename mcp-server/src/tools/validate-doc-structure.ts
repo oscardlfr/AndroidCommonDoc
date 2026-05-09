@@ -48,6 +48,7 @@ export const APPROVED_CATEGORIES = new Set([
   "storage",
   "testing",
   "build",
+  "network",
   "ui",
 ]);
 

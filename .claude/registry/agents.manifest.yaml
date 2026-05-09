@@ -1907,8 +1907,8 @@ agents:
   feature-domain-specialist:
     canonical_name: feature-domain-specialist
     subagent_type: feature-domain-specialist
-    template_version: "1.1.0"
-    template_frontmatter_sha256: f971931f8fbf25f138c7b7b747f468755b9bbda640913b6b1b80af6bbe05c9e3
+    template_version: "1.1.1"
+    template_frontmatter_sha256: eef0b93d2e475ba26c0517cbefdf4c525cdfb6561efa95d3c8bcdf0241ff8f77
     category: domain-specialist
     lifecycle: per-task
     description: "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}."
@@ -1918,14 +1918,14 @@ agents:
       model: sonnet
       token_budget: 3000
     tools:
-      allowed: [Read, Grep, Glob, Bash]
+      allowed: [Read, Grep, Glob, Bash, SendMessage]
       banned:
-        top_level: [Agent, Write, Edit, SendMessage]
+        top_level: [Agent, Write, Edit]
     dispatch:
       spawn_method: Agent
       dispatched_by: [team-lead]
       can_dispatch_to: []
-      can_send_to: []
+      can_send_to: [your-architect]
     gates:
       - id: cp_consultation
         type: pre_action_gate

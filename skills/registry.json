@@ -2358,7 +2358,7 @@
       "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:091efa16e1ae6cc9eb2241135ac9c721c8b5480e7f0a981dfb034b18c9a0f03d",
+      "hash": "sha256:8e52da14a00e7335ceda29d0f16a096c80fcaf79f2ef136d40aa458774f0f6e5",
       "dependencies": [],
       "frontmatter": {
         "name": "feature-domain-specialist",

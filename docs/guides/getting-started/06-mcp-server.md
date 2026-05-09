@@ -1,6 +1,12 @@
 ---
 title: "Step 6 — MCP server / Paso 6 — Servidor MCP"
 slug: getting-started-mcp-server
+scope: [guides, getting-started, mcp]
+sources: [androidcommondoc, anthropic-claude-code]
+targets: [android, desktop, ios, jvm]
+status: active
+layer: L0
+parent: getting-started
 category: guides
 description: >
   Connect the AndroidCommonDoc MCP server to Claude Desktop for programmatic

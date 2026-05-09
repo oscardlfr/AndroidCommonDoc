@@ -1,6 +1,12 @@
 ---
 title: "Step 3 — l0-manifest.json / Paso 3 — l0-manifest.json"
 slug: getting-started-manifest
+scope: [guides, getting-started, manifest]
+sources: [androidcommondoc]
+targets: [android, desktop, ios, jvm]
+status: active
+layer: L0
+parent: getting-started
 category: guides
 description: >
   Full reference for l0-manifest.json: all fields, L1 vs L2 examples,

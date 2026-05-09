@@ -1,6 +1,12 @@
 ---
 title: "Step 9 — Android CLI on Windows / Paso 9 — Android CLI en Windows"
 slug: getting-started-android-cli-windows
+scope: [guides, getting-started, android-cli, windows]
+sources: [androidcommondoc]
+targets: [android]
+status: active
+layer: L0
+parent: getting-started
 category: guides
 description: >
   Install Google's Android CLI v0.7+ without admin rights and connect a
