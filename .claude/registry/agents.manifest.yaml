@@ -580,8 +580,8 @@ agents:
   context-provider:
     canonical_name: context-provider
     subagent_type: context-provider
-    template_version: "3.3.0"
-    template_frontmatter_sha256: a77f7a16c7c903faf9402be9f31e0c95681cb401cc07212c5e20af10dceaa48e
+    template_version: "3.4.0"
+    template_frontmatter_sha256: 798756391be99ef287372e51cd51d6b5d4911fdd0c087eb81c1c7816a1d72125
     category: context
     lifecycle: persistent
     description: "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only."
@@ -606,6 +606,7 @@ agents:
         - mcp__androidcommondoc__module-health
         - mcp__androidcommondoc__code-metrics
         - mcp__androidcommondoc__check-doc-patterns
+        - mcp__androidcommondoc__vault-status
         - mcp__plugin_context7_context7__resolve-library-id
         - mcp__plugin_context7_context7__query-docs
       banned:

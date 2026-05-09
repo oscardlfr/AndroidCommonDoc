@@ -2093,7 +2093,7 @@
       "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:fae46eed1b53ba20e8e26a812ed9eab01a915dd20c381ea3a8141c7008a599f7",
+      "hash": "sha256:e4f9d57dedb6c4388f282cc577cf758997b021d4bb1d675008e091ac1941b6fe",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",

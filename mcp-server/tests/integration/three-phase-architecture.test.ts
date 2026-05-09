@@ -852,8 +852,8 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
     expect(cpContent).toMatch(/find-pattern/);
   });
 
-  it('has template version 3.3.0', () => {
-    expect(cpContent).toContain('template_version: "3.3.0"'); // BL-W35-05: bumped from 3.2.0 → 3.3.0 (Refusing Task Assignments guard)
+  it('has template version 3.4.0', () => {
+    expect(cpContent).toContain('template_version: "3.4.0"'); // BL-W46.1 PR-B: bumped 3.3.0 → 3.4.0 (vault-status added to tools)
   });
 
   it('has External Context section with Context7 call sequence', () => {
