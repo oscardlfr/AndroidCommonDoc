@@ -40,6 +40,11 @@ This summary is the authoritative live view. Older sections below are kept as hi
 
 **Closes BL-W32-08** (orchestration-guide L1/L2 propagation).
 
+### ✅ BL-W32-12 SHIPPED (2026-05-09, PR #164) — pathlib write_text security false-negative
+
+- `architect-bash-write-gate.js` now correctly detects `pathlib.Path.write_text()/write_bytes()` inside `python3 -c "..."` wrappers with backslash-escaped inner quotes.
+- Note: backlog entry described a false-positive (BLOCK on exempt writes) — actual bug was the OPPOSITE: security false-negative (gate never fired, ALL such writes were silently allowed). Diagnosis pivot approved by user.
+
 ### ✅ BL-W46 SHIPPED (2026-05-08) — closes all 16 BL-W45 audit findings + 4 deferred items
 
 Full audit report: `.planning/wave-bl-w45/FULL-AUDIT-POST-WAVE.md` (2H/7M/6L). 4 PRs (#157-#160).
@@ -1073,7 +1078,8 @@ G. **Hook tests** (test-specialist): add bats coverage for new peer-validator ho
 ---
 
 ### BL-W32-12 — architect-bash-write-gate exempt-target detection misses pathlib.Path.write_text() form (HIGH — discovered 2026-05-02)
-**Status**: backlog
+**SHIPPED 2026-05-09 in PR #164** — security false-negative fix; bug description in this entry was incorrect (was actually false-NEGATIVE not false-POSITIVE). See PR #164 description for diagnosis pivot.
+**Status**: SHIPPED
 **Priority**: HIGH (live incident: arch-testing verdict-write blocked during BL-W32-06e despite path being in exempt list)
 **Discovered**: 2026-05-02 during BL-W32-06e EXECUTE phase (arch-testing verdict-to-disk attempt)
 **Source**: BL-W32-05 explicitly noted this detector as "no incident data" and deferred. BL-W32-06e provided the first live incident.
