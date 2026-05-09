@@ -94,7 +94,7 @@ if ($coverageTool -ne "") { $params.CoverageTool = $coverageTool }
 
 ## Runner
 
-This skill delegates to `run-parallel-coverage-suite.sh`/`run-parallel-coverage-suite.ps1` with `--skip-tests`, which is a thin wrapper around `kmp-test-runner` v0.7.0. See [oscardlfr/kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner#readme) for runner internals.
+This skill delegates to `run-parallel-coverage-suite.sh`/`run-parallel-coverage-suite.ps1` with `--skip-tests`, which is a thin wrapper around `kmp-test-runner` v0.9.0. See [oscardlfr/kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner#readme) for runner internals.
 
 ## Cross-References
 

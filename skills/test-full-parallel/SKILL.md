@@ -133,7 +133,7 @@ if ($coverageTool -ne "") { $params.CoverageTool = $coverageTool }
 
 ## Runner
 
-This skill delegates to `run-parallel-coverage-suite.sh`/`run-parallel-coverage-suite.ps1`, which is a thin wrapper around `kmp-test-runner` v0.7.0. The runner handles module discovery, Gradle invocation, daemon management, and Kover/JaCoCo fallback retry. See [oscardlfr/kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner#readme) for runner internals.
+This skill delegates to `run-parallel-coverage-suite.sh`/`run-parallel-coverage-suite.ps1`, which is a thin wrapper around `kmp-test-runner` v0.9.0. The runner handles module discovery, Gradle invocation, daemon management, and Kover/JaCoCo fallback retry. See [oscardlfr/kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner#readme) for runner internals.
 
 ## Cross-References
 

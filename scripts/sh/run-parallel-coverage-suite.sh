@@ -11,9 +11,9 @@ set -euo pipefail
 if command -v kmp-test >/dev/null 2>&1; then
   KMP_TEST_CMD="kmp-test"
 elif command -v npx >/dev/null 2>&1; then
-  KMP_TEST_CMD="npx kmp-test-runner@0.8.1"
+  KMP_TEST_CMD="npx kmp-test-runner@0.9.0"
 else
-  echo "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.8.1" >&2
+  echo "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.9.0" >&2
   exit 1
 fi
 
