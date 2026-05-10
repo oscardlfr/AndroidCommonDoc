@@ -181,8 +181,8 @@ agents:
   arch-testing:
     canonical_name: arch-testing
     subagent_type: arch-testing
-    template_version: "1.30.0"
-    template_frontmatter_sha256: 83388bda50031ca7ee68cb1f44c13a88a30b2be9f2e7bb5225c665a956f43c2f
+    template_version: "1.30.1"
+    template_frontmatter_sha256: 40745156f50b1a6b9cfa0f82214a8c8892aa61ff7bbf09b393b78b70160902a9
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -580,8 +580,8 @@ agents:
   context-provider:
     canonical_name: context-provider
     subagent_type: context-provider
-    template_version: "3.4.0"
-    template_frontmatter_sha256: 798756391be99ef287372e51cd51d6b5d4911fdd0c087eb81c1c7816a1d72125
+    template_version: "3.4.1"
+    template_frontmatter_sha256: 56494a442b399bb05ee42e1f7e9063d6d1350289ac7329f33fc2ed0a943f2bca
     category: context
     lifecycle: persistent
     description: "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only."
@@ -1040,8 +1040,8 @@ agents:
   product-lead:
     canonical_name: product-lead
     subagent_type: product-lead
-    template_version: "1.1.0"
-    template_frontmatter_sha256: 0ac087e19ac14a1782f76768550c4f48247563be5c53dfe6ce87a6c9347eaf45
+    template_version: "1.1.1"
+    template_frontmatter_sha256: 5f919d2cc1a774be283f30d6c430c3189f06459b26566cd4af71754b4c33a21f
     category: lead
     lifecycle: persistent
     description: "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code."

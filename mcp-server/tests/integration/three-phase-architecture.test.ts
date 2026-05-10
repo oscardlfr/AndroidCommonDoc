@@ -252,8 +252,8 @@ describe('tl-phase-execution sub-doc — extracted phase protocol', () => {
 describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
-  it('template version 1.30.0', () => {
-    expect(archContent).toContain('template_version: "1.30.0"');
+  it('template version 1.30.1', () => {
+    expect(archContent).toContain('template_version: "1.30.1"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -855,8 +855,8 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
     expect(cpContent).toMatch(/find-pattern/);
   });
 
-  it('has template version 3.4.0', () => {
-    expect(cpContent).toContain('template_version: "3.4.0"'); // BL-W46.1 PR-B: bumped 3.3.0 → 3.4.0 (vault-status added to tools)
+  it('has template version 3.4.1', () => {
+    expect(cpContent).toContain('template_version: "3.4.1"'); // Wave C T6: bumped 3.4.0 → 3.4.1
   });
 
   it('has External Context section with Context7 call sequence', () => {
@@ -908,8 +908,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toContain('template_version: "1.10.0"');
   });
 
-  it('arch-testing version 1.30.0', () => {
-    expect(testingContent).toContain('template_version: "1.30.0"');
+  it('arch-testing version 1.30.1', () => {
+    expect(testingContent).toContain('template_version: "1.30.1"');
   });
 });
 

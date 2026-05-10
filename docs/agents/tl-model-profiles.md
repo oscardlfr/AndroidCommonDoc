@@ -122,7 +122,7 @@ Projects can add profiles to `model-profiles.json` (e.g., a `mixed` profile with
 
 - Config file: `.claude/model-profiles.json`
 - Skill: `skills/set-model-profile/SKILL.md`
-- team-lead template: `setup/agent-templates/team-lead.md`
-- team-lead agent (synced): `.claude/agents/team-lead.md`
+- team-lead guidance: [main-agent-orchestration-guide](main-agent-orchestration-guide.md)
+- Session orchestration: see [main-agent-orchestration-guide](main-agent-orchestration-guide.md) (team-lead.md deprecated W31.6)
 - Session setup: [tl-session-setup](tl-session-setup.md)
 - Hub: [agents-hub](agents-hub.md)

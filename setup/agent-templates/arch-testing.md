@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.30.0"
+template_version: "1.30.1"
 skills:
   - test
   - test-full-parallel
@@ -278,7 +278,7 @@ Decision inputs:
 
 | Validation needed | Call |
 |-------------------|------|
-| After test changes | `SendMessage(to="team-lead", summary="need daw-guardian", message="Validate background/scheduler changes in {files}")` |
+| After test changes | `SendMessage(to="team-lead", summary="need <feature-guardian>", message="Validate background/scheduler changes in {files}")` |
 | After UI test changes | `SendMessage(to="team-lead", summary="need cross-platform-validator", message="Check platform parity for {files}")` |
 
 {{CUSTOMIZE: Add project-specific guardian calls here}}
@@ -369,7 +369,7 @@ Full protocol: `docs/agents/agent-verdict-protocol.md`
   - `stateIn(scope, SharingStarted.*, initialValue = ...)` in test body WITHOUT `viewModel.` or `createXxx().` reference — this is 'inline stateIn tautology': test controls its own initialValue and verifies its own input.
 - If gaming detected: SendMessage(to="team-lead", summary="TEST GAMING", message="Found gaming patterns in {files}: {details}")
 
-**High-dep VM redirect**: When VM has >10 deps + hardwired DI, L0 templates explicitly DISCOURAGE VM-level unit tests and REDIRECT to composable-layer tests. "Test at the layer where the bug is visible" is the canonical DawSync pattern.
+**High-dep VM redirect**: When VM has >10 deps + hardwired DI, L0 templates explicitly DISCOURAGE VM-level unit tests and REDIRECT to composable-layer tests. "Test at the layer where the bug is visible" is the canonical L2 consumer pattern.
 
 **Compile-time RED (valid TDD signal)**: RED test ≠ only a failing test assertion. For type-system-level bugs (wrong nullability, wrong sealed variant, wrong type), a compile error IS the RED signal — accept as valid TDD. Examples:
 - Nullable type parameter that makes unshipped code fail to compile
