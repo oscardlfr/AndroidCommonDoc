@@ -49,6 +49,8 @@ Extract the scope from your planned commit subject and assert membership. Invali
 
 Automation function: `check_commit_scope`.
 
+**Canonical types/scopes reference**: `docs/agents/commit-spec-validation.md` (cheat-sheet for both type and scope whitelists).
+
 ## Check 3 — Section H Gitignore Check (FIND-17 follow-on)
 
 For each path listed in the Section H atomic-file list, run:
