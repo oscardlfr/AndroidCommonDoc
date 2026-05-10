@@ -30,6 +30,12 @@ Planner uses `SendMessage(to="context-provider")` to get project state (context-
 
 **Plan delivery**: Planner writes the plan to `.planning/PLAN.md` (not via SendMessage — large messages get truncated to idle notification summaries). After planner notifies via SendMessage, team-lead reads the plan with `Read(".planning/PLAN.md")`.
 
+**Wave PLAN.md flow** (mandatory before any architect dispatch):
+1. Create wave dir.
+2. `EnterPlanMode()` → spawn planner (peer in session team) → wait for `PLAN-WRITTEN` reply.
+3. `ExitPlanMode()` → dispatch arch-* peers with `scope_doc_path` pointing to planner-authored PLAN.md.
+Shortcutting to spawn planner later while dispatching architects → **FORBIDDEN**. No PLAN.md = no architect dispatch.
+
 **Phase 2 — Execution (WHERE CODE GETS WRITTEN)**:
 Architects are already session team peers — no new TeamCreate needed.
 ```
@@ -102,3 +108,8 @@ See also [Team Topology](team-topology.md), [Multi-Agent Patterns](multi-agent-p
 - **Call doc-updater mid-session** for long work (5+ waves) to archive decisions to disk
 
 Architects handle ALL investigation, code reading, and delegation to devs/guardians. team-lead NEVER looks at code.
+
+## FORBIDDEN Actions
+
+**FORBIDDEN**: team-lead Write/Edit on `.planning/wave-*/PLAN.md` — that file is planner exclusive work-product.
+Rule: `feedback_planner_owns_plan_md`. Violation recovery: dispatch planner with RATIFY-WITH-EDITS or REJECT-AND-REWRITE.
