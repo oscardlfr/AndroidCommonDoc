@@ -14,10 +14,11 @@ After 2-pass empirical drift audit on 2026-05-10, **only ~10 items genuinely pen
 
 | ID | Severity | One-liner | Wave |
 |----|----------|-----------|------|
-| BL-W31.7-09 | HIGH (PARTIAL) | arch-platform.md missing disk-write Bash heredoc block (arch-testing.md L336-351 has it, arch-platform.md L372-401 lacks) | Wave B |
-| BL-bump-ktr-01 | MED (recurring) | arch-platform verdict-write OVERWRITES APPROVED-PREP token; needs APPEND language | Wave B |
-| BL-bump-ktr-02 | MED (recurring) | Commit-lint type vs scope confusion in dispatches; needs cheat-sheet | Wave B |
-| BL-bump-ktr-03 | MED | MIGRATIONS.json gap when template_version bumped; extend dual-location checklist | Wave B |
+| ~~BL-W31.7-09~~ | ~~HIGH (PARTIAL)~~ | ~~arch-platform.md missing disk-write Bash heredoc block (arch-testing.md L336-351 has it, arch-platform.md L372-401 lacks)~~ | ✅ SHIPPED 2026-05-10 (#173) |
+| ~~BL-bump-ktr-01~~ | ~~MED (recurring)~~ | ~~arch-platform verdict-write OVERWRITES APPROVED-PREP token; needs APPEND language~~ | ✅ SHIPPED 2026-05-10 (#173) |
+| ~~BL-bump-ktr-02~~ | ~~MED (recurring)~~ | ~~Commit-lint type vs scope confusion in dispatches; needs cheat-sheet~~ | ✅ SHIPPED 2026-05-10 (#173) |
+| ~~BL-bump-ktr-03~~ | ~~MED~~ | ~~MIGRATIONS.json gap when template_version bumped; extend dual-location checklist~~ | ✅ SHIPPED 2026-05-10 (#173) |
+| ~~BL-Wave-B-adapter-bug~~ | ~~MED (recurring)~~ | ~~copilot-adapter.sh `reference` branch missing; android-skills-consume.prompt.md drift 6+ PRs~~ | ✅ SHIPPED 2026-05-10 (#173) |
 | arch-testing line-anchor | LOW | arch-testing verification anchored on line range, not block content (false-failure) | Wave B |
 | BL-W32-11 (sub-items) | MED | `docs/agents/claude-md-template.md:158,163` + `tl-model-profiles.md:125` reference deprecated `team-lead.md` | Wave C |
 | BL-W30-02 | LOW | CP shutdown latency memory note (incorrect "ignores shutdown_request" claim) | Wave C |
@@ -182,9 +183,9 @@ This summary is the authoritative live view. Older sections below are kept as hi
 - 1116 bats + 2538 vitest verde
 
 **Lessons (open backlog findings)**:
-- BL-bump-ktr-01: arch-platform verdict-write erases APPROVED-PREP token (recurring; mitigation candidates: hook + template structure + linter)
-- BL-bump-ktr-02: commit-lint type vs scope confusion in dispatches (caught by CI #167; mitigation: validator + cheat-sheet)
-- BL-bump-ktr-03: MIGRATIONS.json gap when template_version bumped (caught by CI #167; mitigation: CLI auto-add or pre-commit hook)
+- ~~BL-bump-ktr-01~~: arch-platform verdict-write erases APPROVED-PREP token — ✅ SHIPPED 2026-05-10 (#173)
+- ~~BL-bump-ktr-02~~: commit-lint type vs scope confusion in dispatches — ✅ SHIPPED 2026-05-10 (#173)
+- ~~BL-bump-ktr-03~~: MIGRATIONS.json gap when template_version bumped — ✅ SHIPPED 2026-05-10 (#173)
 - New finding: arch-testing verification looked at wrong line area for CLI Mandate block (false-failure during PR #169 round). Cost: 1 round-trip clarification. Mitigation candidate: arch-testing should grep-anchor on block content, not line range.
 
 **Deferred** (separate sessions):
