@@ -76,6 +76,46 @@ This summary is the authoritative live view. Older sections below are kept as hi
 
 **Step 2 sequence remaining**: PR2 (CLI gate-expansion + docs hub + agent MANDATE/FORBID + L1/L2 plan) follows in this same session. Step 3+4 (L1+L2 sync) are separate sessions per user direction. THEN BL-W47 (adaptive harness redesign) in a fresh session.
 
+### ✅ cli-audit-pr2 SHIPPED (2026-05-10) — Step 2 PR2 of v0.9.0 incorporation
+
+**PR**: #169 — feat(agents): kmp-test-runner CLI-only mandate — gate-expansion + 12-doc hub + agent MANDATE
+
+**Scope**: 6 commits (4 base + 2 fix-forwards). 12 new docs in `docs/testing/` (cli-hub + 11 sub-docs L0 atomic). gate.js rewrite (allowlist-then-block, 10+4 patterns, JS/Wasm special msg). test-specialist 1.22→1.23 + arch-testing 1.28→1.29 with MANDATE/FORBID pointer blocks. 22 new bats cases (1100→1116). 4 user decisions locked: block check globally, JS/Wasm with special msg, allowlist kmp-test info|describe, DawSync L2 deferred.
+
+### ✅ cli-mandate-cleanup SHIPPED (2026-05-10) — Step 2 PR2 cleanup C5
+
+**PR**: #170 — fix(agents): purge pre-CLI references in 5 templates
+
+**Scope**: 4 commits, 18 files. Closes 3 findings from PR #169 audit:
+- 4 dev specialist templates: "grep for expected changes" → "verify via reporting architect" (resolves Grep-banned contradiction)
+- 4 dev specialist templates: "verified and APPROVED" → "APPROVE verdict"
+- arch-testing.md L409: "Never wrapper scripts" → "wrappers wrap kmp-test-runner v0.9.0+ via canonical chain"
+- 5 manifest version bumps + MIGRATIONS entries + 4 vitest test fixes (incl. 2 obsolete-test rewrites)
+
+### 📝 kmp-test-runner v0.9.0 incorporation arc — retro (2026-05-10)
+
+**Arc**: 5 PRs in single session (8.5h). PRs #166 (housekeeping) + #167 (mechanical bump) + #168 (wave-close 1) + #169 (CLI mandate) + #170 (cleanup).
+
+**Outputs**:
+- ~50 v0.8.1→v0.9.0 occurrence bumps + stale v0.7.0 cleanup
+- 12 new atomic CLI docs at `docs/testing/`
+- gate.js KMP-wide block regex (jvm/android/ios/macos/js/wasm) with allowlist-first
+- 5 templates updated (4 dev + arch-testing) with MANDATE/FORBID + version bumps + MIGRATIONS
+- 1116 bats + 2538 vitest verde
+
+**Lessons (open backlog findings)**:
+- BL-bump-ktr-01: arch-platform verdict-write erases APPROVED-PREP token (recurring; mitigation candidates: hook + template structure + linter)
+- BL-bump-ktr-02: commit-lint type vs scope confusion in dispatches (caught by CI #167; mitigation: validator + cheat-sheet)
+- BL-bump-ktr-03: MIGRATIONS.json gap when template_version bumped (caught by CI #167; mitigation: CLI auto-add or pre-commit hook)
+- New finding: arch-testing verification looked at wrong line area for CLI Mandate block (false-failure during PR #169 round). Cost: 1 round-trip clarification. Mitigation candidate: arch-testing should grep-anchor on block content, not line range.
+
+**Deferred** (separate sessions):
+- Step 3: L1 sync to shared-kmp-libs (in flight — PR #47 from yesterday needs investigation: close+recreate vs update)
+- Step 4: L2 DawSync — 3 invocations (`./gradlew :konsist-guard:test`, `./gradlew check` ×2) need migration to kmp-test CLI before gate enables. User has descoped DawSync for now.
+- BL-W47: adaptive harness redesign (planned, requires fresh session per BL-W47-PLAN.md)
+
+**Architecture wins**: hub doc atomic decomposition validated (12 sub-docs, all <300 lines, frontmatter complete). Allowlist-then-block gate pattern proven. Multi-PR phased approach (mechanical → CLI mandate → cleanup) gave clean reviewable diffs.
+
 ### bump-kmp-test-runner-v0.9.0 post-wave findings (filed 2026-05-09)
 
 #### BL-bump-ktr-01 — arch-platform verdict-write workflow erases APPROVED-PREP token
