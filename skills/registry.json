@@ -1934,7 +1934,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.24.0",
+        "template_version": "1.24.1",
         "skills": [
           "test",
           "extract-errors"
@@ -2108,7 +2108,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "3.4.1"
+        "template_version": "3.4.2"
       }
     },
     {
