@@ -2,11 +2,89 @@
 
 > Created: 2026-04-21
 > Scope: items intentionally deferred during Wave 25 to keep blast radius manageable. Each entry has a trigger condition for when it should be picked up.
-> **Last validated against codebase: 2026-05-08 (post BL-W45 close)**
+> **Last validated against codebase: 2026-05-10 (post cli-mandate incorporation arc + 2-pass drift audit)**
 
 ---
 
-## ⭐ Current state (validated 2026-05-06)
+## 🚧 OPEN BACKLOG (truly pending — post-2026-05-10 audit)
+
+After 2-pass empirical drift audit on 2026-05-10, **only ~10 items genuinely pending fix**. The rest are DRIFT-CLOSED (already shipped, see audit below) or OBSOLETE.
+
+### Real open work — prioritized
+
+| ID | Severity | One-liner | Wave |
+|----|----------|-----------|------|
+| BL-W31.7-09 | HIGH (PARTIAL) | arch-platform.md missing disk-write Bash heredoc block (arch-testing.md L336-351 has it, arch-platform.md L372-401 lacks) | Wave B |
+| BL-bump-ktr-01 | MED (recurring) | arch-platform verdict-write OVERWRITES APPROVED-PREP token; needs APPEND language | Wave B |
+| BL-bump-ktr-02 | MED (recurring) | Commit-lint type vs scope confusion in dispatches; needs cheat-sheet | Wave B |
+| BL-bump-ktr-03 | MED | MIGRATIONS.json gap when template_version bumped; extend dual-location checklist | Wave B |
+| arch-testing line-anchor | LOW | arch-testing verification anchored on line range, not block content (false-failure) | Wave B |
+| BL-W32-11 (sub-items) | MED | `docs/agents/claude-md-template.md:158,163` + `tl-model-profiles.md:125` reference deprecated `team-lead.md` | Wave C |
+| BL-W30-02 | LOW | CP shutdown latency memory note (incorrect "ignores shutdown_request" claim) | Wave C |
+| BL-W30-03 | MED | Doc drift between `di-patterns-modules.md:99-106` and global CLAUDE.md DI rules | Wave C |
+| BL-W30-01 | LOW | Vitest case for `our_mcp_calls` regex in `tool-use-analytics.ts:130` | Wave D |
+| BL-W31.7-04 | MED | Spawn-prompt diet pass 2+3 (orthogonal to BL-W47) | Wave D |
+| W17 MED #11/#17 (PARTIAL) | MED | CP integration verify for `docs/architecture/kmp-features-2026.md` reference | Wave D |
+
+### Frozen for BL-W47 (do NOT touch in cleanup waves)
+
+- BL-W31.7-03 — Hook reduction audit (input to BL-W47)
+- BL-W47 PR1..PR5 — Adaptive Harness Redesign blueprint (`.planning/BL-W47-PLAN.md`)
+
+---
+
+## 🧹 Drift audit results (2026-05-10) — 28 items reconciled
+
+Two-pass empirical audit verified each "OPEN" backlog item against current codebase (develop tip 8496569).
+
+### ✅ DRIFT-CLOSED (23) — already shipped in code, headers updated below
+
+Pass 1 (5 items):
+
+| ID | Severity | Evidence (file:line) |
+|----|----------|----------------------|
+| BL-W26-04 | MED | `.gitignore:78` (.gsd/agents/ gitignored); body already says "RESOLVED 2026-04-24 W30 Round 5" |
+| BL-W30-06 | LOW | `skills/pre-pr/SKILL.md:99` (K/N interop @Suppress allowlist documented) |
+| BL-W30-07 | LOW | `.claude/hooks/compile-fail-pre-commit.sh` exists + wired in `.claude/settings.json:241` |
+| BL-W30-08 | LOW | `scripts/sh/catalog-coverage-check.sh:10,30,46-62` (`--module-paths` flag implemented) |
+| BL-W30-09 | LOW | 5 specialist templates have `[DEV NOTE]` (data-layer:214, domain-model:220, test-specialist:368, ui-specialist:320, toolkit-specialist:230) |
+
+Pass 2 (17 items + BL-W26-02 already in current-state table = 18 total):
+
+| ID | Severity | Evidence (file:line) |
+|----|----------|----------------------|
+| BL-W26-02 | MED | `scripts/sh/skill-leak-check.sh` (shipped BL-W44-S2 PR #151) |
+| BL-W31.5-01 | HIGH | `setup/agent-templates/arch-testing.md:27` (dispatches via team-lead, not subagent_type targeting) |
+| BL-W31.5-04 | HIGH | 5 specialist templates open with `## BANNED TOOLS` heading + Glob/Read FORBIDDEN at top |
+| BL-W31.7-08 | MED | `.claude/agents/toolkit-specialist.md` exists + manifest entry `agents.manifest.yaml:517-570` |
+| BL-W31.7-10 | HIGH | `setup/agent-templates/quality-gater.md:46-64` (PROJECT_TYPE detection via `detect-project-type.sh`); Gradle steps guarded `[[ "$PROJECT_TYPE" == "gradle" ]]` |
+| BL-W31.7-11 | MED | `mcp-server/src/cli/validate-manifest-abi.ts` exists + wired in `drift-audit.yml:302,317` |
+| BL-W32-01 | LOW | Already CLOSED (OBSOLETE) per body line 828 |
+| BL-W32-02 | MED | `docs/agents/arch-topology-protocols.md` (concern-ownership doc, referenced in arch-testing.md:89) |
+| BL-W32-03 | MED | `setup/agent-templates/arch-testing.md:251` (Pre-Dispatch Decision: Mocked vs Fixture-driven section) |
+| BL-W32-04 | HIGH (was RECURRING) | `docs/agents/tl-session-start.md:104-108` (TeamDelete-before-TeamCreate); pre-flight checklist L170 has hard STOP gate |
+| BL-W32-13 | HIGH | `.github/workflows/reusable-commit-lint.yml:63` (`SCOPE_PATTERN` accepts `(-[a-z0-9]+)*` compound suffix) |
+| BL-W32-14 | MED | `setup/agent-templates/doc-updater.md:205-215` (Commit-Loop Discipline section) |
+| BL-W32-15 | MED | 8+ templates have `## Edit Tool Precondition (BL-W32-15)` block |
+| BL-W32-16 | LOW | Inline Common Gradle Error Triage section (BL-W44-S2 PR #152/#153) |
+| BL-W32-17 | LOW | `docs/testing/testing-hub.md:86` (kotlin-reflect gotcha documented) |
+| BL-W32-18 | LOW | `setup/agent-templates/quality-gater.md:197` (XML test count parsing) |
+| BL-W32-19 | LOW | `setup/agent-templates/doc-updater.md:217-223` (Rename Reporting section) |
+| BL-W32-20 | LOW | `.gitignore:63-64,82` (.kmp-test-runner/ + tooling artifacts) |
+
+### ❌ OBSOLETE (5) — dropped or reframed
+
+| ID | Reason |
+|----|--------|
+| BL-W31.7-01 | Reframed → BL-W47 PR4 input (flat-spawning addressed by adaptive harness) |
+| BL-W31.7-02 | Reframed → BL-W47 PR4 input (pull-model task claiming addressed by adaptive harness) |
+| BL-W31.7-05 | Reframed → BL-W47 PR4 input (Phase 1/2/3 split eliminated by adaptive harness) |
+| BL-W30-10 | W31.6 canonical flat-spawning pattern superseded the original motivation |
+| BL-W31.5-03 | Scope is external repo (oscardlfr/kmp-test-runner OSS); not L0 backlog scope |
+
+---
+
+## ⭐ Current state (validated 2026-05-06, audit-confirmed 2026-05-10)
 
 This summary is the authoritative live view. Older sections below are kept as historical reference.
 
