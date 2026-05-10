@@ -104,12 +104,21 @@ KoinIsolatedContext(context = koinApp) {
 - `KoinIsolatedContext` makes `koinViewModel()` resolve against the isolated app without polluting GlobalContext.
 - Do NOT use `GlobalContext.startKoin(koinApp)` — double-calls `createEagerInstances()`.
 - Do NOT call `startKoin {}` separately — creates a second instance.
+- Wrap `SharedSdk.init()` in `remember` — prevents double-init on recomposition.
 
 See `SharedSdk.kt:119-121` KDoc for the contract.
 
 ### Standalone Desktop (no SharedSdk)
 
 For apps that do NOT consume SharedSdk and want a self-managed Koin root: use `startKoin {}` in the `fun main()` body directly; `koinViewModel()` will resolve against GlobalContext. Do NOT mix this pattern with SharedSdk in the same app.
+
+### Android
+
+Use `startKoin {}` in `Application.onCreate()`. `koinViewModel()` resolves against GlobalContext by default — no bridge needed. Do NOT mix with `SharedSdk.init()` in the same app.
+
+### iOS / macOS
+
+No Compose — resolve dependencies via `SharedSdk.koin.get<T>()` directly.
 
 ### KMP Platform Modules
 

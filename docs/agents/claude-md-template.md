@@ -155,7 +155,7 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 ## CLAUDE.md + Agent Connection
 
 ```
-CLAUDE.md                    .claude/agents/team-lead.md
+CLAUDE.md                    docs/agents/main-agent-orchestration-guide.md
 ┌──────────────────────┐     ┌──────────────────────────┐
 │ ## Agent Delegation │     │ ## Specialist Delegation  │
 │ | daw-guardian | ...  │────▶│ invoke daw-guardian when  │
