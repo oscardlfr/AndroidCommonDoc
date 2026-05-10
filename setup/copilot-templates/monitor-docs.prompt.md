@@ -16,7 +16,7 @@ Monitor upstream doc sources for version drift and deprecations. Use when asked 
 /monitor-docs --tier 1
 /monitor-docs --tier 2
 /monitor-docs --review
-/monitor-docs --layer L1 --project-root /path/to/shared-kmp-libs
+/monitor-docs --layer L1 --project-root /path/to/{l1-project}
 ```
 
 ## Parameters

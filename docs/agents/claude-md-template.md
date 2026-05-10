@@ -93,7 +93,7 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 
 ### L1 (Ecosystem Library)
 ```markdown
-# shared-kmp-libs
+# {l1-project}
 
 > L1 Ecosystem Library — Version authority for all KMP modules.
 
@@ -117,14 +117,14 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 
 ### L2 (Application)
 ```markdown
-# DawSync
+# {l2-project}
 
-> L2 Application — Creative Project OS for musicians.
+> L2 Application — {domain description}.
 
 ## Workflow Orchestration
 ### 1. Plan Mode Default
 - Modifying core/domain/ → plan mode — SSOT blast radius
-- SnapshotProducer changes → plan mode — DAW interaction, high risk
+- {Critical-path changes} → plan mode — high risk
 
 ### 2. Agent Delegation
 | Agent | Domain | When |
@@ -133,9 +133,9 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 | `arch-testing` | Test verification | Architect gate after each wave |
 | `arch-platform` | Architecture verification | Architect gate after each wave |
 | `arch-integration` | Integration verification | Architect gate after each wave |
-| `daw-guardian` | DAW safety | Background work, file I/O, schedulers |
+| `<feature-guardian>` | Domain safety | Background work, file I/O, schedulers |
 | `data-layer-specialist` | Data layer | core/data/, repositories |
-| `freemium-gate-checker` | Feature gates | New features, tier changes |
+| `<gate-checker>` | Feature gates | New features, tier changes |
 ...
 ```
 
@@ -158,7 +158,7 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 CLAUDE.md                    docs/agents/main-agent-orchestration-guide.md
 ┌──────────────────────┐     ┌──────────────────────────┐
 │ ## Agent Delegation │     │ ## Specialist Delegation  │
-│ | daw-guardian | ...  │────▶│ invoke daw-guardian when  │
+│ | <feature-guardian> |...│────▶│ invoke <feature-guardian> │
 │ | data-layer  | ...  │     │ invoke data-layer when    │
 │                      │     │                           │
 │ ## Commands           │     │ ## L0 Skills Usage        │

@@ -23,8 +23,8 @@ Each project consumes L0 directly. No intermediary layers.
 
 ```
 L0 (AndroidCommonDoc)
- ├── L1 (shared-kmp-libs)     ← consumes L0 directly
- └── L2 (DawSync)             ← consumes L0 directly
+ ├── L1 ({l1-project})        ← consumes L0 directly
+ └── L2 ({l2-project})        ← consumes L0 directly
 ```
 
 Best for: enterprise teams, standalone apps, projects without a shared-libs layer.
@@ -45,8 +45,8 @@ Knowledge cascades: L0 → L1 → L2. Each layer inherits from its parent and ca
 
 ```
 L0 (AndroidCommonDoc)
- └── L1 (shared-kmp-libs)
-      └── L2 (DawSync)
+ └── L1 ({l1-project})
+      └── L2 ({l2-project})
 ```
 
 Best for: solo devs / small teams where L1 defines ecosystem conventions that L2 inherits.
@@ -57,7 +57,7 @@ Best for: solo devs / small teams where L1 defines ecosystem conventions that L2
   "topology": "chain",
   "sources": [
     { "layer": "L0", "path": "../../AndroidCommonDoc", "role": "tooling" },
-    { "layer": "L1", "path": "../../shared-kmp-libs", "role": "ecosystem" }
+    { "layer": "L1", "path": "../../{l1-project}", "role": "ecosystem" }
   ]
 }
 ```
@@ -83,7 +83,7 @@ Best for: solo devs / small teams where L1 defines ecosystem conventions that L2
   "version": 2,
   "sources": [
     { "layer": "L0", "path": "../AndroidCommonDoc", "role": "tooling" },
-    { "layer": "L1", "path": "../shared-kmp-libs", "role": "ecosystem" }
+    { "layer": "L1", "path": "../{l1-project}", "role": "ecosystem" }
   ],
   "topology": "chain",
   "selection": { "mode": "include-all" },
@@ -225,7 +225,7 @@ Add downstream repos to `.github/downstream-repos.json`:
 
 ```json
 [
-  "your-org/shared-kmp-libs",
+  "your-org/{l1-project}",
   "your-org/my-app"
 ]
 ```

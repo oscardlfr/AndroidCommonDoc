@@ -274,7 +274,7 @@ When encountering unexpected behavior from kotlinx-coroutines-test, Compose, Koi
 2. Only fall back to empirical testing if Context7 does not cover the specific scenario
 3. This avoids wasted QG cycles from fixing symptoms instead of understanding the API contract
 
-> 3 QG cycles were lost in DawSync L2 because the official kotlinx-coroutines-test docs had the answer.
+> 3 QG cycles were lost in an L2 consumer project because the official kotlinx-coroutines-test docs had the answer.
 
 ---
 

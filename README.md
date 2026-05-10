@@ -86,7 +86,7 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 | 31.6 | 2026-04-25 | [#69](https://github.com/oscardlfr/AndroidCommonDoc/pull/69) | agent-template cleanup + canonical pattern alignment; team-lead.md retired in favor of `docs/agents/main-agent-orchestration-guide.md` (main agent IS team-lead) |
 | 31 | 2026-04-24 | [#66](https://github.com/oscardlfr/AndroidCommonDoc/pull/66) | Pre-split hardening + BL-W31-00 + W18/W19 triage + CI fix for W30-latent registry drift |
 | 30 | 2026-04-24 | [#65](https://github.com/oscardlfr/AndroidCommonDoc/pull/65) | 10 backlog items + P3 enforcement hooks + BL-W30-11 planner T-BUG-015 fix |
-| 29 | 2026-04-23 | local + L1 [#28](https://github.com/oscardlfr/shared-kmp-libs/pull/28) | L0 → L1/L2 propagation; shared-kmp-libs manifest cleanup; DawSync local FF merge; api-contract-guardian CP gate |
+| 29 | 2026-04-23 | local + L1 [#28](https://github.com/oscardlfr/shared-kmp-libs/pull/28) | L0 → L1/L2 propagation; L1 manifest cleanup; L2 local FF merge; api-contract-guardian CP gate |
 | 28 | 2026-04-22 | [#62](https://github.com/oscardlfr/AndroidCommonDoc/pull/62) | L0 housekeeping pre-W29: BL-W27-01..04 + W17 HIGH findings #1, #3-#5 |
 | 27 | 2026-04-22 | [#61](https://github.com/oscardlfr/AndroidCommonDoc/pull/61) | BL-W26-06 rollback W25 pattern-search MCP wiring; codified dev → arch → CP chain |
 | 26 | 2026-04-21 | [#60](https://github.com/oscardlfr/AndroidCommonDoc/pull/60) | BL-W26-01a MCP wiring for 4 agents + Bug #8 topology activation gate post-ExitPlanMode |
@@ -155,7 +155,7 @@ Projects choose how they consume layers via `l0-manifest.json` (manifest v2):
 { "version": 2, "topology": "chain",
   "sources": [
     { "layer": "L0", "path": "../../AndroidCommonDoc", "role": "tooling" },
-    { "layer": "L1", "path": "../../shared-kmp-libs", "role": "ecosystem" }
+    { "layer": "L1", "path": "../../{l1-project}", "role": "ecosystem" }
   ] }
 ```
 

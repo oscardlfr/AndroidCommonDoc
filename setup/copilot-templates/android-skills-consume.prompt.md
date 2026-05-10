@@ -69,9 +69,9 @@ Run `android skills list --long` for the authoritative, up-to-date catalogue.
 ## Per-layer applicability
 
 - **L0 (AndroidCommonDoc)**: all skills installed for agent delegation. See wire-up table in `.planning/intel/android-skills-catalog.md`.
-- **L1 (shared-kmp-libs)**: `navigation-3`, `agp-9-upgrade`. No UI means no `edge-to-edge`; no release build means no `r8-analyzer`/`play-billing`.
-- **L2 KMP desktop-primary (e.g. DawSync)**: `navigation-3` only until `androidApp` ships. Other Android-specific skills deferred.
-- **L2 Web (e.g. DawSyncWeb)**: NONE of the Google Android skills apply (Astro/Cloudflare Workers target, not Android).
+- **L1 (the L1 project)**: `navigation-3`, `agp-9-upgrade`. No UI means no `edge-to-edge`; no release build means no `r8-analyzer`/`play-billing`.
+- **L2 KMP desktop-primary**: `navigation-3` only until `androidApp` ships. Other Android-specific skills deferred.
+- **L2 Web (companion web app)**: NONE of the Google Android skills apply (Astro/Cloudflare Workers target, not Android).
 
 ## L0 agent integration (Phase 22-02)
 

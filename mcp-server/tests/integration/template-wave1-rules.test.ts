@@ -119,16 +119,16 @@ describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in team-lead or sub-docs'
 // 8. Wave 1: template_version bumped in architects
 // ---------------------------------------------------------------------------
 describe('Wave 1: template_version bumped in architects', () => {
-  it('arch-testing.md template_version is "1.30.1"', () => {
-    // Wave C T6: bumped from 1.30.0 → 1.30.1
+  it('arch-testing.md template_version is "1.30.2"', () => {
+    // Wave E: bumped from 1.30.1 → 1.30.2 (atomization: Scope Extension + Reporter + Message Topic Discipline)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.30.1"/);
+    expect(content).toMatch(/template_version:\s*"1.30.2"/);
   });
 
-  it('arch-platform.md template_version is "1.28.0"', () => {
-    // Wave B: bumped from 1.27.0 → 1.28.0 (disk-write block + commit + dual-location pointers)
+  it('arch-platform.md template_version is "1.28.1"', () => {
+    // Wave E: bumped from 1.28.0 → 1.28.1 (atomization: Scope Extension + Reporter + Message Topic Discipline)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.28.0"/);
+    expect(content).toMatch(/template_version:\s*"1.28.1"/);
   });
 
   it('arch-integration.md template_version is "1.24.1"', () => {

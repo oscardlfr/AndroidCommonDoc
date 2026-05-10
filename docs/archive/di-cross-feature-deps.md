@@ -29,7 +29,7 @@ Auth ───needs──▸ Network (to call the token refresh endpoint)
                 └── circular: Auth ↔ Network
 ```
 
-This is realistic. In [shared-kmp-libs (L1)](../../README.md), the Ktor network module depends on json-api and logging, the encryption module depends on common utilities, and the consuming app (L2) wires everything through a single Koin graph.
+This is realistic. In the L1 library, the Ktor network module depends on json-api and logging, the encryption module depends on common utilities, and the consuming app (L2) wires everything through a single Koin graph.
 
 ---
 

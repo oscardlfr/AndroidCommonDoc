@@ -59,7 +59,7 @@ When a specialist asks about coroutine test setup, dispatcher choice, or StateFl
 When a specialist reports unexpected coroutine/test behavior:
 1. **Consult Context7 FIRST** via context-provider before diagnosing
 2. Only suggest empirical fixes if Context7 does not cover the scenario
-3. This rule exists because 3 QG cycles were lost in DawSync L2 — the official docs had the answer
+3. This rule exists because 3 QG cycles were lost in an L2 consumer session — the official docs had the answer
 
 ### Core Dev Communication (v5.0.0)
 

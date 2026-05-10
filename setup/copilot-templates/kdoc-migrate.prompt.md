@@ -16,7 +16,7 @@ Full-project KDoc migration orchestrator. Adds KDoc to all undocumented public A
 /kdoc-migrate --module core-domain               # single module
 /kdoc-migrate --priority-only                    # interfaces + sealed classes only
 /kdoc-migrate --dry-run                          # report gaps without generating
-/kdoc-migrate --project-root ../shared-kmp-libs  # cross-project
+/kdoc-migrate --project-root ../{l1-project}  # cross-project
 ```
 
 ## Parameters

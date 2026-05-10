@@ -61,7 +61,7 @@ The L0 tool identifies semantic nodes by `testTag` first, falling back to
 
 ## Not in scope (yet)
 
-- iOS / macOS: DawSync uses SwiftUI there — separate future tooling.
+- iOS / macOS: the L2 app uses SwiftUI there — separate future tooling.
 - Android: covered by L0 `android-layout-diff` (requires a live adb device).
 - Pixel-level visual regression: this tool compares semantics, not rendering.
   Use screenshot-diff tooling if you need pixel fidelity.

@@ -344,6 +344,23 @@ describe("T-BUG-012: arch-* Reporter Protocol checks team-lead liveness and fall
   }
 });
 
+// ── BL-W30-05: arch-* Message Topic Discipline pointer ──────────────────────
+
+describe("BL-W30-05: arch-* templates have Message Topic Discipline pointer", () => {
+  const msgTopicDoc = readDoc("arch-message-topic-discipline");
+  for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
+    it(`${name} has Message Topic Discipline reference`, () => {
+      const { claude, template } = readAgent(name);
+      for (const content of [claude, template]) {
+        const combined = content + msgTopicDoc;
+        expect(combined).toMatch(/Message Topic Discipline/);
+        expect(combined).toMatch(/One message.*one action|one action.*one message/i);
+        expect(combined).toMatch(/N topics.*N messages|send N messages/i);
+      }
+    });
+  }
+});
+
 // ── T-BUG-013: /pre-pr wires catalog-coverage-check.sh ─────────────────────
 
 describe("T-BUG-013: /pre-pr invokes catalog-coverage-check.sh (no more unwired tool theater)", () => {

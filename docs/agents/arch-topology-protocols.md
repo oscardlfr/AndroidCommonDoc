@@ -101,7 +101,7 @@ context-provider has Read/Grep/Glob/Bash and is the curated knowledge layer. Arc
 
 ### Why this exists
 
-L2 DawSync session (2026-04-18) caught arch-platform using `Bash grep` for pattern audits in Wave 0.7. The L0 PR #40 mechanical enforcement (Grep/Glob removed from architect frontmatter) was bypassed via Bash. Mechanical removal closed one door; Bash was the open window. This anti-pattern shuts the window.
+An L2 consumer session (2026-04-18) caught arch-platform using `Bash grep` for pattern audits in Wave 0.7. The L0 PR #40 mechanical enforcement (Grep/Glob removed from architect frontmatter) was bypassed via Bash. Mechanical removal closed one door; Bash was the open window. This anti-pattern shuts the window.
 
 The same pattern applies to dev specialists (test-specialist, ui-specialist, data-layer-specialist, domain-model-specialist) — devs ask their reporting architect, who asks context-provider. Devs running `bash grep` bypass the architect chain entirely, leaving the team without an audit trail.
 

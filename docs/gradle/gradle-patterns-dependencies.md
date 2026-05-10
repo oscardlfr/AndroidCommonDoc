@@ -73,7 +73,7 @@ When consuming a shared library via composite build, import its version catalog 
 ### settings.gradle.kts (consuming project)
 
 ```kotlin
-includeBuild("../shared-kmp-libs") {
+includeBuild("../../{l1-project}") {
     dependencySubstitution {
         substitute(module("com.example.shared:core-result"))
             .using(project(":core-result"))
@@ -83,7 +83,7 @@ includeBuild("../shared-kmp-libs") {
 dependencyResolutionManagement {
     versionCatalogs {
         create("sharedLibs") {
-            from(files("../shared-kmp-libs/gradle/libs.versions.toml"))
+            from(files("../../{l1-project}/gradle/libs.versions.toml"))
         }
     }
 }
