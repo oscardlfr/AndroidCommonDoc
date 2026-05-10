@@ -56,6 +56,43 @@ This summary is the authoritative live view. Older sections below are kept as hi
 | LOW arch-integration at 425-line cap | MONITOR — not violated, no headroom |
 | LOW archive/ docs over 300 lines | DEFERRED — intentional preservation |
 
+### ✅ bump-kmp-test-runner-v0.9.0 SHIPPED (2026-05-09) — Step 2 PR1 of v0.9.0 incorporation
+
+**PRs**: #166 (housekeeping recovery) + #167 (mechanical bump) + #168 (this wave-close)
+
+**Pre-flight verdict**: GREEN — wrappers do not parse JSON envelope; v0.9.0 schema v2 changes (no_test_modules exit-code split, flavor_unused promotion, isolated_runtime_race guard) do not require adaptation.
+
+**Files bumped** (21 in PR #167 + 2 in fix-forward):
+- workflow (1) + hook (1) + 6 wrapper scripts (sh+ps1) + agent template (dual-location SOURCE+COPY) + bats (1) + 4 SKILL.md + README + AGENTS.md + CHANGELOG.md + manifest 1.21.0→1.22.0 + sentinel + test fix (vitest EXPECTED_VERSIONS)
+- Fix-forward: MIGRATIONS.json 1.22.0 entry + skills/registry.json hash regen
+
+**v0.9.0 features unlocked** (informational, not consumed yet):
+- `kmp-test info|describe|update` discovery subcommands
+- `--gradle-args` escape hatch
+- `--isolated` Windows-safe cache (could re-enable parallel test execution)
+- `--variant` truly global
+
+**Stale rolls in same PR**: 3 SKILL.md (test-changed, test-full-parallel, coverage) v0.7.0 → v0.9.0.
+
+**Step 2 sequence remaining**: PR2 (CLI gate-expansion + docs hub + agent MANDATE/FORBID + L1/L2 plan) follows in this same session. Step 3+4 (L1+L2 sync) are separate sessions per user direction. THEN BL-W47 (adaptive harness redesign) in a fresh session.
+
+### bump-kmp-test-runner-v0.9.0 post-wave findings (filed 2026-05-09)
+
+#### BL-bump-ktr-01 — arch-platform verdict-write workflow erases APPROVED-PREP token
+**Severity**: MEDIUM (recurring; surfaced in PR #166, resolved-by-discipline in PR #167)
+**Spec**: When arch-platform writes EXECUTE verdict, it MUST APPEND to existing verdict file, not overwrite. PR #166 showed overwrite kills `APPROVED-PREP` literal token, blocking premature-execution-gate at merge time.
+**Mitigation candidates**: (a) hook that asserts both tokens present before merge; (b) arch-platform template forced 2-section structure (PREP block + EXECUTE block) with explicit `fs.appendFileSync` pattern; (c) verdict-file linter run post-EXECUTE.
+
+#### BL-bump-ktr-02 — Commit-lint type vs scope confusion in dispatches
+**Severity**: MEDIUM (caught by CI on PR #167; cost 1 fix-forward + PR title edit)
+**Spec**: arch-platform PREP for PR #167 specified `deps(scripts):` — `deps` is a SCOPE per `.github/workflows/l0-ci.yml:22`, not a TYPE per `reusable-commit-lint.yml:25` (valid types: feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert). Template dispatches must specify `<type>(<scope>):` explicitly.
+**Mitigation candidates**: (a) validator that asserts dispatch commit specs match `<valid-type>(<valid-scope>)` pattern before APPROVE; (b) inline cheat-sheet in arch-platform template referencing both lists; (c) pre-commit hook running commit-lint locally before push.
+
+#### BL-bump-ktr-03 — MIGRATIONS.json gap when template_version bumped
+**Severity**: MEDIUM (caught by Agent Template Lint CI; cost 1 fix-forward)
+**Spec**: Bumping `template_version` in `.claude/registry/agents.manifest.yaml` requires a corresponding entry in `setup/agent-templates/MIGRATIONS.json`. Currently must be added manually — easy to miss because the dual-location protocol does not mention it.
+**Mitigation candidates**: (a) `generate-template.js --update-manifest-hash` ALSO writes MIGRATIONS.json placeholder entry (with TODO note); (b) pre-commit hook detecting manifest version delta without MIGRATIONS entry; (c) agent template dispatch protocol explicitly requires MIGRATIONS.json edit step in the dual-location procedure.
+
 ### ✅ BL-W32-12 SHIPPED (2026-05-09, PR #164) — pathlib write_text security false-negative
 
 - `architect-bash-write-gate.js` now correctly detects `pathlib.Path.write_text()/write_bytes()` inside `python3 -c "..."` wrappers with backslash-escaped inner quotes.
