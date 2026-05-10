@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.29.0"
+template_version: "1.30.0"
 skills:
   - test
   - test-full-parallel
@@ -406,7 +406,7 @@ Bash("./gradlew :module:test | grep FAILED", run_in_background=true)
 
 **Rule**: pipe operators (`| tail`, `| head`, `| grep`, `| tee`) BUFFER the stdout stream → background task notification never fires → agent hangs indefinitely.
 
-**Also**: skills (`/test`, `/test-full-parallel`, `/coverage`) are declared in your frontmatter for a reason — use them. **Never `./gradlew` directly, never wrapper scripts (`gradle-run.ps1`, `gradle-run.sh`).** These break when env vars are missing.
+**Also**: skills (`/test`, `/test-full-parallel`, `/coverage`, `/test-changed`) wrap `kmp-test-runner` v0.9.0+ via `scripts/{sh,ps1}/*` thin wrappers — that chain is the canonical path. **Never `./gradlew` directly outside the chain.** See [docs/testing/cli-hub.md](../../docs/testing/cli-hub.md).
 
 ## Done Criteria
 

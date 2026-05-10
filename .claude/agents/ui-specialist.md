@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [compose, ui, accessibility, material3]
 token_budget: 3000
-template_version: "1.17.0"
+template_version: "1.18.0"
 memory: project
 skills:
   - accessibility
@@ -240,9 +240,9 @@ UnsupportedClassVersionError / class version mismatch:
 - All mandatory checks pass
 - No HIGH severity violations unreported
 - `/test <module>` passes on all touched modules
-- MUST report to arch-testing and arch-integration and wait for verified and APPROVED before reporting task completion to team-lead
+- MUST report to arch-testing and arch-integration and wait for APPROVE verdict before reporting task completion to team-lead
 - tests MUST pass before reporting done â€” include pass/fail evidence in report
-- NEVER report 'no changes needed' without evidence â€” run tests, grep for expected changes, verify file state
+- NEVER report 'no changes needed' without evidence â€” run tests, verify via your reporting architect (Grep is FORBIDDEN per BANNED TOOLS)
 
 ## MCP Tools (when available)
 - `compose-preview-audit` â€” validate @Preview coverage
