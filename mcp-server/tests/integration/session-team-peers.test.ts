@@ -35,7 +35,7 @@ describe('dev template existence', () => {
 // ---------------------------------------------------------------------------
 describe('dev template structure — template_version in frontmatter', () => {
   const EXPECTED_VERSIONS: Record<string, string> = {
-    'test-specialist.md': '1.22.0',
+    'test-specialist.md': '1.23.0',
     'ui-specialist.md': '1.17.0',
     'data-layer-specialist.md': '1.15.0',
     'domain-model-specialist.md': '1.15.0',

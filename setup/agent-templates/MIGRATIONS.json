@@ -353,6 +353,11 @@
         "date": "2026-05-05",
         "breaking": false,
         "note": "Add before/after delta protocol to arch-testing template (BL-W41 PR2)"
+      },
+      "1.29.0": {
+        "date": "2026-05-09",
+        "breaking": false,
+        "note": "PR2 cli-audit-pr2: Add CLI Mandate block (arch-testing variant — must verify dispatches honor kmp-test-runner CLI-only mandate). Cross-links docs/testing/cli-agent-mandate.md."
       }
     },
     "arch-platform": {
@@ -872,6 +877,11 @@
         "date": "2026-05-09",
         "breaking": false,
         "note": "Bump kmp-test-runner version pins v0.8.1 -> v0.9.0 at lines 155, 161, 166, 167, 189. Mechanical version-string bump. Pre-flight verified GREEN: wrappers do not parse JSON envelope, so schema v1->v2 changes (no_test_modules exit-code split, flavor_unused promotion, isolated_runtime_race guard) do not require adaptation."
+      },
+      "1.23.0": {
+        "date": "2026-05-09",
+        "breaking": false,
+        "note": "PR2 cli-audit-pr2: Add CLI Mandate block (MANDATE/FORBID for kmp-test-runner v0.9.0+ CLI-only). Cross-links docs/testing/cli-agent-mandate.md and cli-hub.md (created in C1). Closes Step 2 PR2 of v0.9.0 incorporation."
       }
     },
     "ui-specialist": {
