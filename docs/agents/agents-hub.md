@@ -69,6 +69,9 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [commit-spec-validation](commit-spec-validation.md) | Cheat-sheet for valid commit types (`reusable-commit-lint.yml:25`) + scopes (`l0-ci.yml:22`) — referenced by arch-platform-prep-authoring-checklist.md Check 2 |
 | [dual-location-protocol](dual-location-protocol.md) | Agent template SOURCE/COPY sync protocol: manifest-bump-first, MIGRATIONS.json Write-only, rehash command (BL-bump-ktr-03) |
 | [arch-testing-dispatch-protocol](arch-testing-dispatch-protocol.md) | Per-dispatch validation rules for arch-testing: scope gate, pattern check, spec completeness, TDD order audit |
+| [arch-scope-extension-protocol](arch-scope-extension-protocol.md) | Scope Extension Protocol (OBS-A HARD SELF-GATE, T-BUG-011) — 3-check gate before any scope extension SendMessage to team-lead |
+| [arch-reporter-protocol](arch-reporter-protocol.md) | Reporter Protocol (MANDATORY, T-BUG-012) — team-lead liveness check before every SendMessage to team-lead |
+| [arch-message-topic-discipline](arch-message-topic-discipline.md) | Message Topic Discipline — one SendMessage per topic; mixing topics creates ambiguous receiver state |
 | [context-provider-adoption-hooks](context-provider-adoption-hooks.md) | Context-provider adoption gate + tool-use observability layer (session-level enforcement) |
 | [knowledge-currency-gate](knowledge-currency-gate.md) | Knowledge currency gate: CP verification required before any KMP capability claim in arch dispatches |
 | [main-agent-orchestration-guide](main-agent-orchestration-guide.md) | Orchestration guide for the main agent: team topology, phase protocol, architect routing, quality gates |

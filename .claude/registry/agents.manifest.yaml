@@ -233,8 +233,8 @@ agents:
   arch-integration:
     canonical_name: arch-integration
     subagent_type: arch-integration
-    template_version: "1.24.0"
-    template_frontmatter_sha256: 43596f306a5c9699289c5a4322438a3c6356327cad761f3e9e3bcfaf2385aaf1
+    template_version: "1.24.1"
+    template_frontmatter_sha256: 6e89d5784e4b616a8f407649e038a58be31e16baba0b38d5bd745d729ef62781
     category: architect
     lifecycle: ephemeral
     description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -580,8 +580,8 @@ agents:
   context-provider:
     canonical_name: context-provider
     subagent_type: context-provider
-    template_version: "3.4.1"
-    template_frontmatter_sha256: 56494a442b399bb05ee42e1f7e9063d6d1350289ac7329f33fc2ed0a943f2bca
+    template_version: "3.4.2"
+    template_frontmatter_sha256: 7b4312e1643ae833b0e2d405e3255ddec16772a009fa281cacfb0f612256e823
     category: context
     lifecycle: persistent
     description: "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only."

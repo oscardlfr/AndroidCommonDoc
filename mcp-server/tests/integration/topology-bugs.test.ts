@@ -27,6 +27,10 @@ function readAgent(name: string): { claude: string; template: string } {
   };
 }
 
+function readDoc(slug: string): string {
+  return fs.readFileSync(path.join(ROOT, "docs/agents", `${slug}.md`), "utf-8");
+}
+
 function extractFrontmatter(raw: string): Record<string, unknown> | null {
   const m = raw.match(/^---\n([\s\S]*?)\n---/);
   if (!m) return null;
@@ -233,12 +237,15 @@ describe("T-BUG-009: catalog-coverage-check script exists in both shell flavors"
 // ── OBS-A: architect Scope Extension Protocol ──────────────────────────────
 
 describe("OBS-A: architect templates have Scope Extension Protocol", () => {
+  const scopeExtDoc = readDoc("arch-scope-extension-protocol");
   for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
     it(`${name} has Scope Extension Protocol block`, () => {
       const { claude, template } = readAgent(name);
       for (const content of [claude, template]) {
-        expect(content).toMatch(/Scope Extension Protocol|OBS-A/);
-        expect(content).toMatch(/scope extension request|wait for explicit team-lead approval/i);
+        // Pointer line in agent template OR full body in sub-doc satisfies the assertion.
+        const combined = content + scopeExtDoc;
+        expect(combined).toMatch(/Scope Extension Protocol|OBS-A/);
+        expect(combined).toMatch(/scope extension request|wait for explicit team-lead approval/i);
       }
     });
   }
@@ -290,23 +297,27 @@ describe("T-BUG-010: team-lead.md retired W31.6 — main-agent-orchestration-gui
 // ── T-BUG-011: arch-* OBS-A HARD self-gate ─────────────────────────────────
 
 describe("T-BUG-011: arch-* OBS-A is a HARD SELF-GATE (not descriptive)", () => {
+  const scopeExtDoc = readDoc("arch-scope-extension-protocol");
   for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
     it(`${name} has HARD SELF-GATE with wave-distance + specialty + scope trigger checks`, () => {
       const { claude, template } = readAgent(name);
       for (const content of [claude, template]) {
-        expect(content).toMatch(/T-BUG-011/);
-        expect(content).toMatch(/HARD SELF-GATE/);
-        expect(content).toMatch(/Wave-distance check/);
-        expect(content).toMatch(/Specialty check/);
+        // Body strings may live in sub-doc (arch-scope-extension-protocol.md) after atomization.
+        // Union agent content with sub-doc so pointer-only templates still pass.
+        const combined = content + scopeExtDoc;
+        expect(combined).toMatch(/T-BUG-011/);
+        expect(combined).toMatch(/HARD SELF-GATE/);
+        expect(combined).toMatch(/Wave-distance check/);
+        expect(combined).toMatch(/Specialty check/);
         // Wave 23: arch-platform + arch-integration renamed the check item from
         // "PLAN.md trigger check" → "Scope-doc trigger check" (reflects that the
         // authoritative source is now scope_doc_path, not PLAN.md directly).
         // arch-testing still uses the old inline form. Accept both.
-        expect(content).toMatch(/Scope-doc trigger check|PLAN\.md trigger check/);
+        expect(combined).toMatch(/Scope-doc trigger check|PLAN\.md trigger check/);
         // REFUSE language must appear (hard-stop, not suggestion)
-        expect(content).toMatch(/REFUSE/);
+        expect(combined).toMatch(/REFUSE/);
         // Anti-pattern: non-adjacent wave (N+2+) must be explicitly forbidden
-        expect(content).toMatch(/non-adjacent wave|N\+2 or further/i);
+        expect(combined).toMatch(/non-adjacent wave|N\+2 or further/i);
       }
     });
   }
@@ -315,15 +326,19 @@ describe("T-BUG-011: arch-* OBS-A is a HARD SELF-GATE (not descriptive)", () => 
 // ── T-BUG-012: arch-* Reporter Protocol (team-lead liveness + fallback) ───────────
 
 describe("T-BUG-012: arch-* Reporter Protocol checks team-lead liveness and falls back to team-lead", () => {
+  const reporterDoc = readDoc("arch-reporter-protocol");
   for (const name of ["arch-platform.md", "arch-testing.md", "arch-integration.md"]) {
     it(`${name} has Reporter Protocol section with liveness check + [team-lead-absent] fallback`, () => {
       const { claude, template } = readAgent(name);
       for (const content of [claude, template]) {
-        expect(content).toMatch(/T-BUG-012/);
-        expect(content).toMatch(/Reporter Protocol/);
-        expect(content).toMatch(/Liveness check|team-lead.*alive|shutdown notification/i);
-        expect(content).toMatch(/\[team-lead-absent\]/);
-        expect(content).toMatch(/fall.*back.*team-lead|team-lead.*fallback|SendMessage.*team-lead/i);
+        // Body strings may live in sub-doc (arch-reporter-protocol.md) after atomization.
+        // Union agent content with sub-doc so pointer-only templates still pass.
+        const combined = content + reporterDoc;
+        expect(combined).toMatch(/T-BUG-012/);
+        expect(combined).toMatch(/Reporter Protocol/);
+        expect(combined).toMatch(/Liveness check|team-lead.*alive|shutdown notification/i);
+        expect(combined).toMatch(/\[team-lead-absent\]/);
+        expect(combined).toMatch(/fall.*back.*team-lead|team-lead.*fallback|SendMessage.*team-lead/i);
       }
     });
   }
