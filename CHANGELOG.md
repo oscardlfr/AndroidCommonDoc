@@ -10,6 +10,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **CLI hub at `docs/testing/`** (12 atomic sub-docs): cli-hub, cli-tests-{jvm, android-unit, android-instrumented, ios, macos, js-wasm}, cli-coverage, cli-cache-management, cli-troubleshooting, cli-changed-modules, cli-agent-mandate. Comprehensive reference for kmp-test-runner v0.9.0+ CLI consumption across all KMP platforms. Each sub-doc carries L0 frontmatter (scope, sources, targets, slug, monitor_urls).
 - **CLI Mandate pointer block** in `setup/agent-templates/test-specialist.md` (1.22.0→1.23.0) and `setup/agent-templates/arch-testing.md` (1.28.0→1.29.0). Templates link to canonical MANDATE/FORBID at `docs/testing/cli-agent-mandate.md`.
 
+### Fixed
+
+- **Pre-CLI references purged** from 5 agent templates (PR #170 cli-mandate-cleanup, follow-up to PR #169 audit). Closes 3 findings:
+  - 4 dev specialist templates (data-layer, domain-model, test-specialist, ui-specialist): "grep for expected changes" bullet contradicted BANNED TOOLS section (Grep tool FORBIDDEN for these specialists). Rewritten to "verify via reporting architect".
+  - Same 4 templates: "verified and APPROVED" old verdict nomenclature → "APPROVE verdict".
+  - arch-testing.md L409: "Never wrapper scripts" was incoherent with canonical chain (skill → wrapper → CLI). Rewritten to clarify wrappers wrap kmp-test-runner v0.9.0+.
+
+Manifests bumped (1.29.0→1.30.0 arch-testing, 1.23.0→1.24.0 test-specialist, 1.15.0→1.16.0 data-layer, 1.15.0→1.16.0 domain-model, 1.17.0→1.18.0 ui-specialist) + MIGRATIONS.json entries + 4 vitest test files updated.
+
 ### Changed
 
 - **kmp-test-runner-gate.js gate-expansion** (CLI-only mandate enforcement). Allowlist-then-block architecture replaces the 3-pattern literal blocklist. Allowlist (10 patterns): `kmp-test info|describe`, `assembleAndroidTest`, `kover*Report`, `createDebugCoverageReport`, `dependencyInsight`, `outgoingVariants`, `testRuntimeClasspath`, `*PrintCommand`/`*DryRun` helpers, plus existing env+inline bypass. Block regex (4 patterns) catches all `*Test` task variants KMP-wide (jvm, common, android-unit, android-instrumented, ios, macos, js, wasm) plus `allTests`, `check`, and module-qualified `:module:*Test`. Special JS/Wasm error message acknowledges that kmp-test-runner v0.9.0 does not yet support JS/Wasm targets. Bats coverage: 22 new cases (gate file 8→30 cases, full suite ~1093→1116).

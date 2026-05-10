@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.23.0"
+template_version: "1.24.0"
 memory: project
 skills:
   - test
@@ -312,9 +312,9 @@ UnsupportedClassVersionError / class version mismatch:
 - All tests pass (`/test-full-parallel`)
 - Coverage meets layer targets
 - No HIGH severity pattern violations unreported
-- MUST report to arch-testing and wait for verified and APPROVED before reporting task completion to team-lead
+- MUST report to arch-testing and wait for APPROVE verdict before reporting task completion to team-lead
 - tests MUST pass before reporting done â€” include pass/fail evidence in report
-- NEVER report 'no changes needed' without evidence â€” run tests, grep for expected changes, verify file state
+- NEVER report 'no changes needed' without evidence â€” run tests, verify via your reporting architect (Grep is FORBIDDEN per BANNED TOOLS)
 
 ## Findings Protocol
 

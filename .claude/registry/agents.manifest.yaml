@@ -181,8 +181,8 @@ agents:
   arch-testing:
     canonical_name: arch-testing
     subagent_type: arch-testing
-    template_version: "1.29.0"
-    template_frontmatter_sha256: 4188f1dea874ec45323b5197e8c8757cf7717b1543a0015bcc6b11b1e8a9f793
+    template_version: "1.30.0"
+    template_frontmatter_sha256: 83388bda50031ca7ee68cb1f44c13a88a30b2be9f2e7bb5225c665a956f43c2f
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -289,8 +289,8 @@ agents:
   test-specialist:
     canonical_name: test-specialist
     subagent_type: test-specialist
-    template_version: "1.23.0"
-    template_frontmatter_sha256: 369c1335736358f1a25701e0b67f292b1672ea5bc23423bca836d014e81ec7b8
+    template_version: "1.24.0"
+    template_frontmatter_sha256: 3dad97f025599d9cc2d8794cf07e7706dc8a677a0c883329d1858dcd83b23fd8
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation."
@@ -346,8 +346,8 @@ agents:
   data-layer-specialist:
     canonical_name: data-layer-specialist
     subagent_type: data-layer-specialist
-    template_version: "1.15.0"
-    template_frontmatter_sha256: aa37f95561a59f1d8dfc29e419e38899e5ff622ac3aef6ba5690bf5095e870e9
+    template_version: "1.16.0"
+    template_frontmatter_sha256: 00d52f8e9291550419cf35ab8028acd9d9922ca6469ef306e248e65c3d2c3884
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration."
@@ -403,8 +403,8 @@ agents:
   domain-model-specialist:
     canonical_name: domain-model-specialist
     subagent_type: domain-model-specialist
-    template_version: "1.15.0"
-    template_frontmatter_sha256: f3aaa79e68094ce276fc9c56c056017ccf8d052e830c081e1bafa07bdc2f7fe9
+    template_version: "1.16.0"
+    template_frontmatter_sha256: 6018e4265d532d5fa5f451eb136c0a53798f190eca9434a439ebbf4fb55c4b3c
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements domain layer — models, use cases, business logic. Reports to arch-platform."
@@ -459,8 +459,8 @@ agents:
   ui-specialist:
     canonical_name: ui-specialist
     subagent_type: ui-specialist
-    template_version: "1.17.0"
-    template_frontmatter_sha256: 5e21c9179afe991fce93bcea15db1dbc6c3e73cb076905173d259cda1ac0f3f0
+    template_version: "1.18.0"
+    template_frontmatter_sha256: 69ae94deec02176646d9237a71e843e09d42f11e5789e29398e22f5193df1abb
     category: core-specialist
     lifecycle: ephemeral
     description: "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations."

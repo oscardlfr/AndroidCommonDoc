@@ -252,8 +252,8 @@ describe('tl-phase-execution sub-doc — extracted phase protocol', () => {
 describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
-  it('template version 1.29.0', () => {
-    expect(archContent).toContain('template_version: "1.29.0"');
+  it('template version 1.30.0', () => {
+    expect(archContent).toContain('template_version: "1.30.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -264,8 +264,11 @@ describe('arch-testing template — Bash safety and version', () => {
     expect(archContent).toMatch(/BUFFER.*stdout|pipe.*buffer/i);
   });
 
-  it('bans gradle-run wrapper scripts by name', () => {
-    expect(archContent).toContain('gradle-run.ps1');
+  it('clarifies wrapper chain (skill -> wrapper -> CLI) per cli-mandate', () => {
+    // PR #170: replaced obsolete "bans gradle-run wrapper scripts" assertion. Per
+    // cli-mandate, wrappers wrap kmp-test-runner v0.9.0+ — they are the canonical
+    // path, NOT to be banned. arch-testing should explain the chain instead.
+    expect(archContent).toMatch(/wrap.*kmp-test-runner|cli-hub\.md|never.*gradlew.*directly.*outside.*chain/i);
   });
 
   it('instructs to use declared skills not raw gradlew', () => {
@@ -905,8 +908,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toContain('template_version: "1.10.0"');
   });
 
-  it('arch-testing version 1.29.0', () => {
-    expect(testingContent).toContain('template_version: "1.29.0"');
+  it('arch-testing version 1.30.0', () => {
+    expect(testingContent).toContain('template_version: "1.30.0"');
   });
 });
 
