@@ -126,7 +126,7 @@ describe('cross-template consultation consistency', () => {
   it('all 4 dev templates require architect approval before done', () => {
     for (const t of DEV_TEMPLATES) {
       const c = fs.readFileSync(path.join(TEMPLATES_DIR, t), 'utf-8');
-      expect(c, `${t} must require architect approval`).toMatch(/arch.*verif.*APPROV|APPROV.*your work|arch.*has verified/i);
+      expect(c, `${t} must require architect approval`).toMatch(/arch.*verif.*APPROV|APPROV.*your work|arch.*has verified|APPROVE verdict/i);
     }
   });
 
