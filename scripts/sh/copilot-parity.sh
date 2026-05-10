@@ -197,6 +197,20 @@ for template in "$TEMPLATES_DIR"/*.prompt.md; do
         elif $VERBOSE; then
             echo "  [OK]      $tname.prompt.md -- has implementation content"
         fi
+    elif grep -q "^## Reference" "$template"; then
+        # Reference template: check for non-empty reference body
+        has_content=$(awk '
+            /^## Reference/{found_section=1; next}
+            found_section && /[^ \t]/{found=1}
+            END{print found ? "yes" : "no"}
+        ' "$template")
+        if [[ "$has_content" == "no" ]]; then
+            EMPTY+=("$tname")
+            echo "  [EMPTY]   $tname.prompt.md -- reference section is empty"
+            empty_found=true
+        elif $VERBOSE; then
+            echo "  [OK]      $tname.prompt.md -- has reference content"
+        fi
     else
         EMPTY+=("$tname")
         echo "  [EMPTY]   $tname.prompt.md -- no Implementation or Instructions section"
