@@ -19,6 +19,7 @@ After 2-pass empirical drift audit on 2026-05-10, **only ~10 items genuinely pen
 | ~~BL-bump-ktr-02~~ | ~~MED (recurring)~~ | ~~Commit-lint type vs scope confusion in dispatches; needs cheat-sheet~~ | ✅ SHIPPED 2026-05-10 (#173) |
 | ~~BL-bump-ktr-03~~ | ~~MED~~ | ~~MIGRATIONS.json gap when template_version bumped; extend dual-location checklist~~ | ✅ SHIPPED 2026-05-10 (#173) |
 | ~~BL-Wave-B-adapter-bug~~ | ~~MED (recurring)~~ | ~~copilot-adapter.sh `reference` branch missing; android-skills-consume.prompt.md drift 6+ PRs~~ | ✅ SHIPPED 2026-05-10 (#173) |
+| ~~BL-Wave-B-bis-topology-gap~~ | ~~MED~~ | ~~team-lead bypass of planner ownership of `.planning/wave-*/PLAN.md` — 3 sub-gaps: G1 FORBIDDEN docs, G2 mechanical hook (plan-md-write-gate.js), G3 Wave PLAN.md trigger note~~ | ✅ SHIPPED 2026-05-10 (#175) |
 | arch-testing line-anchor | LOW | arch-testing verification anchored on line range, not block content (false-failure) | Wave B |
 | BL-W32-11 (sub-items) | MED | `docs/agents/claude-md-template.md:158,163` + `tl-model-profiles.md:125` reference deprecated `team-lead.md` | Wave C |
 | BL-W30-02 | LOW | CP shutdown latency memory note (incorrect "ignores shutdown_request" claim) | Wave C |
