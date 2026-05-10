@@ -125,10 +125,10 @@ describe('Wave 1: template_version bumped in architects', () => {
     expect(content).toMatch(/template_version:\s*"1.30.0"/);
   });
 
-  it('arch-platform.md template_version is "1.27.0"', () => {
-    // BL-W42 PR2: bumped from 1.26.0 → 1.27.0 (Pre-Execute Authoring Checklist)
+  it('arch-platform.md template_version is "1.28.0"', () => {
+    // Wave B: bumped from 1.27.0 → 1.28.0 (disk-write block + commit + dual-location pointers)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.27.0"/);
+    expect(content).toMatch(/template_version:\s*"1.28.0"/);
   });
 
   it('arch-integration.md template_version is "1.24.0"', () => {

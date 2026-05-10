@@ -471,6 +471,11 @@
         "date": "2026-05-05",
         "summary": "BL-W42 PR2: Pre-Execute Authoring Checklist (extract to sub-doc)",
         "breaking": false
+      },
+      "1.28.0": {
+        "date": "2026-05-10",
+        "summary": "Wave B: disk-write verdict block (BL-W31.7-09), APPEND-not-OVERWRITE for EXECUTE (BL-bump-ktr-01), commit cheat-sheet pointer (BL-bump-ktr-02), dual-location pointer (BL-bump-ktr-03). Extract Checks to kmp-checks-catalog.md sub-doc.",
+        "breaking": false
       }
     },
     "arch-integration": {
