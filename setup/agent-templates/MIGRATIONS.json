@@ -357,12 +357,17 @@
       "1.29.0": {
         "date": "2026-05-09",
         "breaking": false,
-        "note": "PR2 cli-audit-pr2: Add CLI Mandate block (arch-testing variant — must verify dispatches honor kmp-test-runner CLI-only mandate). Cross-links docs/testing/cli-agent-mandate.md."
+        "note": "PR2 cli-audit-pr2: Add CLI Mandate block (arch-testing variant â€” must verify dispatches honor kmp-test-runner CLI-only mandate). Cross-links docs/testing/cli-agent-mandate.md."
       },
       "1.30.0": {
         "date": "2026-05-10",
         "breaking": false,
-        "note": "PR #170 cli-mandate-cleanup: clarify wrapper chain at L409 — was \"Never wrapper scripts\" (incoherent with skill→wrapper→CLI chain), now \"Skills wrap kmp-test-runner v0.9.0+ via scripts/{sh,ps1}/* — never invoke gradle outside the chain\". Cleanup C5 finding from PR #169 audit."
+        "note": "PR #170 cli-mandate-cleanup: clarify wrapper chain at L409 â€” was \"Never wrapper scripts\" (incoherent with skillâ†’wrapperâ†’CLI chain), now \"Skills wrap kmp-test-runner v0.9.0+ via scripts/{sh,ps1}/* â€” never invoke gradle outside the chain\". Cleanup C5 finding from PR #169 audit."
+      },
+      "1.30.1": {
+        "date": "2026-05-10",
+        "breaking": false,
+        "note": "Wave C T6: scrub private project name examples (DawSync → L2 consumer pattern, daw-guardian → <feature-guardian>) in body — no frontmatter change. Patch bump."
       }
     },
     "arch-platform": {
@@ -616,6 +621,11 @@
         "date": "2026-05-09",
         "summary": "BL-W46.1 PR-B: add mcp__androidcommondoc__vault-status to tools frontmatter (body-xref gap closure)",
         "breaking": false
+      },
+      "3.4.1": {
+        "date": "2026-05-10",
+        "breaking": false,
+        "note": "Wave C T6: scrub literal cross-project paths (../DawSync/, ../shared-kmp-libs/) → generic placeholders (../<l2-project>/, ../<l1-project>/) with config note. Patch bump."
       }
     },
     "doc-updater": {
@@ -637,7 +647,7 @@
       "2.4.0": {
         "date": "2026-04-21",
         "breaking": false,
-        "note": "Wave 25: declare 8 MCP tools in frontmatter (ingest-content, search-docs, validate-doc-update, validate-doc-structure, check-doc-patterns, audit-docs, check-version-sync, suggest-docs). New §5 Ingestion Handler -- receives approved-by-user payload from team-lead, runs ingest-content MCP tool, writes docs/{cat}/{slug}.md."
+        "note": "Wave 25: declare 8 MCP tools in frontmatter (ingest-content, search-docs, validate-doc-update, validate-doc-structure, check-doc-patterns, audit-docs, check-version-sync, suggest-docs). New Â§5 Ingestion Handler -- receives approved-by-user payload from team-lead, runs ingest-content MCP tool, writes docs/{cat}/{slug}.md."
       },
       "2.6.0": {
         "date": "2026-05-02",
@@ -718,6 +728,11 @@
         "date": "2026-04-19",
         "breaking": false,
         "note": "W19-S2b: added Per-Session Gate block -- Grep/Glob/Bash blocked until CP consulted (hook PR #51)"
+      },
+      "1.1.1": {
+        "date": "2026-05-10",
+        "breaking": false,
+        "note": "Wave C T6: scrub private project name examples (DawSync + DawSyncWeb → L2 app + companion web) in body. Patch bump."
       }
     },
     "platform-auditor": {
@@ -896,7 +911,7 @@
       "1.24.0": {
         "date": "2026-05-10",
         "breaking": false,
-        "note": "PR #170 cli-mandate-cleanup: replace pre-CLI bullets — \"verified and APPROVED\" → \"APPROVE verdict\" + \"grep for expected changes\" → \"verify via reporting architect (Grep is FORBIDDEN per BANNED TOOLS)\". Cleanup C5 finding from PR #169 audit."
+        "note": "PR #170 cli-mandate-cleanup: replace pre-CLI bullets â€” \"verified and APPROVED\" â†’ \"APPROVE verdict\" + \"grep for expected changes\" â†’ \"verify via reporting architect (Grep is FORBIDDEN per BANNED TOOLS)\". Cleanup C5 finding from PR #169 audit."
       }
     },
     "ui-specialist": {
@@ -974,7 +989,7 @@
       "1.18.0": {
         "date": "2026-05-10",
         "breaking": false,
-        "note": "PR #170 cli-mandate-cleanup: replace pre-CLI bullets — \"verified and APPROVED\" → \"APPROVE verdict\" + \"grep for expected changes\" → \"verify via reporting architect (Grep is FORBIDDEN per BANNED TOOLS)\". Cleanup C5 finding from PR #169 audit."
+        "note": "PR #170 cli-mandate-cleanup: replace pre-CLI bullets â€” \"verified and APPROVED\" â†’ \"APPROVE verdict\" + \"grep for expected changes\" â†’ \"verify via reporting architect (Grep is FORBIDDEN per BANNED TOOLS)\". Cleanup C5 finding from PR #169 audit."
       }
     },
     "domain-model-specialist": {
@@ -1042,7 +1057,7 @@
       "1.16.0": {
         "date": "2026-05-10",
         "breaking": false,
-        "note": "PR #170 cli-mandate-cleanup: replace pre-CLI bullets — \"verified and APPROVED\" → \"APPROVE verdict\" + \"grep for expected changes\" → \"verify via reporting architect (Grep is FORBIDDEN per BANNED TOOLS)\". Cleanup C5 finding from PR #169 audit."
+        "note": "PR #170 cli-mandate-cleanup: replace pre-CLI bullets â€” \"verified and APPROVED\" â†’ \"APPROVE verdict\" + \"grep for expected changes\" â†’ \"verify via reporting architect (Grep is FORBIDDEN per BANNED TOOLS)\". Cleanup C5 finding from PR #169 audit."
       }
     },
     "data-layer-specialist": {
@@ -1110,7 +1125,7 @@
       "1.16.0": {
         "date": "2026-05-10",
         "breaking": false,
-        "note": "PR #170 cli-mandate-cleanup: replace pre-CLI bullets — \"verified and APPROVED\" → \"APPROVE verdict\" + \"grep for expected changes\" → \"verify via reporting architect (Grep is FORBIDDEN per BANNED TOOLS)\". Cleanup C5 finding from PR #169 audit."
+        "note": "PR #170 cli-mandate-cleanup: replace pre-CLI bullets â€” \"verified and APPROVED\" â†’ \"APPROVE verdict\" + \"grep for expected changes\" â†’ \"verify via reporting architect (Grep is FORBIDDEN per BANNED TOOLS)\". Cleanup C5 finding from PR #169 audit."
       }
     },
     "advisor": {
