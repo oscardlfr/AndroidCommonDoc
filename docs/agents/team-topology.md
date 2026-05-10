@@ -16,7 +16,7 @@ token_budget: 1500
 
 # Team Topology: 3-Phase Model
 
-Three sequential phases, each lightweight. Ten **session team peers** live in the `session-{project-slug}` team: five spawned at session start plus five core specialists added when Phase 2 begins. All carry context across phases. The project slug is derived from the project directory name (lowercased, hyphens replacing spaces -- e.g., `DawSync` becomes `daw-sync`).
+Three sequential phases, each lightweight. Ten **session team peers** live in the `session-{project-slug}` team: five spawned at session start plus five core specialists added when Phase 2 begins. All carry context across phases. The project slug is derived from the project directory name (lowercased, hyphens replacing spaces -- e.g., `MyApp` becomes `my-app`).
 
 ---
 

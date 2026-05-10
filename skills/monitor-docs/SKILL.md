@@ -15,7 +15,7 @@ copilot-template-type: behavioral
 /monitor-docs --tier 1
 /monitor-docs --tier 2
 /monitor-docs --review
-/monitor-docs --layer L1 --project-root /path/to/shared-kmp-libs
+/monitor-docs --layer L1 --project-root /path/to/{l1-project}
 ```
 
 ## Parameters

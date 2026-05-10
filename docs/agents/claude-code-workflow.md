@@ -47,7 +47,7 @@ Agents live in `.claude/agents/` (canonical). Claude Code invokes them natively 
 ### Invocation
 
 ```
-delegate to daw-guardian: "Audit changed files in core/data/ for ProcessingMode violations"
+delegate to <feature-guardian>: "Audit changed files in core/data/ for domain violations"
 ```
 
 ### When to Delegate vs Inline
@@ -136,14 +136,14 @@ Every task type has a verification pattern:
 | Refactor | `/test-full-parallel` → no regressions |
 | Release | `/pre-release --quick` → `/bump-version` → `/git-flow release` |
 | UI change | Verify in browser/app → delegate to `ui-specialist` |
-| DAW-related | Test SILENT mode → delegate to `daw-guardian` |
+| Domain-specific | Test domain invariant → delegate to `<feature-guardian>` |
 
 Work is done when verification passes, not when code compiles.
 
 ## The Three Layers
 
 ```
-L0 (AndroidCommonDoc)          L1 (shared-kmp-libs)          L2 (DawSync)
+L0 (AndroidCommonDoc)          L1 (project)                  L2 (consumer)
 ┌─────────────────────┐        ┌─────────────────────┐       ┌──────────────────────┐
 │ skills/             │──sync─▶│ .claude/skills/      │       │ .claude/skills/      │
 │ .claude/agents/     │──sync─▶│ .claude/agents/      │       │ .claude/agents/      │

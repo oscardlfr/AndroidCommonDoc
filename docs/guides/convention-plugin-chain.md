@@ -67,7 +67,7 @@ tasks.withType<Detekt>().configureEach {
 ### L1 Override Example
 
 ```yaml
-# shared-kmp-libs/detekt-override.yml
+# {l1-project}/detekt-override.yml
 # Only override severity — L0 base provides all other config
 AndroidCommonDoc:
   NoTurbineRule:

@@ -49,7 +49,7 @@ Keys follow the pattern: `<source>:<category>:<detail>`
 | `readme-audit` | `readme-audit:misplaced:Script 'audit-append'*` |
 | `pattern-lint` | `pattern-lint:cancellation-rethrow:core/data/SomeRepo.kt:42` |
 | `full-audit` | `full-audit:code-quality:cancellation-exception-swallowed:*` |
-| `agent:<name>` | `agent:daw-guardian:cpu-usage-warning:CaptureWatcher.kt` |
+| `agent:<name>` | `agent:<feature-guardian>:domain-warning:WatcherClass.kt` |
 
 ## Prefix Matching
 

@@ -119,7 +119,7 @@ Before promoting from L1 → L0, verify each item:
 
 ## Inaugural Example: `/release-build-verify`
 
-Ships in L1 (`shared-kmp-libs/.claude/skills/release-build-verify/`) during BL-W35.
+Ships in L1 (`{l1-project}/.claude/skills/release-build-verify/`) during BL-W35.
 
 Purpose: validates R8 strip detection patterns across AGP 8/9 without requiring a full release build.
 

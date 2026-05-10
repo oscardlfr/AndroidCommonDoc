@@ -13,7 +13,7 @@ copilot-template-type: behavioral
 ```
 /generate-api-docs                                    # full project
 /generate-api-docs --module core-domain               # single module
-/generate-api-docs --project-root ../shared-kmp-libs  # cross-project
+/generate-api-docs --project-root ../{l1-project}  # cross-project
 /generate-api-docs --validate-only                    # check docs/api/ freshness without regenerating
 ```
 

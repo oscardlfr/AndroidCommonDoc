@@ -12,7 +12,7 @@ Check libs.versions.toml against Maven Central for outdated dependencies. Caches
 ## Usage Examples
 
 ```
-/check-outdated                           # Check shared-kmp-libs catalog
+/check-outdated                           # Check the L1 project catalog
 /check-outdated --project ~/MyApp         # Check a specific project
 /check-outdated --refresh                 # Bypass cache, query Maven Central
 /check-outdated --json                    # Machine-readable JSON output

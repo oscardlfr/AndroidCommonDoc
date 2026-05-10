@@ -150,7 +150,7 @@ Catalog coverage scans `*.gradle.kts` in the consumer project for hardcoded depe
 - Findings → WARNING (reports for visibility, does NOT block the PR).
 - Fix: replace hardcoded literal with `libs.<alias>` or `sharedLibs.<alias>` — add to the catalog if missing.
 
-**Why it matters (T-BUG-013)**: L2 debug session (2026-04-18) caught `jna-platform:5.14.0` hardcoded in DawSync while L1 `shared-kmp-libs` had bumped to `5.16.0`. Silent split-version drift. The script's logic already scanned `*.gradle.kts` correctly (since T-BUG-009) but was never invoked from any pipeline — pure theater. This step closes the wiring gap.
+**Why it matters (T-BUG-013)**: An L2 debug session (2026-04-18) caught `jna-platform:5.14.0` hardcoded in an L2 consumer while the L1 project had bumped to `5.16.0`. Silent split-version drift. The script's logic already scanned `*.gradle.kts` correctly (since T-BUG-009) but was never invoked from any pipeline — pure theater. This step closes the wiring gap.
 
 ### Step 5.8 — Agent template tests
 

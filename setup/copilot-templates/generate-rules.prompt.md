@@ -15,7 +15,7 @@ Generate Detekt custom rules from pattern doc frontmatter. Use when asked to cre
 /generate-rules
 /generate-rules --dry-run
 /generate-rules --consumer path/to/project
-/generate-rules --consumer ../shared-kmp-libs --rules-dir detekt-rules-l1 --package com.grinx.shared.detekt.rules.generated
+/generate-rules --consumer ../{l1-project} --rules-dir detekt-rules-l1 --package com.example.shared.detekt.rules.generated
 ```
 
 ## Parameters

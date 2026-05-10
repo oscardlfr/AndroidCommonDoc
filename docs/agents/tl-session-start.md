@@ -92,7 +92,7 @@ When the user task involves **pattern searching** (find files matching X, count 
 - Dispatching to architect with "use grep to find X" — even though architect has Bash, this bypasses the PR #40 design AND wastes architect tokens on search-mechanics
 - Letting architect or specialist "just bash-grep it" — same bypass, no audit trail
 
-Why: L2 DawSync session (2026-04-18) — the main agent dispatched grep work directly to arch-platform instead of context-provider. arch-platform used `bash grep` (mechanically allowed since it has Bash). Result: search bypassed the curated knowledge layer. The Search Dispatch Protocol makes context-provider the entry point for all search-related work.
+Why: An L2 consumer session (2026-04-18) — the main agent dispatched grep work directly to arch-platform instead of context-provider. arch-platform used `bash grep` (mechanically allowed since it has Bash). Result: search bypassed the curated knowledge layer. The Search Dispatch Protocol makes context-provider the entry point for all search-related work.
 
 ### FORBIDDEN Agent Launches (non-negotiable)
 - **FORBIDDEN**: Spawning core specialists outside Phase 2 start — the 5 core specialists are spawned exactly once when Phase 2 begins
@@ -110,7 +110,7 @@ Why: L2 DawSync session (2026-04-18) — the main agent dispatched grep work dir
 
 ### Session Start: Session Team Setup (mandatory)
 
-**Project slug**: derive from the project root directory name, lowercased with hyphens. Examples: `dawsync`, `shared-kmp-libs`, `androidcommondoc`. This prevents team name collisions when multiple Claude Code sessions run simultaneously.
+**Project slug**: derive from the project root directory name, lowercased with hyphens. Examples: `my-app`, `my-kmp-libs`, `androidcommondoc`. This prevents team name collisions when multiple Claude Code sessions run simultaneously.
 
 **FIRST thing when session starts** — before ANY planning or unrelated Agent():
 

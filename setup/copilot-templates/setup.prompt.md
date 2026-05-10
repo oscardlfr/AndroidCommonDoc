@@ -142,10 +142,10 @@ Scanning for L0/L1 sources...
 
 Discovered sources:
   ✅ L0: AndroidCommonDoc → ../AndroidCommonDoc (from $ANDROID_COMMON_DOC)
-  ✅ L1: shared-kmp-libs   → ../shared-kmp-libs  (found nearby)
+  ✅ L1: {l1-project}   → ../{l1-project}  (found nearby)
 
 Suggested topology: chain
-  Found L1 (shared-kmp-libs) — chain topology lets you inherit its conventions.
+  Found L1 ({l1-project}) — chain topology lets you inherit its conventions.
 
 Use these sources? [Y/n]
   (n = enter paths manually)
@@ -165,7 +165,7 @@ If **flat**: `topology: "flat"`, `sources` = `[{ layer: "L0", path: l0_source }]
 If **chain**: ask for the parent layer path:
 ```
 Parent layer path (relative to this project):
-> ../../shared-kmp-libs
+> ../../{l1-project}
 Parent layer name (e.g. L1):
 > L1
 ```

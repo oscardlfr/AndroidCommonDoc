@@ -15,7 +15,7 @@ assumes_read: team-topology, data-handoff-patterns
 
 # Cross-Layer Team Coordination Protocol
 
-When a task spans L1 (shared-kmp-libs) and L2 (DawSync, WakeTheCave), two independent session teams run in parallel and coordinate via filesystem handoff files — not direct messaging.
+When a task spans L1 (the L1 project) and L2 (consumer apps), two independent session teams run in parallel and coordinate via filesystem handoff files — not direct messaging.
 
 ## When to Use
 
@@ -32,8 +32,8 @@ When a task spans L1 (shared-kmp-libs) and L2 (DawSync, WakeTheCave), two indepe
 ## Architecture: Separate Teams per Layer
 
 ```
-Terminal 1 (L2 DawSync):         Terminal 2 (L1 shared-kmp-libs):
-session-dawsync team             session-shared-kmp-libs team
+Terminal 1 (L2 consumer):        Terminal 2 (L1 project):
+session-{l2-project} team        session-{l1-project} team
 ├── context-provider             ├── context-provider
 ├── 3 architects                 ├── architects
 ├── 4 core specialists           ├── core specialists
@@ -49,7 +49,7 @@ session-dawsync team             session-shared-kmp-libs team
 Direct `SendMessage` between teams is not possible — they live in different team namespaces. Teams coordinate via `.planning/HANDOFF.md` files:
 
 1. **L1 team writes** `.planning/HANDOFF-TO-L2.md` with API contract, breaking changes, and migration notes
-2. **L2 context-provider reads** `../shared-kmp-libs/.planning/HANDOFF-TO-L2.md`
+2. **L2 context-provider reads** `../{l1-project}/.planning/HANDOFF-TO-L2.md`
 3. **L2 team acts** on the handoff
 4. **L2 team writes** `.planning/HANDOFF-TO-L1.md` with integration feedback
 
@@ -60,7 +60,7 @@ The user monitors both terminals and acts as router for urgent decisions that ca
 ```markdown
 # Handoff: L1 → L2
 ## Date: {date}
-## From: session-shared-kmp-libs
+## From: session-{l1-project}
 ## To: session-dawsync
 ## Status: PENDING | ACKNOWLEDGED | COMPLETED
 

@@ -76,7 +76,7 @@ The Compose Multiplatform Gradle plugin ships a `defaultComposeProguardRules` co
 ### Practical Guidance for L1 Libraries
 
 1. **Each L1 module SHOULD ship a `consumer-rules.pro`** in its module root documenting keep rules for its public API surface.
-2. **The consumer app (e.g., DawSync desktop) MUST explicitly wire** all relevant `consumer-rules.pro` files via `configurationFiles.from(...)`.
+2. **The consumer app (L2 consumer desktop) MUST explicitly wire** all relevant `consumer-rules.pro` files via `configurationFiles.from(...)`.
 3. **The L1 convention plugin CANNOT auto-wire** consumer rules to downstream desktop apps — this is a fundamental ProGuard limitation, not a build system gap.
 4. **Document this in your consumer app's ProGuard setup** to avoid future confusion when R8 behavior is incorrectly assumed for Desktop.
 

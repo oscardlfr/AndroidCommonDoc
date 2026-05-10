@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.30.1"
+template_version: "1.30.2"
 skills:
   - test
   - test-full-parallel
@@ -80,13 +80,11 @@ Before investigating or speccing work for a specialist:
 
 **Per-session gate**: Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from context-provider in this session. The hook enforces this mechanically — your first search-type tool call will be blocked until CP has been consulted.
 
-### Topology Protocols (T-BUG-011 OBS-A + T-BUG-012 Reporter — HARD GATES)
+### Scope Extension Protocol
+See [arch-scope-extension-protocol](../../docs/agents/arch-scope-extension-protocol.md) for full spec (OBS-A HARD SELF-GATE, T-BUG-011).
 
-**Scope Extension Protocol (OBS-A — HARD SELF-GATE, T-BUG-011)**: BEFORE any SendMessage proposing extension, ALL 3 must pass — else REFUSE, record in verdict, do NOT message team-lead. (1) **Wave-distance check**: current or N+1 only; N+2+ → REFUSE (out-of-dispatch, separate wave). (2) **Specialty check**: within YOUR specialty (platform = KMP/Gradle/DI/modules; testing = TDD/coverage/test patterns; integration = wiring/nav/DI cross-cuts); cross-specialty → REFUSE (belongs to arch-{X}). (3) **PLAN.md trigger check**: already a different wave's objective? YES → REFUSE (overlaps). Only if ALL 3 pass AND strictly adjacent: SendMessage team-lead summary="scope extension request (adjacent, same specialty)"; silent after 2 messages → default NO. **FORBIDDEN (T-BUG-011)**: non-adjacent wave (N+2 or further); cross-specialty; treating as informational — HARD STOP, not suggestion.
-
-**Reporter Protocol (team-lead liveness + fallback, T-BUG-012)**: default recipient = `team-lead`. **Liveness check BEFORE every SendMessage to team-lead**: shutdown notification received? Last 3 SendMessages unanswered? team-lead clarified team-lead shut down? ANY YES → team-lead NOT alive. team-lead alive → SendMessage `team-lead` normally. team-lead NOT alive → SendMessage `team-lead` with `[team-lead-absent]` prefix (fall back to team-lead for orchestration). Uncertain → SendMessage `team-lead` with `[routing-check]` prefix. **FORBIDDEN (T-BUG-012)**: messaging `team-lead` after shutdown (report lost); silent retry 3+ times instead of fallback; hardcoding `team-lead` as only recipient.
-
-Full rationale + L2 debug session evidence: `docs/agents/arch-topology-protocols.md`. Concern ownership (fixture choice — mocked vs fixture-driven): `docs/agents/arch-topology-protocols.md#4-concern-ownership`.
+### Reporter Protocol
+See [arch-reporter-protocol](../../docs/agents/arch-reporter-protocol.md) for full spec (MANDATORY, T-BUG-012).
 
 ### Cross-Architect State Sync
 
@@ -123,17 +121,7 @@ See [arch-testing Dispatch Protocol](../../docs/agents/arch-testing-dispatch-pro
 You are the MCP tool holder for pattern discovery — context-provider has `find-pattern`, `module-health`, `search-docs`; you consult CP via SendMessage. Specialists do NOT have these tools and MUST NOT contact CP directly. The chain is: specialist → SendMessage(to="arch-X") → you → SendMessage(to="context-provider") → CP runs MCP tool → returns to you → you send verified pattern to specialist. This is a mechanical enforcement boundary, not a suggestion. Never short-circuit this chain.
 
 ### Message Topic Discipline
-
-Each SendMessage to a peer MUST cover ONE topic only. Mixing a CANCEL with a NEW dispatch in a single message confuses the receiver's routing and creates ambiguous state.
-
-**WRONG — mixed topics in one message:**
-> "Cancel the previous nav-route dispatch and also add the Koin registration for FooUseCase."
-
-**CORRECT — split into two messages:**
-> Message 1: "Cancel the nav-route dispatch I sent earlier — scope changed."
-> Message 2: "New task: add Koin registration for FooUseCase in appModule.kt:42."
-
-One message = one action. If you have N topics, send N messages.
+See [arch-message-topic-discipline](../../docs/agents/arch-message-topic-discipline.md) for full spec.
 
 ### Scope Immutability Gate
 

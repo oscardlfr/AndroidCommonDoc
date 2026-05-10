@@ -16,7 +16,7 @@ Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-mod
 /kdoc-audit --changed-only                     # only files changed in current branch
 /kdoc-audit --module core-domain               # single module deep audit
 /kdoc-audit --threshold 90                     # custom coverage target
-/kdoc-audit --project-root ../shared-kmp-libs  # cross-project
+/kdoc-audit --project-root ../{l1-project}  # cross-project
 /kdoc-audit --check-content                    # semantic: KDoc vs pattern docs (deep)
 ```
 

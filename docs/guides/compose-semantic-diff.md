@@ -77,7 +77,7 @@ In any feature's `desktopTest`:
 @Test
 fun `sessions empty state matches baseline`() = runComposeUiTest {
     setContent {
-        DawSyncTheme {
+        AppTheme {
             SessionsScreen(uiState = emptyUiState, onEvent = {}, ... )
         }
     }

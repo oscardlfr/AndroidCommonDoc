@@ -39,7 +39,7 @@
       "description": "Bridge to Google's Android CLI skill ecosystem. Documents how to install Google's official Android skills via `android skills add` and how they co-exist with L0 skills without conflict.",
       "category": "ecosystem",
       "tier": "extended",
-      "hash": "sha256:de8e0d3455afd0716826b21b729028524c8fddbe58d6310d19db8af85cef96cc",
+      "hash": "sha256:d535a4bcde2dee0f674707b83f0c7d6c1dd70b4f537fdbe2097ffe44f3d9da79",
       "dependencies": [],
       "frontmatter": {
         "name": "android-skills-consume",
@@ -310,7 +310,7 @@
       "description": "Check libs.versions.toml against Maven Central for outdated dependencies. Caches results in kdoc-state.json.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:5bd071fb851bcb2d6027024914604a26afcfb1d71e32bc308272fbebf439bc28",
+      "hash": "sha256:37edc46b491ddf7cd4af50f18c581142bc603fa033cb05195a982c7238815f27",
       "dependencies": [],
       "frontmatter": {
         "name": "check-outdated",
@@ -664,7 +664,7 @@
       "description": "Optional: Run Dokka + transformer to generate docs/api/ from KDoc in source code. Produces YAML-frontmatter docs consumable by context-provider and search-docs.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:50d4c3126fa78569da431507c19047d5a96d12f361380114c1c77b6f7ff1c8d1",
+      "hash": "sha256:db1e022cd3c9804af109244960ca69eccb7330307fe3708b9f3fb19917fb0be9",
       "dependencies": [],
       "frontmatter": {
         "name": "generate-api-docs",
@@ -694,7 +694,7 @@
       "description": "Generate Detekt custom rules from pattern doc frontmatter. Use when asked to create or update lint rules from documentation.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:873b6bf3b57bdaddf58c683c96192c16285f11db9d2b2e512fcc4778a7a896ff",
+      "hash": "sha256:7ace04d89a40d14790583c86a3c1294751b7e237e165e5f08f6305bb4e93f0bf",
       "dependencies": [],
       "frontmatter": {
         "name": "generate-rules",
@@ -811,7 +811,7 @@
       "description": "Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-module coverage, and regression warnings vs baseline.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:2968816c49bb33f137d2aa3396c6fcc05e53596b93f1dfda9ec53f47e2c5e958",
+      "hash": "sha256:ff3a1aa83e115c0722ef24e4f1bef75bf18b59c0fa6f4af651c26e232be773ab",
       "dependencies": [],
       "frontmatter": {
         "name": "kdoc-audit",
@@ -842,7 +842,7 @@
       "description": "Full-project KDoc migration orchestrator. Adds KDoc to all undocumented public APIs, module by module, informed by pattern docs.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:ffe7e26d4e922ee4e9f09a8f8584358bb12c23c1c215b286010f10ca089792dc",
+      "hash": "sha256:a3be94836ba55c28dc2228eef7b943e63108aee4e414c19beea765a8d70b4780",
       "dependencies": [],
       "frontmatter": {
         "name": "kdoc-migrate",
@@ -958,7 +958,7 @@
       "description": "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdated dependencies or doc freshness.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:96e31e591798b33c58c39d44c5e657af3279cc1be232d13ac4ea467695558b4b",
+      "hash": "sha256:7e322aa8e1658c0df7692cb3024ae3447c15f33f398c1ae449930f6b4d23d800",
       "dependencies": [],
       "frontmatter": {
         "name": "monitor-docs",
@@ -1043,7 +1043,7 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:13e3d1142ca62780a8f9139a40460d946e816fe45d3b0a554242eecbf9797eff",
+      "hash": "sha256:f88aee3d064780f304e5dedd99f564737c79d5753373211b1523f7c98bff7dca",
       "dependencies": [
         "scripts/sh/scan-secrets.sh",
         "scripts/sh/catalog-coverage-check.sh",
@@ -1362,7 +1362,7 @@
       "description": "Interactive wizard to fully configure a new or existing project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Creates l0-manifest.json, syncs selected assets, and verifies the result. Bilingual output (EN + ES).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:3f8aff5ca33125d2c5dc0588523cdef409018e30704fde1a28e23ffcb13586b2",
+      "hash": "sha256:bea8f1deb9406c8c52d9d2b6fe3eb81843ef2871fa77da5744806b3c2d4b4789",
       "dependencies": [
         "scripts/sh/sync-gsd-skills.sh",
         "scripts/sh/sync-gsd-agents.sh",
@@ -1948,7 +1948,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a6777f51f714e2eb69bce3db478b71b5d90c065cc0f7f91ecd65bfa386f919bf",
+      "hash": "sha256:a96332fc00a2e5a9e6b2de7ae3a46fced857e22ae2016552d2cca7ccabca4db8",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1963,7 +1963,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.28.0",
+        "template_version": "1.28.1",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1977,7 +1977,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:4738672c9d8af71108393ff82d4359e94dbbd0ab85ac5f815cf00866f77a9428",
+      "hash": "sha256:659b5e83e96dad9d4aa328a78e12acccc20029501494403d0b1649497fe7b006",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1992,7 +1992,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.30.1",
+        "template_version": "1.30.2",
         "skills": [
           "test",
           "test-full-parallel",

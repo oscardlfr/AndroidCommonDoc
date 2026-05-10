@@ -28,7 +28,7 @@ They can coexist because:
 - Dagger is pure codegen — no global runtime state, no singleton registry
 - Koin 4.x supports `koinApplication {}` — isolated instance, NOT global `startKoin`
 
-### Contrast with L2 (DawSync)
+### Contrast with L2 (consumer app)
 
 L2 passes `appModules` to `SharedSdk.init()` — app repositories, ViewModels, use cases, all as Koin modules. Everything resolves in ONE `koinApplication`:
 
@@ -166,7 +166,7 @@ The ViewModel doesn't know `EncryptionService` comes from Koin. It's just a cons
 
 ## The Key Difference From L2
 
-| | L2 (DawSync) — all Koin | Hybrid — Koin SDK + Hilt app |
+| | L2 (consumer app) — all Koin | Hybrid — Koin SDK + Hilt app |
 |---|---|---|
 | **App modules** | Passed as `appModules` to `SharedSdk.init()` | Stay in Hilt, never touch Koin |
 | **DI containers** | 1 (Koin) | 2 (Koin + Hilt) |
