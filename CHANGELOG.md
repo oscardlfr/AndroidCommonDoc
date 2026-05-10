@@ -5,6 +5,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (Wave B — arch-platform-hardening-bundle)
+
+- **`docs/agents/kmp-checks-catalog.md`** (NEW sub-doc, 44 lines): Six KMP architectural checks extracted verbatim from `arch-platform.md` L275-309 per atomicity LAW. `arch-platform.md` L275-309 replaced with 4-line pointer block. Net −31 lines on arch-platform.md (400→392 with other insertions).
+- **`docs/agents/commit-spec-validation.md`** (NEW sub-doc, 23 lines): Canonical types/scopes cheat-sheet sourced from `.github/workflows/reusable-commit-lint.yml:25` + `l0-ci.yml:22`. Inline pointer added to `arch-platform.md` Pre-Execute Authoring Checklist. Cross-reference added from `arch-platform-prep-authoring-checklist.md` Check 2. Closes BL-bump-ktr-02.
+- **`docs/agents/dual-location-protocol.md`** (NEW sub-doc, 36 lines): SOURCE→COPY sync steps, manifest-first versioning, Write-tool-only MIGRATIONS.json rule. Inline pointer added to `arch-platform.md`. Closes BL-bump-ktr-03.
+- **`agents-hub.md` 3 new pointer entries**: kmp-checks-catalog, commit-spec-validation, dual-location-protocol.
+- **Disk-Write + 1-Liner DM block** added to `setup/agent-templates/arch-platform.md` (mirrors `arch-testing.md` L336-353, name-adapted). Closes BL-W31.7-09 (HIGH PARTIAL).
+- **APPEND-not-OVERWRITE language** for EXECUTE phase verdict writes added to arch-platform disk-write block. Root-cause fix for PR #166 incident where overwrite erased `APPROVED-PREP` token triggering premature-execution-gate. Closes BL-bump-ktr-01.
+- **`scripts/tests/copilot-adapter-reference.bats`** (8 tests): New bats suite covering `copilot-adapter.sh` `reference` template_type branch. Root-cause fix for 6+ PRs of `android-skills-consume.prompt.md` drift. Closes BL-Wave-B-adapter-bug.
+- **Memory `feedback_l0_doc_atomicity_law`**: Canonicalized rule — atomicity > info preservation > compaction. Extract to sub-doc at size limit; never compress.
+- **Memory `feedback_planner_owns_plan_md`**: team-lead never drafts PLAN.md; planner agent owns all PLAN.md writes.
+- **arch-platform manifest 1.27.0 → 1.28.0** (`agents.manifest.yaml`) + MIGRATIONS.json Shape B entry (additive, no action required). 2 vitest assertion bumps: `template-wave1-rules.test.ts` + `three-phase-architecture.test.ts`.
+
 ### Added
 
 - **CLI hub at `docs/testing/`** (12 atomic sub-docs): cli-hub, cli-tests-{jvm, android-unit, android-instrumented, ios, macos, js-wasm}, cli-coverage, cli-cache-management, cli-troubleshooting, cli-changed-modules, cli-agent-mandate. Comprehensive reference for kmp-test-runner v0.9.0+ CLI consumption across all KMP platforms. Each sub-doc carries L0 frontmatter (scope, sources, targets, slug, monitor_urls).

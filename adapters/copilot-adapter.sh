@@ -10,6 +10,7 @@
 # Template types:
 #   - scripted:   skills with ## Implementation (bash/powershell code blocks)
 #   - behavioral: skills with copilot-template-type: behavioral (instruction-based)
+#   - reference:  skills with copilot-template-type: reference (full body under ## Reference header)
 #
 # Options:
 #   --clean   Remove orphaned templates whose skill is now copilot: false
@@ -114,15 +115,20 @@ for skill_dir in "$SKILLS_DIR"/*/; do
 
   output_file="$OUTPUT_DIR/$name.prompt.md"
 
-  # Determine template type: behavioral or scripted
-  if [ "$template_type" = "behavioral" ]; then
-    # Behavioral template: emit full skill body as instructions
+  # Determine template type: behavioral, reference, or scripted
+  if [ "$template_type" = "behavioral" ] || [ "$template_type" = "reference" ]; then
+    # Behavioral/reference template: emit full skill body as instructions
     body=$(awk '
       BEGIN { in_fm=0; past_fm=0 }
       /^---$/ && !in_fm { in_fm=1; next }
       /^---$/ && in_fm && !past_fm { past_fm=1; next }
       past_fm { print }
     ' "$skill_file" | sed '1{/^$/d}')
+
+    section_header="## Instructions"
+    if [ "$template_type" = "reference" ]; then
+      section_header="## Reference"
+    fi
 
     {
       echo "<!-- GENERATED from skills/$name/SKILL.md -- DO NOT EDIT MANUALLY -->"
@@ -138,14 +144,14 @@ for skill_dir in "$SKILLS_DIR"/*/; do
         printf "%s" "$param_prompts"
         echo ""
       fi
-      echo "## Instructions"
+      echo "$section_header"
       echo ""
       echo "$body"
     } > "$output_file"
 
     count_behavioral=$((count_behavioral + 1))
     generated_names+=("$name")
-    echo "  Generated (behavioral): setup/copilot-templates/$name.prompt.md"
+    echo "  Generated ($template_type): setup/copilot-templates/$name.prompt.md"
   else
     # Scripted template: extract Implementation code blocks
     is_orchestration=$(awk '/^## Implementation/{found=1; next} found && /orchestration workflow/{print "yes"; exit}' "$skill_file")

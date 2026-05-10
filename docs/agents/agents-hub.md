@@ -65,6 +65,9 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [tl-ingestion-request-handler](tl-ingestion-request-handler.md) | Ingestion-request handler: context-provider → user approval → doc-updater pipeline |
 | [arch-platform-prep-authoring-checklist](arch-platform-prep-authoring-checklist.md) | arch-platform pre-execute authoring checklist: cross-file pin scan, scope doc read, verdict field requirements |
 | [arch-platform-section-h-rule](arch-platform-section-h-rule.md) | arch-platform Section H authoring rule: manifest yaml required when versions bump, literal paths only |
+| [kmp-checks-catalog](kmp-checks-catalog.md) | 6 KMP architectural checks (extracted from arch-platform.md): source sets, dep direction, five-layer, convention plugins, pattern compliance, Compose resources |
+| [commit-spec-validation](commit-spec-validation.md) | Cheat-sheet for valid commit types (`reusable-commit-lint.yml:25`) + scopes (`l0-ci.yml:22`) — referenced by arch-platform-prep-authoring-checklist.md Check 2 |
+| [dual-location-protocol](dual-location-protocol.md) | Agent template SOURCE/COPY sync protocol: manifest-bump-first, MIGRATIONS.json Write-only, rehash command (BL-bump-ktr-03) |
 | [arch-testing-dispatch-protocol](arch-testing-dispatch-protocol.md) | Per-dispatch validation rules for arch-testing: scope gate, pattern check, spec completeness, TDD order audit |
 | [context-provider-adoption-hooks](context-provider-adoption-hooks.md) | Context-provider adoption gate + tool-use observability layer (session-level enforcement) |
 | [knowledge-currency-gate](knowledge-currency-gate.md) | Knowledge currency gate: CP verification required before any KMP capability claim in arch dispatches |

@@ -307,9 +307,9 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(integrationContent).toMatch(/production AND test|prod.*test.*callers/i);
   });
 
-  it('arch-platform has template version 1.27.0', () => {
-    // BL-W42 PR2: bumped from 1.26.0 → 1.27.0 (Pre-Execute Authoring Checklist)
-    expect(platformContent).toContain('template_version: "1.27.0"');
+  it('arch-platform has template version 1.28.0', () => {
+    // Wave B: bumped from 1.27.0 → 1.28.0 (disk-write block + commit + dual-location pointers)
+    expect(platformContent).toContain('template_version: "1.28.0"');
   });
 
   it('arch-integration has template version 1.24.0', () => {

@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.27.0"
+template_version: "1.28.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -274,38 +274,8 @@ Use these FIRST — they replace manual Grep/Glob:
 
 ## Checks
 
-### 1. Source Set Discipline
-- `commonMain`: pure Kotlin ONLY — no `android.*`, `java.*`, `platform.*` imports
-- `jvmMain` for Android+Desktop shared code — NEVER duplicate across androidMain + desktopMain
-- `appleMain` for iOS+macOS shared code — NEVER duplicate across iosMain + macosMain
-- File suffixes: `.kt` (common), `.jvm.kt`, `.apple.kt`, `.android.kt`, `.desktop.kt`
-
-### 2. Dependency Direction
-- `impl` → `api`, never reverse
-- `-api` modules contain ONLY: interfaces, sealed classes, data classes, enums
-- No concrete implementations in `-api` modules
-- No cross-cluster direct dependencies (only via api contracts)
-
-### 3. Five-Layer Model
-- UI (Compose/SwiftUI) → ViewModel → Domain (UseCases) → Data (Repos) → Model
-- Each layer depends ONLY on the one below
-- No ViewModel importing from UI layer
-- No Domain layer importing from Data implementation (only api)
-
-### 4. Convention Plugin Compliance
-- All modules use the project convention plugin
-- No manual `android {}` or `kotlin {}` blocks that duplicate convention plugin config
-
-### 5. Pattern Compliance
-- `Result<T>` for all operations (not kotlin.Result, not exceptions)
-- `CancellationException` rethrown in catch blocks
-- UiState as sealed interface (not data class with boolean flags)
-- StateFlow with `stateIn(WhileSubscribed(5_000))`
-- No platform deps in ViewModels (no Context, Resources, UIKit)
-
-### 6. Compose Resources
-- Resources in `src/commonMain/composeResources/` (not custom source sets)
-- `generateResClass = always` for multi-module + composite builds
+Full KMP check catalog: docs/agents/kmp-checks-catalog.md
+(6 checks: source sets, dep direction, five-layer, convention plugins, pattern compliance, Compose resources).
 
 ### Caller Grep Rule (MANDATORY before requesting signature changes)
 
@@ -394,7 +364,34 @@ Escalate to team-lead when:
 - arch-integration: {PASS/FAIL} — build after fixes
 ```
 
+### Disk-Write + 1-Liner DM (MANDATORY)
+
+After completing review:
+1. Write the full verdict block above to `.planning/wave{N}/arch-platform-verdict.md` (`{N}` = wave number from team-lead dispatch) using a Bash heredoc — Write/Edit are denied; this is the only mechanism:
+
+   ```bash
+   mkdir -p .planning/wave{N}/
+   cat <<'EOF' > .planning/wave{N}/arch-platform-verdict.md
+   # arch-platform verdict -- wave {N}
+   {verdict block per docs/agents/agent-verdict-protocol.md}
+   EOF
+   ```
+
+2. `SendMessage(to="team-lead", message="APPROVE")` → team-lead does TaskUpdate only (no broadcast)
+   OR `SendMessage(to="team-lead", message="ESCALATE: <1-sentence reason>")` → team-lead broadcasts with [ESCALATION] marker
+   NEVER include the full verdict block in the DM — team-lead reads the file if needed.
+
+Full protocol: `docs/agents/agent-verdict-protocol.md`
+
+### CRITICAL: APPEND for EXECUTE, OVERWRITE for PREP (BL-bump-ktr-01)
+
+- **PREP phase initial write**: use the Bash heredoc above (`cat <<'EOF' >`) — fresh file, overwrite OK.
+- **EXECUTE phase verdict write**: MUST APPEND to the existing PREP verdict file. Use `fs.appendFileSync()` (or shell `cat <<'EOF' >>` append redirect), NOT `fs.writeFileSync()` or `cat <<'EOF' >`. Overwriting destroys the `APPROVED-PREP` literal token, which `premature-execution-gate` checks at merge time.
+- **Lesson**: PR #166 cost 1 fix-forward when arch-platform overwrote PREP verdict during EXECUTE phase. APPROVED-PREP token erased, gate triggered.
+
 **Pre-Execute Authoring Checklist**: docs/agents/arch-platform-prep-authoring-checklist.md
+**Commit spec cheat-sheet**: docs/agents/commit-spec-validation.md
+**Dual-location sync protocol**: docs/agents/dual-location-protocol.md
 **Lint verdict**: scripts/sh/verdict-pre-execute-check.sh <verdict-path>
 **Available skills**: see `docs/agents/arch-platform-prep-authoring-checklist.md` § Available Skills
 **Done criteria**: see `docs/agents/arch-platform-prep-authoring-checklist.md` § Done Criteria
