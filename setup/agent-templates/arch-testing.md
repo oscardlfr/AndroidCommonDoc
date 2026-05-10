@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.28.0"
+template_version: "1.29.0"
 skills:
   - test
   - test-full-parallel
@@ -237,6 +237,10 @@ Flag and delegate rewrite to `test-specialist`:
 ### 5. Full Suite Gate (final wave only)
 - After the last wave: run `/test-full-parallel`
 - ALL tests must pass. No exceptions, no "pre-existing failures"
+
+### 6. CLI Mandate Enforcement (kmp-test-runner v0.9.0+)
+
+VERIFY dispatches use `kmp-test <subcommand>`, never raw Gradle test tasks. BLOCK APPROVE if dispatch tells test-specialist to invoke `./gradlew test|jvmTest|allTests|check|*Test` or any `*Test` Gradle task. ALLOW bypass markers (`KMP_TEST_RUNNER_BYPASS=1` env / `[KMP_TEST_RUNNER_BYPASS]` inline) only with recorded user authorization. Canonical: [cli-agent-mandate.md](../../docs/testing/cli-agent-mandate.md). Platforms: [cli-hub.md](../../docs/testing/cli-hub.md).
 
 ## MCP Tools (run before reading files)
 

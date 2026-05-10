@@ -5,8 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added
+
+- **CLI hub at `docs/testing/`** (12 atomic sub-docs): cli-hub, cli-tests-{jvm, android-unit, android-instrumented, ios, macos, js-wasm}, cli-coverage, cli-cache-management, cli-troubleshooting, cli-changed-modules, cli-agent-mandate. Comprehensive reference for kmp-test-runner v0.9.0+ CLI consumption across all KMP platforms. Each sub-doc carries L0 frontmatter (scope, sources, targets, slug, monitor_urls).
+- **CLI Mandate pointer block** in `setup/agent-templates/test-specialist.md` (1.22.0→1.23.0) and `setup/agent-templates/arch-testing.md` (1.28.0→1.29.0). Templates link to canonical MANDATE/FORBID at `docs/testing/cli-agent-mandate.md`.
+
 ### Changed
 
+- **kmp-test-runner-gate.js gate-expansion** (CLI-only mandate enforcement). Allowlist-then-block architecture replaces the 3-pattern literal blocklist. Allowlist (10 patterns): `kmp-test info|describe`, `assembleAndroidTest`, `kover*Report`, `createDebugCoverageReport`, `dependencyInsight`, `outgoingVariants`, `testRuntimeClasspath`, `*PrintCommand`/`*DryRun` helpers, plus existing env+inline bypass. Block regex (4 patterns) catches all `*Test` task variants KMP-wide (jvm, common, android-unit, android-instrumented, ios, macos, js, wasm) plus `allTests`, `check`, and module-qualified `:module:*Test`. Special JS/Wasm error message acknowledges that kmp-test-runner v0.9.0 does not yet support JS/Wasm targets. Bats coverage: 22 new cases (gate file 8→30 cases, full suite ~1093→1116).
 - **kmp-test-runner v0.8.1 → v0.9.0** across L0 toolkit. v0.9.0 introduces ENVELOPE_SCHEMA_VERSION 2 (semantic exit-code split + `flavor_unused` promotion + `isolated_runtime_race` guard) — not consumed by L0 wrappers (verified GREEN pre-flight). New v0.9.0 features: `kmp-test info|describe|update` discovery subcommands, `--gradle-args` escape hatch, `--isolated` Windows-safe cache for re-enabling parallel tests, `--variant` truly global. No flag renames. No deprecations. Files: workflow, hook, agent template (dual-location), 6 wrapper scripts, 4 SKILL.md, README, AGENTS.md, gradle-run.bats. PR #TBD.
 
 ### Added (BL-W46.1 PR-B — README Counts + Version + Context-Provider Frontmatter, #162)

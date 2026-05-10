@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.22.0"
+template_version: "1.23.0"
 memory: project
 skills:
   - test
@@ -187,6 +187,10 @@ script.
 
 For the full JSON envelope schema — including `errors[].code` discriminator values —
 run `npx kmp-test-runner@0.9.0 --help` or consult the kmp-test-runner package docs.
+
+## CLI Mandate (v0.9.0+ canonical)
+
+Use `kmp-test <subcommand>` (skills `/test`, `/coverage`, `/test-changed`, `/test-full-parallel`, `/benchmark` wrap it). Gate blocks `./gradlew test|jvmTest|allTests|check|*Test` directly — bypass via `KMP_TEST_RUNNER_BYPASS=1` env or `[KMP_TEST_RUNNER_BYPASS]` inline marker. Canonical MANDATE/FORBID: [cli-agent-mandate.md](../../docs/testing/cli-agent-mandate.md). Platforms: [cli-hub.md](../../docs/testing/cli-hub.md). Errors: [cli-troubleshooting.md](../../docs/testing/cli-troubleshooting.md).
 
 ---
 

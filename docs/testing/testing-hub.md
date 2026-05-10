@@ -62,6 +62,14 @@ Standard patterns for testing Kotlin Multiplatform projects.
 
 > Use `StandardTestDispatcher` injected via constructor — never `Dispatchers.Default` in tests.
 
+## CLI
+
+> Use `kmp-test <subcommand>` for all test execution — NEVER invoke Gradle test tasks directly. See [cli-hub.md](cli-hub.md) for the full platform matrix and subcommand reference.
+
+| Document | Description |
+|----------|-------------|
+| [cli-hub](cli-hub.md) | kmp-test-runner CLI hub: navigation, glossary, skill→CLI mapping |
+
 ## Documents
 
 | Document | Description |

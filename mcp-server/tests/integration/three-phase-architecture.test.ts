@@ -252,8 +252,8 @@ describe('tl-phase-execution sub-doc — extracted phase protocol', () => {
 describe('arch-testing template — Bash safety and version', () => {
   const archContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
 
-  it('template version 1.28.0', () => {
-    expect(archContent).toContain('template_version: "1.28.0"');
+  it('template version 1.29.0', () => {
+    expect(archContent).toContain('template_version: "1.29.0"');
   });
 
   it('has Bash Safety Rules section', () => {
@@ -905,8 +905,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toContain('template_version: "1.10.0"');
   });
 
-  it('arch-testing version 1.28.0', () => {
-    expect(testingContent).toContain('template_version: "1.28.0"');
+  it('arch-testing version 1.29.0', () => {
+    expect(testingContent).toContain('template_version: "1.29.0"');
   });
 });
 

@@ -83,3 +83,152 @@ run_hook() {
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── PR2 cli-audit-pr2: expanded block coverage ───────────────────────────────
+
+# HIGH-risk BLOCK cases (exit=2)
+
+@test "PR2 BLOCK: gradlew jvmTest" {
+  make_input './gradlew jvmTest'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "PR2 BLOCK: gradlew :core-audio:jvmTest" {
+  make_input './gradlew :core-audio:jvmTest'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "PR2 BLOCK: gradlew allTests" {
+  make_input './gradlew allTests'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "PR2 BLOCK: gradlew check" {
+  make_input './gradlew check'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "PR2 BLOCK: gradlew testDebugUnitTest" {
+  make_input './gradlew testDebugUnitTest'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "PR2 BLOCK: gradlew connectedAndroidTest" {
+  make_input './gradlew connectedAndroidTest'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "PR2 BLOCK: gradlew connectedDebugAndroidTest" {
+  make_input './gradlew connectedDebugAndroidTest'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "PR2 BLOCK: gradlew androidUnitTest" {
+  make_input './gradlew androidUnitTest'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# MEDIUM-risk BLOCK cases (exit=2)
+
+@test "PR2 BLOCK: gradlew iosSimulatorArm64Test" {
+  make_input './gradlew iosSimulatorArm64Test'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "PR2 BLOCK: gradlew macosArm64Test" {
+  make_input './gradlew macosArm64Test'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "PR2 BLOCK: gradlew jsTest (JS/Wasm special message in stderr)" {
+  make_input './gradlew jsTest'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"JS/Wasm"* ]] || [[ "$stderr" == *"JS/Wasm"* ]]
+}
+
+@test "PR2 BLOCK: gradlew jsBrowserTest" {
+  make_input './gradlew jsBrowserTest'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "PR2 BLOCK: gradlew wasmJsTest" {
+  make_input './gradlew wasmJsTest'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "PR2 BLOCK: gradlew desktopTest" {
+  make_input './gradlew desktopTest'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ALLOWLIST PASS cases (exit=0)
+
+@test "PR2 PASS: dependencyInsight --configuration testRuntimeClasspath" {
+  make_input './gradlew dependencyInsight --configuration testRuntimeClasspath'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "PR2 PASS: assembleAndroidTest" {
+  make_input './gradlew assembleAndroidTest'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "PR2 PASS: koverXmlReport" {
+  make_input './gradlew koverXmlReport'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "PR2 PASS: kmp-test info" {
+  make_input 'kmp-test info'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "PR2 PASS: kmp-test describe" {
+  make_input 'kmp-test describe'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "PR2 PASS: :integrationTestPrintCommand" {
+  make_input './gradlew :core:integrationTestPrintCommand'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "PR2 PASS: outgoingVariants" {
+  make_input './gradlew outgoingVariants'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# BYPASS PRESERVATION cases (exit=0)
+
+@test "PR2 BYPASS: KMP_TEST_RUNNER_BYPASS=1 env still works" {
+  make_input './gradlew jvmTest'
+  run bash -c "cat '$INPUT_FILE' | KMP_TEST_RUNNER_BYPASS=1 node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "PR2 BYPASS: inline [KMP_TEST_RUNNER_BYPASS] marker still works" {
+  make_input './gradlew jvmTest [KMP_TEST_RUNNER_BYPASS]'
+  run_hook
+  [ "$status" -eq 0 ]
+}
