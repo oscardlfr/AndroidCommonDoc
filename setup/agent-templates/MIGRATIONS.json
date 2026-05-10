@@ -867,6 +867,11 @@
         "date": "2026-05-07",
         "breaking": false,
         "note": "BL-W32-16: inline Common Gradle Error Triage section (JDK mismatch UnsupportedClassVersionError triage steps). PR #146. Backfill: missing from registry, surfaced by BL-W44-S2 PR4 jq tuple lint."
+      },
+      "1.22.0": {
+        "date": "2026-05-09",
+        "breaking": false,
+        "note": "Bump kmp-test-runner version pins v0.8.1 -> v0.9.0 at lines 155, 161, 166, 167, 189. Mechanical version-string bump. Pre-flight verified GREEN: wrappers do not parse JSON envelope, so schema v1->v2 changes (no_test_modules exit-code split, flavor_unused promotion, isolated_runtime_race guard) do not require adaptation."
       }
     },
     "ui-specialist": {

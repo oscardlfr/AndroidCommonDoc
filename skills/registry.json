@@ -400,7 +400,7 @@
       "description": "Analyze test coverage gaps from existing data without running tests. Use when asked to check coverage or find untested code.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:036463d6ebca08c98cbd856cdc0c90c8ce23c00d0d5dd627b1a374d4c753ee27",
+      "hash": "sha256:9e55292e525bb00f89b6a56179154d5ff16d7e5ca293d1f080fec1d86c4b11b7",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -1559,7 +1559,7 @@
       "description": "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:8ab2fbb81456df78298b42c2b668ff63ef4be774138dde13d0c4ce59cc1bb10c",
+      "hash": "sha256:8e64819448307caf29ae33fe45dd57ffc7d2fdfc8c6ab22ab927d3f206071967",
       "dependencies": [
         "scripts/sh/gradle-run.sh",
         "scripts/sh/ai-error-extractor.sh",
@@ -1593,7 +1593,7 @@
       "description": "Run tests only on modules with uncommitted changes. Use when asked to test changed files or run a quick pre-commit check.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:f43f3ced27148d26b5a3ee4af739ad76a79f9ec2497fb8f29a57d1f516d12094",
+      "hash": "sha256:64c8883802f1346e40691cc0213dac15e2de7e72ff30b5e57a6eeb6485fb74b6",
       "dependencies": [
         "scripts/sh/run-changed-modules-tests.sh",
         "scripts/ps1/run-changed-modules-tests.ps1"
@@ -1657,7 +1657,7 @@
       "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:f490d90f4f399a6c94caf4a786d6a0220d3f438c380ca33f3544b5fad962d874",
+      "hash": "sha256:77d35f15adca3b95f8ab4d4c29341caf3b0a0c1301153ae38bd75d7bac06dac5",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -2098,7 +2098,7 @@
       "frontmatter": {
         "name": "context-provider",
         "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
-        "tools": "Read, Grep, Glob, Bash, SendMessage, WebFetch, mcp__androidcommondoc__search-docs, mcp__androidcommondoc__find-pattern, mcp__androidcommondoc__suggest-docs, mcp__androidcommondoc__search-patterns, mcp__androidcommondoc__check-version-sync, mcp__androidcommondoc__module-health, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__check-doc-patterns, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs",
+        "tools": "Read, Grep, Glob, Bash, SendMessage, WebFetch, mcp__androidcommondoc__search-docs, mcp__androidcommondoc__find-pattern, mcp__androidcommondoc__suggest-docs, mcp__androidcommondoc__search-patterns, mcp__androidcommondoc__check-version-sync, mcp__androidcommondoc__module-health, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__check-doc-patterns, mcp__androidcommondoc__vault-status, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs",
         "model": "sonnet",
         "domain": "infrastructure",
         "intent": [
@@ -2108,7 +2108,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "3.3.0"
+        "template_version": "3.4.0"
       }
     },
     {
@@ -2363,7 +2363,7 @@
       "frontmatter": {
         "name": "feature-domain-specialist",
         "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
-        "tools": "Read, Grep, Glob, Bash",
+        "tools": "Read, Grep, Glob, Bash, SendMessage",
         "model": "sonnet",
         "domain": "development",
         "intent": [
@@ -2372,7 +2372,7 @@
           "compliance"
         ],
         "token_budget": 3000,
-        "template_version": "1.1.0",
+        "template_version": "1.1.1",
         "memory": "project",
         "skills": [
           "test",
@@ -2856,7 +2856,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:e1235e041b4923491f04f9651053bc5e208a648742f032e53a039166845599e1",
+      "hash": "sha256:604886d06e33c633c1151c5218c581875c6afc2e63dc22d2ddecdd9a820471c2",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.21.0",
+        "template_version": "1.22.0",
         "memory": "project",
         "skills": [
           "test",

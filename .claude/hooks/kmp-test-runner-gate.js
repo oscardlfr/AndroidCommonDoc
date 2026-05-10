@@ -2,7 +2,7 @@
 // kmp-test-runner-gate.js — PreToolUse hook for Bash (Item 4, BL-W42 PR5).
 //
 // Blocks raw Gradle test invocations: gradlew test, gradle test, :module:test.
-// Agents MUST use the /test skill or kmp-test-runner CLI instead (v0.8.1+).
+// Agents MUST use the /test skill or kmp-test-runner CLI instead (v0.9.0+).
 //
 // Bypass: env KMP_TEST_RUNNER_BYPASS=1 OR inline [KMP_TEST_RUNNER_BYPASS] in command.
 // Fail-open on any parse error or stdin timeout (exit 0).
@@ -40,12 +40,12 @@ process.stdin.on('end', () => {
 
   process.stderr.write(
     `[kmp-test-runner-gate] BLOCKED: raw Gradle test invocation detected ("${matched}").\n` +
-    `Use the /test skill or kmp-test-runner CLI (v0.8.1+) instead.\n` +
+    `Use the /test skill or kmp-test-runner CLI (v0.9.0+) instead.\n` +
     `Blocked patterns: gradlew test, gradle test, :module:test\n` +
     `Bypass options:\n` +
     `  1. Export KMP_TEST_RUNNER_BYPASS=1 (authorized contexts only)\n` +
     `  2. Include [KMP_TEST_RUNNER_BYPASS] inline marker in the command\n` +
-    `Reference: BL-W42 PR5 kmp-test-runner v0.8.1 enforcement\n`
+    `Reference: BL-W42 PR5 kmp-test-runner v0.9.0 enforcement\n`
   );
   process.exit(2);
 });

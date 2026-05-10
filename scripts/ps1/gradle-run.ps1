@@ -62,9 +62,9 @@ $kmpTestCmd = $null
 if (Get-Command kmp-test -ErrorAction SilentlyContinue) {
     $kmpTestCmd = "kmp-test"
 } elseif (Get-Command npx -ErrorAction SilentlyContinue) {
-    $kmpTestCmd = "npx kmp-test-runner@0.8.1"
+    $kmpTestCmd = "npx kmp-test-runner@0.9.0"
 } else {
-    Write-Error "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.8.1"
+    Write-Error "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.9.0"
     exit 1
 }
 

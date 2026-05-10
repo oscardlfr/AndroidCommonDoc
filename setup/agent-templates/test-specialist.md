@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.21.0"
+template_version: "1.22.0"
 memory: project
 skills:
   - test
@@ -152,19 +152,19 @@ If `monitor-sources` MCP tool is available (`mcp-monitor`):
 
 ---
 
-## kmp-test-runner v0.8.1 (canonical KMP test runner)
+## kmp-test-runner v0.9.0 (canonical KMP test runner)
 
 **MANDATE:** Use `/test` skill or `kmp-test-runner` CLI for ALL test runs. NEVER invoke `./gradlew test`, `gradle test`, or `:module:test` directly — a blocking hook enforces this. Use env `KMP_TEST_RUNNER_BYPASS=1` ONLY inside bats setup() helpers.
 
 **FORBID:** `./gradlew test` | `gradle test` | `:module:test` — all blocked by `kmp-test-runner-gate.js`.
 
-`gradle-run.sh` is a thin wrapper around `kmp-test-runner v0.8.1` — all daemon
+`gradle-run.sh` is a thin wrapper around `kmp-test-runner v0.9.0` — all daemon
 retry, Kover fallback, and JDK detection logic lives inside the runner, not the
 script.
 
 **Detection cascade** (automatic, no action required):
-1. Global binary `kmp-test` if installed (`npm install -g kmp-test-runner@0.8.1`)
-2. Fallback: `npx kmp-test-runner@0.8.1` (slower on first run, no install needed)
+1. Global binary `kmp-test` if installed (`npm install -g kmp-test-runner@0.9.0`)
+2. Fallback: `npx kmp-test-runner@0.9.0` (slower on first run, no install needed)
 
 **Supported flags passed through `gradle-run.sh`:**
 
@@ -186,7 +186,7 @@ script.
 **Exit codes**: `0` success · `1` test failure · `2` build error · `3` env error
 
 For the full JSON envelope schema — including `errors[].code` discriminator values —
-run `npx kmp-test-runner@0.8.1 --help` or consult the kmp-test-runner package docs.
+run `npx kmp-test-runner@0.9.0 --help` or consult the kmp-test-runner package docs.
 
 ---
 

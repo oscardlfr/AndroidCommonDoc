@@ -5,6 +5,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Changed
+
+- **kmp-test-runner v0.8.1 → v0.9.0** across L0 toolkit. v0.9.0 introduces ENVELOPE_SCHEMA_VERSION 2 (semantic exit-code split + `flavor_unused` promotion + `isolated_runtime_race` guard) — not consumed by L0 wrappers (verified GREEN pre-flight). New v0.9.0 features: `kmp-test info|describe|update` discovery subcommands, `--gradle-args` escape hatch, `--isolated` Windows-safe cache for re-enabling parallel tests, `--variant` truly global. No flag renames. No deprecations. Files: workflow, hook, agent template (dual-location), 6 wrapper scripts, 4 SKILL.md, README, AGENTS.md, gradle-run.bats. PR #TBD.
+
 ### Added (BL-W46.1 PR-B — README Counts + Version + Context-Provider Frontmatter, #162)
 - **README Recent Changes +14 rows** (`README.md`): BL-W33..W46 wave history (newest-first) added to the stale table (was last at BL-W32). Closes HIGH-2.
 - **README count fixes** (`README.md`): sub-docs 68→77 (2 places), skills 61 (canonical `find skills -name SKILL.md` count, 4 places), bats 1081 (actual @test count). Closes 3 MED.
