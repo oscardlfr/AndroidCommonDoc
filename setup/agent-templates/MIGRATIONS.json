@@ -579,6 +579,11 @@
         "date": "2026-05-04",
         "summary": "BL-W40 PR4: add Numbered Step Gate",
         "breaking": false
+      },
+      "1.24.1": {
+        "date": "2026-05-10",
+        "breaking": false,
+        "note": "Wave D BL-W31.7-04 atomization: extract Scope Extension / Reporter / Message Topic Discipline protocols to dedicated sub-docs in docs/agents/. Pointer-line replacements in template body. ~35L diet."
       }
     },
     "context-provider": {
@@ -626,6 +631,11 @@
         "date": "2026-05-10",
         "breaking": false,
         "note": "Wave C T6: scrub literal cross-project paths (../DawSync/, ../shared-kmp-libs/) → generic placeholders (../<l2-project>/, ../<l1-project>/) with config note. Patch bump."
+      },
+      "3.4.2": {
+        "date": "2026-05-10",
+        "breaking": false,
+        "note": "Wave D W17 #11/#17: add Read kmp-features-2026.md to Spawn Protocol pre-cache for KMP platform capability queries."
       }
     },
     "doc-updater": {

@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
-template_version: "1.24.0"
+template_version: "1.24.1"
 skills:
   - test
   - extract-errors
@@ -58,31 +58,11 @@ Before investigating or speccing work for a specialist:
 
 **Per-session gate**: Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from context-provider in this session. The hook enforces this mechanically — your first search-type tool call will be blocked until CP has been consulted.
 
-### Scope Extension Protocol (OBS-A — HARD SELF-GATE, T-BUG-011)
+### Scope Extension Protocol
+See [arch-scope-extension-protocol](../../docs/agents/arch-scope-extension-protocol.md) for full spec (OBS-A HARD SELF-GATE, T-BUG-011).
 
-**HARD SELF-GATE** — BEFORE any SendMessage proposing extension, ALL 3 must pass. Any fail → REFUSE extension, record in verdict, do NOT message team-lead.
-
-1. **Wave-distance check**: current wave or N+1 only. Target in N+2 or further → REFUSE (out-of-dispatch finding, separate wave needed).
-2. **Specialty check**: within YOUR specialty (platform = KMP/Gradle/DI/modules; testing = TDD/coverage/test patterns; integration = wiring/nav/DI cross-cuts). Cross-specialty → REFUSE (belongs to arch-{X}).
-3. **Scope-doc trigger check**: already a different wave's objective in `scope_doc_path`? YES → REFUSE (acting now overlaps).
-
-**Only if ALL 3 pass AND strictly adjacent (N+1, same specialty)**: SendMessage to team-lead with `summary="scope extension request (adjacent, same specialty)"`, evidence, wave distance, specialty. Wait for approval; silent after 2 messages → default NO, flag as out-of-dispatch.
-
-**FORBIDDEN (T-BUG-011)**: non-adjacent wave (N+2 or further); another architect's specialty; treating this as informational — it is a HARD STOP, not a suggestion.
-
-Full rationale + L2 debug session evidence: `docs/agents/arch-topology-protocols.md#1-scope-extension-protocol--hard-self-gate-t-bug-011`.
-
-### Reporter Protocol (MANDATORY — T-BUG-012)
-
-Default recipient = `team-lead`. **Liveness check BEFORE every SendMessage to team-lead**: shutdown notification received? Last 3 SendMessages unanswered? team-lead clarified team-lead shut down? ANY YES → team-lead NOT alive.
-
-- team-lead alive → SendMessage `team-lead` normally.
-- team-lead NOT alive → SendMessage `team-lead` with `[team-lead-absent]` prefix (fall back to team-lead for orchestration).
-- Uncertain → SendMessage `team-lead` with `[routing-check]` prefix; do NOT guess.
-
-**FORBIDDEN (T-BUG-012)**: messaging `team-lead` after shutdown (report lost); silent retry 3+ times instead of fallback; hardcoding `team-lead` as only recipient.
-
-Full rationale: `docs/agents/arch-topology-protocols.md#2-reporter-protocol--team-lead-liveness-check--team-lead-fallback-t-bug-012`.
+### Reporter Protocol
+See [arch-reporter-protocol](../../docs/agents/arch-reporter-protocol.md) for full spec (MANDATORY, T-BUG-012).
 ### Cross-Architect State Sync
 Before issuing CANCEL/AMEND that may affect another architect's verdict: SendMessage(team-lead, "cross-arch sync", verdict file path). Wait for relay ACK before proceeding. Full protocol: `docs/agents/arch-topology-protocols.md#5-cross-architect-state-sync`. FORBIDDEN: direct arch→arch SendMessage for state sync.
 ### Post-Compaction Re-Sync
@@ -209,17 +189,7 @@ Once you have APPROVED a wave, do NOT re-verify the same files in response to su
 Three verifications on the same wave = anti-pattern. Stop verifying, start dispatching.
 
 ### Message Topic Discipline
-
-Each SendMessage to a peer MUST cover ONE topic only. Mixing a CANCEL with a NEW dispatch in a single message confuses the receiver's routing and creates ambiguous state.
-
-**WRONG — mixed topics in one message:**
-> "Cancel the previous nav-route dispatch and also add the Koin registration for FooUseCase."
-
-**CORRECT — split into two messages:**
-> Message 1: "Cancel the nav-route dispatch I sent earlier — scope changed."
-> Message 2: "New task: add Koin registration for FooUseCase in appModule.kt:42."
-
-One message = one action. If you have N topics, send N messages.
+See [arch-message-topic-discipline](../../docs/agents/arch-message-topic-discipline.md) for full spec.
 ### Scope Immutability Gate
 Distinct from OBS-A (scope extension requests — see `docs/agents/arch-topology-protocols.md#1-scope-extension-protocol`); this gate is about respecting team-lead's explicit rulings on scope boundaries already decided.
 

@@ -312,8 +312,8 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(platformContent).toContain('template_version: "1.28.0"');
   });
 
-  it('arch-integration has template version 1.24.0', () => {
-    expect(integrationContent).toContain('template_version: "1.24.0"');
+  it('arch-integration has template version 1.24.1', () => {
+    expect(integrationContent).toContain('template_version: "1.24.1"');
   });
 });
 
@@ -855,8 +855,8 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
     expect(cpContent).toMatch(/find-pattern/);
   });
 
-  it('has template version 3.4.1', () => {
-    expect(cpContent).toContain('template_version: "3.4.1"'); // Wave C T6: bumped 3.4.0 → 3.4.1
+  it('has template version 3.4.2', () => {
+    expect(cpContent).toContain('template_version: "3.4.2"'); // Wave D: bumped 3.4.1 → 3.4.2
   });
 
   it('has External Context section with Context7 call sequence', () => {

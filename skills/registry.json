@@ -1918,7 +1918,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:637d36de800ef5a68dc3757b6fd0cda998b89210f6e45cd4652ebfa66d384c27",
+      "hash": "sha256:71c86d7eb6c3c39ccf5629a62abb2699a0070886a8e37e6c2fad17f935d43fc6",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1934,7 +1934,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.24.0",
+        "template_version": "1.24.1",
         "skills": [
           "test",
           "extract-errors"
@@ -2093,7 +2093,7 @@
       "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:5485e09ad7a1728c0165247fa12464434c40c78df9e4a1cef877258b5cc84012",
+      "hash": "sha256:f568efc0094ad993b2bb96ddb1e38a3aa60ddb250ba2468deb93aa941fc53952",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -2108,7 +2108,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "3.4.1"
+        "template_version": "3.4.2"
       }
     },
     {

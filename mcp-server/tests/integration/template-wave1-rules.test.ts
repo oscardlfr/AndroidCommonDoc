@@ -131,10 +131,10 @@ describe('Wave 1: template_version bumped in architects', () => {
     expect(content).toMatch(/template_version:\s*"1.28.0"/);
   });
 
-  it('arch-integration.md template_version is "1.24.0"', () => {
-    // BL-W40 PR4: bumped from 1.23.0 → 1.24.0 (Numbered Step Gate)
+  it('arch-integration.md template_version is "1.24.1"', () => {
+    // Wave D T2: bumped from 1.24.0 → 1.24.1 (sub-doc atomization)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.24.0"/);
+    expect(content).toMatch(/template_version:\s*"1.24.1"/);
   });
 
   it('MIGRATIONS.json has W31.6 RETIRED entry for team-lead (W31.6: retired)', () => {

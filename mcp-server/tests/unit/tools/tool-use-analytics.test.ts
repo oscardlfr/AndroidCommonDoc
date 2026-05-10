@@ -151,6 +151,34 @@ describe("tool-use-analytics", () => {
     expect(report.our_mcp_calls).toBe(0);
   });
 
+  it("tracks plugin-wrapped androidcommondoc as our_mcp_calls", () => {
+    // BL-W30-01: Claude Code wraps plugin-provided MCP servers with `plugin_<id>_` prefix.
+    // The log shows `mcp_server: "plugin_androidcommondoc_androidcommondoc"` instead of bare server name.
+    // Classifier must count these as our_mcp_calls, and must NOT double-count as context7_calls.
+    const base = {
+      ts: new Date().toISOString(),
+      session_id: "s1",
+      tool_name: "mcp__plugin_androidcommondoc_androidcommondoc__find-pattern",
+      mcp_tool: "find-pattern",
+      skill_name: null,
+      input_summary: "",
+      duration_ms: null,
+      success: true,
+      agent_name: null,
+      agent_id: null,
+      agent_type: null,
+      cp_bypass_blocked: false,
+    };
+    const pluginAcdEntries = Array.from({ length: 16 }, (_, i) => ({
+      ...base,
+      mcp_server: "plugin_androidcommondoc_androidcommondoc" as const,
+      tool_name: `mcp__plugin_androidcommondoc_androidcommondoc__tool-${i}`,
+    }));
+    const report = computeToolUseReport(pluginAcdEntries, 4, 10, 0);
+    expect(report.our_mcp_calls).toBe(16);
+    expect(report.context7_calls).toBe(0);
+  });
+
   it("markdown snapshot", () => {
     const report = computeToolUseReport(entries, 4, 10, 0);
     const md = renderToolUseMarkdown(report);

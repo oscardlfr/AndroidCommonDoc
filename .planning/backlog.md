@@ -24,9 +24,11 @@ After 2-pass empirical drift audit on 2026-05-10, **only ~10 items genuinely pen
 | ~~BL-W32-11 (sub-items)~~ | ~~MED~~ | ~~`docs/agents/claude-md-template.md:158,163` + `tl-model-profiles.md:125` reference deprecated `team-lead.md`~~ | ✅ SHIPPED 2026-05-10 (#176) |
 | ~~BL-W30-02~~ | ~~LOW~~ | ~~CP shutdown latency memory note (incorrect "ignores shutdown_request" claim)~~ | ✅ SHIPPED 2026-05-10 (#176) — verified RESOLVED at session start; memory file already accurate, BL description was stale |
 | ~~BL-W30-03~~ | ~~MED~~ | ~~Doc drift between `di-patterns-modules.md:99-106` and global CLAUDE.md DI rules~~ | ✅ SHIPPED 2026-05-10 (#176) |
-| BL-W30-01 | LOW | Vitest case for `our_mcp_calls` regex in `tool-use-analytics.ts:130` | Wave D |
-| BL-W31.7-04 | MED | Spawn-prompt diet pass 2+3 (orthogonal to BL-W47) | Wave D |
-| W17 MED #11/#17 (PARTIAL) | MED | CP integration verify for `docs/architecture/kmp-features-2026.md` reference | Wave D |
+| ~~BL-W30-01~~ | ~~LOW~~ | ~~Vitest case for `our_mcp_calls` regex in `tool-use-analytics.ts:130`~~ | ✅ SHIPPED 2026-05-10 (Wave D) — verified regex correct (PR #67); mirror vitest case added for plugin-wrapped androidcommondoc form (test gap closed) |
+| ~~BL-W31.7-04~~ | ~~MED~~ | ~~Spawn-prompt diet pass 2+3 (orthogonal to BL-W47)~~ | ✅ SHIPPED 2026-05-10 (Wave D pass 2) — atomization not compression: 3 protocol sections extracted to dedicated sub-docs, arch-integration 425→395L, 0 info loss. Pass 3 deferred to Wave E (parallel sections in arch-platform/arch-testing) |
+| ~~W17 MED #11/#17 (PARTIAL)~~ | ~~MED~~ | ~~CP integration verify for `docs/architecture/kmp-features-2026.md` reference~~ | ✅ SHIPPED 2026-05-10 (Wave D) — Read line added to CP Spawn Protocol pre-cache (Option A, paired) |
+| BL-W30-04 | MED | L0 private-name scrub completion (~36 files in docs/, setup/copilot-templates/, skills/ — bypass during Wave C T6 staged scope) | Wave E |
+| BL-W30-05 | LOW | Atomization parallel sections in arch-platform.md + arch-testing.md (point at the 3 sub-docs created by Wave D) | Wave E |
 
 ### Frozen for BL-W47 (do NOT touch in cleanup waves)
 
