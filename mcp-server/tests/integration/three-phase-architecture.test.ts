@@ -903,8 +903,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.10.0', () => {
-    expect(plannerContent).toContain('template_version: "1.10.0"');
+  it('planner version 1.11.0', () => {
+    expect(plannerContent).toContain('template_version: "1.11.0"');
   });
 
   it('arch-testing has template_version field in frontmatter', () => {

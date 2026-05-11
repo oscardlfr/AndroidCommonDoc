@@ -109,7 +109,7 @@ function isExemptTarget(target) {
   if (norm.startsWith(normTmp + '/') || norm === normTmp) return true;
   if (target.startsWith('/tmp/') || target === '/tmp') return true;
   if (target.startsWith('$TMPDIR/') || target.startsWith('${TMPDIR}/')) return true;
-  if (/\.planning[\\/]wave[\w.-]+[\\/](?:pr\d+-)?arch-[^\s/\\]+-(?:verdict|cross-verify)\.md$/.test(target)) return true;
+  if (/\.planning[\\/]wave[\w.-]+[\\/](?:[\w.-]+[\\/])?(?:pr\d+-)?arch-[^\s/\\]+-(?:verdict|cross-verify)\.md$/.test(target)) return true;
   if (/\.androidcommondoc[\\/]audit-log\.jsonl$/.test(target)) return true;
   // Architect verdict files in .claude/wave-quality-gates/arch-*.md
   // Pattern: **/.claude/wave-quality-gates/arch-<anything>.md
