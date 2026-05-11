@@ -22,6 +22,8 @@ TOPOLOGY_DOC="$L0_ROOT/docs/architecture/layer-topology.md"
 
 # BL-W45 hub-split: orchestration guide content spread across tl-* sub-docs.
 source "$BATS_TEST_DIRNAME/lib/orchestration-guide.sh"
+# Disk-derived count helpers — avoids hardcoded README count literals.
+source "$BATS_TEST_DIRNAME/lib/readme-counts.sh"
 
 setup() {
     source "$SH_LIB"
@@ -758,8 +760,11 @@ teardown() {
 }
 
 @test "README: 'What gets synced' lists consumer counts" {
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "61"
-    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "59"
+    local skill_count cmd_count
+    skill_count=$(count_skills "$L0_ROOT")
+    cmd_count=$(count_commands "$L0_ROOT")
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "${skill_count}"
+    sed -n '/What gets synced/,/^### /p' "$README" | grep -q "${cmd_count}"
 }
 
 @test "README: 'What gets synced' clarifies what is NOT synced" {
@@ -1020,9 +1025,10 @@ teardown() {
     grep -q "^slug: spec-driven-workflow" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
-@test "README: counts match 39 agents, 61 skills" {
-    agent_count=$(ls "$L0_ROOT/setup/agent-templates/"*.md | grep -v README | wc -l | tr -d ' \r')
-    skill_count=$(find "$L0_ROOT/skills/" -maxdepth 1 -mindepth 1 -type d | wc -l | tr -d ' \r')
+@test "README: counts match agent templates and skills" {
+    local agent_count skill_count
+    agent_count=$(count_agent_templates "$L0_ROOT")
+    skill_count=$(count_skills "$L0_ROOT")
     grep -q "${agent_count} specialized agents" "$README"
     grep -q "${skill_count} canonical" "$README"
 }
@@ -1353,10 +1359,11 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "doc-templates" "$README" || grep -q "PRODUCT_SPEC" "$README"
 }
 
-@test "README: counts match 39 agents, 61 skills, 59 commands" {
-    agent_count=$(ls "$L0_ROOT/setup/agent-templates/"*.md | grep -v README | wc -l | tr -d ' \r')
-    skill_count=$(find "$L0_ROOT/skills/" -maxdepth 1 -mindepth 1 -type d | wc -l | tr -d ' \r')
-    cmd_count=$(find "$L0_ROOT/.claude/commands/" -name '*.md' | wc -l | tr -d ' \r')
+@test "README: counts match agent templates, skills, and commands" {
+    local agent_count skill_count cmd_count
+    agent_count=$(count_agent_templates "$L0_ROOT")
+    skill_count=$(count_skills "$L0_ROOT")
+    cmd_count=$(count_commands "$L0_ROOT")
     grep -q "${agent_count} specialized agents" "$README"
     grep -q "${skill_count} canonical" "$README"
     grep -q "${cmd_count}" "$README"
