@@ -311,8 +311,8 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(platformContent).toMatch(/template_version:\s*"\d+\.\d+\.\d+"/);
   });
 
-  it('arch-integration has template version 1.24.1', () => {
-    expect(integrationContent).toContain('template_version: "1.24.1"');
+  it('arch-integration has template version 1.25.0', () => {
+    expect(integrationContent).toContain('template_version: "1.25.0"');
   });
 });
 

@@ -119,22 +119,22 @@ describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in team-lead or sub-docs'
 // 8. Wave 1: template_version bumped in architects
 // ---------------------------------------------------------------------------
 describe('Wave 1: template_version bumped in architects', () => {
-  it('arch-testing.md template_version is "1.30.2"', () => {
-    // Wave E: bumped from 1.30.1 → 1.30.2 (atomization: Scope Extension + Reporter + Message Topic Discipline)
+  it('arch-testing.md template_version is "1.31.0"', () => {
+    // BL-W47-prep-2: bumped from 1.30.2 → 1.31.0 (APPROVED-PREP/APPROVED-VERDICT marker standardization)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.30.2"/);
+    expect(content).toMatch(/template_version:\s*"1.31.0"/);
   });
 
-  it('arch-platform.md template_version is "1.28.1"', () => {
-    // Wave E: bumped from 1.28.0 → 1.28.1 (atomization: Scope Extension + Reporter + Message Topic Discipline)
+  it('arch-platform.md template_version is "1.29.0"', () => {
+    // BL-W47-prep-2: bumped from 1.28.1 → 1.29.0 (APPROVED-PREP/APPROVED-VERDICT marker standardization)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.28.1"/);
+    expect(content).toMatch(/template_version:\s*"1.29.0"/);
   });
 
-  it('arch-integration.md template_version is "1.24.1"', () => {
-    // Wave D T2: bumped from 1.24.0 → 1.24.1 (sub-doc atomization)
+  it('arch-integration.md template_version is "1.25.0"', () => {
+    // BL-W47-prep-2: bumped from 1.24.1 → 1.25.0 (APPROVED-PREP/APPROVED-VERDICT marker standardization)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.24.1"/);
+    expect(content).toMatch(/template_version:\s*"1.25.0"/);
   });
 
   it('MIGRATIONS.json has W31.6 RETIRED entry for team-lead (W31.6: retired)', () => {

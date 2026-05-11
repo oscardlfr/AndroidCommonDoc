@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.30.2"
+template_version: "1.31.0"
 skills:
   - test
   - test-full-parallel
@@ -339,6 +339,12 @@ After completing review:
    NEVER include the full verdict block in the DM — team-lead reads the file if needed.
 
 Full protocol: `docs/agents/agent-verdict-protocol.md`
+
+### CRITICAL: APPEND for EXECUTE, OVERWRITE for PREP (BL-bump-ktr-01)
+
+- **PREP phase initial write**: use the Bash heredoc above (`cat <<'EOF' >`) — fresh file, overwrite OK.
+- **EXECUTE phase verdict write**: MUST APPEND to the existing PREP verdict file. Use `fs.appendFileSync()` (or shell `cat <<'EOF' >>` append redirect), NOT `fs.writeFileSync()` or `cat <<'EOF' >`. Overwriting destroys the `APPROVED-PREP` literal token, which `premature-execution-gate` checks at merge time.
+- **Lesson**: PR #166 cost 1 fix-forward when arch-platform overwrote PREP verdict during EXECUTE phase. APPROVED-PREP token erased, gate triggered.
 
 ### 6. Coverage Baseline Gate
 - Run /coverage on every touched module

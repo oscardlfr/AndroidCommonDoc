@@ -378,6 +378,11 @@
         "date": "2026-05-10",
         "breaking": false,
         "note": "Wave E BL-W30-05 + BL-W30-04: atomize Topology Protocols (split into Scope Extension + Reporter) + Message Topic Discipline to pointer lines; private-name scrub in body. No frontmatter change. Patch bump."
+      },
+      "1.31.0": {
+        "date": "2026-05-11",
+        "breaking": false,
+        "note": "BL-W47-prep-2: APPROVED-PREP/APPROVED-VERDICT marker standardization. Add CRITICAL APPEND-for-EXECUTE block to Disk-Write section."
       }
     },
     "arch-platform": {
@@ -496,6 +501,11 @@
         "date": "2026-05-10",
         "breaking": false,
         "note": "Wave E BL-W30-05: atomize Scope Extension + Reporter + Message Topic Discipline inline bodies to pointer lines (sub-docs extracted in Wave D). No frontmatter change. Patch bump."
+      },
+      "1.29.0": {
+        "date": "2026-05-11",
+        "breaking": false,
+        "note": "BL-W47-prep-2: APPROVED-PREP/APPROVED-VERDICT marker standardization. Template version bump."
       }
     },
     "arch-integration": {
@@ -599,6 +609,11 @@
         "date": "2026-05-10",
         "breaking": false,
         "note": "Wave D BL-W31.7-04 atomization: extract Scope Extension / Reporter / Message Topic Discipline protocols to dedicated sub-docs in docs/agents/. Pointer-line replacements in template body. ~35L diet."
+      },
+      "1.25.0": {
+        "date": "2026-05-11",
+        "breaking": false,
+        "note": "BL-W47-prep-2: APPROVED-PREP/APPROVED-VERDICT marker standardization. Add CRITICAL APPEND-for-EXECUTE block to Disk-Write section."
       }
     },
     "context-provider": {
