@@ -5,6 +5,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W47-prep — topology cleanups, [#180](https://github.com/oscardlfr/AndroidCommonDoc/pull/180))
+
+- planner 1.10.0 → 1.11.0: AMEND discipline protocol + plan-write-location fix.
+- 4 topology gaps closed: doc-updater SUPERSEDES header, premature-execution-gate arch-platform-only filename, planner plan-write-gate hook, arch amend-without-permission guard.
+
+### Added (Wave F — post-Wave-E audit cleanup, [#179](https://github.com/oscardlfr/AndroidCommonDoc/pull/179))
+
+- Post-Wave-E audit cleanup: 7 findings resolved (1H/3M/3L).
+- Script v0.9.0 parity: L1 sync (#50) aligning agent templates.
+- README skills count drift corrected (61→64).
+
+### Added (Wave E — L0 cleanup, [#178](https://github.com/oscardlfr/AndroidCommonDoc/pull/178))
+
+- BL-W30-04/-05 closed: atomization of Scope Extension + Reporter Protocol inline bodies to pointer lines across 3 architect templates.
+- Line-anchor vitest refactor: template-wave1-rules.test.ts assertions anchored to exact line numbers.
+- Private-name scrub: remaining cross-project path literals replaced with generic placeholders.
+
+### Added (Wave D — quick wins, [#177](https://github.com/oscardlfr/AndroidCommonDoc/pull/177))
+
+- Atomization pass 2: 3 new sub-docs extracted (arch-testing-dispatch-protocol, arch-scope-extension-protocol, arch-reporter-protocol). ~30L diet.
+- CP integration W17#11/#17: context-provider Spawn Protocol pre-cache expanded with kmp-features-2026.md.
+- Test gap W17#5 closed: testing-patterns-dispatcher-scopes sub-doc added.
+
+### Added (Wave C — doc cleanup + private-name scrub, [#176](https://github.com/oscardlfr/AndroidCommonDoc/pull/176))
+
+- BL-W32-11 closed: arch-bash-write-gate regex fix for Windows paths.
+- BL-W30-02/-03 closed: context-provider + product-lead private project name scrub.
+- T6 private-name scrub: 3 templates scrubbed of literal cross-project paths.
+
 ### Added (Wave B — arch-platform-hardening-bundle)
 
 - **`docs/agents/kmp-checks-catalog.md`** (NEW sub-doc, 44 lines): Six KMP architectural checks extracted verbatim from `arch-platform.md` L275-309 per atomicity LAW. `arch-platform.md` L275-309 replaced with 4-line pointer block. Net −31 lines on arch-platform.md (400→392 with other insertions).

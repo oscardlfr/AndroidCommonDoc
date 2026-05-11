@@ -72,9 +72,9 @@ function getWaveSlug(projectRoot) {
 }
 
 function hasApprovedPrep(waveDir) {
-  // Decision 3: scan for /^(?:pr\d+-)?arch-platform-verdict\.md$/ files containing APPROVED-PREP
-  // Note: verdict spec has a typo (`prd+`) — use `pr\d+` per PLAN.md (authoritative)
-  const verdictRe = /^(?:pr\d+-)?arch-platform-verdict\.md$/;
+  // Decision 3: scan for /^(?:pr\d+-)?arch-[a-z]+-verdict\.md$/ files containing APPROVED-PREP
+  // Broadened from arch-platform-only (BL-W47-prep-2): any arch-domain verdict proves PREP passed.
+  const verdictRe = /^(?:pr\d+-)?arch-[a-z]+-verdict\.md$/;
   let entries;
   try {
     entries = fs.readdirSync(waveDir);

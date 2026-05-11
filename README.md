@@ -45,6 +45,8 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 
 | Wave | Date | PR | Theme |
 |------|------|----|-------|
+| BL-W47-prep | 2026-05-11 | [#180](https://github.com/oscardlfr/AndroidCommonDoc/pull/180) | Topology cleanups: planner 1.11.0, AMEND protocol, 4 topology gaps closed. |
+| Wave F | 2026-05-11 | [#179](https://github.com/oscardlfr/AndroidCommonDoc/pull/179) | Post-Wave-E audit cleanup + script v0.9.0 parity. |
 | Wave E | 2026-05-10 | [#178](https://github.com/oscardlfr/AndroidCommonDoc/pull/178) | L0 cleanup: scrub + atomization + line-anchor vitest refactor. 3 BL closures (BL-W30-04/-05, line-anchor). |
 | Wave D | 2026-05-10 | [#177](https://github.com/oscardlfr/AndroidCommonDoc/pull/177) | Quick wins: atomization pass 2, CP integration W17#11/#17, test gap. 30L diet via 3 sub-docs. |
 | Wave C | 2026-05-10 | [#176](https://github.com/oscardlfr/AndroidCommonDoc/pull/176) | Doc cleanup + private-name scrub. 3 BL closures (BL-W32-11, BL-W30-02/03). |
