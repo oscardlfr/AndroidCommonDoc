@@ -430,6 +430,22 @@ PYEOF
   [ "$status" -eq 0 ]
 }
 
+@test "allows redirect to 3-level nested wave-chore verdict path" {
+  make_input "cat > .planning/wave-chore/wave-f-l1-sync-doc-cleanup/arch-platform-verdict.md <<EOF
+APPROVE
+EOF" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "4-level nested path is blocked (arbitrary depth not exempt)" {
+  make_input "cat > .planning/wave-chore/branch/sub/arch-platform-verdict.md <<EOF
+APPROVE
+EOF" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
 @test "pathlib write_text to pr-prefixed file without -verdict suffix is blocked" {
   make_input "Path('.planning/wave-bl-w37/pr5-arch-platform-something.md').write_text('x')" 'arch-platform'
   run_hook
