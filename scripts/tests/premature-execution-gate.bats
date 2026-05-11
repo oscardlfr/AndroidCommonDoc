@@ -119,3 +119,19 @@ run_hook() {
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# Case 10 PASS: arch-integration-verdict.md with APPROVED-PREP unblocks specialist (BL-W47-prep-2)
+@test "Case 10: allows specialist Write when arch-integration-verdict.md contains APPROVED-PREP" {
+  printf 'STATUS: APPROVED-PREP\n' > "$WAVE_DIR/arch-integration-verdict.md"
+  make_input "Write" "docs/new-doc.md" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# Case 11 PASS: arch-testing-verdict.md with APPROVED-PREP unblocks specialist (BL-W47-prep-2)
+@test "Case 11: allows specialist Write when arch-testing-verdict.md contains APPROVED-PREP" {
+  printf 'STATUS: APPROVED-PREP\n' > "$WAVE_DIR/arch-testing-verdict.md"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
