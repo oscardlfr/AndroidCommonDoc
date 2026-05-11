@@ -171,6 +171,11 @@
         "date": "2026-05-03",
         "summary": "BL-W35-03: add Post-Compaction Re-Sync pointer block",
         "breaking": false
+      },
+      "1.11.0": {
+        "date": "2026-05-11",
+        "summary": "BL-W47-prep F2+F3: canonical arch-platform-verdict.md filename note + AMEND Obedience Protocol (verbatim REPLACE WITH + disk verification)",
+        "breaking": false
       }
     },
     "quality-gater": {
