@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BL-W32-06e: Thin wrapper around kmp-test-runner v0.8.1 `changed` subcommand.
+# BL-W32-06e: Thin wrapper around kmp-test-runner v0.9.0 `changed` subcommand.
 # Replaces 256-line script that delegated to run-parallel-coverage-suite.sh.
 # Git change detection, module-to-path mapping, and test dispatch are now
 # inside kmp-test-runner internals. L0 retains: --include-shared glue,
@@ -48,7 +48,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: run-changed-modules-tests.sh --project-root <path> [OPTIONS]"
       echo ""
-      echo "Thin wrapper around kmp-test-runner v0.8.1 changed subcommand."
+      echo "Thin wrapper around kmp-test-runner v0.9.0 changed subcommand."
       echo ""
       echo "Options:"
       echo "  --include-shared            Include changes in shared-kmp-libs"

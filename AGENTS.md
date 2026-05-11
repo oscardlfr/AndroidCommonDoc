@@ -140,7 +140,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `performance` | Full web performance audit with recommendations |
 | `seo` | Validate SEO metadata, structure, and discoverability |
 | `web-quality-audit` | Comprehensive web quality audit across all dimensions |
-| `material-3-skill` | Implement Google's Material Design 3 (Compose, Flutter, web) — components, theming, layout, scaffold (third-party, MIT) |
+| `material-3` | Implement Google's Material Design 3 (Compose, Flutter, web) — components, theming, layout, scaffold (third-party, MIT) |
 
 ## MCP Tools (46)
 

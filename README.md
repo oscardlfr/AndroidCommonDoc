@@ -6,7 +6,7 @@
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 46 tools wired into agent frontmatter (Wave 25: 20 core agents — team-lead, 3 architects, context-provider, doc-updater, doc-alignment, codebase-mapper, beta-readiness, l0-coherence-auditor, verifier — now declare MCP tools explicitly so the harness loads their schemas), a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 40 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring and user-gated ingestion loop (context-provider → team-lead approval → doc-updater → `ingest-content` MCP tool) -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 46 tools wired into agent frontmatter (Wave 25: 20 core agents — team-lead, 79 architects, context-provider, doc-updater, doc-alignment, codebase-mapper, beta-readiness, l0-coherence-auditor, verifier — now declare MCP tools explicitly so the harness loads their schemas), a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 40 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring and user-gated ingestion loop (context-provider → team-lead approval → doc-updater → `ingest-content` MCP tool) -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
@@ -45,6 +45,11 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 
 | Wave | Date | PR | Theme |
 |------|------|----|-------|
+| Wave E | 2026-05-10 | [#178](https://github.com/oscardlfr/AndroidCommonDoc/pull/178) | L0 cleanup: scrub + atomization + line-anchor vitest refactor. 3 BL closures (BL-W30-04/-05, line-anchor). |
+| Wave D | 2026-05-10 | [#177](https://github.com/oscardlfr/AndroidCommonDoc/pull/177) | Quick wins: atomization pass 2, CP integration W17#11/#17, test gap. 30L diet via 3 sub-docs. |
+| Wave C | 2026-05-10 | [#176](https://github.com/oscardlfr/AndroidCommonDoc/pull/176) | Doc cleanup + private-name scrub. 3 BL closures (BL-W32-11, BL-W30-02/03). |
+| Wave B | 2026-05-10 | [#173](https://github.com/oscardlfr/AndroidCommonDoc/pull/173)–[#174](https://github.com/oscardlfr/AndroidCommonDoc/pull/174) | Arch-platform hardening bundle. 5 BL closures (W31.7-09/ktr-01/02/03/adapter-bug). 3 new sub-docs. |
+| Wave B-bis | 2026-05-10 | [#175](https://github.com/oscardlfr/AndroidCommonDoc/pull/175) | Topology gaps closed (G1+G2+G3). plan-md-write-gate hook. |
 | BL-W46 | 2026-05-09 | [#157](https://github.com/oscardlfr/AndroidCommonDoc/pull/157)–[#161](https://github.com/oscardlfr/AndroidCommonDoc/pull/161) | Closed 16 BL-W45 audit findings + 4 deferred (3 fixed, 1 dropped). node -e gate exemption, sh backtick parity, getting-started frontmatter, plan-mode NOT-REPRODUCIBLE. |
 | BL-W45 | 2026-05-08 | [#154](https://github.com/oscardlfr/AndroidCommonDoc/pull/154)–[#156](https://github.com/oscardlfr/AndroidCommonDoc/pull/156) + L1 [#46](https://github.com/oscardlfr/shared-kmp-libs/pull/46) | Alignment debt cleanup. INV-a..k closed. Orchestration guide hub-split 351→33 lines, 8 tl-* sub-docs, kmp-test-runner v0.8.1. |
 | BL-W44-S2 | 2026-05-08 | [#150](https://github.com/oscardlfr/AndroidCommonDoc/pull/150)–[#153](https://github.com/oscardlfr/AndroidCommonDoc/pull/153) | BL-W26-01/02 closed. 5 agents gain MCP tools frontmatter. 4 retro fixes: planner sentinel, arch-bash-write-gate exemption, jq tuple lint, adapters headers. |
@@ -726,6 +731,7 @@ See [Team Topology](docs/agents/team-topology.md) for full details.
 | `domain-model-specialist` | specialist | Domain models, use cases, business logic |
 | `test-specialist` | specialist | Test compliance, coverage gaps, **test generation** |
 | `ui-specialist` | specialist | Compose accessibility, Material3 — **audits and implements fixes** |
+| `toolkit-specialist` | specialist | MCP server (TypeScript), hooks, non-test scripts — debugging, tooling fixes |
 | `api-rate-limit-auditor` | guardian | HTTP rate limiting, retry backoff, timeouts |
 | `beta-readiness-agent` | guardian | Feature completeness and beta criteria |
 | `cross-platform-validator` | guardian | Platform parity (Android, iOS, Desktop) |
@@ -995,6 +1001,15 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `validate-agent-templates` | Lint agent templates: frontmatter, role keywords, anti-patterns, versioning (7 checks) |
 | `catalog-coverage-check` | Detect hardcoded Gradle dependency versions that should use the version catalog |
 | `scan-secrets` | Scan project directory for verified secrets using TruffleHog |
+| `before-after-delta` | Token-efficient before/after diff for architect PREP/EXECUTE protocol |
+| `detect-project-type` | Detect Android vs KMP project type from build files |
+| `generate-template` | Generate agent template from manifest entry |
+| `lint-verdict-section-h` | Validate verdict section H format in architect dispatches |
+| `proguard-validate` | AGP 9 ProGuard/R8 configuration validator |
+| `skill-leak-check` | Detect skills accidentally referencing L0-internal paths |
+| `validate-manifest` | Validate l0-manifest.json schema and cross-references |
+| `validate-manifest-abi` | Classify manifest changes as BREAKING/ADDITIVE/NEUTRAL |
+| `verdict-pre-execute-check` | Pre-execute checklist validation for architect verdicts |
 
 ### Shared Libraries
 
@@ -1009,7 +1024,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-16 domain hubs, 77 sub-docs, 25 guides, 45 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+16 domain hubs, 79 sub-docs, 25 guides, 52 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1086,6 +1101,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 | [Resources](docs/resources/resources-hub.md) | Memory, lifecycle, and platform resource handling | Android + KMP |
 | [Security](docs/security/security-hub.md) | Encryption, key management, biometric auth, platform crypto | Android + KMP |
 | [Storage](docs/storage/storage-hub.md) | Key-value, relational, secure, cache — thin module architecture | Android + KMP |
+| [Network](docs/network/network-hub.md) | Ktor WebSocket patterns, HTTP client configuration | Android + KMP |
 | [Testing](docs/testing/testing-hub.md) | runTest, fakes, coroutine dispatchers, dispatcher scopes (Path A/B), coverage, benchmarks | Android + KMP |
 | [UI](docs/ui/ui-hub.md) | Sealed UiState, StateFlow, events, navigation, Compose screen structure | Android + KMP |
 
@@ -1129,7 +1145,7 @@ AndroidCommonDoc/
 +-- .claude/
 |   +-- commands/           # 59 Claude Code slash commands
 |   +-- agents/             # 39 specialized agents
-|   +-- hooks/              # Real-time enforcement hooks (27 hooks wired, 27 on disk)
+|   +-- hooks/              # Real-time enforcement hooks (28 on disk / 36 wired)
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
 |   +-- */SKILL.md          # 61 canonical skill definitions
@@ -1141,7 +1157,7 @@ AndroidCommonDoc/
 |   +-- sh/                 # Bash (macOS/Linux) -- 44 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
-|   +-- tests/              # bats shell test suite (1081 tests, 4 fixture XMLs)
+|   +-- tests/              # bats shell test suite (1132 tests, 4 fixture XMLs)
 +-- mcp-server/             # MCP server (46 tools, 3 prompts, dynamic resources)
 |   +-- src/
 |   |   +-- tools/          # 46 tools: validation, analysis, metrics, audit, sync, vault, doc integrity
@@ -1191,7 +1207,7 @@ AndroidCommonDoc/
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
 |   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
-+-- docs/                   # 16 domain hubs, 77 sub-docs, 25 guides, 45 agent workflow docs
++-- docs/                   # 16 domain hubs, 79 sub-docs, 25 guides, 52 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/

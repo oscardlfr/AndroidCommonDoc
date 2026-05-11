@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BL-W32-06a: Thin wrapper around kmp-test-runner v0.8.1.
+# BL-W32-06a: Thin wrapper around kmp-test-runner v0.9.0.
 # Replaces the 497-line self-contained runner (daemon retry, Kover fallback,
 # JDK detection). All of that logic is now inside kmp-test-runner internals.
 set -euo pipefail
@@ -41,7 +41,7 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       echo "Usage: gradle-run.sh [options] [<module>]"
       echo ""
-      echo "Thin wrapper around kmp-test-runner v0.8.1 (kmp-test)."
+      echo "Thin wrapper around kmp-test-runner v0.9.0 (kmp-test)."
       echo ""
       echo "Options:"
       echo "  --project-root <path>     Project root (default: pwd)"
