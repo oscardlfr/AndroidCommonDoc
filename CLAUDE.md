@@ -82,7 +82,7 @@
 
 ## Commands
 - `/pre-pr` — full pre-merge validation
-- `/readme-audit` — doc audit (13 checks, hub table, counts, links)
+- `/readme-audit` — doc audit (10 checks, hub table, counts, links)
 - `/full-audit` — unified audit across all quality dimensions
 - `/audit-docs` — doc-specific audit (structure + coherence + upstream)
 - `/validate-patterns` — code vs pattern compliance

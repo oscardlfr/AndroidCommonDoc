@@ -17,6 +17,8 @@ description: "CLI hub: kmp-test-runner v0.9.0 navigation, glossary, and skill→
 
 # kmp-test-runner CLI Hub
 
+> **Scope**: CLI/runner usage only — see [testing-hub.md](testing-hub.md) for full testing patterns (runTest, fakes, dispatchers, coverage).
+
 Navigation for kmp-test-runner v0.9.0 usage across L0 patterns.
 
 > **MANDATE**: Use `kmp-test <subcommand>` for all test execution. See [cli-agent-mandate.md](cli-agent-mandate.md).
