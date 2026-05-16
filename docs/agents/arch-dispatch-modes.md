@@ -98,6 +98,29 @@ Arch templates' PRE-TASK Protocol uses `scope_doc_path` instead of a hardcoded p
 5. **Cross-check**: if the dispatch summary conflicts with scope_doc_path contents, SendMessage team-lead with `PLAN-DISPATCH DRIFT` and quote both. Do NOT silently follow either.
 6. **Branch on mode**: `PREP` → prep behavior (identify risks, return READY). `EXECUTE` → execute behavior (verify, delegate fixes, write verdict).
 
+## PREP verdict dispatch hygiene (mandatory)
+
+Architect PREP verdicts MUST be filed at:
+`.planning/wave-<slug>/arch-<arch>-verdict.md`
+
+The body MUST contain the literal string `APPROVED-PREP`.
+
+**Why this exact filename**:
+- `.claude/hooks/premature-execution-gate.js:77` regex `/^(?:pr\d+-)?arch-[a-z]+-verdict\.md$/` admits ONLY this naming pattern.
+- `.claude/hooks/architect-bash-write-gate.js:112` exempt pattern likewise admits only `arch-<arch>-verdict\.md` (and `arch-<arch>-cross-verify.md` for cross-arch verification verdicts).
+- Files named `APPROVED-PREP-<arch>.md` or any other variant are NOT exempt — the architect will be BLOCKED from writing them.
+
+**Anti-pattern to avoid in dispatch prompts**:
+Do NOT instruct architects to write to `APPROVED-PREP-<arch>.md`, `<arch>-prep.md`, or any non-canonical name. Architects follow dispatch prompts; if the dispatch prescribes a wrong filename, the architect will attempt to write it and hit the gate.
+
+**Canonical dispatch snippet** (correct):
+```
+Write PREP verdict to: .planning/wave-<slug>/arch-integration-verdict.md
+Body MUST contain literal string: APPROVED-PREP
+```
+
+**Reference**: this rule surfaced from BL-W47-prep-5 friction where all 3 architects hit the gate due to orchestrator dispatch wording (templates were correct; dispatch prompts were the bug).
+
 ## Anti-patterns (forbidden)
 
 - Hardcoding `.planning/PLAN.md` in arch templates — Bug #5 reopener. Use `scope_doc_path` field from dispatch.

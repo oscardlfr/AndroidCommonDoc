@@ -38,13 +38,8 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [quality-gate-protocol](quality-gate-protocol.md) | Sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) |
 | [context-rotation-guide](context-rotation-guide.md) | Context management: rotation strategies, team-lead-as-relay, team dissolution |
 | [cross-layer-protocol](cross-layer-protocol.md) | Cross-layer team coordination: separate teams per layer, filesystem handoff via `.planning/HANDOFF.md`, phase sync |
-| [tl-phase-execution](tl-phase-execution.md) | team-lead's 3-phase execution protocol: phase transitions, triggers, anti-patterns, execution checklist |
-| [tl-session-setup](tl-session-setup.md) | team-lead session setup: Phase 2 core specialists, selective spawning, rotation protocol, context management, architect routing |
-| [tl-dispatch-topology](tl-dispatch-topology.md) | team-lead dispatch: topology gate, pattern validation chain, dynamic scaling, autonomy rules, kill order |
-| [tl-verification-gates](tl-verification-gates.md) | team-lead verification: architect verdicts, post-verdict broadcast, post-wave integrity check |
-| [tl-quality-doc-pipeline](tl-quality-doc-pipeline.md) | team-lead quality gate + doc pipeline: quality-gater retry rules, doc-updater mandate, CLAUDE.md pointers-only rule |
 | [scope-extension-protocol](scope-extension-protocol.md) | Mechanical scope-extension gate: authorization workflow when architects hit out-of-scope blockers, escape hatch, bypass audit log |
-| [tl-model-profiles](tl-model-profiles.md) | `.claude/model-profiles.json`: 4 profiles, team-lead-opus-override rationale, haiku/opus override maps |
+| [team-lead-hub](team-lead/team-lead-hub.md) | Team-lead protocols: phase execution, dispatch, verification gates, model profiles, git workflow, agent roster — 14 sub-docs |
 | [arch-dispatch-modes](arch-dispatch-modes.md) | Architect PREP/EXECUTE dispatch modes + scope_doc_path protocol (Wave 23 Bug #5 + #6 fix) |
 | [Agent Core Rules](agent-core-rules.md) | Universal rules for all session agents |
 | [Agent Verdict Protocol](agent-verdict-protocol.md) | Architect verdict format + disk-write + 1-liner DM pattern |
@@ -55,14 +50,6 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [test-specialist-coverage-targets](test-specialist-coverage-targets.md) | test-specialist minimum coverage targets by layer (model/domain/data/db/UI) |
 | [test-specialist-jdk-env](test-specialist-jdk-env.md) | test-specialist JDK env triage: UnsupportedClassVersionError, JAVA_HOME override steps (BL-W32-16) |
 | [test-specialist-vm-testing](test-specialist-vm-testing.md) | test-specialist high-dep ViewModel testing: factory pattern, compile-time RED signal |
-| [tl-session-start](tl-session-start.md) | **REQUIRED AT SESSION START** — T-BUG-010, HARD GATEs, FORBIDDEN/ALLOWED mode, Phase 0 spawn blocks, pre-flight checklist, planning phase gate |
-| [tl-agent-roster](tl-agent-roster.md) | Agent roster + specialist ownership map: all roles, surfaces, reporting chains, TS/hooks routing |
-| [tl-pm-absent-mode](tl-pm-absent-mode.md) | PM/Project-Manager Absent Mode: liveness check, routing fallback, FORBIDDEN actions |
-| [tl-verification-done-criteria](tl-verification-done-criteria.md) | Verification-before-done: TDD gate, doc check, security auditor routing |
-| [tl-git-workflow](tl-git-workflow.md) | Mandatory git workflow: branch protection, commit discipline, script invocation, RTK prefix |
-| [tl-skills-mcp-tools](tl-skills-mcp-tools.md) | L0 skills, MCP tools, and official skills reference |
-| [tl-release-workflow](tl-release-workflow.md) | Release workflow, post-change checklist, findings protocol |
-| [tl-ingestion-request-handler](tl-ingestion-request-handler.md) | Ingestion-request handler: context-provider → user approval → doc-updater pipeline |
 | [arch-platform-prep-authoring-checklist](arch-platform-prep-authoring-checklist.md) | arch-platform pre-execute authoring checklist: cross-file pin scan, scope doc read, verdict field requirements |
 | [arch-platform-section-h-rule](arch-platform-section-h-rule.md) | arch-platform Section H authoring rule: manifest yaml required when versions bump, literal paths only |
 | [kmp-checks-catalog](kmp-checks-catalog.md) | 6 KMP architectural checks (extracted from arch-platform.md): source sets, dep direction, five-layer, convention plugins, pattern compliance, Compose resources |
@@ -76,6 +63,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [knowledge-currency-gate](knowledge-currency-gate.md) | Knowledge currency gate: CP verification required before any KMP capability claim in arch dispatches |
 | [main-agent-orchestration-guide](main-agent-orchestration-guide.md) | Orchestration guide for the main agent: team topology, phase protocol, architect routing, quality gates |
 | [quality-gater-runtime-ui-validation](quality-gater-runtime-ui-validation.md) | quality-gater Step 9.5 — Runtime UI Validation: Android Layout Diff + Compose Semantic Diff dispatch |
+| [workflow-orchestration](workflow-orchestration.md) | Plan mode, agent delegation table, verification, and autonomous execution rules (extracted from CLAUDE.md prep-6) |
 
 ## Key Concepts
 

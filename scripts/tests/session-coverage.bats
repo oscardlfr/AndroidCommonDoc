@@ -1035,13 +1035,13 @@ teardown() {
 
 @test "CLAUDE.md: lists all new agents in delegation table" {
     for agent in debugger verifier advisor researcher codebase-mapper; do
-        grep -q "$agent" "$L0_ROOT/CLAUDE.md"
+        grep -q "$agent" "$L0_ROOT/docs/agents/workflow-orchestration.md"
     done
 }
 
 @test "CLAUDE.md: lists all new skills in commands section" {
     for skill in debug research map-codebase verify decide note review-pr benchmark; do
-        grep -q "/$skill" "$L0_ROOT/CLAUDE.md"
+        grep -q "/$skill" "$L0_ROOT/docs/guides/commands.md"
     done
 }
 
@@ -1336,9 +1336,9 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 }
 
 @test "CLAUDE.md: lists /work, /init-session, /resume-work" {
-    grep -q "/work" "$L0_ROOT/CLAUDE.md"
-    grep -q "/init-session" "$L0_ROOT/CLAUDE.md"
-    grep -q "/resume-work" "$L0_ROOT/CLAUDE.md"
+    grep -q "/work" "$L0_ROOT/docs/guides/commands.md"
+    grep -q "/init-session" "$L0_ROOT/docs/guides/commands.md"
+    grep -q "/resume-work" "$L0_ROOT/docs/guides/commands.md"
 }
 
 @test "CHANGELOG: has ecosystem initialization entry" {
