@@ -50,6 +50,9 @@
 ### No console.log in MCP server
 - Use `logger` utility (stderr only) — `console.log` corrupts stdio transport
 
+### Agentskills.io spec pilot
+- See `docs/skills/agentskills-pilot.md` — WARN-only CI validator, advisory.
+
 ### Doc size limits (MUST split, never extend)
 - Hub docs **≤100 lines**: navigation + glossary only, zero implementation detail
 - Sub-docs **≤300 lines**: one focused topic. At 250+ → plan your split

@@ -6,6 +6,12 @@
 
 HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/plan-md-write-gate.js"
 
+# Defense-in-depth: remove any leaked sentinels from the repo's wave-quality-gates dir
+teardown_file() {
+  rm -f "$BATS_TEST_DIRNAME/../../.claude/wave-quality-gates/foo.md"
+  rm -f "$BATS_TEST_DIRNAME/../../.claude/wave-quality-gates"/wave-test*.md
+}
+
 # ── Case 1: BLOCK — non-planner (team-lead) writes PLAN.md → exit 2 ─────────
 
 @test "gate blocks team-lead Write on .planning/wave-*/PLAN.md" {
@@ -23,8 +29,11 @@ HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/plan-md-write-gate.js"
 # ── Case 2: ALLOW — planner writes PLAN.md → exit 0 ────────────────────────
 
 @test "gate allows planner Write on .planning/wave-*/PLAN.md" {
-  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-foo/PLAN.md\"},\"agent_type\":\"planner\"}' | node '$HOOK'"
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-foo/PLAN.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' node '$HOOK'"
   [ "$status" -eq 0 ]
+  rm -rf "$tmp_dir"
 }
 
 # ── Case 3: ALLOW — Write on non-matching path → exit 0 ─────────────────────
