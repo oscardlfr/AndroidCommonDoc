@@ -1507,6 +1507,9 @@ HOOK_SCRIPT="$L0_ROOT/.claude/hooks/quality-gate-pre-commit.sh"
 }
 
 @test "quality-gate hook: pre-commit stub exits 0 on git commit (stamp check moved to pre-push)" {
-    run bash -c 'echo "{\"tool_input\":{\"command\":\"git commit -m test\"}}" | bash "$HOOK_SCRIPT"'
+    # $HOOK_SCRIPT must be interpolated by bats — use double quotes around bash -c arg
+    # so the variable expands before the subshell sees it.
+    INPUT='{"tool_input":{"command":"git commit -m test"}}'
+    run bash -c "echo '$INPUT' | bash '$HOOK_SCRIPT'"
     [ "$status" -eq 0 ]
 }
