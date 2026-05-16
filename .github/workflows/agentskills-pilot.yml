@@ -15,12 +15,14 @@ jobs:
   agentskills-validate:
     name: Agentskills Spec Pilot (WARN)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
       - name: Install uv
-        run: pip install uv
+        uses: astral-sh/setup-uv@v8
 
       - name: Validate skills against agentskills.io spec
         continue-on-error: true
