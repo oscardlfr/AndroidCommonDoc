@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
-template_version: "1.25.0"
+template_version: "1.26.0"
 skills:
   - test
   - extract-errors
@@ -389,6 +389,7 @@ Full protocol: `docs/agents/agent-verdict-protocol.md`
 - **PREP phase initial write**: use the Bash heredoc above (`cat <<'EOF' >`) — fresh file, overwrite OK.
 - **EXECUTE phase verdict write**: MUST APPEND to the existing PREP verdict file. Use `fs.appendFileSync()` (or shell `cat <<'EOF' >>` append redirect), NOT `fs.writeFileSync()` or `cat <<'EOF' >`. Overwriting destroys the `APPROVED-PREP` literal token, which `premature-execution-gate` checks at merge time.
 - **Lesson**: PR #166 cost 1 fix-forward when arch-platform overwrote PREP verdict during EXECUTE phase. APPROVED-PREP token erased, gate triggered.
+- **Token asymmetry**: `APPROVED-PREP` is gate-enforced (premature-execution-gate blocks merge if absent); `APPROVED-VERDICT` is record-only (post-execution audit trail, not checked by any hook).
 
 ## Official Skills (use when available)
 - `webapp-testing` — Integration test patterns (Playwright, navigation e2e)
