@@ -17,7 +17,7 @@ description: "Changed-modules test mode via kmp-test-runner CLI — git-diff-bas
 
 # Changed Modules Tests
 
-Incremental test execution via kmp-test-runner v0.9.0 `changed` subcommand — tests only the modules affected by git changes.
+Incremental test execution via kmp-test-runner v0.9.1 `changed` subcommand — tests only the modules affected by git changes.
 
 ## CLI Usage
 

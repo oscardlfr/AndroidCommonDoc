@@ -15,7 +15,7 @@ monitor_urls:
 description: "MANDATE/FORBID block for kmp-test-runner CLI — referenced by test-specialist and arch-testing templates"
 ---
 
-# CLI Mandate — kmp-test-runner (v0.9.0+)
+# CLI Mandate — kmp-test-runner (v0.9.1+)
 
 > This doc is the canonical MANDATE/FORBID reference. Agent templates link here — do not inline this content into templates.
 
@@ -77,7 +77,7 @@ KMP_TEST_RUNNER_BYPASS=1 ./gradlew ...
 
 ## JS/Wasm note
 
-`jsTest`, `jsBrowserTest`, `jsNodeTest`, `wasmJsTest` are blocked by the gate with a special message: _"kmp-test-runner v0.9.0 CLI does not yet fully support JS/Wasm targets — track https://github.com/oscardlfr/kmp-test-runner/releases for v0.10+ support."_ Do not invoke these directly.
+`jsTest`, `jsBrowserTest`, `jsNodeTest`, `wasmJsTest` are blocked by the gate with a special message: _"kmp-test-runner v0.9.1 CLI does not yet fully support JS/Wasm targets — track https://github.com/oscardlfr/kmp-test-runner/releases for v0.10+ support."_ Do not invoke these directly.
 
 ## Reference docs
 

@@ -17,7 +17,7 @@ description: "macOS native test execution via kmp-test-runner CLI — macosArm64
 
 # macOS Native Tests
 
-macOS native test execution via kmp-test-runner v0.9.0. **Requires macOS host.**
+macOS native test execution via kmp-test-runner v0.9.1. **Requires macOS host.**
 
 ## CLI Usage
 

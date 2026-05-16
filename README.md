@@ -24,7 +24,7 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **Detekt rules** that enforce architecture patterns at build time -- 23 hand-written + 5 generated AST-only rules (28 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, security patterns, and testing anti-patterns
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
 - **[Dokka Markdown Plugin](https://github.com/oscardlfr/dokka-markdown-plugin)** — transforms KDoc into L0-compliant structured markdown (`docs/api/*.md`) with 14-field YAML frontmatter, content-addressed hashes for CI drift detection, and first-class KMP expect/actual handling. Standalone repo, MIT-licensed.
-- **[kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner)** — npm CLI (`@oscardlfr/kmp-test-runner` v0.9.0) that owns Gradle test orchestration. Invoked by `/test`, `/coverage`, `/test-full-parallel`, `/test-changed` skills via the `gradle-run.sh` (Linux/macOS, in `scripts/sh/`) or `gradle-run.ps1` (Windows, in `scripts/ps1/`) thin wrappers. Standalone repo, Apache-2.0.
+- **[kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner)** — npm CLI (`@oscardlfr/kmp-test-runner` v0.9.1) that owns Gradle test orchestration. Invoked by `/test`, `/coverage`, `/test-full-parallel`, `/test-changed` skills via the `gradle-run.sh` (Linux/macOS, in `scripts/sh/`) or `gradle-run.ps1` (Windows, in `scripts/ps1/`) thin wrappers. Standalone repo, Apache-2.0.
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
 - **MCP server** with 46 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions. **Wave 25 fix**: all 46 tools are now callable by the 20 core agents (previously prose-only — agents described MCP usage but the harness never loaded the schemas). One tool is intentionally L2-only (`android-cli-bridge`, for L2 consumer apps)
@@ -46,7 +46,7 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 | Wave | Date | PR | Theme |
 |------|------|----|-------|
 | BL-W47-prep | 2026-05-11 | [#180](https://github.com/oscardlfr/AndroidCommonDoc/pull/180) | Topology cleanups: planner 1.11.0, AMEND protocol, 4 topology gaps closed. |
-| Wave F | 2026-05-11 | [#179](https://github.com/oscardlfr/AndroidCommonDoc/pull/179) | Post-Wave-E audit cleanup + script v0.9.0 parity. |
+| Wave F | 2026-05-11 | [#179](https://github.com/oscardlfr/AndroidCommonDoc/pull/179) | Post-Wave-E audit cleanup + script v0.9.1 parity. |
 | Wave E | 2026-05-10 | [#178](https://github.com/oscardlfr/AndroidCommonDoc/pull/178) | L0 cleanup: scrub + atomization + line-anchor vitest refactor. 3 BL closures (BL-W30-04/-05, line-anchor). |
 | Wave D | 2026-05-10 | [#177](https://github.com/oscardlfr/AndroidCommonDoc/pull/177) | Quick wins: atomization pass 2, CP integration W17#11/#17, test gap. 30L diet via 3 sub-docs. |
 | Wave C | 2026-05-10 | [#176](https://github.com/oscardlfr/AndroidCommonDoc/pull/176) | Doc cleanup + private-name scrub. 3 BL closures (BL-W32-11, BL-W30-02/03). |
@@ -507,7 +507,7 @@ Gradle plugins and utilities shipped in `tools/` — installable independently f
 
 Install via `/setup --dokka-plugin yes` (wizard W10) or manually — see the [standalone plugin repo](https://github.com/oscardlfr/dokka-markdown-plugin#readme) and the pattern doc at [`docs/gradle/dokka-markdown-plugin.md`](docs/gradle/dokka-markdown-plugin.md).
 
-### kmp-test-runner v0.9.0 — test orchestration runner
+### kmp-test-runner v0.9.1 — test orchestration runner
 
 `@oscardlfr/kmp-test-runner` is the canonical runner for Gradle test execution across the L0/L1/L2 chain. AndroidCommonDoc consumes it via thin shell wrappers: `gradle-run.sh/.ps1` (~100 lines each, BL-W32-06a) for single-module runs, and `run-parallel-coverage-suite.sh/.ps1` + `run-changed-modules-tests.sh/.ps1` (BL-W32-06e) for parallel suite and changed-module flows. The wrappers delegate retry semantics, daemon management, Kover coverage, and Windows file-lock recovery to the runner. **Skills using it**: `/test`, `/coverage`, `/test-full-parallel`, `/test-full`, `/test-changed`. **Adoption**: L0 ✓ (BL-W32-06a/06e), L1 in progress, L2 pending. For runner CLI usage, retry policies, and configuration see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme).
 
@@ -969,12 +969,12 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `check-doc-freshness` | Verify pattern doc version references against versions manifest (calls check-freshness) |
 | `check-version-sync` | Version catalog diff between projects -- or against `versions-manifest.json` directly |
 | `generate-sbom` | CycloneDX SBOM generation via Gradle plugin |
-| `gradle-run` | Thin wrapper over `kmp-test-runner` v0.9.0 (smart retry, daemon management, OOM recovery handled by external CLI) |
+| `gradle-run` | Thin wrapper over `kmp-test-runner` v0.9.1 (smart retry, daemon management, OOM recovery handled by external CLI) |
 | `lint-resources` | String resource naming convention enforcement |
 | `pattern-lint` | **Deterministic code pattern checks** -- 8 grep-based rules (CancellationException, MutableSharedFlow, forbidden imports, println, TODO crash, runBlocking, GlobalScope, System.currentTimeMillis) |
 | `run-android-tests` | Instrumented test orchestration on device/emulator |
 | `run-changed-modules-tests` | Git diff-based module detection + selective test execution |
-| `run-parallel-coverage-suite` | Thin wrapper over kmp-test-runner v0.9.0 for parallel test execution + L0 coverage-full-report.md generation. `--exclude-coverage` for test-utility modules, auto-excludes `*:testing`, `konsist-guard`, etc. For runner internals see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme). |
+| `run-parallel-coverage-suite` | Thin wrapper over kmp-test-runner v0.9.1 for parallel test execution + L0 coverage-full-report.md generation. `--exclude-coverage` for test-utility modules, auto-excludes `*:testing`, `konsist-guard`, etc. For runner internals see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme). |
 | `scan-sbom` | CVE scanning via Trivy |
 | `verify-kmp-packages` | KMP source set validation and import checking |
 
@@ -1226,7 +1226,7 @@ AndroidCommonDoc/
 
 ## Coverage Workflow
 
-`/test-full-parallel` orchestrates a complete test + coverage cycle via `run-parallel-coverage-suite.sh` — a thin wrapper around [kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner) v0.9.0:
+`/test-full-parallel` orchestrates a complete test + coverage cycle via `run-parallel-coverage-suite.sh` — a thin wrapper around [kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner) v0.9.1:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -1234,7 +1234,7 @@ AndroidCommonDoc/
 │  run-parallel-coverage-suite.sh --project-root . --coverage-tool auto│
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  1. DELEGATE TO kmp-test-runner v0.9.0                              │
+│  1. DELEGATE TO kmp-test-runner v0.9.1                              │
 │     kmp-test-runner parallel --project-root .                       │
 │     Handles: module discovery, Gradle invocation, daemon mgmt,      │
 │     timeout watchdog, Kover/JaCoCo fallback retry                   │

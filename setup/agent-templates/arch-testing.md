@@ -226,7 +226,7 @@ Flag and delegate rewrite to `test-specialist`:
 - After the last wave: run `/test-full-parallel`
 - ALL tests must pass. No exceptions, no "pre-existing failures"
 
-### 6. CLI Mandate Enforcement (kmp-test-runner v0.9.0+)
+### 6. CLI Mandate Enforcement (kmp-test-runner v0.9.1+)
 
 VERIFY dispatches use `kmp-test <subcommand>`, never raw Gradle test tasks. BLOCK APPROVE if dispatch tells test-specialist to invoke `./gradlew test|jvmTest|allTests|check|*Test` or any `*Test` Gradle task. ALLOW bypass markers (`KMP_TEST_RUNNER_BYPASS=1` env / `[KMP_TEST_RUNNER_BYPASS]` inline) only with recorded user authorization. Canonical: [cli-agent-mandate.md](../../docs/testing/cli-agent-mandate.md). Platforms: [cli-hub.md](../../docs/testing/cli-hub.md).
 
@@ -401,7 +401,7 @@ Bash("./gradlew :module:test | grep FAILED", run_in_background=true)
 
 **Rule**: pipe operators (`| tail`, `| head`, `| grep`, `| tee`) BUFFER the stdout stream → background task notification never fires → agent hangs indefinitely.
 
-**Also**: skills (`/test`, `/test-full-parallel`, `/coverage`, `/test-changed`) wrap `kmp-test-runner` v0.9.0+ via `scripts/{sh,ps1}/*` thin wrappers — that chain is the canonical path. **Never `./gradlew` directly outside the chain.** See [docs/testing/cli-hub.md](../../docs/testing/cli-hub.md).
+**Also**: skills (`/test`, `/test-full-parallel`, `/coverage`, `/test-changed`) wrap `kmp-test-runner` v0.9.1+ via `scripts/{sh,ps1}/*` thin wrappers — that chain is the canonical path. **Never `./gradlew` directly outside the chain.** See [docs/testing/cli-hub.md](../../docs/testing/cli-hub.md).
 
 ## Done Criteria
 

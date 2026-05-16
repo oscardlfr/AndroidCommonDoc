@@ -17,7 +17,7 @@ description: "Android unit test execution via kmp-test-runner CLI — Robolectri
 
 # Android Unit Tests
 
-Android unit test execution (Robolectric, no device required) via kmp-test-runner v0.9.0.
+Android unit test execution (Robolectric, no device required) via kmp-test-runner v0.9.1.
 
 ## CLI Usage
 

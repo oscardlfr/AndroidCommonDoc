@@ -115,7 +115,7 @@ if ($coverageTool -ne "") { $params.CoverageTool = $coverageTool }
 
 ## Runner
 
-This skill delegates to `run-changed-modules-tests.sh`/`run-changed-modules-tests.ps1`, which detects changed modules then delegates to the thin-wrapped `run-parallel-coverage-suite` backed by `kmp-test-runner` v0.9.0. See [oscardlfr/kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner#readme) for runner internals.
+This skill delegates to `run-changed-modules-tests.sh`/`run-changed-modules-tests.ps1`, which detects changed modules then delegates to the thin-wrapped `run-parallel-coverage-suite` backed by `kmp-test-runner` v0.9.1. See [oscardlfr/kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner#readme) for runner internals.
 
 ## Cross-References
 
