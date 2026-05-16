@@ -32,7 +32,12 @@ process.stdin.on('end', () => {
   const toolName = data.tool_name || '';
   if (toolName !== 'Write' && toolName !== 'Edit') process.exit(0);
 
-  const filePath = (data.tool_input?.file_path ?? '').replace(/\\/g, '/');
+  const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  let filePath = (data.tool_input?.file_path ?? '').replace(/\\/g, '/');
+  if (path.isAbsolute(filePath)) {
+    filePath = path.relative(projectRoot, filePath).replace(/\\/g, '/');
+  }
+  filePath = filePath.replace(/^\.\//, '');
 
   // Match .planning/wave-<slug>/PLAN.md or .planning/wave-<slug>/PLAN-W<digits>.md
   if (!/^\.planning\/wave-[^/]+\/PLAN(-W\d+)?\.md$/.test(filePath)) process.exit(0);

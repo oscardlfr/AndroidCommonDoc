@@ -21,9 +21,7 @@ process.stdin.on('end', () => {
 
     if (!agentType.startsWith('arch-')) process.exit(0);
 
-    const targetPath = toolName === 'Write'
-      ? (data.tool_input?.path || '')
-      : (data.tool_input?.file_path || '');
+    const targetPath = data.tool_input?.file_path ?? data.tool_input?.path ?? '';
     if (!targetPath) process.exit(0);
 
     const projectRoot = process.env.PROJECT_ROOT || process.cwd();
