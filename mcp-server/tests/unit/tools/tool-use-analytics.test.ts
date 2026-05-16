@@ -10,6 +10,11 @@ const FIXTURE_PATH = path.resolve(
   "../../../../scripts/tests/fixtures/tool-use-log-fixture.jsonl",
 );
 
+// BL-W47-prep-3: fixture entries are dated 2026-04-15. Use a long lookback so the
+// 4-week window of computeToolUseReport doesn't age the fixture out as wall-clock
+// time advances. Update fixture timestamps if a separate fixture-rotation strategy ships.
+const FIXTURE_LOOKBACK_WEEKS = 520;
+
 interface ToolUseLogEntry {
   ts: string;
   session_id: string;
@@ -38,33 +43,33 @@ describe("tool-use-analytics", () => {
   });
 
   it("top_tools[0] is Bash with 12 calls", () => {
-    const report = computeToolUseReport(entries, 4, 10, 0);
+    const report = computeToolUseReport(entries, FIXTURE_LOOKBACK_WEEKS, 10, 0);
     expect(report.top_tools[0].tool_name).toBe("Bash");
     expect(report.top_tools[0].calls).toBe(12);
   });
 
   it("cp_bypass_blocked sum is 3", () => {
-    const report = computeToolUseReport(entries, 4, 10, 0);
+    const report = computeToolUseReport(entries, FIXTURE_LOOKBACK_WEEKS, 10, 0);
     expect(report.cp_bypass_blocked).toBe(3);
   });
 
   it("context7_calls is 5", () => {
-    const report = computeToolUseReport(entries, 4, 10, 0);
+    const report = computeToolUseReport(entries, FIXTURE_LOOKBACK_WEEKS, 10, 0);
     expect(report.context7_calls).toBe(5);
   });
 
   it("our_mcp_calls is 5", () => {
-    const report = computeToolUseReport(entries, 4, 10, 0);
+    const report = computeToolUseReport(entries, FIXTURE_LOOKBACK_WEEKS, 10, 0);
     expect(report.our_mcp_calls).toBe(5);
   });
 
   it("skill_calls is 5", () => {
-    const report = computeToolUseReport(entries, 4, 10, 0);
+    const report = computeToolUseReport(entries, FIXTURE_LOOKBACK_WEEKS, 10, 0);
     expect(report.skill_calls).toBe(5);
   });
 
   it("by_agent groups by agent_id, falling back to agent_type then unknown", () => {
-    const report = computeToolUseReport(entries, 4, 10, 0);
+    const report = computeToolUseReport(entries, FIXTURE_LOOKBACK_WEEKS, 10, 0);
     expect(report.by_agent["arch-integration-3@session-androidcommondoc"]).toBe(15); // Read(10) + SendMessage(5)
     expect(report.by_agent["arch-platform-3@session-androidcommondoc"]).toBe(20);   // Grep(8) + Bash(12)
     expect(report.by_agent["arch-testing-3@session-androidcommondoc"]).toBe(5);     // Skill(5)
@@ -72,14 +77,14 @@ describe("tool-use-analytics", () => {
   });
 
   it("session_summary totals are correct", () => {
-    const report = computeToolUseReport(entries, 4, 10, 0);
+    const report = computeToolUseReport(entries, FIXTURE_LOOKBACK_WEEKS, 10, 0);
     expect(report.session_summary.total_calls).toBe(50);
     expect(report.session_summary.unique_tools).toBeGreaterThan(0);
-    expect(report.session_summary.period_days).toBe(28);
+    expect(report.session_summary.period_days).toBe(FIXTURE_LOOKBACK_WEEKS * 7);
   });
 
   it("success_rate is between 0 and 1", () => {
-    const report = computeToolUseReport(entries, 4, 10, 0);
+    const report = computeToolUseReport(entries, FIXTURE_LOOKBACK_WEEKS, 10, 0);
     for (const t of report.top_tools) {
       expect(t.success_rate).toBeGreaterThanOrEqual(0);
       expect(t.success_rate).toBeLessThanOrEqual(1);
@@ -87,7 +92,7 @@ describe("tool-use-analytics", () => {
   });
 
   it("mcp_calls counts entries starting with mcp__", () => {
-    const report = computeToolUseReport(entries, 4, 10, 0);
+    const report = computeToolUseReport(entries, FIXTURE_LOOKBACK_WEEKS, 10, 0);
     expect(report.mcp_calls).toBe(10); // 5 context7 + 5 androidcommondoc
   });
 
@@ -180,13 +185,13 @@ describe("tool-use-analytics", () => {
   });
 
   it("markdown snapshot", () => {
-    const report = computeToolUseReport(entries, 4, 10, 0);
+    const report = computeToolUseReport(entries, FIXTURE_LOOKBACK_WEEKS, 10, 0);
     const md = renderToolUseMarkdown(report);
     expect(md).toMatchSnapshot();
   });
 
   it("dead_tools is empty when all entries are within window", () => {
-    const report = computeToolUseReport(entries, 4, 10, 0);
+    const report = computeToolUseReport(entries, FIXTURE_LOOKBACK_WEEKS, 10, 0);
     expect(report.dead_tools).toHaveLength(0);
   });
 

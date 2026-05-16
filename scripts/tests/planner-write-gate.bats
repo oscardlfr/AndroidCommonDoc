@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests for .claude/hooks/plan-md-write-gate.js (G2 — BL-W-B-bis)
+# Tests for .claude/hooks/plan-md-write-gate.js (G2 — BL-W-B-bis; F2 sentinel — BL-W47-prep-3)
 # Modeled on scripts/tests/plan-mode-spawn-planner.bats.
 #
 # Agent identity is passed via stdin JSON `data.agent_type` field (NOT CLAUDE_AGENT_NAME).
@@ -61,4 +61,41 @@ HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/plan-md-write-gate.js"
 @test "gate allows unknown agent_type on non-.planning path" {
   run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"scripts/tests/something.bats\"},\"agent_type\":\"unknown-agent\"}' | node '$HOOK'"
   [ "$status" -eq 0 ]
+}
+
+# ── F2 Sentinel cases (BL-W47-prep-3) ────────────────────────────────────────
+
+@test "F2: planner Write on PLAN.md creates wave-quality-gates sentinel" {
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  mkdir -p "$tmp_dir/.claude/wave-quality-gates"
+  local sentinel="$tmp_dir/.claude/wave-quality-gates/wave-test-slug.md"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-wave-test-slug/PLAN.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [ -f "$sentinel" ]
+  [[ "$(cat $sentinel)" == *'Wave Quality Gate: wave-test-slug'* ]]
+  [[ "$(cat $sentinel)" == *'PASS (stub'* ]]
+  rm -rf "$tmp_dir"
+}
+
+@test "F2: sentinel NOT created for non-planner Write (block path)" {
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  mkdir -p "$tmp_dir/.claude/wave-quality-gates"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-wave-test-slug/PLAN.md\"},\"agent_type\":\"team-lead\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [ ! -f "$tmp_dir/.claude/wave-quality-gates/wave-test-slug.md" ]
+  rm -rf "$tmp_dir"
+}
+
+@test "F2: sentinel NOT created if it already exists (idempotent)" {
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  mkdir -p "$tmp_dir/.claude/wave-quality-gates"
+  local sentinel="$tmp_dir/.claude/wave-quality-gates/wave-test-slug.md"
+  echo "existing content" > "$sentinel"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-wave-test-slug/PLAN.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [[ "$(cat $sentinel)" == "existing content" ]]
+  rm -rf "$tmp_dir"
 }
