@@ -14,7 +14,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 - Post-Wave-E audit cleanup: 7 findings resolved (1H/3M/3L).
 - Script v0.9.0 parity: L1 sync (#50) aligning agent templates.
-- README skills count: no drift (audit script used non-dir count; corrected in BL-W47-prep-2 T3).
+- README skills count audit ran (skills count remained 61; audit script counted non-dir entries — closed in BL-W47-prep-2 T3 (disk-derived count helper)).
 
 ### Added (Wave E — L0 cleanup, [#178](https://github.com/oscardlfr/AndroidCommonDoc/pull/178))
 
