@@ -17,7 +17,7 @@ description: "kmp-test-runner troubleshooting — exit codes, envelope schema v2
 
 # Troubleshooting
 
-Exit codes, envelope schema v2 changes, and common error remediation for kmp-test-runner v0.9.0.
+Exit codes, envelope schema v2 changes, and common error remediation for kmp-test-runner v0.9.1.
 
 ## Exit Codes
 

@@ -17,7 +17,7 @@ description: "JVM and Desktop test execution via kmp-test-runner CLI — jvmTest
 
 # JVM / Desktop / Common Tests
 
-JVM, Desktop, and cross-platform test execution patterns via kmp-test-runner v0.9.0.
+JVM, Desktop, and cross-platform test execution patterns via kmp-test-runner v0.9.1.
 
 ## CLI Usage
 

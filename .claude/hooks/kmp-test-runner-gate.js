@@ -2,7 +2,7 @@
 // kmp-test-runner-gate.js — PreToolUse hook for Bash (PR2 cli-audit-pr2).
 //
 // Blocks ALL Gradle test task variants across KMP platforms. Agents MUST
-// use kmp-test-runner CLI v0.9.0+ instead.
+// use kmp-test-runner CLI v0.9.1+ instead.
 //
 // See docs/testing/cli-hub.md for the full 12-doc reference.
 //
@@ -10,7 +10,7 @@
 // Fail-open on any parse error or stdin timeout (exit 0).
 
 const ALLOWLIST_PATTERNS = [
-  // Read-only diagnostic commands (kmp-test-runner v0.9.0)
+  // Read-only diagnostic commands (kmp-test-runner v0.9.1)
   /\bkmp-test\s+(info|describe)\b/,
   // Compile-only Android task (no test execution)
   /\bassembleAndroidTest\b/,
@@ -83,7 +83,7 @@ process.stdin.on('end', () => {
   // Special JS/Wasm message
   if (JS_WASM_PATTERN.test(command)) {
     process.stderr.write(
-      `[kmp-test-runner-gate] BLOCKED but kmp-test-runner v0.9.0 does NOT yet support JS/Wasm.\n` +
+      `[kmp-test-runner-gate] BLOCKED but kmp-test-runner v0.9.1 does NOT yet support JS/Wasm.\n` +
       `Use KMP_TEST_RUNNER_BYPASS=1 ONLY with explicit user authorization. Upstream issue pending.\n` +
       `See: docs/testing/cli-tests-js-wasm.md\n`
     );
@@ -93,12 +93,12 @@ process.stdin.on('end', () => {
   // Standard block message
   process.stderr.write(
     `[kmp-test-runner-gate] BLOCKED: raw Gradle test invocation detected.\n` +
-    `Use the /test skill or kmp-test-runner CLI (v0.9.0+) instead.\n` +
+    `Use the /test skill or kmp-test-runner CLI (v0.9.1+) instead.\n` +
     `See: docs/testing/cli-hub.md (full 12-doc CLI reference)\n` +
     `Bypass options:\n` +
     `  1. Export KMP_TEST_RUNNER_BYPASS=1 (authorized contexts only)\n` +
     `  2. Include [KMP_TEST_RUNNER_BYPASS] inline marker in the command\n` +
-    `Reference: PR2 cli-audit-pr2 — kmp-test-runner v0.9.0 CLI-only mandate\n`
+    `Reference: PR2 cli-audit-pr2 — kmp-test-runner v0.9.1 CLI-only mandate\n`
   );
   process.exit(2);
 });

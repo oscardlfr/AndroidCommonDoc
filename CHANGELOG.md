@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W47-prep-7 — kmp-test-runner 0.9.1 bump)
+
+- kmp-test-runner v0.9.0 → v0.9.1 across CI, bash/ps1 wrappers, skills, docs/testing/, AGENTS.md, README. Mechanical version-string bump.
+- test-specialist 1.24.0 → 1.25.0, arch-testing 1.31.0 → 1.32.0 (MIGRATIONS.json entries added).
+- 3 historical refs preserved: `cli-troubleshooting.md:33` (`v0.9.0 Breaking` heading), `cli-tests-js-wasm.md:22,33` (deferred note version anchors).
+
 ### Added (BL-W47-prep — topology cleanups, [#180](https://github.com/oscardlfr/AndroidCommonDoc/pull/180))
 
 - planner 1.10.0 → 1.11.0: AMEND discipline protocol + plan-write-location fix.

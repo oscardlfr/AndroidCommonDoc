@@ -17,7 +17,7 @@ description: "Coverage report generation via kmp-test-runner CLI — Kover/JaCoC
 
 # Coverage
 
-Coverage report generation via kmp-test-runner v0.9.0.
+Coverage report generation via kmp-test-runner v0.9.1.
 
 ## CLI Usage
 

@@ -383,6 +383,11 @@
         "date": "2026-05-11",
         "breaking": false,
         "note": "BL-W47-prep-2: APPROVED-PREP/APPROVED-VERDICT marker standardization. Add CRITICAL APPEND-for-EXECUTE block to Disk-Write section."
+      },
+      "1.32.0": {
+        "date": "2026-05-16",
+        "breaking": false,
+        "note": "BL-W47-prep-7: Bump kmp-test-runner version pins v0.9.0 -> v0.9.1 across templates, wrappers, skills, docs/testing/, README, AGENTS.md. Mechanical version-string bump. Excluded 3 historical refs (cli-troubleshooting.md:33 \"v0.9.0 Breaking\" heading + cli-tests-js-wasm.md:22,33 deferred note version anchors)."
       }
     },
     "arch-platform": {
@@ -952,6 +957,11 @@
         "date": "2026-05-10",
         "breaking": false,
         "note": "PR #170 cli-mandate-cleanup: replace pre-CLI bullets -- \"verified and APPROVED\" -> \"APPROVE verdict\" + \"grep for expected changes\" -> \"verify via reporting architect (Grep is FORBIDDEN per BANNED TOOLS)\". Cleanup C5 finding from PR #169 audit."
+      },
+      "1.25.0": {
+        "date": "2026-05-16",
+        "breaking": false,
+        "note": "BL-W47-prep-7: Bump kmp-test-runner version pins v0.9.0 -> v0.9.1 at lines 155, 161, 166, 167, 189, 191. Mechanical version-string bump. Excluded 3 historical refs (cli-troubleshooting.md:33 \"v0.9.0 Breaking\" heading + cli-tests-js-wasm.md:22,33 deferred note version anchors)."
       }
     },
     "ui-specialist": {
