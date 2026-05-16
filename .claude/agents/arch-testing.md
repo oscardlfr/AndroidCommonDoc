@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.32.0"
+template_version: "1.31.0"
 skills:
   - test
   - test-full-parallel

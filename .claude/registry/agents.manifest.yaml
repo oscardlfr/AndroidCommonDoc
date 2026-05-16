@@ -126,8 +126,8 @@ agents:
   arch-platform:
     canonical_name: arch-platform
     subagent_type: arch-platform
-    template_version: "1.30.0"
-    template_frontmatter_sha256: 8974d631483c99caa59dad9b90f6bc551790c9ac8b942805323b0d5e6a314a38
+    template_version: "1.29.0"
+    template_frontmatter_sha256: 9c3e7f126037e8d611e0292a4d7a8c3b4a9a906a9026a48f851e5786a9906bdb
     category: architect
     lifecycle: ephemeral
     description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -181,8 +181,8 @@ agents:
   arch-testing:
     canonical_name: arch-testing
     subagent_type: arch-testing
-    template_version: "1.32.0"
-    template_frontmatter_sha256: 3db7497ed6d85e1e1371a9519257f8ea960198f7c8cc5fe50c665cd8762efa55
+    template_version: "1.31.0"
+    template_frontmatter_sha256: 36bed2e51162ba2e86a3a89518e56d15e6e845eece5752349f7dd530ca94e104
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -233,8 +233,8 @@ agents:
   arch-integration:
     canonical_name: arch-integration
     subagent_type: arch-integration
-    template_version: "1.26.0"
-    template_frontmatter_sha256: 63238047b103c26f9099505ae1381ca859823a850f794e3de2951e925e1ea695
+    template_version: "1.25.0"
+    template_frontmatter_sha256: f77c59e040e5b774d1d873efa9c602d8f629e50e82ee189c597b9d81f93933e4
     category: architect
     lifecycle: ephemeral
     description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
