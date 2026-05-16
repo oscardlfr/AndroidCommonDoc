@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,10 +10,13 @@ const FIXTURE_PATH = path.resolve(
   "../../../../scripts/tests/fixtures/tool-use-log-fixture.jsonl",
 );
 
-// BL-W47-prep-3: fixture entries are dated 2026-04-15. Use a long lookback so the
-// 4-week window of computeToolUseReport doesn't age the fixture out as wall-clock
-// time advances. Update fixture timestamps if a separate fixture-rotation strategy ships.
-const FIXTURE_LOOKBACK_WEEKS = 520;
+// Fixture timestamps are anchored at 2026-04-15. To keep the test hermetic
+// and the 4-week lookback window stable, beforeAll mocks system time to
+// FIXED_NOW (2026-05-15) and rolls all fixture timestamps so the newest
+// entry sits at FIXED_NOW - 24h. afterAll restores real timers.
+// The fixture file on disk stays unchanged.
+const FIXTURE_LOOKBACK_WEEKS = 4;
+const FIXED_NOW = new Date("2026-05-15T12:00:00.000Z");
 
 interface ToolUseLogEntry {
   ts: string;
@@ -35,7 +38,18 @@ describe("tool-use-analytics", () => {
   let entries: ToolUseLogEntry[];
 
   beforeAll(async () => {
-    entries = await readJsonlFile<ToolUseLogEntry>(FIXTURE_PATH);
+    vi.setSystemTime(FIXED_NOW);
+    const raw = await readJsonlFile<ToolUseLogEntry>(FIXTURE_PATH);
+    const maxTs = Math.max(...raw.map(e => new Date(e.ts).getTime()));
+    const offset = Date.now() - maxTs - 24 * 60 * 60 * 1000; // newest entry = 1 day before FIXED_NOW
+    entries = raw.map(e => ({
+      ...e,
+      ts: new Date(new Date(e.ts).getTime() + offset).toISOString(),
+    }));
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
   });
 
   it("fixture has 50 entries", () => {
