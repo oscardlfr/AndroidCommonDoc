@@ -1506,64 +1506,7 @@ HOOK_SCRIPT="$L0_ROOT/.claude/hooks/quality-gate-pre-commit.sh"
     [ -x "$HOOK_SCRIPT" ]
 }
 
-@test "quality-gate hook: no stamp file returns deny" {
-    STAMP_DIR=$(mktemp -d)
-    result=$(echo '{"tool_input":{"command":"git commit -m test"}}' \
-      | ANDROID_COMMON_DOC="$STAMP_DIR" bash "$HOOK_SCRIPT")
-    echo "$result" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
-    echo "$result" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("No quality-gate stamp")'
-    rm -rf "$STAMP_DIR"
-}
-
-@test "quality-gate hook: fresh PASS stamp returns allow" {
-    STAMP_DIR=$(mktemp -d)
-    mkdir -p "$STAMP_DIR/.androidcommondoc"
-    NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    cat > "$STAMP_DIR/.androidcommondoc/quality-gate.stamp" << EOF
-{"verdict":"PASS","timestamp":"$NOW","steps_passed":9}
-EOF
-    result=$(echo '{"tool_input":{"command":"git commit -m test"}}' \
-      | ANDROID_COMMON_DOC="$STAMP_DIR" bash "$HOOK_SCRIPT")
-    echo "$result" | jq -e '.hookSpecificOutput.permissionDecision == "allow"'
-    echo "$result" | jq -e '.hookSpecificOutput.additionalContext | test("Quality gate PASS")'
-    rm -rf "$STAMP_DIR"
-}
-
-@test "quality-gate hook: FAIL verdict returns deny" {
-    STAMP_DIR=$(mktemp -d)
-    mkdir -p "$STAMP_DIR/.androidcommondoc"
-    NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    cat > "$STAMP_DIR/.androidcommondoc/quality-gate.stamp" << EOF
-{"verdict":"FAIL","timestamp":"$NOW","steps_passed":7}
-EOF
-    result=$(echo '{"tool_input":{"command":"git commit -m test"}}' \
-      | ANDROID_COMMON_DOC="$STAMP_DIR" bash "$HOOK_SCRIPT")
-    echo "$result" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
-    echo "$result" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("not PASS")'
-    rm -rf "$STAMP_DIR"
-}
-
-@test "quality-gate hook: expired stamp (>30 min) returns deny" {
-    STAMP_DIR=$(mktemp -d)
-    mkdir -p "$STAMP_DIR/.androidcommondoc"
-    OLD=$(date -u -d '60 minutes ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-60M +%Y-%m-%dT%H:%M:%SZ)
-    cat > "$STAMP_DIR/.androidcommondoc/quality-gate.stamp" << EOF
-{"verdict":"PASS","timestamp":"$OLD","steps_passed":9}
-EOF
-    result=$(echo '{"tool_input":{"command":"git commit -m test"}}' \
-      | ANDROID_COMMON_DOC="$STAMP_DIR" bash "$HOOK_SCRIPT")
-    echo "$result" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
-    echo "$result" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("expired")'
-    rm -rf "$STAMP_DIR"
-}
-
-@test "quality-gate hook: invalid JSON in stamp returns deny" {
-    STAMP_DIR=$(mktemp -d)
-    mkdir -p "$STAMP_DIR/.androidcommondoc"
-    echo "not valid json at all" > "$STAMP_DIR/.androidcommondoc/quality-gate.stamp"
-    result=$(echo '{"tool_input":{"command":"git commit -m test"}}' \
-      | ANDROID_COMMON_DOC="$STAMP_DIR" bash "$HOOK_SCRIPT")
-    echo "$result" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
-    echo "$result" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("invalid JSON")'
-    rm -rf "$STAMP_DIR"
+@test "quality-gate hook: pre-commit stub exits 0 on git commit (stamp check moved to pre-push)" {
+    run bash -c 'echo "{\"tool_input\":{\"command\":\"git commit -m test\"}}" | bash "$HOOK_SCRIPT"'
+    [ "$status" -eq 0 ]
 }
