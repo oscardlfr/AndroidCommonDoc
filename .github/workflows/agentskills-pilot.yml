@@ -2,15 +2,14 @@ name: Agentskills Spec Pilot
 
 on:
   push:
-    branches:
-      - develop
-      - master
+    branches: [master, develop]
+    paths:
+      - 'skills/**'
   pull_request:
-    branches:
-      - develop
-
-permissions:
-  contents: read
+    branches: [master, develop]
+    paths:
+      - 'skills/**'
+  workflow_dispatch:
 
 jobs:
   agentskills-validate:
@@ -18,10 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        run: pip install uv
 
       - name: Validate skills against agentskills.io spec
         continue-on-error: true
