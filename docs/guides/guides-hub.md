@@ -37,6 +37,8 @@ Setup, configuration, and authoring guides for the L0/L1/L2 ecosystem.
 | [copilot-templates-regen](copilot-templates-regen.md) | How to regenerate GitHub Copilot prompt templates via `copilot-adapter.sh` after skill changes |
 | [compose-semantic-diff](compose-semantic-diff.md) | Setup guide for runtime UI validation on Compose Multiplatform desktop (JVM) — printToString() capture path |
 | [jdk-toolchain](jdk-toolchain.md) | Configure Gradle Java toolchain to auto-provision the correct JDK; UnsupportedClassVersionError triage |
+| [project-constraints](project-constraints.md) | Console.log ban, doc size limits, agent template dual-location, vault sync, Git Flow, agentskills pilot |
+| [commands](commands.md) | Full list of /pre-pr, /readme-audit, /full-audit and all other L0 slash commands |
 
 ## Key Rules
 
