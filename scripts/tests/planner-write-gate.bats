@@ -99,3 +99,31 @@ HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/plan-md-write-gate.js"
   [[ "$(cat $sentinel)" == "existing content" ]]
   rm -rf "$tmp_dir"
 }
+
+# ── F3 Absolute-path normalization cases (BL-W47-prep-4) ─────────────────────
+
+@test "F3-E: planner Write with ABSOLUTE path to PLAN.md → allow (exit 0) + sentinel created" {
+  local tmp_dir win_dir abs_path sentinel
+  tmp_dir="$(mktemp -d)"
+  # cygpath -m gives forward-slash Windows paths so Node and bash agree on the dir
+  win_dir="$(cygpath -m "$tmp_dir" 2>/dev/null || echo "$tmp_dir")"
+  mkdir -p "$tmp_dir/.claude/wave-quality-gates"
+  abs_path="${win_dir}/.planning/wave-abs-test/PLAN.md"
+  sentinel="$tmp_dir/.claude/wave-quality-gates/abs-test.md"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"'\"$abs_path\"'\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$win_dir' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [ -f "$sentinel" ]
+  [[ "$(cat "$sentinel")" == *'Wave Quality Gate: abs-test'* ]]
+  rm -rf "$tmp_dir"
+}
+
+@test "F3-F: non-planner Write with ABSOLUTE path to PLAN.md → block (exit 2)" {
+  local tmp_dir win_dir abs_path
+  tmp_dir="$(mktemp -d)"
+  win_dir="$(cygpath -m "$tmp_dir" 2>/dev/null || echo "$tmp_dir")"
+  abs_path="${win_dir}/.planning/wave-abs-test/PLAN.md"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"'\"$abs_path\"'\"},\"agent_type\":\"team-lead\"}' | CLAUDE_PROJECT_DIR='$win_dir' node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+  rm -rf "$tmp_dir"
+}
