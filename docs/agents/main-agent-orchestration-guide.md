@@ -31,3 +31,5 @@ description: "Orchestration guide for the main agent running a session: team top
 | [tl-skills-mcp-tools](tl-skills-mcp-tools.md) | L0 skills, MCP tools, official skills reference |
 | [tl-release-workflow](tl-release-workflow.md) | Release steps, post-change checklist, findings summary format |
 | [tl-ingestion-request-handler](tl-ingestion-request-handler.md) | context-provider → user approval → doc-updater ingestion pipeline |
+| [tl-pattern-gap-handler](tl-pattern-gap-handler.md) | When context-provider emits `PATTERN-GAP: <topic>`: ask user approval OR proceed without. Dispatch ingestion on approval. |
+| [tl-task-completion-protocol](tl-task-completion-protocol.md) | Specialists send `READY-FOR-REVIEW: <task-id>`. team-lead verifies delivery, then marks task completed. Never accept specialist self-completion. |

@@ -706,6 +706,11 @@
         "date": "2026-05-10",
         "breaking": false,
         "note": "Wave D W17 #11/#17: add Read kmp-features-2026.md to Spawn Protocol pre-cache for KMP platform capability queries."
+      },
+      "3.4.3": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-10 F2: add On Pattern Gap section -- CP emits PATTERN-GAP: <topic> to team-lead when query yields zero cached patterns and no related sub-docs. Proactive signal enables earlier ingestion gating. L1 friction signals #17/#28/#44."
       }
     },
     "doc-updater": {
