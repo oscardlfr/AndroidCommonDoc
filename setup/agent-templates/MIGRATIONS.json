@@ -233,6 +233,11 @@
         "date": "2026-05-05",
         "breaking": false,
         "note": "BL-W42 PR3: add Step 2.7 FULL bats suite directive (bats scripts/tests/); add 2.7 row to Report table"
+      },
+      "2.11.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-8 F5: Step 1 item 4 — read valid_scopes from .commitlintrc.json (single source of truth post-F4). Step 8 item 4 — cross-check all diff commit scopes against .commitlintrc.json array. Do NOT use l0-ci.yml or hardcoded list."
       }
     },
     "doc-migrator": {
@@ -388,6 +393,11 @@
         "date": "2026-05-16",
         "breaking": false,
         "note": "BL-W47-prep-7: Bump kmp-test-runner version pins v0.9.0 -> v0.9.1 across templates, wrappers, skills, docs/testing/, README, AGENTS.md. Mechanical version-string bump. Excluded 3 historical refs (cli-troubleshooting.md:33 \"v0.9.0 Breaking\" heading + cli-tests-js-wasm.md:22,33 deferred note version anchors)."
+      },
+      "1.33.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-8 F6: Review Depth Mandate — deep review MUST Read each modified file line-by-line before APPROVE. APPROVE requires line-level audit, not diff stat. Inserted before Scope Validation Gate."
       }
     },
     "arch-platform": {
@@ -511,6 +521,11 @@
         "date": "2026-05-11",
         "breaking": false,
         "note": "BL-W47-prep-2: APPROVED-PREP/APPROVED-VERDICT marker standardization. Template version bump."
+      },
+      "1.30.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-8 F6: Review Depth Mandate — deep review MUST Read each modified file line-by-line before APPROVE. APPROVE requires line-level audit, not diff stat. Inserted before Scope Validation Gate."
       }
     },
     "arch-integration": {
@@ -619,6 +634,11 @@
         "date": "2026-05-11",
         "breaking": false,
         "note": "BL-W47-prep-2: APPROVED-PREP/APPROVED-VERDICT marker standardization. Add CRITICAL APPEND-for-EXECUTE block to Disk-Write section."
+      },
+      "1.26.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-8 F6: Review Depth Mandate — deep review MUST Read each modified file line-by-line before APPROVE. APPROVE requires line-level audit, not diff stat. Inserted before Scope Validation Gate."
       }
     },
     "context-provider": {

@@ -77,6 +77,21 @@ FORBIDDEN: `Bash curl/wget`; falling back to training knowledge. Full rationale:
 
 Bash is for git/gradle/test only. FORBIDDEN for search: `grep`, `rg`, `find`, etc. — bypasses PR #40 mechanical enforcement. Use SendMessage to context-provider instead. Full rationale: `docs/agents/arch-topology-protocols.md#3-bash-search-anti-pattern-t-bug-015`.
 
+### Review Depth Mandate (MANDATORY)
+
+Deep review MUST Read each modified file (use Read tool — not diff stat) and scan line-by-line for:
+- Unused imports
+- Framework mismatch (e.g., JUnit4 vs kotlin.test in Kotlin tests)
+- Source set placement errors (e.g., wrong directory for AGP plugin)
+- Hardcoded test values (vs UI fixtures, vs constants)
+- Missing test patterns (vs canonical pattern doc references)
+- Boundary violations (vs L0 architecture doc references)
+- Stale references (vs latest version in template_version manifest)
+
+Verdict APPROVE requires line-level audit, not just stat overview. If you skip Read on a diff file, you MUST NOT issue APPROVE for that file.
+
+**Reference**: this mandate surfaced from BL-W47p L1 session where 3 architects APPROVED but 3 specialists immediately found HIGH issues (JUnit4 imports, source set errors, etc.). Architects did shallow gate reviews; specialists caught what architects missed. This mandate prevents recurrence.
+
 ### Scope Validation Gate (MANDATORY)
 
 Before dispatching ANY specialist task, Read the `scope_doc_path` from team-lead dispatch and verify the task is in active scope. Off-scope = DO NOT dispatch. SendMessage to team-lead with summary="OFF-SCOPE REQUEST" and evidence. Never substitute `.planning/PLAN.md` or any guessed path.
@@ -374,14 +389,6 @@ Escalate to team-lead when:
 - arch-testing: {PASS/FAIL} — tests after fixes
 - arch-platform: {PASS/FAIL} — patterns after fixes
 ```
-### Deep File Review (MANDATORY before APPROVE — F6)
-
-Before emitting APPROVE in EXECUTE phase, you MUST perform a line-level audit of every modified file:
-- Use the **Read tool** on each modified file — NOT diff stat, NOT summary
-- Scan line-by-line for: unused imports, framework mismatch (JUnit4 vs kotlin.test), source set placement errors, hardcoded test values, missing test patterns, boundary violations
-- APPROVE requires evidence of line-level audit. "Looks fine from diff" is NOT sufficient.
-- If a file has >200 lines: Read in offset chunks. Every line must be covered.
-
 ### Disk-Write + 1-Liner DM (MANDATORY)
 
 After completing review:

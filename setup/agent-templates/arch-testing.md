@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.32.0"
+template_version: "1.33.0"
 skills:
   - test
   - test-full-parallel
@@ -104,6 +104,21 @@ FORBIDDEN: `Bash curl/wget`; falling back to training knowledge. Full rationale:
 ### Bash Search Anti-pattern (FORBIDDEN — T-BUG-015)
 
 **`Bash` is for git/gradle/test only. You may NOT use it for pattern searching.** FORBIDDEN: `grep`, `rg`, `ripgrep`, `ag`, `ack`, `find`, `fd`, `awk`/`sed` (for pattern filtering). These bypass L0 PR #40 (mechanical Grep/Glob removal). **CORRECT path**: SendMessage to context-provider with `summary="search: <topic>"`, `message="Find <pattern> in <scope>. Return <what you need>."`. Full rationale + L2 evidence: `docs/agents/arch-topology-protocols.md#3-bash-search-anti-pattern-t-bug-015`.
+
+### Review Depth Mandate (MANDATORY)
+
+Deep review MUST Read each modified file (use Read tool — not diff stat) and scan line-by-line for:
+- Unused imports
+- Framework mismatch (e.g., JUnit4 vs kotlin.test in Kotlin tests)
+- Source set placement errors (e.g., wrong directory for AGP plugin)
+- Hardcoded test values (vs UI fixtures, vs constants)
+- Missing test patterns (vs canonical pattern doc references)
+- Boundary violations (vs L0 architecture doc references)
+- Stale references (vs latest version in template_version manifest)
+
+Verdict APPROVE requires line-level audit, not just stat overview. If you skip Read on a diff file, you MUST NOT issue APPROVE for that file.
+
+**Reference**: this mandate surfaced from BL-W47p L1 session where 3 architects APPROVED but 3 specialists immediately found HIGH issues (JUnit4 imports, source set errors, etc.). Architects did shallow gate reviews; specialists caught what architects missed. This mandate prevents recurrence.
 
 ### Scope Validation Gate (MANDATORY)
 
@@ -320,14 +335,6 @@ Escalate to team-lead when:
 - Test output: {summary}
 - MCP code-metrics: {if used}
 ```
-
-### Deep File Review (MANDATORY before APPROVE — F6)
-
-Before emitting APPROVE in EXECUTE phase, you MUST perform a line-level audit of every modified file:
-- Use the **Read tool** on each modified file — NOT diff stat, NOT summary
-- Scan line-by-line for: unused imports, framework mismatch (JUnit4 vs kotlin.test), source set placement errors, hardcoded test values, missing test patterns, boundary violations
-- APPROVE requires evidence of line-level audit. "Looks fine from diff" is NOT sufficient.
-- If a file has >200 lines: Read in offset chunks. Every line must be covered.
 
 ### Disk-Write + 1-Liner DM (MANDATORY)
 
