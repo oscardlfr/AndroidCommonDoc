@@ -152,10 +152,9 @@ class KmpBenchmarkConventionPlugin : Plugin<Project> {
             macosArm64(); macosX64()
             applyDefaultHierarchyTemplate()
         }
-        // JMH requiere que las clases @State sean open
-        extensions.findByName("allOpen")?.let { ext ->
-            ext.javaClass.getMethod("annotation", String::class.java)
-                .invoke(ext, "org.openjdk.jmh.annotations.State")
+        // JMH requiere que las clases @State sean open — usar tipo seguro, no reflexión
+        extensions.configure<AllOpenExtension> {
+            annotation("org.openjdk.jmh.annotations.State")
         }
         // Solo desktop (JVM) ejecuta JMH microbenchmarks
         val bExt = extensions.getByType(BenchmarksExtension::class.java)
@@ -179,7 +178,7 @@ class KmpBenchmarkConventionPlugin : Plugin<Project> {
 }
 ```
 
-**Notas**: `allopen` es obligatorio — JMH necesita clases `@State` abiertas (Kotlin las genera `final`). Solo el target `desktop` (JVM) ejecuta JMH. Tres configuraciones: `main` (CI, rigurosa), `smoke` (dev, rápida), `stress` (carga).
+**Notas**: `allopen` es obligatorio — JMH necesita clases `@State` abiertas (Kotlin las genera `final`). Import: `org.jetbrains.kotlin.allopen.gradle.AllOpenExtension` (namespace `kotlin`, no `kotlinx`). Solo el target `desktop` (JVM) ejecuta JMH. Tres configuraciones: `main` (CI, rigurosa), `smoke` (dev, rápida), `stress` (carga). Para el workaround de config-cache en Windows ver [kotlinx-benchmark-config-cache-windows](../gradle/kotlinx-benchmark-config-cache-windows.md).
 
 ### 5.2 Módulo Benchmark KMP (usa el convention plugin)
 
