@@ -662,7 +662,7 @@ interface HookRegistrationEntry {
   readonly file: string;
 }
 
-/** The 9 L0 enforcement hook registrations (6 unique hook files) that must be present in L1 settings.json. */
+/** The 8 L0 enforcement hook registrations (6 unique hook files) that must be present in L1 settings.json. */
 const L0_REQUIRED_HOOK_REGISTRATIONS: readonly HookRegistrationEntry[] = [
   { event: 'PreToolUse', matcher: 'Write|Edit', file: 'team-completeness-gate.js' },
   { event: 'PreToolUse', matcher: 'Bash',       file: 'team-completeness-gate.js' },
