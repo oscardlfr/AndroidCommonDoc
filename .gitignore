@@ -50,6 +50,7 @@ tmp/
 # Wave 28+: canonical cross-session files are tracked
 !.planning/backlog.md
 !.planning/wave*-propagation-plan.md
+!.planning/BL-W47-PLAN.md
 # W31.7: architect verdicts are session-scoped scratch files (`.gitignore`
 # pattern at line 47 only matches depth 1; subdirs need their own rules).
 .planning/verdicts/

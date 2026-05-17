@@ -17,7 +17,7 @@
  * - Registry existence is validated before any sync operations
  */
 
-import { readFile, writeFile, mkdir, unlink, access, readdir, rename } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink, access, readdir, rename, copyFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { execSync } from "node:child_process";
 import path from "node:path";
@@ -338,6 +338,12 @@ function detectTypeFromPath(
   return "command";
 }
 
+/** Returns true for hook JS files (used by destPath and syncHooks). */
+function isHookPath(sourcePath: string): boolean {
+  return (sourcePath.startsWith(".claude/hooks/") || sourcePath.startsWith("hooks/"))
+    && sourcePath.endsWith(".js");
+}
+
 /**
  * Translate a registry source path to the destination path inside the project.
  *
@@ -345,10 +351,17 @@ function detectTypeFromPath(
  * under `.claude/skills/<name>/SKILL.md` in consumer projects so that
  * Claude Code's skill loader finds them at `.claude/skills/`.
  *
+ * Hooks live in `.claude/hooks/*.js` in L0 and are materialized at the
+ * same relative path in consumer projects (no prefix remapping needed).
+ *
  * Agents and commands already carry `.claude/` prefixes in the registry.
  */
 export function destPath(sourcePath: string): string {
   if (sourcePath.startsWith("skills/")) {
+    return `.claude/${sourcePath}`;
+  }
+  // Bare hooks/foo.js → .claude/hooks/foo.js (consistent with syncHooks dest layout)
+  if (sourcePath.startsWith("hooks/") && isHookPath(sourcePath)) {
     return `.claude/${sourcePath}`;
   }
   return sourcePath;
@@ -1340,6 +1353,81 @@ export async function detectMigrations(
   }
 
   return pending;
+}
+
+// ---------------------------------------------------------------------------
+// Hook propagation (F7 — BL-W47-prep-8)
+// ---------------------------------------------------------------------------
+
+/** Result of a hook sync operation */
+export interface HookSyncResult {
+  copied: string[];
+  skipped: string[];
+  errors: string[];
+}
+
+/**
+ * Propagate .claude/hooks/ JS files from L0 to the downstream project.
+ *
+ * Copies every *.js file in the L0 .claude/hooks/ directory to the
+ * destination project's .claude/hooks/ directory, skipping files whose
+ * basename appears in manifest.selection.exclude_hooks.
+ *
+ * Hooks not present in L0 (project-local hooks) are never touched.
+ * Missing L0 hooks dir is handled gracefully (returns empty result).
+ *
+ * @param l0Root - Root of the L0 source (AndroidCommonDoc)
+ * @param projectRoot - Root of the downstream project
+ * @param excludeHooks - List of hook filenames to skip (from manifest.selection.exclude_hooks)
+ * @param dryRun - If true, no filesystem changes
+ */
+export async function syncHooks(
+  l0Root: string,
+  projectRoot: string,
+  excludeHooks: string[] = [],
+  dryRun = false,
+): Promise<HookSyncResult> {
+  const result: HookSyncResult = { copied: [], skipped: [], errors: [] };
+  const l0HooksDir = path.join(l0Root, ".claude", "hooks");
+  const destHooksDir = path.join(projectRoot, ".claude", "hooks");
+  const excludeSet = new Set(excludeHooks);
+
+  let entries: string[];
+  try {
+    const dirEntries = await readdir(l0HooksDir);
+    entries = dirEntries.filter((f) => f.endsWith(".js"));
+  } catch {
+    // L0 hooks dir missing — not an error, just nothing to sync
+    return result;
+  }
+
+  if (!dryRun) {
+    await mkdir(destHooksDir, { recursive: true });
+  }
+
+  for (const filename of entries) {
+    if (excludeSet.has(filename)) {
+      result.skipped.push(filename);
+      continue;
+    }
+    if (dryRun) {
+      result.copied.push(filename);
+      continue;
+    }
+    try {
+      await copyFile(
+        path.join(l0HooksDir, filename),
+        path.join(destHooksDir, filename),
+      );
+      result.copied.push(filename);
+    } catch (err) {
+      result.errors.push(
+        `Failed to copy hook ${filename}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  return result;
 }
 
 /**

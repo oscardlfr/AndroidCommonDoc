@@ -126,8 +126,8 @@ agents:
   arch-platform:
     canonical_name: arch-platform
     subagent_type: arch-platform
-    template_version: "1.29.0"
-    template_frontmatter_sha256: 9c3e7f126037e8d611e0292a4d7a8c3b4a9a906a9026a48f851e5786a9906bdb
+    template_version: "1.31.0"
+    template_frontmatter_sha256: bd9d7e89e6a16097ffdb2d17cb9a6ae10d050c0975fd1adf36c20f93ab9b7dc2
     category: architect
     lifecycle: ephemeral
     description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -181,8 +181,8 @@ agents:
   arch-testing:
     canonical_name: arch-testing
     subagent_type: arch-testing
-    template_version: "1.31.0"
-    template_frontmatter_sha256: 36bed2e51162ba2e86a3a89518e56d15e6e845eece5752349f7dd530ca94e104
+    template_version: "1.34.0"
+    template_frontmatter_sha256: 08af4d2a47debca4387bb3c9edf5ce4fa54ee53ef7e093da041b19fc93fb0350
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -233,8 +233,8 @@ agents:
   arch-integration:
     canonical_name: arch-integration
     subagent_type: arch-integration
-    template_version: "1.25.0"
-    template_frontmatter_sha256: f77c59e040e5b774d1d873efa9c602d8f629e50e82ee189c597b9d81f93933e4
+    template_version: "1.27.0"
+    template_frontmatter_sha256: e863ae703a4e52b495e45d9ff71d52e72d83981d141d657bc7d97ac992be89aa
     category: architect
     lifecycle: ephemeral
     description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -913,8 +913,8 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.10.0"
-    template_frontmatter_sha256: 422e10c9e29887e7f38ff2ed21a13d227e665175165ac15edba6da89840f695a
+    template_version: "2.11.0"
+    template_frontmatter_sha256: 0d2948224d49c039292d8eb58009dc6385657a18cffa9e23bdc671292693a651
     category: orchestrator
     lifecycle: ephemeral
     description: "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL."

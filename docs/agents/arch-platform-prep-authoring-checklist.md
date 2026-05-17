@@ -41,9 +41,11 @@ Automation function: `check_cross_file_pins` in `scripts/sh/verdict-pre-execute-
 
 ## Check 2 — Commitlint Scope Validation (FIND-16, FIND-19 recurring)
 
-The `(scope)` in the planned commit subject MUST exist in the canonical whitelist at `.github/workflows/l0-ci.yml:22`.
+The `(scope)` in the planned commit subject MUST exist in the canonical scope list from `.commitlintrc.json` → `scopes` array (single source of truth post-F4). Do NOT use `.github/workflows/l0-ci.yml:22` as the reference — it is now downstream of `.commitlintrc.json`.
 
-Whitelist (as of BL-W42): `core,data,ui,feature,ci,deps,release,docs,detekt,mcp,skills,scripts,agents,archive,di,guides,tests,tools`
+Read `.commitlintrc.json` and extract the `scopes` array directly. Do NOT rely on the hardcoded list below (stale risk — `.commitlintrc.json` always wins).
+
+Current scopes (as of BL-W47 — verify against `.commitlintrc.json`): `core,data,ui,feature,ci,deps,release,docs,detekt,mcp,skills,scripts,agents,archive,di,guides,tests,tools`
 
 Extract the scope from your planned commit subject and assert membership. Invalid scope = FAIL.
 

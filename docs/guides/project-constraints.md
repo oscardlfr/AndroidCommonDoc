@@ -38,6 +38,10 @@ description: "Console.log ban, doc size limits, agent template dual-location, va
 - Run `validate-vault` before every sync (0 duplicates, 0 homogeneity errors)
 - Vault files: `lowercase-kebab-case` — uppercase causes ghost nodes in Obsidian
 
+## Commit Scope Validation
+
+Canonical valid_scopes for commit linting: `.commitlintrc.json` at project root. DO NOT hardcode scopes elsewhere — CI (`reusable-commit-lint.yml`), the `commit-scope-validation-gate.js` hook, and `/commit-lint` all read from this file.
+
 ## Git Flow
 - `master` ← releases only — **requires user approval** for any merge to master. `develop` ← integration **via PR only**. `feature/*` ← from develop.
 - **Branch protection on develop** (W31.6 enforcement): PR required, CI Gate + Drift Audit + L0 CI must pass, linear history required, no force pushes, no deletions. Direct pushes are MECHANICALLY blocked.

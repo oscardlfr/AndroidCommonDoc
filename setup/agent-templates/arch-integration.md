@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
-template_version: "1.25.0"
+template_version: "1.27.0"
 skills:
   - test
   - extract-errors
@@ -76,6 +76,10 @@ FORBIDDEN: `Bash curl/wget`; falling back to training knowledge. Full rationale:
 ### Bash Search Anti-pattern (FORBIDDEN — T-BUG-015)
 
 Bash is for git/gradle/test only. FORBIDDEN for search: `grep`, `rg`, `find`, etc. — bypasses PR #40 mechanical enforcement. Use SendMessage to context-provider instead. Full rationale: `docs/agents/arch-topology-protocols.md#3-bash-search-anti-pattern-t-bug-015`.
+
+### Review Depth Mandate (MANDATORY)
+
+See [arch-review-depth-mandate](../../docs/agents/arch-review-depth-mandate.md) for full mandate. Summary: Read each modified file line-by-line during gate review. APPROVE requires line-level audit. Violations from BL-W47p L1 session (#29/#30) drove this rule.
 
 ### Scope Validation Gate (MANDATORY)
 

@@ -137,8 +137,31 @@ When editing a template:
 2. Copy to `.claude/agents/<name>.md`
 3. Regenerate registry: `node mcp-server/build/cli/generate-registry.js`
 
+## Hook Propagation (F7 — BL-W47-prep-8)
+
+`/sync-l0` also propagates `.claude/hooks/*.js` files from L0 to the destination project.
+
+**Behavior**:
+- All `*.js` files in L0's `.claude/hooks/` are copied to the destination `.claude/hooks/`
+- Project-local hooks (not present in L0) are never touched
+- Missing L0 hooks dir is handled gracefully (no error, no copies)
+
+**Excluding hooks**: add hook filenames to `selection.exclude_hooks` in `l0-manifest.json`:
+
+```json
+{
+  "selection": {
+    "mode": "include-all",
+    "exclude_hooks": ["project-specific-gate.js"]
+  }
+}
+```
+
+The `exclude_hooks` field defaults to `[]` (all L0 hooks propagated). Existing manifests without this field auto-migrate via schema default.
+
 ## Safety
 
 - Files listed in `l2_specific` are never modified during sync
 - Orphaned files (in checksums but not in registry) are only removed if they have L0 version headers
 - Each materialized file includes its source hash for audit trail
+- Hook propagation is additive — project-local hooks are never removed

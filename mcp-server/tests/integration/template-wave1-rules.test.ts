@@ -119,22 +119,22 @@ describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in team-lead or sub-docs'
 // 8. Wave 1: template_version bumped in architects
 // ---------------------------------------------------------------------------
 describe('Wave 1: template_version bumped in architects', () => {
-  it('arch-testing.md template_version is "1.31.0"', () => {
-    // BL-W47-prep-2: bumped from 1.30.2 → 1.31.0 (APPROVED-PREP/APPROVED-VERDICT marker standardization)
+  it('arch-testing.md template_version is "1.34.0"', () => {
+    // BL-W47-prep-8 BLOCK 2: bumped from 1.31.0 → 1.34.0 (Review Depth Mandate + sub-doc extraction)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
+    expect(content).toMatch(/template_version:\s*"1.34.0"/);
+  });
+
+  it('arch-platform.md template_version is "1.31.0"', () => {
+    // BL-W47-prep-8 BLOCK 2: bumped from 1.29.0 → 1.31.0 (Review Depth Mandate + sub-doc extraction)
+    const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
     expect(content).toMatch(/template_version:\s*"1.31.0"/);
   });
 
-  it('arch-platform.md template_version is "1.29.0"', () => {
-    // BL-W47-prep-2: bumped from 1.28.1 → 1.29.0 (APPROVED-PREP/APPROVED-VERDICT marker standardization)
-    const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.29.0"/);
-  });
-
-  it('arch-integration.md template_version is "1.25.0"', () => {
-    // BL-W47-prep-2: bumped from 1.24.1 → 1.25.0 (APPROVED-PREP/APPROVED-VERDICT marker standardization)
+  it('arch-integration.md template_version is "1.27.0"', () => {
+    // BL-W47-prep-8 BLOCK 2: bumped from 1.25.0 → 1.27.0 (Review Depth Mandate + sub-doc extraction)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.25.0"/);
+    expect(content).toMatch(/template_version:\s*"1.27.0"/);
   });
 
   it('MIGRATIONS.json has W31.6 RETIRED entry for team-lead (W31.6: retired)', () => {

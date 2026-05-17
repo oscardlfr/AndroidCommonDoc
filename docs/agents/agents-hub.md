@@ -45,6 +45,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [Agent Verdict Protocol](agent-verdict-protocol.md) | Architect verdict format + disk-write + 1-liner DM pattern |
 | [Ingestion Loop](ingestion-loop.md) | External-source → L0 docs: context-provider flag → team-lead user-approval → doc-updater `ingest-content` (Wave 25 — closes T-BUG-005) |
 | [local-first-skills-pattern](local-first-skills-pattern.md) | When to deploy a skill locally (L1) before promoting to L0; lifecycle stages and promotion criteria |
+| [arch-review-depth-mandate](arch-review-depth-mandate.md) | Architect line-by-line file review mandate before APPROVE — 7 scan categories, APPROVE gate (BL-W47p #29/#30) |
 | [post-compaction-resync](post-compaction-resync.md) | Protocol for agent-side state recovery after context compaction |
 | [branch-guard](branch-guard.md) | PreToolUse hook that blocks write-git ops on `develop`/`master` (BL-W35-08) |
 | [test-specialist-coverage-targets](test-specialist-coverage-targets.md) | test-specialist minimum coverage targets by layer (model/domain/data/db/UI) |

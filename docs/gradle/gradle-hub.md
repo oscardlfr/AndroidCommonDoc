@@ -58,6 +58,7 @@ KMP and Android-only Gradle build configuration, convention plugins, and depende
 | [gradle-patterns-dgpv2-typed-config](gradle-patterns-dgpv2-typed-config.md) | DGPv2 typed pluginsConfiguration — registerBinding, jsonEncode, fqPluginName gotchas |
 | [agp9-consumer-rules-banned-directives](agp9-consumer-rules-banned-directives.md) | AGP 9 banned ProGuard directives in consumer rules — confirmed (2 ERROR) + plausible (4 WARN) + controlling property |
 | [compose-desktop-proguard-no-library-propagation](compose-desktop-proguard-no-library-propagation.md) | Compose Desktop ProGuard has no library-side auto-propagation — no META-INF/proguard/ discovery, configurationFiles.from() is the only wiring mechanism |
+| [agp9-kmp-host-test-source-set](agp9-kmp-host-test-source-set.md) | AGP 9 KMP android test source sets — androidHostTest (JVM) and androidDeviceTest (emulator); withHostTestBuilder / withDeviceTestBuilder DSL; anti-pattern: androidUnitTest/androidTest (AGP 8.x only) |
 
 ## Key Rules
 

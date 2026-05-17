@@ -232,3 +232,37 @@ run_hook() {
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── F8 false-positive regression tests (BL-W47-prep-8) ───────────────────────
+# These commands contain 'gradle' or 'test' in a non-command context and MUST
+# NOT be blocked after the regex was tightened to anchor to command invocations.
+
+@test "F8 PASS: ls docs/gradle/gradle-hub.md does NOT trigger block" {
+  make_input 'ls docs/gradle/gradle-hub.md'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "F8 PASS: cat docs/gradle/agp9-kmp-host-test-source-set.md does NOT trigger block" {
+  make_input 'cat docs/gradle/agp9-kmp-host-test-source-set.md'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "F8 PASS: node script mentioning test does NOT trigger block" {
+  make_input "node -e \"console.log('running test output')\" [KMP_TEST_RUNNER_BYPASS]"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "F8 BLOCK: ./gradlew jvmTest still blocked after F8 fix" {
+  make_input './gradlew jvmTest'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "F8 BLOCK: ./gradlew check still blocked after F8 fix" {
+  make_input './gradlew check'
+  run_hook
+  [ "$status" -eq 2 ]
+}
