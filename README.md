@@ -1159,11 +1159,7 @@ AndroidCommonDoc/
 |   +-- sh/                 # Bash (macOS/Linux) -- 44 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
-<<<<<<< Updated upstream
-|   +-- tests/              # bats shell test suite (1132 tests, 4 fixture XMLs)
-=======
-|   +-- tests/              # bats shell test suite (1080 tests, 4 fixture XMLs)
->>>>>>> Stashed changes
+|   +-- tests/              # bats shell test suite
 +-- mcp-server/             # MCP server (46 tools, 3 prompts, dynamic resources)
 |   +-- src/
 |   |   +-- tools/          # 46 tools: validation, analysis, metrics, audit, sync, vault, doc integrity
