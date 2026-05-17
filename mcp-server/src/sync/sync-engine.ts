@@ -33,6 +33,7 @@ import {
   type Manifest,
   type LayerSource,
 } from "./manifest-schema.js";
+import { logger } from "../utils/logger.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -652,6 +653,137 @@ function hasL0Header(content: string): boolean {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
+// Hook registration merge (F1 — BL-W47-prep-11)
+// ---------------------------------------------------------------------------
+
+interface HookRegistrationEntry {
+  readonly event: string;
+  readonly matcher: string;
+  readonly file: string;
+}
+
+/** The 8 L0 enforcement hook registrations (6 unique hook files) that must be present in L1 settings.json. */
+const L0_REQUIRED_HOOK_REGISTRATIONS: readonly HookRegistrationEntry[] = [
+  { event: 'PreToolUse', matcher: 'Write|Edit', file: 'team-completeness-gate.js' },
+  { event: 'PreToolUse', matcher: 'Bash',       file: 'team-completeness-gate.js' },
+  { event: 'PreToolUse', matcher: 'TaskUpdate', file: 'specialist-task-completion-gate.js' },
+  { event: 'PreToolUse', matcher: 'Write|Edit', file: 'premature-execution-gate.js' },
+  { event: 'PreToolUse', matcher: 'Bash',       file: 'premature-execution-gate.js' },
+  { event: 'PreToolUse', matcher: 'Bash',       file: 'branch-guard.js' },
+  { event: 'PreToolUse', matcher: 'Bash',       file: 'pre-push-pre-pr-gate.js' },
+  { event: 'PreToolUse', matcher: 'Bash',       file: 'commit-scope-validation-gate.js' },
+] as const;
+
+/** Shape of a single hook entry within a matcher block */
+interface HookCommandEntry {
+  type: string;
+  command: string;
+  timeout?: number;
+}
+
+/** Shape of a matcher block in settings.json hooks[event] array */
+interface MatcherBlock {
+  matcher: string;
+  hooks: HookCommandEntry[];
+}
+
+/** Shape of the settings.json hooks section */
+interface SettingsHooks {
+  [event: string]: MatcherBlock[];
+}
+
+/** Shape of settings.json */
+interface ClaudeSettings {
+  hooks?: SettingsHooks;
+  [key: string]: unknown;
+}
+
+export interface MergeHookRegistrationsResult {
+  /** Entries that were added during this merge */
+  added: Array<{ event: string; matcher: string; file: string }>;
+  /** Entries already present (idempotent skip) */
+  skipped: Array<{ event: string; matcher: string; file: string }>;
+  /** Dry-run mode: no writes were performed */
+  dryRun: boolean;
+}
+
+/**
+ * Additively merge L0 enforcement hook registrations into a downstream project's
+ * .claude/settings.json.
+ *
+ * Idempotent: a hook is skipped if its basename already appears in the matching
+ * event/matcher block. PostToolUse arrays are never touched.
+ *
+ * @param projectRoot - Root of the downstream project
+ * @param dryRun - If true, compute diff but do not write
+ */
+export async function mergeHookRegistrations(
+  projectRoot: string,
+  dryRun = false,
+): Promise<MergeHookRegistrationsResult> {
+  const settingsPath = path.join(projectRoot, '.claude', 'settings.json');
+  const result: MergeHookRegistrationsResult = { added: [], skipped: [], dryRun };
+
+  let settings: ClaudeSettings;
+
+  // Read existing settings.json — seed empty structure on missing file or malformed JSON
+  try {
+    const raw = await readFile(settingsPath, 'utf-8');
+    try {
+      settings = JSON.parse(raw) as ClaudeSettings;
+    } catch {
+      // Malformed JSON — fail-open: warn and seed empty structure
+      logger.warn(`mergeHookRegistrations: malformed JSON in ${settingsPath} — seeding empty structure`);
+      settings = { hooks: { PreToolUse: [] } };
+    }
+  } catch {
+    // File missing — seed empty structure
+    settings = { hooks: { PreToolUse: [] } };
+  }
+
+  if (!settings.hooks) {
+    settings.hooks = {};
+  }
+
+  for (const entry of L0_REQUIRED_HOOK_REGISTRATIONS) {
+    const { event, matcher, file } = entry;
+    const command = `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
+
+    // Ensure the event array exists
+    if (!settings.hooks[event]) {
+      settings.hooks[event] = [];
+    }
+    const eventArray: MatcherBlock[] = settings.hooks[event];
+
+    // Find existing matcher block — exact string match (no second block with same matcher)
+    let matcherBlock = eventArray.find((b) => b.matcher === matcher);
+    if (!matcherBlock) {
+      matcherBlock = { matcher, hooks: [] };
+      eventArray.push(matcherBlock);
+    }
+
+    // Idempotency check: scan existing commands for this hook's basename
+    const alreadyPresent = matcherBlock.hooks.some((h) =>
+      typeof h.command === 'string' && h.command.includes(file),
+    );
+
+    if (alreadyPresent) {
+      result.skipped.push({ event, matcher, file });
+    } else {
+      matcherBlock.hooks.push({ type: 'command', command, timeout: 5 });
+      result.added.push({ event, matcher, file });
+    }
+  }
+
+  if (!dryRun && result.added.length > 0) {
+    await mkdir(path.dirname(settingsPath), { recursive: true });
+    await writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Multi-source registry merge (M003/S01)
 // ---------------------------------------------------------------------------
 
@@ -984,6 +1116,14 @@ export async function syncMultiSource(
     for (const err of hookResult.errors) {
       report.warnings.push(`Hook sync: ${err}`);
     }
+  }
+
+  // Hook registration merge (F1 — BL-W47-prep-11): additive merge into settings.json
+  const msMergeResult = await mergeHookRegistrations(projectRoot, dryRun);
+  if (msMergeResult.added.length > 0) {
+    report.warnings.push(
+      `Hook registrations added to settings.json: ${msMergeResult.added.map((e) => e.file).join(', ')}`,
+    );
   }
 
   return report;
@@ -1336,6 +1476,14 @@ export async function syncL0(
   const slHookResult = await syncHooks(l0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
   for (const err of slHookResult.errors) {
     report.warnings.push(`Hook sync: ${err}`);
+  }
+
+  // Hook registration merge (F1 — BL-W47-prep-11): additive merge into settings.json
+  const slMergeResult = await mergeHookRegistrations(projectRoot, dryRun);
+  if (slMergeResult.added.length > 0) {
+    report.warnings.push(
+      `Hook registrations added to settings.json: ${slMergeResult.added.map((e) => e.file).join(', ')}`,
+    );
   }
 
   return report;

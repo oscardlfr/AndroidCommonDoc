@@ -6,6 +6,7 @@
  *   1. Hook JS files land in fixture/.claude/hooks/
  *   2. The manifest checksums field is updated
  *   3. Exit code is 0
+ *   4. --force-l0-managed overwrites specialist templates (F2 BL-W47-prep-11)
  *
  * Bats propagation is L0-LOCAL only (Amendment 1, BL-W47-prep-10) — NOT synced.
  *
@@ -17,7 +18,7 @@ import { writeFile, mkdir, rm, readdir, access } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -121,5 +122,115 @@ describe("sync-l0 end-to-end CLI", () => {
       ? require("node:fs").readdirSync(hooksDir)
       : [];
     expect(hookFiles).not.toContain("premature-execution-gate.js");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F2 — --force-l0-managed specialist template propagation (BL-W47-prep-11)
+// Uses Pattern A (subprocess CLI) per arch-testing — needed for CLI flag parsing.
+// ---------------------------------------------------------------------------
+
+describe("sync-l0 --force-l0-managed specialist templates", () => {
+  let fixtureDir: string;
+
+  beforeEach(async () => {
+    fixtureDir = await (await import("node:fs/promises")).mkdtemp(join(tmpdir(), "sync-l0-flm-"));
+    await mkdir(join(fixtureDir, ".claude", "agents"), { recursive: true });
+    await mkdir(join(fixtureDir, ".claude", "hooks"), { recursive: true });
+    const rel = require("node:path").relative(fixtureDir, L0_ROOT).replace(/\\/g, "/");
+    await writeFile(join(fixtureDir, "l0-manifest.json"), makeManifest(rel), "utf8");
+  });
+
+  afterEach(async () => {
+    await rm(fixtureDir, { recursive: true, force: true });
+  });
+
+  it("--force-l0-managed overwrites locally-modified data-layer-specialist.md", async () => {
+    const agentPath = join(fixtureDir, ".claude", "agents", "data-layer-specialist.md");
+
+    // First sync: seeds all files + manifest checksums
+    const seed = spawnSync(
+      process.execPath,
+      [CLI_PATH, "--project-root", fixtureDir],
+      { encoding: "utf8", timeout: 60000 },
+    );
+    expect(seed.status, `seed stderr: ${seed.stderr}`).toBe(0);
+
+    if (!existsSync(agentPath)) {
+      // Agent not in registry for this L0 — skip
+      return;
+    }
+
+    const originalContent = readFileSync(agentPath, "utf8");
+
+    // Simulate a local edit AND backdating the manifest checksum to an older value
+    // so computeSyncActions sees conflict (local hash != manifest hash != registry hash)
+    const localEdit = "# LOCAL EDIT — should be overwritten by --force-l0-managed\n";
+    writeFileSync(agentPath, localEdit, "utf8");
+
+    // Backdating the checksum: change the manifest checksum for this agent to a stale hash
+    // so the engine sees: registry_hash != stale_manifest_hash → tries update → local file != stale → conflict
+    const manifestPath = join(fixtureDir, "l0-manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const agentKey = ".claude/agents/data-layer-specialist.md";
+    if (manifest.checksums[agentKey]) {
+      manifest.checksums[agentKey] = "sha256:000000000000000000000000000000000000000000000000000000000000stale";
+      writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+    }
+
+    // Sync with --force-l0-managed: local edit must be discarded
+    const forceResult = spawnSync(
+      process.execPath,
+      [CLI_PATH, "--project-root", fixtureDir, "--force-l0-managed"],
+      { encoding: "utf8", timeout: 60000 },
+    );
+    expect(forceResult.status, `stderr: ${forceResult.stderr}`).toBe(0);
+
+    const afterContent = readFileSync(agentPath, "utf8");
+    expect(afterContent).not.toContain("LOCAL EDIT");
+    // Should be restored to L0 content (contains l0_source frontmatter from materialization)
+    expect(afterContent).toContain("l0_source");
+  });
+
+  it("without --force-l0-managed, local edit is preserved when conflict detected", async () => {
+    const agentPath = join(fixtureDir, ".claude", "agents", "data-layer-specialist.md");
+
+    // First sync: seeds all files + manifest checksums
+    const seed = spawnSync(
+      process.execPath,
+      [CLI_PATH, "--project-root", fixtureDir],
+      { encoding: "utf8", timeout: 60000 },
+    );
+    expect(seed.status, `seed stderr: ${seed.stderr}`).toBe(0);
+
+    if (!existsSync(agentPath)) {
+      // Agent not in registry — skip
+      return;
+    }
+
+    // Locally modify + backdate checksum to trigger conflict detection
+    const localEdit = "# LOCAL EDIT — should be preserved without --force-l0-managed\n";
+    writeFileSync(agentPath, localEdit, "utf8");
+
+    const manifestPath = join(fixtureDir, "l0-manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const agentKey = ".claude/agents/data-layer-specialist.md";
+    if (manifest.checksums[agentKey]) {
+      manifest.checksums[agentKey] = "sha256:000000000000000000000000000000000000000000000000000000000000stale";
+      writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+    }
+
+    // Sync WITHOUT --force-l0-managed: local edit must survive
+    const normalResult = spawnSync(
+      process.execPath,
+      [CLI_PATH, "--project-root", fixtureDir],
+      { encoding: "utf8", timeout: 60000 },
+    );
+    expect(normalResult.status, `stderr: ${normalResult.stderr}`).toBe(0);
+
+    const afterContent = readFileSync(agentPath, "utf8");
+    expect(afterContent).toBe(localEdit);
+    // Conflict warning should appear in output
+    expect(normalResult.stdout + normalResult.stderr).toContain("local edits");
   });
 });
