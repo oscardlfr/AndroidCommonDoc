@@ -1934,7 +1934,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.25.0",
+        "template_version": "1.26.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1963,7 +1963,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.29.0",
+        "template_version": "1.30.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1992,7 +1992,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.31.0",
+        "template_version": "1.33.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2694,7 +2694,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:0d31f147b2a76e39dc46b94e365a991e43ab3eda3766c2435b2604a1fd5ca55b",
+      "hash": "sha256:eaf714fb34953fc7f7dbe3d3dbf5889ba7616ee34cbacdec11e56ddaef9d1a30",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2710,7 +2710,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.10.0"
+        "template_version": "2.11.0"
       }
     },
     {
