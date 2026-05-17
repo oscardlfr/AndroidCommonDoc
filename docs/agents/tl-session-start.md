@@ -47,6 +47,19 @@ The main agent (when orchestrating a session) orchestrates the project: plan sco
 
 **Per-session gate**: Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from context-provider in this session. The hook enforces this mechanically — your first search-type tool call will be blocked until CP has been consulted. Wave slug propagation + quality-gate sentinel location: see [tl-session-setup § Wave Slug Propagation](tl-session-setup.md#wave-slug-propagation-find-18-fix-bl-w42-pr1) (FIND-17/18 fix).
 
+### L0 Mechanical Floor Consultation Checklist (MANDATORY)
+
+Before drafting any brief that mentions git ops, hooks, /pre-pr, commit-lint, or architect protocols:
+
+1. Read all `.claude/hooks/*.js` for PreToolUse + Bash matchers active in this project
+2. Read each `arch-*` template's "MANDATORY" / "MUST DO" sections
+3. List active mechanical enforcements affecting the brief topics
+4. If brief contradicts any active enforcement, REVISE the brief (do NOT instruct specialists to bypass)
+
+Active hooks: `pre-push-pre-pr-gate.js`, `git-amend-gate.js`, `commit-scope-validation-gate.js`, `branch-guard.js`, `premature-execution-gate.js`, `specialist-task-completion-gate.js`.
+
+**INTERMEDIATE PUSHES require fresh /pre-pr stamp.** Plan for this in phase timing OR squash to single push at PR-open time.
+
 ## Operating Mode
 
 ### FORBIDDEN Actions (non-negotiable)

@@ -16,7 +16,7 @@ description: "Orchestration guide for the main agent running a session: team top
 
 | Document | When to Load |
 |----------|-------------|
-| **[tl-session-start](tl-session-start.md)** — **REQUIRED AT SESSION START** | T-BUG-010 critical block, HARD GATEs, FORBIDDEN/ALLOWED operating mode, Phase 0 spawn blocks, pre-flight checklist, planning phase gate |
+| **[tl-session-start](tl-session-start.md)** — **REQUIRED AT SESSION START** | T-BUG-010 critical block, HARD GATEs, FORBIDDEN/ALLOWED operating mode, Phase 0 spawn blocks, pre-flight checklist, L0 Mechanical Floor Consultation Checklist, planning phase gate |
 | [tl-session-setup](tl-session-setup.md) | Phase 2 selective spawning, long-session rotation, context management, architect routing table |
 | [tl-dispatch-topology](tl-dispatch-topology.md) | Pre-dispatch gate (5 checks), pattern validation chain, dynamic scaling, autonomy rules, kill order |
 | [tl-verification-gates](tl-verification-gates.md) | Architect verdicts, post-verdict broadcast, post-wave integrity check, token meter gate |
