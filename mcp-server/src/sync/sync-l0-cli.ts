@@ -32,6 +32,8 @@ import { existsSync } from "node:fs";
 import {
   syncL0,
   syncMultiSource,
+  syncHooks,
+  syncBatsTests,
   resolveL0Source,
   cloneRemoteSource,
   cleanupClone,
@@ -248,6 +250,27 @@ async function main(): Promise<void> {
     console.log("");
 
     report = await syncL0(projectRoot, l0Root, options);
+  }
+
+  // Wire hook + bats propagation (F5 — BL-W47-prep-10, Option B: separate syncBatsTests)
+  const manifestPath = path.join(projectRoot, "l0-manifest.json");
+  const manifest = await readManifest(manifestPath);
+  const excludeHooks = manifest.selection?.exclude_hooks ?? [];
+
+  const hookResult = await syncHooks(l0Root, projectRoot, excludeHooks, dryRun);
+  if (hookResult.copied.length > 0) {
+    console.log(`Hooks synced: ${hookResult.copied.length} copied, ${hookResult.skipped.length} skipped`);
+  }
+  for (const err of hookResult.errors) {
+    console.warn(`⚠ Hook sync: ${err}`);
+  }
+
+  const batsResult = await syncBatsTests(l0Root, projectRoot, dryRun);
+  if (batsResult.copied.length > 0) {
+    console.log(`Bats tests synced: ${batsResult.copied.length} copied`);
+  }
+  for (const err of batsResult.errors) {
+    console.warn(`⚠ Bats sync: ${err}`);
   }
 
   // Print summary

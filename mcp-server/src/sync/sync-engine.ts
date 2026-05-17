@@ -1471,3 +1471,67 @@ export async function applyMigrations(
   manifest.migrations_applied = [...applied];
   await writeManifest(manifestPath, manifest);
 }
+
+// ---------------------------------------------------------------------------
+// Bats test propagation (Option B — separate from syncHooks per BL-W47-prep-10)
+// ---------------------------------------------------------------------------
+
+/** Result of a bats test sync operation */
+export interface BatsSyncResult {
+  copied: string[];
+  skipped: string[];
+  errors: string[];
+}
+
+/**
+ * Propagate hook bats test files from L0 scripts/tests/ to the downstream project.
+ *
+ * Copies every *-gate.bats file from L0 scripts/tests/ to the destination
+ * project's scripts/tests/ directory.  Non-gate bats (e.g. project-specific
+ * tests) are never touched.  Missing source dir is handled gracefully.
+ *
+ * @param l0Root - Root of the L0 source (AndroidCommonDoc)
+ * @param projectRoot - Root of the downstream project
+ * @param dryRun - If true, no filesystem changes
+ */
+export async function syncBatsTests(
+  l0Root: string,
+  projectRoot: string,
+  dryRun = false,
+): Promise<BatsSyncResult> {
+  const result: BatsSyncResult = { copied: [], skipped: [], errors: [] };
+  const l0BatsDir = path.join(l0Root, "scripts", "tests");
+  const destBatsDir = path.join(projectRoot, "scripts", "tests");
+
+  let entries: string[];
+  try {
+    const dirEntries = await readdir(l0BatsDir);
+    entries = dirEntries.filter((f) => f.endsWith("-gate.bats"));
+  } catch {
+    return result;
+  }
+
+  if (!dryRun) {
+    await mkdir(destBatsDir, { recursive: true });
+  }
+
+  for (const filename of entries) {
+    if (dryRun) {
+      result.copied.push(filename);
+      continue;
+    }
+    try {
+      await copyFile(
+        path.join(l0BatsDir, filename),
+        path.join(destBatsDir, filename),
+      );
+      result.copied.push(filename);
+    } catch (err) {
+      result.errors.push(
+        `Failed to copy bats ${filename}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  return result;
+}
