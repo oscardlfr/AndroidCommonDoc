@@ -74,7 +74,7 @@ export const SUBDIR_TO_CATEGORIES: Record<string, string[]> = {
   security: ["security"],
   oauth: ["security"],
   "error-handling": ["domain", "ui"],
-  gradle: ["build"],
+  gradle: ["build", "gradle"],
   tech: ["build", "security"],
   guides: ["guides", "testing", "ui"],
   domain: ["domain"],

@@ -266,6 +266,37 @@ category: old
     expect(result.totalFiles).toBe(0);
     expect(result.errors).toHaveLength(0);
   });
+
+  it("passes when docs/gradle/foo.md has category: gradle (F3 fix)", async () => {
+    // F3 regression test: gradle subdir must accept category=gradle
+    const gradleDir = path.join(tmpDir, "docs", "gradle");
+    await mkdir(gradleDir, { recursive: true });
+    await writeFile(
+      path.join(gradleDir, "gradle-patterns.md"),
+      `---
+scope: [gradle]
+sources: [gradle]
+targets: [jvm]
+slug: gradle-patterns
+category: gradle
+---
+# Gradle Patterns
+`,
+    );
+
+    const result = await validateDocsDirectory(path.join(tmpDir, "docs"));
+
+    expect(result.totalFiles).toBe(1);
+    expect(result.errors).toHaveLength(0);
+  });
+});
+
+describe("SUBDIR_TO_CATEGORIES constant", () => {
+  it('gradle entry includes "gradle" (F3 fix)', async () => {
+    const { SUBDIR_TO_CATEGORIES } = await import("../../../src/tools/validate-doc-structure.js");
+    expect(SUBDIR_TO_CATEGORIES["gradle"]).toContain("gradle");
+    expect(SUBDIR_TO_CATEGORIES["gradle"]).toContain("build");
+  });
 });
 
 // --- Phase 14.2: Size limit checks ---
