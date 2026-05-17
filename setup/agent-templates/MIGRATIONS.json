@@ -398,6 +398,11 @@
         "date": "2026-05-17",
         "breaking": false,
         "note": "BL-W47-prep-8 F6: Review Depth Mandate — deep review MUST Read each modified file line-by-line before APPROVE. APPROVE requires line-level audit, not diff stat. Inserted before Scope Validation Gate."
+      },
+      "1.34.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-8 BLOCK 2: Extract Review Depth Mandate body to docs/agents/arch-review-depth-mandate.md sub-doc. Replace inline body with pointer line. Reduces arch-testing below 425L limit."
       }
     },
     "arch-platform": {
@@ -526,6 +531,11 @@
         "date": "2026-05-17",
         "breaking": false,
         "note": "BL-W47-prep-8 F6: Review Depth Mandate — deep review MUST Read each modified file line-by-line before APPROVE. APPROVE requires line-level audit, not diff stat. Inserted before Scope Validation Gate."
+      },
+      "1.31.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-8 BLOCK 2: Extract Review Depth Mandate body to docs/agents/arch-review-depth-mandate.md sub-doc. Replace inline body with pointer line."
       }
     },
     "arch-integration": {
@@ -639,6 +649,11 @@
         "date": "2026-05-17",
         "breaking": false,
         "note": "BL-W47-prep-8 F6: Review Depth Mandate — deep review MUST Read each modified file line-by-line before APPROVE. APPROVE requires line-level audit, not diff stat. Inserted before Scope Validation Gate."
+      },
+      "1.27.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-8 BLOCK 2: Extract Review Depth Mandate body to docs/agents/arch-review-depth-mandate.md sub-doc. Replace inline body with pointer line."
       }
     },
     "context-provider": {

@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.33.0"
+template_version: "1.34.0"
 skills:
   - test
   - test-full-parallel
@@ -107,18 +107,7 @@ FORBIDDEN: `Bash curl/wget`; falling back to training knowledge. Full rationale:
 
 ### Review Depth Mandate (MANDATORY)
 
-Deep review MUST Read each modified file (use Read tool — not diff stat) and scan line-by-line for:
-- Unused imports
-- Framework mismatch (e.g., JUnit4 vs kotlin.test in Kotlin tests)
-- Source set placement errors (e.g., wrong directory for AGP plugin)
-- Hardcoded test values (vs UI fixtures, vs constants)
-- Missing test patterns (vs canonical pattern doc references)
-- Boundary violations (vs L0 architecture doc references)
-- Stale references (vs latest version in template_version manifest)
-
-Verdict APPROVE requires line-level audit, not just stat overview. If you skip Read on a diff file, you MUST NOT issue APPROVE for that file.
-
-**Reference**: this mandate surfaced from BL-W47p L1 session where 3 architects APPROVED but 3 specialists immediately found HIGH issues (JUnit4 imports, source set errors, etc.). Architects did shallow gate reviews; specialists caught what architects missed. This mandate prevents recurrence.
+See [arch-review-depth-mandate](../../docs/agents/arch-review-depth-mandate.md) for full mandate. Summary: Read each modified file line-by-line during gate review. APPROVE requires line-level audit. Violations from BL-W47p L1 session (#29/#30) drove this rule.
 
 ### Scope Validation Gate (MANDATORY)
 

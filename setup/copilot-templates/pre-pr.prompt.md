@@ -228,6 +228,26 @@ Report per-module pass/fail. Show failing test names on failure.
 If all pass: "Ready to open PR against `{base}`."
 If any fail: list specific violations and stop.
 
+### Step 8.5 — Write pre-pr stamp (PASS only)
+
+On READY/PASS outcome only, write a machine-readable stamp so `pre-push-pre-pr-gate.js` can verify the check was run:
+
+```bash
+STAMP_PATH="$(pwd)/.androidcommondoc/pre-pr.stamp"
+mkdir -p "$(dirname "$STAMP_PATH")"
+cat > "$STAMP_PATH" <<EOF
+{
+  "verdict": "PASS",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "head": "$(git rev-parse HEAD)",
+  "branch": "$(git branch --show-current)"
+}
+EOF
+echo "Stamp written: $STAMP_PATH"
+```
+
+On BLOCKED/FAIL outcome: do NOT write the stamp (or write with `"verdict": "FAIL"` for audit purposes). The gate hook reads this stamp before any `git push` on feature branches.
+
 ## Important Rules
 
 1. **Run before every PR** — CI is not a substitute for local pre-flight
