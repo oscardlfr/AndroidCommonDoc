@@ -159,6 +159,37 @@ When editing a template:
 
 The `exclude_hooks` field defaults to `[]` (all L0 hooks propagated). Existing manifests without this field auto-migrate via schema default.
 
+**Bats test propagation** (Option B, BL-W47-prep-10): all `*-gate.bats` files from L0 `scripts/tests/` are also copied to the destination `scripts/tests/`. Only gate-specific test files travel; project-local bats files are never touched.
+
+## .commitlintrc.json Seed-if-Absent (F6 — BL-W47-prep-10)
+
+`/sync-l0` seeds `.commitlintrc.json` in the destination project if it is absent.
+
+**Strategy (fail-open)**:
+1. If destination already has `.commitlintrc.json` → **SKIP**. Never overwrite project-specific scopes.
+2. If absent, attempt to parse `valid_scopes` from `.github/workflows/ci.yml` line matching `valid_scopes: [...]`.
+   - On success: write `.commitlintrc.json` merging parsed scopes with L0's 18 canonical scopes (deduped).
+   - On parse failure (ci.yml absent, unreadable, or no matching line): seed with L0's 18 scopes only.
+
+**L0 canonical scopes (18)**: `core`, `data`, `ui`, `feature`, `ci`, `deps`, `release`, `docs`, `detekt`, `mcp`, `skills`, `scripts`, `agents`, `archive`, `di`, `guides`, `tests`, `tools`.
+
+The worst-case outcome is the destination doesn't get a `.commitlintrc.json` if the write fails — no regression vs the pre-F6 state.
+
+## --force-l0-managed Flag (F7 — BL-W47-prep-10)
+
+The `--force-l0-managed` CLI flag overwrites L0-managed templates regardless of local-edit detection.
+
+**L0-managed templates** (hardcoded in CLI — no expected L1 customization):
+- `.claude/agents/arch-platform.md`
+- `.claude/agents/arch-testing.md`
+- `.claude/agents/arch-integration.md`
+- `.claude/agents/quality-gater.md`
+- `.claude/agents/planner.md`
+
+Without `--force-l0-managed` (default): drift is detected and warned, but local edits are preserved. With `--force-l0-managed`: these 5 templates are overwritten even when local-edit conflict is detected. Does NOT affect any other templates.
+
+Future direction: `<!-- L1-LOCAL -->` marker in agent files will designate project-owned files; absence of the marker implies L0-managed.
+
 ## Safety
 
 - Files listed in `l2_specific` are never modified during sync

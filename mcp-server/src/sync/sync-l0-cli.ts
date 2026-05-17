@@ -66,6 +66,7 @@ interface CliArgs {
   force: boolean;
   dryRun: boolean;
   autoMigrate: boolean;
+  forceL0Managed: boolean;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -75,6 +76,7 @@ function parseArgs(argv: string[]): CliArgs {
   let force = false;
   let dryRun = false;
   let autoMigrate = false;
+  let forceL0Managed = false;
 
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--project-root" && argv[i + 1]) {
@@ -91,11 +93,27 @@ function parseArgs(argv: string[]): CliArgs {
       dryRun = true;
     } else if (argv[i] === "--auto-migrate") {
       autoMigrate = true;
+    } else if (argv[i] === "--force-l0-managed") {
+      forceL0Managed = true;
     }
   }
 
-  return { projectRoot, l0Root, prune, force, dryRun, autoMigrate };
+  return { projectRoot, l0Root, prune, force, dryRun, autoMigrate, forceL0Managed };
 }
+
+// ---------------------------------------------------------------------------
+// L0-managed template list (F7 — BL-W47-prep-10)
+// These templates have no expected L1 customization and are overwritten by
+// --force-l0-managed regardless of local-edit detection.
+// ---------------------------------------------------------------------------
+
+const L0_MANAGED_TEMPLATES = [
+  '.claude/agents/arch-platform.md',
+  '.claude/agents/arch-testing.md',
+  '.claude/agents/arch-integration.md',
+  '.claude/agents/quality-gater.md',
+  '.claude/agents/planner.md',
+];
 
 // ---------------------------------------------------------------------------
 // Manifest bootstrap
@@ -184,11 +202,76 @@ async function ensureManifest(
 }
 
 // ---------------------------------------------------------------------------
+// .commitlintrc.json seed-if-absent (F6 — BL-W47-prep-10)
+// ---------------------------------------------------------------------------
+
+// Canonical L0 scopes — fallback when ci.yml parse fails
+const L0_COMMITLINT_SCOPES = [
+  "core", "data", "ui", "feature", "ci", "deps", "release", "docs",
+  "detekt", "mcp", "skills", "scripts", "agents", "archive", "di",
+  "guides", "tests", "tools",
+];
+
+/**
+ * Seed .commitlintrc.json in projectRoot if absent.
+ *
+ * Strategy (inline, fail-open per arch-integration refinement):
+ * 1. If L1 already has .commitlintrc.json → SKIP (never overwrite project-specific).
+ * 2. If missing, attempt to parse valid_scopes from L1's ci.yml.
+ *    On success → write .commitlintrc.json with merged scopes (L1 + L0 fallback dedup).
+ *    On parse failure → seed minimal from L0's 18 scopes only.
+ * 3. dryRun=true → log intent, no write.
+ */
+async function seedCommitlintrc(projectRoot: string, dryRun: boolean): Promise<void> {
+  const rcPath = path.join(projectRoot, ".commitlintrc.json");
+
+  // Skip if already present — never overwrite project-specific scopes
+  if (existsSync(rcPath)) return;
+
+  let scopes: string[] = [...L0_COMMITLINT_SCOPES];
+
+  // Attempt to parse valid_scopes from L1's .github/workflows/ci.yml
+  const ciYmlPath = path.join(projectRoot, ".github", "workflows", "ci.yml");
+  try {
+    const ciContent = await readFile(ciYmlPath, "utf-8");
+    // Look for a line containing valid_scopes: [...] — simple regex scan, fail-open
+    const match = ciContent.match(/valid_scopes:\s*\[([^\]]+)\]/);
+    if (match) {
+      const parsed = match[1]
+        .split(",")
+        .map((s) => s.trim().replace(/['"]/g, ""))
+        .filter(Boolean);
+      if (parsed.length > 0) {
+        // Merge: L1 scopes first (preserve project-specific), then any L0 scopes not already present
+        const merged = [...new Set([...parsed, ...L0_COMMITLINT_SCOPES])];
+        scopes = merged;
+      }
+    }
+  } catch {
+    // ci.yml absent or unreadable — use L0 scopes only (fail-open)
+  }
+
+  const content = JSON.stringify({ valid_scopes: scopes }, null, 2) + "\n";
+
+  if (dryRun) {
+    console.log(`  (dry-run) Would seed .commitlintrc.json with ${scopes.length} scopes`);
+    return;
+  }
+
+  try {
+    await writeFile(rcPath, content, "utf-8");
+    console.log(`Seeded .commitlintrc.json (${scopes.length} scopes)`);
+  } catch (err) {
+    console.warn(`⚠ Could not seed .commitlintrc.json: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const { projectRoot, l0Root: l0RootArg, prune, force, dryRun, autoMigrate } = parseArgs(process.argv);
+  const { projectRoot, l0Root: l0RootArg, prune, force, dryRun, autoMigrate, forceL0Managed } = parseArgs(process.argv);
 
   console.log(`Sync → ${projectRoot}`);
   if (dryRun) console.log("  (dry-run mode — no files will be modified)");
@@ -218,7 +301,12 @@ async function main(): Promise<void> {
     }
   }
 
-  const options: SyncOptions = { prune, force, dryRun };
+  const options: SyncOptions = {
+    prune,
+    force,
+    dryRun,
+    forceL0ManagedPaths: forceL0Managed ? L0_MANAGED_TEMPLATES : [],
+  };
   let report: SyncReport;
 
   if (isMultiSource) {
@@ -272,6 +360,9 @@ async function main(): Promise<void> {
   for (const err of batsResult.errors) {
     console.warn(`⚠ Bats sync: ${err}`);
   }
+
+  // Seed .commitlintrc.json if absent (F6 — never overwrites existing)
+  await seedCommitlintrc(projectRoot, dryRun);
 
   // Print summary
   console.log(`  Added:     ${report.added}`);
