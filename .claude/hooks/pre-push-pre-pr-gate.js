@@ -116,15 +116,24 @@ process.stdin.on('end', () => {
       return;
     }
 
-    // Check 4: HEAD matches
+    // Check 4: HEAD matches with short-SHA normalization
     const currentHead = gitOutput(['rev-parse', 'HEAD'], projectRoot);
-    if (currentHead && stamp.head) {
-      const normalizedStampHead = gitOutput(['rev-parse', stamp.head], projectRoot);
-      if (normalizedStampHead === null && stamp.head.length < 40) {
+    if (stamp.head && stamp.head.length > 0 && stamp.head.length < 40) {
+      // Short SHA in stamp — try to resolve via git
+      const normalizedStampHead = currentHead ? gitOutput(['rev-parse', stamp.head], projectRoot) : null;
+      if (normalizedStampHead === null) {
+        // Git unavailable or can't resolve short SHA — block
         block('stamp uses short SHA, expected full SHA — re-run /pre-pr.');
         return;
       }
-      const resolvedStampHead = normalizedStampHead || stamp.head;
+      // Resolved successfully — compare against current HEAD
+      if (currentHead !== normalizedStampHead) {
+        block('/pre-pr stamp HEAD (' + stamp.head + ') does not match current HEAD. Re-run /pre-pr.');
+        return;
+      }
+    } else if (currentHead && stamp.head) {
+      // Full SHA — compare directly
+      const resolvedStampHead = gitOutput(['rev-parse', stamp.head], projectRoot) || stamp.head;
       if (resolvedStampHead && currentHead !== resolvedStampHead) {
         block('/pre-pr stamp HEAD (' + stamp.head + ') does not match current HEAD. Re-run /pre-pr.');
         return;

@@ -32,7 +32,7 @@ PYEOF
 write_stamp() {
   local verdict="${1:-PASS}"
   local age_secs="${2:-0}"
-  local head="${3:-abc12345}"
+  local head="${3}"
   local branch="${4:-feature/test}"
   python3 - "$STAMP_FILE" "$verdict" "$age_secs" "$head" "$branch" <<'PYEOF'
 import json, sys, time, datetime
@@ -169,6 +169,7 @@ run_hook() {
   git -C "$git_root" config user.email "test@test.com"
   git -C "$git_root" config user.name "Test"
   git -C "$git_root" commit --allow-empty --quiet -m "init"
+  git -C "$git_root" checkout -b feature/test --quiet
   local short_sha
   short_sha="$(git -C "$git_root" rev-parse --short HEAD)"
   local stamp_dir="$git_root/.androidcommondoc"
