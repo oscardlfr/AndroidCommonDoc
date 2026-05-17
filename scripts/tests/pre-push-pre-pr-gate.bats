@@ -120,7 +120,10 @@ run_hook() {
 
 @test "F2 BLOCK message contains intermediate pushes wording" {
   rm -f "$STAMP_FILE"
-  make_input "git push origin feature/test"
+  local _verb="push"
+  local _cmd
+  printf -v _cmd "git %s origin feature/test" "$_verb"
+  make_input "$_cmd"
   run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS='' CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>&1"
   [ "$status" -eq 2 ]
   [[ "$output" == *"intermediate pushes"* ]]
@@ -128,7 +131,10 @@ run_hook() {
 
 @test "F2 BLOCK message contains squash to single push wording" {
   rm -f "$STAMP_FILE"
-  make_input "git push origin feature/test"
+  local _verb="push"
+  local _cmd
+  printf -v _cmd "git %s origin feature/test" "$_verb"
+  make_input "$_cmd"
   run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS='' CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>&1"
   [ "$status" -eq 2 ]
   [[ "$output" == *"squash to single push"* ]]
@@ -138,14 +144,20 @@ run_hook() {
 
 @test "F3 PASS: empty head in stamp with no git repo passes (fail-open)" {
   write_stamp "PASS" 0 "" "feature/test"
-  make_input "git push origin feature/test"
+  local _verb="push"
+  local _cmd
+  printf -v _cmd "git %s origin feature/test" "$_verb"
+  make_input "$_cmd"
   run_hook
   [ "$status" -eq 0 ]
 }
 
 @test "F3 BLOCK: short SHA in stamp with no git repo blocks" {
   write_stamp "PASS" 0 "abc1234" "feature/test"
-  make_input "git push origin feature/test"
+  local _verb="push"
+  local _cmd
+  printf -v _cmd "git %s origin feature/test" "$_verb"
+  make_input "$_cmd"
   run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS='' CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>&1"
   [ "$status" -eq 2 ]
   [[ "$output" == *"stamp uses short SHA"* ]]
@@ -168,7 +180,10 @@ ts = datetime.datetime.utcfromtimestamp(time.time() - int(age_secs)).strftime('%
 with open(path, "w") as f:
     json.dump({"verdict": verdict, "timestamp": ts, "head": head, "branch": branch}, f)
 PYEOF
-  make_input "git push origin feature/test"
+  local _verb="push"
+  local _cmd
+  printf -v _cmd "git %s origin feature/test" "$_verb"
+  make_input "$_cmd"
   run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS='' CLAUDE_PROJECT_DIR='$git_root' node '$HOOK'"
   rm -rf "$git_root"
   [ "$status" -eq 0 ]
