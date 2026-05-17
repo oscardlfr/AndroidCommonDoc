@@ -28,12 +28,14 @@ const ALLOWLIST_PATTERNS = [
 ];
 
 const BLOCK_PATTERNS = [
-  // gradlew/gradle followed by *Test variants OR bare 'test' task
-  /\b(gradlew|gradle)\b.*\b(\w*Test|test)\b/,
+  // gradlew/gradle as a COMMAND (not inside a path) followed by *Test variants or bare 'test'.
+  // Anchors: start-of-line, whitespace, pipe, semicolon, &&, ||, or (.
+  // NOT matched when gradle appears mid-path (e.g., docs/gradle/agp9-kmp-host-test-source-set.md).
+  /(?:^|[|&;\s(])\.?\/?(gradlew?)(?![\w./]).*\b(\w*Test|test)\b/,
   // gradlew/gradle allTests
-  /\b(gradlew|gradle)\s+.*\ballTests\b/,
+  /(?:^|[|&;\s(])\.?\/?(gradlew?)(?![\w./]).*\ballTests\b/,
   // gradlew/gradle check (lifecycle task that runs tests)
-  /\b(gradlew|gradle)\s+.*\bcheck\b/,
+  /(?:^|[|&;\s(])\.?\/?(gradlew?)(?![\w./]).*\bcheck\b/,
   // module-qualified test tasks like :core:jvmTest OR :core:test
   /:[\w-]+:(\w*Test|test)\b/,
 ];
