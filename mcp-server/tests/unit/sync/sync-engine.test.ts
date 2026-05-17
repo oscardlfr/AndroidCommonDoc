@@ -1028,6 +1028,7 @@ describe("syncL0 manifest preservation", () => {
         exclude_agents: ["privacy-auditor"],
         exclude_commands: ["start-track"],
         exclude_categories: ["security"],
+        exclude_hooks: [],
       },
       l2_specific: {
         commands: ["deploy"],

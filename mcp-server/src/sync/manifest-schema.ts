@@ -45,6 +45,8 @@ const SelectionSchema = z.object({
   exclude_agents: z.array(z.string()).default([]),
   exclude_commands: z.array(z.string()).default([]),
   exclude_categories: z.array(z.string()).default([]),
+  /** Hook filenames to exclude from sync (e.g. "project-specific-gate.js") */
+  exclude_hooks: z.array(z.string()).default([]),
 });
 
 const L2SpecificSchema = z.object({
@@ -146,6 +148,7 @@ export function createDefaultManifest(l0Source: string): Manifest {
       exclude_agents: [],
       exclude_commands: [],
       exclude_categories: [],
+      exclude_hooks: [],
     },
     checksums: {},
     l2_specific: { commands: [], agents: [], skills: [] },
@@ -165,6 +168,7 @@ export function createChainManifest(sources: LayerSource[]): Manifest {
       exclude_agents: [],
       exclude_commands: [],
       exclude_categories: [],
+      exclude_hooks: [],
     },
     checksums: {},
     l2_specific: { commands: [], agents: [], skills: [] },
