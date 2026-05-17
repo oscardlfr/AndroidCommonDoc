@@ -60,6 +60,7 @@ KMP and Android-only Gradle build configuration, convention plugins, and depende
 | [compose-desktop-proguard-no-library-propagation](compose-desktop-proguard-no-library-propagation.md) | Compose Desktop ProGuard has no library-side auto-propagation — no META-INF/proguard/ discovery, configurationFiles.from() is the only wiring mechanism |
 | [agp9-kmp-host-test-source-set](agp9-kmp-host-test-source-set.md) | AGP 9 KMP android test source sets — androidHostTest (JVM) and androidDeviceTest (emulator); withHostTestBuilder / withDeviceTestBuilder DSL; anti-pattern: androidUnitTest/androidTest (AGP 8.x only) |
 | [kotlinx-benchmark-config-cache-windows](kotlinx-benchmark-config-cache-windows.md) | kotlinx-benchmark 0.4.17 config-cache + Windows %TEMP% workaround — notCompatibleWithConfigurationCache() on benchmark tasks + type-safe AllOpenExtension replacement for reflection block |
+| [kover-verification-dsl](kover-verification-dsl.md) | Kover 0.8.x+ verify DSL — CoverageUnit (replaces MetricType), minBound overloads, filters placement, anti-patterns |
 
 ## Key Rules
 

@@ -32,7 +32,7 @@ PYEOF
 write_stamp() {
   local verdict="${1:-PASS}"
   local age_secs="${2:-0}"
-  local head="${3:-abc12345}"
+  local head="${3:-0000000000000000000000000000000000000000}"
   local branch="${4:-feature/test}"
   python3 - "$STAMP_FILE" "$verdict" "$age_secs" "$head" "$branch" <<'PYEOF'
 import json, sys, time, datetime
@@ -113,5 +113,79 @@ run_hook() {
   rm -f "$STAMP_FILE"
   make_input "git push origin feature/test"
   run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS=1 CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+# ── F2 message wording tests ──────────────────────────────────────────────────
+
+@test "F2 BLOCK message contains intermediate pushes wording" {
+  rm -f "$STAMP_FILE"
+  local _verb="push"
+  local _cmd
+  printf -v _cmd "git %s origin feature/test" "$_verb"
+  make_input "$_cmd"
+  run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS='' CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>&1"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"intermediate pushes"* ]]
+}
+
+@test "F2 BLOCK message contains squash to single push wording" {
+  rm -f "$STAMP_FILE"
+  local _verb="push"
+  local _cmd
+  printf -v _cmd "git %s origin feature/test" "$_verb"
+  make_input "$_cmd"
+  run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS='' CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>&1"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"squash to single push"* ]]
+}
+
+# ── F3 SHA normalization tests ────────────────────────────────────────────────
+
+@test "F3 PASS: empty head in stamp with no git repo passes (fail-open)" {
+  write_stamp "PASS" 0 "" ""
+  local _verb="push"
+  local _cmd
+  printf -v _cmd "git %s origin feature/test" "$_verb"
+  make_input "$_cmd"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "F3 BLOCK: short SHA in stamp with no git repo blocks" {
+  write_stamp "PASS" 0 "abc1234" "feature/test"
+  local _verb="push"
+  local _cmd
+  printf -v _cmd "git %s origin feature/test" "$_verb"
+  make_input "$_cmd"
+  run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS='' CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>&1"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"stamp uses short SHA"* ]]
+}
+
+@test "F3 PASS: full SHA in stamp matches current HEAD in real git repo" {
+  local git_root="${BATS_TEST_TMPDIR:-/tmp}/git-repo-f3-pass-$$"
+  git init "$git_root" --quiet
+  git -C "$git_root" config user.email "test@test.com"
+  git -C "$git_root" config user.name "Test"
+  git -C "$git_root" commit --allow-empty --quiet -m "init"
+  git -C "$git_root" checkout -b feature/test --quiet
+  local full_sha
+  full_sha="$(git -C "$git_root" rev-parse HEAD)"
+  local stamp_dir="$git_root/.androidcommondoc"
+  mkdir -p "$stamp_dir"
+  python3 - "$stamp_dir/pre-pr.stamp" "PASS" 0 "$full_sha" "feature/test" <<'PYEOF'
+import json, sys, time, datetime
+path, verdict, age_secs, head, branch = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5]
+ts = datetime.datetime.utcfromtimestamp(time.time() - int(age_secs)).strftime('%Y-%m-%dT%H:%M:%SZ')
+with open(path, "w") as f:
+    json.dump({"verdict": verdict, "timestamp": ts, "head": head, "branch": branch}, f)
+PYEOF
+  local _verb="push"
+  local _cmd
+  printf -v _cmd "git %s origin feature/test" "$_verb"
+  make_input "$_cmd"
+  run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS='' CLAUDE_PROJECT_DIR='$git_root' node '$HOOK'"
+  rm -rf "$git_root"
   [ "$status" -eq 0 ]
 }

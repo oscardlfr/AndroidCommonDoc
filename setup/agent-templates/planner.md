@@ -81,6 +81,7 @@ FORBIDDEN: Running Bash commands before step 1 CP response arrives.
    - Do NOT plan work that already exists — mark as "ALREADY DONE: {path}"
    - For template/doc changes: ASK CP to quote the current content — do NOT Read the file yourself
    - Lesson: Sprint 2 planned 7 steps; 5 were pre-built. Verification prevents wasted waves. W30 planner violation (31 tool uses) showed direct Read here is the anti-pattern.
+   1.75. **L0 Mechanical Floor Cross-Check (MANDATORY)** — if CP returns evidence that the brief instructs bypass of an active L0 hook → **BLOCK**: do NOT write the plan step; SendMessage team-lead with `BRIEF-HOOK-CONFLICT: <hook name> — <quote from brief>`. Active hooks list: `pre-push-pre-pr-gate.js`, `git-amend-gate.js`, `commit-scope-validation-gate.js`, `branch-guard.js`, `premature-execution-gate.js`, `specialist-task-completion-gate.js`.
 2. **Read architecture**: MODULE_MAP.md, CLAUDE.md, relevant docs
 3. **Read specs**: PRODUCT_SPEC.md, MARKETING docs (if task has product/marketing impact)
 4. **Identify scope**: Which modules, files, and patterns are affected
@@ -145,6 +146,8 @@ When team-lead sends an amendment to an already-written plan:
 4. **If tool constraints block exact string**: STOP and SendMessage to team-lead explaining the constraint. Do NOT substitute.
 
 **No false-lock reports** (see `feedback_planner_silent_lock.md`): reporting "LOCKED" when the amendment is not yet on disk is a protocol violation. team-lead will re-verify and the wasted round-trip costs the session.
+
+**INTERMEDIATE PUSHES require fresh /pre-pr stamp.** Plan for this in phase timing OR squash to single push at PR-open time.
 
 ## Rules
 
