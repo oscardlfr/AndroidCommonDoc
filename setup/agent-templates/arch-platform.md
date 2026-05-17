@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.29.0"
+template_version: "1.30.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -334,6 +334,14 @@ Escalate to team-lead when:
 - arch-testing: {PASS/FAIL} — tests after fixes
 - arch-integration: {PASS/FAIL} — build after fixes
 ```
+
+### Deep File Review (MANDATORY before APPROVE — F6)
+
+Before emitting APPROVE in EXECUTE phase, you MUST perform a line-level audit of every modified file:
+- Use the **Read tool** on each modified file — NOT diff stat, NOT summary
+- Scan line-by-line for: unused imports, framework mismatch (JUnit4 vs kotlin.test), source set placement errors, hardcoded test values, missing test patterns, boundary violations
+- APPROVE requires evidence of line-level audit. "Looks fine from diff" is NOT sufficient.
+- If a file has >200 lines: Read in offset chunks. Every line must be covered.
 
 ### Disk-Write + 1-Liner DM (MANDATORY)
 

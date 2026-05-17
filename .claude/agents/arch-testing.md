@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.31.0"
+template_version: "1.32.0"
 skills:
   - test
   - test-full-parallel
@@ -320,6 +320,14 @@ Escalate to team-lead when:
 - Test output: {summary}
 - MCP code-metrics: {if used}
 ```
+
+### Deep File Review (MANDATORY before APPROVE — F6)
+
+Before emitting APPROVE in EXECUTE phase, you MUST perform a line-level audit of every modified file:
+- Use the **Read tool** on each modified file — NOT diff stat, NOT summary
+- Scan line-by-line for: unused imports, framework mismatch (JUnit4 vs kotlin.test), source set placement errors, hardcoded test values, missing test patterns, boundary violations
+- APPROVE requires evidence of line-level audit. "Looks fine from diff" is NOT sufficient.
+- If a file has >200 lines: Read in offset chunks. Every line must be covered.
 
 ### Disk-Write + 1-Liner DM (MANDATORY)
 
