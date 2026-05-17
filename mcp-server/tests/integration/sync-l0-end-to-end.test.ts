@@ -4,9 +4,10 @@
  * Spawns the compiled CLI as a subprocess against a minimal L1 fixture
  * project and verifies that:
  *   1. Hook JS files land in fixture/.claude/hooks/
- *   2. Gate bats files land in fixture/scripts/tests/
- *   3. The manifest checksums field is updated
- *   4. Exit code is 0
+ *   2. The manifest checksums field is updated
+ *   3. Exit code is 0
+ *
+ * Bats propagation is L0-LOCAL only (Amendment 1, BL-W47-prep-10) — NOT synced.
  *
  * This test catches regressions that unit tests of syncHooks() in isolation
  * cannot detect (prep-8 F7 root cause: CLI orchestration gap).
@@ -55,7 +56,6 @@ describe("sync-l0 end-to-end CLI", () => {
     fixtureDir = await (await import("node:fs/promises")).mkdtemp(join(tmpdir(), "sync-l0-e2e-"));
     // Minimal L1 fixture structure
     await mkdir(join(fixtureDir, ".claude", "hooks"), { recursive: true });
-    await mkdir(join(fixtureDir, "scripts", "tests"), { recursive: true });
     // Write manifest with relative path back to L0_ROOT
     const rel = require("node:path").relative(fixtureDir, L0_ROOT).replace(/\\/g, "/");
     await writeFile(join(fixtureDir, "l0-manifest.json"), makeManifest(rel), "utf8");
@@ -79,22 +79,6 @@ describe("sync-l0 end-to-end CLI", () => {
     expect(existsSync(hooksDir), "hooks dir should exist").toBe(true);
     const hookFiles = require("node:fs").readdirSync(hooksDir).filter((f: string) => f.endsWith(".js"));
     expect(hookFiles.length, "at least one hook .js file should be synced").toBeGreaterThan(0);
-  });
-
-  it("exits 0 and gate bats files land in scripts/tests/", () => {
-    const result = spawnSync(
-      process.execPath,
-      [CLI_PATH, "--project-root", fixtureDir],
-      { encoding: "utf8", timeout: 60000 },
-    );
-
-    expect(result.status, `stderr: ${result.stderr}`).toBe(0);
-
-    // At least one *-gate.bats should exist in fixture scripts/tests/
-    const batsDir = join(fixtureDir, "scripts", "tests");
-    expect(existsSync(batsDir), "bats dir should exist").toBe(true);
-    const batsFiles = require("node:fs").readdirSync(batsDir).filter((f: string) => f.endsWith("-gate.bats"));
-    expect(batsFiles.length, "at least one *-gate.bats file should be synced").toBeGreaterThan(0);
   });
 
   it("exits 0 and manifest checksums are updated", () => {
@@ -137,39 +121,5 @@ describe("sync-l0 end-to-end CLI", () => {
       ? require("node:fs").readdirSync(hooksDir)
       : [];
     expect(hookFiles).not.toContain("premature-execution-gate.js");
-  });
-
-  it("seeds .commitlintrc.json when absent (F6)", () => {
-    const result = spawnSync(
-      process.execPath,
-      [CLI_PATH, "--project-root", fixtureDir],
-      { encoding: "utf8", timeout: 60000 },
-    );
-
-    expect(result.status, `stderr: ${result.stderr}`).toBe(0);
-
-    const rcPath = join(fixtureDir, ".commitlintrc.json");
-    expect(existsSync(rcPath), ".commitlintrc.json should be seeded").toBe(true);
-    const rc = JSON.parse(readFileSync(rcPath, "utf8"));
-    expect(Array.isArray(rc.valid_scopes), "valid_scopes should be an array").toBe(true);
-    expect(rc.valid_scopes.length, "valid_scopes should have at least 18 scopes").toBeGreaterThanOrEqual(18);
-  });
-
-  it("does not overwrite existing .commitlintrc.json (F6 skip guard)", () => {
-    const existingScopes = ["custom-scope-only"];
-    const existingContent = JSON.stringify({ valid_scopes: existingScopes }, null, 2);
-    const rcPath = join(fixtureDir, ".commitlintrc.json");
-    require("node:fs").writeFileSync(rcPath, existingContent, "utf8");
-
-    const result = spawnSync(
-      process.execPath,
-      [CLI_PATH, "--project-root", fixtureDir],
-      { encoding: "utf8", timeout: 60000 },
-    );
-
-    expect(result.status, `stderr: ${result.stderr}`).toBe(0);
-
-    const rc = JSON.parse(readFileSync(rcPath, "utf8"));
-    expect(rc.valid_scopes).toEqual(existingScopes);
   });
 });

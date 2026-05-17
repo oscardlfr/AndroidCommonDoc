@@ -159,21 +159,13 @@ When editing a template:
 
 The `exclude_hooks` field defaults to `[]` (all L0 hooks propagated). Existing manifests without this field auto-migrate via schema default.
 
-**Bats test propagation** (Option B, BL-W47-prep-10): all `*-gate.bats` files from L0 `scripts/tests/` are also copied to the destination `scripts/tests/`. Only gate-specific test files travel; project-local bats files are never touched.
+## .commitlintrc.json — Project-Specific, NOT Propagated
 
-## .commitlintrc.json Seed-if-Absent (F6 — BL-W47-prep-10)
+`.commitlintrc.json` is **project-specific** and is **not propagated by `/sync-l0`**. Each layer (L0, L1, L2) maintains its own commitlint configuration with a scope list tuned to that project's module structure.
 
-`/sync-l0` seeds `.commitlintrc.json` in the destination project if it is absent.
+**Why not propagated**: L0 has 18 canonical scopes; L1 projects may have 40+ module-specific scopes. Auto-seeding or overwriting would either truncate L1 scopes or require ongoing maintenance of a scope whitelist that diverges per project. Projects must create and own their `.commitlintrc.json` independently.
 
-**Strategy (fail-open)**:
-1. If destination already has `.commitlintrc.json` → **SKIP**. Never overwrite project-specific scopes.
-2. If absent, attempt to parse `valid_scopes` from `.github/workflows/ci.yml` line matching `valid_scopes: [...]`.
-   - On success: write `.commitlintrc.json` merging parsed scopes with L0's 18 canonical scopes (deduped).
-   - On parse failure (ci.yml absent, unreadable, or no matching line): seed with L0's 18 scopes only.
-
-**L0 canonical scopes (18)**: `core`, `data`, `ui`, `feature`, `ci`, `deps`, `release`, `docs`, `detekt`, `mcp`, `skills`, `scripts`, `agents`, `archive`, `di`, `guides`, `tests`, `tools`.
-
-The worst-case outcome is the destination doesn't get a `.commitlintrc.json` if the write fails — no regression vs the pre-F6 state.
+**Best practice**: create `.commitlintrc.json` once per project from the CI `valid_scopes` list (usually in `.github/workflows/ci.yml`). L0's 18 scopes are a useful starting template, but are not authoritative for downstream layers.
 
 ## --force-l0-managed Flag (F7 — BL-W47-prep-10)
 

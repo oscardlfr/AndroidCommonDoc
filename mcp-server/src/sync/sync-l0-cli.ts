@@ -32,8 +32,6 @@ import { existsSync } from "node:fs";
 import {
   syncL0,
   syncMultiSource,
-  syncHooks,
-  syncBatsTests,
   resolveL0Source,
   cloneRemoteSource,
   cleanupClone,
@@ -202,71 +200,6 @@ async function ensureManifest(
 }
 
 // ---------------------------------------------------------------------------
-// .commitlintrc.json seed-if-absent (F6 — BL-W47-prep-10)
-// ---------------------------------------------------------------------------
-
-// Canonical L0 scopes — fallback when ci.yml parse fails
-const L0_COMMITLINT_SCOPES = [
-  "core", "data", "ui", "feature", "ci", "deps", "release", "docs",
-  "detekt", "mcp", "skills", "scripts", "agents", "archive", "di",
-  "guides", "tests", "tools",
-];
-
-/**
- * Seed .commitlintrc.json in projectRoot if absent.
- *
- * Strategy (inline, fail-open per arch-integration refinement):
- * 1. If L1 already has .commitlintrc.json → SKIP (never overwrite project-specific).
- * 2. If missing, attempt to parse valid_scopes from L1's ci.yml.
- *    On success → write .commitlintrc.json with merged scopes (L1 + L0 fallback dedup).
- *    On parse failure → seed minimal from L0's 18 scopes only.
- * 3. dryRun=true → log intent, no write.
- */
-async function seedCommitlintrc(projectRoot: string, dryRun: boolean): Promise<void> {
-  const rcPath = path.join(projectRoot, ".commitlintrc.json");
-
-  // Skip if already present — never overwrite project-specific scopes
-  if (existsSync(rcPath)) return;
-
-  let scopes: string[] = [...L0_COMMITLINT_SCOPES];
-
-  // Attempt to parse valid_scopes from L1's .github/workflows/ci.yml
-  const ciYmlPath = path.join(projectRoot, ".github", "workflows", "ci.yml");
-  try {
-    const ciContent = await readFile(ciYmlPath, "utf-8");
-    // Look for a line containing valid_scopes: [...] — simple regex scan, fail-open
-    const match = ciContent.match(/valid_scopes:\s*\[([^\]]+)\]/);
-    if (match) {
-      const parsed = match[1]
-        .split(",")
-        .map((s) => s.trim().replace(/['"]/g, ""))
-        .filter(Boolean);
-      if (parsed.length > 0) {
-        // Merge: L1 scopes first (preserve project-specific), then any L0 scopes not already present
-        const merged = [...new Set([...parsed, ...L0_COMMITLINT_SCOPES])];
-        scopes = merged;
-      }
-    }
-  } catch {
-    // ci.yml absent or unreadable — use L0 scopes only (fail-open)
-  }
-
-  const content = JSON.stringify({ valid_scopes: scopes }, null, 2) + "\n";
-
-  if (dryRun) {
-    console.log(`  (dry-run) Would seed .commitlintrc.json with ${scopes.length} scopes`);
-    return;
-  }
-
-  try {
-    await writeFile(rcPath, content, "utf-8");
-    console.log(`Seeded .commitlintrc.json (${scopes.length} scopes)`);
-  } catch (err) {
-    console.warn(`⚠ Could not seed .commitlintrc.json: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -339,30 +272,6 @@ async function main(): Promise<void> {
 
     report = await syncL0(projectRoot, l0Root, options);
   }
-
-  // Wire hook + bats propagation (F5 — BL-W47-prep-10, Option B: separate syncBatsTests)
-  const manifestPath = path.join(projectRoot, "l0-manifest.json");
-  const manifest = await readManifest(manifestPath);
-  const excludeHooks = manifest.selection?.exclude_hooks ?? [];
-
-  const hookResult = await syncHooks(l0Root, projectRoot, excludeHooks, dryRun);
-  if (hookResult.copied.length > 0) {
-    console.log(`Hooks synced: ${hookResult.copied.length} copied, ${hookResult.skipped.length} skipped`);
-  }
-  for (const err of hookResult.errors) {
-    console.warn(`⚠ Hook sync: ${err}`);
-  }
-
-  const batsResult = await syncBatsTests(l0Root, projectRoot, dryRun);
-  if (batsResult.copied.length > 0) {
-    console.log(`Bats tests synced: ${batsResult.copied.length} copied`);
-  }
-  for (const err of batsResult.errors) {
-    console.warn(`⚠ Bats sync: ${err}`);
-  }
-
-  // Seed .commitlintrc.json if absent (F6 — never overwrites existing)
-  await seedCommitlintrc(projectRoot, dryRun);
 
   // Print summary
   console.log(`  Added:     ${report.added}`);

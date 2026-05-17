@@ -1464,7 +1464,7 @@
       "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:2f5827fc2c2207370394ed35096a40ca0d82887179fa4d4ac905bbe6c1041c19",
+      "hash": "sha256:7b7445a0c2f1710d2b3295f0f3074026f1a09b01d3f75173e42dc2190d2cdbc4",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
