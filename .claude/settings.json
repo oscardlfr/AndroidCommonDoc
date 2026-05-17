@@ -311,6 +311,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "TaskUpdate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/specialist-task-completion-gate.js",
+            "timeout": 5
+          }
+        ]
       }
     ]
   }
