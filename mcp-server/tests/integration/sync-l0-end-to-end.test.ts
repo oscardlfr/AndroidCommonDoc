@@ -138,4 +138,38 @@ describe("sync-l0 end-to-end CLI", () => {
       : [];
     expect(hookFiles).not.toContain("premature-execution-gate.js");
   });
+
+  it("seeds .commitlintrc.json when absent (F6)", () => {
+    const result = spawnSync(
+      process.execPath,
+      [CLI_PATH, "--project-root", fixtureDir],
+      { encoding: "utf8", timeout: 60000 },
+    );
+
+    expect(result.status, `stderr: ${result.stderr}`).toBe(0);
+
+    const rcPath = join(fixtureDir, ".commitlintrc.json");
+    expect(existsSync(rcPath), ".commitlintrc.json should be seeded").toBe(true);
+    const rc = JSON.parse(readFileSync(rcPath, "utf8"));
+    expect(Array.isArray(rc.valid_scopes), "valid_scopes should be an array").toBe(true);
+    expect(rc.valid_scopes.length, "valid_scopes should have at least 18 scopes").toBeGreaterThanOrEqual(18);
+  });
+
+  it("does not overwrite existing .commitlintrc.json (F6 skip guard)", () => {
+    const existingScopes = ["custom-scope-only"];
+    const existingContent = JSON.stringify({ valid_scopes: existingScopes }, null, 2);
+    const rcPath = join(fixtureDir, ".commitlintrc.json");
+    require("node:fs").writeFileSync(rcPath, existingContent, "utf8");
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI_PATH, "--project-root", fixtureDir],
+      { encoding: "utf8", timeout: 60000 },
+    );
+
+    expect(result.status, `stderr: ${result.stderr}`).toBe(0);
+
+    const rc = JSON.parse(readFileSync(rcPath, "utf8"));
+    expect(rc.valid_scopes).toEqual(existingScopes);
+  });
 });
