@@ -32,7 +32,7 @@ PYEOF
 write_stamp() {
   local verdict="${1:-PASS}"
   local age_secs="${2:-0}"
-  local head="${3}"
+  local head="${3:-0000000000000000000000000000000000000000}"
   local branch="${4:-feature/test}"
   python3 - "$STAMP_FILE" "$verdict" "$age_secs" "$head" "$branch" <<'PYEOF'
 import json, sys, time, datetime
@@ -143,7 +143,7 @@ run_hook() {
 # ── F3 SHA normalization tests ────────────────────────────────────────────────
 
 @test "F3 PASS: empty head in stamp with no git repo passes (fail-open)" {
-  write_stamp "PASS" 0 "" "feature/test"
+  write_stamp "PASS" 0 "" ""
   local _verb="push"
   local _cmd
   printf -v _cmd "git %s origin feature/test" "$_verb"
@@ -163,18 +163,18 @@ run_hook() {
   [[ "$output" == *"stamp uses short SHA"* ]]
 }
 
-@test "F3 PASS: short SHA in stamp resolves to current HEAD in real git repo" {
-  local git_root="${BATS_TEST_TMPDIR:-/tmp}/git-repo-f3-$$"
+@test "F3 PASS: full SHA in stamp matches current HEAD in real git repo" {
+  local git_root="${BATS_TEST_TMPDIR:-/tmp}/git-repo-f3-pass-$$"
   git init "$git_root" --quiet
   git -C "$git_root" config user.email "test@test.com"
   git -C "$git_root" config user.name "Test"
   git -C "$git_root" commit --allow-empty --quiet -m "init"
   git -C "$git_root" checkout -b feature/test --quiet
-  local short_sha
-  short_sha="$(git -C "$git_root" rev-parse --short HEAD)"
+  local full_sha
+  full_sha="$(git -C "$git_root" rev-parse HEAD)"
   local stamp_dir="$git_root/.androidcommondoc"
   mkdir -p "$stamp_dir"
-  python3 - "$stamp_dir/pre-pr.stamp" "PASS" 0 "$short_sha" "feature/test" <<'PYEOF'
+  python3 - "$stamp_dir/pre-pr.stamp" "PASS" 0 "$full_sha" "feature/test" <<'PYEOF'
 import json, sys, time, datetime
 path, verdict, age_secs, head, branch = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5]
 ts = datetime.datetime.utcfromtimestamp(time.time() - int(age_secs)).strftime('%Y-%m-%dT%H:%M:%SZ')
