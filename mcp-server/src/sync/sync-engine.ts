@@ -338,6 +338,12 @@ function detectTypeFromPath(
   return "command";
 }
 
+/** Returns true for hook JS files (used by destPath and syncHooks). */
+function isHookPath(sourcePath: string): boolean {
+  return (sourcePath.startsWith(".claude/hooks/") || sourcePath.startsWith("hooks/"))
+    && sourcePath.endsWith(".js");
+}
+
 /**
  * Translate a registry source path to the destination path inside the project.
  *
@@ -345,10 +351,17 @@ function detectTypeFromPath(
  * under `.claude/skills/<name>/SKILL.md` in consumer projects so that
  * Claude Code's skill loader finds them at `.claude/skills/`.
  *
+ * Hooks live in `.claude/hooks/*.js` in L0 and are materialized at the
+ * same relative path in consumer projects (no prefix remapping needed).
+ *
  * Agents and commands already carry `.claude/` prefixes in the registry.
  */
 export function destPath(sourcePath: string): string {
   if (sourcePath.startsWith("skills/")) {
+    return `.claude/${sourcePath}`;
+  }
+  // Bare hooks/foo.js → .claude/hooks/foo.js (consistent with syncHooks dest layout)
+  if (sourcePath.startsWith("hooks/") && isHookPath(sourcePath)) {
     return `.claude/${sourcePath}`;
   }
   return sourcePath;
