@@ -81,6 +81,7 @@ Standard patterns for testing Kotlin Multiplatform projects.
 | [testing-patterns-schedulers](testing-patterns-schedulers.md) | Scheduler testing — advancing time, virtual clocks |
 | [testing-patterns-benchmarks](testing-patterns-benchmarks.md) | Benchmark patterns — dispatcher selection, androidx vs kotlinx-benchmark |
 | [testing-patterns-dispatcher-scopes](testing-patterns-dispatcher-scopes.md) | Dispatcher scopes — Path A (stateIn/VM) vs Path B (startObserving), shared testScheduler |
+| [security-testing-patterns](security-testing-patterns.md) | Security module tests — Android Keystore instrumented, cipher unit-tests, real-vs-fake split, PBKDF2-iter-as-config-field |
 
 ## Key Rules
 
