@@ -213,6 +213,11 @@
           },
           {
             "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/commit-scope-validation-gate.js",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/bash-cli-spawn-gate.js",
             "timeout": 5
           },
