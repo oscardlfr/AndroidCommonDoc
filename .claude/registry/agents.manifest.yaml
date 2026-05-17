@@ -913,8 +913,8 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.10.0"
-    template_frontmatter_sha256: 422e10c9e29887e7f38ff2ed21a13d227e665175165ac15edba6da89840f695a
+    template_version: "2.11.0"
+    template_frontmatter_sha256: 0d2948224d49c039292d8eb58009dc6385657a18cffa9e23bdc671292693a651
     category: orchestrator
     lifecycle: ephemeral
     description: "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL."

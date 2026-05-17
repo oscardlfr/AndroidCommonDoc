@@ -340,7 +340,7 @@
       "description": "Validate and fix commit messages against Conventional Commits v1.0.0. Use when writing commits, reviewing commit history, or enforcing commit conventions.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b458c1cea8e694db442a9e591cbc544f5f3f15add9d0b372169ecbaf8337ea9d",
+      "hash": "sha256:e702b0cb7ca8455cd943562401390ba76eda5ba05b6b6a8ae72d08108888bc72",
       "dependencies": [],
       "frontmatter": {
         "name": "commit-lint",
@@ -1043,7 +1043,7 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f88aee3d064780f304e5dedd99f564737c79d5753373211b1523f7c98bff7dca",
+      "hash": "sha256:e64c85f0dac9a9325a119af416d93d4ce9a6777f2d0b93e88f790f0b03fa52b6",
       "dependencies": [
         "scripts/sh/scan-secrets.sh",
         "scripts/sh/catalog-coverage-check.sh",
@@ -1464,7 +1464,7 @@
       "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:5957247f6834800f929b6313cf798244b63dff8608024278724e8c15900f5988",
+      "hash": "sha256:68b9708e375ca4834f653ff31a90d38936539927c6bf127bcae971446844c817",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
@@ -2694,7 +2694,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f75b798ea299b4d6755171854bc63a6f707d6bdac97e2e409661ca2fdfde101c",
+      "hash": "sha256:0d31f147b2a76e39dc46b94e365a991e43ab3eda3766c2435b2604a1fd5ca55b",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
