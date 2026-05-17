@@ -87,7 +87,8 @@ process.stdin.on('end', () => {
     const block = (reason) => {
       process.stderr.write(
         `[pre-push-pre-pr-gate] BLOCKED: ${reason}\n` +
-        `Run /pre-pr before pushing. On PASS it writes the stamp at:\n` +
+        `/pre-pr required for ALL pushes, including intermediate pushes (any push before final PR-open push). Re-run /pre-pr before each push, OR squash to single push at PR-open time.\n` +
+        `On PASS it writes the stamp at:\n` +
         `  ${stampPath}\n` +
         `Bypass: export PRE_PR_BYPASS=1\n`
       );
@@ -117,9 +118,17 @@ process.stdin.on('end', () => {
 
     // Check 4: HEAD matches
     const currentHead = gitOutput(['rev-parse', 'HEAD'], projectRoot);
-    if (currentHead && stamp.head && currentHead !== stamp.head) {
-      block(`/pre-pr stamp HEAD (${stamp.head.slice(0, 8)}) does not match current HEAD (${currentHead.slice(0, 8)}). Re-run /pre-pr after your latest commit.`);
-      return;
+    if (currentHead && stamp.head) {
+      const normalizedStampHead = gitOutput(['rev-parse', stamp.head], projectRoot);
+      if (normalizedStampHead === null && stamp.head.length < 40) {
+        block('stamp uses short SHA, expected full SHA — re-run /pre-pr.');
+        return;
+      }
+      const resolvedStampHead = normalizedStampHead || stamp.head;
+      if (resolvedStampHead && currentHead !== resolvedStampHead) {
+        block('/pre-pr stamp HEAD (' + stamp.head + ') does not match current HEAD. Re-run /pre-pr.');
+        return;
+      }
     }
 
     // Check 5: branch matches

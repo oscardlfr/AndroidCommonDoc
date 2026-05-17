@@ -115,3 +115,61 @@ run_hook() {
   run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS=1 CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
   [ "$status" -eq 0 ]
 }
+
+# ── F2 message wording tests ──────────────────────────────────────────────────
+
+@test "F2 BLOCK message contains intermediate pushes wording" {
+  rm -f "$STAMP_FILE"
+  make_input "git push origin feature/test"
+  run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS='' CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>&1"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"intermediate pushes"* ]]
+}
+
+@test "F2 BLOCK message contains squash to single push wording" {
+  rm -f "$STAMP_FILE"
+  make_input "git push origin feature/test"
+  run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS='' CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>&1"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"squash to single push"* ]]
+}
+
+# ── F3 SHA normalization tests ────────────────────────────────────────────────
+
+@test "F3 PASS: empty head in stamp with no git repo passes (fail-open)" {
+  write_stamp "PASS" 0 "" "feature/test"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "F3 BLOCK: short SHA in stamp with no git repo blocks" {
+  write_stamp "PASS" 0 "abc1234" "feature/test"
+  make_input "git push origin feature/test"
+  run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS='' CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>&1"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"stamp uses short SHA"* ]]
+}
+
+@test "F3 PASS: short SHA in stamp resolves to current HEAD in real git repo" {
+  local git_root="${BATS_TEST_TMPDIR:-/tmp}/git-repo-f3-$$"
+  git init "$git_root" --quiet
+  git -C "$git_root" config user.email "test@test.com"
+  git -C "$git_root" config user.name "Test"
+  git -C "$git_root" commit --allow-empty --quiet -m "init"
+  local short_sha
+  short_sha="$(git -C "$git_root" rev-parse --short HEAD)"
+  local stamp_dir="$git_root/.androidcommondoc"
+  mkdir -p "$stamp_dir"
+  python3 - "$stamp_dir/pre-pr.stamp" "PASS" 0 "$short_sha" "feature/test" <<'PYEOF'
+import json, sys, time, datetime
+path, verdict, age_secs, head, branch = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5]
+ts = datetime.datetime.utcfromtimestamp(time.time() - int(age_secs)).strftime('%Y-%m-%dT%H:%M:%SZ')
+with open(path, "w") as f:
+    json.dump({"verdict": verdict, "timestamp": ts, "head": head, "branch": branch}, f)
+PYEOF
+  make_input "git push origin feature/test"
+  run bash -c "cat '$INPUT_FILE' | PRE_PR_BYPASS='' CLAUDE_PROJECT_DIR='$git_root' node '$HOOK'"
+  rm -rf "$git_root"
+  [ "$status" -eq 0 ]
+}
