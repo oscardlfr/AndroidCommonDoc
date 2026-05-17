@@ -4,29 +4,26 @@
 # Verifies that incomplete teams are blocked after the grace period.
 
 HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/team-completeness-gate.js"
-INPUT_FILE="${BATS_TEST_TMPDIR:-/tmp}/team-completeness-gate-input-$$.json"
-FLAG_FILE="${BATS_TEST_TMPDIR:-/tmp}/claude-team-topology-test-session-$$.flag"
 
 setup() {
   export TEAM_COMPLETENESS_BYPASS=1
   export CLAUDE_SESSION_ID="test-session-$$"
   export TMPDIR="${BATS_TEST_TMPDIR:-/tmp}"
+  INPUT_FILE="${TMPDIR}/team-completeness-gate-input-$$.json"
+  # FLAG_FILE is placed at the session-derived path so no cp is needed in run_hook
+  FLAG_FILE="${TMPDIR}/claude-team-topology-test-session-$$.flag"
 }
 
 teardown() {
-  rm -f "$FLAG_FILE"
-  rm -f "$INPUT_FILE"
+  rm -f "${TMPDIR}/claude-team-topology-test-session-$$.flag"
+  rm -f "${TMPDIR}/team-completeness-gate-input-$$.json"
 }
 
 make_input() {
   local tool="${1:-Bash}"
-  python3 - "$tool" "$INPUT_FILE" <<'PYEOF'
-import json, sys
-tool, path = sys.argv[1], sys.argv[2]
-with open(path, "w", encoding="utf-8") as f:
-    inp = {"tool_name": tool, "session_id": "test-session-" + __import__("os").environ.get("BATS_SUITE_TMPDIR", "x")[-4:]}
-    json.dump(inp, f)
-PYEOF
+  cat > "$INPUT_FILE" <<EOF
+{"tool_name":"${tool}","session_id":"test-session-$$"}
+EOF
 }
 
 make_flag() {
@@ -43,18 +40,14 @@ PYEOF
 }
 
 run_hook() {
-  local session_id="test-session-$$"
-  # Rename flag to match session
-  local flag_path="${TMPDIR}/claude-team-topology-${session_id}.flag"
-  cp "$FLAG_FILE" "$flag_path" 2>/dev/null || true
-  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='${session_id}' TMPDIR='${TMPDIR}' node '$HOOK'"
-  rm -f "$flag_path"
+  # FLAG_FILE is already at the session-derived path (no cp needed)
+  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' node '$HOOK'"
 }
 
 # ── PASS cases (should NOT block) ────────────────────────────────────────────
 
 @test "PASS: no flag file (solo session)" {
-  python3 -c "import json; f=open('$INPUT_FILE','w'); json.dump({'tool_name':'Bash','session_id':'no-flag-session'},f)"
+  make_input "Bash"
   run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='no-flag-session' TMPDIR='${TMPDIR}' node '$HOOK'"
   [ "$status" -eq 0 ]
 }
@@ -69,17 +62,13 @@ run_hook() {
 @test "PASS: bypass env TEAM_COMPLETENESS_BYPASS=1" {
   make_flag $((60 * 60 * 1000)) "[]"
   make_input "Bash"
-  local session_id="test-session-$$"
-  local flag_path="${TMPDIR}/claude-team-topology-${session_id}.flag"
-  cp "$FLAG_FILE" "$flag_path"
-  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS=1 CLAUDE_SESSION_ID='${session_id}' TMPDIR='${TMPDIR}' node '$HOOK'"
-  rm -f "$flag_path"
+  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS=1 CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' node '$HOOK'"
   [ "$status" -eq 0 ]
 }
 
 @test "PASS: non-subject tool (Task) is not intercepted" {
   make_flag $((60 * 60 * 1000)) "[]"
-  python3 -c "import json; f=open('$INPUT_FILE','w'); json.dump({'tool_name':'Task','session_id':'test-session-$$'},f)"
+  make_input "Task"
   run_hook
   [ "$status" -eq 0 ]
 }
@@ -87,23 +76,15 @@ run_hook() {
 # ── FAIL-OPEN cases ───────────────────────────────────────────────────────────
 
 @test "FAIL-OPEN: malformed flag file is ignored" {
-  local session_id="test-session-$$"
-  local flag_path="${TMPDIR}/claude-team-topology-${session_id}.flag"
-  echo "not json" > "$flag_path"
+  echo "not json" > "$FLAG_FILE"
   make_input "Bash"
-  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='${session_id}' TMPDIR='${TMPDIR}' node '$HOOK'"
-  rm -f "$flag_path"
+  run_hook
   [ "$status" -eq 0 ]
 }
 
 @test "FAIL-OPEN: missing topology yaml does not block" {
   make_flag $((60 * 60 * 1000)) "[]"
   make_input "Bash"
-  local session_id="test-session-$$"
-  local flag_path="${TMPDIR}/claude-team-topology-${session_id}.flag"
-  cp "$FLAG_FILE" "$flag_path"
-  # Use a nonexistent project root so yaml load fails
-  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='${session_id}' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='/nonexistent' node '$HOOK'"
-  rm -f "$flag_path"
+  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='/nonexistent' node '$HOOK'"
   [ "$status" -eq 0 ]
 }
