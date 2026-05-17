@@ -106,11 +106,20 @@ function parseArgs(argv: string[]): CliArgs {
 // ---------------------------------------------------------------------------
 
 const L0_MANAGED_TEMPLATES = [
+  // Orchestration roles (5 original)
   '.claude/agents/arch-platform.md',
   '.claude/agents/arch-testing.md',
   '.claude/agents/arch-integration.md',
   '.claude/agents/quality-gater.md',
   '.claude/agents/planner.md',
+  // Specialist templates (7 added in prep-11 — F2)
+  '.claude/agents/data-layer-specialist.md',
+  '.claude/agents/domain-model-specialist.md',
+  '.claude/agents/ui-specialist.md',
+  '.claude/agents/toolkit-specialist.md',
+  '.claude/agents/test-specialist.md',
+  '.claude/agents/doc-updater.md',
+  '.claude/agents/context-provider.md',
 ];
 
 // ---------------------------------------------------------------------------

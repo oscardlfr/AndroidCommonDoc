@@ -167,18 +167,29 @@ The `exclude_hooks` field defaults to `[]` (all L0 hooks propagated). Existing m
 
 **Best practice**: create `.commitlintrc.json` once per project from the CI `valid_scopes` list (usually in `.github/workflows/ci.yml`). L0's 18 scopes are a useful starting template, but are not authoritative for downstream layers.
 
-## --force-l0-managed Flag (F7 — BL-W47-prep-10)
+## --force-l0-managed Flag (F7 — BL-W47-prep-10, expanded F2 — BL-W47-prep-11)
 
 The `--force-l0-managed` CLI flag overwrites L0-managed templates regardless of local-edit detection.
 
-**L0-managed templates** (hardcoded in CLI — no expected L1 customization):
+**L0-managed templates** (12 entries — hardcoded in CLI, no expected L1 customization):
+
+Orchestration roles (original 5):
 - `.claude/agents/arch-platform.md`
 - `.claude/agents/arch-testing.md`
 - `.claude/agents/arch-integration.md`
 - `.claude/agents/quality-gater.md`
 - `.claude/agents/planner.md`
 
-Without `--force-l0-managed` (default): drift is detected and warned, but local edits are preserved. With `--force-l0-managed`: these 5 templates are overwritten even when local-edit conflict is detected. Does NOT affect any other templates.
+Specialist templates (7 added in prep-11):
+- `.claude/agents/data-layer-specialist.md`
+- `.claude/agents/domain-model-specialist.md`
+- `.claude/agents/ui-specialist.md`
+- `.claude/agents/toolkit-specialist.md`
+- `.claude/agents/test-specialist.md`
+- `.claude/agents/doc-updater.md`
+- `.claude/agents/context-provider.md`
+
+Without `--force-l0-managed` (default): drift is detected and warned, but local edits are preserved. With `--force-l0-managed`: all 12 templates are overwritten even when local-edit conflict is detected. Does NOT affect any other templates.
 
 Future direction: `<!-- L1-LOCAL -->` marker in agent files will designate project-owned files; absence of the marker implies L0-managed.
 
