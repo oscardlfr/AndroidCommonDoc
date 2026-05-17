@@ -52,6 +52,14 @@ jobs:
         run: |
           VALID_TYPES="${{ inputs.valid_types }}"
           VALID_SCOPES="${{ inputs.valid_scopes }}"
+
+          # Override VALID_SCOPES from .commitlintrc.json if present (F4 single source of truth)
+          if [ -f ".commitlintrc.json" ]; then
+            FILE_SCOPES=$(jq -r '.valid_scopes | join(",")' .commitlintrc.json 2>/dev/null || echo "")
+            if [ -n "$FILE_SCOPES" ]; then
+              VALID_SCOPES="$FILE_SCOPES"
+            fi
+          fi
           MAX_LEN="${{ inputs.max_subject_length }}"
 
           # Build type pattern

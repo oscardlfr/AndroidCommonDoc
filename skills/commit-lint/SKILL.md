@@ -21,8 +21,18 @@ copilot: true
 - `--message` -- A single commit message to validate (instead of reading from git log).
 - `--range` -- Git ref range to validate (e.g., `HEAD~5..HEAD`, `main..HEAD`). Default: last commit only.
 - `--fix` -- Interactively rewrite non-conforming commit messages.
-- `--scope-enum` -- Comma-separated list of allowed scopes (e.g., `core,feature,ui`). Default: any scope accepted.
+- `--scope-enum` -- Comma-separated list of allowed scopes (e.g., `core,feature,ui`). Default: reads from `.commitlintrc.json` if present, otherwise any scope accepted.
 - `--type-enum` -- Comma-separated list of allowed types. Default: `feat,fix,docs,style,refactor,perf,test,build,ci,chore,revert`.
+
+## Scope Validation
+
+If `--scope-enum` is not provided and `.commitlintrc.json` exists in the project root, valid scopes are read automatically:
+
+```bash
+VALID_SCOPES=$(jq -r '.valid_scopes | join(",")' .commitlintrc.json 2>/dev/null || echo "")
+```
+
+This ensures scope validation uses the same canonical source as CI (`reusable-commit-lint.yml`). Do NOT hardcode scopes in agent prompts or memory — always derive from `.commitlintrc.json`.
 
 ## Behavior
 

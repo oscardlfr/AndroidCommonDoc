@@ -1,0 +1,3 @@
+{
+  "valid_scopes": ["core","data","ui","feature","ci","deps","release","docs","detekt","mcp","skills","scripts","agents","archive","di","guides","tests","tools"]
+}
