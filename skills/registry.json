@@ -1464,7 +1464,7 @@
       "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:68b9708e375ca4834f653ff31a90d38936539927c6bf127bcae971446844c817",
+      "hash": "sha256:2f5827fc2c2207370394ed35096a40ca0d82887179fa4d4ac905bbe6c1041c19",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
@@ -1918,7 +1918,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2588fa1d8e77795080257be899754973b3ca65395b3a89ede94e13aee126d600",
+      "hash": "sha256:1ea5983ffe8de4fb41503d5968b611676c89261d48b13c6b9af6b91e7773f308",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1934,7 +1934,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.27.0",
+        "template_version": "1.28.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1948,7 +1948,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a72be745c780c70c0c9cfe3d0fced06e47c8e2babdba58dcd17d44eb22026076",
+      "hash": "sha256:207a4fbfb95c1d7fa1176477272f47fce4572c7105edd5c76f817b48b1ed9763",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1963,7 +1963,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.31.0",
+        "template_version": "1.32.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1977,7 +1977,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:d4ba9bdd54fe2706525190ba88f42018d3c1083a366118582d843b95a81d9cdf",
+      "hash": "sha256:594447b4671b9633690ee7a3b63fd380785448d256bebf1cbf501e5d8570d74e",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1992,7 +1992,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.34.0",
+        "template_version": "1.35.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2151,7 +2151,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:10d59c9994adb2768ceffaecaa159236a0210f84116fcdaed81cfda974d8b3a2",
+      "hash": "sha256:3c4dd9155accee4d5bf2c1831382da7ed758236e007e930ab991ab0b8e2b3b63",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -2167,7 +2167,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.16.0",
+        "template_version": "1.17.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2297,7 +2297,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:8baf1c0674aa2f51f17ee7e13ed4c6a09ab759c11eafa38dbb36afe3a7c6c82b",
+      "hash": "sha256:78bd15a6c4cb41112ccb95887abb07b4d62112c44325c03c2baf2bc6c6a4a606",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2313,7 +2313,7 @@
           "ingest"
         ],
         "token_budget": 2000,
-        "template_version": "2.9.0",
+        "template_version": "2.10.0",
         "skills": [
           "audit-docs",
           "readme-audit",
@@ -2328,7 +2328,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:652c8c50670f9a7a038232f6df196a034aab99e28cba45b1f18e56315a2d06fe",
+      "hash": "sha256:7ba2a6f62f65631063f1cd8a89db86e1f40ad241bbc2186eb99beb93abd54e4c",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2343,7 +2343,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.16.0",
+        "template_version": "1.17.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2856,7 +2856,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:0c4ccdaa9f14a7adbe9c1a19a5c012607a808f4c5f21a23c34da61706a1cd3e1",
+      "hash": "sha256:a3ab63873fc09d986cf2cc91506c4544c7061f383379c8d335bf47092d1e5457",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.24.0",
+        "template_version": "1.26.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2894,7 +2894,7 @@
       "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4365af6841b4fa7cf40a2d3a93c07f89b5109e6e5fab7e65f77a7cde078c014b",
+      "hash": "sha256:ea6b97fbfc9566a21197cc6d424da4c4f2ba45b0916ee6d42bff2baff86be2c1",
       "dependencies": [],
       "frontmatter": {
         "name": "toolkit-specialist",
@@ -2913,7 +2913,7 @@
           "validator"
         ],
         "token_budget": 3000,
-        "template_version": "1.4.0",
+        "template_version": "1.5.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2928,7 +2928,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:35c00d9ed259f9d84006add8e6c8287dbd1744607f13c5719ee0ed39469fd04b",
+      "hash": "sha256:beddb3d88aed5fd07143995339319e92c47b2a99ea454fb573e4753ca547126a",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2943,7 +2943,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.18.0",
+        "template_version": "1.19.0",
         "memory": "project",
         "skills": [
           "accessibility",

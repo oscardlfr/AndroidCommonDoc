@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
-template_version: "1.27.0"
+template_version: "1.28.0"
 skills:
   - test
   - extract-errors
@@ -405,3 +405,9 @@ You are NOT done until:
 4. Cross-architect verification passed after fixes
 5. No orphan components remain
 **No "compiles therefore works" verdicts.** Compilation is necessary but not sufficient — wiring must be verified.
+
+## Task Completion Protocol (reference)
+
+Architects rarely mark tasks directly. Before marking any task completed,
+verify READY-FOR-REVIEW was received from the relevant specialist.
+Full protocol: see specialist templates (e.g. data-layer-specialist).

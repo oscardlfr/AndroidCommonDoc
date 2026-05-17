@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.34.0"
+template_version: "1.35.0"
 skills:
   - test
   - test-full-parallel
@@ -417,3 +417,9 @@ You are NOT done until:
 5. Your verdict is backed by evidence, not assumptions
 
 **No "looks fine" verdicts.** Either you ran the tests and they passed, or you didn't and you can't APPROVE.
+
+## Task Completion Protocol (reference)
+
+Architects rarely mark tasks directly. Before marking any task completed,
+verify READY-FOR-REVIEW was received from the relevant specialist.
+Full protocol: see specialist templates (e.g. test-specialist).
