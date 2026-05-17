@@ -159,6 +159,29 @@ When editing a template:
 
 The `exclude_hooks` field defaults to `[]` (all L0 hooks propagated). Existing manifests without this field auto-migrate via schema default.
 
+## .commitlintrc.json — Project-Specific, NOT Propagated
+
+`.commitlintrc.json` is **project-specific** and is **not propagated by `/sync-l0`**. Each layer (L0, L1, L2) maintains its own commitlint configuration with a scope list tuned to that project's module structure.
+
+**Why not propagated**: L0 has 18 canonical scopes; L1 projects may have 40+ module-specific scopes. Auto-seeding or overwriting would either truncate L1 scopes or require ongoing maintenance of a scope whitelist that diverges per project. Projects must create and own their `.commitlintrc.json` independently.
+
+**Best practice**: create `.commitlintrc.json` once per project from the CI `valid_scopes` list (usually in `.github/workflows/ci.yml`). L0's 18 scopes are a useful starting template, but are not authoritative for downstream layers.
+
+## --force-l0-managed Flag (F7 — BL-W47-prep-10)
+
+The `--force-l0-managed` CLI flag overwrites L0-managed templates regardless of local-edit detection.
+
+**L0-managed templates** (hardcoded in CLI — no expected L1 customization):
+- `.claude/agents/arch-platform.md`
+- `.claude/agents/arch-testing.md`
+- `.claude/agents/arch-integration.md`
+- `.claude/agents/quality-gater.md`
+- `.claude/agents/planner.md`
+
+Without `--force-l0-managed` (default): drift is detected and warned, but local edits are preserved. With `--force-l0-managed`: these 5 templates are overwritten even when local-edit conflict is detected. Does NOT affect any other templates.
+
+Future direction: `<!-- L1-LOCAL -->` marker in agent files will designate project-owned files; absence of the marker implies L0-managed.
+
 ## Safety
 
 - Files listed in `l2_specific` are never modified during sync

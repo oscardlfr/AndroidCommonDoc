@@ -78,6 +78,12 @@ export interface SyncOptions {
   force?: boolean;
   /** If true, no filesystem changes — only compute the plan */
   dryRun?: boolean;
+  /**
+   * Dest-relative paths (e.g. ".claude/agents/arch-platform.md") to force-overwrite
+   * even when a local edit conflict is detected.  Does NOT affect other entries.
+   * Used by --force-l0-managed (F7 — BL-W47-prep-10).
+   */
+  forceL0ManagedPaths?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -716,7 +722,8 @@ export async function syncMultiSource(
   projectRoot: string,
   options: SyncOptions = {},
 ): Promise<MultiSourceSyncReport> {
-  const { prune = false, force = false, dryRun = false } = options;
+  const { prune = false, force = false, dryRun = false, forceL0ManagedPaths = [] } = options;
+  const l0ManagedSet = new Set(forceL0ManagedPaths);
 
   const manifestPath = path.join(projectRoot, "l0-manifest.json");
   const manifest = await readManifest(manifestPath);
@@ -776,6 +783,18 @@ export async function syncMultiSource(
   // Use existing sync plan + action computation
   const resolved = resolveSyncPlan(mergedRegistry, manifest);
   const actions = await computeSyncActions(resolved, manifest, projectRoot, force);
+
+  // Post-process: flip conflict → update for L0-managed paths (--force-l0-managed)
+  if (l0ManagedSet.size > 0) {
+    for (const planEntry of actions) {
+      if (planEntry.action === "conflict") {
+        const dest = destPath(planEntry.registryEntry.path);
+        if (l0ManagedSet.has(dest)) {
+          planEntry.action = "update";
+        }
+      }
+    }
+  }
 
   const report: MultiSourceSyncReport = {
     added: 0,
@@ -958,6 +977,15 @@ export async function syncMultiSource(
     }
   }
 
+  // Hook propagation (F5 — BL-W47-prep-10): syncHooks inside syncMultiSource
+  const msL0Root = resolvedPaths[orderedSources[0].layer] ?? "";
+  if (msL0Root) {
+    const hookResult = await syncHooks(msL0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
+    for (const err of hookResult.errors) {
+      report.warnings.push(`Hook sync: ${err}`);
+    }
+  }
+
   return report;
 }
 
@@ -1098,7 +1126,8 @@ export async function syncL0(
   l0Root: string,
   options: SyncOptions = {},
 ): Promise<SyncReport> {
-  const { prune = false, force = false, dryRun = false } = options;
+  const { prune = false, force = false, dryRun = false, forceL0ManagedPaths = [] } = options;
+  const l0ManagedSet = new Set(forceL0ManagedPaths);
 
   const manifestPath = path.join(projectRoot, "l0-manifest.json");
   const manifest = await readManifest(manifestPath);
@@ -1118,6 +1147,18 @@ export async function syncL0(
   // Resolve what to sync and compute actions
   const resolved = resolveSyncPlan(registry, manifest);
   const actions = await computeSyncActions(resolved, manifest, projectRoot, force);
+
+  // Post-process: flip conflict → update for L0-managed paths (--force-l0-managed)
+  if (l0ManagedSet.size > 0) {
+    for (const planEntry of actions) {
+      if (planEntry.action === "conflict") {
+        const dest = destPath(planEntry.registryEntry.path);
+        if (l0ManagedSet.has(dest)) {
+          planEntry.action = "update";
+        }
+      }
+    }
+  }
 
   const report: SyncReport = {
     added: 0,
@@ -1289,6 +1330,12 @@ export async function syncL0(
         }
       }
     }
+  }
+
+  // Hook propagation (F5 — BL-W47-prep-10): syncHooks called inside syncL0
+  const slHookResult = await syncHooks(l0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
+  for (const err of slHookResult.errors) {
+    report.warnings.push(`Hook sync: ${err}`);
   }
 
   return report;

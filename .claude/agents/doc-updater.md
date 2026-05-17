@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [docs, changelog, memory, roadmap, ingest]
 token_budget: 2000
-template_version: "2.9.0"
+template_version: "2.10.0"
 skills:
   - audit-docs
   - readme-audit
@@ -232,3 +232,14 @@ After updating, report:
 - **Decisions saved**: {list of memory entries}
 - **Pending**: {anything that needs manual review}
 ```
+
+## Task Completion Protocol (MANDATORY)
+
+Specialists do NOT mark tasks completed. Use TaskUpdate status='in_progress' while working. When done:
+1. Send `READY-FOR-REVIEW: <task-id>` SendMessage to team-lead with brief summary
+2. team-lead verifies delivery (files modified vs claimed)
+3. team-lead marks task as completed via TaskUpdate
+
+**Mechanical enforcement**: `.claude/hooks/specialist-task-completion-gate.js` (prep-10 F1) blocks specialist TaskUpdate with status="completed".
+
+**Bypass** (emergencies only, requires user authorization): `SPECIALIST_TASK_COMPLETION_BYPASS=1` env var.

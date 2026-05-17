@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.31.0"
+template_version: "1.32.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -371,3 +371,9 @@ Full protocol: `docs/agents/agent-verdict-protocol.md`
 **Lint verdict**: scripts/sh/verdict-pre-execute-check.sh <verdict-path>
 **Available skills**: see `docs/agents/arch-platform-prep-authoring-checklist.md` § Available Skills
 **Done criteria**: see `docs/agents/arch-platform-prep-authoring-checklist.md` § Done Criteria
+
+## Task Completion Protocol (reference)
+
+Architects rarely mark tasks directly. Before marking any task completed,
+verify READY-FOR-REVIEW was received from the relevant specialist.
+Full protocol: see specialist templates (e.g. data-layer-specialist).

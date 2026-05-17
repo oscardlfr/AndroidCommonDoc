@@ -403,6 +403,11 @@
         "date": "2026-05-17",
         "breaking": false,
         "note": "BL-W47-prep-8 BLOCK 2: Extract Review Depth Mandate body to docs/agents/arch-review-depth-mandate.md sub-doc. Replace inline body with pointer line. Reduces arch-testing below 425L limit."
+      },
+      "1.35.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-10 F1b: add Task Completion Protocol (reference) section -- architects verify READY-FOR-REVIEW from specialist before marking any task completed."
       }
     },
     "arch-platform": {
@@ -536,6 +541,11 @@
         "date": "2026-05-17",
         "breaking": false,
         "note": "BL-W47-prep-8 BLOCK 2: Extract Review Depth Mandate body to docs/agents/arch-review-depth-mandate.md sub-doc. Replace inline body with pointer line."
+      },
+      "1.32.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-10 F1b: add Task Completion Protocol (reference) section -- architects verify READY-FOR-REVIEW from specialist before marking any task completed."
       }
     },
     "arch-integration": {
@@ -654,6 +664,11 @@
         "date": "2026-05-17",
         "breaking": false,
         "note": "BL-W47-prep-8 BLOCK 2: Extract Review Depth Mandate body to docs/agents/arch-review-depth-mandate.md sub-doc. Replace inline body with pointer line."
+      },
+      "1.28.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-10 F1b: add Task Completion Protocol (reference) section -- architects verify READY-FOR-REVIEW from specialist before marking any task completed."
       }
     },
     "context-provider": {
@@ -706,6 +721,11 @@
         "date": "2026-05-10",
         "breaking": false,
         "note": "Wave D W17 #11/#17: add Read kmp-features-2026.md to Spawn Protocol pre-cache for KMP platform capability queries."
+      },
+      "3.4.3": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-10 F2: add On Pattern Gap section -- CP emits PATTERN-GAP: <topic> to team-lead when query yields zero cached patterns and no related sub-docs. Proactive signal enables earlier ingestion gating. L1 friction signals #17/#28/#44."
       }
     },
     "doc-updater": {
@@ -748,6 +768,11 @@
         "date": "2026-05-05",
         "breaking": false,
         "note": "FIND-10 (BL-W42 PR5): add SUPERSEDES Dispatch Protocol -- when mid-execute SendMessage carries 'SUPERSEDES PRIOR DISPATCH' header, doc-updater MUST abort current work, re-read dispatch from scratch, and verify superseded_at timestamp before proceeding"
+      },
+      "2.10.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-10 F1b: add Task Completion Protocol (MANDATORY) section -- doc-updater (as specialist) uses status=in_progress only; sends READY-FOR-REVIEW to team-lead when done. Hook specialist-task-completion-gate.js enforces mechanically."
       }
     },
     "product-strategist": {
@@ -997,6 +1022,11 @@
         "date": "2026-05-16",
         "breaking": false,
         "note": "BL-W47-prep-7: Bump kmp-test-runner version pins v0.9.0 -> v0.9.1 at lines 155, 161, 166, 167, 189, 191. Mechanical version-string bump. Excluded 3 historical refs (cli-troubleshooting.md:33 \"v0.9.0 Breaking\" heading + cli-tests-js-wasm.md:22,33 deferred note version anchors)."
+      },
+      "1.26.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-10 F1b: add Task Completion Protocol (MANDATORY) section -- specialists use status=in_progress only; send READY-FOR-REVIEW to team-lead when done. Hook specialist-task-completion-gate.js enforces mechanically."
       }
     },
     "ui-specialist": {
@@ -1075,6 +1105,11 @@
         "date": "2026-05-10",
         "breaking": false,
         "note": "PR #170 cli-mandate-cleanup: replace pre-CLI bullets -- \"verified and APPROVED\" -> \"APPROVE verdict\" + \"grep for expected changes\" -> \"verify via reporting architect (Grep is FORBIDDEN per BANNED TOOLS)\". Cleanup C5 finding from PR #169 audit."
+      },
+      "1.19.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-10 F1b: add Task Completion Protocol (MANDATORY) section -- specialists use status=in_progress only; send READY-FOR-REVIEW to team-lead when done. Hook specialist-task-completion-gate.js enforces mechanically."
       }
     },
     "domain-model-specialist": {
@@ -1143,6 +1178,11 @@
         "date": "2026-05-10",
         "breaking": false,
         "note": "PR #170 cli-mandate-cleanup: replace pre-CLI bullets -- \"verified and APPROVED\" -> \"APPROVE verdict\" + \"grep for expected changes\" -> \"verify via reporting architect (Grep is FORBIDDEN per BANNED TOOLS)\". Cleanup C5 finding from PR #169 audit."
+      },
+      "1.17.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-10 F1b: add Task Completion Protocol (MANDATORY) section -- specialists use status=in_progress only; send READY-FOR-REVIEW to team-lead when done. Hook specialist-task-completion-gate.js enforces mechanically."
       }
     },
     "data-layer-specialist": {
@@ -1211,6 +1251,11 @@
         "date": "2026-05-10",
         "breaking": false,
         "note": "PR #170 cli-mandate-cleanup: replace pre-CLI bullets -- \"verified and APPROVED\" -> \"APPROVE verdict\" + \"grep for expected changes\" -> \"verify via reporting architect (Grep is FORBIDDEN per BANNED TOOLS)\". Cleanup C5 finding from PR #169 audit."
+      },
+      "1.17.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-10 F1b: add Task Completion Protocol (MANDATORY) section -- specialists use status=in_progress only; send READY-FOR-REVIEW to team-lead when done. Hook specialist-task-completion-gate.js enforces mechanically."
       }
     },
     "advisor": {
@@ -1434,6 +1479,11 @@
         "date": "2026-05-05",
         "breaking": false,
         "note": "BL-W42 PR3: amend discipline policy (only amend on USER request; use follow-up commit otherwise) + git-amend-gate hook awareness. PR #137. Backfill: missing from registry, surfaced by BL-W44-S2 PR4 jq tuple lint."
+      },
+      "1.5.0": {
+        "date": "2026-05-17",
+        "breaking": false,
+        "note": "BL-W47-prep-10 F1b: add Task Completion Protocol (MANDATORY) section -- specialists use status=in_progress only; send READY-FOR-REVIEW to team-lead when done. Hook specialist-task-completion-gate.js enforces mechanically."
       }
     }
   }

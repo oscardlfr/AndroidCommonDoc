@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [typescript, mcp-server, mcp-tool, vitest, hooks, lib, ts-lib, validator]
 token_budget: 3000
-template_version: "1.4.0"
+template_version: "1.5.0"
 memory: project
 skills:
   - test
@@ -230,3 +230,14 @@ When invoked as a subagent, end your response with a structured summary:
 - **[DEV NOTE]**: [your interpretation — kept separate from raw evidence]
 - **Status**: PASS | FAIL | NEEDS_REVIEW
 ```
+
+## Task Completion Protocol (MANDATORY)
+
+Specialists do NOT mark tasks completed. Use TaskUpdate status='in_progress' while working. When done:
+1. Send `READY-FOR-REVIEW: <task-id>` SendMessage to team-lead with brief summary
+2. team-lead verifies delivery (files modified vs claimed)
+3. team-lead marks task as completed via TaskUpdate
+
+**Mechanical enforcement**: `.claude/hooks/specialist-task-completion-gate.js` (prep-10 F1) blocks specialist TaskUpdate with status="completed".
+
+**Bypass** (emergencies only, requires user authorization): `SPECIALIST_TASK_COMPLETION_BYPASS=1` env var.

@@ -161,6 +161,17 @@ From `.planning/RESEARCH-adaptive-harness.md` §9:
 - `.claude/hooks/premature-execution-gate.js` — extend to require Spawn Table presence in PLAN.md before allowing EXECUTE phase.
 - Architect templates — add "When dispatching, target a specific indexed instance (e.g., `test-specialist-2`) per the Spawn Table assignment."
 
+### PR4 expansion — Task Completion semantics
+
+**Sub-goal**: Specialists never mark tasks completed; team-lead marks completed after verifying READY-FOR-REVIEW message. Specialist self-verification (files-modified vs claimed) becomes the mechanical check.
+
+**Scope**:
+- Adaptive spawn-table includes per-specialist task ownership
+- TaskUpdate hook (prep-10 F1) enforces this at tool-call level
+- team-lead protocol: verify before marking completed
+
+**References**: L1 BL-W47p friction signals #21, #31, #36, #42, #43 (task auto-completion + false-claim recurrence). prep-10 F1 hook provides mechanical enforcement; PR4 integrates into adaptive topology.
+
 **Folds in**: BL-W31.7-01 (flat-spawning real → adaptive Spawn Table), BL-W31.7-02 (pull-model → indexed dispatch), BL-W31.7-05 (eliminar Phase split → Spawn Table replaces phase coordination).
 
 **Out of scope (separate PR if needed)**: BL-W31.7-03 hook reduction — defer audit until adaptive topology stabilizes.
@@ -242,6 +253,7 @@ Additional questions surfaced by prep-8 amendments:
 8. **SubagentStop hook timing** (PR2): `SubagentStop` hook name is UNVERIFIED — may not exist in Anthropic SDK. PR2 implementation must verify via Context7 before relying on it. See OQ9 for fallback options.
 9. **OQ9 — Anthropic hook event for specialist self-verification** (PR2): Which Anthropic Agent SDK hook event is the right surface for files-modified-vs-claimed verification? Options: (a) SubagentStart pre-fire if available, (b) PostToolUse after final file write, (c) PM-side check on IMPL-COMPLETE message. SubagentStop provisional name unverified — investigate in PR2 phase.
 10. **HOLD checkpoint density** (PR6): If specialists poll at "after each file write", high-frequency file writers will send many checkpoint-acks — potential message flood. Define a minimum interval (e.g., 30 seconds or N operations) to throttle.
+11. **TaskUpdate hook intercept compatibility**: settings.json "Task|Agent" matcher (existing, line 286) may substring-match TaskUpdate. Adding a separate "TaskUpdate" exact-match block could cause double-firing. All hooks are fail-open so no breakage, but verify empirically after C6 hook lands. Per CP refinement.
 
 ---
 

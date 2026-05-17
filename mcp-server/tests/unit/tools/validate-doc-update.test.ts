@@ -303,6 +303,21 @@ describe("coherence check", () => {
 
     expect(result.issues.some((i) => i.type === "incoherent")).toBe(true);
   });
+
+  it("passes docs/gradle/foo.md with category: gradle (F3 fix)", async () => {
+    // F3 regression: gradle subdir must accept category=gradle without incoherent error
+    const target = writeDoc("gradle/gradle-patterns.md", makeFrontmatter({
+      slug: "gradle-patterns",
+      category: "gradle",
+    }) + "# Gradle Patterns\n");
+
+    const result = await validate(target, makeFrontmatter({
+      slug: "gradle-patterns",
+      category: "gradle",
+    }) + "# Gradle Patterns\n");
+
+    expect(result.issues.filter((i) => i.type === "incoherent")).toHaveLength(0);
+  });
 });
 
 describe("overall status", () => {

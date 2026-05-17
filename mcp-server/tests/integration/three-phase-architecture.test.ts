@@ -43,12 +43,12 @@ describe('agent template size limits', () => {
   const templates = fs.readdirSync(TEMPLATES_DIR)
     .filter(f => f.endsWith('.md') && f !== 'README.md');
 
-  // arch-int/platform have ≤425 operational tolerance (BL-W35-09 cleanup scheduled)
+  // arch-int/platform/testing have ≤425 operational tolerance (BL-W35-09 cleanup scheduled; BL-W47-prep-10 C7: +5 lines light reference section)
   const ARCH_INT_PLATFORM_LIMIT = 425;
   const STANDARD_LIMIT = 420;
 
   for (const template of templates) {
-    const limit = (template === 'arch-integration.md' || template === 'arch-platform.md')
+    const limit = (template === 'arch-integration.md' || template === 'arch-platform.md' || template === 'arch-testing.md')
       ? ARCH_INT_PLATFORM_LIMIT
       : STANDARD_LIMIT;
     it(`${template} is ≤${limit} lines`, () => {
@@ -311,8 +311,8 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(platformContent).toMatch(/template_version:\s*"\d+\.\d+\.\d+"/);
   });
 
-  it('arch-integration has template version 1.27.0', () => {
-    expect(integrationContent).toContain('template_version: "1.27.0"');
+  it('arch-integration has template version 1.28.0', () => {
+    expect(integrationContent).toContain('template_version: "1.28.0"');
   });
 });
 
@@ -854,8 +854,8 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
     expect(cpContent).toMatch(/find-pattern/);
   });
 
-  it('has template version 3.4.2', () => {
-    expect(cpContent).toContain('template_version: "3.4.2"'); // Wave D: bumped 3.4.1 → 3.4.2
+  it('has template version 3.4.3', () => {
+    expect(cpContent).toContain('template_version: "3.4.3"'); // BL-W47-prep-10 C5: bumped 3.4.2 → 3.4.3 (On Pattern Gap section)
   });
 
   it('has External Context section with Context7 call sequence', () => {

@@ -64,6 +64,7 @@ interface CliArgs {
   force: boolean;
   dryRun: boolean;
   autoMigrate: boolean;
+  forceL0Managed: boolean;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -73,6 +74,7 @@ function parseArgs(argv: string[]): CliArgs {
   let force = false;
   let dryRun = false;
   let autoMigrate = false;
+  let forceL0Managed = false;
 
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--project-root" && argv[i + 1]) {
@@ -89,11 +91,27 @@ function parseArgs(argv: string[]): CliArgs {
       dryRun = true;
     } else if (argv[i] === "--auto-migrate") {
       autoMigrate = true;
+    } else if (argv[i] === "--force-l0-managed") {
+      forceL0Managed = true;
     }
   }
 
-  return { projectRoot, l0Root, prune, force, dryRun, autoMigrate };
+  return { projectRoot, l0Root, prune, force, dryRun, autoMigrate, forceL0Managed };
 }
+
+// ---------------------------------------------------------------------------
+// L0-managed template list (F7 — BL-W47-prep-10)
+// These templates have no expected L1 customization and are overwritten by
+// --force-l0-managed regardless of local-edit detection.
+// ---------------------------------------------------------------------------
+
+const L0_MANAGED_TEMPLATES = [
+  '.claude/agents/arch-platform.md',
+  '.claude/agents/arch-testing.md',
+  '.claude/agents/arch-integration.md',
+  '.claude/agents/quality-gater.md',
+  '.claude/agents/planner.md',
+];
 
 // ---------------------------------------------------------------------------
 // Manifest bootstrap
@@ -186,7 +204,7 @@ async function ensureManifest(
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const { projectRoot, l0Root: l0RootArg, prune, force, dryRun, autoMigrate } = parseArgs(process.argv);
+  const { projectRoot, l0Root: l0RootArg, prune, force, dryRun, autoMigrate, forceL0Managed } = parseArgs(process.argv);
 
   console.log(`Sync → ${projectRoot}`);
   if (dryRun) console.log("  (dry-run mode — no files will be modified)");
@@ -216,7 +234,12 @@ async function main(): Promise<void> {
     }
   }
 
-  const options: SyncOptions = { prune, force, dryRun };
+  const options: SyncOptions = {
+    prune,
+    force,
+    dryRun,
+    forceL0ManagedPaths: forceL0Managed ? L0_MANAGED_TEMPLATES : [],
+  };
   let report: SyncReport;
 
   if (isMultiSource) {
