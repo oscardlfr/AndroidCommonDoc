@@ -8,7 +8,7 @@
 # BL-W32-13: compound module scopes accepted when base token is in valid_scopes.
 
 setup() {
-  VALID_SCOPES="core,data,ui,feature,ci,deps,release,docs,detekt,mcp,skills,scripts,agents,archive,di,guides,tests,tools"
+  VALID_SCOPES=$(jq -r '.valid_scopes | join(",")' .commitlintrc.json)
   SCOPE_LIST=$(echo "$VALID_SCOPES" | tr ',' '|')
   VALID_TYPES="feat,fix,docs,style,refactor,perf,test,build,ci,chore,revert"
   TYPE_PATTERN=$(echo "$VALID_TYPES" | tr ',' '|')
