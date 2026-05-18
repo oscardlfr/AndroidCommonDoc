@@ -2093,7 +2093,7 @@
       "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:705156134e9a7f06295ee722f56d796b8d47244ab9cf8969dbf2fe3a608f53f6",
+      "hash": "sha256:8a505d017485d48129db4185f60ee533167a8bc818e6e39a0581a743684ca1a9",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -2108,7 +2108,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "3.4.3"
+        "template_version": "3.4.4"
       }
     },
     {
@@ -2151,7 +2151,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:3c4dd9155accee4d5bf2c1831382da7ed758236e007e930ab991ab0b8e2b3b63",
+      "hash": "sha256:2bda394bf33126e0b346dca3f942d2b1340aeca650e815bbc5b31a868bdd02b4",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -2167,7 +2167,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.17.0",
+        "template_version": "1.18.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2328,7 +2328,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7ba2a6f62f65631063f1cd8a89db86e1f40ad241bbc2186eb99beb93abd54e4c",
+      "hash": "sha256:023c49d93fa3f78c3bcbf35d02b5cae1c620e952796129990ca02b5c6fa916af",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2343,7 +2343,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.17.0",
+        "template_version": "1.18.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2530,7 +2530,7 @@
       "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:47a6fb85fa058dd4743c3c8c04f1c35375ede39d0be02ba59e4de773a65bdb0d",
+      "hash": "sha256:c142737a9f26cbc65faa6c409f91bb020275adc2e16df37c8936e3f79f21505c",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -2545,7 +2545,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.11.0"
+        "template_version": "1.12.0"
       }
     },
     {
@@ -2856,7 +2856,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:a3ab63873fc09d986cf2cc91506c4544c7061f383379c8d335bf47092d1e5457",
+      "hash": "sha256:627f10d8942ca9208ac7c1a6feda3f36d20e8555318432164412b5de9dab488e",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.26.0",
+        "template_version": "1.27.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2894,7 +2894,7 @@
       "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ea6b97fbfc9566a21197cc6d424da4c4f2ba45b0916ee6d42bff2baff86be2c1",
+      "hash": "sha256:f6d841e89b0ca7f815f0d6943175fad87fc84f05d118878da9d27f2c68547234",
       "dependencies": [],
       "frontmatter": {
         "name": "toolkit-specialist",
@@ -2913,7 +2913,7 @@
           "validator"
         ],
         "token_budget": 3000,
-        "template_version": "1.5.0",
+        "template_version": "1.6.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2928,7 +2928,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:beddb3d88aed5fd07143995339319e92c47b2a99ea454fb573e4753ca547126a",
+      "hash": "sha256:f9b3d966483f8e027160320c299e94c8b2f75afdaa06c0d095f967d20a942e5d",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2943,7 +2943,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.19.0",
+        "template_version": "1.20.0",
         "memory": "project",
         "skills": [
           "accessibility",

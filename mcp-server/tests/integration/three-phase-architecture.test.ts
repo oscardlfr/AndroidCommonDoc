@@ -854,8 +854,8 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
     expect(cpContent).toMatch(/find-pattern/);
   });
 
-  it('has template version 3.4.3', () => {
-    expect(cpContent).toContain('template_version: "3.4.3"'); // BL-W47-prep-10 C5: bumped 3.4.2 → 3.4.3 (On Pattern Gap section)
+  it('has template version 3.4.4', () => {
+    expect(cpContent).toContain('template_version: "3.4.4"'); // BL-W47-prep-13 C5: bumped 3.4.3 → 3.4.4 (Rule 8 FQN labeling)
   });
 
   it('has External Context section with Context7 call sequence', () => {
@@ -903,8 +903,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.11.0', () => {
-    expect(plannerContent).toContain('template_version: "1.11.0"');
+  it('planner version 1.12.0', () => {
+    expect(plannerContent).toContain('template_version: "1.12.0"');
   });
 
   it('arch-testing has template_version field in frontmatter', () => {

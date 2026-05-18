@@ -165,11 +165,12 @@ describe('dev template structural invariants', () => {
     // BL-W34-D: extract escalation + JDK env patterns to docs/ to restore 350 limit.
     // BL-W40 PR3 (2026-05-04): +7 lines (Numbered Step Gate) — ui 315→322, domain 215→222, data 208→215.
     // BL-W47-prep-10 C7 (2026-05-17): +11 lines each (Task Completion Protocol section) — test 370→381, ui 322→333, domain 222→233, data 216→227.
+    // BL-W47-prep-13 C5 (2026-05-18): +1 line each (./gradlew check exit criteria) — test 381→382, ui 333→334, domain 233→234, data 227→228.
     const PER_TEMPLATE_LIMIT: Record<string, number> = {
-      'test-specialist.md': 381,
-      'ui-specialist.md': 333,
-      'domain-model-specialist.md': 233,
-      'data-layer-specialist.md': 227,
+      'test-specialist.md': 382,
+      'ui-specialist.md': 334,
+      'domain-model-specialist.md': 234,
+      'data-layer-specialist.md': 228,
     };
     for (const t of DEV_TEMPLATES) {
       const c = fs.readFileSync(path.join(TEMPLATES_DIR, t), 'utf-8');
