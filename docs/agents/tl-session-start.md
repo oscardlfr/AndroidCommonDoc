@@ -55,6 +55,8 @@ Before drafting any brief that mentions git ops, hooks, /pre-pr, commit-lint, or
 2. Read each `arch-*` template's "MANDATORY" / "MUST DO" sections
 3. List active mechanical enforcements affecting the brief topics
 4. If brief contradicts any active enforcement, REVISE the brief (do NOT instruct specialists to bypass)
+5. Run `scripts/sh/list-valid-commit-tokens.sh` — verify TYPE-vs-SCOPE distinction is explicit in any brief that mentions commit messages. TYPE list comes from `.github/workflows/reusable-commit-lint.yml`; SCOPE list from `.commitlintrc.json`. These are DIFFERENT files.
+6. For brief items specifying Java/JNI FQN from external dependencies, verify via artifact inspection: `unzip -l <artifact>.aar | grep '\.class$'`. Nested class shows as `Outer$Inner.class`; top-level as `Inner.class`. FQNs from .java source alone are [source-based, NOT artifact-verified].
 
 Active hooks: `pre-push-pre-pr-gate.js`, `git-amend-gate.js`, `commit-scope-validation-gate.js`, `branch-guard.js`, `premature-execution-gate.js`, `specialist-task-completion-gate.js`.
 
@@ -91,6 +93,18 @@ After receiving ANY context-provider SendMessage response:
 2. If YES → SendMessage doc-updater IMMEDIATELY with pattern name,
    precedent files, when-to-use rules, target doc location
 3. Do NOT defer to end-of-phase batch — knowledge decays with context compression
+
+### User Decision Broadcast Protocol (MANDATORY)
+
+Within **60 seconds** of `AskUserQuestion` returning, team-lead MUST `SendMessage` to **every active architect** with:
+
+1. User decision verbatim (no paraphrasing)
+2. ANY invalidated prior architect reasoning (with reference to the architect's prior HOLD or query)
+3. Explicit "release any HOLD on this topic" instruction if applicable
+
+**Failure mode**: architects continue drafting HOLDs on stale premises. Wave 3b friction #76+#78 — PM took 17min, arch-platform spent cycles drafting formal HOLD GATE on now-invalid premise. Pattern: PM relay should INVALIDATE the architect's prior reasoning, not just deliver the new decision.
+
+Friction baseline: `feedback_validate_decisions_with_user` covers WHEN to ask; this protocol covers HOW FAST to broadcast.
 
 ### Search Dispatch Protocol (MANDATORY — T-BUG-015)
 
