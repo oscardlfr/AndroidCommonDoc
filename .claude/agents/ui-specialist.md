@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [compose, ui, accessibility, material3]
 token_budget: 3000
-template_version: "1.19.0"
+template_version: "1.20.0"
 memory: project
 skills:
   - accessibility
@@ -240,6 +240,7 @@ UnsupportedClassVersionError / class version mismatch:
 - All mandatory checks pass
 - No HIGH severity violations unreported
 - `/test <module>` passes on all touched modules
+- MUST run `./gradlew check` (NOT just per-module per-target compile) before sending READY-FOR-REVIEW. Per-target compile may miss cross-source-set references (e.g., androidMain symbol unresolved when only compileKotlinDesktop ran).
 - MUST report to arch-testing and arch-integration and wait for APPROVE verdict before reporting task completion to team-lead
 - tests MUST pass before reporting done â€” include pass/fail evidence in report
 - NEVER report 'no changes needed' without evidence â€” run tests, verify via your reporting architect (Grep is FORBIDDEN per BANNED TOOLS)

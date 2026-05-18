@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [domain, model, usecase, business-logic]
 token_budget: 3000
-template_version: "1.17.0"
+template_version: "1.18.0"
 memory: project
 skills:
   - test
@@ -172,6 +172,7 @@ Write unit tests for every domain model:
 - No android.*/platform imports in `commonMain` source
 - Repository interfaces defined (data layer will implement them)
 - Run `/test <module>` on every touched module â€” tests MUST pass before reporting done
+- MUST run `./gradlew check` (NOT just per-module per-target compile) before sending READY-FOR-REVIEW. Per-target compile may miss cross-source-set references.
 - MUST report to arch-platform and wait for APPROVE verdict before reporting task completion to team-lead
 - NEVER report 'no changes needed' without evidence â€” run tests, verify via your reporting architect (Grep is FORBIDDEN per BANNED TOOLS)
 

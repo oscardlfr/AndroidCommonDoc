@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [typescript, mcp-server, mcp-tool, vitest, hooks, lib, ts-lib, validator]
 token_budget: 3000
-template_version: "1.5.0"
+template_version: "1.6.0"
 memory: project
 skills:
   - test
@@ -187,6 +187,7 @@ You implement and maintain the TypeScript tooling layer of the AndroidCommonDoc 
 - All `manifest-validator.ts` changes paired with `manifest-validator.test.ts` cases (test-specialist authored, you confirm)
 - Hook changes paired with `.bats` coverage (test-specialist authored, you confirm)
 - Run `npm test` after every src/ change — must pass before reporting done
+- If phase touches KMP source sets (not TS-only), MUST run `./gradlew check` before READY-FOR-REVIEW. Per-target compile may miss cross-source-set references.
 - MUST report to arch-platform and wait for APPROVED verdict before reporting task completion to team-lead
 - NEVER report 'no changes needed' without evidence — run build, run tests, verify file state
 

@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [data, repository, database, network, caching]
 token_budget: 3000
-template_version: "1.17.0"
+template_version: "1.18.0"
 memory: project
 skills:
   - test
@@ -166,6 +166,7 @@ Write integration tests for every repository:
 - No android.*/platform imports in `commonMain`
 - Koin module registered
 - Run `/test <module>` on every touched module â€” tests MUST pass before reporting done
+- MUST run `./gradlew check` (NOT just per-module per-target compile) before sending READY-FOR-REVIEW. Per-target compile may miss cross-source-set references (e.g., androidMain symbol unresolved when only compileKotlinDesktop ran).
 - MUST report to arch-platform AND arch-integration and wait for APPROVE verdict before reporting task completion to team-lead
 - NEVER report 'no changes needed' without evidence â€” run tests, verify via your reporting architect (Grep is FORBIDDEN per BANNED TOOLS)
 
