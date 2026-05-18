@@ -2108,7 +2108,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "3.4.3"
+        "template_version": "3.4.4"
       }
     },
     {
@@ -2167,7 +2167,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.17.0",
+        "template_version": "1.18.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2343,7 +2343,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.17.0",
+        "template_version": "1.18.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2545,7 +2545,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.11.0"
+        "template_version": "1.12.0"
       }
     },
     {
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.26.0",
+        "template_version": "1.27.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2913,7 +2913,7 @@
           "validator"
         ],
         "token_budget": 3000,
-        "template_version": "1.5.0",
+        "template_version": "1.6.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2943,7 +2943,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.19.0",
+        "template_version": "1.20.0",
         "memory": "project",
         "skills": [
           "accessibility",
