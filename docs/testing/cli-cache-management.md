@@ -17,7 +17,7 @@ description: "Cache management for kmp-test-runner — locations, --isolated, --
 
 # Cache Management
 
-Cache locations, isolation flags, and pollution scenario remediation for kmp-test-runner v0.9.1.
+Cache locations, isolation flags, and pollution scenario remediation for kmp-test-runner v0.10.1.
 
 ## Cache Locations by OS
 

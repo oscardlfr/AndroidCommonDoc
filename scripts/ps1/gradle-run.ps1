@@ -1,7 +1,7 @@
 #!/usr/bin/env powershell
 <#
 .SYNOPSIS
-    Thin wrapper around kmp-test-runner v0.9.1 (BL-W32-06a).
+    Thin wrapper around kmp-test-runner v0.10.1 (BL-W32-06a).
     Replaces the 489-line self-contained runner. All daemon retry, Kover
     fallback, and JDK detection logic is now inside kmp-test-runner internals.
 

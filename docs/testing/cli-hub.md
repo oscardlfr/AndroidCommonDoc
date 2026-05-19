@@ -12,14 +12,14 @@ monitor_urls:
   - url: "https://github.com/oscardlfr/kmp-test-runner/releases"
     type: github-releases
     tier: 1
-description: "CLI hub: kmp-test-runner v0.9.1 navigation, glossary, and skill→CLI mapping"
+description: "CLI hub: kmp-test-runner v0.10.1 navigation, glossary, and skill→CLI mapping"
 ---
 
 # kmp-test-runner CLI Hub
 
 > **Scope**: CLI/runner usage only — see [testing-hub.md](testing-hub.md) for full testing patterns (runTest, fakes, dispatchers, coverage).
 
-Navigation for kmp-test-runner v0.9.1 usage across L0 patterns.
+Navigation for kmp-test-runner v0.10.1 usage across L0 patterns.
 
 > **MANDATE**: Use `kmp-test <subcommand>` for all test execution. See [cli-agent-mandate.md](cli-agent-mandate.md).
 

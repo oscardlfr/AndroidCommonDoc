@@ -17,7 +17,7 @@ description: "iOS test execution via kmp-test-runner CLI — iosSimulatorArm64Te
 
 # iOS Tests
 
-iOS test execution via kmp-test-runner v0.9.1. **Requires macOS host.**
+iOS test execution via kmp-test-runner v0.10.1. **Requires macOS host.**
 
 ## CLI Usage
 

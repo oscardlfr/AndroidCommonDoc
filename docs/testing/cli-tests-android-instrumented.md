@@ -17,7 +17,7 @@ description: "Android instrumented test execution via kmp-test-runner CLI — co
 
 # Android Instrumented Tests
 
-Android instrumented test execution (real device or emulator required) via kmp-test-runner v0.9.1.
+Android instrumented test execution (real device or emulator required) via kmp-test-runner v0.10.1.
 
 ## CLI Usage
 

@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.27.0"
+template_version: "1.28.0"
 memory: project
 skills:
   - test
@@ -152,19 +152,19 @@ If `monitor-sources` MCP tool is available (`mcp-monitor`):
 
 ---
 
-## kmp-test-runner v0.9.1 (canonical KMP test runner)
+## kmp-test-runner v0.10.1 (canonical KMP test runner)
 
 **MANDATE:** Use `/test` skill or `kmp-test-runner` CLI for ALL test runs. NEVER invoke `./gradlew test`, `gradle test`, or `:module:test` directly — a blocking hook enforces this. Use env `KMP_TEST_RUNNER_BYPASS=1` ONLY inside bats setup() helpers.
 
 **FORBID:** `./gradlew test` | `gradle test` | `:module:test` — all blocked by `kmp-test-runner-gate.js`.
 
-`gradle-run.sh` is a thin wrapper around `kmp-test-runner v0.9.1` — all daemon
+`gradle-run.sh` is a thin wrapper around `kmp-test-runner v0.10.1` — all daemon
 retry, Kover fallback, and JDK detection logic lives inside the runner, not the
 script.
 
 **Detection cascade** (automatic, no action required):
-1. Global binary `kmp-test` if installed (`npm install -g kmp-test-runner@0.9.1`)
-2. Fallback: `npx kmp-test-runner@0.9.1` (slower on first run, no install needed)
+1. Global binary `kmp-test` if installed (`npm install -g kmp-test-runner@0.10.1`)
+2. Fallback: `npx kmp-test-runner@0.10.1` (slower on first run, no install needed)
 
 **Supported flags passed through `gradle-run.sh`:**
 
@@ -186,9 +186,9 @@ script.
 **Exit codes**: `0` success · `1` test failure · `2` build error · `3` env error
 
 For the full JSON envelope schema — including `errors[].code` discriminator values —
-run `npx kmp-test-runner@0.9.1 --help` or consult the kmp-test-runner package docs.
+run `npx kmp-test-runner@0.10.1 --help` or consult the kmp-test-runner package docs.
 
-## CLI Mandate (v0.9.1+ canonical)
+## CLI Mandate (v0.10.1+ canonical)
 
 Use `kmp-test <subcommand>` (skills `/test`, `/coverage`, `/test-changed`, `/test-full-parallel`, `/benchmark` wrap it). Gate blocks `./gradlew test|jvmTest|allTests|check|*Test` directly — bypass via `KMP_TEST_RUNNER_BYPASS=1` env or `[KMP_TEST_RUNNER_BYPASS]` inline marker. Canonical MANDATE/FORBID: [cli-agent-mandate.md](../../docs/testing/cli-agent-mandate.md). Platforms: [cli-hub.md](../../docs/testing/cli-hub.md). Errors: [cli-troubleshooting.md](../../docs/testing/cli-troubleshooting.md).
 

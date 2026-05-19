@@ -413,6 +413,11 @@
         "date": "2026-05-17",
         "breaking": false,
         "note": "BL-W47-prep-10 F1b: add Task Completion Protocol (reference) section -- architects verify READY-FOR-REVIEW from specialist before marking any task completed."
+      },
+      "1.36.0": {
+        "date": "2026-05-19",
+        "breaking": false,
+        "note": "BL-W47-prep-14: Bump kmp-test-runner version pins v0.9.1 -> v0.10.1. Mechanical version-string bump. Preserved kmp-test-runner-gate.js:88 JS/Wasm gate message (no JS/Wasm changes in v0.10)."
       }
     },
     "arch-platform": {
@@ -1042,6 +1047,11 @@
         "date": "2026-05-18",
         "breaking": false,
         "summary": "BL-W47-prep-13 F3: Done Criteria — MUST run ./gradlew check (not just per-module per-target) before READY-FOR-REVIEW. Prevents cross-source-set reference misses."
+      },
+      "1.28.0": {
+        "date": "2026-05-19",
+        "breaking": false,
+        "note": "BL-W47-prep-14: Bump kmp-test-runner version pins v0.9.1 -> v0.10.1 at kmp-test-runner section header, gradle-run.sh wrapper description, detection cascade (2 lines), envelope schema --help, CLI Mandate version header. Mechanical version-string bump."
       }
     },
     "ui-specialist": {

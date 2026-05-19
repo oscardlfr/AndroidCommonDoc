@@ -1,7 +1,7 @@
 #!/usr/bin/env powershell
 <#
 .SYNOPSIS
-    Thin wrapper around kmp-test-runner v0.9.1 (BL-W32-06e).
+    Thin wrapper around kmp-test-runner v0.10.1 (BL-W32-06e).
     Replaces the 1201-line self-contained runner. Gradle daemon retry, module
     discovery, Kover/JaCoCo fallback, and parallel orchestration are now inside
     kmp-test-runner internals. L0 retains: AI-Optimized Summary post-processor,
@@ -95,7 +95,7 @@ $autoExcludePatterns = @(
 
 # --- Deprecation warnings ---------------------------------------------------- #
 if ($FreshDaemon) {
-    Write-Warning "WARNING: -FreshDaemon not supported by kmp-test-runner v0.9.1; flag ignored. See GAP-01."
+    Write-Warning "WARNING: -FreshDaemon not supported by kmp-test-runner v0.10.1; flag ignored. See GAP-01."
 }
 if ($ExcludeCoverage -ne "") {
     Write-Warning "WARNING: -ExcludeCoverage deprecated — degraded to --exclude-modules; tests will be skipped instead of just excluded from coverage. See GAP-05."
