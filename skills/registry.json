@@ -1918,7 +1918,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1ea5983ffe8de4fb41503d5968b611676c89261d48b13c6b9af6b91e7773f308",
+      "hash": "sha256:3f3a66fc9dd400112d8da24768d7cd54bd68220f7a55643f9e073b1efe3f7f60",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1992,7 +1992,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.35.0",
+        "template_version": "1.36.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.27.0",
+        "template_version": "1.28.0",
         "memory": "project",
         "skills": [
           "test",
