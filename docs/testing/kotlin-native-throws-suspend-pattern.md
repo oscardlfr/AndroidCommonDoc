@@ -1,5 +1,5 @@
 ---
-category: kotlin
+category: testing
 scope: [kotlin-native, coroutines, apple-targets, commonMain]
 sources: [Wave 3c friction #107, K/N compiler enforcement]
 targets: [ios, macos, iosSimulator]

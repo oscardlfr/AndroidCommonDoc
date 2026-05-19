@@ -13,7 +13,7 @@ monitor_urls:
   - url: "https://kotlin.github.io/kotlinx-kover/"
     type: doc-page
     tier: 2
-l0_refs: [kover-verification-dsl, testing-patterns-coverage, biometric-android-device-test-patterns]
+l0_refs: [kover-verification-dsl, kover-platform-variant-scoping, testing-patterns-coverage, biometric-android-device-test-patterns]
 ---
 
 # Kover KMP Source Set Coverage Scope
