@@ -93,7 +93,6 @@ Standard patterns for testing Kotlin Multiplatform projects.
 - Use fakes not mocks — pure Kotlin, no reflection, deterministic behavior
 - Coverage threshold ≥80% on `commonMain`; per-module via Kover
 ## Sealed Hierarchy Shape Tests (BL-W32-17)
-
 For sealed hierarchy shape tests in foundation modules:
 - DO NOT use KClass.sealedSubclasses - requires kotlin-reflect (~3MB JVM dependency)
 - DO use manual List<Parent>: `val instances = listOf(SubA(), SubB(), SubC()); assertEquals(3, instances.size)`
