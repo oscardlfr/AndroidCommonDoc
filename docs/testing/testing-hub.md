@@ -82,6 +82,9 @@ Standard patterns for testing Kotlin Multiplatform projects.
 | [testing-patterns-benchmarks](testing-patterns-benchmarks.md) | Benchmark patterns — dispatcher selection, androidx vs kotlinx-benchmark |
 | [testing-patterns-dispatcher-scopes](testing-patterns-dispatcher-scopes.md) | Dispatcher scopes — Path A (stateIn/VM) vs Path B (startObserving), shared testScheduler |
 | [security-testing-patterns](security-testing-patterns.md) | Security module tests — Android Keystore instrumented, cipher unit-tests, real-vs-fake split, PBKDF2-iter-as-config-field |
+| [biometric-android-device-test-patterns](biometric-android-device-test-patterns.md) | BiometricPrompt instrumented tests — FakeBiometricPromptFactory, Kover subset-includes, catalog deps, device-agnostic assertions |
+| [kover-kmp-source-set-coverage-scope](kover-kmp-source-set-coverage-scope.md) | Kover instruments JVM variant only — androidMain-only classes must be excluded from koverVerify |
+| [desktop-process-executor-test-seam-pattern](desktop-process-executor-test-seam-pattern.md) | SOLID injection seam for Desktop OS commands — ProcessExecutor + FakeProcessExecutor + osNameProvider lambda |
 
 ## Key Rules
 
