@@ -13,7 +13,7 @@ monitor_urls:
   - url: "https://developer.android.com/reference/androidx/biometric/BiometricPrompt"
     type: doc-page
     tier: 2
-l0_refs: [biometric-owasp-a07-lifecycle, security-testing-patterns, auth-biometric]
+l0_refs: [biometric-owasp-a07-lifecycle, security-testing-patterns]
 ---
 
 # Biometric GDPR Article 9 — Android

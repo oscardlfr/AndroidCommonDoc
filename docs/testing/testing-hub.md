@@ -92,12 +92,9 @@ Standard patterns for testing Kotlin Multiplatform projects.
 - Inject `CoroutineDispatcher` in ViewModels — switch via `testDispatcher` in tests
 - Use fakes not mocks — pure Kotlin, no reflection, deterministic behavior
 - Coverage threshold ≥80% on `commonMain`; per-module via Kover
-
 ## Sealed Hierarchy Shape Tests (BL-W32-17)
 
 For sealed hierarchy shape tests in foundation modules:
 - DO NOT use KClass.sealedSubclasses - requires kotlin-reflect (~3MB JVM dependency)
-- DO use manual List<Parent> approach:
-    val instances: List<MyParent> = listOf(SubA(), SubB(), SubC())
-    assertEquals(3, instances.size)
-Compile-time IS-A via type parameter + explicit subtype listing.
+- DO use manual List<Parent>: `val instances = listOf(SubA(), SubB(), SubC()); assertEquals(3, instances.size)`
+- Compile-time IS-A via type parameter + explicit subtype listing.
