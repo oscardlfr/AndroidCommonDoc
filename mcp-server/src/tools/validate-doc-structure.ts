@@ -142,7 +142,7 @@ const COMPLETENESS_FIELDS: Array<keyof PatternMetadata> = [
  *
  * Rules:
  * - Absolute max: 500 lines per doc (error)
- * - Hub doc max: 100 lines for docs containing "## Sub-documents" (error)
+ * - Hub doc max: 100 lines for docs whose filename contains "hub" (error)
  * - Section max: 150 lines per ## section (warning)
  * - Archive docs: all size checks skipped
  *
@@ -163,8 +163,8 @@ export function checkSizeLimits(
     return { errors, warnings };
   }
 
+  const lineCount = content.trimEnd().split("\n").length;
   const lines = content.split("\n");
-  const lineCount = lines.length;
 
   // Absolute max: 500 lines
   if (lineCount > 500) {

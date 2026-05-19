@@ -297,6 +297,15 @@ Before requesting ANY constructor/function signature change via team-lead:
 
 **Why**: An unlisted caller = guaranteed rework cycle (~15K tokens wasted). Delegating to context-provider is cheap, rework is not.
 
+### Cross-module claim format (MANDATORY)
+
+Any claim about cross-module references ("zero callers", "no consumers", "only X file uses Y") MUST include:
+(a) grep command executed (verbatim)
+(b) raw output (or "0 matches" if empty)
+(c) interpretation as separate paragraph from evidence
+
+Inferred claims without grep are INADMISSIBLE. Per friction #63/#95 (recurring W3a + W3c).
+
 ## Dev Routing Table
 
 **ALL fixes go through team-lead → specialist. You have NO Write/Edit tool. "Trivial" does not exist for architects.**

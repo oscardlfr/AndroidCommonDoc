@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W47-prep-14 — kmp-test-runner v0.10.1 bump)
+
+- kmp-test-runner v0.9.1 → v0.10.1 across agents, scripts, hooks, skills, docs/testing/, AGENTS.md, README. Mechanical version-string bump.
+- New v0.10 features available (--color/NO_COLOR, org.gradle.parallel auto-respect, user-global config ~/.kmp-test/config.json, agent skill packaging) — full feature docs deferred to a follow-up wave.
+- 1 historical ref preserved: `kmp-test-runner-gate.js:88` JS/Wasm gate message (no JS/Wasm changes in v0.10).
+
 ### Added (BL-W47-prep-7 — kmp-test-runner 0.9.1 bump)
 
 - kmp-test-runner v0.9.0 → v0.9.1 across CI, bash/ps1 wrappers, skills, docs/testing/, AGENTS.md, README. Mechanical version-string bump.

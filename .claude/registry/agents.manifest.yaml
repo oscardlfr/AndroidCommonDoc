@@ -181,8 +181,8 @@ agents:
   arch-testing:
     canonical_name: arch-testing
     subagent_type: arch-testing
-    template_version: "1.35.0"
-    template_frontmatter_sha256: d36a398d3b03d6db364d9d672d8cd5242b2a32704dc6facf9e975ba3994687bb
+    template_version: "1.36.0"
+    template_frontmatter_sha256: abcb9a5d4f5544be5a2ff3cd7e0084b4c6188b2c8b8ac462039c5a51ce70b180
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -289,8 +289,8 @@ agents:
   test-specialist:
     canonical_name: test-specialist
     subagent_type: test-specialist
-    template_version: "1.27.0"
-    template_frontmatter_sha256: 060392b4f71f2b7f1e67c88cf4165f830fcbfead35b096f4e44b34c03a6baf0c
+    template_version: "1.28.0"
+    template_frontmatter_sha256: 767378325683bc6098354f5fb71a19f7f96e50f1cdff91d043d7ecea94cc1e72
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation."

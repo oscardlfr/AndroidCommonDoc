@@ -131,3 +131,23 @@ REPO_ROOT="$BATS_TEST_DIRNAME/../.."
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }
+
+# --- F4: code-state verification mandate + cross-module claim format ---
+
+@test "tl-session-start.md contains code-state verification mandate" {
+  run grep -c "code-state verification" "$REPO_ROOT/docs/agents/tl-session-start.md"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
+@test "arch-integration.md contains Cross-module claim format" {
+  run grep -c "Cross-module claim format" "$REPO_ROOT/setup/agent-templates/arch-integration.md"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
+@test "arch-integration.md contains grep command executed phrase" {
+  run grep -c "grep command executed" "$REPO_ROOT/setup/agent-templates/arch-integration.md"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}

@@ -400,7 +400,7 @@
       "description": "Analyze test coverage gaps from existing data without running tests. Use when asked to check coverage or find untested code.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:97cdc3195e3be4b4b5be67e8448aa6f10cf0893279393497abfc3cedd5a220da",
+      "hash": "sha256:d65f50a142f14bcb7eace52c70aa230adbcddd3022f87b35e5caea27f54a5700",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -1559,7 +1559,7 @@
       "description": "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:66ab31cd13459e5285e0515c0d5b7e21823ded578f57c8e1df49482d0a5178b7",
+      "hash": "sha256:00cd32ff04da5f61c6e10ea7e62854a157af491a8d84b025904e4cb6c7f63087",
       "dependencies": [
         "scripts/sh/gradle-run.sh",
         "scripts/sh/ai-error-extractor.sh",
@@ -1593,7 +1593,7 @@
       "description": "Run tests only on modules with uncommitted changes. Use when asked to test changed files or run a quick pre-commit check.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:05036ebc7fe4f1edeec2459f2bdff3fc0faf9bf4815fe8da60396761b2fc4431",
+      "hash": "sha256:a06596a4ff3350762d155d8cfc4d4cff86f173df768a9a4e54a4eab7818448e8",
       "dependencies": [
         "scripts/sh/run-changed-modules-tests.sh",
         "scripts/ps1/run-changed-modules-tests.ps1"
@@ -1657,7 +1657,7 @@
       "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:476f5e73e0884cb2ca794379b9ffd2b616162530e978a9d863ebbb50fba17dfe",
+      "hash": "sha256:6a28dba20753a33ef005489409f388e6c23fca48d4b0b3bd1c3e4dba3c79541a",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -1918,7 +1918,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1ea5983ffe8de4fb41503d5968b611676c89261d48b13c6b9af6b91e7773f308",
+      "hash": "sha256:3f3a66fc9dd400112d8da24768d7cd54bd68220f7a55643f9e073b1efe3f7f60",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1977,7 +1977,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:594447b4671b9633690ee7a3b63fd380785448d256bebf1cbf501e5d8570d74e",
+      "hash": "sha256:9ed25a85c998504b07d07a657269e8705890c9e3bd478c67a79ca9fa044369e6",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1992,7 +1992,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.35.0",
+        "template_version": "1.36.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2856,7 +2856,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:627f10d8942ca9208ac7c1a6feda3f36d20e8555318432164412b5de9dab488e",
+      "hash": "sha256:6d2eb9dddb090a3abd76bc3b850fc88c1d31f73ca17cdbefae4a7a1ca9266770",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.27.0",
+        "template_version": "1.28.0",
         "memory": "project",
         "skills": [
           "test",

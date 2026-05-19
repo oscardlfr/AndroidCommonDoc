@@ -42,6 +42,7 @@ Generic KMP storage patterns — platform models, encryption layers, key-value v
 |----------|-------------|
 | [storage-patterns](storage-patterns.md) | Hub: storage architecture, platform models, quick reference |
 | [storage-patterns-implementation](storage-patterns-implementation.md) | Implementation patterns — SQLDelight, MMKV, expect/actual, migration |
+| [mmkv-kmp-jni-loader-pattern](mmkv-kmp-jni-loader-pattern.md) | MMKV native loader testability — Android `MMKV.LibLoader` seam + Desktop JNA `NativeLibraryLoader` seam; `by lazy` injection; JNA search order + CWE-693 security note |
 
 ## Key Rules
 

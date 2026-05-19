@@ -1,7 +1,7 @@
 #!/usr/bin/env powershell
 <#
 .SYNOPSIS
-    Thin wrapper around kmp-test-runner v0.9.1 changed subcommand (BL-W32-06e).
+    Thin wrapper around kmp-test-runner v0.10.1 changed subcommand (BL-W32-06e).
     Replaces 274-line script that delegated to run-parallel-coverage-suite.ps1.
     Git change detection, module-to-path mapping, and test dispatch are now
     inside kmp-test-runner internals. L0 retains: -IncludeShared glue,
@@ -64,9 +64,9 @@ $kmpTestCmd = $null
 if (Get-Command kmp-test -ErrorAction SilentlyContinue) {
     $kmpTestCmd = "kmp-test"
 } elseif (Get-Command npx -ErrorAction SilentlyContinue) {
-    $kmpTestCmd = "npx kmp-test-runner@0.9.1"
+    $kmpTestCmd = "npx kmp-test-runner@0.10.1"
 } else {
-    Write-Error "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.9.1"
+    Write-Error "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.10.1"
     exit 1
 }
 

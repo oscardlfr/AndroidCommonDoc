@@ -65,6 +65,88 @@ kotlin {
 
 shared-kmp-libs had orphan files in `androidUnitTest/` and `androidInstrumentedTest/` that were never compiled. Wave 1 resolved these by migrating to `androidHostTest` / `androidDeviceTest` or deleting dead files, and adding `withDeviceTestBuilder {}` / `withHostTestBuilder {}` as needed.
 
+## Compile Task Names — KGP vs AGP 9 KMP
+
+The `android.kotlin.multiplatform.library` plugin (AGP 9 KMP) uses different Gradle task names from the standard KGP plugin. Using the wrong name in exit-criteria or CI scripts will produce "Task not found" errors without any compilation occurring.
+
+| Target | KGP plugin task | AGP 9 KMP plugin task |
+|--------|----------------|----------------------|
+| Android main source | `compileKotlinAndroid` | **`compileAndroidMain`** |
+| Android debug | `compileDebugKotlin` | **`compileDebugAndroidMain`** |
+| Android release | `compileReleaseKotlin` | **`compileReleaseAndroidMain`** |
+| Desktop (JVM) | `compileKotlinDesktop` | `compileKotlinDesktop` (same) |
+| iOS x64 | `compileKotlinIosX64` | `compileKotlinIosX64` (same) |
+| Common | `compileKotlinMetadata` | `compileKotlinMetadata` (same) |
+
+**Rule**: For any module using `android.kotlin.multiplatform.library`, specialist exit-criteria and PM briefs MUST use `compileAndroidMain`, NOT `compileKotlinAndroid`.
+
+**Verification**: CI `.github/workflows/ci.yml:164` has always used the correct `compileAndroidMain` form — treat that as the canonical reference.
+
+```bash
+# WRONG — task does not exist for AGP 9 KMP
+./gradlew :core-auth-biometric:compileKotlinAndroid
+
+# CORRECT
+./gradlew :core-auth-biometric:compileAndroidMain
+```
+
+## Source Sets vs Runnable Test Tasks
+
+`commonTest` is a KMP **source set**, not a runnable Gradle task. Running `./gradlew :module:commonTest` will fail with "Task not found".
+
+Tests declared in `commonTest` are compiled into each platform-specific test binary and run under the platform's own test task:
+
+| Source set | Runnable task (AGP 9 KMP) | Notes |
+|-----------|--------------------------|-------|
+| `commonTest` | `:module:desktopTest` | Default hierarchy: desktopTest inherits commonTest |
+| `commonTest` | `:module:androidDeviceTest` | When instrumented test source set is present |
+| `androidDeviceTest` | `:module:androidDeviceTest` | Requires physical device or emulator |
+| `desktopTest` | `:module:desktopTest` | Runs on JVM; safest CI fallback |
+
+**Canonical brief phrasing**: "verify commonTest sources pass via `:module:desktopTest`" — NOT "run commonTest".
+
+```bash
+# WRONG — commonTest is a source set, not a task
+./gradlew :core-auth-biometric:commonTest
+
+# CORRECT
+./gradlew :core-auth-biometric:desktopTest
+```
+
+## androidDeviceTest Task Semantics
+
+| Task | Semantics | Device required | CI-safe |
+|------|-----------|----------------|---------|
+| `compileAndroidDeviceTest` | Compile-only — verifies sources compile | NO | YES |
+| `assembleAndroidTest` | Assembles test APK | NO (build only) | YES (but slow) |
+| `connectedAndroidTest` | Full test execution on device/emulator | YES | LOCAL-ONLY (macOS runner 10× cost) |
+
+**Rule**: use `compileAndroidDeviceTest` for compile verification in specialist briefs. Reserve `connectedAndroidTest` for local manual verification only.
+
+```bash
+# WRONG — assembles full test APK; slower than needed for compile check
+./gradlew :core-auth-biometric:assembleAndroidTest
+
+# CORRECT — pure compile check; no device, no APK assembly
+./gradlew :core-auth-biometric:compileAndroidDeviceTest
+
+# LOCAL-ONLY — full test execution (requires emulator/device)
+./gradlew :core-auth-biometric:connectedAndroidTest
+```
+
+## :check as the Definitive K/N Validation Task
+
+`:desktopTest` verifies JVM compilation and runs commonTest sources on JVM. It does NOT validate Kotlin/Native constraints — K/N-specific restrictions (e.g., `@Throws` must include `CancellationException`, backtick names cannot contain `()`) only surface when Apple targets are compiled.
+
+Use `:check` as the definitive cross-platform validation gate for any commonTest or commonMain change:
+
+```bash
+# Definitive all-target gate — compiles + tests every configured target
+./gradlew :module:check
+```
+
+**Rule**: any brief specifying commonTest changes with backtick function names or `@Throws` on `suspend fun` MUST include `:check` in exit-criteria, not only `:desktopTest`.
+
 ## See Also
 
 - [gradle-patterns-agp9](gradle-patterns-agp9.md) — parent hub for AGP 9 module templates

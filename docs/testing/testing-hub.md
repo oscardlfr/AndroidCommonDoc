@@ -82,18 +82,18 @@ Standard patterns for testing Kotlin Multiplatform projects.
 | [testing-patterns-benchmarks](testing-patterns-benchmarks.md) | Benchmark patterns — dispatcher selection, androidx vs kotlinx-benchmark |
 | [testing-patterns-dispatcher-scopes](testing-patterns-dispatcher-scopes.md) | Dispatcher scopes — Path A (stateIn/VM) vs Path B (startObserving), shared testScheduler |
 | [security-testing-patterns](security-testing-patterns.md) | Security module tests — Android Keystore instrumented, cipher unit-tests, real-vs-fake split, PBKDF2-iter-as-config-field |
+| [biometric-android-device-test-patterns](biometric-android-device-test-patterns.md) | BiometricPrompt instrumented tests — FakeBiometricPromptFactory, Kover subset-includes, catalog deps, device-agnostic assertions |
+| [kover-kmp-source-set-coverage-scope](kover-kmp-source-set-coverage-scope.md) | Kover instruments JVM variant only — androidMain-only classes must be excluded from koverVerify |
+| [desktop-process-executor-test-seam-pattern](desktop-process-executor-test-seam-pattern.md) | SOLID injection seam for Desktop OS commands — ProcessExecutor + FakeProcessExecutor + osNameProvider lambda |
+| [kotlin-native-throws-suspend-pattern](kotlin-native-throws-suspend-pattern.md) | K/N compiler constraint: @Throws on suspend fun must include CancellationException; backtick name restrictions |
 
 ## Key Rules
 
 - Inject `CoroutineDispatcher` in ViewModels — switch via `testDispatcher` in tests
 - Use fakes not mocks — pure Kotlin, no reflection, deterministic behavior
 - Coverage threshold ≥80% on `commonMain`; per-module via Kover
-
 ## Sealed Hierarchy Shape Tests (BL-W32-17)
-
 For sealed hierarchy shape tests in foundation modules:
 - DO NOT use KClass.sealedSubclasses - requires kotlin-reflect (~3MB JVM dependency)
-- DO use manual List<Parent> approach:
-    val instances: List<MyParent> = listOf(SubA(), SubB(), SubC())
-    assertEquals(3, instances.size)
-Compile-time IS-A via type parameter + explicit subtype listing.
+- DO use manual List<Parent>: `val instances = listOf(SubA(), SubB(), SubC()); assertEquals(3, instances.size)`
+- Compile-time IS-A via type parameter + explicit subtype listing.

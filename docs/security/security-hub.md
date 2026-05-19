@@ -26,6 +26,8 @@ Generic KMP security patterns — encryption, key management, biometric authenti
 | Document | Description |
 |----------|-------------|
 | [security-patterns](security-patterns.md) | Encryption architecture, key management, biometric auth, anti-patterns |
+| [biometric-owasp-a07-lifecycle](biometric-owasp-a07-lifecycle.md) | OWASP A07 biometric lifecycle: session binding, key invalidation, BIOMETRIC_STRONG default, re-auth triggers |
+| [biometric-gdpr-article9-android](biometric-gdpr-article9-android.md) | GDPR Art.9 biometric obligations: errString sanitization, log minimization, Right to Erasure boundary |
 
 ## Key Rules
 
