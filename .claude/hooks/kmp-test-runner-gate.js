@@ -85,7 +85,7 @@ process.stdin.on('end', () => {
   // Special JS/Wasm message
   if (JS_WASM_PATTERN.test(command)) {
     process.stderr.write(
-      `[kmp-test-runner-gate] BLOCKED but kmp-test-runner v0.9.1 does NOT yet support JS/Wasm.\n` +
+      `[kmp-test-runner-gate] BLOCKED but kmp-test-runner v0.10.1 does NOT yet support JS/Wasm.\n` +
       `Use KMP_TEST_RUNNER_BYPASS=1 ONLY with explicit user authorization. Upstream issue pending.\n` +
       `See: docs/testing/cli-tests-js-wasm.md\n`
     );
