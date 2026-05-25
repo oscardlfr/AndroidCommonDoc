@@ -42,7 +42,7 @@ Point-in-time health snapshot of all 47 registered MCP tools in the AndroidCommo
 |---|------|-----------|--------|-----------|-----------|---------|------------|
 | 1 | `check-doc-freshness` (alias: `monitor-sources`) | Y | Y | Y | Y | n/a | Y |
 | 2 | `verify-kmp-packages` | Y | N | Y | Y | n/a | Y |
-| 3 | `check-version-sync` | Y | N | Y | **FAIL** (F2) | n/a | Y |
+| 3 | `check-version-sync` | Y | Y | Y | **FAIL** (F2) | n/a | Y |
 | 4 | `script-parity` | Y | N | Y | Y | n/a | Y |
 | 5 | `setup-check` | Y | Y | Y | Y | n/a | Y |
 | 6 | `validate-all` | Y | Y | Y | Y | n/a | Y |
@@ -110,10 +110,9 @@ Point-in-time health snapshot of all 47 registered MCP tools in the AndroidCommo
 
 ## Untested Tools — Remediation
 
-Tools with Tested = N (5 tools): `verify-kmp-packages`, `check-version-sync`, `script-parity`, `audit-report`, `rate-limit-status`.
+Tools with Tested = N (4 tools): `verify-kmp-packages`, `script-parity`, `audit-report`, `rate-limit-status`.
 
 - `verify-kmp-packages`, `script-parity`: use `runScript()` shell runner — tests require controlled script fixtures or direct `parseOutput()` exercise.
-- `check-version-sync`: F2 fixed in this wave; test added in C2.
 - `audit-report`: uses `server.tool()` variant — add unit test for result aggregation logic.
 - `rate-limit-status`: meta utility; inline handler is trivial. Low priority.
 
