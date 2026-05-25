@@ -15,7 +15,7 @@ export type {
   FindingsSummary,
 } from "./findings.js";
 
-export type ValidationStatus = "PASS" | "FAIL" | "ERROR" | "TIMEOUT";
+export type ValidationStatus = "PASS" | "FAIL" | "ERROR" | "TIMEOUT" | "NO_CONSUMERS_CONFIGURED";
 export type DetailStatus = "PASS" | "FAIL" | "WARN";
 
 export interface ValidationDetail {

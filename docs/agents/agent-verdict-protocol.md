@@ -35,6 +35,8 @@ After completing review for wave `{N}`:
 
    team-lead MUST verify file presence before TaskUpdate (see `tl-verification-gates.md`).
 
+   **WINDOWS PATH WARNING (HARD RULE — BL-W47-prep-15 root cause)**: ALWAYS use the relative path with forward slashes as shown above (`.planning/wave{N}/arch-{role}-verdict.md`). NEVER use absolute Windows paths in the heredoc redirect target. Bash interprets `\<octal-digits>` (e.g. `\346` inside `\34645`) as an octal escape character, mangling the destination path into a single filename in the working directory (e.g. `Usersæ45AndroidStudioProjects...arch-{role}-verdict.md` as an orphan). The hook `architect-bash-write-gate.js` is innocent — the regex correctly exempts both POSIX and Windows path forms; it's bash's path interpretation that corrupts the absolute Windows path before the file is written. If you must reference an absolute path, single-quote it (`'C:\\path\\...'`) — single quotes prevent octal-escape interpretation. Recommended: stick to the canonical relative form above.
+
 2. **SendMessage** to `team-lead`:
    - `"APPROVE"` — clean pass
    - `"ESCALATE: <1-sentence reason>"` — team-lead must decide

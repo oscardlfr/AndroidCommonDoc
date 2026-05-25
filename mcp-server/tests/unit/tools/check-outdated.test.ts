@@ -11,6 +11,7 @@ import {
   parseVersions,
   parseLibraries,
   queryAllLibraries,
+  buildResult,
   type ParsedLibrary,
 } from "../../../src/tools/check-outdated.js";
 import {
@@ -19,6 +20,7 @@ import {
   createEmptyState,
   updateDependencies,
 } from "../../../src/utils/kdoc-state.js";
+import * as kdocState from "../../../src/utils/kdoc-state.js";
 
 const TEST_ROOT = path.join(os.tmpdir(), "check-outdated-test-" + process.pid);
 
@@ -404,6 +406,80 @@ describe("check-outdated tool registration", () => {
       expect(parsed.from_cache).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+// ── PARTIAL status + cache-not-written ────────────────────────────────────────
+
+describe("buildResult PARTIAL status (all-fetch-fail)", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("returns PARTIAL (not UP_TO_DATE) when all fetches fail with TypeError", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("fetch failed")) as unknown as typeof fetch;
+
+    // 10 libraries — all will error; errors(10) > threshold(max(5, 10*0.1)=5)
+    const libs: ParsedLibrary[] = Array.from({ length: 10 }, (_, i) => ({
+      alias: `lib-${i}`,
+      group: "com.example",
+      artifact: `lib-${i}`,
+      version: "1.0.0",
+    }));
+
+    const mavenResults = await queryAllLibraries(libs);
+    const result = buildResult(mavenResults, false);
+    expect(result.status).toBe("PARTIAL");
+    expect(result.errors.length).toBe(10);
+    expect(result.outdated_count).toBe(0);
+    expect(result.up_to_date_count).toBe(0);
+  });
+
+  it("does not write cache when result is PARTIAL", async () => {
+    const writeSpy = vi.spyOn(kdocState, "writeKDocState");
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("fetch failed")) as unknown as typeof fetch;
+
+    // Set up a minimal TOML so the tool can run
+    const gradleDir = path.join(TEST_ROOT, "gradle");
+    mkdirSync(gradleDir, { recursive: true });
+    // 10 entries so threshold is exceeded
+    const entries = Array.from({ length: 10 }, (_, i) =>
+      `lib-${i} = { module = "com.example:lib-${i}", version = "1.0.0" }`,
+    ).join("\n");
+    writeFileSync(
+      path.join(gradleDir, "libs.versions.toml"),
+      `[versions]\n\n[libraries]\n${entries}\n`,
+    );
+
+    const { McpServer } = await import("@modelcontextprotocol/sdk/server/mcp.js");
+    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+    const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+    const { registerCheckOutdatedTool } = await import("../../../src/tools/check-outdated.js");
+
+    const srv = new McpServer({ name: "test-partial", version: "1.0.0" });
+    registerCheckOutdatedTool(srv);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await srv.connect(serverTransport);
+    const cli = new Client({ name: "test-partial-client", version: "1.0.0" });
+    await cli.connect(clientTransport);
+
+    try {
+      const result = await cli.callTool({
+        name: "check-outdated",
+        arguments: { project_root: TEST_ROOT, cache_ttl_hours: 0, format: "json" },
+      });
+
+      const text = (result.content[0] as { text: string }).text;
+      const parsed = JSON.parse(text);
+      expect(parsed.status).toBe("PARTIAL");
+      expect(writeSpy).not.toHaveBeenCalled();
+    } finally {
+      writeSpy.mockRestore();
+      await cli.close();
+      await srv.close();
     }
   });
 });

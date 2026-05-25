@@ -269,7 +269,7 @@ export async function queryAllLibraries(
 // ── Tool output ────────────────────────────────────────────────────────────
 
 export interface CheckOutdatedResult {
-  status: "OUTDATED" | "UP_TO_DATE";
+  status: "OUTDATED" | "UP_TO_DATE" | "PARTIAL";
   checked_at: string;
   total_libraries: number;
   outdated_count: number;
@@ -311,10 +311,19 @@ export function buildResult(
     }
   }
 
+  // When all fetches failed (no successful results), mark as PARTIAL to avoid
+  // a false UP_TO_DATE status that could poison the cache.
+  const totalLibraries = mavenResults.length;
+  const errorThreshold = Math.max(5, Math.round(totalLibraries * 0.1));
+  const isPartial =
+    errors.length > errorThreshold &&
+    outdated.length === 0 &&
+    upToDate === 0;
+
   return {
-    status: outdated.length > 0 ? "OUTDATED" : "UP_TO_DATE",
+    status: outdated.length > 0 ? "OUTDATED" : isPartial ? "PARTIAL" : "UP_TO_DATE",
     checked_at: new Date().toISOString(),
-    total_libraries: mavenResults.length,
+    total_libraries: totalLibraries,
     outdated_count: outdated.length,
     outdated,
     up_to_date_count: upToDate,
@@ -325,9 +334,15 @@ export function buildResult(
 
 export function formatSummary(result: CheckOutdatedResult): string {
   const lines: string[] = [];
-  lines.push(
-    `Dependency check: ${result.status} (${result.outdated_count} outdated / ${result.total_libraries} total)`,
-  );
+  if (result.status === "PARTIAL") {
+    lines.push(
+      `Dependency check: PARTIAL — ${result.errors.length} fetch errors, no reliable results. Re-run when network is available.`,
+    );
+  } else {
+    lines.push(
+      `Dependency check: ${result.status} (${result.outdated_count} outdated / ${result.total_libraries} total)`,
+    );
+  }
   lines.push(`Checked at: ${result.checked_at}`);
   if (result.from_cache) lines.push("(from cache)");
   lines.push("");
@@ -463,16 +478,19 @@ export function registerCheckOutdatedTool(
         const mavenResults = await queryAllLibraries(libraries);
         const result = buildResult(mavenResults, false);
 
-        // Cache results in kdoc-state.json
-        const state = readKDocState(project_root) ?? createEmptyState();
-        updateDependencies(state, {
-          last_checked: result.checked_at,
-          cache_ttl_hours,
-          total_libraries: result.total_libraries,
-          outdated_count: result.outdated_count,
-          outdated: result.outdated,
-        });
-        writeKDocState(project_root, state);
+        // Cache results in kdoc-state.json — skip when PARTIAL to avoid poisoning
+        // the cache with misleading UP_TO_DATE data from failed network calls.
+        if (result.status !== "PARTIAL") {
+          const state = readKDocState(project_root) ?? createEmptyState();
+          updateDependencies(state, {
+            last_checked: result.checked_at,
+            cache_ttl_hours,
+            total_libraries: result.total_libraries,
+            outdated_count: result.outdated_count,
+            outdated: result.outdated,
+          });
+          writeKDocState(project_root, state);
+        }
 
         const text =
           format === "json"

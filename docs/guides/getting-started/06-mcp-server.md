@@ -10,8 +10,8 @@ parent: getting-started
 category: guides
 description: >
   Connect the AndroidCommonDoc MCP server to Claude Desktop for programmatic
-  access to all 35 tools. / Conectar el servidor MCP de AndroidCommonDoc a
-  Claude Desktop para acceso programático a las 35 herramientas.
+  access to all 47 tools. / Conectar el servidor MCP de AndroidCommonDoc a
+  Claude Desktop para acceso programático a las 47 herramientas.
 last_updated: "2026-03-18"
 ---
 
@@ -21,7 +21,7 @@ last_updated: "2026-03-18"
 
 ## English
 
-The MCP server exposes 35 tools over stdio transport. Once connected,
+The MCP server exposes 47 tools over stdio transport. Once connected,
 Claude Desktop can invoke validation, monitoring, and doc-intelligence tools
 directly — no shell commands needed.
 
@@ -104,7 +104,7 @@ look for the tool icon (🔧). Type:
 List all available androidcommondoc tools
 ```
 
-You should see 35 tools grouped by category.
+You should see 47 tools grouped by category.
 
 ### Available tools (17)
 
@@ -126,7 +126,7 @@ info in the response.
 
 ## Castellano
 
-El servidor MCP expone 35 herramientas sobre transporte stdio. Una vez
+El servidor MCP expone 47 herramientas sobre transporte stdio. Una vez
 conectado, Claude Desktop puede invocar herramientas de validación, monitoreo
 e inteligencia documental directamente, sin comandos de shell.
 
@@ -192,7 +192,7 @@ conversación y busca el icono de herramientas (🔧). Escribe:
 Lista todas las herramientas de androidcommondoc disponibles
 ```
 
-Deberías ver 35 herramientas agrupadas por categoría.
+Deberías ver 47 herramientas agrupadas por categoría.
 
 ### Herramientas disponibles (17)
 
