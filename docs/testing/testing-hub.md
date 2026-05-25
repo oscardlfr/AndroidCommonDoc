@@ -8,7 +8,7 @@ layer: L0
 category: testing
 description: "Testing category hub: KMP testing patterns — runTest, fakes, coroutine dispatchers, coverage"
 version: 1
-last_updated: "2026-04"
+last_updated: "2026-05"
 monitor_urls:
   - url: "https://github.com/Kotlin/kotlinx.coroutines/releases"
     type: github-releases

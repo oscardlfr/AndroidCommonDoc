@@ -8,7 +8,7 @@ layer: L0
 category: compose
 description: "Hub doc: Compose Multiplatform patterns for resources, configuration, and usage"
 version: "1.0"
-last_updated: "2026-03-16"
+last_updated: "2026-05"
 assumes_read: compose-hub
 token_budget: 411
 monitor_urls:

@@ -3,7 +3,7 @@ scope: [testing, coroutines]
 sources: [kotlinx-coroutines-test, junit5]
 targets: [android, desktop, ios, jvm]
 version: 2
-last_updated: "2026-03"
+last_updated: "2026-05"
 assumes_read: testing-hub
 token_budget: 1399
 monitor_urls:
