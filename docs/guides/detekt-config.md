@@ -67,7 +67,7 @@ All 18 rules shipped by AndroidCommonDoc. Hand-written rules are AST-only (no ty
 | Rule | Detects | Source doc |
 |------|---------|-----------|
 | `SealedUiStateRule` | `UiState` declared as `data class` instead of `sealed interface` | viewmodel-state-management-sealed.md |
-| `MutableStateFlowExposedRule` | `public val` of type `MutableStateFlow` in a `ViewModel` | viewmodel-state-management-stateflow.md |
+| `MutableStateFlowExposedRule` | `public val` of type `MutableStateFlow` in a `ViewModel`, including Kotlin 2.4 explicit backing field syntax (`val state: StateFlow<T>` + `field = MutableStateFlow(...)`) | viewmodel-state-management-stateflow.md |
 | `WhileSubscribedTimeoutRule` | `stateIn` without `WhileSubscribed(5_000)` timeout | viewmodel-state-management-stateflow.md |
 
 ### ViewModel Boundaries
