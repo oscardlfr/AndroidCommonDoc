@@ -39,6 +39,7 @@ Setup, configuration, and authoring guides for the L0/L1/L2 ecosystem.
 | [jdk-toolchain](jdk-toolchain.md) | Configure Gradle Java toolchain to auto-provision the correct JDK; UnsupportedClassVersionError triage |
 | [project-constraints](project-constraints.md) | Console.log ban, doc size limits, agent template dual-location, vault sync, Git Flow, agentskills pilot |
 | [commands](commands.md) | Full list of /pre-pr, /readme-audit, /full-audit and all other L0 slash commands |
+| [mcp-toolchain-health-audit](mcp-toolchain-health-audit.md) | 47-tool MCP server audit — registration, test coverage, fail-mode, cache, and rate-limit status |
 
 ## Key Rules
 

@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W47-prep-15 — MCP toolchain health audit + fail-mode fixes)
+
+- **F1 — `check-outdated` cache-poisoning fix** (`mcp-server/src/tools/check-outdated.ts`): added `"PARTIAL"` to `CheckOutdatedResult.status` union; `buildResult()` now returns `PARTIAL` when all network fetches fail instead of false-positive `UP_TO_DATE`. Cache write guarded by error-count threshold — no cache poisoning on all-error runs. Vitest: all-fetch-fail spy asserts `status="PARTIAL"` and `writeKDocState` not called.
+- **F2 — `check-version-sync` false-pass fix** (`mcp-server/src/tools/check-version-sync.ts`, `mcp-server/src/types/results.ts`): added `"NO_CONSUMERS_CONFIGURED"` to `ValidationStatus` type union; tool now returns this distinct status (with guidance message) when no consumer paths produce 0 checks — eliminates silent-pass false positive. Vitest: `parseOutput("", "", 0, 0).status === "NO_CONSUMERS_CONFIGURED"`.
+- **F3 — 47-tool MCP health audit doc** (`docs/guides/mcp-toolchain-health-audit.md`): new audit matrix covering all 47 registered tools across 6 columns (Registered, Tested, Documented, FailModeOK, CacheOK, RateLimited). Identifies 5 untested tools, 40 undocumented tools, and documents F1/F2 remediation. `docs/guides/guides-hub.md` updated with pointer row.
+- **F4 — `ingest-content` fail-mode confirmed** (`mcp-server/tests/unit/tools/ingest-content.test.ts` L163–180): pre-existing test coverage for HTTP 403 and TypeError fetch-fail paths confirmed — no new tests needed.
+
 ### Added (BL-W47-prep-14 — kmp-test-runner v0.10.1 bump)
 
 - kmp-test-runner v0.9.1 → v0.10.1 across agents, scripts, hooks, skills, docs/testing/, AGENTS.md, README. Mechanical version-string bump.
