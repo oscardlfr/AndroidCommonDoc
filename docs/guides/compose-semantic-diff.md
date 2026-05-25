@@ -74,6 +74,8 @@ Add `build/ui-snapshots/` to `.gitignore`.
 In any feature's `desktopTest`:
 
 ```kotlin
+import androidx.compose.ui.test.v2.runComposeUiTest  // CMP 1.11+: use .v2 package (no IDE quick-fix available)
+
 @Test
 fun `sessions empty state matches baseline`() = runComposeUiTest {
     setContent {

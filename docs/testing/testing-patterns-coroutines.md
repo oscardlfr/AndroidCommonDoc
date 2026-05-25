@@ -253,6 +253,14 @@ class SchedulerTest {
 
 ---
 
+## CMP 1.11 Compose Tests — Dispatcher Swap Impact
+
+> **CMP 1.11.0**: The Compose UI test package changed from `androidx.compose.ui.test` to `androidx.compose.ui.test.v2`. The v2 package uses `StandardTestDispatcher` as default (previously `UnconfinedTestDispatcher`). Compose effects (`LaunchedEffect`, `collectAsState`) no longer execute eagerly — call `advanceUntilIdle()` after each state-triggering step.
+>
+> The `@Deprecated` WARNING on the old entry points documents this at compile time, but no IDE quick-fix is offered (`replaceWith` is absent). Update imports manually.
+>
+> See [testing-compose-ui-test-v2.md](testing-compose-ui-test-v2.md) for the full migration guide.
+
 ## References
 
 - [nowinandroid testing](https://github.com/android/nowinandroid)

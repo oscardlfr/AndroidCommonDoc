@@ -67,6 +67,15 @@ Patterns for Compose Multiplatform development in KMP projects. Covers resource 
 | [compose-resources-usage](compose-resources-usage.md) | Runtime usage: string resources, image loading, fonts, qualifiers, dual resource system |
 | [compose-resources-troubleshooting](compose-resources-troubleshooting.md) | Common issues and solutions: missing Res, duplicate registration, CI failures |
 
+## CMP 1.11.0 Highlights
+
+Key additions in Compose Multiplatform 1.11.0 (KotlinConf'26, 2026-05-20):
+
+- **Hot Reload**: bundled out of the box — no separate plugin required
+- **iOS Liquid Glass interop**: native UIKit blur/glass effect composable bridge
+- **Native text input**: full IME and selection handles on iOS and macOS
+- **Test API v2**: Compose UI test package migrated to `androidx.compose.ui.test.v2`; dispatcher changed from `UnconfinedTestDispatcher` to `StandardTestDispatcher`. See [testing-compose-ui-test-v2](../testing/testing-compose-ui-test-v2.md) for migration guide.
+
 ## Related
 
 - [UI Screen Patterns](../ui/ui-screen-patterns.md) -- How to use resources in screens
