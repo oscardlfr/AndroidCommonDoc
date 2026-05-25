@@ -17,7 +17,7 @@ import { logger } from "../utils/logger.js";
 /**
  * Parse check-version-sync.sh output into a ValidationResult.
  */
-function parseOutput(
+export function parseOutput(
   stdout: string,
   _stderr: string,
   exitCode: number,
@@ -59,6 +59,15 @@ function parseOutput(
         message,
       });
     }
+  }
+
+  if (details.length === 0 && stdout.trim().length === 0) {
+    return {
+      status: "NO_CONSUMERS_CONFIGURED",
+      summary: "No checks performed. Pass --consumer-paths or configure in MCP call args",
+      details: [],
+      duration_ms: durationMs,
+    };
   }
 
   if (details.length === 0 && stdout.trim().length > 0) {
