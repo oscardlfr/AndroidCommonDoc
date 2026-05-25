@@ -106,10 +106,25 @@ grep "include(\":" settings.gradle.kts | grep -E ":[a-z]+:[a-z]+:"
 /verify-kmp <module>
 ```
 
+## Module Structure Mandate (AGP 9)
+
+AGP 9 introduces an Android-KMP library plugin that replaces `kotlin.androidTarget {}` in shared KMP modules. This is separate from the flat-naming constraint above.
+
+**Plugin migration required for all KMP library modules:**
+- Old: `kotlin.androidTarget {}` inside a KMP module
+- New: `com.android.kotlin.multiplatform.library` plugin + `kotlin.androidLibrary {}` block
+
+**Structural split required when:** Android application entry point (`MainActivity`, `Application`) currently lives inside the shared KMP module — extract to a dedicated `androidApp` module using `com.android.application`.
+
+AGP 9 support is backported to CMP 1.9.3+ and 1.10.0+.
+
+See [kmp-architecture-modules.md — AGP 9 Module Boundary Rule](../architecture/kmp-architecture-modules.md#4-agp-9-module-boundary-rule) for the full migration steps and plugin configuration.
+
 ## Cross-references
 
 - [gradle-hub](gradle-hub.md) — parent hub with flat-module-names rule frontmatter
 - [gradle-patterns-conventions](gradle-patterns-conventions.md) — L0 convention plugins
 - [gradle-patterns-android-only](gradle-patterns-android-only.md) — AGP 8.x path for legacy modules
+- [kmp-architecture-modules](../architecture/kmp-architecture-modules.md) — AGP 9 module boundary rule + plugin migration
 - Plan 19-03 — `setup/create-module.sh` wrapper design
 - Android CLI: `android create --list-profiles` for current templates

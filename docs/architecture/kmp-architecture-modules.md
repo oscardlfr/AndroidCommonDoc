@@ -143,7 +143,13 @@ feature/snapshot-list/
 - No custom `composeMain` source set needed
 - ViewModels in `commonMain` are shared via XCFramework to iOS/macOS
 
-## 4. Validation
+## 4. AGP 9 Module Boundary Rule
+
+AGP 9 forbids `com.android.application` inside a multiplatform module. Primary mandate: migrate to `com.android.kotlin.multiplatform.library` plugin + `kotlin.androidLibrary {}` block. Secondary (only when Android entry point is in shared module): extract to standalone `androidApp/` module.
+
+See **[kmp-project-structure-agp9.md](kmp-project-structure-agp9.md)** for plugin configuration, structural split guide, and migration steps.
+
+## 5. Validation
 
 Run `/verify-kmp` skill to check for:
 - Forbidden imports in commonMain
