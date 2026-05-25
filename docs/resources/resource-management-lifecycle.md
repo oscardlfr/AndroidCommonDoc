@@ -49,7 +49,11 @@ Patterns for lifecycle-aware resource management in Compose Desktop: window focu
 class WindowFocusManager {
     private val _hasFocus = MutableStateFlow(false)
     val hasFocus: StateFlow<Boolean> = _hasFocus.asStateFlow()
+```
 
+> **Kotlin 2.4+**: Explicit backing fields (`field:`) are now Stable and replace the `private val _x` + `val x = _x.asStateFlow()` boilerplate. Available since Kotlin 2.3.0 (preview), Stable in 2.4.0. See [kotlin-2.4-explicit-backing-fields] for migration. (This file has 3 occurrences; one callout near first usage is sufficient.)
+
+```kotlin
     fun attachToWindow(window: ComposeWindow) {
         window.addWindowFocusListener(object : WindowFocusListener {
             override fun windowGainedFocus(e: WindowEvent) {
