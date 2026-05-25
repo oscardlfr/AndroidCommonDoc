@@ -7,7 +7,7 @@ sources:
 targets: [arch-platform.md, kmp-architecture-sourceset.md]
 category: architecture
 slug: kmp-features-2026
-last_verified: 2026-04-24
+last_verified: 2026-05-25
 ---
 
 # KMP Features & Platform Capability Matrix (2026)
@@ -61,9 +61,19 @@ last_verified: 2026-04-24
 ## Coroutines Version Notes
 
 - **1.10.x** (Stable) — current production release; use in all production KMP projects
-- **1.11.0-rc01** (RC, paired with Kotlin 2.2.20) — release candidate; do not use in production without explicit opt-in
+- **1.11.0** (paired with Kotlin 2.2.20) — verify stable status via [kotlinx.coroutines releases](https://github.com/Kotlin/kotlinx.coroutines/releases) before adopting in production
 
 `Dispatchers.IO` is JVM/Android only. Apple/Linux/Native targets use `Dispatchers.Default` for IO work. Always inject dispatchers in commonMain — never hardcode `Dispatchers.*` in ViewModels or UseCases.
+
+---
+
+## Compose Multiplatform Version Notes
+
+- **1.11.0 GA** (KotlinConf'26, 2026-05-20) — production ready
+  - Kotlin pairing: **2.2+ baseline** (2.3.10 for native/web targets)
+  - Key additions: Hot Reload bundled, iOS Liquid Glass interop, native text input, Compose UI test API v2
+  - Test API: `androidx.compose.ui.test` deprecated → `androidx.compose.ui.test.v2` (package change only; `StandardTestDispatcher` default)
+  - See [testing-compose-ui-test-v2.md](testing-compose-ui-test-v2.md) for migration guide
 
 ---
 
@@ -75,4 +85,4 @@ last_verified: 2026-04-24
 
 ---
 
-*Last verified: 2026-04-24. Refresh every 6 months or after major KMP release.*
+*Last verified: 2026-05-25 (KotlinConf'26). Refresh every 6 months or after major KMP release.*
