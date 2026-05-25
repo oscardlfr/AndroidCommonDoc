@@ -4,7 +4,7 @@ sources: [compose-multiplatform, kotlinx-coroutines-test]
 targets: [android, desktop, ios]
 version: 1
 last_updated: "2026-05"
-description: "CMP 1.11.0 Compose UI test migration: v1 runComposeUiTest -> v2 runComposeUiTestWithContext, dispatcher swap UnconfinedTestDispatcher -> StandardTestDispatcher, advanceUntilIdle() requirements"
+description: "CMP 1.11.0 Compose UI test migration: package change from androidx.compose.ui.test to androidx.compose.ui.test.v2 (same function names), StandardTestDispatcher default, advanceUntilIdle() requirements"
 slug: testing-compose-ui-test-v2
 status: active
 layer: L0
