@@ -3,7 +3,7 @@ scope: [architecture, source-sets, hierarchy]
 sources: [kotlin-multiplatform, kotlin-gradle-plugin]
 targets: [android, desktop, ios, jvm]
 version: 3
-last_updated: "2026-03"
+last_updated: "2026-05"
 assumes_read: architecture-hub
 token_budget: 881
 description: "Hub doc: KMP source set hierarchy, module structure, and architecture patterns"

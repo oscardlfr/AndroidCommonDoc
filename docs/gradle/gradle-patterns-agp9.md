@@ -9,7 +9,7 @@ category: gradle
 parent: gradle-patterns
 assumes_read: gradle-hub
 version: 1
-last_updated: "2026-04-17"
+last_updated: "2026-05"
 token_budget: 650
 description: "AGP 9.0+ module templates — what `android create` emits, how the L0 wrapper (setup/create-module.sh) aligns it with convention plugins, and the flat-module-names invariant."
 ---
