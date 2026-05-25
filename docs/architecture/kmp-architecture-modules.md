@@ -3,7 +3,7 @@ scope: [architecture, modules, compose-resources]
 sources: [kotlin-multiplatform, compose-resources, android-gradle-plugin]
 targets: [android, desktop, ios, jvm]
 version: 1
-last_updated: "2026-03"
+last_updated: "2026-05"
 assumes_read: architecture-hub
 token_budget: 989
 monitor_urls:

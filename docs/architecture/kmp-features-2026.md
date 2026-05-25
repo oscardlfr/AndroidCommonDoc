@@ -73,7 +73,7 @@ last_verified: 2026-05-25
   - Kotlin pairing: **2.2+ baseline** (2.3.10 for native/web targets)
   - Key additions: Hot Reload bundled, iOS Liquid Glass interop, native text input, Compose UI test API v2
   - Test API: `androidx.compose.ui.test` deprecated → `androidx.compose.ui.test.v2` (package change only; `StandardTestDispatcher` default)
-  - See [testing-compose-ui-test-v2.md](testing-compose-ui-test-v2.md) for migration guide
+  - See [testing-compose-ui-test-v2.md](../testing/testing-compose-ui-test-v2.md) for migration guide
 
 ---
 

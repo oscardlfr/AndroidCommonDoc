@@ -7,8 +7,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Added (BL-W47-prep-16 — KotlinConf26 HIGH gaps: CMP 1.11 test API v2 + Kotlin 2.4 explicit backing fields + AGP 9 mandate)
 
-- **F1 — CMP 1.11 Compose UI test API v2** (docs/testing/testing-compose-ui-test-v2.md): NEW doc — v1->v2 migration guide. runComposeUiTest -> runComposeUiTestWithContext, UnconfinedTestDispatcher -> StandardTestDispatcher dispatcher swap, advanceUntilIdle() requirements, effectContext parameter. testing-hub, testing-patterns-coroutines, compose-patterns, compose-semantic-diff:78 updated.
-- **F2 — Kotlin 2.4 explicit backing fields** (9 docs): Added field: MutableStateFlow<T> callout alongside existing boilerplate. MutableStateFlowExposedRule.kt verified/extended for explicit-backing-field AST coverage.
+- **F1 — CMP 1.11 Compose UI test API v2** (docs/testing/testing-compose-ui-test-v2.md): NEW doc — v1->v2 migration guide. Package change only: androidx.compose.ui.test -> androidx.compose.ui.test.v2 (same function names), UnconfinedTestDispatcher -> StandardTestDispatcher dispatcher swap, advanceUntilIdle() requirements, effectContext/runTestContext parameters. testing-hub, testing-patterns-coroutines, compose-patterns, compose-semantic-diff:78 updated.
+- **F2 — Kotlin 2.4 explicit backing fields** (7 files, 9 occurrences): Added field: MutableStateFlow<T> callout alongside existing boilerplate. MutableStateFlowExposedRule.kt verified/extended for explicit-backing-field AST coverage.
 - **F3 — AGP 9 module boundary mandate** (docs/architecture/kmp-architecture-modules.md, kmp-architecture.md, docs/gradle/gradle-patterns-agp9.md): AGP 9 section added — forbids Android Application plugin in multiplatform module; composeApp -> shared+androidApp+desktopApp structural split with migration steps. kmp-project-structure-agp9.md extracted (atomicity law).
 - **F4 — CMP 1.11.0 RC->GA stale fix** (docs/architecture/kmp-features-2026.md:64): stale "rc01 do not use in production" coroutines entry updated; NEW Compose Multiplatform Version Notes section added (1.11.0 GA, KotlinConf26 2026-05-20, Kotlin 2.2+ baseline/2.3.10 native-web).
 
