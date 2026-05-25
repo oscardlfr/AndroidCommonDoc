@@ -3,7 +3,7 @@ scope: [architecture, source-sets, hierarchy]
 sources: [kotlin-multiplatform, kotlin-gradle-plugin]
 targets: [android, desktop, ios, jvm]
 version: 3
-last_updated: "2026-03"
+last_updated: "2026-05"
 assumes_read: architecture-hub
 token_budget: 881
 description: "Hub doc: KMP source set hierarchy, module structure, and architecture patterns"
@@ -103,4 +103,6 @@ This document is split into focused sub-docs for token-efficient loading:
 ---
 
 **Status**: Active -- All KMP modules must follow this source set hierarchy.
-**Last Validated**: April 2026 with Kotlin 2.3.20 / KMP Gradle Plugin 2.3.20
+**Last Validated**: May 2026 with Kotlin 2.4.0-RC + AGP 9.0
+
+> **AGP 9 Structural Mandate**: KMP modules must not use `com.android.application` plugin inside shared modules. Migrate to `com.android.kotlin.multiplatform.library` + `kotlin.androidLibrary {}`. When the Android entry point lives in shared module, extract to `androidApp/` module. See [kmp-architecture-modules.md — AGP 9 Module Boundary Rule](kmp-architecture-modules.md#4-agp-9-module-boundary-rule) for migration steps.

@@ -39,10 +39,12 @@ class MutableStateFlowExposedRule(config: Config) : Rule(
 
         val typeRef = property.typeReference?.text ?: ""
         val initializer = property.initializer?.text ?: ""
+        val backingFieldInitializer = property.fieldDeclaration?.getInitializer()?.text ?: ""
 
         val isMutableStateFlow =
             typeRef.contains("MutableStateFlow") ||
-                initializer.startsWith("MutableStateFlow")
+                initializer.startsWith("MutableStateFlow") ||
+                backingFieldInitializer.startsWith("MutableStateFlow")
 
         if (isMutableStateFlow) {
             report(

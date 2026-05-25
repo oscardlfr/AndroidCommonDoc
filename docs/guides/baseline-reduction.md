@@ -129,6 +129,8 @@ class MyViewModel : ViewModel() {
 }
 ```
 
+> **Kotlin 2.4+**: Explicit backing fields (`field:`) are now Stable and replace the `private val _uiState` + `val uiState = _uiState.asStateFlow()` boilerplate. Available since Kotlin 2.3.0 (preview), Stable in 2.4.0. See [kotlin-2.4-explicit-backing-fields] for migration.
+
 #### `NoHardcodedDispatchersRule`
 
 ```kotlin

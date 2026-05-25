@@ -100,7 +100,11 @@ When state changes are triggered by user actions:
 ```kotlin
 private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Idle())
 val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+```
 
+> **Kotlin 2.4+**: Explicit backing fields (`field:`) are now Stable and replace the `private val _uiState` + `val uiState = _uiState.asStateFlow()` boilerplate. Available since Kotlin 2.3.0 (preview), Stable in 2.4.0. See [kotlin-2.4-explicit-backing-fields] for migration.
+
+```kotlin
 fun login(email: String, password: String) {
     val flowId = _uiState.value.flowId
     _uiState.value = AuthUiState.Loading(flowId)

@@ -8,7 +8,7 @@ layer: L0
 category: testing
 description: "Testing category hub: KMP testing patterns — runTest, fakes, coroutine dispatchers, coverage"
 version: 1
-last_updated: "2026-04"
+last_updated: "2026-05"
 monitor_urls:
   - url: "https://github.com/Kotlin/kotlinx.coroutines/releases"
     type: github-releases
@@ -86,6 +86,7 @@ Standard patterns for testing Kotlin Multiplatform projects.
 | [kover-kmp-source-set-coverage-scope](kover-kmp-source-set-coverage-scope.md) | Kover instruments JVM variant only — androidMain-only classes must be excluded from koverVerify |
 | [desktop-process-executor-test-seam-pattern](desktop-process-executor-test-seam-pattern.md) | SOLID injection seam for Desktop OS commands — ProcessExecutor + FakeProcessExecutor + osNameProvider lambda |
 | [kotlin-native-throws-suspend-pattern](kotlin-native-throws-suspend-pattern.md) | K/N compiler constraint: @Throws on suspend fun must include CancellationException; backtick name restrictions |
+| [testing-compose-ui-test-v2](testing-compose-ui-test-v2.md) | CMP 1.11 Compose UI test v2 migration — package change to `.v2`, StandardTestDispatcher default, advanceUntilIdle() requirements |
 
 ## Key Rules
 

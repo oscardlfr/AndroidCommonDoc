@@ -53,7 +53,11 @@ val flow: Flow<Int> = flow {
 
 // StateFlow for state
 val state: StateFlow<UiState> = _state.asStateFlow()
+```
 
+> **Kotlin 2.4+**: Explicit backing fields (`field:`) are now Stable and replace the `private val _state` + `val state = _state.asStateFlow()` boilerplate. Available since Kotlin 2.3.0 (preview), Stable in 2.4.0. See [kotlin-2.4-explicit-backing-fields] for migration.
+
+```kotlin
 // Operators
 flow
     .filter { it > 0 }

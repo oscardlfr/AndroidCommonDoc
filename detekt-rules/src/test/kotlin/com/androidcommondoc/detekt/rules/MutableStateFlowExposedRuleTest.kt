@@ -66,4 +66,30 @@ class MutableStateFlowExposedRuleTest {
         val findings = rule.lint(code)
         assertThat(findings).hasSize(2)
     }
+
+    @Test
+    fun `reports public explicit backing field with MutableStateFlow in ViewModel`() {
+        val code = """
+            class MyViewModel : ViewModel() {
+                val uiState: StateFlow<UiState>
+                    field = MutableStateFlow(UiState.Loading)
+            }
+        """.trimIndent()
+        val findings = rule.lint(code)
+        assertThat(findings).hasSize(1)
+        assertThat(findings[0].message).contains("MutableStateFlow")
+        assertThat(findings[0].message).contains("asStateFlow()")
+    }
+
+    @Test
+    fun `accepts private explicit backing field with MutableStateFlow in ViewModel`() {
+        val code = """
+            class MyViewModel : ViewModel() {
+                private val uiState: StateFlow<UiState>
+                    field = MutableStateFlow(UiState.Loading)
+            }
+        """.trimIndent()
+        val findings = rule.lint(code)
+        assertThat(findings).isEmpty()
+    }
 }
