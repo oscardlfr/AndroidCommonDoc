@@ -186,4 +186,18 @@ The coverage scripts (`run-parallel-coverage-suite`) auto-detect XML reports in 
 
 ---
 
+## 10. klibs.io Discoverability
+
+[klibs.io](https://klibs.io) is the KMP library discovery portal (3,500+ libraries as of KotlinConf'26).
+Libraries are **auto-indexed within ~1 month** if all 3 criteria are met — no manual registration.
+
+**Checklist**:
+- [ ] Library is open-source on GitHub
+- [ ] At least one artifact published to **Maven Central** (GitHub Packages / JBR Space alone does NOT qualify)
+- [ ] At least one artifact is multiplatform with `kotlin-tooling-metadata.json` present
+
+Reference: https://klibs.io/faq
+
+---
+
 **Parent doc**: [gradle-patterns.md](gradle-patterns.md)
