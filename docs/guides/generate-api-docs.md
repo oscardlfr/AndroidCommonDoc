@@ -127,6 +127,10 @@ Individual docs also carry a `content_hash:` 12-char hex in their frontmatter. `
 
 Projects that skip plugin installation (`/setup --dokka-plugin no` or W10 declined) can still use `/generate-api-docs`. The skill detects missing plugin and prints the install hint from `versions-manifest.json plugin_versions.dokka-markdown-plugin`. All consuming agents degrade gracefully when `docs/api/` is absent — they fall back to source-level KDoc queries.
 
+## Future: kdoc.jar
+
+JetBrains announced `kdoc.jar` at KotlinConf'26 (2026-05-20) — a machine-readable documentation format designed for IDEs, Dokka, and AI consumers. No GA date as of 2026-05-25. No Gradle plugin or consumer SDK published yet. L0 will re-evaluate when a Gradle plugin and consumer SDK are available; `kdoc.jar` may supersede the current Dokka markdown output as the machine-readable input for this workflow.
+
 ## Cross-references
 
 - [`docs/gradle/dokka-markdown-plugin.md`](../gradle/dokka-markdown-plugin.md) — frontmatter contract, file taxonomy, slug rules
