@@ -26,10 +26,10 @@ last_verified: 2026-05-26
 | Linux | Beta | Alpha |
 | JS — Browser | Stable | Alpha |
 | JS — Node.js | Stable | Alpha |
-| Wasm | Alpha | Alpha |
+| Wasm | Beta | Alpha |
 
 > **Linux** is Beta (not Stable) for KMP as of 2026-04-24.
-> **Wasm** (`wasmJs`) is Alpha (not Beta) for both KMP and Compose MP.
+> **Wasm** (`wasmJs`) KMP tier is **Beta** (promoted from Alpha — see kotlinlang.org/docs/wasm-overview.html). Compose Multiplatform on Wasm remains **Alpha** — do not use in production. Note: *incremental compilation* is Stable in Kotlin 2.4 (enabled by default) — separate from platform tier. *WebAssembly Component Model* is available only in Kotlin 2.4.0-RC EAP, not in 2.4.0 GA builds.
 
 ---
 
@@ -95,6 +95,13 @@ last_verified: 2026-05-26
 - Opt-in block: `swiftExport {}` with `@OptIn(ExperimentalSwiftExportDsl::class)`
 - **NOT production-ready as of 2026-05-26** — see `viewmodel-state-management-stateflow.md` for current guidance
 
+### Swift Package Manager Import (Experimental, Kotlin 2.4)
+
+- **Status**: Experimental in Kotlin 2.4
+- Declare Swift package dependencies via `swiftPMDependencies {}` block in the module's Gradle dependency block
+- Imports Obj-C APIs via Clang module discovery — pure-Swift APIs not accessible
+- Reference: https://kotlinlang.org/docs/multiplatform/multiplatform-spm-import.html
+
 ### Kotlin/Native 2.4 Runtime: CMS GC Default
 
 - **Default GC changed**: PMCS → CMS (Concurrent Mark and Sweep) in 2.4.0
@@ -110,7 +117,7 @@ last_verified: 2026-05-26
 
 - **"macOS file IO is unsupported"** — WRONG as of kotlinx-io 1.x. macOS has full Source/Sink/Buffer support via Native targets.
 - **"JS has no networking"** — WRONG for Node.js target. JS-Node.js supports raw TCP via Ktor. JS-Browser target is sandbox-restricted (HTTP/WebSocket only — no raw TCP).
-- **"Wasm is Beta"** — WRONG. Wasm (`wasmJs`) is Alpha tier for both KMP and Compose MP as of 2026-04-24.
+- **"Wasm is fully Beta"** — WRONG. KMP Wasm (`wasmJs`) is Beta as of 2026-05-26 — not production-recommended. Compose Multiplatform on Wasm remains Alpha — do not use in production CMP/Wasm apps. Source: https://kotlinlang.org/docs/wasm-overview.html
 
 ---
 

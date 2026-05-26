@@ -85,3 +85,4 @@ copilot-template-type: behavioral
 - Quality gate: Step 0.5 uses `kdoc-coverage` in changed-only mode
 - Guardian: `doc-alignment-agent` runs KDoc coverage as continuous drift detection
 - Migration: `/kdoc-migrate` uses this to measure progress
+- Note: `kdoc.jar` (announced KotlinConf'26, 2026-05-20) may supersede current Dokka markdown output as machine-readable input for this skill. Monitor for Gradle plugin + consumer SDK GA.

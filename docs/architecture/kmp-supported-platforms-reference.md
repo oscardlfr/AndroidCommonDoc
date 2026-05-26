@@ -37,7 +37,7 @@ Kotlin Multiplatform defines three stability levels:
 | Linux (x64) | `linuxX64` | Beta | Alpha |
 | Windows (x64) | `mingwX64` | Beta | Alpha |
 | JS (Browser) | `js` | Stable | Alpha |
-| Wasm (Browser) | `wasmJs` | Alpha | Alpha |
+| Wasm (Browser) | `wasmJs` | Beta | Alpha |
 | watchOS | `watchosArm64` | Beta | Not supported |
 | tvOS | `tvosArm64` | Beta | Not supported |
 
@@ -53,5 +53,5 @@ Compose Multiplatform follows its own stability track, distinct from KMP core:
 
 - Use this table as the authoritative 2026 baseline for platform support claims
 - Always distinguish KMP code-sharing tier from Compose UI tier — they differ for Apple targets
-- Wasm/JS Compose is Alpha — do not recommend for production apps in pattern docs
+- Wasm/JS Compose: Wasm (`wasmJs`) KMP tier is Beta (promoted from Alpha — not production-recommended). Compose MP on Wasm remains Alpha — do not recommend for production CMP apps. Note: Wasm *incremental compilation* is Stable in Kotlin 2.4 — compilation stability and platform tier are orthogonal.
 - Verify against upstream JetBrains docs before citing in external-facing content

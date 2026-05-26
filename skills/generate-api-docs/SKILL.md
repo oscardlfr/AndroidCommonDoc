@@ -79,3 +79,4 @@ Transformer:
 - **Quality gate Step 0**: validates frontmatter on docs/api/ automatically
 - **context-provider**: discovers API docs via `search-docs(category="api")`
 - **validate-doc-update**: excludes `generated: true` files from duplicate detection
+- Note: `kdoc.jar` (announced KotlinConf'26, 2026-05-20) may supersede current Dokka markdown output as machine-readable input for this skill. Monitor for Gradle plugin + consumer SDK GA.

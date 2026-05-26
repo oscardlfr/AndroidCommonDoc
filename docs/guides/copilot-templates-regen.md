@@ -95,6 +95,16 @@ setup/copilot-templates/*.prompt.md   (generated — do not edit)
 The adapter is idempotent: running it twice with identical inputs produces
 identical output, safe to run in CI.
 
+## VS Code Channel (Future)
+
+JetBrains shipped the `JetBrains.kotlin-server` VS Code extension at KotlinConf'26 (2026-05-20), powered by the official Kotlin Language Server. Status: **Alpha** as of 2026-05-20.
+
+This opens a new distribution channel beyond the current GitHub Copilot prompt templates. When the extension exits Alpha (Beta or GA):
+- L0 skills with `copilot: true` in frontmatter should also generate VS Code LSP-compatible snippets
+- A parallel `setup/vscode-snippets/` directory is the anticipated output location
+
+This is deferred — Alpha is too early to commit to a generation format. Track the extension at `JetBrains.kotlin-server` in the VS Code marketplace.
+
 ## Cross-References
 
 - Adapter source: `adapters/copilot-adapter.sh`

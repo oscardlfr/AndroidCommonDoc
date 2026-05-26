@@ -72,6 +72,8 @@ CommonMain (pure Kotlin, interfaces, expects)
 | `androidMain` | Android-only APIs | `android.*`, `androidx.*` |
 | `desktopMain` | Desktop-only APIs | `javax.swing`, `java.awt` |
 
+> **Swift Package Manager Import (Experimental, Kotlin 2.4)**: Apple targets can now consume Obj-C and Swift code via `swiftPMDependencies {}` in the module's Gradle dependency block (Clang module discovery). Status is Experimental. See [kmp-features-2026.md — SPM Import](kmp-features-2026.md#swift-package-manager-import-experimental-kotlin-24) for details.
+
 ## 3. build.gradle.kts Template
 
 Since Kotlin 1.9.20, the default hierarchy template is applied automatically when you declare targets. Source sets like `appleMain`, `iosMain`, `macosMain`, and their test counterparts are auto-created with the correct `dependsOn` relationships. You only need to `get` them to add dependencies.
