@@ -75,3 +75,42 @@ From `.commitlintrc.json` and `docs/guides/project-constraints.md` (via context-
 ---
 
 ## Stash: not used
+
+---
+
+## C9 Fix-Forward + Final Verdict (Stamp Refresh 2026-05-26T21:15:00Z)
+
+**Updated Verdict**: PASS
+**Commits covered**: C1–C9 (C8 wave-close + C9 atomicity fix-forward)
+
+### C9 Fix-Forward Verification
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| `testing-patterns-benchmarks.md` line count | PASS | 296 lines — under 300-line hard limit (was 319) |
+| `testing-patterns-benchmarks-rebaseline.md` line count | PASS | 39 lines — well under 300-line limit |
+| validate-doc-update (parent) | PASS | VALID, 0 issues |
+| validate-doc-update (new sub-doc) | PASS | VALID, 0 issues — frontmatter complete (scope/sources/targets/category/slug/parent) |
+| Sub-doc back-link | PASS | `parent: testing-patterns-benchmarks` + relative path link in body |
+| Hub pointer in parent | PASS | Line 290: relative link to `testing-patterns-benchmarks-rebaseline.md` |
+| C9 commit scope | PASS | `docs(tests)` — valid per .commitlintrc.json |
+| Branch hygiene after C9 | PASS | git status: clean (0 untracked, 0 modified) |
+
+### Final Commitlint Audit (all 9 commits)
+
+| Commit | Subject | Scope | Valid |
+|--------|---------|-------|-------|
+| d69480e | docs(docs): F1+F4+F5 kmp-features-2026 | docs | PASS |
+| 472decd | docs(docs): F1 kotlinx-coroutines-reference | docs | PASS |
+| 1ae27a5 | docs(docs): F2 gradle-patterns-dependencies | docs | PASS |
+| 399b04d | docs(docs): F3 gradle-patterns + getting-started | docs | PASS |
+| 8b9051f | docs(ui): F4 viewmodel-state-management-stateflow | ui | PASS |
+| 4795fef | docs(tests): F5+F6 benchmarks + agp9 | tests | PASS |
+| 91dfbc1 | docs(docs): F7 gradle-patterns-publishing | docs | PASS |
+| c9449e2 | chore(agents): bl-w47-prep-17 wave-close | agents | PASS |
+| a6528b4 | docs(tests): F5+F6 extract rebaseline section | tests | PASS |
+
+### Stamp
+Written to `.androidcommondoc/quality-gate.stamp` — PASS, 2026-05-26T21:15:00Z, C1-C9.
+
+### Stash: not used
