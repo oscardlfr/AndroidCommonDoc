@@ -59,6 +59,13 @@ kotlin-stdlib = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", versio
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 ```
 
+> **Kotlin Stdlib Security Policy (announced KotlinConf'26)**
+> - 18-month backport window from `.0` release for security fixes
+> - Scope: JVM `kotlin-stdlib` artifact only — compiler tooling excluded
+> - For security-sensitive consumers: use a literal pin in `[versions]` (not `version.ref = "kotlin"` BOM aliasing) so security patches are explicit
+> - Audit transitive overrides: `./gradlew dependencies | grep kotlin-stdlib`
+> - References: https://blog.jetbrains.com/kotlin/2026/05/security-support-policy-for-the-kotlin-standard-library/ + https://kotlinlang.org/docs/security.html
+
 ### Best Practices
 
 - Single source of truth for versions
