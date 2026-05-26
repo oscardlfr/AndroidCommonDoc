@@ -19,7 +19,7 @@ description: "JS and Wasm test execution — deferred CLI support note, jsTest v
 
 JS and Wasm test patterns for kmp-test-runner v0.10.1.
 
-> **DEFERRED**: kmp-test-runner v0.9.0 CLI does not yet fully support JS/Wasm targets. The gate blocks these Gradle tasks with a special message. Track [https://github.com/oscardlfr/kmp-test-runner/releases](https://github.com/oscardlfr/kmp-test-runner/releases) for v0.10+ support.
+> **DEFERRED**: kmp-test-runner v0.10.1 CLI does not yet fully support JS/Wasm targets. The gate blocks these Gradle tasks with a special message. Track [https://github.com/oscardlfr/kmp-test-runner/releases](https://github.com/oscardlfr/kmp-test-runner/releases) for v0.10+ support.
 
 ## Current Status
 
@@ -30,7 +30,7 @@ JS and Wasm test patterns for kmp-test-runner v0.10.1.
 | `jsNodeTest` | Deferred | BLOCKED + special message |
 | `wasmJsTest` | Deferred | BLOCKED + special message |
 
-Gate message when blocked: _"kmp-test-runner v0.9.0 CLI does not yet fully support JS/Wasm targets — track https://github.com/oscardlfr/kmp-test-runner/releases for v0.10+ support."_
+Gate message when blocked: _"kmp-test-runner v0.10.1 CLI does not yet fully support JS/Wasm targets — track https://github.com/oscardlfr/kmp-test-runner/releases for v0.10+ support."_
 
 ## JS Task Distinctions
 
