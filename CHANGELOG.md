@@ -5,6 +5,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W47-prep-18 — KotlinConf'26 LOW tier doc closure + trilogy complete)
+
+- **F1 — Wasm KMP tier Alpha→Beta** (docs/architecture/kmp-features-2026.md, kmp-supported-platforms-reference.md): KMP Wasm tier promoted to Beta per kotlinlang.org/docs/wasm-overview.html (user-approved 2026-05-26). CMP-on-Wasm remains Alpha. Incremental compilation Stable in Kotlin 2.4 (default-on, orthogonal to platform tier). WebAssembly Component Model available in Kotlin 2.4.0-RC EAP only (not GA). Myths section updated: "Wasm is fully Beta — WRONG. KMP Wasm is Beta; Compose MP on Wasm remains Alpha."
+- **F1-stale — kmp-test-runner v0.9.0→v0.10.1** (docs/testing/cli-tests-js-wasm.md): DEFERRED blockquote (line 22) and gate message quote (line 33) bumped. JS/Wasm CLI support remains deferred in v0.10.1.
+- **F2 — kdoc.jar watch note** (docs/guides/generate-api-docs.md, skills/kdoc-audit/SKILL.md, skills/generate-api-docs/SKILL.md): `## Future: kdoc.jar` section — announced KotlinConf'26 2026-05-20; machine-readable format for IDEs/Dokka/AI; no GA date as of 2026-05-25. Forward-ref in both skills.
+- **F3 — VS Code Kotlin LSP Alpha channel** (docs/guides/copilot-templates-regen.md, guides-hub.md): `## VS Code Channel (Future)` section — `JetBrains.kotlin-server` extension Alpha as of 2026-05-20; deferred until Beta; `setup/vscode-snippets/` noted as future output target. guides-hub row extended.
+- **F4 — SPM Import Experimental (Kotlin 2.4)** (docs/architecture/kmp-features-2026.md, kmp-architecture-sourceset.md): `swiftPMDependencies {}` block — Experimental, Clang module discovery, imports Obj-C APIs from Obj-C and Swift packages. Correct import-side URL (multiplatform-spm-import.html). Callout in sourceset doc.
+- **F5 NOOP**: `docs/guides/getting-started/*.md` has no "install KMP plugin separately" language (grep confirmed). KMP+CMP IDE plugin auto-bundled in IntelliJ 2026.1.2+ — no doc update needed.
+- **F6 NOOP**: `kmp-architecture.md` is purely technical; productivity study citation out of place. Dropped.
+- **KotlinConf'26 alignment trilogy COMPLETE**: prep-16 (HIGH) + prep-17 (MEDIUM) + prep-18 (LOW) = full KotlinConf'26 closure across Kotlin 2.4, CMP 1.11, AGP 9, and KMP ecosystem docs.
+
 ### Added (BL-W47-prep-17 — KotlinConf'26 MEDIUM 7 L0 doc gaps)
 
 - **F1 — Context parameters → Stable (Kotlin 2.4)** (docs/architecture/kmp-features-2026.md, kotlinx-coroutines-reference.md): new "Context Parameters" section in kmp-features-2026.md; coroutine reference notes context params as cleaner alternative to extension-receiver overloading for scoping patterns. Detekt rule `PreferContextParameterRule` deferred to L1/L2 Kotlin 2.4 adoption.
