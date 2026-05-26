@@ -289,6 +289,29 @@ dependencies {
 
 ---
 
+## 6. Re-baseline after Kotlin 2.4 / AGP Bump
+
+### K/N CMS GC (Kotlin 2.4)
+
+Kotlin 2.4 changes the default Kotlin/Native GC from PMCS to CMS (Concurrent Mark and Sweep).
+CMS interacts with `nativeGCAfterIteration = true` differently — shorter but more frequent pauses.
+**Benchmark baselines silently shift after a Kotlin 2.4 upgrade.**
+
+- Re-record all K/N benchmarks after bumping Kotlin to 2.4.
+- Rollback flag: `kotlin.native.gc=pmcs` in `gradle.properties` — use only if regression confirmed.
+- See `kmp-features-2026.md` → "Kotlin/Native 2.4 Runtime Changes" for full context.
+
+### R8 Coroutine Rewrite (AGP + Kotlin 2.4)
+
+R8 paired with AGP + Kotlin 2.4 rewrote coroutine lock handling — up to 50% perf improvement
+on Compose benchmarks. **Android benchmark baselines may improve 20-50% after AGP bump.**
+
+- Re-record all Android benchmarks after bumping AGP.
+- Attribute the improvement to R8, not to code changes — do not revert unrelated code to "fix" it.
+- See `agp9-consumer-rules-banned-directives.md` for why `-dontoptimize` is banned.
+
+---
+
 ## References
 
 - [kotlinx-benchmark](https://github.com/Kotlin/kotlinx-benchmark)
