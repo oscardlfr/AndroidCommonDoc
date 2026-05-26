@@ -32,6 +32,10 @@ AndroidCommonDoc (L0) — single source of truth
     └── l0-manifest.json
 ```
 
+> **If you are evaluating Amper**: Standalone Amper 0.10+ does **NOT** support composite builds.
+> This workspace uses Gradle composite (`includeBuild("../shared-kmp-libs")`).
+> See `gradle-patterns.md` → "Amper Compatibility Note" before adopting Amper.
+
 ## Sub-documents
 
 - [Step 1 — Install L0](getting-started/01-install-l0.md)

@@ -7,7 +7,7 @@ sources:
 targets: [arch-platform.md, kmp-architecture-sourceset.md]
 category: architecture
 slug: kmp-features-2026
-last_verified: 2026-05-25
+last_verified: 2026-05-26
 ---
 
 # KMP Features & Platform Capability Matrix (2026)
@@ -77,6 +77,35 @@ last_verified: 2026-05-25
 
 ---
 
+## Kotlin 2.4 Language & Runtime Changes
+
+### Context Parameters (Stable, Kotlin 2.4)
+
+- **Status**: Stable in 2.4.0 — replaces `@ExperimentalContextParameters` opt-in
+- Replaces extension-receiver overloading (`Receiver.() -> Unit`) where a context parameter is semantically cleaner
+- Example: `Logger.() -> Unit` → `context(Logger) () -> Unit` — avoids accidental receiver exposure at call sites
+- See `kotlinx-coroutines-reference.md` for coroutine scope injection patterns
+- Reference: https://kotlinlang.org/docs/context-parameters.html
+
+### Swift Export (Alpha, Kotlin 2.4)
+
+- **Status**: Alpha — promoted from Experimental in 2.4.0
+- Supports: enums (true Swift enums with exhaustive switch), sealed classes, data classes, variadic functions, default parameters, `Flow<T> → AsyncSequence`
+- Limitations: extension functions on external types not supported; certain generic bounds unsupported; `suspend` still requires SKIE or KMP-NativeCoroutines wrapper
+- Opt-in block: `swiftExport {}` with `@OptIn(ExperimentalSwiftExportDsl::class)`
+- **NOT production-ready as of 2026-05-26** — see `viewmodel-state-management-stateflow.md` for current guidance
+
+### Kotlin/Native 2.4 Runtime: CMS GC Default
+
+- **Default GC changed**: PMCS → CMS (Concurrent Mark and Sweep) in 2.4.0
+- Performance: 25% faster build / half RAM (cumulative improvement from 2.2→2.4 baseline)
+- CMS produces shorter but more frequent GC pauses — benchmark baselines **silently shift** after a 2.4 upgrade
+- Rollback: add `kotlin.native.gc=pmcs` in `gradle.properties` (only if regression confirmed)
+- Re-record K/N benchmarks after upgrading — see `testing-patterns-benchmarks.md`
+- Reference: https://kotlinlang.org/docs/native-memory-manager.html
+
+---
+
 ## Myths & Common Misconceptions
 
 - **"macOS file IO is unsupported"** — WRONG as of kotlinx-io 1.x. macOS has full Source/Sink/Buffer support via Native targets.
@@ -85,4 +114,4 @@ last_verified: 2026-05-25
 
 ---
 
-*Last verified: 2026-05-25 (KotlinConf'26). Refresh every 6 months or after major KMP release.*
+*Last verified: 2026-05-26 (KotlinConf'26). Refresh every 6 months or after major KMP release.*

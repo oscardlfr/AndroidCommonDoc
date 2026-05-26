@@ -76,3 +76,12 @@ flow
 - kotlinx.coroutines is universally available across all KMP targets
 - `Dispatchers.IO` is JVM/Android only; Apple/Native use `Dispatchers.Default` for IO
 - Multiplatform Flow support is stable across all targets since 1.7.x
+
+## Context Parameters (Kotlin 2.4)
+
+Kotlin 2.4 context parameters (Stable) offer a cleaner alternative to extension receivers for coroutine scope injection.
+
+- Pattern: `Logger.() -> Unit` → `context(Logger) () -> Unit` — avoids accidental receiver exposure at the call site
+- Particularly useful when injecting a coroutine scope where a full extension receiver is semantically wrong (the caller should not have access to all receiver members)
+- Existing extension-receiver patterns remain valid — context parameters are an addendum, not a replacement
+- Reference: https://kotlinlang.org/docs/context-parameters.html

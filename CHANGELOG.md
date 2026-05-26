@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (BL-W47-prep-17 — KotlinConf'26 MEDIUM 7 L0 doc gaps)
+
+- **F1 — Context parameters → Stable (Kotlin 2.4)** (docs/architecture/kmp-features-2026.md, kotlinx-coroutines-reference.md): new "Context Parameters" section in kmp-features-2026.md; coroutine reference notes context params as cleaner alternative to extension-receiver overloading for scoping patterns. Detekt rule `PreferContextParameterRule` deferred to L1/L2 Kotlin 2.4 adoption.
+- **F2 — Kotlin stdlib 18-month security backport policy** (docs/gradle/gradle-patterns-dependencies.md): callout near `kotlin-stdlib` version entry — 18-month backport window from `.0` release (JVM artifact only; compiler tooling excluded). Literal pin recommendation for security-sensitive consumers; `./gradlew dependencies | grep kotlin-stdlib` audit suggestion.
+- **F3 — Amper Gradle plugin DEPRECATED + composite-build NOT supported footgun** (docs/gradle/gradle-patterns.md, docs/guides/getting-started.md): Amper compatibility note — plugin deprecated as of 0.7.0; standalone 0.10 does NOT support composite builds; L0/L1 patterns assume Gradle composite. getting-started.md crosslinks the note for first-time consumers.
+- **F4 — Swift Export → Alpha (Kotlin 2.4)** (docs/architecture/kmp-features-2026.md, docs/ui/viewmodel-state-management-stateflow.md): Swift Export row in Apple/iOS features table — Alpha, supports enums (exhaustive switch), sealed/data classes, variadic functions, default params, `Flow<T> → AsyncSequence`. SKIE/KMP-NativeCoroutines remain the production path; viewmodel-state-management-stateflow.md gets forward-looking note.
+- **F5 — Kotlin/Native CMS GC default (silent rebaseline trigger)** (docs/architecture/kmp-features-2026.md, docs/testing/testing-patterns-benchmarks.md): new "Kotlin/Native 2.4 Runtime Changes" section — PMCS → CMS default, 25% faster build / half RAM (cumulative 2.2→2.4), rollback flag `kotlin.native.gc=pmcs`. Benchmarks doc gets re-baseline alert near `nativeGCAfterIteration` lines.
+- **F6 — R8 coroutine locks rewrite (silent rebaseline trigger)** (docs/gradle/agp9-consumer-rules-banned-directives.md, docs/testing/testing-patterns-benchmarks.md): up to 50% Compose perf improvement on AGP+Kotlin 2.4 bump; reinforces existing `-dontoptimize` ban. Benchmarks doc instructs consumers to attribute improvement to R8 (not code) and re-record baselines after bump.
+- **F7 — klibs.io listing criteria** (docs/gradle/gradle-patterns-publishing.md): new klibs.io discoverability checklist — open-source on GitHub + at least one Maven Central artifact + at least one multiplatform artifact with `kotlin-tooling-metadata.json`. Auto-indexed within ~1 month; no manual registration.
+
 ### Added (BL-W47-prep-16 — KotlinConf26 HIGH gaps: CMP 1.11 test API v2 + Kotlin 2.4 explicit backing fields + AGP 9 mandate)
 
 - **F1 — CMP 1.11 Compose UI test API v2** (docs/testing/testing-compose-ui-test-v2.md): NEW doc — v1->v2 migration guide. Package change only: androidx.compose.ui.test -> androidx.compose.ui.test.v2 (same function names), UnconfinedTestDispatcher -> StandardTestDispatcher dispatcher swap, advanceUntilIdle() requirements, effectContext/runTestContext parameters. testing-hub, testing-patterns-coroutines, compose-patterns, compose-semantic-diff:78 updated.

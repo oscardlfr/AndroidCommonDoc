@@ -37,6 +37,16 @@ These directives are explicitly banned per the AGP 9.0 release notes:
 
 **Behaviour when encountered**: AGP 9.0 raises a build error when these directives appear in consumer rules (controlled by `android.r8.globalOptionsInConsumerRules.disallowed`, default `true`).
 
+### R8 2.4 Performance (Kotlin 2.4 + AGP)
+
+R8 paired with Kotlin 2.4 rewrote coroutine lock handling — up to 50% perf improvement on Compose benchmarks.
+The improvement is **automatic on AGP bump** — no consumer action required.
+
+> Consumers MUST NOT add `-dontoptimize` to recover "lost" performance (already banned by this doc).
+> The `-dontoptimize` flag disables R8 globally and eliminates this improvement entirely.
+
+See `testing-patterns-benchmarks.md` → "Re-baseline after Kotlin 2.4 / AGP Bump" for benchmark impact.
+
 ## Section 2: Plausible Banned Directives (Unverified — Needs Source Confirmation)
 
 The following directives are plausible additional bans based on `ConsumerRuleGlobalGuardian.readConsumerKeepRulesRemovingBannedGlobals` in:

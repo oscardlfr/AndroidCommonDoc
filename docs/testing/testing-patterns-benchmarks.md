@@ -287,7 +287,7 @@ dependencies {
 
 > **Nota**: las dependencias de benchmark (`kotlinx-benchmark-runtime`, plugins) vienen del catálogo compartido (`sharedLibs`), no del local. Ver [Catalog-First Rule](../gradle/gradle-patterns-dependencies.md).
 
----
+> **Re-baseline After Kotlin 2.4 / AGP Bump**: K/N CMS GC (Kotlin 2.4) and R8 coroutine rewrite (AGP+Kotlin 2.4) silently shift baselines — re-record after either bump. Full guidance: [testing-patterns-benchmarks-rebaseline.md](testing-patterns-benchmarks-rebaseline.md).
 
 ## References
 

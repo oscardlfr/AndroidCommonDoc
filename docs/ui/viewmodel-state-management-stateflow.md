@@ -162,6 +162,15 @@ class SnapshotListViewModelWrapper: ObservableObject {
 }
 ```
 
+#### Future Path: Swift Export (Alpha, Kotlin 2.4)
+
+Swift Export is the official long-term path for Kotlin→Swift interop but is **NOT production-ready** as of 2026-05-26.
+
+- Supports: enums (exhaustive switch), sealed classes, data classes, `Flow<T> → AsyncSequence`
+- Limitations: `suspend` functions still require a wrapper (SKIE or KMP-NativeCoroutines); extension functions on external types unsupported
+- **Continue using SKIE or KMP-NativeCoroutines for production** — re-evaluate at Beta or Stable
+- See `kmp-features-2026.md` for full feature scope and opt-in block
+
 ### Manual Wrapper (Not Recommended)
 
 Manual wrappers using `viewModel.uiState.collect {}` from Kotlin are fragile -- they don't integrate with Swift structured concurrency and require careful lifecycle management. Prefer SKIE or KMP-NativeCoroutines.
