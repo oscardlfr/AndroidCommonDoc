@@ -43,6 +43,15 @@ Standard Gradle patterns for Kotlin Multiplatform projects. A shared version cat
 
 ---
 
+> **Amper Compatibility Note**
+> - Amper Gradle plugin **DEPRECATED** as of 0.7.0 — not under active development
+> - Standalone Amper 0.10+ does **NOT** support composite builds (`includeBuild(...)`)
+> - L0 + L1 patterns assume Gradle composite — **DO NOT mix with Amper standalone**
+> - L0 will re-evaluate if/when Amper gains composite build support
+> - Reference: https://blog.jetbrains.com/amper/2026/03/amper-0-10/
+
+---
+
 ## Sub-documents
 
 This document is split into focused sub-docs for token-efficient loading:
