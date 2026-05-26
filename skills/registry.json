@@ -664,7 +664,7 @@
       "description": "Optional: Run Dokka + transformer to generate docs/api/ from KDoc in source code. Produces YAML-frontmatter docs consumable by context-provider and search-docs.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:db1e022cd3c9804af109244960ca69eccb7330307fe3708b9f3fb19917fb0be9",
+      "hash": "sha256:dbbd29726313d2f64732c868e7c9e4979ed7cdb0e9a662173a5ecd209ca7037e",
       "dependencies": [],
       "frontmatter": {
         "name": "generate-api-docs",
@@ -811,7 +811,7 @@
       "description": "Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-module coverage, and regression warnings vs baseline.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:ff3a1aa83e115c0722ef24e4f1bef75bf18b59c0fa6f4af651c26e232be773ab",
+      "hash": "sha256:40bc78df4d3742cfa1f33803effe3111cf33cd21714fc5796e2392776d47d2d5",
       "dependencies": [],
       "frontmatter": {
         "name": "kdoc-audit",
