@@ -119,6 +119,21 @@ function isExemptTarget(target) {
   return false;
 }
 
+// Resolve a single shell variable reference ($VAR or ${VAR}) from simple
+// `VAR=value` or `VAR="value"` assignments visible in cmd.
+// Returns the resolved string if found; original target otherwise.
+// Only resolves one level — no recursive expansion.
+function resolveShellVar(target, cmd) {
+  if (!target || target[0] !== '$') return target;
+  const varName = target.replace(/^\$\{?([A-Za-z_]\w*)\}?$/, '$1');
+  if (varName === target) return target; // not a simple var reference
+  // Match: VARNAME="value" or VARNAME=value — no spaces; stops at ; & | newline
+  const varPattern = new RegExp('(?:^|[;\\n&|\\s])' + varName + '=(["\']?)([^;\\n&|]+?)\\1(?:[;\\n&|\\s]|$)');
+  const m = varPattern.exec(cmd + ' '); // trailing space ensures end-of-string anchor fires
+  if (!m) return target;
+  return m[2].trim();
+}
+
 function detectViolation(cmd) {
   // Scan only non-body lines so heredoc body content is never misread as
   // a redirect. The opener line (which contains the real target) is included.
@@ -129,7 +144,11 @@ function detectViolation(cmd) {
     collectRedirectTargets(line, redirectTargets);
   }
 
-  const firstBadRedirect = redirectTargets.find(t => t && !isExemptTarget(t));
+  const firstBadRedirect = redirectTargets.find(t => {
+    if (!t) return false;
+    const resolved = resolveShellVar(t, cmd);
+    return !isExemptTarget(resolved);
+  });
   if (firstBadRedirect !== undefined) {
     const isHeredoc = HEREDOC_RE.test(cmd);
     return { kind: isHeredoc ? 'heredoc redirect' : 'shell redirect', target: firstBadRedirect };
