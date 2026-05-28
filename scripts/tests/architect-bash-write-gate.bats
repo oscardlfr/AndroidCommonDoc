@@ -854,3 +854,36 @@ PYEOF
   [[ "$output" == *"pathlib.Path"* ]]
 }
 
+# ── BL-W47-prep-19: shell variable in redirect target ───────────────────────
+# Bug: collectRedirectTargets extracts the literal token `$VERDICT` (unresolved
+# variable) from `printf body > "$VERDICT"`. The exemption regex tests the raw
+# `$VERDICT` string, which never matches `.planning/wave.../arch-*-verdict.md`,
+# so arch-platform gets BLOCKED when using a shell variable for the verdict path.
+# Cases 1, 2, 4 FAIL on HEAD (unpatched hook). Case 3 passes on HEAD (security
+# regression guard — non-exempt $VAR path must remain blocked after fix).
+
+@test "BL-W47-prep-19: \$VAR simple redirect to exempt verdict path → ALLOW" {
+  make_input 'VERDICT=".planning/wave-bl-w47-prep-19/arch-platform-verdict.md"; printf '"'"'body'"'"' > "$VERDICT"' 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "BL-W47-prep-19: \$VAR heredoc redirect to exempt verdict path → ALLOW" {
+  make_input 'VERDICT=".planning/wave-bl-w47-prep-18/arch-platform-verdict.md"; cat <<'"'"'EOF'"'"' > "$VERDICT"
+APPROVED-PREP
+EOF' 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "BL-W47-prep-19: \$VAR non-exempt path → BLOCK (security regression guard)" {
+  make_input 'VERDICT="docs/foo.md"; printf '"'"'body'"'"' > "$VERDICT"' 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "BL-W47-prep-19: \$VAR Windows absolute forward-slash verdict path → ALLOW" {
+  make_input 'VERDICT="C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc/.planning/wave-bl-w47-prep-19/arch-platform-verdict.md"; echo APPROVE > "$VERDICT"' 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
