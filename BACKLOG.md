@@ -108,7 +108,7 @@ Unified upstream-change watcher with 3 output handlers. Replaces ad-hoc calendar
 - Shell defaults — zsh is macOS default; verify all bats + shell hooks work under zsh quirks.
 - Gradle truststore — likely zero-config on Mac (keychain trust); confirm by attempting one full build without flags.
 - bats runner — confirm `scripts/tests/*.bats` execution under macOS bats-core (Homebrew install).
-- Xcode/iOS targets — newly available. DawSync L2 project can finally compile iOS/macOS targets. Schedule smoke-test wave once core toolchain verified.
+- Xcode/iOS targets — newly available. L2 consumer projects can finally compile iOS/macOS targets. Schedule smoke-test wave once core toolchain verified.
 - `~/.gradle/gradle.properties` — re-create empty on Mac (don't copy Windows-specific flags).
 
 ### Migration playbook reference
