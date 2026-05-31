@@ -39,7 +39,7 @@
 
 ### Wave 40 — Wave 17 L2 hardening (BIG, ~19-32h)
 
-19 findings (5 HIGH, 13 MED, 1 LOW) from DawSync L2 session 2026-04-18. Hardens prose rules → mechanical gates (hooks, numbered-step assertions, liveness probes).
+19 findings (5 HIGH, 13 MED, 1 LOW) from L2 consumer session 2026-04-18. Hardens prose rules → mechanical gates (hooks, numbered-step assertions, liveness probes).
 
 **Source**: `project_wave17_l2_topology_findings.md`, plan at `.planning/wave17-l2-topology-findings.md`.
 **Trigger**: schedule AFTER Wave 35-39 cleared for clean context.
@@ -140,8 +140,8 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Long-term / no fixed order
 
-- **DawSync product alignment** session — pricing drift, feature contradictions, dormant context-bridge — `project_dawsync_product_alignment.md`
-- **Future agents** — D1 guardian for DawSyncWeb, context-provider-as-internal-context7-agent — `project_future_agents.md`
+- **L2 consumer product alignment** session — pricing drift, feature contradictions, dormant context-bridge — `project_dawsync_product_alignment.md`
+- **Future agents** — D1 guardian for L2 web consumer, context-provider-as-internal-context7-agent — `project_future_agents.md`
 - **Plugin v0.2.1** — triggered-only (10 @Disabled tests pending Maven Central v0.3.0) — `project_plugin_v0.2.1_status.md`
 - **BL-W32-04** — CP zombie session start — active observation, no fix yet — `project_BL-W32-04_shipped.md`
 
