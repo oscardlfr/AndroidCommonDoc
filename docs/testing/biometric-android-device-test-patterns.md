@@ -4,11 +4,11 @@ scope: [biometric-auth, android-instrumented, kover, fakes]
 sources: [core-auth-biometric, Wave 3c implementation]
 targets: [android]
 slug: biometric-android-device-test-patterns
-status: draft
+status: active
 layer: L0
 description: "Android instrumented test patterns for BiometricPrompt: FakeBiometricPromptFactory callbacks, assertFailsWith, Kover subset-includes gate, catalog deps, device-agnostic assertions"
-version: 1
-last_updated: "2026-05-19"
+version: 2
+last_updated: "2026-05-31"
 monitor_urls:
   - url: "https://developer.android.com/reference/androidx/biometric/BiometricPrompt"
     type: doc-page

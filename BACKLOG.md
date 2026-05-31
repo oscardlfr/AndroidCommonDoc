@@ -39,7 +39,7 @@
 
 ### Wave 40 — Wave 17 L2 hardening (BIG, ~19-32h)
 
-19 findings (5 HIGH, 13 MED, 1 LOW) from DawSync L2 session 2026-04-18. Hardens prose rules → mechanical gates (hooks, numbered-step assertions, liveness probes).
+19 findings (5 HIGH, 13 MED, 1 LOW) from L2 consumer session 2026-04-18. Hardens prose rules → mechanical gates (hooks, numbered-step assertions, liveness probes).
 
 **Source**: `project_wave17_l2_topology_findings.md`, plan at `.planning/wave17-l2-topology-findings.md`.
 **Trigger**: schedule AFTER Wave 35-39 cleared for clean context.
@@ -91,6 +91,29 @@ Unified upstream-change watcher with 3 output handlers. Replaces ad-hoc calendar
 
 **Source**: `project_wave_bl_w47_prep_20_shipped.md` (filed 2026-05-31).
 
+### Wave BL-W47-RENDER — Headless Compose render-to-PNG autofix loop (~4-8h iterative)
+
+Off-screen rendering of `@Composable` functions to PNG using `androidx.compose.ui.ImageComposeScene` (Skiko-backed). Enables ui-specialist + test-specialist autonomous visual-regression iteration without a display. Fills the "Screenshot diff (future)" gap noted in `docs/guides/compose-semantic-diff.md:126`.
+
+| Component | Description | Status |
+|-----------|-------------|--------|
+| Renderer wrapper | Thin Kotlin wrapper around `ImageComposeScene` (secondary constructor — no `@ExperimentalComposeUiApi` opt-in) | scoped |
+| L0 MCP tool `render-composable` | Invokes renderer via Gradle task, returns PNG path + dimensions | scoped |
+| ui-specialist autofix loop | render → multimodal read → detect issues → Edit → re-render → pixel diff | scoped |
+| /audit + /full-audit integration | Fold render step into existing audit commands as new dimension | follow-on |
+
+**API surface (CP-verified, source: JetBrains/compose-multiplatform-core jb-main)**:
+- Class `androidx.compose.ui.ImageComposeScene` lives in `skikoMain` — available on Desktop JVM, iOS, macOS, Linux (NOT Android, NOT Wasm/JS)
+- `render(nanoTime: Long = 0): org.jetbrains.skia.Image` — stable in practice (used by compose-hot-reload since 1.10.0+)
+- Conversion chain: `Image.toComposeImageBitmap().toAwtImage()` → `ImageIO.write(...)` PNG (Desktop JVM path)
+- Initial implementation: Desktop JVM only (AWT for PNG encoding). iOS/macOS need platform-specific encoder.
+
+**Dependencies**: CMP ≥ 1.10.0 (Skiko-backed targets), Desktop JVM toolchain. NOT integrated with `runComposeUiTest` (which is a separate test API — see `testing-compose-ui-test-v2` for that domain).
+
+**Sequencing**: post Mac migration (~2026-06-07). Re-eval after migration smoke-test confirms Desktop builds clean on macOS. Future Handler B (CI integration) when Wave-RENDER first iteration ships clean.
+
+**Source**: spike pattern observed in L2 consumer project (2026-05-31). CP Context7 + source verification confirmed API. Ingestion-request flagged for new L0 doc `compose-headless-render-imagescene.md` under `category: compose` — file as follow-on wave or fold into RENDER C1 implementation.
+
 ## Platform Shift (MacBook Pro M5 Max migration in progress)
 
 **Target**: ~2026-06-01 to ~2026-06-07 (≤1 week from filing).
@@ -117,8 +140,8 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Long-term / no fixed order
 
-- **DawSync product alignment** session — pricing drift, feature contradictions, dormant context-bridge — `project_dawsync_product_alignment.md`
-- **Future agents** — D1 guardian for DawSyncWeb, context-provider-as-internal-context7-agent — `project_future_agents.md`
+- **L2 consumer product alignment** session — pricing drift, feature contradictions, dormant context-bridge — `project_dawsync_product_alignment.md`
+- **Future agents** — D1 guardian for L2 web consumer, context-provider-as-internal-context7-agent — `project_future_agents.md`
 - **Plugin v0.2.1** — triggered-only (10 @Disabled tests pending Maven Central v0.3.0) — `project_plugin_v0.2.1_status.md`
 - **BL-W32-04** — CP zombie session start — active observation, no fix yet — `project_BL-W32-04_shipped.md`
 

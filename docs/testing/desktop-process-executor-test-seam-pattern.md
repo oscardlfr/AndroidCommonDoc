@@ -4,11 +4,11 @@ scope: [desktop, solid, injection-seams, process-executor, runtime]
 sources: [core-oauth-browser, Wave 3cd DesktopBrowserLauncher implementation]
 targets: [desktop]
 slug: desktop-process-executor-test-seam-pattern
-status: draft
+status: active
 layer: L0
 description: "SOLID injection seam pattern for Desktop modules invoking OS commands: ProcessExecutor interface + FakeProcessExecutor + osNameProvider lambda. Enables deterministic unit tests without OS side-effects."
-version: 1
-last_updated: "2026-05-19"
+version: 2
+last_updated: "2026-05-31"
 l0_refs: [biometric-android-device-test-patterns, testing-patterns-coverage]
 ---
 

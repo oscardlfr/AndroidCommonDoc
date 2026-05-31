@@ -4,11 +4,11 @@ scope: [biometric-auth, gdpr, privacy, data-minimization]
 sources: [core-auth-biometric, Wave 3c privacy-auditor verdict]
 targets: [android]
 slug: biometric-gdpr-article9-android
-status: draft
+status: active
 layer: L0
 description: "GDPR Article 9 obligations for Android biometric auth: special category data, errString sanitization pattern, log minimization, Right to Erasure boundary"
-version: 1
-last_updated: "2026-05-19"
+version: 2
+last_updated: "2026-05-31"
 monitor_urls:
   - url: "https://developer.android.com/reference/androidx/biometric/BiometricPrompt"
     type: doc-page
