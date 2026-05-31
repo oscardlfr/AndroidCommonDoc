@@ -87,7 +87,7 @@ Inserted after `architect-bash-write-gate.js` in the existing array.
 
 ### Propagation to L1/L2
 
-`.claude/hooks/` is NOT in `/sync-l0` scope. Hooks propagate via `setup/install-hooks.sh` (Linux/macOS) and `setup/Install-Hooks.ps1` (Windows). Both scripts use a static hook list — `branch-guard.js` is added explicitly to both.
+`branch-guard.js` is a `.js` hook, so its FILE is propagated by `/sync-l0` (which copies `.claude/hooks/*.js` to consumers since BL-W47-prep-8; opt out per-hook via `selection.exclude_hooks` in `l0-manifest.json`). It is also copied by `setup/install-hooks.sh` (Linux/macOS) + `setup/Install-Hooks.ps1` (Windows). However, **neither mechanism registers it in `settings.json`** — `install-hooks.sh` auto-registers only `detekt-post-write.sh` + `detekt-pre-commit.sh`, so `branch-guard.js` requires manual `settings.json` registration. See [hook-manifest](hook-manifest.md) for the full per-hook propagation + registration classification.
 
 ## Test Coverage
 
