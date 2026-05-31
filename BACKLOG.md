@@ -114,6 +114,27 @@ Off-screen rendering of `@Composable` functions to PNG using `androidx.compose.u
 
 **Source**: spike pattern observed in L2 consumer project (2026-05-31). CP Context7 + source verification confirmed API. Ingestion-request flagged for new L0 doc `compose-headless-render-imagescene.md` under `category: compose` — file as follow-on wave or fold into RENDER C1 implementation.
 
+### Wave BL-W47-HOOK-MANIFEST — Consumer Hook Manifest (doc-only, ~1h)
+
+File a canonical reference classifying all 34 L0 hooks
+(`consumer-required` / `consumer-optional` / `l0-internal`).
+Addresses the silent settings.json registration gap: even after hook files land
+on disk (`.js` via sync-l0, `.sh` via install-hooks), the consumer must still
+decide which to REGISTER in settings.json. Currently the L2 consumer project
+registers 5 of 12 consumer-required hooks.
+
+**Components**:
+| Doc | Change |
+|---|---|
+| `docs/agents/hook-manifest.md` | NEW — 34-hook classification table |
+| `docs/agents/agents-hub.md` | +1 row to Documents table |
+
+**Sequencing**: Independent of Mac Platform Shift. Doc-only; no hook code changes.
+Follow-on wave (out of scope here): extend sync-l0 to validate consumer settings.json
+against the manifest (warn-only).
+
+**Source**: BL-W47-prep-22 planning, 2026-05-31.
+
 ## Platform Shift (MacBook Pro M5 Max migration in progress)
 
 **Target**: ~2026-06-01 to ~2026-06-07 (≤1 week from filing).
