@@ -62,6 +62,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [arch-message-topic-discipline](arch-message-topic-discipline.md) | Message Topic Discipline — one SendMessage per topic; mixing topics creates ambiguous receiver state |
 | [context-provider-adoption-hooks](context-provider-adoption-hooks.md) | Context-provider adoption gate + tool-use observability layer (session-level enforcement) |
 | [knowledge-currency-gate](knowledge-currency-gate.md) | Knowledge currency gate: CP verification required before any KMP capability claim in arch dispatches |
+| [hook-manifest](hook-manifest.md) | L0 hook classification: consumer-required / consumer-optional / l0-internal for all 34 hooks |
 | [main-agent-orchestration-guide](main-agent-orchestration-guide.md) | Orchestration guide for the main agent: team topology, phase protocol, architect routing, quality gates |
 | [quality-gater-runtime-ui-validation](quality-gater-runtime-ui-validation.md) | quality-gater Step 9.5 — Runtime UI Validation: Android Layout Diff + Compose Semantic Diff dispatch |
 | [workflow-orchestration](workflow-orchestration.md) | Plan mode, agent delegation table, verification, and autonomous execution rules (extracted from CLAUDE.md prep-6) |
