@@ -4,11 +4,11 @@ scope: [kover, kmp, android, coverage, instrumented-tests]
 sources: [Wave 3c friction #113, Wave 3a AndroidKeyProvider precedent, kover-verification-dsl]
 targets: [android, desktop]
 slug: kover-kmp-source-set-coverage-scope
-status: draft
+status: active
 layer: L0
 description: "Kover KMP platform scope: instruments JVM compilation variant only. androidMain-only classes cannot be measured by koverVerify. Required exclude pattern + local-only connectedAndroidTest verification strategy."
-version: 1
-last_updated: "2026-05-19"
+version: 2
+last_updated: "2026-05-31"
 monitor_urls:
   - url: "https://kotlin.github.io/kotlinx-kover/"
     type: doc-page

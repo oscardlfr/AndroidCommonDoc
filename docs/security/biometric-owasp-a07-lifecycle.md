@@ -4,11 +4,11 @@ scope: [biometric-auth, owasp-a07, masvs-auth, session-management]
 sources: [androidx.biometric, core-auth-biometric]
 targets: [android]
 slug: biometric-owasp-a07-lifecycle
-status: draft
+status: active
 layer: L0
 description: "OWASP A07 (Identification & Authentication Failures) biometric lifecycle rules: session binding, key invalidation on enrollment change, re-auth triggers, MASVS-AUTH-1/2 coverage"
-version: 1
-last_updated: "2026-05-19"
+version: 2
+last_updated: "2026-05-31"
 monitor_urls:
   - url: "https://developer.android.com/reference/androidx/biometric/BiometricManager"
     type: doc-page

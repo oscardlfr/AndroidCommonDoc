@@ -4,11 +4,11 @@ scope: [kotlin-native, coroutines, apple-targets, commonMain]
 sources: [Wave 3c friction #107, K/N compiler enforcement]
 targets: [ios, macos, iosSimulator]
 slug: kotlin-native-throws-suspend-pattern
-status: draft
+status: active
 layer: L0
 description: "Kotlin/Native compiler constraint: @Throws on suspend fun MUST include CancellationException. Applies to all Apple targets (iosX64, iosArm64, iosSimulatorArm64, macosArm64). Canonical annotation pattern + import path + anti-pattern + exit-criteria mandate."
-version: 1
-last_updated: "2026-05-19"
+version: 2
+last_updated: "2026-05-31"
 monitor_urls:
   - url: "https://kotlinlang.org/docs/native-objc-interop.html"
     type: doc-page
