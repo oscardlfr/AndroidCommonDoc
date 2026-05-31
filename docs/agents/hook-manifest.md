@@ -94,4 +94,4 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 - Knowledge currency gate: [knowledge-currency-gate](knowledge-currency-gate.md)
 - Hub: [agents-hub](agents-hub.md)
 
-**Follow-on (out of scope this wave)**: `docs/agents/branch-guard.md:88-90` contains a stale claim that `.claude/hooks/` is NOT in `/sync-l0` scope — stale since BL-W47-prep-8. Requires a separate wave.
+**Note**: `docs/agents/branch-guard.md`'s propagation section was corrected to match this manifest (it previously claimed `.claude/hooks/` is NOT in `/sync-l0` scope — stale since BL-W47-prep-8).
