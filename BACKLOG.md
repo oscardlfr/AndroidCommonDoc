@@ -1,6 +1,6 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-05-04 (post BL-W37)
+> **Last updated**: 2026-05-31 (post BL-W47-prep-19)
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
@@ -64,6 +64,57 @@
 **Trigger**: review when `/metrics` data shows measurable pattern frequency.
 **Source**: `project_wave18_backlog.md`.
 
+### Wave BL-W47 — Adaptive Harness Redesign (meta plan, 5 PRs)
+
+Core goal of all BL-W47-prep-X waves. Redesigns the wave harness for resilience, mechanical enforcement, and self-improvement. Full plan at `.planning/BL-W47-PLAN.md`.
+
+**Sub-findings from prep-19** (deferred):
+- **SF-prep-19-A** (LOW) — Backslash heredoc Windows path gap: `cat <<'EOF' > C:\...` mangles path in MSYS Bash. Filed by arch-testing. **Obsoleted by Mac migration ~2026-06 → re-eval post-migration.**
+- **SF-prep-19-B** (LOW) — TDD bundling protocol: QG WARN in prep-19 C2 (bats+fix bundled in one commit). Future waves may tighten protocol; defer to post-BL-W47 harness review.
+
+**Source**: `.planning/BL-W47-PLAN.md`, `project_wave_bl_w47_prep_19_shipped.md`.
+
+### Wave BL-W47-WATCHER — Release-trigger watcher framework (~4-8h iterative)
+
+Unified upstream-change watcher with 3 output handlers. Replaces ad-hoc calendar items (e.g., `BL-W36-check`) and manual reminders for upstream releases / doc drift.
+
+| Component | Description | Status |
+|-----------|-------------|--------|
+| Watcher core | Registry of targets + `/schedule` cron + diff vs last snapshot | scoped |
+| Handler A | Version trigger — new non-prerelease tag → `/note` + backlog entry + ping for upgrade wave | first iteration |
+| Handler B | Doc ingest — new upstream doc URL → existing Ingestion Loop (CP flag → user approval → `ingest-content`) | follow-on |
+| Handler C | Drift detection — ingested doc upstream diverges from `last_verified` frontmatter → revalidate finding | follow-on |
+
+**Dependencies**: `/schedule` user-trigger semantics (billable, not auto-launched by Claude), `ingest-content` MCP, `monitor-sources` MCP, `check-outdated` MCP, `validate_upstream` frontmatter.
+
+**Sequencing**: NOT a blocker for BL-W47 main harness wave — independent + parallel. Recommended start AFTER Mac migration completes (~2026-06-07) so watcher targets + Handler B integration validate on the stable post-migration shell environment.
+
+**Source**: `project_wave_bl_w47_prep_20_shipped.md` (filed 2026-05-31).
+
+## Platform Shift (MacBook Pro M5 Max migration in progress)
+
+**Target**: ~2026-06-01 to ~2026-06-07 (≤1 week from filing).
+**Trigger**: Hardware migration off Windows + MSYS/Git-Bash environment to native macOS.
+
+### Items that DIE with migration (no follow-up needed)
+
+- **SSL/PKIX Windows-ROOT trust store workaround** — JVM trust chain mismatch resolved by `-Djavax.net.ssl.trustStoreType=Windows-ROOT` flag. Irrelevant on Mac (default keychain trust).
+- **Backslash heredoc Windows path gap** (`SF-prep-19-A`) — MSYS Bash mangles `cat <<'EOF' > C:\Users\...\verdict.md`. Native macOS bash/zsh: no such issue.
+- **MSYS path quirks** — `/c/` prefixes, cygdrive translation, `/tmp` vs `C:\Users\...\Temp` divergence. All gone on Mac.
+- **.ps1 hooks** — never invoked outside PowerShell; prune from settings.json post-migration.
+
+### Items needing RE-EVAL on Mac (assess post-migration)
+
+- Shell defaults — zsh is macOS default; verify all bats + shell hooks work under zsh quirks.
+- Gradle truststore — likely zero-config on Mac (keychain trust); confirm by attempting one full build without flags.
+- bats runner — confirm `scripts/tests/*.bats` execution under macOS bats-core (Homebrew install).
+- Xcode/iOS targets — newly available. L2 consumer projects can finally compile iOS/macOS targets. Schedule smoke-test wave once core toolchain verified.
+- `~/.gradle/gradle.properties` — re-create empty on Mac (don't copy Windows-specific flags).
+
+### Migration playbook reference
+
+See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration plan: fresh install + selective restore of `~/.claude/` user-level config + project clones + re-auth all credentials (no token copy).
+
 ## Long-term / no fixed order
 
 - **DawSync product alignment** session — pricing drift, feature contradictions, dormant context-bridge — `project_dawsync_product_alignment.md`
@@ -73,12 +124,11 @@
 
 ## Shipped (recent)
 
-- **BL-W37** (2026-05-04) — Cross-repo sync wave, 4 PRs: L0 #124 (BL-W36-01 hook regex prefix-style filename), L1 #41 (BL-W34-A logger writer/reader desync atomic fix — arch-platform caught critical desync that reader-only patch would have made worse), L1 #42 (BL-W34-B inline shell-tests CI job), L0 #125 (BL-W34-E observability — Option D over nonces theater + re-enable 2 SKIPPED test files). BL-W37-01 (manifest drift) resolved inline in PR3. Filed BL-W37-02/03/04 to Wave 39 — `project_wave_bl_w37_cross_repo_sync_shipped.md`
-- **BL-W36** (2026-05-04) — BL-W34 deferred bundle, 4 PRs (#119-#122). PR1 BL-W34-G closed as RESOLVED by PR #116 Amendment C (no PR needed). Filed BL-W36-01..04 findings — `project_wave_bl_w36_bl_w34_deferred_shipped.md`
-- **BL-W35** (2026-05-04) — L0 dogfood topology hardening, 6 PRs (#112-#117) addressing 7 bugs + 1 incident — `project_wave_bl_w35_l0_dogfood_topology_shipped.md`
-- **BL-W34** (2026-05-03) — L1 security prep, 3 PRs (#107 / #108 / #109) — `project_wave_bl_w34_l1_security_prep_shipped.md`
-- **BL-W33** (2026-05-02) — L1 reports triage, 5 PRs (#101-#105) — `project_wave_bl_w33_shipped.md`
-- **BL-W32-06e** (2026-05-02) — Script dedup PR #100 — `project_BL-W32-06e_shipped.md`
+- **BL-W47-prep-19** (2026-05-27) — Hook hardening: F1 kickoff-scope validator (WARN-only hook + 4 bats) + F2 $VAR redirect exemption fix (resolveShellVar helper). 126/126 bats. F3 NOOP — `project_wave_bl_w47_prep_19_shipped.md`
+- **BL-W47-prep-18** (2026-05-27) — KotlinConf'26 LOW tier + trilogy complete: Wasm Beta, SPM Experimental, kdoc.jar, VS Code LSP, kmp-test-runner v0.10.1. PR #197 @ `7e8f3a1`. 22/22 CI PASS — `project_wave_bl_w47_prep_18_shipped.md`
+- **BL-W47-prep-17** (2026-05-26) — KotlinConf'26 MEDIUM tier: 7 L0 doc gaps (context params Stable, stdlib security, Amper footgun, Swift Export Alpha, K/N CMS GC, R8 coroutine perf, klibs.io). PR #196 @ `06e82be`. 10 commits — `project_wave_bl_w47_prep_17_shipped.md`
+- **BL-W47-prep-16** (2026-05-25) — KotlinConf'26 HIGH tier: CMP 1.11 test API v2 (package change), Kotlin 2.4 backing fields (7 files), AGP 9 mandate sub-doc, RC→GA stale fix. PR #195 @ `7136709` — `project_wave_bl_w47_prep_16_shipped.md`
+- **BL-W47-prep-15** (2026-05-25) — MCP toolchain audit: check-outdated PARTIAL fix, check-version-sync NO_CONSUMERS_CONFIGURED, 47-tool audit doc, atomicity split recovery. PR #194 @ `ab771dc`. 21/21 CI PASS — `project_wave_bl_w47_prep_15_shipped.md`
 
 For full wave history: `git log` + memory `project_*shipped.md` files.
 
