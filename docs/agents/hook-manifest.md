@@ -16,6 +16,8 @@ category: agents
 
 Reference classification for all 34 hooks in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
 
+> **CI-enforced** — the `hook-manifest-coverage` job in `.github/workflows/drift-audit.yml` fails the build if the hook table below drifts from `.claude/hooks/` (a missing, phantom, or duplicated hook). The table is the source of truth for coverage.
+
 ## Three-Tier Status
 
 | Status | Meaning |

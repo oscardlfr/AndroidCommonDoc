@@ -403,6 +403,38 @@ jobs:
           fi
           exit $FAIL
 
+  hook-manifest-coverage:
+    name: hook-manifest covers all .claude/hooks/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Assert hook-manifest.md lists every hook exactly once
+        run: |
+          set +e
+          MANIFEST="docs/agents/hook-manifest.md"
+          # Hook names from TABLE ROWS only (first column, backtick-wrapped, .js/.sh) —
+          # excludes prose mentions (l0-manifest.json, settings.json, …) and the legend table.
+          MAN_RAW=$(grep -oE '^\| `[a-z0-9._-]+\.(js|sh)`' "$MANIFEST" | sed -E 's/^\| `//; s/`$//')
+          MAN_UNIQ=$(printf '%s\n' "$MAN_RAW" | sort -u)
+          DISK=$(ls -1 .claude/hooks/ | sort)
+          RAW_N=$(printf '%s\n' "$MAN_RAW" | grep -c . || true)
+          UNIQ_N=$(printf '%s\n' "$MAN_UNIQ" | grep -c . || true)
+          DISK_N=$(printf '%s\n' "$DISK" | grep -c . || true)
+          echo "manifest rows: raw=$RAW_N unique=$UNIQ_N | disk hooks=$DISK_N"
+          FAIL=0
+          if [ "$RAW_N" -ne "$UNIQ_N" ]; then
+            echo "❌ duplicate hook rows in manifest (raw=$RAW_N unique=$UNIQ_N)"; FAIL=1
+          fi
+          MISSING=$(comm -23 <(printf '%s\n' "$DISK") <(printf '%s\n' "$MAN_UNIQ"))
+          PHANTOM=$(comm -13 <(printf '%s\n' "$DISK") <(printf '%s\n' "$MAN_UNIQ"))
+          if [ -n "$MISSING" ]; then echo "❌ hooks missing from manifest:"; echo "$MISSING"; FAIL=1; fi
+          if [ -n "$PHANTOM" ]; then echo "❌ phantom hooks in manifest (no such file):"; echo "$PHANTOM"; FAIL=1; fi
+          if [ "$FAIL" -eq 0 ]; then
+            echo "✅ hook-manifest.md covers all $DISK_N hooks (no missing / phantom / dup)"
+          fi
+          exit $FAIL
+
   topology-gate:
     name: Wave Topology Gate (WARN)
     runs-on: ubuntu-latest
