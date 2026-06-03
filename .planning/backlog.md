@@ -6,16 +6,6 @@
 
 ---
 
-## ✅ Shipped (recent)
-
-- **Kotlin 2.4.0 GA** (2026-06-03) — Upgrade L0 to Kotlin 2.4.0 GA. Manifest pins (kotlin→2.4.0 ×3, KSP→2.3.9 decoupled + coupled_versions removed), build-logic toolchain 2.3.0→2.4.0 (build-verified clean), 3 GA claim corrections (Wasm Component Model Experimental-in-GA, context-args nuance, K/N GC flag), new docs/stdlib/ domain (UUID/sorted-order/value-class JS-TS export) + collection literals + Gradle 9.5 compat. 13 commits. — `project_wave_kotlin_2_4_0_ga_shipped.md`
-- **BL-W47-prep-22** (2026-05-31) — Consumer hook-manifest: 34 hooks 12/10/12 + hub + BACKLOG; 100% coverage now CI-enforced (drift-audit hook-manifest-coverage job). PRs #201/#202/#203.
-- **BL-W47-prep-21** (2026-05-31) — BL-W47-RENDER filed + 6 Wave-3cd docs promoted draft→active + F3/F4/F5 NOOPs. PR #200.
-- **BL-W47-prep-20** (2026-05-31) — BACKLOG.md refresh (27-day stale): Shipped prune + BL-W47-WATCHER + BL-W47 main + sub-findings + Mac Platform Shift section. PR #199.
-- **BL-W47-prep-19** (2026-05-27) — F1 kickoff-scope validator hook + F2 $VAR redirect exemption fix + F3 NOOP. 126/126 bats. PR #198.
-
----
-
 ## 🚧 OPEN BACKLOG (truly pending — post-2026-05-10 audit)
 
 After 2-pass empirical drift audit on 2026-05-10, **only ~10 items genuinely pending fix**. The rest are DRIFT-CLOSED (already shipped, see audit below) or OBSOLETE.
