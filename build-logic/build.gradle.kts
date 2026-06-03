@@ -1,6 +1,6 @@
 plugins {
     `java-gradle-plugin`
-    kotlin("jvm") version "2.3.0"
+    kotlin("jvm") version "2.4.0"
 }
 
 // Repositories: Maven Central only — no Gradle Plugin Portal required.
@@ -19,7 +19,7 @@ dependencies {
     // Kotlin Gradle plugin — required because the Detekt plugin depends on
     // KotlinBasePlugin at runtime. Without this the Gradle daemon fails with
     // "KotlinBasePlugin not found" when applying dev.detekt.
-    implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0")
+    implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.0")
 }
 
 gradlePlugin {

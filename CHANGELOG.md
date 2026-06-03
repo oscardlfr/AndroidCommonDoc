@@ -5,6 +5,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (session-kotlin240 — Kotlin 2.4.0 GA upgrade)
+
+- **Kotlin 2.4.0 GA** (`versions-manifest.json`): `versions.kotlin`, `profiles.kmp.kotlin`, `profiles.android-only.kotlin` bumped from 2.3.20 → 2.4.0. `updated` field refreshed to 2026-06-03.
+- **KSP 2.3.9 (decoupled)** (`versions-manifest.json`): `versions.ksp` updated from coupled format `2.3.20-2.0.1` → plain SemVer `2.3.9`. `coupled_versions.ksp` entry deleted — KSP decoupled from Kotlin since KSP 2.3.0 (2025-10). `version_notes.ksp` rewritten to warn against the old `<kotlin-version>-<ksp-release>` coupled format.
+- **build-logic toolchain** (`build-logic/build.gradle.kts`): `kotlin("jvm")` and `kotlin-gradle-plugin` bumped 2.3.0 → 2.4.0, closing a pre-existing 2-minor skew vs the manifest. Build-verified by arch-integration.
+- **Version stamps** (`docs/compose/compose-resources-patterns.md`, `docs/error-handling/error-handling-patterns.md`, `docs/gradle/gradle-patterns.md`, `docs/gradle/gradle-patterns-android-only.md`, `docs/architecture/kmp-architecture.md`): "Last Validated" dates and Kotlin version references updated to June 2026 / Kotlin 2.4.0 GA. `kmp-architecture.md` RC→GA stamp flip (prep-16 residual).
+- **Dokka compat matrix** (`README.md`): Two new rows added for Kotlin 2.4.0 (KMP + Android-only). Historical 2.3.20 rows preserved.
+
+### Fixed (session-kotlin240 — Kotlin 2.4 GA claim corrections)
+
+- **Wasm Component Model** (`docs/architecture/kmp-features-2026.md:32`): Corrected false "RC EAP only" claim. Wasm Component Model IS in Kotlin 2.4.0 GA as **Experimental** — enables Kotlin/Wasm beyond the browser (FaaS/serverless). Severity: HIGH (misleading L1/L2 consumers).
+- **Context parameters nuance** (`docs/architecture/kmp-features-2026.md:84`): Added exception — *explicit context arguments* (passing named context args at call sites) remain **Experimental** in 2.4, requiring `-Xexplicit-context-arguments` opt-in. The context parameters feature itself is Stable.
+- **K/N GC rollback flag** (`docs/architecture/kmp-features-2026.md:111`): `kotlin.native.gc=pmcs` → `kotlin.native.binary.gc=pmcs`. Wrong property name caused silent rollback failures for any L2 team copying it.
+
+### Added (session-kotlin240 — Kotlin 2.4 feature documentation)
+
+- **Collection literals** (`docs/architecture/kmp-features-2026.md`): New section — Experimental in Kotlin 2.4.0 GA, opt in with `-Xcollection-literals`; bracket syntax `val primes: List<Int> = [2, 3, 5, 7, 11]`; custom type support via `operator fun of`.
+- **stdlib domain** (`docs/stdlib/`): New hub + sub-doc. Three Stable 2.4.0 stdlib additions: UUID API (`kotlin.uuid.Uuid` — common, replaces `expect/actual` boilerplate; V4/V7 generation Experimental); sorted-order checks (`isSorted`, `isSortedDescending`, `isSortedWith`, `isSortedBy`); value-class JS/TS export (`@JsExport` on `@JvmInline` now emits proper TypeScript wrapper type).
+- **Gradle 9.5.0 compat** (`docs/gradle/gradle-patterns.md`): Kotlin 2.4.0 supports Gradle 7.6.3–9.5.0 (CP-verified). L0 wrappers at Gradle 9.1.0 — within range, no bump required.
+- **README + CLAUDE.md**: stdlib domain registered (hub table row, tree entry); domain hubs 16→17, sub-docs 79→81. Verified by readme-audit.
+
 ### Added (BL-W47-prep-18 — KotlinConf'26 LOW tier doc closure + trilogy complete)
 
 - **F1 — Wasm KMP tier Alpha→Beta** (docs/architecture/kmp-features-2026.md, kmp-supported-platforms-reference.md): KMP Wasm tier promoted to Beta per kotlinlang.org/docs/wasm-overview.html (user-approved 2026-05-26). CMP-on-Wasm remains Alpha. Incremental compilation Stable in Kotlin 2.4 (default-on, orthogonal to platform tier). WebAssembly Component Model available in Kotlin 2.4.0-RC EAP only (not GA). Myths section updated: "Wasm is fully Beta — WRONG. KMP Wasm is Beta; Compose MP on Wasm remains Alpha."

@@ -50,6 +50,11 @@ Standard Gradle patterns for Kotlin Multiplatform projects. A shared version cat
 > - L0 will re-evaluate if/when Amper gains composite build support
 > - Reference: https://blog.jetbrains.com/amper/2026/03/amper-0-10/
 
+> **Kotlin 2.4.0 + Gradle Compatibility**
+> - Kotlin 2.4.0 supports **Gradle 7.6.3 through 9.5.0** (CP-verified, 2026-06-03)
+> - All three L0 wrappers (`build-logic/`, `detekt-rules/`, `konsist-tests/`) are at Gradle 9.1.0 — within the supported range; no wrapper bump required for this wave
+> - Source: https://kotlinlang.org/docs/whatsnew24.html
+
 ---
 
 ## Sub-documents
@@ -84,4 +89,4 @@ This document is split into focused sub-docs for token-efficient loading:
 ---
 
 **Status**: Active -- All KMP projects must follow these Gradle patterns.
-**Last Validated**: April 2026 with Gradle 8.x / AGP 9.0 / Kotlin 2.3.20
+**Last Validated**: June 2026 with Gradle 8.x / AGP 9.0 / Kotlin 2.4.0
