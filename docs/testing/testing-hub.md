@@ -87,6 +87,7 @@ Standard patterns for testing Kotlin Multiplatform projects.
 | [desktop-process-executor-test-seam-pattern](desktop-process-executor-test-seam-pattern.md) | SOLID injection seam for Desktop OS commands — ProcessExecutor + FakeProcessExecutor + osNameProvider lambda |
 | [kotlin-native-throws-suspend-pattern](kotlin-native-throws-suspend-pattern.md) | K/N compiler constraint: @Throws on suspend fun must include CancellationException; backtick name restrictions |
 | [testing-compose-ui-test-v2](testing-compose-ui-test-v2.md) | **L2 consumer projects: migrate `runComposeUiTest` to `.v2` package (L1 NO-OP).** CMP 1.11 package change, StandardTestDispatcher default, advanceUntilIdle() |
+| [testing-patterns-benchmarks-rebaseline](testing-patterns-benchmarks-rebaseline.md) | Benchmark re-baseline checklist after Kotlin/Native CMS GC or R8 upgrade — silent perf shift alert |
 
 ## Key Rules
 
