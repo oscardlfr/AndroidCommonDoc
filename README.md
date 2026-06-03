@@ -501,6 +501,8 @@ Gradle plugins and utilities shipped in `tools/` — installable independently f
 
 | Dokka | Kotlin | AGP | JDK | Status |
 |-------|--------|-----|-----|--------|
+| 2.2.0 | 2.4.0 | 9.0.0+ (KMP) | 17+ | Supported |
+| 2.2.0 | 2.4.0 | 8.x (Android-only) | 17+ | Supported |
 | 2.2.0 | 2.3.20 | 9.0.0+ (KMP) | 17+ | Supported |
 | 2.2.0 | 2.3.20 | 8.x (Android-only) | 17+ | Supported |
 | 2.1.x | any | any | 17+ | Unsupported |
