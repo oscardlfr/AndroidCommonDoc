@@ -8,7 +8,8 @@
 # BL-W32-13: compound module scopes accepted when base token is in valid_scopes.
 
 setup() {
-  VALID_SCOPES=$(jq -r '.valid_scopes | join(",")' .commitlintrc.json)
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  VALID_SCOPES=$(jq -r '.valid_scopes | join(",")' "$REPO_ROOT/.commitlintrc.json")
   SCOPE_LIST=$(echo "$VALID_SCOPES" | tr ',' '|')
   VALID_TYPES="feat,fix,docs,style,refactor,perf,test,build,ci,chore,revert"
   TYPE_PATTERN=$(echo "$VALID_TYPES" | tr ',' '|')
