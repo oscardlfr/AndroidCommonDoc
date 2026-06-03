@@ -1,6 +1,6 @@
 {
   "description": "Canonical version manifest for freshness tracking. Single source of truth for dependency versions across L0/L1/L2. monitor_urls here are checked by /monitor-docs independently of doc frontmatters.",
-  "updated": "2026-03-18",
+  "updated": "2026-06-03",
   "monitor_urls": [
     {
       "url": "https://github.com/JetBrains/kotlin/releases",
@@ -39,29 +39,27 @@
       "tier": 1
     }
   ],
-  "coupled_versions": {
-    "ksp": ["kotlin"]
-  },
+  "coupled_versions": {},
   "profiles": {
     "kmp": {
       "description": "Kotlin Multiplatform projects (Android + Desktop + iOS + macOS). Requires AGP 9.0+.",
       "agp": "9.0.0",
-      "kotlin": "2.3.20",
+      "kotlin": "2.4.0",
       "compose-multiplatform": "1.10.0",
       "compose-gradle-plugin": "1.10.0"
     },
     "android-only": {
       "description": "Android-only projects using com.android.library. Compatible with AGP 8.x — no migration required.",
       "agp": "8.9.1",
-      "kotlin": "2.3.20",
+      "kotlin": "2.4.0",
       "agp_note": "AGP 8.x uses com.android.library plugin and android {} DSL block. flat-module-names rule does NOT apply (AGP 9+ bug only)."
     }
   },
   "versions": {
-    "kotlin": "2.3.20",
+    "kotlin": "2.4.0",
     "agp": "9.0.0",
     "agp-android-only": "8.9.1",
-    "ksp": "2.3.20-2.0.1",
+    "ksp": "2.3.9",
     "compose-multiplatform": "1.10.0",
     "koin": "4.1.1",
     "kotlinx-coroutines": "1.10.2",
@@ -91,7 +89,7 @@
   "version_notes": {
     "agp": "KMP projects only. Android-only projects use agp-android-only (8.x) — do not force migration to 9.0.",
     "agp-android-only": "com.android.library projects on AGP 8.x. Compatible with KMP L0 patterns except flat-module-names and KmpLibraryConventionPlugin — use AndroidLibraryConventionPlugin instead.",
-    "ksp": "Kotlin Symbol Processing. Version format: <kotlin-version>-<ksp-release>. Must match kotlin version exactly — always update together. Listed in coupled_versions.",
+    "ksp": "Kotlin Symbol Processing (KSP2). As of KSP 2.3.0 (2025-10), the version is DECOUPLED from Kotlin — plain SemVer (X.Y.Z). Do NOT assume a <kotlin-version>-<ksp-release> coupling. Check https://github.com/google/ksp/releases for the latest KSP stable that supports your Kotlin version.",
     "compose-multiplatform": "JetBrains Compose Multiplatform plugin (org.jetbrains.compose). KMP only.",
     "compose-gradle-plugin": "Google Compose Compiler Gradle plugin (org.jetbrains.kotlin.plugin.compose). In KMP, the Kotlin plugin version drives the compiler; this entry tracks the Compose compiler integration plugin version.",
     "turbine": "Testing library for Kotlin Flows (app.cash.turbine). Not in KMP convention plugin — add to test dependencies manually.",
