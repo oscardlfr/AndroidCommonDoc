@@ -48,7 +48,7 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 | BL-W47-prep | 2026-05-11 | [#180](https://github.com/oscardlfr/AndroidCommonDoc/pull/180) | Topology cleanups: planner 1.11.0, AMEND protocol, 4 topology gaps closed. |
 | Wave F | 2026-05-11 | [#179](https://github.com/oscardlfr/AndroidCommonDoc/pull/179) | Post-Wave-E audit cleanup + script v0.9.1 parity. |
 | Wave E | 2026-05-10 | [#178](https://github.com/oscardlfr/AndroidCommonDoc/pull/178) | L0 cleanup: scrub + atomization + line-anchor vitest refactor. 3 BL closures (BL-W30-04/-05, line-anchor). |
-| Wave D | 2026-05-10 | [#177](https://github.com/oscardlfr/AndroidCommonDoc/pull/177) | Quick wins: atomization pass 2, CP integration W17#11/#17, test gap. 30L diet via 3 sub-docs. |
+| Wave D | 2026-05-10 | [#177](https://github.com/oscardlfr/AndroidCommonDoc/pull/177) | Quick wins: atomization pass 2, CP integration W17#11/#17, test gap. 30L diet via 3 extracted sub-docs. |
 | Wave C | 2026-05-10 | [#176](https://github.com/oscardlfr/AndroidCommonDoc/pull/176) | Doc cleanup + private-name scrub. 3 BL closures (BL-W32-11, BL-W30-02/03). |
 | Wave B | 2026-05-10 | [#173](https://github.com/oscardlfr/AndroidCommonDoc/pull/173)–[#174](https://github.com/oscardlfr/AndroidCommonDoc/pull/174) | Arch-platform hardening bundle. 5 BL closures (W31.7-09/ktr-01/02/03/adapter-bug). 3 new sub-docs. |
 | Wave B-bis | 2026-05-10 | [#175](https://github.com/oscardlfr/AndroidCommonDoc/pull/175) | Topology gaps closed (G1+G2+G3). plan-md-write-gate hook. |
@@ -1012,6 +1012,8 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `validate-manifest` | Validate l0-manifest.json schema and cross-references |
 | `validate-manifest-abi` | Classify manifest changes as BREAKING/ADDITIVE/NEUTRAL |
 | `verdict-pre-execute-check` | Pre-execute checklist validation for architect verdicts |
+| `agentskills-validate` | Local parity check for agentskills-pilot CI step — validates skills ref for every `skills/*/` dir (WARN-only, Bash-only) |
+| `list-valid-commit-tokens` | Lists valid commit types and scopes from `.github/workflows/reusable-commit-lint.yml` (Bash-only) |
 
 ### Shared Libraries
 
@@ -1026,7 +1028,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-16 domain hubs, 79 sub-docs, 25 guides, 52 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+16 domain hubs, 95 sub-docs, 28 guides, 52 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1156,7 +1158,7 @@ AndroidCommonDoc/
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
 |   +-- ps1/                # PowerShell (Windows) -- 39 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 44 scripts
+|   +-- sh/                 # Bash (macOS/Linux) -- 46 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite
@@ -1209,7 +1211,7 @@ AndroidCommonDoc/
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
 |   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
-+-- docs/                   # 16 domain hubs, 79 sub-docs, 25 guides, 52 agent workflow docs
++-- docs/                   # 16 domain hubs, 95 sub-docs, 28 guides, 52 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- offline-first/ +-- resources/
