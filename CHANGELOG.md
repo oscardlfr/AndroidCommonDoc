@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (feature/commit-scope-git-hook — universal commit-scope enforcement)
+
+- **git `commit-msg` hook** (`scripts/sh/commit-msg-hook.sh`, installed via `install-git-hooks.sh`): enforces Conventional Commits format + scope whitelist universally — fires for every committer in the clone, closing the team-peer bypass in `commit-scope-validation-gate.js` (PreToolUse hook only covers the main orchestrator). Single source of truth: `.commitlintrc.json` `valid_scopes`. Compound scopes (`core-error-sdk`) pass when the first segment (`core`) is valid — matches PreToolUse hook semantics exactly. Fail-open when `.commitlintrc.json` is missing or malformed.
+- **Three-layer commit-scope enforcement documented** (`docs/guides/pre-commit-hooks.md`): new section covering PreToolUse gate (orchestrator-only, fast feedback) → git `commit-msg` hook (authoritative, universal) → CI `reusable-commit-lint.yml` (PR backstop), including the known limitation of the PreToolUse hook.
+- **Hook manifest note** (`docs/agents/hook-manifest.md`): "Git-Layer Hooks" section added — clearly distinguishes git hooks from `.claude/hooks/` Claude Code hooks; confirms `hook-manifest-coverage` CI guard counts only `.claude/hooks/` (prep-22 unaffected).
+
 ### Added (session-kotlin240 — Kotlin 2.4.0 GA upgrade)
 
 - **Kotlin 2.4.0 GA** (`versions-manifest.json`): `versions.kotlin`, `profiles.kmp.kotlin`, `profiles.android-only.kotlin` bumped from 2.3.20 → 2.4.0. `updated` field refreshed to 2026-06-03.

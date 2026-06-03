@@ -88,12 +88,26 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 | `registry-pre-commit.sh` | l0-internal | Auto-rehashes registry when L0 agent template files are staged |
 | `quality-gate-pre-commit.sh` | l0-internal | Pass-through stub only; stamp check moved to pre-push in BL-W47-prep-3 F4 |
 
+## Git-Layer Hooks (NOT in this manifest)
+
+This manifest covers only `.claude/hooks/` (Claude Code hooks). The repository also ships **git hooks** in `scripts/sh/`, installed via `install-git-hooks.sh`. These are separate:
+
+| Git Hook | Script | What it enforces |
+|----------|--------|-----------------|
+| `pre-commit` | `scripts/sh/pre-commit-hook.sh` | Registry hash freshness + manifest drift |
+| `commit-msg` | `scripts/sh/commit-msg-hook.sh` | Conventional Commits format + scope whitelist (UNIVERSAL — fires for all committers, closes the team-peer bypass in `commit-scope-validation-gate.js`) |
+
+> **Why two scope gates?** `commit-scope-validation-gate.js` (PreToolUse) only intercepts the main orchestrator's commits. `commit-msg-hook.sh` is authoritative — it fires for every committer in the clone via git's native hook mechanism. See [pre-commit-hooks](../guides/pre-commit-hooks.md#three-layer-commit-scope-enforcement) for the full three-layer table.
+
+The `hook-manifest-coverage` CI guard (prep-22) counts only `.claude/hooks/` entries — git hooks are excluded and do not affect coverage counts.
+
 ## Cross-References
 
 - `.js` propagation mechanism: `skills/sync-l0/SKILL.md:140-160`
 - CP adoption hooks (context-provider-gate, tool-use-logger): [context-provider-adoption-hooks](context-provider-adoption-hooks.md)
 - Branch protection hook: [branch-guard](branch-guard.md)
 - Knowledge currency gate: [knowledge-currency-gate](knowledge-currency-gate.md)
+- Commit-scope + git-layer hooks: [pre-commit-hooks](../guides/pre-commit-hooks.md)
 - Hub: [agents-hub](agents-hub.md)
 
 **Note**: `docs/agents/branch-guard.md`'s propagation section was corrected to match this manifest (it previously claimed `.claude/hooks/` is NOT in `/sync-l0` scope — stale since BL-W47-prep-8).
