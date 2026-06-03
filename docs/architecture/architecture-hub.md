@@ -49,6 +49,7 @@ KMP source set organization, module structure, and architecture enforcement patt
 | [kmp-supported-platforms-reference](kmp-supported-platforms-reference.md) | KMP + Compose MP platform stability matrix (2026) — citable reference |
 | [kotlinx-io-reference](kotlinx-io-reference.md) | kotlinx-io Buffer/Source/Sink API reference — citable source for kmp-features-2026 |
 | [kotlinx-coroutines-reference](kotlinx-coroutines-reference.md) | kotlinx.coroutines builders, Flow, Dispatchers reference — citable source for kmp-features-2026 |
+| [kmp-project-structure-agp9](kmp-project-structure-agp9.md) | AGP 9 project structure: composeApp → shared+androidApp+desktopApp split, module boundary rule, migration steps |
 
 ## Key Rules
 

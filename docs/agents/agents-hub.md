@@ -82,8 +82,8 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 
 ## Rules
 
-See [agent-core-rules](agent-core-rules.md) for universal behavioral rules. Key constraints:
+See agent-core-rules.md for universal behavioral rules. Key constraints:
 - Agent Roster in CLAUDE.md is mandatory — without it, Claude Code uses generic agents
 - Script-first: if a regex can do it, don't make an agent for it
 - team-lead orchestrates, NEVER codes — assigns to devs, launches architect gates
-- **MCP tools must be declared in `tools:` frontmatter** to be callable (Wave 25 fix). 20 core agents wired; see [agent-core-rules](agent-core-rules.md) §8.
+- **MCP tools must be declared in `tools:` frontmatter** to be callable (Wave 25 fix). 20 core agents wired; see agent-core-rules.md §8.

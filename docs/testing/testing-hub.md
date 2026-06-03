@@ -64,7 +64,7 @@ Standard patterns for testing Kotlin Multiplatform projects.
 
 ## CLI
 
-> Use `kmp-test <subcommand>` for all test execution — NEVER invoke Gradle test tasks directly. See [cli-hub.md](cli-hub.md) for the full platform matrix and subcommand reference.
+> Use `kmp-test <subcommand>` for all test execution — NEVER invoke Gradle test tasks directly. See [cli-hub.md](cli-hub.md) for platform matrix and subcommand reference.
 
 | Document | Description |
 |----------|-------------|
@@ -87,14 +87,11 @@ Standard patterns for testing Kotlin Multiplatform projects.
 | [desktop-process-executor-test-seam-pattern](desktop-process-executor-test-seam-pattern.md) | SOLID injection seam for Desktop OS commands — ProcessExecutor + FakeProcessExecutor + osNameProvider lambda |
 | [kotlin-native-throws-suspend-pattern](kotlin-native-throws-suspend-pattern.md) | K/N compiler constraint: @Throws on suspend fun must include CancellationException; backtick name restrictions |
 | [testing-compose-ui-test-v2](testing-compose-ui-test-v2.md) | **L2 consumer projects: migrate `runComposeUiTest` to `.v2` package (L1 NO-OP).** CMP 1.11 package change, StandardTestDispatcher default, advanceUntilIdle() |
+| [testing-patterns-benchmarks-rebaseline](testing-patterns-benchmarks-rebaseline.md) | Benchmark re-baseline checklist after Kotlin/Native CMS GC or R8 upgrade — silent perf shift alert |
 
 ## Key Rules
 
 - Inject `CoroutineDispatcher` in ViewModels — switch via `testDispatcher` in tests
 - Use fakes not mocks — pure Kotlin, no reflection, deterministic behavior
 - Coverage threshold ≥80% on `commonMain`; per-module via Kover
-## Sealed Hierarchy Shape Tests (BL-W32-17)
-For sealed hierarchy shape tests in foundation modules:
-- DO NOT use KClass.sealedSubclasses - requires kotlin-reflect (~3MB JVM dependency)
-- DO use manual List<Parent>: `val instances = listOf(SubA(), SubB(), SubC()); assertEquals(3, instances.size)`
-- Compile-time IS-A via type parameter + explicit subtype listing.
+- Sealed hierarchy shape tests: use `listOf(SubA(), SubB(), SubC())` — avoid `KClass.sealedSubclasses` (requires kotlin-reflect ~3MB)
