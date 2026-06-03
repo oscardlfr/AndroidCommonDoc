@@ -103,6 +103,6 @@ This document is split into focused sub-docs for token-efficient loading:
 ---
 
 **Status**: Active -- All KMP modules must follow this source set hierarchy.
-**Last Validated**: May 2026 with Kotlin 2.4.0-RC + AGP 9.0
+**Last Validated**: June 2026 with Kotlin 2.4.0 GA + AGP 9.0
 
 > **AGP 9 Structural Mandate**: KMP modules must not use `com.android.application` plugin inside shared modules. Migrate to `com.android.kotlin.multiplatform.library` + `kotlin.androidLibrary {}`. When the Android entry point lives in shared module, extract to `androidApp/` module. See [kmp-architecture-modules.md — AGP 9 Module Boundary Rule](kmp-architecture-modules.md#4-agp-9-module-boundary-rule) for migration steps.

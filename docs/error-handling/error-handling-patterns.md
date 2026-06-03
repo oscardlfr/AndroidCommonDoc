@@ -98,4 +98,4 @@ This document is split into focused sub-docs for token-efficient loading:
 ---
 
 **Status**: Active -- All KMP projects must follow these error handling patterns.
-**Last Validated**: April 2026 with Kotlin 2.3.20 / kotlinx-coroutines 1.10.x
+**Last Validated**: June 2026 with Kotlin 2.4.0 / kotlinx-coroutines 1.10.x

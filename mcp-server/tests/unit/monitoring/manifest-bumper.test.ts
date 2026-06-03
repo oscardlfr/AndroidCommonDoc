@@ -125,4 +125,17 @@ describe("resolveCoupledVersions", () => {
     expect(coupled).toContain("ksp");
     expect(coupled).toHaveLength(3);
   });
+
+  it("does not drag ksp when ksp has no coupling entry (KSP2 decoupled)", () => {
+    // After KSP2 decoupling, the live manifest has coupled_versions: {} — no ksp entry.
+    // Bumping kotlin must NOT pull in ksp.
+    const decoupled = {
+      updated: "2026-06-01",
+      versions: { kotlin: "2.4.0", ksp: "2.3.9" },
+      coupled_versions: {},
+    };
+    const coupled = resolveCoupledVersions("kotlin", decoupled);
+    expect(coupled).not.toContain("ksp");
+    expect(coupled).toHaveLength(0);
+  });
 });

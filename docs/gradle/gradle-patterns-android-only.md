@@ -110,7 +110,7 @@ class AndroidLibraryComposeConventionPlugin : Plugin<Project> {
 ```toml
 [versions]
 agp            = "8.9.1"
-kotlin         = "2.3.0"
+kotlin         = "2.4.0"
 coroutines     = "1.10.2"
 turbine        = "1.2.1"
 junit5         = "6.0.3"

@@ -1,6 +1,6 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-05-31 (post BL-W47-prep-19)
+> **Last updated**: 2026-06-03 (post Kotlin 2.4.0 GA)
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
@@ -168,11 +168,11 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Shipped (recent)
 
+- **Kotlin 2.4.0 GA** (2026-06-03) — Upgrade L0 to Kotlin 2.4.0 GA. Manifest pins (kotlin→2.4.0 ×3, KSP→2.3.9 decoupled + coupled_versions removed), build-logic toolchain 2.3.0→2.4.0 (build-verified clean), 3 GA claim corrections (Wasm Component Model Experimental-in-GA, context-args nuance, K/N GC flag), new docs/stdlib/ domain (UUID/sorted-order/value-class JS-TS export) + collection literals + Gradle 9.5 compat. 13 commits. — `project_wave_kotlin_2_4_0_ga_shipped.md`
+- **BL-W47-prep-22** (2026-05-31) — Consumer hook-manifest: 34 hooks 12/10/12 + hub + BACKLOG; 100% coverage now CI-enforced (drift-audit hook-manifest-coverage job). PRs #201/#202/#203 — `project_wave_bl_w47_prep_22_shipped.md`
+- **BL-W47-prep-21** (2026-05-31) — BL-W47-RENDER filed (CP-verified ImageComposeScene Skiko API) + 6 Wave-3cd docs promoted draft→active + F3/F4/F5 NOOPs. 2 commits. PR #200 — `project_wave_bl_w47_prep_21_shipped.md`
+- **BL-W47-prep-20** (2026-05-31) — BACKLOG.md refresh (27-day stale): Shipped prune to top-5 + BL-W47-WATCHER + BL-W47 main + 2 prep-19 sub-findings + Mac Platform Shift section. 2 commits. PR #199 — `project_wave_bl_w47_prep_20_shipped.md`
 - **BL-W47-prep-19** (2026-05-27) — Hook hardening: F1 kickoff-scope validator (WARN-only hook + 4 bats) + F2 $VAR redirect exemption fix (resolveShellVar helper). 126/126 bats. F3 NOOP — `project_wave_bl_w47_prep_19_shipped.md`
-- **BL-W47-prep-18** (2026-05-27) — KotlinConf'26 LOW tier + trilogy complete: Wasm Beta, SPM Experimental, kdoc.jar, VS Code LSP, kmp-test-runner v0.10.1. PR #197 @ `7e8f3a1`. 22/22 CI PASS — `project_wave_bl_w47_prep_18_shipped.md`
-- **BL-W47-prep-17** (2026-05-26) — KotlinConf'26 MEDIUM tier: 7 L0 doc gaps (context params Stable, stdlib security, Amper footgun, Swift Export Alpha, K/N CMS GC, R8 coroutine perf, klibs.io). PR #196 @ `06e82be`. 10 commits — `project_wave_bl_w47_prep_17_shipped.md`
-- **BL-W47-prep-16** (2026-05-25) — KotlinConf'26 HIGH tier: CMP 1.11 test API v2 (package change), Kotlin 2.4 backing fields (7 files), AGP 9 mandate sub-doc, RC→GA stale fix. PR #195 @ `7136709` — `project_wave_bl_w47_prep_16_shipped.md`
-- **BL-W47-prep-15** (2026-05-25) — MCP toolchain audit: check-outdated PARTIAL fix, check-version-sync NO_CONSUMERS_CONFIGURED, 47-tool audit doc, atomicity split recovery. PR #194 @ `ab771dc`. 21/21 CI PASS — `project_wave_bl_w47_prep_15_shipped.md`
 
 For full wave history: `git log` + memory `project_*shipped.md` files.
 
