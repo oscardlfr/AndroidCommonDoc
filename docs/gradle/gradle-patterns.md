@@ -84,4 +84,4 @@ This document is split into focused sub-docs for token-efficient loading:
 ---
 
 **Status**: Active -- All KMP projects must follow these Gradle patterns.
-**Last Validated**: April 2026 with Gradle 8.x / AGP 9.0 / Kotlin 2.3.20
+**Last Validated**: June 2026 with Gradle 8.x / AGP 9.0 / Kotlin 2.4.0
