@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (session-kotlin240 — Kotlin 2.4.0 GA upgrade)
+
+- **Kotlin 2.4.0 GA** (`versions-manifest.json`): `versions.kotlin`, `profiles.kmp.kotlin`, `profiles.android-only.kotlin` bumped from 2.3.20 → 2.4.0. `updated` field refreshed to 2026-06-03.
+- **KSP 2.3.9 (decoupled)** (`versions-manifest.json`): `versions.ksp` updated from coupled format `2.3.20-2.0.1` → plain SemVer `2.3.9`. `coupled_versions.ksp` entry deleted — KSP decoupled from Kotlin since KSP 2.3.0 (2025-10). `version_notes.ksp` rewritten to warn against the old coupled format.
+- **build-logic toolchain** (`build-logic/build.gradle.kts`): `kotlin("jvm")` and `kotlin-gradle-plugin` bumped 2.3.0 → 2.4.0, closing a pre-existing 2-minor skew vs the manifest.
+- **Version stamps** (`docs/compose/compose-resources-patterns.md`, `docs/error-handling/error-handling-patterns.md`, `docs/gradle/gradle-patterns.md`, `docs/gradle/gradle-patterns-android-only.md`): "Last Validated" dates and Kotlin version references updated to June 2026 / Kotlin 2.4.0.
+- **Dokka compat matrix** (`README.md`): Two new rows added for Kotlin 2.4.0 (KMP + Android-only). Historical 2.3.20 rows preserved.
+- **Forthcoming (sub-wave 2b)**: `docs/architecture/kmp-features-2026.md` fixes (Wasm Component Model, context parameters, K/N GC flag) + new Kotlin 2.4 feature docs (collection literals, UUID, sorted-order, value-class JS/TS export, Gradle 9.5 support).
+
 ### Added (BL-W47-prep-18 — KotlinConf'26 LOW tier doc closure + trilogy complete)
 
 - **F1 — Wasm KMP tier Alpha→Beta** (docs/architecture/kmp-features-2026.md, kmp-supported-platforms-reference.md): KMP Wasm tier promoted to Beta per kotlinlang.org/docs/wasm-overview.html (user-approved 2026-05-26). CMP-on-Wasm remains Alpha. Incremental compilation Stable in Kotlin 2.4 (default-on, orthogonal to platform tier). WebAssembly Component Model available in Kotlin 2.4.0-RC EAP only (not GA). Myths section updated: "Wasm is fully Beta — WRONG. KMP Wasm is Beta; Compose MP on Wasm remains Alpha."
