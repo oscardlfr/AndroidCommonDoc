@@ -88,6 +88,20 @@ last_verified: 2026-06-03
 - See `kotlinx-coroutines-reference.md` for coroutine scope injection patterns
 - Reference: https://kotlinlang.org/docs/context-parameters.html
 
+### Collection Literals (Experimental, Kotlin 2.4)
+
+- **Status**: Experimental in Kotlin 2.4.0 GA — opt in with `-Xcollection-literals` compiler flag
+- Syntax: `val shapes: MutableList<String> = ["triangle", "square"]` — bracket syntax for list/set/array literals
+- Custom types: implement `operator fun of(vararg elements: T)` companion to support literal construction
+- Not a runtime change — desugars to existing collection factory calls
+- Example:
+  ```kotlin
+  // freeCompilerArgs.add("-Xcollection-literals")
+  val primes: List<Int> = [2, 3, 5, 7, 11]
+  val lookup: Set<String> = ["alpha", "beta"]
+  ```
+- Reference: https://kotlinlang.org/docs/whatsnew24.html
+
 ### Swift Export (Alpha, Kotlin 2.4)
 
 - **Status**: Alpha — promoted from Experimental in 2.4.0
