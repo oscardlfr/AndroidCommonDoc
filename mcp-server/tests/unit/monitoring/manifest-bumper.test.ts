@@ -33,41 +33,41 @@ describe("bumpManifestVersion", () => {
   });
 
   it("bumps versions[key] to new version", async () => {
-    const { manifest } = await bumpManifestVersion("kotlin", "2.3.20", manifestPath);
-    expect(manifest.versions.kotlin).toBe("2.3.20");
+    const { manifest } = await bumpManifestVersion("kotlin", "2.4.0", manifestPath);
+    expect(manifest.versions.kotlin).toBe("2.4.0");
   });
 
   it("bumps matching profile entries", async () => {
-    const { manifest } = await bumpManifestVersion("kotlin", "2.3.20", manifestPath);
-    expect(manifest.profiles?.kmp?.kotlin).toBe("2.3.20");
-    expect(manifest.profiles?.["android-only"]?.kotlin).toBe("2.3.20");
+    const { manifest } = await bumpManifestVersion("kotlin", "2.4.0", manifestPath);
+    expect(manifest.profiles?.kmp?.kotlin).toBe("2.4.0");
+    expect(manifest.profiles?.["android-only"]?.kotlin).toBe("2.4.0");
   });
 
   it("does NOT change profile entries for unrelated keys", async () => {
-    const { manifest } = await bumpManifestVersion("kotlin", "2.3.20", manifestPath);
+    const { manifest } = await bumpManifestVersion("kotlin", "2.4.0", manifestPath);
     // agp in profiles should be unchanged
     expect(manifest.profiles?.kmp?.agp).toBe("9.0.0");
     expect(manifest.profiles?.["android-only"]?.agp).toBe("8.9.1");
   });
 
   it("reports all updated paths", async () => {
-    const { updated } = await bumpManifestVersion("kotlin", "2.3.20", manifestPath);
+    const { updated } = await bumpManifestVersion("kotlin", "2.4.0", manifestPath);
     expect(updated).toContain("versions.kotlin");
     expect(updated).toContain("profiles.kmp.kotlin");
     expect(updated).toContain("profiles.android-only.kotlin");
   });
 
   it("updates the updated timestamp to today", async () => {
-    const { manifest } = await bumpManifestVersion("kotlin", "2.3.20", manifestPath);
+    const { manifest } = await bumpManifestVersion("kotlin", "2.4.0", manifestPath);
     const today = new Date().toISOString().slice(0, 10);
     expect(manifest.updated).toBe(today);
   });
 
   it("persists changes to disk", async () => {
-    await bumpManifestVersion("kotlin", "2.3.20", manifestPath);
+    await bumpManifestVersion("kotlin", "2.4.0", manifestPath);
     const raw = await fs.readFile(manifestPath, "utf-8");
     const reloaded = JSON.parse(raw);
-    expect(reloaded.versions.kotlin).toBe("2.3.20");
+    expect(reloaded.versions.kotlin).toBe("2.4.0");
   });
 
   it("adds key if not present in versions (with warning)", async () => {
@@ -79,15 +79,15 @@ describe("bumpManifestVersion", () => {
   it("works when profiles section is absent", async () => {
     const minimal = { updated: "2026-01-01", versions: { kotlin: "2.3.10" } };
     await fs.writeFile(manifestPath, JSON.stringify(minimal));
-    const { manifest } = await bumpManifestVersion("kotlin", "2.3.20", manifestPath);
-    expect(manifest.versions.kotlin).toBe("2.3.20");
+    const { manifest } = await bumpManifestVersion("kotlin", "2.4.0", manifestPath);
+    expect(manifest.versions.kotlin).toBe("2.4.0");
   });
 });
 
 describe("resolveCoupledVersions", () => {
   const manifest = {
     updated: "2026-03-01",
-    versions: { kotlin: "2.3.20", ksp: "2.3.20-2.0.1" },
+    versions: { kotlin: "2.4.0", ksp: "2.3.20-2.0.1" },
     coupled_versions: {
       ksp: ["kotlin"],
     },
@@ -104,7 +104,7 @@ describe("resolveCoupledVersions", () => {
   });
 
   it("returns empty array when coupled_versions is absent", () => {
-    const noCouple = { updated: "2026-01-01", versions: { kotlin: "2.3.20" } };
+    const noCouple = { updated: "2026-01-01", versions: { kotlin: "2.4.0" } };
     const coupled = resolveCoupledVersions("kotlin", noCouple);
     expect(coupled).toHaveLength(0);
   });
@@ -124,5 +124,21 @@ describe("resolveCoupledVersions", () => {
     expect(coupled).toContain("compose-gradle-plugin");
     expect(coupled).toContain("ksp");
     expect(coupled).toHaveLength(3);
+  });
+
+  // KSP2 decoupled — manifest has no coupled_versions entry for ksp (plain SemVer "2.3.9")
+  it("returns empty array for ksp when ksp is absent from coupled_versions (decoupled scenario)", () => {
+    const decoupled = {
+      updated: "2026-06-01",
+      versions: { kotlin: "2.4.0", ksp: "2.3.9" },
+      coupled_versions: {
+        "compose-compiler": ["kotlin"],
+      },
+    };
+    // bumping kotlin must NOT pull in ksp — ksp is now independently versioned
+    const coupled = resolveCoupledVersions("kotlin", decoupled);
+    expect(coupled).not.toContain("ksp");
+    expect(coupled).toContain("compose-compiler");
+    expect(coupled).toHaveLength(1);
   });
 });

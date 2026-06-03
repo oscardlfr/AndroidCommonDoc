@@ -16,14 +16,14 @@ teardown() {
 
 # Helper: write a minimal versions-manifest.json
 write_manifest() {
-    local kotlin="${1:-2.3.20}"
+    local kotlin="${1:-2.4.0}"
     local agp="${2:-9.0.0}"
     cat > "$WORK_DIR/manifest.json" << EOF
 {
   "versions": {
     "kotlin": "$kotlin",
     "agp": "$agp",
-    "ksp": "2.3.20-2.0.1"
+    "ksp": "2.3.9"
   }
 }
 EOF
@@ -41,8 +41,8 @@ EOF
 # --- Basic --from-manifest mode ---
 
 @test "--from-manifest: accepts valid manifest + project with matching versions" {
-    write_manifest "2.3.20" "9.0.0"
-    write_toml "2.3.20" "9.0.0"
+    write_manifest "2.4.0" "9.0.0"
+    write_toml "2.4.0" "9.0.0"
 
     run bash "$SCRIPT" --from-manifest "$WORK_DIR/manifest.json" \
         --projects "$WORK_DIR"
@@ -50,7 +50,7 @@ EOF
 }
 
 @test "--from-manifest: detects outdated kotlin in project" {
-    write_manifest "2.3.20" "9.0.0"
+    write_manifest "2.4.0" "9.0.0"
     write_toml "2.3.10" "9.0.0"
 
     run bash "$SCRIPT" --from-manifest "$WORK_DIR/manifest.json" \
@@ -60,8 +60,8 @@ EOF
 }
 
 @test "--from-manifest: detects outdated agp in project" {
-    write_manifest "2.3.20" "9.0.0"
-    write_toml "2.3.20" "8.9.0"
+    write_manifest "2.4.0" "9.0.0"
+    write_toml "2.4.0" "8.9.0"
 
     run bash "$SCRIPT" --from-manifest "$WORK_DIR/manifest.json" \
         --projects "$WORK_DIR"
@@ -75,7 +75,7 @@ EOF
 }
 
 @test "--from-manifest: json output format works" {
-    write_manifest "2.3.20" "9.0.0"
+    write_manifest "2.4.0" "9.0.0"
     write_toml "2.3.10" "9.0.0"
 
     run bash "$SCRIPT" --from-manifest "$WORK_DIR/manifest.json" \
@@ -86,7 +86,7 @@ EOF
 }
 
 @test "--from-manifest: source name shown as versions-manifest.json not a dir name" {
-    write_manifest "2.3.20" "9.0.0"
+    write_manifest "2.4.0" "9.0.0"
     write_toml "2.3.10" "9.0.0"
 
     run bash "$SCRIPT" --from-manifest "$WORK_DIR/manifest.json" \
@@ -97,7 +97,7 @@ EOF
 # --- parse_manifest_json function ---
 
 @test "parse_manifest_json: extracts key=value pairs from versions object" {
-    write_manifest "2.3.20" "9.0.0"
+    write_manifest "2.4.0" "9.0.0"
 
     # Source the script functions only (without running main)
     result=$(bash -c "
@@ -116,14 +116,14 @@ for k, v in versions.items():
         print(f"{k}={v}")
 PYEOF
 )
-    echo "$result" | grep -q "^kotlin=2.3.20$"
+    echo "$result" | grep -q "^kotlin=2.4.0$"
     echo "$result" | grep -q "^agp=9.0.0$"
 }
 
 @test "parse_manifest_json: skips version_notes entries (values with spaces)" {
     cat > "$WORK_DIR/manifest.json" << 'EOF'
 {
-  "versions": { "kotlin": "2.3.20" },
+  "versions": { "kotlin": "2.4.0" },
   "version_notes": { "agp": "KMP projects only. Use agp-android-only for 8.x" }
 }
 EOF
@@ -148,7 +148,7 @@ PYEOF
     mkdir -p "$WORK_DIR/source/gradle" "$WORK_DIR/consumer/gradle"
     cat > "$WORK_DIR/source/gradle/libs.versions.toml" << 'EOF'
 [versions]
-kotlin = "2.3.20"
+kotlin = "2.4.0"
 EOF
     cat > "$WORK_DIR/consumer/gradle/libs.versions.toml" << 'EOF'
 [versions]
@@ -162,8 +162,8 @@ EOF
 }
 
 @test "--from-manifest and --source-of-truth are mutually exclusive: manifest wins" {
-    write_manifest "2.3.20" "9.0.0"
-    write_toml "2.3.20" "9.0.0"
+    write_manifest "2.4.0" "9.0.0"
+    write_toml "2.4.0" "9.0.0"
 
     # When both provided, --from-manifest takes precedence (FROM_MANIFEST set)
     run bash "$SCRIPT" \

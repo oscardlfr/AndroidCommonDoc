@@ -394,7 +394,7 @@ describe("detectChanges", () => {
       url: "https://github.com/JetBrains/kotlin/releases",
       type: "github-releases",
       status: "ok",
-      latest_version: "2.3.20",
+      latest_version: "2.4.0",
       fetched_at: new Date().toISOString(),
     });
 
@@ -402,7 +402,7 @@ describe("detectChanges", () => {
     expect(report.findings).toHaveLength(1);
     expect(report.findings[0].summary).toContain("kotlin");
     expect(report.findings[0].summary).toContain("2.3.10");
-    expect(report.findings[0].summary).toContain("2.3.20");
+    expect(report.findings[0].summary).toContain("2.4.0");
     // Must NOT produce a finding for kotlinx-coroutines
     expect(report.findings[0].summary).not.toContain("kotlinx-coroutines");
   });
@@ -410,7 +410,7 @@ describe("detectChanges", () => {
   it("manifest_key: no finding when upstream matches manifest exactly", async () => {
     await fs.writeFile(
       manifestPath,
-      JSON.stringify({ versions: { kotlin: "2.3.20" } }),
+      JSON.stringify({ versions: { kotlin: "2.4.0" } }),
     );
 
     const entry = makeEntry("kmp-architecture", [
@@ -426,7 +426,7 @@ describe("detectChanges", () => {
       url: "https://github.com/JetBrains/kotlin/releases",
       type: "github-releases",
       status: "ok",
-      latest_version: "2.3.20",
+      latest_version: "2.4.0",
       fetched_at: new Date().toISOString(),
     });
 
@@ -453,7 +453,7 @@ describe("detectChanges", () => {
       url: "https://github.com/JetBrains/kotlin/releases",
       type: "github-releases",
       status: "ok",
-      latest_version: "2.3.20",
+      latest_version: "2.4.0",
       fetched_at: new Date().toISOString(),
     });
 
