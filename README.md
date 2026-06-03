@@ -1028,7 +1028,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-16 domain hubs, 79 sub-docs, 25 guides, 52 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+17 domain hubs, 81 sub-docs, 25 guides, 52 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1108,6 +1108,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 | [Network](docs/network/network-hub.md) | Ktor WebSocket patterns, HTTP client configuration | Android + KMP |
 | [Testing](docs/testing/testing-hub.md) | runTest, fakes, coroutine dispatchers, dispatcher scopes (Path A/B), coverage, benchmarks | Android + KMP |
 | [UI](docs/ui/ui-hub.md) | Sealed UiState, StateFlow, events, navigation, Compose screen structure | Android + KMP |
+| [stdlib](docs/stdlib/stdlib-hub.md) | Kotlin stdlib additions: UUID API, sorted-order checks, value-class JS/TS export | Android + KMP |
 
 ---
 
@@ -1211,11 +1212,12 @@ AndroidCommonDoc/
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
 |   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
-+-- docs/                   # 16 domain hubs, 79 sub-docs, 25 guides, 52 agent workflow docs
++-- docs/                   # 17 domain hubs, 81 sub-docs, 25 guides, 52 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
-|   +-- navigation/         +-- offline-first/ +-- resources/
-|   +-- storage/            +-- testing/    +-- ui/
+|   +-- navigation/         +-- network/    +-- offline-first/ +-- resources/
+|   +-- security/           +-- stdlib/     +-- storage/
+|   +-- testing/            +-- ui/
 |   +-- archive/
 +-- adapters/               # Code generation pipeline (skills → prompts, agents → Copilot agents, CLAUDE.md → copilot-instructions)
 +-- versions-manifest.json  # Canonical library versions + monitor_urls + coupled_versions
