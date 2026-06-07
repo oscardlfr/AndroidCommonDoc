@@ -1001,6 +1001,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `copilot-parity` | Verify Copilot prompt templates match Claude skill definitions |
 | `install-git-hooks` | Install pre-commit (pattern-lint) + commit-msg (conventional commits) git hooks |
 | `pre-commit-hook` | Standalone pre-commit hook body: blocks commits with stale registry hash |
+| `commit-msg-hook` | git commit-msg hook: Conventional Commits format + scope whitelist (universal — fires for all committers; closes team-peer bypass in PreToolUse `commit-scope-validation-gate.js`) |
 | `run-benchmarks` | Detect and run JVM/Android benchmark suites with Gradle |
 | `validate-agent-templates` | Lint agent templates: frontmatter, role keywords, anti-patterns, versioning (7 checks) |
 | `catalog-coverage-check` | Detect hardcoded Gradle dependency versions that should use the version catalog |
@@ -1161,7 +1162,7 @@ AndroidCommonDoc/
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
 |   +-- ps1/                # PowerShell (Windows) -- 39 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 46 scripts
+|   +-- sh/                 # Bash (macOS/Linux) -- 47 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite

@@ -1,28 +1,28 @@
 ---
-scope: [git, hooks, pre-commit, registry, rehash]
+scope: [git, hooks, pre-commit, registry, rehash, commit-scope]
 sources: [androidcommondoc]
 targets: [android, desktop, ios, jvm]
 slug: pre-commit-hooks
 status: active
 layer: L0
 category: guides
-description: "Pre-commit hooks: pattern-lint on staged Kotlin files, registry rehash check on staged SKILL.md/registry.json"
-version: 1
-last_updated: "2026-04"
+description: "Pre-commit hooks: pattern-lint on staged Kotlin files, registry rehash check on staged SKILL.md/registry.json, commit-scope whitelist enforcement"
+version: 2
+last_updated: "2026-06"
 ---
 
 # Pre-Commit Hooks Guide
 
-Git hooks enforce local quality gates before a commit reaches CI. This guide covers installation and the registry hash gate introduced in Wave 21.
+Git hooks enforce local quality gates before a commit reaches CI.
 
 ## Overview
 
-Two hooks are managed by `scripts/sh/install-git-hooks.sh`:
+Three hooks are managed by `scripts/sh/install-git-hooks.sh`:
 
 | Hook | Script | Purpose |
 |------|--------|---------|
 | `pre-commit` | `scripts/sh/pre-commit-hook.sh` | Block commits with a stale registry hash |
-| `commit-msg` | inline heredoc | Enforce Conventional Commits format |
+| `commit-msg` | `scripts/sh/commit-msg-hook.sh` | Enforce Conventional Commits format + scope whitelist |
 
 ## Installation
 
@@ -32,12 +32,47 @@ Run from the repository root:
 bash scripts/sh/install-git-hooks.sh
 ```
 
-This copies `scripts/sh/pre-commit-hook.sh` into `.git/hooks/pre-commit` and sets the commit-msg hook.
+This copies `scripts/sh/pre-commit-hook.sh` into `.git/hooks/pre-commit` and installs `scripts/sh/commit-msg-hook.sh` as `.git/hooks/commit-msg`.
 
 To verify hooks are installed:
 
 ```bash
 ls -la .git/hooks/pre-commit .git/hooks/commit-msg
+```
+
+## Three-Layer Commit-Scope Enforcement
+
+Valid commit scopes are defined once in `.commitlintrc.json` (`valid_scopes` field). Three layers enforce this:
+
+| Layer | Mechanism | Coverage | Authoritative? |
+|-------|-----------|----------|----------------|
+| **PreToolUse** `commit-scope-validation-gate.js` | Claude Code hook — fires on `git commit` tool calls | **Main orchestrator only** — does NOT cover team peers or direct `git` CLI usage | No |
+| **git `commit-msg`** `commit-msg-hook.sh` | Git hook — fires for every `git commit` in the clone | **Universal** — all committers, all branches, all tools | **Yes** |
+| **CI** `reusable-commit-lint.yml` | Workflow — runs on every PR | All branches, PR-time backstop | Backstop |
+
+> **Known limitation of the PreToolUse hook**: `commit-scope-validation-gate.js` only intercepts commits made by the main orchestrator agent. Team peers that commit directly bypass it. The git `commit-msg` hook closes this gap — it fires universally regardless of who or what triggers the commit.
+
+### What `commit-msg-hook.sh` validates
+
+1. **Format**: first line matches `type(scope)?!?: description` (Conventional Commits). Merge commits skip all checks.
+2. **Scope whitelist** (if scope present): scope must appear in `valid_scopes` from `.commitlintrc.json`. Compound scopes (e.g. `core-error-sdk`) pass if the first segment (`core`) is valid — matches `commit-scope-validation-gate.js` semantics exactly.
+3. **Fail-open**: missing/malformed `.commitlintrc.json`, or no scope in message → passes through.
+
+### Example: blocked commit
+
+```
+$ git commit -m "docs(invalid-scope): update"
+[commit-msg-hook] BLOCKED: scope "(invalid-scope)" is not in valid_scopes.
+  Valid scopes (from .commitlintrc.json): core data ui feature ci deps release docs detekt mcp skills scripts agents archive di guides tests tools
+  Compound scopes like "core-error-sdk" are valid when "core" is in the list.
+```
+
+### Example: passing commit
+
+```bash
+git commit -m "docs: update pre-commit-hooks guide"   # no scope — passes
+git commit -m "docs(guides): update pre-commit-hooks"  # valid scope — passes
+git commit -m "feat(core-error-sdk): add new error"    # compound — passes (core is valid)
 ```
 
 ## The Registry Hash Gate
