@@ -6,6 +6,14 @@
 
 ## Active (proposed wave order)
 
+### Team stale-suffix spawn guard (MED — hook, ~2-3h) — filed 2026-06-07
+
+Hook to **BLOCK** spawning any core session role (team-lead, arch-platform/integration/testing, context-provider, doc-updater, quality-gater, planner, specialists) with a `-2`/`-N` numeric suffix. A suffixed spawn means the canonical name is occupied by a stale/dead peer (stale team dir) → **inter-peer messages misroute to the DEAD original** (gate-acks, consults, dispatches silently lost). The hook should block the spawn and direct the operator to clean `~/.claude/teams/session-{slug}/` first (the work-skill stale-dir check) so the respawn takes the canonical name.
+
+**Trigger**: Kotlin 2.4.0 session, post-reboot (2026-06-07) — respawned `context-provider` + `quality-gater` collided with the dead originals → `context-provider-2` / `quality-gater-2` → broken messaging (user-observed live). The work-skill's manual stale-dir cleanup is easy to skip; make it a mechanical block. Relates to Wave 39 session-teardown hook + memory `feedback_stale_team_suffix_collision`.
+
+**Source**: filed by user 2026-06-07.
+
 ### Wave 38 — Ingestion bundle (LOW urgency, ~2-4h)
 
 | ID | Item |
