@@ -61,9 +61,9 @@ fi
 if git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
   COMMITLINT_CONFIG="$git_root/.commitlintrc.json"
 else
-  # Fallback: navigate from BASH_SOURCE to find the project root
+  # Fallback: navigate from BASH_SOURCE to find the repo root
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  # scripts/sh/ -> scripts/ -> project root
+  # scripts/sh/ -> scripts/ -> repo root
   COMMITLINT_CONFIG="$(dirname "$(dirname "$SCRIPT_DIR")")/.commitlintrc.json"
 fi
 
