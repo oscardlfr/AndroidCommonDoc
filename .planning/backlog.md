@@ -35,7 +35,7 @@ After 2-pass empirical drift audit on 2026-05-10, **only ~10 items genuinely pen
 - BL-W31.7-03 — Hook reduction audit (input to BL-W47)
 - BL-W47 PR1..PR5 — Adaptive Harness Redesign blueprint (`.planning/BL-W47-PLAN.md`)
 
-### bump-kmp-test-runner-v0.10 (filed BL-W47-prep-7 — 2026-05-16)
+### bump-kmp-test-runner-v0.10 (filed BL-W47-prep-7 — 2026-05-16) — **SHIPPED 2026-06-10**
 **Severity**: LOW (informational — track for when 0.10 releases)
 **Trigger**: When github.com/oscardlfr/kmp-test-runner releases v0.10.0 (currently in development per user 2026-05-16)
 **Scope**: Same mechanical files as BL-W47-prep-7 F1 (~18 actionable files):
@@ -47,6 +47,7 @@ After 2-pass empirical drift audit on 2026-05-10, **only ~10 items genuinely pen
 - AGENTS.md, .github/workflows/reusable-shell-tests.yml
 **Monitor**: https://github.com/oscardlfr/kmp-test-runner/releases
 **Notes**: Check 0.10 changelog for breaking changes (envelope schema bump possible). If JS/Wasm support lands, update cli-tests-js-wasm.md deferred notes. If --fresh-daemon support lands, update warnings in run-parallel-coverage-suite.sh:78 / .ps1:98.
+**Resolution**: Shipped as 0.14.0 (jumped from 0.10.1) in feature/cancellation-detekt. --fresh-daemon landed in 0.14.0 — warnings updated. CI outlier (reusable-shell-tests.yml at 0.9.1) also bumped.
 
 ---
 
