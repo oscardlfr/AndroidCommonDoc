@@ -400,7 +400,7 @@
       "description": "Analyze test coverage gaps from existing data without running tests. Use when asked to check coverage or find untested code.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:d65f50a142f14bcb7eace52c70aa230adbcddd3022f87b35e5caea27f54a5700",
+      "hash": "sha256:6b4a92a4ca45ccbeb09f2b6a10818317006b609e439a004315abc2e89ca65e46",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
@@ -1559,7 +1559,7 @@
       "description": "Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:00cd32ff04da5f61c6e10ea7e62854a157af491a8d84b025904e4cb6c7f63087",
+      "hash": "sha256:733e1667e9b9e38b536fd89d752e8e57f01987dd6411a8301e166bc0cad04875",
       "dependencies": [
         "scripts/sh/gradle-run.sh",
         "scripts/sh/ai-error-extractor.sh",
@@ -1593,7 +1593,7 @@
       "description": "Run tests only on modules with uncommitted changes. Use when asked to test changed files or run a quick pre-commit check.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:a06596a4ff3350762d155d8cfc4d4cff86f173df768a9a4e54a4eab7818448e8",
+      "hash": "sha256:e73b34414aec6a659b9cbe06633daf8d0396c40818f22ec3ea2ec3d1d91b5d30",
       "dependencies": [
         "scripts/sh/run-changed-modules-tests.sh",
         "scripts/ps1/run-changed-modules-tests.ps1"
@@ -1657,7 +1657,7 @@
       "description": "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:6a28dba20753a33ef005489409f388e6c23fca48d4b0b3bd1c3e4dba3c79541a",
+      "hash": "sha256:50369e98cbc1f7dbb404fad1bd919c1279a086378b1b9554e950f03b4c46c03c",
       "dependencies": [
         "scripts/sh/run-parallel-coverage-suite.sh",
         "scripts/ps1/run-parallel-coverage-suite.ps1"
