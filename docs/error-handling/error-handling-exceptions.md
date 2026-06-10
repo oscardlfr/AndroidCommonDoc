@@ -3,7 +3,7 @@ scope: [error-handling, exceptions, architecture]
 sources: [core-error, kotlinx-coroutines]
 targets: [android, desktop, ios, jvm]
 version: 1
-last_updated: "2026-03"
+last_updated: "2026-06"
 assumes_read: error-handling-hub
 token_budget: 1674
 description: "Exception patterns: DomainException hierarchy, CancellationException safety, error mapping between layers"
@@ -24,6 +24,7 @@ rules:
     detect:
       catch_type: CancellationException
       required_action: rethrow
+      compliant_alternatives: [throw_rethrow, ensure_active, sibling_ce_rethrow]
     hand_written: true
     source_rule: CancellationExceptionRethrowRule.kt
   - id: no-silent-catch
@@ -125,6 +126,14 @@ try {
     Result.failure(e.toDomainException())
 }
 ```
+
+### Compliant Alternatives (as of CancellationExceptionRethrowRule v2)
+
+In addition to an explicit `throw e` in a `catch (e: CancellationException)` block, the following patterns are also recognised as compliant by the Detekt rule:
+
+- **`ensureActive()` in `Exception`/`Throwable` clauses** — calling `coroutineContext.ensureActive()`, `currentCoroutineContext().ensureActive()`, or bare `ensureActive()` inside a `catch (e: Exception)` or `catch (t: Throwable)` body satisfies the rule. This escape applies to `Exception`/`Throwable` clauses **only** (strict default). A `catch (e: CancellationException)` block with only `ensureActive()` and no `throw` is still flagged — a caught `TimeoutCancellationException` would be swallowed if the parent job is not cancelled.
+
+- **Preceding sibling CE rethrow** — a `catch (e: Exception)` or `catch (t: Throwable)` clause is compliant when an earlier sibling `catch (e: CancellationException) { throw e }` clause appears in the same `try` expression. The sibling must precede the current clause and must itself contain a `throw`.
 
 ### Why This Matters
 
