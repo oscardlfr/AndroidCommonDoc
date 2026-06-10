@@ -12,6 +12,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Added (feature/cancellation-detekt — enhanced CE rethrow rule semantics)
 
+- **`--fresh-daemon` forwarding** (`run-parallel-coverage-suite.sh`, `run-parallel-coverage-suite.ps1`): `--fresh-daemon` flag is now forwarded to `kmp-test-runner` (wired via `FRESH_DAEMON=true` env and passthrough at line 157/ps1:157). Available as of kmp-test-runner 0.14.0; adds ~5s cold-start overhead.
+
 ### Fixed (feature/cancellation-detekt — CancellationExceptionRethrowRule semantics doc)
 
 - **`docs/error-handling/error-handling-exceptions.md`**: Updated `cancellation-exception-rethrow` rule entry with `compliant_alternatives: [throw_rethrow, ensure_active, sibling_ce_rethrow]`. Added prose section "Compliant Alternatives (as of CancellationExceptionRethrowRule v2)" documenting the strict-default constraint: `ensureActive()` satisfies `Exception`/`Throwable` clauses only; a `CancellationException` catch with only `ensureActive()` remains flagged.

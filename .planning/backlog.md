@@ -36,8 +36,8 @@ After 2-pass empirical drift audit on 2026-05-10, **only ~10 items genuinely pen
 - BL-W47 PR1..PR5 — Adaptive Harness Redesign blueprint (`.planning/BL-W47-PLAN.md`)
 
 ### bump-kmp-test-runner-v0.10 (filed BL-W47-prep-7 — 2026-05-16) — **SHIPPED 2026-06-10**
-**Severity**: LOW (informational — track for when 0.10 releases)
-**Trigger**: When github.com/oscardlfr/kmp-test-runner releases v0.10.0 (currently in development per user 2026-05-16)
+**Severity**: LOW (informational — filed 2026-05-16 while v0.10 was in development)
+**Trigger**: Was awaiting github.com/oscardlfr/kmp-test-runner v0.10.0 release (filed when v0.10 was in development per user 2026-05-16)
 **Scope**: Same mechanical files as BL-W47-prep-7 F1 (~18 actionable files):
 - 2 agent templates (test-specialist.md + arch-testing.md, dual-location)
 - 6 wrapper scripts (3 sh + 3 ps1)

@@ -14,7 +14,7 @@ parent: compose-hub
 sources_external:
   - "user-relayed L1 session finding 2026-06-10, verified against ComposePlugin.kt 1.10.3"
 rules:
-  - id: no-androidx-preview-in-commonmain
+  - id: no-androidx-preview-in-common
     type: banned-import
     message: "Use org.jetbrains.compose.ui.tooling.preview.Preview in commonMain, not androidx.compose.ui.tooling.preview.Preview — the androidx import compiles on desktop (CMP ships a transitive shim) but silently breaks Android builds."
     detect:
