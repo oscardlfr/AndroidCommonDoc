@@ -48,7 +48,7 @@
     Print assembled kmp-test command to stdout, exit 0. No runner invocation.
 
 .PARAMETER FreshDaemon
-    DEPRECATED — flag ignored (See GAP-01).
+    Available since v0.14.0 — adds ~5s cold-start overhead. Forwards --fresh-daemon to kmp-test-runner.
 
 .PARAMETER ExcludeCoverage
     DEPRECATED — use ExcludeModules. Translates to --exclude-modules.
@@ -94,9 +94,6 @@ $autoExcludePatterns = @(
 )
 
 # --- Deprecation warnings ---------------------------------------------------- #
-if ($FreshDaemon) {
-    Write-Host "NOTE: -FreshDaemon is available as of kmp-test-runner v0.14.0 (adds ~5s cold-start overhead)."
-}
 if ($ExcludeCoverage -ne "") {
     Write-Warning "WARNING: -ExcludeCoverage deprecated — degraded to --exclude-modules; tests will be skipped instead of just excluded from coverage. See GAP-05."
 }
@@ -135,6 +132,7 @@ if ($CoverageTool -ne "")     { $cmdArgs += @("--coverage-tool", $CoverageTool) 
 if ($MinMissedLines -gt 0)    { $cmdArgs += @("--min-missed-lines", "$MinMissedLines") }
 if ($Timeout -ne 600)         { $cmdArgs += @("--timeout", "$Timeout") }
 if ($excludeModulesArg -ne "") { $cmdArgs += @("--exclude-modules", $excludeModulesArg) }
+if ($FreshDaemon)              { $cmdArgs += "--fresh-daemon" }
 
 # --- Wrapper -DryRun (Strategy A — arch-testing addendum) -------------------- #
 # Echo assembled command to stdout, exit 0, NO runner invocation.
