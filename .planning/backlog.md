@@ -2,7 +2,7 @@
 
 > Created: 2026-04-21
 > Scope: items intentionally deferred during Wave 25 to keep blast radius manageable. Each entry has a trigger condition for when it should be picked up.
-> **Last validated against codebase: 2026-05-10 (post cli-mandate incorporation arc + 2-pass drift audit)**
+> **Last validated against codebase: 2026-06-10 (4 L1 session findings filed; compose-preview-multiplatform-import ingested)**
 
 ---
 

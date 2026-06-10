@@ -7,8 +7,8 @@ status: active
 layer: L0
 category: compose
 description: "Compose category hub: Compose Multiplatform resource management and UI patterns"
-version: 1
-last_updated: "2026-03"
+version: 2
+last_updated: "2026-06"
 monitor_urls:
   - url: "https://github.com/JetBrains/compose-multiplatform/releases"
     type: github-releases
