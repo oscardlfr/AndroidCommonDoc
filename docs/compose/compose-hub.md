@@ -7,8 +7,8 @@ status: active
 layer: L0
 category: compose
 description: "Compose category hub: Compose Multiplatform resource management and UI patterns"
-version: 1
-last_updated: "2026-03"
+version: 2
+last_updated: "2026-06"
 monitor_urls:
   - url: "https://github.com/JetBrains/compose-multiplatform/releases"
     type: github-releases
@@ -44,6 +44,7 @@ Compose Multiplatform resource management and UI patterns.
 | [compose-resources-troubleshooting](compose-resources-troubleshooting.md) | Common issues: missing Res, duplicate registration, CI |
 | [compose-resources-configuration-setup](compose-resources-configuration-setup.md) | Setup and initialization |
 | [compose-layout-validation](compose-layout-validation.md) | Build-time Compose layout validation (Detekt rule + runtime layout-diff pipeline) |
+| [compose-preview-multiplatform-import](compose-preview-multiplatform-import.md) | CMP @Preview import — JetBrains namespace, uiToolingPreview accessor, androidx-in-commonMain trap |
 
 ## Key Rules
 

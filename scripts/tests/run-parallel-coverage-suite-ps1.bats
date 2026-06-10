@@ -150,3 +150,14 @@ teardown() {
   ! grep -q "\-\-exclude-coverage" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
   [[ "$output" == *"deprecated"* ]]
 }
+
+# ── Case 6: -FreshDaemon — forwarded to kmp-test runner ──────────────────────
+
+@test "run-parallel-coverage-suite.ps1: -FreshDaemon is forwarded to kmp-test" {
+  run "$PWSH" -NoProfile -ExecutionPolicy Bypass \
+    -Command "\$env:PATH = '$WIN_FAKE_BIN$PATH_SEP' + \$env:PATH; & '$WIN_SCRIPT' -ProjectRoot '$WIN_PROJECT' -FreshDaemon" \
+    2>&1
+  # Thin-wrap must pass --fresh-daemon through to kmp-test
+  [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
+  grep -q "\-\-fresh-daemon" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
+}

@@ -5,6 +5,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Changed (feature/cancellation-detekt — kmp-test-runner 0.10.1→0.14.0 bump)
+
+- **kmp-test-runner 0.10.1 → 0.14.0** across all actionable pin locations: 6 wrapper scripts (sh/ps1), 4 skill SKILL.md files, 11 docs/testing/cli-*.md files (historical exclusions preserved: cli-troubleshooting.md:33, cli-tests-js-wasm.md:22/33), README.md, AGENTS.md, agent templates (test-specialist + arch-testing, dual-location), kmp-test-runner-gate.js hook. CI outlier at `.github/workflows/reusable-shell-tests.yml` bumped from 0.9.1 → 0.14.0.
+- **`--fresh-daemon` availability note** (`run-parallel-coverage-suite.sh:78`, `run-parallel-coverage-suite.ps1:98`): warning reworded from "not supported / flag ignored" to reflect that `--fresh-daemon` is available as of 0.14.0 (adds ~5s cold-start overhead).
+
+### Added (feature/cancellation-detekt — enhanced CE rethrow rule semantics)
+
+- **`--fresh-daemon` forwarding** (`run-parallel-coverage-suite.sh`, `run-parallel-coverage-suite.ps1`): `--fresh-daemon` flag is now forwarded to `kmp-test-runner` (wired via `FRESH_DAEMON=true` env and passthrough at line 157/ps1:157). Available as of kmp-test-runner 0.14.0; adds ~5s cold-start overhead.
+
+### Fixed (feature/cancellation-detekt — CancellationExceptionRethrowRule semantics doc)
+
+- **`docs/error-handling/error-handling-exceptions.md`**: Updated `cancellation-exception-rethrow` rule entry with `compliant_alternatives: [throw_rethrow, ensure_active, sibling_ce_rethrow]`. Added prose section "Compliant Alternatives (as of CancellationExceptionRethrowRule v2)" documenting the strict-default constraint: `ensureActive()` satisfies `Exception`/`Throwable` clauses only; a `CancellationException` catch with only `ensureActive()` remains flagged.
+
 ### Added (feature/commit-scope-git-hook — universal commit-scope enforcement)
 
 - **git `commit-msg` hook** (`scripts/sh/commit-msg-hook.sh`, installed via `install-git-hooks.sh`): enforces Conventional Commits format + scope whitelist universally — fires for every committer in the clone, closing the team-peer bypass in `commit-scope-validation-gate.js` (PreToolUse hook only covers the main orchestrator). Single source of truth: `.commitlintrc.json` `valid_scopes`. Compound scopes (`core-error-sdk`) pass when the first segment (`core`) is valid — matches PreToolUse hook semantics exactly. Fail-open when `.commitlintrc.json` is missing or malformed.

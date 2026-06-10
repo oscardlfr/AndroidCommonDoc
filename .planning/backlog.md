@@ -2,7 +2,7 @@
 
 > Created: 2026-04-21
 > Scope: items intentionally deferred during Wave 25 to keep blast radius manageable. Each entry has a trigger condition for when it should be picked up.
-> **Last validated against codebase: 2026-05-10 (post cli-mandate incorporation arc + 2-pass drift audit)**
+> **Last validated against codebase: 2026-06-10 (4 L1 session findings filed; compose-preview-multiplatform-import ingested)**
 
 ---
 
@@ -35,9 +35,9 @@ After 2-pass empirical drift audit on 2026-05-10, **only ~10 items genuinely pen
 - BL-W31.7-03 — Hook reduction audit (input to BL-W47)
 - BL-W47 PR1..PR5 — Adaptive Harness Redesign blueprint (`.planning/BL-W47-PLAN.md`)
 
-### bump-kmp-test-runner-v0.10 (filed BL-W47-prep-7 — 2026-05-16)
-**Severity**: LOW (informational — track for when 0.10 releases)
-**Trigger**: When github.com/oscardlfr/kmp-test-runner releases v0.10.0 (currently in development per user 2026-05-16)
+### bump-kmp-test-runner-v0.10 (filed BL-W47-prep-7 — 2026-05-16) — **SHIPPED 2026-06-10**
+**Severity**: LOW (informational — filed 2026-05-16 while v0.10 was in development)
+**Trigger**: Was awaiting github.com/oscardlfr/kmp-test-runner v0.10.0 release (filed when v0.10 was in development per user 2026-05-16)
 **Scope**: Same mechanical files as BL-W47-prep-7 F1 (~18 actionable files):
 - 2 agent templates (test-specialist.md + arch-testing.md, dual-location)
 - 6 wrapper scripts (3 sh + 3 ps1)
@@ -47,6 +47,40 @@ After 2-pass empirical drift audit on 2026-05-10, **only ~10 items genuinely pen
 - AGENTS.md, .github/workflows/reusable-shell-tests.yml
 **Monitor**: https://github.com/oscardlfr/kmp-test-runner/releases
 **Notes**: Check 0.10 changelog for breaking changes (envelope schema bump possible). If JS/Wasm support lands, update cli-tests-js-wasm.md deferred notes. If --fresh-daemon support lands, update warnings in run-parallel-coverage-suite.sh:78 / .ps1:98.
+**Resolution**: Shipped as 0.14.0 (jumped from 0.10.1) in feature/cancellation-detekt. --fresh-daemon landed in 0.14.0 — warnings updated. CI outlier (reusable-shell-tests.yml at 0.9.1) also bumped.
+
+### 🔴 BL-L1-cmp-preview-detekt — New L0 Detekt rule `no-androidx-preview-in-common` (filed 2026-06-10)
+**Severity**: HIGH — next wave candidate
+**Source**: L1 session finding 2026-06-10 (user-relayed, user-approved)
+**Trigger**: Next detekt-rules wave or standalone rule wave
+**Rationale**: `androidx.compose.ui.tooling.preview.Preview` in commonMain/shared source sets compiles on desktop (CMP ships a transitive androidx shim) but silently breaks Android builds. An L1 session found 44 files of accumulated rot: Android target deferred + CI never compiled Android → went undetected. A Detekt-time catch prevents recurrence. Generic to any CMP project → L0.
+**Scope**:
+- Rule class (analog: existing hand-written rules in `detekt-rules/`)
+- RuleSetProvider registration
+- `detekt-l0-base.yml` regen via `/generate-rules`
+- Tests (unit + integration)
+- Pattern-doc with `rules:` frontmatter (candidate: `docs/compose/compose-preview-multiplatform-import.md` — cross-ref: commit 2 this wave)
+- README rule-count bump
+**Cross-ref**: `docs/compose/compose-preview-multiplatform-import.md` ingested this wave documents the correct JetBrains import pattern.
+
+### 🟡 BL-L1-root-detekt-convention — L0 root-detekt convention doc/template (filed 2026-06-10)
+**Severity**: MEDIUM
+**Source**: L1 session finding 2026-06-10 (user-relayed, user-approved)
+**Trigger**: Next detekt-rules wave or standalone convention-plugin pass
+**Rationale**: An L1 project's root `build.gradle.kts` drifted from `shared-kmp-libs` — missing: (a) `/build/generated/` filter (without it, Detekt lints SQLDelight generated code → thousands of false positives), (b) `baseline.set(...)` in `DetektCreateBaselineTask` (per-source-set baselines never written), (c) umbrella `detektBaseline` task wiring. `shared-kmp-libs` has all three correctly. L2 projects that hand-copy the config drift.
+**Scope**: Document/templatize the root-detekt convention in L0 (`docs/guides/detekt-config.md` territory or as a convention plugin in `build-logic/`) so L1/L2 consumers inherit via `/sync-l0` instead of hand-copying and diverging.
+
+### ⚪ BL-L1-sync-l0-scripts-gap — Re-flag: sync-l0 does not propagate scripts/ (filed 2026-06-10)
+**Severity**: LOW (re-flag — previously known, not yet actioned)
+**Source**: L1 session report 2026-06-10 (live impact confirmed)
+**Ordering**: BEFORE the big harness wave (user-stated ordering constraint)
+**Problem**: `/sync-l0` propagates `skills/`, `agents/`, and `.claude/commands/` but NOT `scripts/`. Synced `.claude/commands/*.md` reference `scripts/sh/*.sh` and `scripts/ps1/*.ps1` — broken references in consumer projects that haven't manually copied the scripts.
+**Scope**: Audit sync-l0 config coherence; include `scripts/` in the propagated payload. Verify no consumer breakage from script additions.
+
+### ⚪ BL-L1-compose-preview-ingested — Cross-ref: compose-preview-multiplatform-import doc ingested (2026-06-10)
+**Severity**: INFORMATIONAL — closed at filing
+**Source**: L1 ingestion-request fulfilled this wave (feature/cancellation-detekt commit 2)
+**Note**: `docs/compose/compose-preview-multiplatform-import.md` ingested with citation frontmatter. Covers correct CMP @Preview import pattern (org.jetbrains vs androidx), uiToolingPreview accessor, CMP 1.10.x coordinate gotcha. Rule candidate `no-androidx-preview-in-common` tracked in BL-L1-cmp-preview-detekt above.
 
 ---
 

@@ -164,3 +164,14 @@ teardown() {
   # Must emit deprecation warning to stderr
   [[ "$output" == *"deprecated"* ]] || [[ "$stderr" == *"deprecated"* ]]
 }
+
+# ── Case 6: --fresh-daemon — forwarded to kmp-test runner ────────────────────
+
+@test "run-parallel-coverage-suite.sh: --fresh-daemon is forwarded to kmp-test" {
+  run env PATH="$FAKE_BIN:$PATH" bash "$SCRIPT" \
+    --project-root "$FAKE_PROJECT" \
+    --fresh-daemon
+  # Thin-wrap must pass --fresh-daemon through to kmp-test
+  [ -f "${BATS_TEST_TMPDIR}/kmp-test-args.log" ]
+  grep -q "\-\-fresh-daemon" "${BATS_TEST_TMPDIR}/kmp-test-args.log"
+}

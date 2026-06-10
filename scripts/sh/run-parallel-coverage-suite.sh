@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BL-W32-06e: Thin wrapper around kmp-test-runner v0.10.1.
+# BL-W32-06e: Thin wrapper around kmp-test-runner v0.14.0.
 # Replaces the 1355-line self-contained runner. Gradle daemon retry, module
 # discovery, Kover/JaCoCo fallback, and parallel orchestration are now inside
 # kmp-test-runner internals. L0 retains: AI-Optimized Summary post-processor,
@@ -11,9 +11,9 @@ set -euo pipefail
 if command -v kmp-test >/dev/null 2>&1; then
   KMP_TEST_CMD="kmp-test"
 elif command -v npx >/dev/null 2>&1; then
-  KMP_TEST_CMD="npx kmp-test-runner@0.10.1"
+  KMP_TEST_CMD="npx kmp-test-runner@0.14.0"
 else
-  echo "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.10.1" >&2
+  echo "ERROR: kmp-test-runner not found. Install: npm install -g kmp-test-runner@0.14.0" >&2
   exit 1
 fi
 
@@ -48,6 +48,7 @@ BENCHMARK=false
 BENCHMARK_CONFIG="smoke"
 INCLUDE_SHARED=false
 DRY_RUN=false
+FRESH_DAEMON=false
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/audit-append.sh"
@@ -75,7 +76,7 @@ while [[ $# -gt 0 ]]; do
     --java-home)
       export JAVA_HOME="$2"; shift 2 ;;
     --fresh-daemon)
-      echo "WARNING: --fresh-daemon not supported by kmp-test-runner v0.10.1; flag ignored. See GAP-01." >&2
+      FRESH_DAEMON=true
       shift ;;
     --exclude-coverage)
       echo "WARNING: --exclude-coverage deprecated — degraded to --exclude-modules; tests will be skipped instead of just excluded from coverage. See GAP-05." >&2
@@ -84,7 +85,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: run-parallel-coverage-suite.sh --project-root <path> [OPTIONS]"
       echo ""
-      echo "Thin wrapper around kmp-test-runner v0.10.1."
+      echo "Thin wrapper around kmp-test-runner v0.14.0."
       echo ""
       echo "Options:"
       echo "  --test-type <type>          all | common | desktop | androidUnit | androidInstrumented"
@@ -99,7 +100,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --benchmark                 Run benchmarks after tests"
       echo "  --benchmark-config <name>   smoke (default) | main | stress"
       echo "  --dry-run                   Print assembled kmp-test command, exit 0"
-      echo "  --fresh-daemon              DEPRECATED — flag ignored (See GAP-01)"
+      echo "  --fresh-daemon              Available since v0.14.0 — adds ~5s cold-start overhead"
       echo "  --exclude-coverage <list>   DEPRECATED — use --exclude-modules"
       echo ""
       echo "Exit codes: 0=success  1=test failure  2=build error  3=env error"
@@ -153,6 +154,7 @@ CMD+=(--project-root "$PROJECT_ROOT")
 [[ "$MIN_MISSED_LINES" -gt 0 ]] && CMD+=(--min-missed-lines "$MIN_MISSED_LINES")
 [[ "$TIMEOUT" -ne 600 ]]        && CMD+=(--timeout "$TIMEOUT")
 [[ -n "$EXCLUDE_MODULES_ARG" ]] && CMD+=(--exclude-modules "$EXCLUDE_MODULES_ARG")
+[[ "$FRESH_DAEMON" == true ]]   && CMD+=(--fresh-daemon)
 
 # --- Wrapper --dry-run (Strategy A — arch-testing addendum) ----------------- #
 # Echo assembled command to stdout, exit 0, NO runner invocation.

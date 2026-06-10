@@ -418,6 +418,11 @@
         "date": "2026-05-19",
         "breaking": false,
         "note": "BL-W47-prep-14: Bump kmp-test-runner version pins v0.9.1 -> v0.10.1. Mechanical version-string bump. Preserved kmp-test-runner-gate.js:88 JS/Wasm gate message (no JS/Wasm changes in v0.10)."
+      },
+      "1.37.0": {
+        "date": "2026-06-10",
+        "breaking": false,
+        "note": "wave-cancellation-detekt: Bump kmp-test-runner version pins v0.10.1 -> v0.14.0. Mechanical version-string bump. Preserved kmp-test-runner-gate.js:88 JS/Wasm gate message (no JS/Wasm changes in v0.14). Historical exclusions: cli-troubleshooting.md:33, cli-tests-js-wasm.md:22/33 unchanged."
       }
     },
     "arch-platform": {
@@ -1052,6 +1057,11 @@
         "date": "2026-05-19",
         "breaking": false,
         "note": "BL-W47-prep-14: Bump kmp-test-runner version pins v0.9.1 -> v0.10.1 at kmp-test-runner section header, gradle-run.sh wrapper description, detection cascade (2 lines), envelope schema --help, CLI Mandate version header. Mechanical version-string bump."
+      },
+      "1.29.0": {
+        "date": "2026-06-10",
+        "breaking": false,
+        "note": "wave-cancellation-detekt: Bump kmp-test-runner version pins v0.10.1 -> v0.14.0. Mechanical version-string bump. Preserved kmp-test-runner-gate.js:88 JS/Wasm gate message (no JS/Wasm changes in v0.14). Historical exclusions: cli-troubleshooting.md:33, cli-tests-js-wasm.md:22/33 unchanged."
       }
     },
     "ui-specialist": {
