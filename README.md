@@ -509,7 +509,7 @@ Gradle plugins and utilities shipped in `tools/` — installable independently f
 
 Install via `/setup --dokka-plugin yes` (wizard W10) or manually — see the [standalone plugin repo](https://github.com/oscardlfr/dokka-markdown-plugin#readme) and the pattern doc at [`docs/gradle/dokka-markdown-plugin.md`](docs/gradle/dokka-markdown-plugin.md).
 
-### kmp-test-runner v0.10.1 — test orchestration runner
+### kmp-test-runner v0.14.0 — test orchestration runner
 
 `@oscardlfr/kmp-test-runner` is the canonical runner for Gradle test execution across the L0/L1/L2 chain. AndroidCommonDoc consumes it via thin shell wrappers: `gradle-run.sh/.ps1` (~100 lines each, BL-W32-06a) for single-module runs, and `run-parallel-coverage-suite.sh/.ps1` + `run-changed-modules-tests.sh/.ps1` (BL-W32-06e) for parallel suite and changed-module flows. The wrappers delegate retry semantics, daemon management, Kover coverage, and Windows file-lock recovery to the runner. **Skills using it**: `/test`, `/coverage`, `/test-full-parallel`, `/test-full`, `/test-changed`. **Adoption**: L0 ✓ (BL-W32-06a/06e), L1 in progress, L2 pending. For runner CLI usage, retry policies, and configuration see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme).
 
@@ -971,12 +971,12 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `check-doc-freshness` | Verify pattern doc version references against versions manifest (calls check-freshness) |
 | `check-version-sync` | Version catalog diff between projects -- or against `versions-manifest.json` directly |
 | `generate-sbom` | CycloneDX SBOM generation via Gradle plugin |
-| `gradle-run` | Thin wrapper over `kmp-test-runner` v0.10.1 (smart retry, daemon management, OOM recovery handled by external CLI) |
+| `gradle-run` | Thin wrapper over `kmp-test-runner` v0.14.0 (smart retry, daemon management, OOM recovery handled by external CLI) |
 | `lint-resources` | String resource naming convention enforcement |
 | `pattern-lint` | **Deterministic code pattern checks** -- 8 grep-based rules (CancellationException, MutableSharedFlow, forbidden imports, println, TODO crash, runBlocking, GlobalScope, System.currentTimeMillis) |
 | `run-android-tests` | Instrumented test orchestration on device/emulator |
 | `run-changed-modules-tests` | Git diff-based module detection + selective test execution |
-| `run-parallel-coverage-suite` | Thin wrapper over kmp-test-runner v0.10.1 for parallel test execution + L0 coverage-full-report.md generation. `--exclude-coverage` for test-utility modules, auto-excludes `*:testing`, `konsist-guard`, etc. For runner internals see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme). |
+| `run-parallel-coverage-suite` | Thin wrapper over kmp-test-runner v0.14.0 for parallel test execution + L0 coverage-full-report.md generation. `--exclude-coverage` for test-utility modules, auto-excludes `*:testing`, `konsist-guard`, etc. For runner internals see the [standalone repo](https://github.com/oscardlfr/kmp-test-runner#readme). |
 | `scan-sbom` | CVE scanning via Trivy |
 | `verify-kmp-packages` | KMP source set validation and import checking |
 
@@ -1233,7 +1233,7 @@ AndroidCommonDoc/
 
 ## Coverage Workflow
 
-`/test-full-parallel` orchestrates a complete test + coverage cycle via `run-parallel-coverage-suite.sh` — a thin wrapper around [kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner) v0.10.1:
+`/test-full-parallel` orchestrates a complete test + coverage cycle via `run-parallel-coverage-suite.sh` — a thin wrapper around [kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner) v0.14.0:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -1241,7 +1241,7 @@ AndroidCommonDoc/
 │  run-parallel-coverage-suite.sh --project-root . --coverage-tool auto│
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  1. DELEGATE TO kmp-test-runner v0.10.1                             │
+│  1. DELEGATE TO kmp-test-runner v0.14.0                             │
 │     kmp-test-runner parallel --project-root .                       │
 │     Handles: module discovery, Gradle invocation, daemon mgmt,      │
 │     timeout watchdog, Kover/JaCoCo fallback retry                   │
