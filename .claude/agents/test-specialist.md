@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [test, coverage, quality, tdd]
 token_budget: 3000
-template_version: "1.28.0"
+template_version: "1.29.0"
 memory: project
 skills:
   - test
