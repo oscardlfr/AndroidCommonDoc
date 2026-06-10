@@ -119,10 +119,11 @@ describe('Wave 1 BUG 6: Post-Wave Team Integrity Check in team-lead or sub-docs'
 // 8. Wave 1: template_version bumped in architects
 // ---------------------------------------------------------------------------
 describe('Wave 1: template_version bumped in architects', () => {
-  it('arch-testing.md template_version is "1.36.0"', () => {
+  it('arch-testing.md template_version is "1.37.0"', () => {
     // BL-W47-prep-14 C2: bumped from 1.35.0 → 1.36.0 (kmp-test-runner v0.10.1 bump)
+    // wave cancellation-detekt: bumped from 1.36.0 → 1.37.0 (kmp-test-runner v0.14.0 bump)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.36.0"/);
+    expect(content).toMatch(/template_version:\s*"1.37.0"/);
   });
 
   it('arch-platform.md template_version is "1.32.0"', () => {
