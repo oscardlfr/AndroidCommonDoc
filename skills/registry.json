@@ -1992,7 +1992,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.36.0",
+        "template_version": "1.37.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2871,7 +2871,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.28.0",
+        "template_version": "1.29.0",
         "memory": "project",
         "skills": [
           "test",
