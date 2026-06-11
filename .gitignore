@@ -51,6 +51,10 @@ tmp/
 !.planning/backlog.md
 !.planning/wave*-propagation-plan.md
 !.planning/BL-W47-PLAN.md
+# BL-W47 v2 contract docs + firing matrix (prep-8 precedent: tracked planning artifacts)
+!.planning/BL-W47-PLAN-v2.md
+!.planning/AUDIT-harness-2026-06.md
+!.planning/BL-W47-firing-matrix.md
 # W31.7: architect verdicts are session-scoped scratch files (`.gitignore`
 # pattern at line 47 only matches depth 1; subdirs need their own rules).
 .planning/verdicts/
