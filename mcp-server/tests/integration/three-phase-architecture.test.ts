@@ -876,6 +876,23 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
   it('has graceful degradation when Context7 unavailable', () => {
     expect(cpContent).toMatch(/graceful|fall.?back|unavailable|not installed/i);
   });
+
+  it('has write_bundle protocol section', () => {
+    expect(cpContent).toMatch(/## write_bundle/);
+  });
+
+  it('write_bundle invokes the sanctioned writer script', () => {
+    expect(cpContent).toContain('scripts/sh/write-bundle.sh');
+  });
+
+  it('write_bundle declares the single sanctioned write path + ABI boundary', () => {
+    expect(cpContent).toMatch(/single sanctioned write path/i);
+    expect(cpContent).toMatch(/authorized for THIS script invocation only/i);
+  });
+
+  it('write_bundle triggers only on team-lead dispatch', () => {
+    expect(cpContent).toMatch(/ONLY on an explicit team-lead dispatch/i);
+  });
 });
 
 // ---------------------------------------------------------------------------
