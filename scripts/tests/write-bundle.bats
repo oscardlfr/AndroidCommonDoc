@@ -216,3 +216,30 @@ run_writer_env() {
     --slug 'bad/slug'"
   [ "$status" -ne 0 ]
 }
+
+@test "E8 BLOCK: body exceeding 60 lines exits non-zero and writes nothing" {
+  # 61 lines is one over the allowed maximum — script must reject and write nothing.
+  # Use echo (not printf with leading '-') to avoid printf flag-parsing on some shells.
+  run bash -c "cd '$PROJ' && (for i in \$(seq 1 61); do echo \"line \$i\"; done) | bash '$SCRIPT' \
+    --role test-specialist \
+    --plan-id 'wave-bl-w47-bundles/PLAN.md#T4' \
+    --slug bl-w47-test"
+  [ "$status" -ne 0 ]
+  [ ! -d "$PROJ/.planning/wave-bl-w47-test/context-bundles" ] || \
+    [ -z "$(ls -A "$PROJ/.planning/wave-bl-w47-test/context-bundles/" 2>/dev/null)" ]
+}
+
+@test "E9 BLOCK: plan-id with embedded newline exits non-zero" {
+  # A newline inside plan-id could inject arbitrary YAML fields into the frontmatter.
+  # Write the payload to a file to safely carry it past bats quoting layers.
+  local payload_file
+  payload_file="$(mktemp "$PROJ/payload.XXXXXX")"
+  printf 'wave-bl-w47/PLAN.md\ninjected: evil' > "$payload_file"
+  local bad_plan_id
+  bad_plan_id="$(cat "$payload_file")"
+  run bash -c "cd '$PROJ' && printf '%s\n' '$BODY_CONTENT' | bash '$SCRIPT' \
+    --role test-specialist \
+    --plan-id \"$bad_plan_id\" \
+    --slug bl-w47-test"
+  [ "$status" -ne 0 ]
+}

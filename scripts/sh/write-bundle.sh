@@ -67,6 +67,12 @@ if [[ -z "$PLAN_ID" ]]; then
   exit 1
 fi
 
+# Validate PLAN_ID format (YAML injection prevention).
+if [[ ! "$PLAN_ID" =~ ^[A-Za-z0-9][A-Za-z0-9/#._-]*$ ]]; then
+  echo "[write-bundle] ERROR: --plan-id value is invalid: '${PLAN_ID}' — must match ^[A-Za-z0-9][A-Za-z0-9/#._-]*\$" >&2
+  exit 1
+fi
+
 # -- 3. Resolve wave slug -------------------------------------------------------
 WAVE_SLUG=""
 
@@ -100,6 +106,13 @@ fi
 
 # -- 5. Read body from stdin ---------------------------------------------------
 BODY="$(cat)"
+
+# Enforce body line-count limit (schema Content Rule 3: body ≤ 60 lines HARD).
+LINE_COUNT="$(printf '%s\n' "$BODY" | wc -l | tr -d ' ')"
+if (( LINE_COUNT > 60 )); then
+  echo "[write-bundle] ERROR: bundle body is ${LINE_COUNT} lines — exceeds 60-line limit (schema Content Rule 3). Reduce body and retry." >&2
+  exit 1
+fi
 
 # -- 6. Compute output path ----------------------------------------------------
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
