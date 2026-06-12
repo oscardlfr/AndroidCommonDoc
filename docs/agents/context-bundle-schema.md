@@ -7,7 +7,7 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "Context bundle schema (BL-W47 ex-PR2): file-based T2 contract for respawn/rotation context — storage, TTL, header format, PATTERNS-only rules, writer/consumer contracts"
+description: "Context bundle schema: portable file-based contract for respawn/rotation context — storage, TTL, header format, PATTERNS-only rules, writer/consumer contracts"
 version: 1
 last_updated: "2026-06"
 assumes_read: context-rotation-guide
@@ -16,7 +16,7 @@ token_budget: 1500
 
 # Context Bundle Schema
 
-File-based context bundles are the **primary (T2) contract** for handing structured context to context-exhausted or freshly respawned agents. They are plain markdown files — portable to any model/CLI that can read files (audit Part E #2 inversion, binding). `SubagentStart` `additionalContext` injection is a **future T3 adapter** (PR-0c+), never the carrier of this invariant.
+File-based context bundles are the **primary contract** for handing structured context to context-exhausted or freshly respawned agents. They are plain markdown files — portable to any model/CLI that can read files. Hook-based injection (`SubagentStart` `additionalContext`) is an optional future adapter, never the carrier of this invariant.
 
 ## Storage & Naming
 
@@ -72,7 +72,7 @@ schema_version: 1
 
 1. **PATTERNS-only**: doc references = path + frontmatter slug + one-line relevance. NEVER paste file contents, code blocks from the repo, or full doc bodies into a bundle.
 2. **No work forecasts**: the Status Snapshot describes the bundle role's OWN current state — never predicted future work for other roles (spawn-prompt hygiene).
-3. **Size cap**: body ≤ 60 lines. A bundle REPLACES inline spawn-prompt context; it must never regrow it (audit Part E #13-4).
+3. **Size cap**: body ≤ 60 lines. A bundle REPLACES inline spawn-prompt context; it must never regrow it.
 4. **Architect Addendum** (architect roles only) absorbs the pre-rotate brief: current verdict state (PREP/FINAL emitted, file path), in-flight findings (id + severity + one line), pending dispatches awaiting that architect.
 
 ## Writer Contract
@@ -90,11 +90,11 @@ bash scripts/sh/write-bundle.sh --role test-specialist \
 BODY
 ```
 
-- This flag+stdin interface is CANONICAL — it supersedes any positional-arg sketch in wave PLAN.md files (arch-platform PREP F1).
+- This flag+stdin interface is CANONICAL — it supersedes any positional-arg sketch in wave PLAN.md files.
 - Body arrives on stdin; the script authors the YAML header (UTC `created_at`, slug resolution) and writes `context-bundles/{role}.md`, creating directories as needed.
 - Slug resolution order (mirrors hook layer): `--slug` flag → `CLAUDE_WAVE_SLUG` env → git branch `feature/{slug}`. Unresolvable slug = error (exit ≠ 0), never a guess.
-- The script writes ONLY under `.planning/wave-{slug}/context-bundles/` — any other target is out of contract. CP's Bash tool is authorized for THIS script invocation only; every other write-capable Bash call remains banned under `CONTEXT_PROVIDER_READ_ONLY` (arch-platform PREP F2).
-- T2 portability: in non-Claude environments any file-capable agent may run the same script — the schema, not the orchestrator, is the contract.
+- The script writes ONLY under `.planning/wave-{slug}/context-bundles/` — any other target is out of contract. CP's Bash tool is authorized for THIS script invocation only; every other write-capable Bash call remains banned under `CONTEXT_PROVIDER_READ_ONLY`.
+- Portability: in non-Claude environments any file-capable agent may run the same script — the schema, not the orchestrator, is the contract.
 
 ## Consumer Contract (spawn-prompt mandate)
 
