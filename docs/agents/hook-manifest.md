@@ -96,6 +96,7 @@ This manifest covers only `.claude/hooks/` (Claude Code hooks). The repository a
 |----------|--------|-----------------|
 | `pre-commit` | `scripts/sh/pre-commit-hook.sh` | Registry hash freshness + manifest drift |
 | `commit-msg` | `scripts/sh/commit-msg-hook.sh` | Conventional Commits format + scope whitelist (UNIVERSAL — fires for all committers, closes the team-peer bypass in `commit-scope-validation-gate.js`) |
+| `pre-push` | `scripts/sh/pre-push-hook.sh` | Two-stamp push gate (BL-W47 PR-0b): quality-gate.stamp + pre-pr.stamp must be PASS, ≤30 min old, and match the pushed commit (pre-pr `head` == pushed sha; quality-gate stamp must be NEWER than the pushed commit's committer date). UNIVERSAL backstop below the Claude-layer push gates — fires for every push from the clone regardless of agent identity. Exempt: deletions, tags, refs/heads/{develop,master,main} (PR-merge flow). Bypass: `SKIP_PUSH_GATE=1` (explicit user authorization only) |
 
 > **Why two scope gates?** `commit-scope-validation-gate.js` (PreToolUse) only intercepts the main orchestrator's commits. `commit-msg-hook.sh` is authoritative — it fires for every committer in the clone via git's native hook mechanism. See [pre-commit-hooks](../guides/pre-commit-hooks.md#three-layer-commit-scope-enforcement) for the full three-layer table.
 

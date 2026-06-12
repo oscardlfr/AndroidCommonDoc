@@ -18,7 +18,7 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custo
 
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
-- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 39 cross-platform pairs + 5 Bash-only utilities
+- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 39 cross-platform pairs + 6 Bash-only utilities
 - **AI agent skills** for Claude Code and GitHub Copilot -- 61 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 23 hand-written + 5 generated AST-only rules (28 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, security patterns, and testing anti-patterns
@@ -959,7 +959,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Scripts
 
-39 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 5 Bash-only utilities.
+39 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 6 Bash-only utilities.
 
 ### Core Scripts
 
@@ -991,6 +991,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `migration-check` | Database migration validator (Room/SQLDelight) |
 | `code-metrics` | Code complexity metrics: LOC, file count, public functions per module |
 | `gradle-config-check` | Gradle configuration linter (convention plugins, hardcoded versions) |
+| `check-root-garbage` | CI anti-recurrence check: detects mangled-path fragments (e.g. `Users*` entries) at repo root (BL-W47 PR-0b D1 guard) |
 | `sync-gsd-skills` | GSD-2 skill sync from marketplace + L0 + L0 agents (opt-in) |
 | `sync-gsd-agents` | Generate GSD subagent wrappers from .claude/agents/ |
 | `check-agent-parity` | Verify parity between .claude/agents/ and GSD subagents |
@@ -999,9 +1000,10 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `readme-audit` | Comprehensive README/doc audit against filesystem (counts, tables, tree, hub links, prose claims) |
 | `rehash-registry` | Recompute SHA-256 hashes in registry.json (CRLF→LF normalized) |
 | `copilot-parity` | Verify Copilot prompt templates match Claude skill definitions |
-| `install-git-hooks` | Install pre-commit (pattern-lint) + commit-msg (conventional commits) git hooks |
+| `install-git-hooks` | Install pre-commit (pattern-lint) + commit-msg (conventional commits) + pre-push (two-stamp gate) git hooks |
 | `pre-commit-hook` | Standalone pre-commit hook body: blocks commits with stale registry hash |
 | `commit-msg-hook` | git commit-msg hook: Conventional Commits format + scope whitelist (universal — fires for all committers; closes team-peer bypass in PreToolUse `commit-scope-validation-gate.js`) |
+| `pre-push-hook` | git pre-push hook: two-stamp gate (quality-gate.stamp + pre-pr.stamp PASS ≤30min, sha-bound; BL-W47 PR-0b) — universal backstop below the Claude-layer push gates |
 | `run-benchmarks` | Detect and run JVM/Android benchmark suites with Gradle |
 | `validate-agent-templates` | Lint agent templates: frontmatter, role keywords, anti-patterns, versioning (7 checks) |
 | `catalog-coverage-check` | Detect hardcoded Gradle dependency versions that should use the version catalog |
@@ -1031,7 +1033,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-17 domain hubs, 96 sub-docs, 28 guides, 52 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+17 domain hubs, 97 sub-docs, 28 guides, 52 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1162,7 +1164,7 @@ AndroidCommonDoc/
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
 |   +-- ps1/                # PowerShell (Windows) -- 39 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 47 scripts
+|   +-- sh/                 # Bash (macOS/Linux) -- 49 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite
@@ -1215,7 +1217,7 @@ AndroidCommonDoc/
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
 |   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
-+-- docs/                   # 17 domain hubs, 96 sub-docs, 28 guides, 52 agent workflow docs
++-- docs/                   # 17 domain hubs, 97 sub-docs, 28 guides, 52 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- network/    +-- offline-first/ +-- resources/

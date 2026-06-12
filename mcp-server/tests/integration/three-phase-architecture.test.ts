@@ -199,8 +199,9 @@ describe('team-lead template — 3-phase model', () => {
     expect(content).toContain('creating session team first');
   });
 
-  it('rotation uses SAME name AND SAME team_name', () => {
-    expect(combinedPM).toContain('SAME name AND SAME team_name');
+  it('rotation uses kill-then-respawn with canonical name', () => {
+    expect(combinedPM).toContain('kill-then-respawn');
+    expect(combinedPM).toContain('CANONICAL name');
   });
 
   it('has Session Team Setup section', () => {
@@ -232,9 +233,9 @@ describe('tl-phase-execution sub-doc — extracted phase protocol', () => {
     expect(content).toMatch(/planner.*context-provider/i);
   });
 
-  it('anti-pattern arch-X-v2 is documented with correction', () => {
-    expect(content).toContain('arch-X-v2');
-    expect(content).toContain('SAME name AND SAME team_name');
+  it('anti-pattern indexed replacement is documented with correction', () => {
+    expect(content).toContain('kill-then-respawn');
+    expect(content).toContain('arch-platform-2');
   });
 
   it('references .planning/PLAN.md for plan file delivery', () => {

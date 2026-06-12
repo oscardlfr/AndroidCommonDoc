@@ -40,6 +40,9 @@ on:
         type: string
         default: "konsist-guard/build/reports/tests/"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   architecture-guards:
     name: "🏛️ Architecture Guards"

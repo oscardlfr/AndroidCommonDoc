@@ -52,14 +52,15 @@ Read-only git ops (`status`, `log`, `diff`, `show`, `rev-parse`, `blame`, `reflo
 
 ## Detection Logic
 
-The hook tokenizes the bash command string on whitespace:
-- If `tokens[0]` is not `git` → allow
-- If `tokens[1]` is not in `BLOCKED_SUBCOMMANDS` → allow
-- Shell-out to read current branch via `git rev-parse --abbrev-ref HEAD` (2s timeout)
-- If branch not in `PROTECTED_BRANCHES` → allow
-- Otherwise: emit JSON block decision, exit 2
+Since BL-W47 PR-0b the hook scans COMPOUND commands segment by segment (closing the `rtk git commit` and `cd x && git commit` bypass classes found empirically in the PR-0a firing matrix §6/E3):
 
-Tokenized parse prevents `git commit-graph` from matching `commit` (`tokens[1]` is `commit-graph`). The `git -C /path commit` edge case (`tokens[1]` is `-C`) passes through because `-C` is not in the block list.
+1. Split the command string into segments on `&&`, `||`, `;` and single `|`.
+2. Per segment: trim, strip a leading `(`, then strip leading prefixes — env assignments (`VAR=x`), `rtk`, `sudo`, `command` (same stripping baseline as `wave-phase-gate.js` `isGatedCommand`, extended).
+3. If the stripped segment's first token is not `git` → segment passes.
+4. Resolve the git subcommand past global flags (`-C <path>`, `--work-tree`, `--git-dir` skip their argument; other `-*` flags are skipped) — so `git -C /path commit` IS detected.
+5. If any segment's subcommand is in `BLOCKED_SUBCOMMANDS`: shell-out to read the current branch via `git rev-parse --abbrev-ref HEAD` (2s timeout); if the branch is in `PROTECTED_BRANCHES` → emit JSON block decision, exit 2.
+
+Tokenized parse prevents `git commit-graph` from matching `commit` (subcommand token is `commit-graph`). Note the residual: segment-level `cd` into ANOTHER repo (`cd ../other && git commit`) is checked against THIS repo's current branch — fail-open by design (the guard protects this clone's protected branches).
 
 Block message includes a remediation suggestion:
 ```

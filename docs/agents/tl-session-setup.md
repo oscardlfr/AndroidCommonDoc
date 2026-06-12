@@ -50,11 +50,11 @@ Core specialists live until session end — same lifecycle as architects. They a
 
 **Why session team peers**: context-provider reads the project ONCE. Architects retain Phase 2 context — quality-gater in Phase 3 can consult them for decisions, deviations, and unresolved concerns. Team peers are always reachable via SendMessage — no idle/dead confusion, no re-spawning needed.
 
-**Rotation**: for long sessions (5+ waves), re-spawn with SAME name AND SAME team_name: `Agent(name="context-provider", team_name="session-{project-slug}", ...)` — replaces the old peer in the team.
+**Rotation**: for long sessions (5+ waves), rotate KILL-THEN-RESPAWN: (1) gracefully terminate the old peer — `SendMessage(to="context-provider", message={type:"shutdown_request"})`; (2) VERIFY its member entry is GONE from `~/.claude/teams/session-{project-slug}/config.json` (if it lingers, escalate to the user for manual cleanup — do NOT work around it); (3) re-spawn the CANONICAL name: `Agent(name="context-provider", team_name="session-{project-slug}", ...)` — collision-free now, fresh context window. NEVER respawn while the old instance is alive or its entry lingers: the spawn SUFFIXES silently (`-2`) and messages addressed to the role's canonical name stop arriving (dead-inbox routing — proven twice: feedback_stale_team_suffix_collision + PR #206 saga; suffixed names also evade exact-match gates until PR-0c identity-tolerance, matrix E17). NEVER use free-form names for agents holding Write/Bash/gh — non-canonical names are invisible to every type-keyed gate (incident E18, BL-W47 firing matrix §5). Stopped SUBAGENTS (Agent-tool, not teammates) need no respawn at all: SendMessage auto-resumes them with full context (native primitive, matrix E20).
 
 **Long-session rotation protocol**: If a core specialist has accumulated 15+ tool uses AND 150k+ tokens AND has failed a single dispatch 2+ times, STOP retrying. Either:
-(a) Architect requests team-lead rotate the specialist (re-spawn with SAME name and SAME team_name — clears persistent context), OR
-(b) team-lead spawns a named overflow dev (e.g. `{specialist}-2`, team_name="session-{project-slug}") for the specific failing task.
+(a) Architect requests team-lead rotate the specialist — kill-then-respawn: graceful shutdown of the bloated peer, verify its config entry is removed, then re-spawn the CANONICAL name with fresh context (see Rotation above), OR
+(b) team-lead spawns a named overflow dev (e.g. `{specialist}-2`, team_name="session-{project-slug}") for the specific failing task — overflow is ADDITIONAL capacity alongside the live canonical peer, addressed explicitly by its own `-2` name (NOT a replacement).
 
 Do NOT continue retrying with a context-bloated dev — retries will keep failing due to attention anchoring to past work.
 

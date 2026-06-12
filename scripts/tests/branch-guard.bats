@@ -164,3 +164,43 @@ sys.stdout.write(json.dumps({'tool_name': '$tool', 'tool_input': {'command': '$c
   run env "PATH=$FAKE_PATH" FAKE_GIT_BRANCH="develop" bash -c "cat '$INPUT_FILE' | node '$HOOK'"
   [ "$status" -eq 2 ]
 }
+
+# ── WS2 bypass-class cases (BL-W47 PR-0b) ────────────────────────────────────
+# These cases verify the parser fix correctly handles compound commands and
+# prefix patterns that previously let blocked subcommands slip through.
+
+@test "blocks rtk git commit on develop (rtk-prefix bypass class)" {
+  make_input "rtk git commit -m msg"
+  run env "PATH=$FAKE_PATH" FAKE_GIT_BRANCH="develop" bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
+
+@test "blocks cd /x && git commit on develop (compound-command bypass class)" {
+  make_input "cd /x && git commit -m msg"
+  run env "PATH=$FAKE_PATH" FAKE_GIT_BRANCH="develop" bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
+
+@test "blocks FOO=1 git commit on develop (env-prefix bypass class)" {
+  make_input "FOO=1 git commit -m x"
+  run env "PATH=$FAKE_PATH" FAKE_GIT_BRANCH="develop" bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
+
+@test "blocks git add . && rtk git commit on develop (compound with rtk-prefix)" {
+  make_input "git add . && rtk git commit -m x"
+  run env "PATH=$FAKE_PATH" FAKE_GIT_BRANCH="develop" bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
+
+@test "allows rtk git status on develop (rtk-prefix read-only control)" {
+  make_input "rtk git status"
+  run env "PATH=$FAKE_PATH" FAKE_GIT_BRANCH="develop" bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "allows cd /x && npm test on develop (non-git compound control)" {
+  make_input "cd /x && npm test"
+  run env "PATH=$FAKE_PATH" FAKE_GIT_BRANCH="develop" bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
