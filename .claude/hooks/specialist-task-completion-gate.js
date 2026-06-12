@@ -16,14 +16,15 @@
 //
 // Fail-open: any parse error or stdin error -> exit 0
 
-const SPECIALIST_TYPES = new Set([
+// Canonical specialist names — startsWith match for suffix-rotation tolerance
+const SPECIALIST_TYPES = [
   'test-specialist',
   'toolkit-specialist',
   'ui-specialist',
   'domain-model-specialist',
   'data-layer-specialist',
   'doc-updater',
-]);
+];
 
 let input = '';
 const t = setTimeout(() => process.exit(0), 5000);
@@ -39,8 +40,8 @@ process.stdin.on('end', () => {
     // Only intercept TaskUpdate
     if (toolName !== 'TaskUpdate') process.exit(0);
 
-    // Only subject specialists are gated
-    if (!SPECIALIST_TYPES.has(agentType)) process.exit(0);
+    // Only subject specialists are gated — startsWith for suffix-rotation tolerance
+    if (!SPECIALIST_TYPES.some(s => agentType.startsWith(s))) process.exit(0);
 
     // Only block status=completed
     const status = data.tool_input?.status || '';
