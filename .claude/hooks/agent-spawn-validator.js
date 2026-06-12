@@ -161,6 +161,34 @@ process.stdin.on('end', () => {
       }));
       process.exit(2);
     }
+
+    // Stale-suffix guard (BL-W47 identity-tolerance, L6e)
+    // Three cases when agentName differs from subagentType (canonical):
+    //   A. Intentional overflow: agentName = canonical + -\d+ suffix AND canonical is in manifest
+    //      => ALLOW (rotation pattern; overflow peer)
+    //   B. Accidental same-name: trivially caught by the equality guard above
+    //   C. Free name: agentName matches no canonical pattern => WARN
+    if (agentName !== subagentType) {
+      const suffixMatch = /^(.+)-(\d+)$/.exec(agentName);
+      if (suffixMatch) {
+        const canonicalBase = suffixMatch[1];
+        if (!manifest.agents || !manifest.agents[canonicalBase]) {
+          // Case C: suffix present but canonical base not in manifest => WARN
+          process.stderr.write(
+            '[agent-spawn-validator] WARN: spawning "' + agentName + '" with suffix but canonical "' +
+            canonicalBase + '" is not in manifest. This may be a misconfigured name. ' +
+            'Prefer canonical names per identity-tolerance OQ3.\n'
+          );
+        }
+        // Case A: known canonical with numeric suffix => silently allow (fall through)
+      } else {
+        // Case C: free name (no suffix) => WARN, allow
+        process.stderr.write(
+          '[agent-spawn-validator] WARN: name="' + agentName + '" does not match subagent_type="' +
+          subagentType + '" and has no recognized suffix. Canonical name preferred for gate coverage.\n'
+        );
+      }
+    }
   }
 
   process.exit(0);
