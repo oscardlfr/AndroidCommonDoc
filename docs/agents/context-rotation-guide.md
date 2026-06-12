@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Context window management for TeamCreate teams: rotation, archiving, team-lead-as-relay, anti-patterns"
-version: 2
-last_updated: "2026-05"
+version: 3
+last_updated: "2026-06"
 assumes_read: autonomous-multi-agent-workflow
 token_budget: 1500
 ---
@@ -64,15 +64,19 @@ Wave 3 summary: Fixed 4 encoding issues in data layer (arch-platform).
 Remaining: 1 ESCALATED issue — navigation restructuring needs design decision.
 ```
 
-### 3. Re-Spawn Session Team Peers
+### 3. Rotate Session Team Peers (kill-then-respawn)
 
-For long sessions (**5+ waves** with 10 peers, 7+ waves with 5 peers), re-spawn with **SAME name AND SAME team_name** to replace the old peer in-team:
+For long sessions (**5+ waves** with 10 peers, 7+ waves with 5 peers), rotate a peer in three steps:
 
-```
-Agent(name="arch-platform", team_name="session-{project-slug}", prompt="...", run_in_background=true)
-```
+1. **Kill properly**: `SendMessage(to="arch-platform", message={type:"shutdown_request"})` — wait for the peer to approve and terminate.
+2. **Verify removal**: read `~/.claude/teams/session-{project-slug}/config.json` and confirm the member entry is GONE. If it lingers, escalate to the user for manual cleanup — do NOT work around it.
+3. **Re-spawn the CANONICAL name**: `Agent(name="arch-platform", team_name="session-{project-slug}", prompt="...", run_in_background=true)` — the name is collision-free again; the new peer gets a fresh context window with canonical routing and full gate coverage.
 
-This replaces the old `arch-platform` in the team with a fresh context window. **Never** use a "v2" suffix — `arch-platform-v2` creates a second peer instead of replacing the first.
+**Anti-pattern — indexed replacement**: spawning `arch-platform-2` as a replacement (or respawning without the kill+verify steps) does NOT rotate the role. Respawn-without-kill SUFFIXES silently; messages addressed to the canonical role name keep routing to the dead inbox (empirically proven twice: feedback_stale_team_suffix_collision + PR #206 saga), and suffixed names evade exact-match gates until identity-tolerant matching ships in PR-0c (matrix E17). Indexed `-2` names are legitimate ONLY as intentional OVERFLOW capacity — a second peer working alongside a LIVE canonical peer, addressed explicitly by its own `-2` name. **Never use free-form names** for agents holding Write/Bash/gh — non-canonical names are invisible to every type-keyed gate (BL-W47 firing matrix §5, incident E18).
+
+Stopped **subagents** (Agent-tool, no team_name) are different: SendMessage to a stopped subagent auto-resumes it in the background with FULL history (native primitive, matrix E20) — no respawn, no rotation needed.
+
+> Worktree note: stamps (`.androidcommondoc/quality-gate.stamp`, `pre-pr.stamp`) are PER-WORKTREE — a peer working in a linked worktree must run /quality-gate and /pre-pr inside its own worktree or the git pre-push gate blocks its pushes.
 
 ### 4. Dissolve and Recreate Team
 
@@ -173,7 +177,7 @@ Add ONLY when in scope:
 
 | Anti-pattern | Why it's bad | Fix |
 |-------------|-------------|-----|
-| 7+ waves (10-peer) / 10+ waves (5-peer) | Context grows to 60K+ tokens | Re-spawn peers with same name/team_name, or dissolve/recreate |
+| 7+ waves (10-peer) / 10+ waves (5-peer) | Context grows to 60K+ tokens | Rotate kill-then-respawn (shutdown_request → verify removal → respawn canonical name), or dissolve/recreate |
 | Extra specialists as team peers | Extras accumulate context they don't need | Core specialists are peers; extras are sub-agents via team-lead (no team_name) |
 | team-lead reading full verdicts | Verdict prose bloats team-lead context | Architects: 3-line summary first, details on request |
 | Not calling doc-updater between waves | Findings lost if session crashes | Archive to disk every 3-5 waves |

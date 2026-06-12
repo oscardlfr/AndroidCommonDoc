@@ -58,7 +58,7 @@ All 10 peers: SendMessage(to="<agent-name>")  ← always reachable
 
 **Why TeamCreate**: team peers don't go "idle" the same way as background agents — no idle/dead confusion, no re-spawning with "v2" suffixes. **context-provider is an on-demand oracle** — agents SendMessage it with specific queries and it loads relevant files on demand (not eagerly), keeping setup cost low. Core devs accumulate layer knowledge across waves, eliminating per-spawn context re-reads. Quality-gater in Phase 3 joins the same team and can SendMessage directly to architects and devs. Context is preserved across all phases.
 
-**Context rotation**: for long sessions (5+ waves with 10 peers, 7+ waves with 5 peers), re-spawn with SAME name AND SAME team_name: `Agent(name="arch-platform", team_name="session-{project-slug}", ...)` — replaces the old peer in-team. Never use a "v2" suffix.
+**Context rotation**: for long sessions (5+ waves with 10 peers, 7+ waves with 5 peers), rotate kill-then-respawn: graceful `shutdown_request` → VERIFY the member entry is removed from the team config → re-spawn the CANONICAL name (`Agent(name="arch-platform", team_name="session-{project-slug}", ...)`). Respawn-without-kill SUFFIXES silently (`-2`) and the canonical name routes to a dead inbox — see [context-rotation-guide](context-rotation-guide.md) §3.
 
 ### Why Session Team Peers
 
@@ -172,7 +172,7 @@ Phase 3 — Quality Gate (temporary quality-gater)
 
 **Wave pattern**: For large tasks, multiple detect/fix/verify cycles (waves). Persistent architects retain full context between waves.
 
-**Context management**: All 10 session team peers carry context across waves automatically. For long sessions (5+ waves), re-spawn with same name AND same team_name: `Agent(name="arch-platform", team_name="session-{project-slug}", ...)` — replaces the old peer in the team.
+**Context management**: All 10 session team peers carry context across waves automatically. For long sessions (5+ waves), rotate kill-then-respawn: graceful shutdown_request → verify the member entry is removed from the team config → re-spawn the CANONICAL name. Never spawn a `-2` replacement (dead-inbox routing) — see [context-rotation-guide](context-rotation-guide.md) §3.
 
 ---
 
@@ -204,7 +204,7 @@ See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 
 - **team-lead is sole Agent() spawner** -- teammates can't use Agent() in in-process mode (#31977)
 - **Architects**: Read, Grep, Glob, Bash, SendMessage (NO Write/Edit/Agent)
-- **10 session team peers** -- 5 at session start (context-provider, doc-updater, arch-testing, arch-platform, arch-integration) + 5 core specialists at Phase 2 start (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist). For long sessions (5+ waves), re-spawn with same name AND same team_name.
+- **10 session team peers** -- 5 at session start (context-provider, doc-updater, arch-testing, arch-platform, arch-integration) + 5 core specialists at Phase 2 start (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist). For long sessions (5+ waves), rotate kill-then-respawn (canonical name; see [context-rotation-guide](context-rotation-guide.md) §3).
 - **No new TeamCreate for Phase 2** -- architects are already in the session team. team-lead sends plan via SendMessage. No additional team creation needed.
 - **Phase 3 deliberation is mandatory** -- quality-gater MUST consult all 3 architects before running automated checks. Skipping deliberation voids the gate.
 - **team-lead FORBIDDEN from spawning core specialists outside Phase 2 start** -- the 5 core specialists are spawned exactly once when Phase 2 begins.

@@ -74,7 +74,7 @@ quality-gater FAIL → IMMEDIATELY back to SendMessage architects (Phase 2 retry
 - Architect requests named specialist via SendMessage and team-lead substitutes anonymous or differently-named agent — team-lead MUST honor the requested name → BUG
 - team-lead uses TeamCreate for architects in Phase 2 (they're persistent, use SendMessage) → BUG
 - team-lead creates new TeamCreate per wave instead of reusing session team → BUG
-- team-lead re-spawns an architect as "arch-X-v2" instead of SendMessage to the original → BUG. **RULE: If an architect seems unresponsive → SendMessage first. If no response after 1 retry → re-spawn with the SAME name AND SAME team_name (e.g. `Agent(name="arch-platform", team_name="session-{project-slug}", ...)`), never append "v2" or any suffix.**
+- team-lead re-spawns an architect instead of SendMessage to the original → BUG. **RULE: If an architect seems unresponsive → SendMessage first (idle peers wake on message; stopped subagents auto-resume with full context). If no response after 1 retry → kill-then-respawn: gracefully terminate the old peer (shutdown_request), VERIFY its entry is removed from the team config (escalate to user if it lingers), then re-spawn the CANONICAL name (`Agent(name="arch-platform", team_name="session-{project-slug}", ...)`). NEVER spawn an indexed replacement (`arch-platform-2`) alongside a dead or lingering entry — messages addressed to the canonical name stop arriving (dead-inbox routing, proven twice) and suffixed names evade exact-match gates (matrix E17). Free-form names are invisible to type-keyed gates (firing matrix §5, incident E18).**
 
 ## Execution Trigger Checklist
 ```

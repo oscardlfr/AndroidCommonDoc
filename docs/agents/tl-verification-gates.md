@@ -76,7 +76,7 @@ Context compaction can cause a peer to loop — echoing the same summary repeate
 
 **On detection**:
 ```
-SendMessage(to="user", message="[COMPACTION-LOOP] arch-{role}: 3 consecutive identical summaries detected. Likely context-compacted. Recommend re-spawning: Agent(name='arch-{role}', team_name='session-{slug}', ...)")
+SendMessage(to="user", message="[COMPACTION-LOOP] arch-{role}: 3 consecutive identical summaries detected. Likely context-compacted. Recommend kill-then-respawn: shutdown_request to arch-{role}, verify team-config entry removed, then Agent(name='arch-{role}', team_name='session-{slug}', ...) with fresh context — never spawn a -2 replacement alongside")
 ```
 
 Do NOT re-spawn automatically — user decides. Just flag and await instruction.
@@ -136,4 +136,4 @@ After collecting verdicts from all architects at the end of each wave, verify te
 1. Bash: read team config to list active session team peers
 2. Confirm context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater are ALL alive
 3. Confirm all spawned core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist — whichever were spawned in scope) are ALL alive
-4. If ANY peer is missing: IMMEDIATELY re-spawn with SAME name AND SAME team_name — `Agent(name="X", team_name="session-{slug}", ...)`. NEVER append "-v2". NEVER skip the integrity check.
+4. If ANY peer is missing: kill-then-respawn — confirm the dead peer's member entry is actually REMOVED from the team config (`~/.claude/teams/session-{slug}/config.json`; if it lingers, escalate to the user for manual cleanup), then IMMEDIATELY re-spawn the CANONICAL name — `Agent(name="X", team_name="session-{slug}", ...)`. NEVER spawn an indexed `X-2` replacement — messages addressed to the canonical name will not reach it (dead-inbox routing, proven twice) and suffixed names evade exact-match gates (matrix E17). Free-form names are gate-invisible (firing matrix §5, incident E18). NEVER skip the integrity check.
