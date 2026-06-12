@@ -855,8 +855,8 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
     expect(cpContent).toMatch(/find-pattern/);
   });
 
-  it('has template version 3.4.4', () => {
-    expect(cpContent).toContain('template_version: "3.4.4"'); // BL-W47-prep-13 C5: bumped 3.4.3 → 3.4.4 (Rule 8 FQN labeling)
+  it('has template version 3.5.0', () => {
+    expect(cpContent).toContain('template_version: "3.5.0"'); // bumped 3.4.4 → 3.5.0 (write_bundle protocol added)
   });
 
   it('has External Context section with Context7 call sequence', () => {
@@ -875,6 +875,23 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
 
   it('has graceful degradation when Context7 unavailable', () => {
     expect(cpContent).toMatch(/graceful|fall.?back|unavailable|not installed/i);
+  });
+
+  it('has write_bundle protocol section', () => {
+    expect(cpContent).toMatch(/## write_bundle/);
+  });
+
+  it('write_bundle invokes the sanctioned writer script', () => {
+    expect(cpContent).toContain('scripts/sh/write-bundle.sh');
+  });
+
+  it('write_bundle declares the single sanctioned write path + ABI boundary', () => {
+    expect(cpContent).toMatch(/single sanctioned write path/i);
+    expect(cpContent).toMatch(/authorized for THIS script invocation only/i);
+  });
+
+  it('write_bundle triggers only on team-lead dispatch', () => {
+    expect(cpContent).toMatch(/ONLY on an explicit team-lead dispatch/i);
   });
 });
 

@@ -66,6 +66,10 @@ tmp/
 .claude/agent-memory/
 .claude/settings.local.json
 
+# ── Per-user CLI adapter mirrors (Codex audit, agentskills export) — machine-local, regenerated ──
+.agents/
+.codex/
+
 # ── Local caches & audit logs ──
 .androidcommondoc/upstream-cache/
 .androidcommondoc/audit-log.jsonl

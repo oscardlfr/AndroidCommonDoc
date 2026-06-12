@@ -4,8 +4,8 @@ slug: main-agent-orchestration-guide
 scope: L0
 sources: ["W31.6 retirement of setup/agent-templates/team-lead.md", "docs/agents/tl-session-setup.md", "docs/agents/tl-dispatch-topology.md"]
 targets: [main agent]
-version: 1.1.0
-description: "Orchestration guide for the main agent running a session: team topology, phase protocol, architect routing, quality gates."
+version: 1.2.0
+description: "Orchestration guide for the main agent running a session: team topology, phase protocol, architect routing, context bundles, quality gates."
 ---
 
 # Main Agent Orchestration Guide
@@ -33,3 +33,12 @@ description: "Orchestration guide for the main agent running a session: team top
 | [tl-ingestion-request-handler](tl-ingestion-request-handler.md) | context-provider → user approval → doc-updater ingestion pipeline |
 | [tl-pattern-gap-handler](tl-pattern-gap-handler.md) | When context-provider emits `PATTERN-GAP: <topic>`: ask user approval OR proceed without. Dispatch ingestion on approval. |
 | [tl-task-completion-protocol](tl-task-completion-protocol.md) | Specialists send `READY-FOR-REVIEW: <task-id>`. team-lead verifies delivery, then marks task completed. Never accept specialist self-completion. |
+| [context-bundle-schema](context-bundle-schema.md) | Context bundle schema: portable file-based respawn/rotation context — storage, TTL, PATTERNS-only rules, writer/consumer contracts |
+
+## Context Bundles
+
+Every peer spawn/respawn prompt MUST open with the bundle-read mandate from [context-bundle-schema](context-bundle-schema.md) §Consumer Contract:
+
+> **FIRST: Read your bundle at `.planning/wave-{slug}/context-bundles/{role}.md` before any other action (then gate-ack to context-provider). If it is absent or its `wave_slug` does not match the active wave, report "no valid bundle" to team-lead and proceed without it.**
+
+Bundles are written by context-provider (`write_bundle`, via `scripts/sh/write-bundle.sh`) on YOUR dispatch — always BEFORE a kill-then-respawn rotation, optionally before risky long stretches. File bundles are the PRIMARY context-handoff contract — portable to any file-reading agent; hook-based injection (`SubagentStart` `additionalContext`) is a future optional adapter, never the carrier of this invariant.

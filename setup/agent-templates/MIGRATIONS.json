@@ -746,6 +746,11 @@
         "date": "2026-05-18",
         "breaking": false,
         "summary": "BL-W47-prep-13 F2: Rule 8 FQN source labeling — when delivering Java/JNI FQNs from .java source (not artifact inspection), label as [source-based, NOT artifact-verified]."
+      },
+      "3.5.0": {
+        "date": "2026-06-12",
+        "breaking": false,
+        "summary": "write_bundle protocol section: CP becomes the designated context-bundle writer via scripts/sh/write-bundle.sh (single sanctioned Bash write path, team-lead dispatch only, PATTERNS-only sourcing). Read-only tool surface unchanged. Schema: docs/agents/context-bundle-schema.md."
       }
     },
     "doc-updater": {

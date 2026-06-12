@@ -7,8 +7,8 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "Context window management for TeamCreate teams: rotation, archiving, team-lead-as-relay, anti-patterns"
-version: 3
+description: "Context window management for TeamCreate teams: rotation with context bundles, archiving, team-lead-as-relay, anti-patterns"
+version: 4
 last_updated: "2026-06"
 assumes_read: autonomous-multi-agent-workflow
 token_budget: 1500
@@ -66,11 +66,12 @@ Remaining: 1 ESCALATED issue — navigation restructuring needs design decision.
 
 ### 3. Rotate Session Team Peers (kill-then-respawn)
 
-For long sessions (**5+ waves** with 10 peers, 7+ waves with 5 peers), rotate a peer in three steps:
+For long sessions (**5+ waves** with 10 peers, 7+ waves with 5 peers), rotate a peer in four steps:
 
+0. **Write the bundle BEFORE the kill**: dispatch context-provider `write_bundle(role, plan_id, status_snapshot)` → `.planning/wave-{slug}/context-bundles/{role}.md` ([context-bundle-schema](context-bundle-schema.md)). A dead peer cannot be queried for its state; architect-role bundles carry the verdict state, in-flight findings, and pending dispatches.
 1. **Kill properly**: `SendMessage(to="arch-platform", message={type:"shutdown_request"})` — wait for the peer to approve and terminate.
 2. **Verify removal**: read `~/.claude/teams/session-{project-slug}/config.json` and confirm the member entry is GONE. If it lingers, escalate to the user for manual cleanup — do NOT work around it.
-3. **Re-spawn the CANONICAL name**: `Agent(name="arch-platform", team_name="session-{project-slug}", prompt="...", run_in_background=true)` — the name is collision-free again; the new peer gets a fresh context window with canonical routing and full gate coverage.
+3. **Re-spawn the CANONICAL name**: `Agent(name="arch-platform", team_name="session-{project-slug}", prompt="...", run_in_background=true)` — the name is collision-free again; the new peer gets a fresh context window with canonical routing and full gate coverage. The respawn prompt MUST open with the bundle-read mandate (schema §Consumer Contract): the fresh peer reads its bundle as the literal first action (the `.planning/` path is CP-gate-exempt, so this works before its gate-ack).
 
 **Anti-pattern — indexed replacement**: spawning `arch-platform-2` as a replacement (or respawning without the kill+verify steps) does NOT rotate the role. Respawn-without-kill SUFFIXES silently; messages addressed to the canonical role name keep routing to the dead inbox (empirically proven twice: feedback_stale_team_suffix_collision + PR #206 saga), and suffixed names evade exact-match gates until identity-tolerant matching ships in PR-0c (matrix E17). Indexed `-2` names are legitimate ONLY as intentional OVERFLOW capacity — a second peer working alongside a LIVE canonical peer, addressed explicitly by its own `-2` name. **Never use free-form names** for agents holding Write/Bash/gh — non-canonical names are invisible to every type-keyed gate (BL-W47 firing matrix §5, incident E18).
 
