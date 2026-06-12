@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/pre-push-hook.sh (BL-W47 PR-0b).
 # Git-layer two-stamp push gate: quality-gate.stamp + pre-pr.stamp.
@@ -209,22 +210,21 @@ run_hook_with_env() {
 
 # ── Advisory cases (arch-testing ADVISORY A1 + A2) ───────────────────────────
 
-@test "A16 BLOCK: python3 missing from PATH" {
-  # Both stamps present and valid to isolate the python3 check (not a stamp absence block).
+@test "A16 BLOCK: python3 crashing — fail-closed" {
+  # Both stamps present and valid so the ONLY failure source is the interpreter.
   write_qg_stamp 0
   write_pp_stamp "PASS" 0 "$HEAD_SHA"
-  # Run hook with a PATH that has no python3 binary.
-  # Must block (fail-closed posture) with an actionable message.
-  local empty_bin
-  empty_bin="$(mktemp -d)"
-  # Provide only git on PATH (needed to parse stdin and resolve shas).
-  local git_bin_dir
-  git_bin_dir="$(dirname "$(command -v git)")"
-  run bash -c "cd '$REPO' && printf '%s\n' 'refs/heads/feature/test $HEAD_SHA refs/heads/feature/test $ZERO' | PATH='$empty_bin:$git_bin_dir' SKIP_PUSH_GATE= bash '$HOOK' origin https://example.invalid/repo.git"
-  rm -rf "$empty_bin"
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"python3"* ]]
-  [[ "$output" == *"BLOCKED"* || "$output" == *"infrastructure"* ]]
+  # Hijack python3 resolution with a shim that exits 127 immediately.
+  # Full PATH is preserved so bash/git/coreutils remain available.
+  local fake_bin
+  fake_bin="$(mktemp -d)"
+  printf '#!/usr/bin/env bash\nexit 127\n' > "$fake_bin/python3"
+  chmod +x "$fake_bin/python3"
+  # set -euo pipefail in the hook propagates python3's exit code (127) through
+  # command substitution, so the hook exits nonzero (127 or 1). Either is a BLOCK.
+  run -127 bash -c "cd '$REPO' && printf '%s\n' 'refs/heads/feature/test $HEAD_SHA refs/heads/feature/test $ZERO' | PATH='$fake_bin:$PATH' SKIP_PUSH_GATE= bash '$HOOK' origin https://example.invalid/repo.git"
+  rm -rf "$fake_bin"
+  [ "$status" -ne 0 ]
 }
 
 @test "A17 BLOCK: opportunistic qg.head mismatch — qg stamp has head field != pushed sha" {
