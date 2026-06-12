@@ -165,7 +165,7 @@ Agent(name="data-layer-specialist", team_name="session-{project-slug}", run_in_b
 Agent(name="toolkit-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are toolkit-specialist for this session. FIRST: read your bundle at .planning/wave-{slug}/context-bundles/toolkit-specialist.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Your reporting architect is arch-platform. Stay alive.")
 ```
 
-**Bundle-read mandate**: every peer spawn/respawn prompt opens with the bundle-read line (canonical wording: [context-bundle-schema](context-bundle-schema.md) §Consumer Contract) — the Phase 2 prompts above carry it inline; prepend it equally to session-start peer prompts and to ANY respawn prompt. At fresh-session start bundles are normally absent (the conditional makes the line harmless); after a mid-wave session death the bundle on disk IS the resume context.
+**Bundle-read mandate**: every peer spawn/respawn prompt MUST open with the bundle-read line (canonical wording: [context-bundle-schema](context-bundle-schema.md) §Consumer Contract). The Phase 2 specialist prompts above carry it inline; the session-start blocks earlier in this file do NOT — prepend the same line to them when spawning (and to ANY respawn prompt). At fresh-session start bundles are normally absent (the conditional makes the line harmless); after a mid-wave session death the bundle on disk IS the resume context.
 
 ### Phase 2 Core Specialists — Session Context + Routing
 See [tl-session-setup](tl-session-setup.md) for Phase 2 selective spawning rules, long-session rotation protocol, context management, and architect routing table.
