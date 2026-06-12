@@ -4,7 +4,7 @@ sources: [androidcommondoc]
 targets: [all]
 version: 1
 last_updated: "2026-05"
-description: "Consumer hook manifest: classifies all 34 L0 hooks as consumer-required / consumer-optional / l0-internal"
+description: "Consumer hook manifest: classifies all 33 L0 hooks as consumer-required / consumer-optional / l0-internal"
 slug: hook-manifest
 status: active
 layer: L0
@@ -14,7 +14,7 @@ category: agents
 
 # L0 Hook Manifest
 
-Reference classification for all 34 hooks in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
+Reference classification for all 33 hooks in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
 
 > **CI-enforced** — the `hook-manifest-coverage` job in `.github/workflows/drift-audit.yml` fails the build if the hook table below drifts from `.claude/hooks/` (a missing, phantom, or duplicated hook). The table is the source of truth for coverage.
 
@@ -77,7 +77,7 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 | `registry-rehash-reminder.js` | l0-internal | Emits reminder to run --update-manifest-hash after agent template edits |
 | `kickoff-scope-validator.js` | l0-internal | WARN-only: checks commitlint scopes on *-kickoff.md file writes |
 
-### Shell Hooks (6)
+### Shell Hooks (5)
 
 | Hook | Status | Rationale |
 |------|--------|-----------|
@@ -86,7 +86,7 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 | `compile-fail-pre-commit.sh` | consumer-required | Code quality: blocks commit on staged .kt files containing `error()` patterns (peer of detekt-pre-commit) |
 | `quality-gate-pre-push.sh` | consumer-optional | Quality-stamp workflow: verifies quality-gate.stamp is fresh and PASS before push |
 | `registry-pre-commit.sh` | l0-internal | Auto-rehashes registry when L0 agent template files are staged |
-| `quality-gate-pre-commit.sh` | l0-internal | Pass-through stub only; stamp check moved to pre-push in BL-W47-prep-3 F4 |
+
 
 ## Git-Layer Hooks (NOT in this manifest)
 
