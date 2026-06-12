@@ -198,7 +198,7 @@ At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatche
 ### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
 
 ```
-□ 0. TeamDelete("session-{project-slug}") called before TeamCreate?         → YES or STOP (Bug #3)
+□ 0. TeamDelete(team_name="session-{project-slug}") called before TeamCreate? → YES or STOP (Bug #3)
 □ 1. TeamCreate("session-{project-slug}") called?                           → YES or STOP
 □ 2. context-provider added to session team?                 → YES or STOP
 □ 3. doc-updater added to session team?                      → YES or STOP
