@@ -120,6 +120,16 @@ esac
 [[ "$pp_head" == "-" ]] && block "pre-pr.stamp" "has no 'head' field — re-run /pre-pr"
 
 # -- 6. Per-pushed-sha checks ----------------------------------------------------
+# Multi-ref pre-check: pre-pr.stamp carries a single head, so a push updating
+# several feature refs with DIFFERENT tips can never validate — name the real
+# cause instead of a misleading per-sha "head mismatch".
+first_sha="${gated_shas[0]}"
+for sha in "${gated_shas[@]}"; do
+  if [[ "$sha" != "$first_sha" ]]; then
+    block "pre-pr.stamp" "multi-ref feature push detected (multiple distinct tip SHAs) — a single-head stamp cannot vouch for more than one ref. Push one feature ref at a time, re-running /pre-pr for each final commit"
+  fi
+done
+
 for sha in "${gated_shas[@]}"; do
   if [[ "$pp_head" != "$sha" ]]; then
     block "pre-pr.stamp" "head ($pp_head) does not match pushed commit ($sha). Re-run /pre-pr on the final commit"

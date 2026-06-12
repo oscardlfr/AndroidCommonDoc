@@ -25,3 +25,9 @@ teardown() {
   run bash "$SCRIPT" "$TMPDIR_ROOT"
   [ "$status" -eq 0 ]
 }
+
+@test "exits 2 fail-closed when target root does not exist (CodeRabbit PR #209)" {
+  run bash "$SCRIPT" "$TMPDIR_ROOT/does-not-exist"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"ERROR"* ]]
+}

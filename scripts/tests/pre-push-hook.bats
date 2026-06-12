@@ -254,3 +254,21 @@ PYEOF
   [ "$status" -eq 1 ]
   [[ "$output" == *"quality-gate.stamp"* ]]
 }
+
+# ── R1: multi-ref pre-check (CodeRabbit PR #209 review) ──────────────────────
+
+@test "R1 BLOCK: multi-ref feature push with distinct tips names the real cause" {
+  # Two gated feature refs with DIFFERENT tip shas: a single-head pre-pr stamp
+  # can never vouch for both — the block reason must say multi-ref, not a
+  # misleading per-sha head mismatch.
+  local other_sha="cccccccccccccccccccccccccccccccccccccccc"
+  write_qg_stamp 0
+  write_pp_stamp "PASS" 0 "$HEAD_SHA"
+  run bash -c "cd '$REPO' && printf '%s\n' \
+    \"refs/heads/feature/test $HEAD_SHA refs/heads/feature/test $ZERO\" \
+    \"refs/heads/feature/other $other_sha refs/heads/feature/other $ZERO\" \
+    | SKIP_PUSH_GATE= bash '$HOOK' origin https://example.invalid/repo.git"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"multi-ref"* ]]
+  [[ "$output" != *"does not match pushed commit"* ]]
+}

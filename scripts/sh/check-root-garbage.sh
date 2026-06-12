@@ -9,12 +9,28 @@
 #
 # Exit 0: no Users* entries found at the top level.
 # Exit 1: one or more Users* entries found; list printed to stdout.
+# Exit 2: target root missing/unreadable or scan failed (fail-closed — a guard
+#         that cannot scan must not report "clean").
 
 set -euo pipefail
 
 PROJECT_ROOT="${1:-.}"
 
-mapfile -t matches < <(find "$PROJECT_ROOT" -maxdepth 1 -name "Users*" 2>/dev/null || true)
+if [[ ! -d "$PROJECT_ROOT" ]]; then
+  echo "ERROR: Target root does not exist or is not a directory: $PROJECT_ROOT"
+  exit 2
+fi
+
+# Command substitution (NOT process substitution) so a find failure propagates
+# and trips the fail-closed branch — `< <(...)` exit codes are invisible to set -e.
+matches_raw="$(find "$PROJECT_ROOT" -maxdepth 1 -name "Users*")" || {
+  echo "ERROR: root scan failed for: $PROJECT_ROOT (fail-closed)"
+  exit 2
+}
+matches=()
+if [[ -n "$matches_raw" ]]; then
+  mapfile -t matches <<< "$matches_raw"
+fi
 
 if [[ ${#matches[@]} -gt 0 ]]; then
   echo "ERROR: Mangled path fragment(s) found at repo root (D1 recurrence):"
