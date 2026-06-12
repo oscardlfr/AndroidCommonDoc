@@ -23,7 +23,7 @@ manifest:
   generator:
     name: "manual-seed-phase-1"
     version: "0.4.0"
-    notes: "Hand-extracted from setup/agent-templates/*.md frontmatter. 38/38 populated (Phase 1 complete). team-lead retired W31.6 (PR #69) — canonical pattern is main-agent-as-team-lead per docs/agents/main-agent-orchestration-guide.md. ALL surfaced misalignments resolved 2026-04-26: 4 mechanical fixes (platform-auditor, l0-coherence-auditor, module-lifecycle, cross-platform-validator — all SendMessage / dedup); 3 investigations resolved as intentional / out-of-scope (feature-domain-specialist scaffold, runtime drift Anthropic-side, find-pattern retention W27-scope-was-architects-only). Audit #6: 6 scaffolds + 4 manual-only + 1 sporadic doc-migrator + 27 actively-dispatched. Phase 2 (2026-04-27): WARN-mode CI validator wired (scripts/sh/validate-manifest.sh + mcp-server/src/cli/validate-manifest.ts + .github/workflows/drift-audit.yml manifest-drift-warn job). Side fixes shipped alongside: NAMING_CONVENTION regex extended with -detector + -alignment suffixes; UTF-8 mojibake (â€”) in description fields of data-layer-specialist, domain-model-specialist, ui-specialist templates + mirrors restored to em-dash. Phase 3 round 1 (2026-04-27): template-generator lib + CLI shipped; arch-platform / arch-testing / arch-integration SHA-256 baselines populated via surgical line-based writer (replaces yaml Document API which would have rewritten ~900 lines). 16/38 agents already canonical-aligned at round 1 boundary; 22/38 will be canonicalized in subsequent rounds before Phase 4."
+    notes: "Hand-extracted from setup/agent-templates/*.md frontmatter. 38/38 populated (Phase 1 complete; 39/39 after BL-W47 hook-surgery +1 toolkit-specialist). team-lead retired W31.6 (PR #69) — canonical pattern is main-agent-as-team-lead per docs/agents/main-agent-orchestration-guide.md. ALL surfaced misalignments resolved 2026-04-26: 4 mechanical fixes (platform-auditor, l0-coherence-auditor, module-lifecycle, cross-platform-validator — all SendMessage / dedup); 3 investigations resolved as intentional / out-of-scope (feature-domain-specialist scaffold, runtime drift Anthropic-side, find-pattern retention W27-scope-was-architects-only). Audit #6: 6 scaffolds + 4 manual-only + 1 sporadic doc-migrator + 27 actively-dispatched. Phase 2 (2026-04-27): WARN-mode CI validator wired (scripts/sh/validate-manifest.sh + mcp-server/src/cli/validate-manifest.ts + .github/workflows/drift-audit.yml manifest-drift-warn job). Side fixes shipped alongside: NAMING_CONVENTION regex extended with -detector + -alignment suffixes; UTF-8 mojibake (â€”) in description fields of data-layer-specialist, domain-model-specialist, ui-specialist templates + mirrors restored to em-dash. Phase 3 round 1 (2026-04-27): template-generator lib + CLI shipped; arch-platform / arch-testing / arch-integration SHA-256 baselines populated via surgical line-based writer (replaces yaml Document API which would have rewritten ~900 lines). 16/38 agents already canonical-aligned at round 1 boundary; 22/38 will be canonicalized in subsequent rounds before Phase 4."
 
 paths_template:
   template: "setup/agent-templates/{canonical_name}.md"
@@ -88,9 +88,9 @@ invariants:
 # -----------------------------------------------------------------------------
 # Agent entries
 # -----------------------------------------------------------------------------
-# Coverage: 38 / 38 (Phase 1 complete; team-lead retired W31.6 — replaced by docs/agents/main-agent-orchestration-guide.md)
+# Coverage: 39 / 39 (Phase 1 complete; team-lead retired W31.6 — replaced by docs/agents/main-agent-orchestration-guide.md; +1 toolkit-specialist added BL-W47 hook-surgery)
 #   - architects: 3/3
-#   - core-specialist: 4/4
+#   - core-specialist: 5/5
 #   - domain-specialist: 1/1 (feature-domain-specialist — template scaffold for L2 instantiation)
 #   - context: 1/1
 #   - doc-owner: 2/2
