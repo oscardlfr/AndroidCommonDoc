@@ -108,7 +108,7 @@ fi
 BODY="$(cat)"
 
 # Enforce body line-count limit (schema Content Rule 3: body ≤ 60 lines HARD).
-LINE_COUNT="$(printf '%s\n' "$BODY" | wc -l | tr -d ' ')"
+LINE_COUNT="$(printf '%s\n' "$BODY" | wc -l | tr -d ' \r')"
 if (( LINE_COUNT > 60 )); then
   echo "[write-bundle] ERROR: bundle body is ${LINE_COUNT} lines — exceeds 60-line limit (schema Content Rule 3). Reduce body and retry." >&2
   exit 1
