@@ -102,6 +102,8 @@ Every spawn/respawn prompt for a role that has (or may have) a bundle MUST open 
 
 > **FIRST: Read your bundle at `.planning/wave-{slug}/context-bundles/{role}.md` before any other action (then gate-ack to context-provider). If it is absent or its `wave_slug` does not match the active wave, report "no valid bundle" to team-lead and proceed without it.**
 
+Sole exception to the gate-ack half: `context-provider` itself — it is the gate's oracle and cannot ack itself; its prompts carry only the bundle-read half.
+
 Spawn points carrying the mandate: [tl-session-setup](tl-session-setup.md), [tl-session-start](tl-session-start.md), [main-agent-orchestration-guide](main-agent-orchestration-guide.md), [context-rotation-guide](context-rotation-guide.md) §3, [team-topology](team-topology.md), [tl-phase-execution](tl-phase-execution.md).
 
 ## Relationship to Kill-Then-Respawn Rotation
