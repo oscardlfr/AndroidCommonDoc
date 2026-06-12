@@ -177,7 +177,7 @@ Add ONLY when in scope:
 
 | Anti-pattern | Why it's bad | Fix |
 |-------------|-------------|-----|
-| 7+ waves (10-peer) / 10+ waves (5-peer) | Context grows to 60K+ tokens | Rotate kill-then-respawn (shutdown_request → verify removal → respawn canonical name), or dissolve/recreate |
+| 5+ waves (10-peer) / 7+ waves (5-peer) without rotation | Context grows to 60K+ tokens | Rotate kill-then-respawn (shutdown_request → verify removal → respawn canonical name), or dissolve/recreate |
 | Extra specialists as team peers | Extras accumulate context they don't need | Core specialists are peers; extras are sub-agents via team-lead (no team_name) |
 | team-lead reading full verdicts | Verdict prose bloats team-lead context | Architects: 3-line summary first, details on request |
 | Not calling doc-updater between waves | Findings lost if session crashes | Archive to disk every 3-5 waves |
