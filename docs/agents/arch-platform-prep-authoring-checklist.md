@@ -18,6 +18,8 @@ When bumping `template_version` in Section G, enumerate ALL references to the ol
 
 Run: `rtk grep -rn "<old_version>" mcp-server/tests/ setup/agent-templates/ MIGRATIONS.json`
 
+**MIGRATIONS.json is a required pata.** A MIGRATIONS.json entry MUST be drafted for every template_version bump — even non-breaking bumps. The entry documents the version increment so consumers can audit their sync history. Absent MIGRATIONS.json entry = FAIL on this check. See [arch-platform-section-h-rule](arch-platform-section-h-rule.md) §Canonical 5-pata ceremony for the required order.
+
 **Step 1b — Section headers, anchor links, and pointer paths (FIND-12 extension):**
 
 Version-only grep misses non-version references that break when content is extracted or restructured. Also grep for:
