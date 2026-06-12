@@ -7,9 +7,9 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "Context-provider adoption gate + tool-use observability layer — Wave 17-lite (session-level enforcement, falsifiable hypothesis)."
-version: 1
-last_updated: "2026-04"
+description: "Context-provider adoption gate + tool-use observability layer — Wave 17-lite (session-level enforcement, falsifiable hypothesis) + PATTERNS-only boundary."
+version: 2
+last_updated: "2026-06"
 assumes_read: team-topology, tl-session-setup
 token_budget: 1500
 ---
@@ -156,6 +156,16 @@ context-provider now routes external-source findings (Context7 / WebFetch) throu
 ### 3. MCP Tool Declaration Requirement
 
 The hooks in this doc (Wave 17-lite) assume agents *can call* MCP tools. Wave 25 discovered that the 10 core agents described MCP usage in their prose but none declared MCP tools in their `tools:` frontmatter — so the harness never exposed the schemas and the `cp_bypass_blocked_count` was artificially low because agents couldn't call CP-backed MCP tools anyway. Wave 25 wired MCP tools into the 10 core agents' frontmatter. This changes the baseline measurement for the Wave 17-lite falsifiable hypothesis — the 2-week window resets from 2026-04-21.
+
+## PATTERNS-Only Boundary (context bundles)
+
+context-provider's outbound context — query answers AND the context bundles it writes via `write_bundle` (`scripts/sh/write-bundle.sh`) — is bounded to PATTERNS-only:
+
+1. **Allowed**: doc references (path + frontmatter slug + one-line relevance), rule citations with `file:line` sources, pattern-index entries.
+2. **Banned**: arbitrary file contents (no pasted code blocks or doc bodies), work forecasts (predicted future work for other roles), invented peer state (Status Snapshot facts come ONLY from team-lead's dispatch).
+3. CP's tool surface stays read-only (`CONTEXT_PROVIDER_READ_ONLY`: Write/Edit/Agent banned); its Bash tool is authorized solely for the `write-bundle.sh` invocation, whose targets are confined to `.planning/wave-{slug}/context-bundles/`.
+
+Full schema, header format, and consumer mandate: [context-bundle-schema](context-bundle-schema.md).
 
 ## Cross-References
 

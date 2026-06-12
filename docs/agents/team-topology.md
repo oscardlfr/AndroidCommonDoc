@@ -58,7 +58,7 @@ All 10 peers: SendMessage(to="<agent-name>")  ← always reachable
 
 **Why TeamCreate**: team peers don't go "idle" the same way as background agents — no idle/dead confusion, no re-spawning with "v2" suffixes. **context-provider is an on-demand oracle** — agents SendMessage it with specific queries and it loads relevant files on demand (not eagerly), keeping setup cost low. Core devs accumulate layer knowledge across waves, eliminating per-spawn context re-reads. Quality-gater in Phase 3 joins the same team and can SendMessage directly to architects and devs. Context is preserved across all phases.
 
-**Context rotation**: for long sessions (5+ waves with 10 peers, 7+ waves with 5 peers), rotate kill-then-respawn: graceful `shutdown_request` → VERIFY the member entry is removed from the team config → re-spawn the CANONICAL name (`Agent(name="arch-platform", team_name="session-{project-slug}", ...)`). Respawn-without-kill SUFFIXES silently (`-2`) and the canonical name routes to a dead inbox — see [context-rotation-guide](context-rotation-guide.md) §3.
+**Context rotation**: for long sessions (5+ waves with 10 peers, 7+ waves with 5 peers), rotate kill-then-respawn: CP writes the role's context bundle FIRST (`write_bundle` → `.planning/wave-{slug}/context-bundles/{role}.md`, [context-bundle-schema](context-bundle-schema.md)) → graceful `shutdown_request` → VERIFY the member entry is removed from the team config → re-spawn the CANONICAL name (`Agent(name="arch-platform", team_name="session-{project-slug}", ...)`) with a prompt opening with the bundle-read mandate. Respawn-without-kill SUFFIXES silently (`-2`) and the canonical name routes to a dead inbox — see [context-rotation-guide](context-rotation-guide.md) §3.
 
 ### Why Session Team Peers
 
