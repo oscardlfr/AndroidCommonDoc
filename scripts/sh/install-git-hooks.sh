@@ -20,5 +20,10 @@ chmod +x "$HOOKS_DIR/pre-commit"
 cp "scripts/sh/commit-msg-hook.sh" "$HOOKS_DIR/commit-msg"
 chmod +x "$HOOKS_DIR/commit-msg"
 
-echo "Installed: pre-commit (registry-rehash, manifest-drift), commit-msg (format + scope whitelist)"
-echo "   To uninstall: rm .git/hooks/pre-commit .git/hooks/commit-msg"
+# Pre-push: two-stamp gate (quality-gate.stamp + pre-pr.stamp, <=30 min, sha match).
+# Git-layer backstop below Claude hooks — fires for every push incl. rtk git push.
+cp "scripts/sh/pre-push-hook.sh" "$HOOKS_DIR/pre-push"
+chmod +x "$HOOKS_DIR/pre-push"
+
+echo "Installed: pre-commit (registry-rehash, manifest-drift), commit-msg (format + scope whitelist), pre-push (two-stamp gate)"
+echo "   To uninstall: rm .git/hooks/pre-commit .git/hooks/commit-msg .git/hooks/pre-push"

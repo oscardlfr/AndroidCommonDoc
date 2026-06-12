@@ -999,9 +999,10 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `readme-audit` | Comprehensive README/doc audit against filesystem (counts, tables, tree, hub links, prose claims) |
 | `rehash-registry` | Recompute SHA-256 hashes in registry.json (CRLF→LF normalized) |
 | `copilot-parity` | Verify Copilot prompt templates match Claude skill definitions |
-| `install-git-hooks` | Install pre-commit (pattern-lint) + commit-msg (conventional commits) git hooks |
+| `install-git-hooks` | Install pre-commit (pattern-lint) + commit-msg (conventional commits) + pre-push (two-stamp gate) git hooks |
 | `pre-commit-hook` | Standalone pre-commit hook body: blocks commits with stale registry hash |
 | `commit-msg-hook` | git commit-msg hook: Conventional Commits format + scope whitelist (universal — fires for all committers; closes team-peer bypass in PreToolUse `commit-scope-validation-gate.js`) |
+| `pre-push-hook` | git pre-push hook: two-stamp gate (quality-gate.stamp + pre-pr.stamp PASS ≤30min, sha-bound; BL-W47 PR-0b) — universal backstop below the Claude-layer push gates |
 | `run-benchmarks` | Detect and run JVM/Android benchmark suites with Gradle |
 | `validate-agent-templates` | Lint agent templates: frontmatter, role keywords, anti-patterns, versioning (7 checks) |
 | `catalog-coverage-check` | Detect hardcoded Gradle dependency versions that should use the version catalog |
@@ -1162,7 +1163,7 @@ AndroidCommonDoc/
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
 |   +-- ps1/                # PowerShell (Windows) -- 39 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 47 scripts
+|   +-- sh/                 # Bash (macOS/Linux) -- 49 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite

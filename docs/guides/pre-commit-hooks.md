@@ -6,8 +6,8 @@ slug: pre-commit-hooks
 status: active
 layer: L0
 category: guides
-description: "Pre-commit hooks: pattern-lint on staged Kotlin files, registry rehash check on staged SKILL.md/registry.json, commit-scope whitelist enforcement"
-version: 2
+description: "Git hooks: registry rehash + manifest drift on commit, Conventional Commits scope whitelist, two-stamp pre-push gate"
+version: 3
 last_updated: "2026-06"
 ---
 
@@ -23,6 +23,7 @@ Three hooks are managed by `scripts/sh/install-git-hooks.sh`:
 |------|--------|---------|
 | `pre-commit` | `scripts/sh/pre-commit-hook.sh` | Block commits with a stale registry hash |
 | `commit-msg` | `scripts/sh/commit-msg-hook.sh` | Enforce Conventional Commits format + scope whitelist |
+| `pre-push` | `scripts/sh/pre-push-hook.sh` | Two-stamp push gate (BL-W47 PR-0b): quality-gate.stamp + pre-pr.stamp PASS, ≤30 min, matching the pushed commit. Bypass: `SKIP_PUSH_GATE=1` (explicit user authorization only) |
 
 ## Installation
 
@@ -32,12 +33,12 @@ Run from the repository root:
 bash scripts/sh/install-git-hooks.sh
 ```
 
-This copies `scripts/sh/pre-commit-hook.sh` into `.git/hooks/pre-commit` and installs `scripts/sh/commit-msg-hook.sh` as `.git/hooks/commit-msg`.
+This copies `scripts/sh/pre-commit-hook.sh` into `.git/hooks/pre-commit`, installs `scripts/sh/commit-msg-hook.sh` as `.git/hooks/commit-msg`, and installs `scripts/sh/pre-push-hook.sh` as `.git/hooks/pre-push`.
 
 To verify hooks are installed:
 
 ```bash
-ls -la .git/hooks/pre-commit .git/hooks/commit-msg
+ls -la .git/hooks/pre-commit .git/hooks/commit-msg .git/hooks/pre-push
 ```
 
 ## Three-Layer Commit-Scope Enforcement
