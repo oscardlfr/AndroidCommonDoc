@@ -959,7 +959,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Scripts
 
-39 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 5 Bash-only utilities.
+39 cross-platform script pairs in `scripts/ps1/` (Windows) and `scripts/sh/` (macOS/Linux), plus 6 Bash-only utilities.
 
 ### Core Scripts
 
@@ -991,6 +991,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `migration-check` | Database migration validator (Room/SQLDelight) |
 | `code-metrics` | Code complexity metrics: LOC, file count, public functions per module |
 | `gradle-config-check` | Gradle configuration linter (convention plugins, hardcoded versions) |
+| `check-root-garbage` | CI anti-recurrence check: detects mangled-path fragments (e.g. `Users*` entries) at repo root (BL-W47 PR-0b D1 guard) |
 | `sync-gsd-skills` | GSD-2 skill sync from marketplace + L0 + L0 agents (opt-in) |
 | `sync-gsd-agents` | Generate GSD subagent wrappers from .claude/agents/ |
 | `check-agent-parity` | Verify parity between .claude/agents/ and GSD subagents |
@@ -1032,7 +1033,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-17 domain hubs, 96 sub-docs, 28 guides, 52 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+17 domain hubs, 97 sub-docs, 28 guides, 52 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1216,7 +1217,7 @@ AndroidCommonDoc/
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
 |   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
-+-- docs/                   # 17 domain hubs, 96 sub-docs, 28 guides, 52 agent workflow docs
++-- docs/                   # 17 domain hubs, 97 sub-docs, 28 guides, 52 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- network/    +-- offline-first/ +-- resources/
