@@ -88,6 +88,10 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 | `registry-pre-commit.sh` | l0-internal | Auto-rehashes registry when L0 agent template files are staged |
 
 
+## Verdict Canal Script (NOT in this manifest)
+
+`scripts/sh/write-verdict.sh` — verdict canal script; invoked by architects via Bash to write PREP and VERIFY-FINAL verdicts to `.planning/wave-{slug}/arch-{role}-verdict.md`. Not a git hook and not a Claude Code hook. Not included in the CI hook-manifest-coverage count. See [agent-verdict-protocol](agent-verdict-protocol.md) for invocation details.
+
 ## Git-Layer Hooks (NOT in this manifest)
 
 This manifest covers only `.claude/hooks/` (Claude Code hooks). The repository also ships **git hooks** in `scripts/sh/`, installed via `install-git-hooks.sh`. These are separate:
