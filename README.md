@@ -1019,6 +1019,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `verdict-pre-execute-check` | Pre-execute checklist validation for architect verdicts |
 | `agentskills-validate` | Local parity check for agentskills-pilot CI step — validates skills ref for every `skills/*/` dir (WARN-only, Bash-only) |
 | `list-valid-commit-tokens` | Lists valid commit types and scopes from `.github/workflows/reusable-commit-lint.yml` (Bash-only) |
+| `write-bundle` | Context-bundle writer: YAML header + stdin body to `.planning/wave-{slug}/context-bundles/{role}.md` (Bash-only) |
 
 ### Shared Libraries
 
@@ -1164,7 +1165,7 @@ AndroidCommonDoc/
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
 |   +-- ps1/                # PowerShell (Windows) -- 39 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 49 scripts
+|   +-- sh/                 # Bash (macOS/Linux) -- 50 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite
