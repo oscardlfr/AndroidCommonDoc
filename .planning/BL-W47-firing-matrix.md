@@ -132,5 +132,13 @@ Consequences (binding inputs downstream):
 | E20 | S1b SendMessage auto-resume from transcript, full recall, 0 tool uses |
 | E21 | Team task list #1 appeared post-TeamCreate; session-UUID list (12 tasks) stranded — task-list context switch |
 
+## 9. Appendix — amend-gate git-layer evaluation (PR-0b decision, 2026-06-12)
+
+> **Evaluation only — no implementation in PR-0b.** Per BL-W47-PLAN-v2 §PR-0b ("assess whether `commit --amend` detection in the commit-msg hook is sufficient or needs a separate `prepare-commit-msg` hook").
+
+The commit-msg hook receives only the message file and CANNOT distinguish amend from new commit — insufficient, ruled out. `prepare-commit-msg` CAN detect amend: `$2=commit, $3=HEAD` for `--amend`; known false positive `git commit -c/-C HEAD` (identical signature; ~zero usage here), and rebase/cherry-pick re-commits hit the same path, so enforcement would need a rebase exemption. `GIT_REFLOG_ACTION` (per git internals; 10-line temp-repo verification deferred to the implementation PR — this session is design-only) is exported to hooks by rebase/pull/merge/sequencer but NOT set by plain `git commit --amend` — usable as a rebase-EXEMPTION signal, useless as a positive amend signal. `CLAUDE_AMEND_AUTHORIZED=1` propagates from agent bash into git subprocesses, so one variable can gate both layers when ported.
+
+**Decision: DEFER the prepare-commit-msg port (do not ship in PR-0b).** Rationale: (1) Claude-layer `git-amend-gate.js` already covers the agent surface; (2) PR-0b's pre-push hook makes unauthorized amends UNPUSHABLE — amending rewrites the committer date (stales quality-gate.stamp via the ordering check) and the sha (stales pre-pr.head) — so the invariant that matters ("rewritten history cannot escape without re-vetting") is now enforced at push time at T1; (3) commit-time blocking adds rebase false-positive risk for marginal gain. Re-evaluate at the PR-0c consolidation gate if peer amend incidents recur.
+
 ---
-*PR-0a complete. Rollback: this file is a read-only research artifact; no hooks were changed. The single production-file side effect of the session beyond cleanup commits is the incident disposition (§5).*
+*PR-0a complete (§1-§8); §9 appended by PR-0b (S2). Rollback: this file is a read-only research artifact; no hooks were changed in PR-0a. The single production-file side effect of the S1 session beyond cleanup commits is the incident disposition (§5).*
