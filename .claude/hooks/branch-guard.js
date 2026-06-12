@@ -34,10 +34,28 @@ process.stdin.on('end', () => {
     const data = JSON.parse(input);
     if (data.tool_name !== 'Bash') process.exit(0);
     const cmd = data.tool_input?.command || '';
-    const tokens = cmd.trim().split(/\s+/);
-    if (tokens[0] !== 'git') process.exit(0);
-    const subCmd = findSubcommand(tokens);
-    if (!subCmd || !BLOCKED_SUBCOMMANDS.includes(subCmd)) process.exit(0);
+    // Split on compound-command separators: &&, ||, ;, single |
+    const segments = cmd.split(/&&|\|\||;(?!=)|(?<![|])\|(?![|])/);
+    let subCmd = null;
+    for (const rawSeg of segments) {
+      let seg = rawSeg.trim();
+      // Strip leading ( for subshells
+      seg = seg.replace(/^\(+/, '').trim();
+      // Strip env assignments (VAR=value at the start)
+      seg = seg.replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=[^\s]*\s+)+/, '').trim();
+      // Strip known command prefixes
+      seg = seg.replace(/^rtk\s+/, '').trim();
+      seg = seg.replace(/^sudo\s+/, '').trim();
+      seg = seg.replace(/^command\s+/, '').trim();
+      const tokens = seg.split(/\s+/);
+      if (tokens[0] !== 'git') continue;
+      const found = findSubcommand(tokens);
+      if (found && BLOCKED_SUBCOMMANDS.includes(found)) {
+        subCmd = found;
+        break;
+      }
+    }
+    if (!subCmd) process.exit(0);
     let branch;
     try {
       branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8', timeout: 2000 }).trim();
