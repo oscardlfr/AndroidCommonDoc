@@ -17,14 +17,16 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const SUBJECT_TYPES = new Set([
+// Canonical subject type names — matched with startsWith to tolerate
+// suffix-rotated peer names (e.g. toolkit-specialist-2 matches toolkit-specialist)
+const SUBJECT_TYPES = [
   'test-specialist',
   'toolkit-specialist',
   'ui-specialist',
   'domain-model-specialist',
   'data-layer-specialist',
   'doc-updater',
-]);
+];
 
 // Copied verbatim from wave-phase-gate.js lines 24-66 (Decision 2)
 function getWaveSlug(projectRoot) {
@@ -107,8 +109,8 @@ process.stdin.on('end', () => {
     // Only intercept Write, Edit, Bash
     if (toolName !== 'Write' && toolName !== 'Edit' && toolName !== 'Bash') process.exit(0);
 
-    // Only subject agents are gated
-    if (!SUBJECT_TYPES.has(agentType)) process.exit(0);
+    // Only subject agents are gated — startsWith for suffix-rotation tolerance
+    if (!SUBJECT_TYPES.some(s => agentType.startsWith(s))) process.exit(0);
 
     // Bypass 1: session-scoped env
     if (process.env.WAVE_PREP_BYPASS === '1') process.exit(0);
