@@ -15,7 +15,19 @@ on:
 #  - Referenced skills/agents/commands that don't exist in filesystem
 #  - Ingestion loop documentation out of sync with agent templates
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
+  root-garbage-check:
+    name: Root garbage check (D1 recurrence)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check for mangled path fragments at repo root
+        run: bash scripts/sh/check-root-garbage.sh .
+
   wiring-audit:
     name: MCP wiring + tool/skill orphan check
     runs-on: ubuntu-latest
