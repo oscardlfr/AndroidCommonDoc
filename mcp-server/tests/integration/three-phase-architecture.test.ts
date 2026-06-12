@@ -855,8 +855,8 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
     expect(cpContent).toMatch(/find-pattern/);
   });
 
-  it('has template version 3.4.4', () => {
-    expect(cpContent).toContain('template_version: "3.4.4"'); // BL-W47-prep-13 C5: bumped 3.4.3 → 3.4.4 (Rule 8 FQN labeling)
+  it('has template version 3.5.0', () => {
+    expect(cpContent).toContain('template_version: "3.5.0"'); // bumped 3.4.4 → 3.5.0 (write_bundle protocol added)
   });
 
   it('has External Context section with Context7 call sequence', () => {
