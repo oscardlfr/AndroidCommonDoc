@@ -66,6 +66,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [main-agent-orchestration-guide](main-agent-orchestration-guide.md) | Orchestration guide for the main agent: team topology, phase protocol, architect routing, quality gates |
 | [quality-gater-runtime-ui-validation](quality-gater-runtime-ui-validation.md) | quality-gater Step 9.5 — Runtime UI Validation: Android Layout Diff + Compose Semantic Diff dispatch |
 | [workflow-orchestration](workflow-orchestration.md) | Plan mode, agent delegation table, verification, and autonomous execution rules (extracted from CLAUDE.md prep-6) |
+| [context-bundle-schema](context-bundle-schema.md) | Context bundle schema (BL-W47 ex-PR2): file-based T2 contract for respawn/rotation context — storage, TTL, header format, PATTERNS-only rules, writer/consumer contracts |
 
 ## Key Concepts
 
