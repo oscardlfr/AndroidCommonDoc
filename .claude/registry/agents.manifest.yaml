@@ -233,8 +233,8 @@ agents:
   arch-integration:
     canonical_name: arch-integration
     subagent_type: arch-integration
-    template_version: "1.28.0"
-    template_frontmatter_sha256: e0906dad06576993f9895c9de3fb03c80ee031539584aa7d5bea35d0145c7db2
+    template_version: "1.29.0"
+    template_frontmatter_sha256: 7c73623b5f267ec015ca3774a869605f5f7ad00e2ed3182a26759f4f88417079
     category: architect
     lifecycle: ephemeral
     description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
