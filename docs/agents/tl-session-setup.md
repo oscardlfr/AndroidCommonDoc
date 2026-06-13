@@ -137,7 +137,7 @@ export CLAUDE_WAVE_SLUG=bl-w42-pr1   # set once in terminal; hooks pick it up
 
 **Fallback detection order:**
 1. `CLAUDE_WAVE_SLUG` env var (canonical)
-2. Git branch: `feature/{slug}` → strip `feature/` prefix
+2. Git branch: **last path-segment** (`${branch##*/}` / `branch.split('/').pop()`), so `feature/payment-api` → `payment-api` and `codex/api-redesign` → `api-redesign`. `develop`, `master`, `main`, `HEAD`, and empty values are rejected.
 3. Alias scan: single `.planning/wave-*/PLAN.md` presence (last resort)
 
 **Quality-gate sentinel location (FIND-17 fix):** `.claude/wave-quality-gates/{slug}.md`

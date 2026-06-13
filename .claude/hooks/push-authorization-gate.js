@@ -33,11 +33,48 @@ const { spawnSync } = require('child_process');
 const MAX_AGE_SECS = 1800;   // 30 minutes
 const SKEW_TOLERANCE = 120;   // 2 minutes future tolerance
 
-// Detect git push in a bash command string.
-// Matches: git push, rtk git push (but NOT git push --force which is in deny list).
-// Does NOT need to block force-push here — settings.json deny list handles that.
+// Detect git push in a bash command string (P2a deep detector: segment-aware + exec-aware).
+// Best-effort: ANSI-C $'...' quoting is now covered (optional \$? before quote in Pass 1).
+// Escape sequences inside $'...' (e.g. $'\x67it push') and variable indirection remain
+// uncatchable by string parsing; the git-layer pre-push two-stamp is the authoritative backstop.
+// Language interpreters (python -c, perl -e) and arbitrary obfuscation are also uncatchable.
+// Pass 1: recurse into executed sub-strings (shell -c '...', $'...', eval '...', $(...), `...`)
+//   so that `sh -c 'git push'` / `sh -c $'git push'` are caught.
+// Pass 2: strip heredoc bodies + quoted spans (prose false-positive prevention),
+//   split on shell control operators (NOT newline), test ^git push per segment
+//   after stripping env-var assignments and common wrapper prefixes (incl. unquoted eval).
+// Guards: `sh -c "echo 'git push'"`, `printf 'git push'`, `echo $'git push'` (prose) all ALLOW.
 function isGitPushCommand(cmd) {
-  return /\brtk\s+git\s+push\b|\bgit\s+push\b/.test(cmd);
+  // Pass 1: recurse into executed sub-shells / eval bodies (QUOTED and ANSI-C $'...' forms).
+  // Applied to the ORIGINAL cmd (before quote-strip) so payloads stay intact.
+  // \$? before the quote capture handles $'...' and $"..." (ANSI-C quoting).
+  const EXEC = [
+    /\b(?:sh|bash|zsh|dash|ksh|ash)\b(?:\s+-\S+)*\s+-[a-z]*c\b\s*\$?(['"])([\s\S]*?)\1/g, // shell -c '...' / $'...'
+    /\beval\b\s*\$?(['"])([\s\S]*?)\1/g,                                                     // eval '...' / $'...'
+    /\$\(([\s\S]*?)\)/g,                                                                     // $(...)
+    /`([^`]*)`/g,                                                                            // `...`
+  ];
+  for (const re of EXEC) {
+    let m;
+    while ((m = re.exec(cmd)) !== null) {
+      if (isGitPushCommand(m[m.length - 1])) return true;
+    }
+  }
+  // Pass 2: strip heredoc bodies + quoted spans, then split and prefix-strip per segment.
+  // `eval` in the prefix-strip catches unquoted `eval git push` (quoted form handled in Pass 1).
+  const cleaned = cmd
+    .replace(/<<-?\s*['"]?(\w+)['"]?[\s\S]*?\n\s*\1\b/g, ' <<HEREDOC ')
+    .replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
+  return cleaned.split(/\s*(?:&&|\|\||;|\|)\s*/).some(seg => {
+    let s = seg.trim(), prev;
+    do {
+      prev = s;
+      s = s
+        .replace(/^(?:[A-Z_][A-Z0-9_]*=[^\s]+\s+)+/, '')  // strip leading VAR=val env
+        .replace(/^(?:rtk|sudo|command|env|xargs|time|nice|nohup|stdbuf|setsid|doas|builtin|exec|eval)\s+(?:-\S+\s+)*/, '');
+    } while (s !== prev);
+    return /^git\s+push\b/.test(s);
+  });
 }
 
 // Read and validate a stamp file. Returns { ok: true, head, epoch } or { ok: false, reason }.
@@ -97,8 +134,14 @@ function getHeadSha(projectRoot) {
 }
 
 function block(reason) {
-  process.stdout.write(JSON.stringify({ decision: 'block', reason }));
-  process.exit(2);
+  // Write decision JSON to stdout, then flush stdout before exit (CR #2).
+  // process.stdout.write callback ensures the write is flushed before termination.
+  const json = JSON.stringify({ decision: 'block', reason });
+  if (process.stdout.write(json)) {
+    process.exit(2);
+  } else {
+    process.stdout.once('drain', () => process.exit(2));
+  }
 }
 
 let input = '';
@@ -131,14 +174,17 @@ process.stdin.on('end', () => {
     }
 
     // Main orchestrator (empty agent_type): check if pre-push hook is installed
+    // P1b fix: verify identity via ACDOC-PRE-PUSH-GATE marker — presence alone is not enough
+    // (a foreign stub or bare `exit 0` would otherwise bypass stamp validation).
     const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
     const prePushHook = path.join(projectRoot, '.git', 'hooks', 'pre-push');
-    const hookInstalled = fs.existsSync(prePushHook);
-
-    if (hookInstalled) {
-      // Git-layer hook handles stamp validation — allow here
-      process.exit(0);
-    }
+    let hookIsACDoc = false;
+    try {
+      if (fs.existsSync(prePushHook))
+        hookIsACDoc = /ACDOC-PRE-PUSH-GATE/.test(fs.readFileSync(prePushHook, 'utf8'));
+    } catch {}
+    if (hookIsACDoc) process.exit(0); // git-layer ACDoc hook owns stamp validation
+    // else fall through to stamp fallback below
 
     // Fallback-stamps validation (pre-push hook NOT installed)
     const stampDir = path.join(projectRoot, '.androidcommondoc');

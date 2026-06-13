@@ -27,24 +27,24 @@ const { spawnSync } = require('child_process');
 const STDIN_TIMEOUT_MS = 5000;
 
 function resolveWaveSlug(projectRoot) {
-  // Branch-name resolution only: env var does not persist between Bash calls.
-  // feature/<slug> → slug extracted from suffix after last '/'.
+  // Branch-name resolution only: env var does not persist between Bash calls (by design).
+  // Uses symbolic-ref as primary (works on empty repos / unborn branches);
+  // falls back to abbrev-ref for detached-HEAD / worktree edge cases.
+  // P2b: always resolve to last segment so codex/*, hotfix/* etc. work correctly.
   try {
-    const result = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-      cwd: projectRoot,
-      timeout: 3000,
-      encoding: 'utf8',
+    const symResult = spawnSync('git', ['symbolic-ref', '--short', 'HEAD'], {
+      cwd: projectRoot, timeout: 3000, encoding: 'utf8',
     });
-    if (result.status === 0) {
-      const branch = (result.stdout || '').trim();
-      if (branch && branch !== 'HEAD') {
-        if (branch.startsWith('feature/')) {
-          return branch.slice('feature/'.length);
-        }
-        // Non-feature branch: return as-is (wave slug may equal branch name)
-        if (branch !== 'develop' && branch !== 'master' && branch !== 'main') {
-          return branch;
-        }
+    const abbResult = symResult.status !== 0
+      ? spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+          cwd: projectRoot, timeout: 3000, encoding: 'utf8',
+        })
+      : null;
+    const branch = (symResult.status === 0 ? symResult : abbResult)?.stdout?.trim() || '';
+    if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
+      const slug = branch.split('/').pop();
+      if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD') {
+        return slug;
       }
     }
   } catch {

@@ -179,6 +179,72 @@ write_bundle() {
   [[ "$output" == *"Key CRLF patterns here"* ]]
 }
 
+@test "P2b SB-NF1 PASS: codex/bl-w47-demo branch → slug 'bl-w47-demo' → bundle injected if present" {
+  # After P2b fix, subagent-start-context-bundle.js must resolve 'codex/bl-w47-demo'
+  # to last-segment 'bl-w47-demo' and inject the bundle when it exists.
+  # Switch the isolated repo to a codex/ branch.
+  git -C "$PROJECT_ROOT" checkout -b "codex/bl-w47-demo" -q 2>/dev/null
+  # Create a bundle for the resolved slug.
+  local bundle_dir_demo="$PROJECT_ROOT/.planning/wave-bl-w47-demo/context-bundles"
+  mkdir -p "$bundle_dir_demo"
+  printf -- '---\nwave_slug: bl-w47-demo\n---\n# Context bundle for codex branch\nCodex patterns here.\n' \
+    > "$bundle_dir_demo/arch-platform.md"
+  make_input "SubagentStart" "arch-platform"
+  run_hook
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"additionalContext"'* ]]
+  [[ "$output" == *"Codex patterns here"* ]]
+}
+
+@test "P2b SB-NF2 PASS: develop branch checkout (reject-list, branch path) → no slug → silent exit 0" {
+  # Drive the BRANCH path (no CLAUDE_WAVE_SLUG env) on an actual 'develop' branch.
+  # BEFORE fix: the hook had only the feature/-strip path; bare 'develop' would fall
+  # through to `return branch` and return 'develop' as slug (not rejected). RED.
+  # AFTER fix: reject-list applied to branch-parsed slug → null → exit 0, output empty.
+  # CodeRabbit #6: prior version used 'develop-test' branch + CLAUDE_WAVE_SLUG='develop' env
+  # — that tested the env path, not the branch-detection reject-list. This uses a real
+  # 'develop' branch checkout with no env override.
+  git -C "$PROJECT_ROOT" checkout -b develop -q 2>/dev/null || \
+    git -C "$PROJECT_ROOT" checkout develop -q 2>/dev/null
+  make_input "SubagentStart" "arch-platform"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>/dev/null"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "B SB-BRANCH-REJECT-develop: develop branch → resolveWaveSlug returns null → no bundle injected even when bundle exists" {
+  # subagent-start-context-bundle.js is env-free: resolveWaveSlug() reads the git branch,
+  # never CLAUDE_WAVE_SLUG. On the 'develop' branch the reject-list returns null → no lookup.
+  # Create a bundle for the 'develop' slug to prove it is NOT injected (reject fires
+  # before the bundle lookup). If the reject-list were absent, the hook would find the
+  # bundle and emit additionalContext — that's what this test prevents.
+  git -C "$PROJECT_ROOT" checkout -b develop -q 2>/dev/null || \
+    git -C "$PROJECT_ROOT" checkout develop -q 2>/dev/null
+  local dev_bundle_dir="$PROJECT_ROOT/.planning/wave-develop/context-bundles"
+  mkdir -p "$dev_bundle_dir"
+  printf -- '---\nwave_slug: develop\n---\n# Should not be injected.\n' \
+    > "$dev_bundle_dir/arch-platform.md"
+  make_input "SubagentStart" "arch-platform"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>/dev/null"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "B SB-BRANCH-REJECT-master: master branch → resolveWaveSlug returns null → no bundle injected even when bundle exists" {
+  # Same class as SB-BRANCH-REJECT-develop but for 'master' branch.
+  # Branch-driven path: no CLAUDE_WAVE_SLUG env — resolveWaveSlug() reads git branch.
+  git -C "$PROJECT_ROOT" checkout -b master -q 2>/dev/null || \
+    git -C "$PROJECT_ROOT" checkout master -q 2>/dev/null
+  local master_bundle_dir="$PROJECT_ROOT/.planning/wave-master/context-bundles"
+  mkdir -p "$master_bundle_dir"
+  printf -- '---\nwave_slug: master\n---\n# Should not be injected.\n' \
+    > "$master_bundle_dir/arch-platform.md"
+  make_input "SubagentStart" "arch-platform"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>/dev/null"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "CR5-A: bundle with '---' on second line (not first) does NOT produce false-positive match" {
   # File content: line 1 = plain text, line 2 = '---' (looks like frontmatter end but
   # there is no opening '---' at byte 0). Pre-ca13f47 with /m flag, ^ matched line

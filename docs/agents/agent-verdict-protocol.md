@@ -33,7 +33,7 @@ After completing review for wave `{N}`:
    ```
 
    - `{role}` = `arch-platform`, `arch-testing`, or `arch-integration` (full name, with `arch-` prefix)
-   - Wave slug is resolved automatically from the git branch name (`feature/<slug>` → slug). Override with `--slug <value>` if needed.
+   - Wave slug is resolved automatically from the git branch name: **last path-segment** (`${branch##*/}` / `branch.split('/').pop()`), so `feature/payment-api` → `payment-api` and `codex/api-redesign` → `api-redesign`. Override with `--slug <value>` if needed. `develop`, `master`, `main`, `HEAD`, and empty values are rejected.
    - The script enforces two-phase integrity: PREP creates the file (fails if already exists), VERIFY-FINAL appends (fails if no PREP file found, fails if both tokens already present).
    - Anti-traversal confinement: verdict path is always confined to `.planning/<wave-slug>/arch-{role}-verdict.md` within repo root.
 

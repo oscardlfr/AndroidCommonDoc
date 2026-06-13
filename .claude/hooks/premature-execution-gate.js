@@ -28,25 +28,29 @@ const SUBJECT_TYPES = [
   'doc-updater',
 ];
 
-// Copied verbatim from wave-phase-gate.js lines 24-66 (Decision 2)
+// Mirrors wave-phase-gate.js getWaveSlug (Decision 2): env-reject + symbolic-ref + alias scan.
 function getWaveSlug(projectRoot) {
-  // Priority 1: explicit env var
-  if (process.env.CLAUDE_WAVE_SLUG) return process.env.CLAUDE_WAVE_SLUG;
+  // Priority 1: explicit env var — trim and validate against reject-list (CR #3).
+  const envSlug = (process.env.CLAUDE_WAVE_SLUG || '').trim();
+  if (envSlug && !['develop', 'master', 'main', 'HEAD'].includes(envSlug)) return envSlug;
 
-  // Priority 2: git branch parsing
+  // Priority 2: git branch parsing (symbolic-ref primary, abbrev-ref fallback).
+  // symbolic-ref works on empty repos (no commits); abbrev-ref handles worktrees.
   try {
-    const result = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-      cwd: projectRoot,
-      timeout: 5000,
-      encoding: 'utf8',
+    const symResult = spawnSync('git', ['symbolic-ref', '--short', 'HEAD'], {
+      cwd: projectRoot, timeout: 5000, encoding: 'utf8',
     });
-    if (result.status === 0) {
-      const branch = (result.stdout || '').trim();
-      if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
-        if (branch.startsWith('feature/')) {
-          return branch.slice('feature/'.length);
-        }
-        return branch;
+    const abbResult = symResult.status !== 0
+      ? spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+          cwd: projectRoot, timeout: 5000, encoding: 'utf8',
+        })
+      : null;
+    const branch = (symResult.status === 0 ? symResult : abbResult)?.stdout?.trim() || '';
+    if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
+      // P2b: always resolve to last segment (covers non-feature branches like codex/*)
+      const slug = branch.split('/').pop();
+      if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD') {
+        return slug;
       }
     }
   } catch {
@@ -95,6 +99,17 @@ function hasApprovedPrep(waveDir) {
   return false;
 }
 
+function block(reason) {
+  // Write decision JSON to stdout, then flush stdout before exit (CR #2).
+  // Drain-event pattern ensures the write is flushed before termination.
+  const json = JSON.stringify({ decision: 'block', reason });
+  if (process.stdout.write(json)) {
+    process.exit(2);
+  } else {
+    process.stdout.once('drain', () => process.exit(2));
+  }
+}
+
 let input = '';
 const t = setTimeout(() => process.exit(0), 5000);
 process.stdin.setEncoding('utf8');
@@ -139,14 +154,13 @@ process.stdin.on('end', () => {
     if (hasApprovedPrep(waveDir)) process.exit(0);
 
     // Block: specialist + active wave + no APPROVED-PREP
-    process.stderr.write(JSON.stringify({
-      decision: 'block',
-      reason: '[premature-execution-gate] Specialist "' + agentType + '" attempted ' + toolName
+    // P1c fix: block JSON must go to stdout (not stderr) — harness reads stdout for decisions.
+    block(
+      '[premature-execution-gate] Specialist "' + agentType + '" attempted ' + toolName
         + ' before APPROVED-PREP verdict for wave "' + slug + '".\n'
         + 'Expected an APPROVED-PREP verdict file in .planning/wave-' + slug + '/\n'
-        + 'Wait for arch-platform to write the APPROVED-PREP verdict, or set WAVE_PREP_BYPASS=1.',
-    }) + '\n');
-    process.exit(2);
+        + 'Wait for arch-platform to write the APPROVED-PREP verdict, or set WAVE_PREP_BYPASS=1.'
+    );
 
   } catch {
     // Fail-open — never block due to script error

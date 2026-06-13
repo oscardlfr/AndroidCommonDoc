@@ -105,7 +105,9 @@ if [[ "$phase_valid" -ne 1 ]]; then
 fi
 
 # ── Slug resolution ───────────────────────────────────────────────────────────
-# Priority: --slug > $CLAUDE_WAVE_SLUG > git branch name
+# Priority: --slug > $CLAUDE_WAVE_SLUG > git branch last-segment
+# P2b fix: always extract last segment so non-feature branches (codex/*, hotfix/*)
+# resolve correctly. develop/master/main/HEAD are rejected unconditionally.
 
 resolve_slug() {
   if [[ -n "$SLUG_OVERRIDE" ]]; then
@@ -118,16 +120,21 @@ resolve_slug() {
     return
   fi
 
-  # Branch-name resolution: feature/<slug> → slug after last '/'
+  # Branch-name resolution: always take last segment (works for feature/* AND codex/* etc.)
+  # Use symbolic-ref as primary: works on empty repos (no commits yet) and detached HEAD alike.
+  # Fall back to abbrev-ref for worktrees and other edge cases.
   local branch=""
-  branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
-  if [[ -n "$branch" && "$branch" == *"/"* ]]; then
-    echo "${branch##*/}"
-    return
+  local slug=""
+  branch="$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+  slug="${branch##*/}"
+
+  # Reject protected branch names and empty slug
+  if [[ -z "$slug" || "$slug" =~ ^(develop|master|main|HEAD)$ ]]; then
+    echo "[write-verdict] ERROR: Cannot resolve wave slug from branch '$branch'. Provide --slug or use a non-protected branch (slug = last path segment)." >&2
+    exit 2
   fi
 
-  echo "[write-verdict] ERROR: Cannot resolve wave slug. Provide --slug or ensure git branch is feature/<slug>" >&2
-  exit 2
+  echo "$slug"
 }
 
 WAVE_SLUG="$(resolve_slug)"
@@ -141,6 +148,13 @@ fi
 
 if [[ "$WAVE_SLUG" == *".."* || "$WAVE_SLUG" == *"/"* || "$WAVE_SLUG" == *"\\"* ]]; then
   echo "[write-verdict] ERROR: Traversal attempt detected in slug '$WAVE_SLUG'" >&2
+  exit 2
+fi
+
+# ── Reject protected branch names (P2b: applies to ALL slug sources including --slug) ──
+
+if [[ "$WAVE_SLUG" =~ ^(develop|master|main|HEAD)$ ]]; then
+  echo "[write-verdict] ERROR: Slug '$WAVE_SLUG' is a protected branch name and cannot be used as a wave slug." >&2
   exit 2
 fi
 

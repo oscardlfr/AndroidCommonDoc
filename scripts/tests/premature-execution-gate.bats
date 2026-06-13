@@ -168,3 +168,97 @@ run_hook() {
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── P1c: block channel — block JSON must appear on STDOUT not stderr ──────────
+# Codex repro (P1c): premature-execution-gate.js at line 142 uses process.stderr.write(...)
+# for the block JSON. All 3 sibling gates use process.stdout. After the fix, the
+# structured block decision must be on stdout so the harness can read it.
+#
+# Test strategy: redirect stderr to /dev/null; assert structured JSON is on stdout.
+# RED before fix: stdout is empty (JSON goes to stderr, lost after redirect).
+# GREEN after fix: JSON block decision is on stdout.
+
+@test "P1c BLOCK: specialist + active wave + no APPROVED-PREP emits block JSON on stdout (not stderr)" {
+  # No verdict file — gate must block. Redirect stderr to /dev/null to prove
+  # the block JSON is on stdout, not leaking through stderr.
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' node '$HOOK' 2>/dev/null"
+  [ "$status" -eq 2 ]
+  # The block decision JSON must be present on stdout (captured in $output by bats).
+  [[ "$output" == *'"decision"'* ]]
+  [[ "$output" == *'"block"'* ]]
+}
+
+# ── P2b: non-feature branch slug resolution for premature-execution-gate ──────
+# Per PLAN Step 10: each resolver file gets a non-feature branch case.
+# Setup: switch CLAUDE_WAVE_SLUG to a non-feature-prefixed slug (last-segment only).
+
+@test "P2b PEG-SLUG: codex/bl-w47-demo branch → slug 'bl-w47-demo' + active wave dir detected" {
+  # After the P2b fix, premature-execution-gate must resolve 'codex/bl-w47-demo' to
+  # last-segment slug 'bl-w47-demo'. Create a wave dir for that slug and confirm the gate
+  # detects the active wave (which means slug resolution worked).
+  local non_feature_slug="bl-w47-demo"
+  local non_feature_wave_dir="$BATS_TEST_TMPDIR/planning/wave-$non_feature_slug"
+  mkdir -p "$non_feature_wave_dir"
+  # No verdict → gate must BLOCK (proves slug was resolved and wave was found).
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' CLAUDE_WAVE_SLUG='$non_feature_slug' node '$HOOK' 2>/dev/null"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"APPROVED-PREP"* ]]
+}
+
+# ── B: env reject-list for CLAUDE_WAVE_SLUG (CodeRabbit #3) ──────────────────
+# After the fix, the 3 JS resolvers must apply the reject-list to CLAUDE_WAVE_SLUG too.
+# When CLAUDE_WAVE_SLUG is 'develop' or 'master', the gate must skip/fail-open.
+# RED now: env slug returned unvalidated → gate looks for wave-develop/ → not found
+# → fails open (exit 0). GREEN after fix confirms the SAME behaviour, but via explicit
+# reject-list path rather than accidental miss. Both before and after the fix the exit
+# is 0 — the test validates that the gate does NOT incorrectly block.
+
+@test "B PEG-ENV-REJECT-develop: CLAUDE_WAVE_SLUG=develop → gate fails open (no block)" {
+  # develop is a reject-list slug — gate must skip/fail-open regardless of wave dirs.
+  # Create a wave-develop dir to confirm the gate is NOT finding it and blocking.
+  local dev_wave_dir="$BATS_TEST_TMPDIR/planning/wave-develop"
+  mkdir -p "$dev_wave_dir"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' CLAUDE_PROJECT_DIR='$BATS_TEST_TMPDIR' CLAUDE_WAVE_SLUG='develop' node '$HOOK' 2>/dev/null"
+  [ "$status" -eq 0 ]
+}
+
+@test "B PEG-ENV-REJECT-master: CLAUDE_WAVE_SLUG=master → gate fails open (no block)" {
+  # master is a reject-list slug — same behaviour as develop.
+  local master_wave_dir="$BATS_TEST_TMPDIR/planning/wave-master"
+  mkdir -p "$master_wave_dir"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' CLAUDE_PROJECT_DIR='$BATS_TEST_TMPDIR' CLAUDE_WAVE_SLUG='master' node '$HOOK' 2>/dev/null"
+  [ "$status" -eq 0 ]
+}
+
+# ── C: branch path (no env) for premature-execution-gate (CodeRabbit #4) ──────
+# Drive slug resolution via git branch (no CLAUDE_WAVE_SLUG), mirroring the
+# subagent-start F1/C1 model. Creates an isolated git repo on codex/ branch.
+# BEFORE fix: gate returns full branch 'codex/bl-w47-demo' as slug →
+#   wave dir is 'wave-codex/bl-w47-demo' (invalid path or not found) → fails open.
+# AFTER fix: slug = 'bl-w47-demo' → wave-bl-w47-demo/ found → no verdict → exit 2.
+
+@test "C PEG-BRANCH-PATH: codex/bl-w47-demo branch (no env) → gate detects wave via branch → exit 2" {
+  # Isolated git repo — never reads live .git.
+  local proj
+  proj="$(mktemp -d)"
+  git -C "$proj" init -q 2>/dev/null
+  git -C "$proj" config user.email "bats@test.local"
+  git -C "$proj" config user.name "Bats Test"
+  git -C "$proj" commit --allow-empty -q -m "init"
+  git -C "$proj" checkout -b "codex/bl-w47-demo" -q 2>/dev/null
+  # Create wave dir for the CORRECT last-segment slug.
+  mkdir -p "$proj/.planning/wave-bl-w47-demo"
+  # Explicitly clear CLAUDE_WAVE_SLUG so setup()'s export doesn't leak into the subprocess
+  # and bypass branch parsing (the env-bypass class of bug — S4 lesson).
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' CLAUDE_WAVE_SLUG='' CLAUDE_PROJECT_DIR='$proj' node '$HOOK' 2>/dev/null"
+  rm -rf "$proj"
+  # BEFORE fix: exits 0 (wave dir not found due to full-branch slug). RED.
+  # AFTER fix: exits 2 (no verdict → gate blocks).
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"APPROVED-PREP"* ]]
+}

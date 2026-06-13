@@ -274,3 +274,44 @@ run_verdict_slug() {
   [ "$status" -eq 2 ]
   [[ "$output" == *"Invalid role"* ]]
 }
+
+# ── P2b: non-feature branch slug resolution ────────────────────────────────────
+# After the P2b fix, write-verdict.sh must accept a slug derived from a non-feature
+# branch last-segment. The --slug flag carries the pre-resolved slug, so the test
+# simply checks that a 'codex/bl-w47-demo'-derived slug (last-segment: 'bl-w47-demo')
+# is accepted and produces a verdict file.
+# The reject-list guard is also tested: develop/master slugs must exit non-zero.
+
+@test "P2b VWV-WIP PASS: wip branch (branch-detection path, no --slug) resolves to slug 'wip' (P2b regression)" {
+  # The P2b regression fires on the branch-detection path. write-verdict.sh resolve_slug()
+  # at line 124: `if [[ "$branch" == *"/"* ]]` — only strips the last segment when branch
+  # contains a slash. A bare 'wip' branch falls through to the ERROR exit at line 129.
+  # After fix: ${branch##*/} applied for any non-empty, non-protected branch name.
+  # NOTE: This test exercises the branch-detection path (no --slug, no CLAUDE_WAVE_SLUG).
+  git -C "$PROJ" checkout -b "wip" -q 2>/dev/null
+  run bash -c "cd '$PROJ' && bash '$SCRIPT' --role arch-testing --phase prep"
+  [ "$status" -eq 0 ]
+  [ -f "$PROJ/.planning/wave-wip/arch-testing-verdict.md" ]
+  grep -q "APPROVED-PREP" "$PROJ/.planning/wave-wip/arch-testing-verdict.md"
+}
+
+@test "P2b VWV-NF1 PASS: non-feature slug 'bl-w47-demo' (from codex/bl-w47-demo) accepted by --slug" {
+  # write-verdict.sh receives the pre-resolved last-segment; this test confirms it works.
+  run_verdict_slug "bl-w47-demo" --role arch-testing --phase prep --slug "bl-w47-demo"
+  [ "$status" -eq 0 ]
+  [ -f "$PROJ/.planning/wave-bl-w47-demo/arch-testing-verdict.md" ]
+  grep -q "APPROVED-PREP" "$PROJ/.planning/wave-bl-w47-demo/arch-testing-verdict.md"
+}
+
+@test "P2b VWV-NF2 BLOCK: reject-list slug 'develop' → exit 2 (exact)" {
+  # After the P2b fix, write-verdict.sh must reject the 'develop' slug with exit 2
+  # specifically (not just non-zero — exact code confirms deliberate rejection, not crash).
+  run_verdict_slug "" --role arch-testing --phase prep --slug "develop"
+  [ "$status" -eq 2 ]
+}
+
+@test "P2b VWV-NF3 BLOCK: reject-list slug 'master' → exit 2 (exact)" {
+  # Same for master — exact exit 2 required.
+  run_verdict_slug "" --role arch-testing --phase prep --slug "master"
+  [ "$status" -eq 2 ]
+}
