@@ -51,3 +51,17 @@ run_hook_with_input() {
   [ "$status" -eq 0 ]
   [[ "$HOOK_STDERR" != *"/dev/stdin"* ]]
 }
+
+@test "push-authorization-gate: exits 0 on non-push Bash input (fail-open, no stdin noise)" {
+  # push-authorization-gate.js is a node hook — uses the same JSON-piped-to-node pattern.
+  # A non-push command must pass through silently (exit 0, no output noise).
+  local inp="${BATS_TEST_TMPDIR:-/tmp}/stdin-test-push-auth-$$.json"
+  printf '%s\n' '{"tool_name":"Bash","tool_input":{"command":"echo hello"}}' > "$inp"
+  run bash -c "cat '$inp' | node '$HOOKS_DIR/push-authorization-gate.js' 2>/tmp/bats-push-auth-stderr-$$"
+  local hook_stderr
+  hook_stderr=$(cat /tmp/bats-push-auth-stderr-$$ 2>/dev/null || true)
+  rm -f /tmp/bats-push-auth-stderr-$$
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [[ "$hook_stderr" != *"/dev/stdin"* ]]
+}
