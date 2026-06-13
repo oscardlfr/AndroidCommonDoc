@@ -200,13 +200,14 @@ run_verify_final() {
   # Dual-token guard: block if BOTH tokens already present (replay prevention).
   # Matching is LINE-ANCHORED — prose that mentions a token does NOT trigger the guard.
   # Accepted forms for APPROVED-PREP:
-  #   - "**Status**: APPROVED-PREP"  (script-written prep)
-  #   - "APPROVED-PREP"              (bare line, manually written by arch)
+  #   - "**Status**: APPROVED-PREP"    (script-written prep)
+  #   - "APPROVED-PREP"                (bare line, manually written by arch)
+  #   - "**Verdict: APPROVED-PREP**"   (bold form used in L3 manual verdicts)
   # Accepted forms for APPROVED-VERIFY-FINAL:
   #   - "**Status**: APPROVED-VERIFY-FINAL"  (script-written verify-final)
   #   - "APPROVED-VERIFY-FINAL"              (bare line, manually written)
   local has_prep=0 has_final=0
-  grep -qE '^\*\*Status\*\*: APPROVED-PREP$|^APPROVED-PREP$' "$VERDICT_FILE" && has_prep=1
+  grep -qE '^\*\*Status\*\*: APPROVED-PREP$|^APPROVED-PREP$|^\*\*Verdict: APPROVED-PREP\*\*$' "$VERDICT_FILE" && has_prep=1
   grep -qE '^\*\*Status\*\*: APPROVED-VERIFY-FINAL$|^APPROVED-VERIFY-FINAL$' "$VERDICT_FILE" && has_final=1
 
   if [[ "$has_prep" -eq 1 && "$has_final" -eq 1 ]]; then
