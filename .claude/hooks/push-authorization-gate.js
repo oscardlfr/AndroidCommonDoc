@@ -161,16 +161,24 @@ process.stdin.on('end', () => {
       );
     }
 
-    // pre-pr.stamp head must match HEAD
-    if (ppResult.head) {
-      const headSha = getHeadSha(projectRoot);
-      if (headSha && ppResult.head !== headSha) {
-        block(
-          `[push-authorization-gate] BLOCKED: pre-pr.stamp head (${ppResult.head}) does not match ` +
-          `current HEAD (${headSha}). Re-run /pre-pr on the final commit then re-push. ` +
-          `Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
-        );
-      }
+    // pre-pr.stamp head must match HEAD.
+    // Block unconditionally if head field is absent, empty, or not a 40-hex SHA —
+    // a stamp without a valid head bypasses commit-binding (CR-3).
+    const SHA_RE = /^[0-9a-f]{40}$/i;
+    if (!ppResult.head || !SHA_RE.test(ppResult.head)) {
+      block(
+        `[push-authorization-gate] BLOCKED: pre-pr.stamp has missing or invalid head SHA ` +
+        `("${ppResult.head ?? ''}"). Re-run /pre-pr on the final commit then re-push. ` +
+        `Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
+      );
+    }
+    const headSha = getHeadSha(projectRoot);
+    if (headSha && ppResult.head !== headSha) {
+      block(
+        `[push-authorization-gate] BLOCKED: pre-pr.stamp head (${ppResult.head}) does not match ` +
+        `current HEAD (${headSha}). Re-run /pre-pr on the final commit then re-push. ` +
+        `Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
+      );
     }
 
     // All checks passed
