@@ -183,12 +183,17 @@
           },
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/team-completeness-gate.js",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/plan-context.js",
             "timeout": 5
-          },
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/plan-context.js",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/team-completeness-gate.js",
             "timeout": 5
           }
         ]
@@ -219,11 +224,6 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/push-authorization-gate.js",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/team-completeness-gate.js",
             "timeout": 5
           },
           {
