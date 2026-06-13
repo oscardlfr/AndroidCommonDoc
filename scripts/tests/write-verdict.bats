@@ -248,6 +248,25 @@ run_verdict_slug() {
   [[ "$output" == *"dual-token"* ]]
 }
 
+# ── VN-7: bold-verdict PREP form recognized as valid prep marker ─────────────
+
+@test "VN-7 PASS: bold-verdict APPROVED-PREP form recognized, no WARN emitted" {
+  # dd73cdf added bold form '**Verdict: APPROVED-PREP**' to the has_prep grep.
+  # When has_prep=1, the legacy-WARN branch (has_prep=0) must NOT fire.
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  printf '**Verdict: APPROVED-PREP**\n\nSome arch content\n' \
+    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
+
+  # Capture combined stdout+stderr to assert WARN absent
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-platform --phase verify-final --slug '$WAVE_SLUG' \
+    < /dev/null 2>&1"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"WARN"* ]]
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+}
+
 # ── Extra: invalid role → exit 2 ─────────────────────────────────────────────
 
 @test "invalid role exits 2" {
