@@ -199,6 +199,55 @@ run_verdict_slug() {
   [[ "$output" == *"APPROVED-VERIFY-FINAL"* ]]
 }
 
+# ── VN-4: prose mentioning token in stdin body does NOT trigger dual-token guard
+
+@test "VN-4 PASS: APPROVED-VERIFY-FINAL in prose (mid-sentence) does not trigger guard" {
+  # Anchored grep (592a8b5): guard only fires when token is on its OWN line.
+  # A mention inside a sentence must not trigger exit 2.
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  printf '**Status**: APPROVED-PREP\n' \
+    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
+
+  run bash -c "cd '$PROJ' && \
+    echo 'This supersedes the old APPROVED-VERIFY-FINAL block' | \
+    CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' \
+    --role arch-platform --phase verify-final --slug '$WAVE_SLUG'"
+  [ "$status" -eq 0 ]
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+}
+
+# ── VN-5: bare APPROVED-PREP line (no **Status**: prefix) recognized by prep check
+
+@test "VN-5 PASS: bare APPROVED-PREP line recognized as valid prep marker" {
+  # 592a8b5 added bare-line anchor to has_prep grep — manually written prep files
+  # without the **Status**: prefix must still be accepted.
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  printf 'APPROVED-PREP\n\nSome arch content here\n' \
+    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
+
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-platform --phase verify-final --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+}
+
+# ── VN-6: dual-token guard fires when APPROVED-VERIFY-FINAL is on its own line ─
+
+@test "VN-6 FAIL: dual-token guard fires when APPROVED-VERIFY-FINAL is on its own line" {
+  # Distinct from VN-3: explicitly plants bare APPROVED-VERIFY-FINAL line (not via script)
+  # to confirm the anchored guard catches both **Status**: form and bare-line form.
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  printf '**Status**: APPROVED-PREP\nAPPROVED-VERIFY-FINAL\n' \
+    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
+
+  run bash -c "cd '$PROJ' && echo 'attempt' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-platform --phase verify-final --slug '$WAVE_SLUG'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"dual-token"* ]]
+}
+
 # ── Extra: invalid role → exit 2 ─────────────────────────────────────────────
 
 @test "invalid role exits 2" {
