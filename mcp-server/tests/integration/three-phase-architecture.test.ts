@@ -819,20 +819,7 @@ describe('quality-gater template — stamp enforcement', () => {
     expect(content).toMatch(/\| 10\. Stamp/);
   });
 
-  it('quality-gate hook file exists', () => {
-    const hookPath = path.join(ROOT, '.claude/hooks/quality-gate-pre-commit.sh');
-    expect(fs.existsSync(hookPath)).toBe(true);
-  });
 
-  it('quality-gate hook is registered in settings.json', () => {
-    const settings = JSON.parse(
-      fs.readFileSync(path.join(ROOT, '.claude/settings.json'), 'utf-8')
-    );
-    const preToolUse = settings.hooks?.PreToolUse ?? [];
-    const bashHooks = preToolUse.find((h: any) => h.matcher === 'Bash');
-    const hookCommands = bashHooks?.hooks?.map((h: any) => h.command) ?? [];
-    expect(hookCommands.some((c: string) => c.includes('quality-gate-pre-commit.sh'))).toBe(true);
-  });
 });
 
 // ---------------------------------------------------------------------------

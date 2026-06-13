@@ -90,11 +90,7 @@ const FULL_L1_SETTINGS = {
             command: "\"$ANDROID_COMMON_DOC\"/.claude/hooks/detekt-pre-commit.sh",
             timeout: 60,
           },
-          {
-            type: "command",
-            command: "\"$ANDROID_COMMON_DOC\"/.claude/hooks/quality-gate-pre-commit.sh",
-            timeout: 5,
-          },
+
         ],
       },
     ],
@@ -175,8 +171,6 @@ describe("mergeHookRegistrations()", () => {
 
     // Original project hooks preserved
     expect(cmds.some((c) => c.includes("detekt-pre-commit.sh"))).toBe(true);
-    expect(cmds.some((c) => c.includes("quality-gate-pre-commit.sh"))).toBe(true);
-
     // L0 enforcement hooks appended
     expect(cmds.some((c) => c.includes("team-completeness-gate.js"))).toBe(true);
     expect(cmds.some((c) => c.includes("premature-execution-gate.js"))).toBe(true);

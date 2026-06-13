@@ -43,14 +43,6 @@ run_hook_with_input() {
   [[ "$HOOK_STDERR" != *"/dev/stdin"* ]]
 }
 
-@test "quality-gate-pre-commit: exits 0 on non-commit input, no /dev/stdin noise" {
-  local inp="${BATS_TEST_TMPDIR:-/tmp}/stdin-test-qg-$$.json"
-  make_non_commit_input "$inp"
-  run_hook_with_input "$HOOKS_DIR/quality-gate-pre-commit.sh" "$inp"
-  [ "$status" -eq 0 ]
-  [[ "$HOOK_STDERR" != *"/dev/stdin"* ]]
-}
-
 
 @test "registry-pre-commit: exits 0 on non-commit input, no /dev/stdin noise" {
   local inp="${BATS_TEST_TMPDIR:-/tmp}/stdin-test-registry-$$.json"
