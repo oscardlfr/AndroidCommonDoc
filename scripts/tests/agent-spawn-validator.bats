@@ -138,6 +138,47 @@ run_hook() {
   [ "$status" -eq 0 ]
 }
 
+# ── Stale-suffix / identity-tolerance (BL-W47 OQ3, L6e) ─────────────────────
+# TeamCreate-peer agents must supply team_name + name. When name ≠ subagent_type
+# the stale-suffix guard classifies the name as:
+#   A. Canonical + numeric suffix (e.g. arch-testing-2) → ALLOW silently
+#   C. Base not in manifest or free name              → WARN stderr, ALLOW
+# These tests use arch-testing (a confirmed TeamCreate-peer in the manifest).
+
+@test "SS-A PASS: canonical-suffix name (arch-testing-2) allows silently (Case A overflow)" {
+  make_input "Task" "arch-testing" "session-bl-w47" "arch-testing-2"
+  run_hook
+  [ "$status" -eq 0 ]
+  # No block output — Case A silently passes through
+  [[ "$output" != *'"decision":"block"'* ]]
+}
+
+@test "SS-C1 WARN: suffix-but-unknown-base (foo-specialist-2) emits WARN on stderr, exits 0" {
+  # foo-specialist is not in manifest — suffix present but base unknown → Case C WARN
+  make_input "Task" "arch-testing" "session-bl-w47" "foo-specialist-2"
+  # Capture stderr via 2>&1 to check for WARN
+  run bash -c "cd '$PROJECT_ROOT' && cat '$INPUT_FILE' | node '$HOOK' 2>&1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN"* ]]
+}
+
+@test "SS-C2 WARN: free-name (free-agent-name, no suffix) emits WARN on stderr, exits 0" {
+  # No numeric suffix and name ≠ subagent_type → Case C free name WARN
+  make_input "Task" "arch-testing" "session-bl-w47" "free-agent-name"
+  run bash -c "cd '$PROJECT_ROOT' && cat '$INPUT_FILE' | node '$HOOK' 2>&1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN"* ]]
+}
+
+@test "SS-REG BLOCK: TeamCreate-peer spawned without team_name/name still blocked (regression)" {
+  # Regression: the TeamCreate-peer gate (team_name + name required) must still fire
+  # even after the stale-suffix logic was added.
+  make_input "Task" "arch-testing" "" ""
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"team_name"* ]]
+}
+
 @test "fails open when template file is missing" {
   mv "$PROJECT_ROOT/setup/agent-templates/advisor.md" "$BATS_TEST_TMPDIR/advisor.bak"
   make_input "Task" "advisor"

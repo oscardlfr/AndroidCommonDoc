@@ -67,3 +67,28 @@ make_input() {
   run bash -c "echo 'not-valid-json' | SPECIALIST_TASK_COMPLETION_BYPASS='' node '$HOOK'"
   [ "$status" -eq 0 ]
 }
+
+# ── Identity-tolerance: suffix-rotation + free-name (BL-W47 OQ3) ─────────────
+# SPECIALIST_TYPES uses startsWith — suffix-rotated peers must be blocked same
+# as canonical; free names (no prefix match) must pass through.
+
+@test "IT-1 BLOCK: suffix-rotated specialist (test-specialist-2) blocked on status=completed" {
+  local input
+  input="$(make_input "test-specialist-2" "completed")"
+  run bash -c "echo '$input' | SPECIALIST_TASK_COMPLETION_BYPASS='' node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
+
+@test "IT-2 BLOCK: suffix-rotated specialist (toolkit-specialist-2) blocked on status=completed" {
+  local input
+  input="$(make_input "toolkit-specialist-2" "completed")"
+  run bash -c "echo '$input' | SPECIALIST_TASK_COMPLETION_BYPASS='' node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
+
+@test "IT-3 PASS: free-name agent (free-agent) allowed on status=completed (not a specialist)" {
+  local input
+  input="$(make_input "free-agent" "completed")"
+  run bash -c "echo '$input' | SPECIALIST_TASK_COMPLETION_BYPASS='' node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
