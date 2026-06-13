@@ -332,10 +332,10 @@ After completing review:
 
    ```bash
    # PREP phase (creates file, fails if APPROVED-PREP already present)
-   bash scripts/sh/write-verdict.sh --phase prep
+   bash scripts/sh/write-verdict.sh --role arch-testing --phase prep
 
    # VERIFY-FINAL phase (appends; requires APPROVED-PREP already in file)
-   bash scripts/sh/write-verdict.sh --phase verify-final
+   bash scripts/sh/write-verdict.sh --role arch-testing --phase verify-final
    ```
 
    Write/Edit are denied; `write-verdict.sh` is the only sanctioned verdict-write path (L1 canal, wave bl-w47-hook-surgery).

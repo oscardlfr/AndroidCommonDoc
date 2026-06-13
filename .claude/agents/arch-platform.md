@@ -346,13 +346,13 @@ After completing review:
 
    ```bash
    # PREP phase (creates file, fails if APPROVED-PREP already present)
-   bash scripts/sh/write-verdict.sh --phase prep
+   bash scripts/sh/write-verdict.sh --role arch-platform --phase prep
 
    # VERIFY-FINAL phase (appends; requires APPROVED-PREP already in file)
-   bash scripts/sh/write-verdict.sh --phase verify-final
+   bash scripts/sh/write-verdict.sh --role arch-platform --phase verify-final
    ```
 
-   Write/Edit are denied; `write-verdict.sh` is the only sanctioned verdict-write path (L1 canal, wave bl-w47-hook-surgery). Pipe content via stdin or pass --file. See `scripts/sh/write-verdict.sh --help` for full usage.
+   Write/Edit are denied; `write-verdict.sh` is the only sanctioned verdict-write path (L1 canal, wave bl-w47-hook-surgery). See `scripts/sh/write-verdict.sh --help` for full usage.
 
 2. `SendMessage(to="team-lead", message="APPROVE")` → team-lead does TaskUpdate only (no broadcast)
    OR `SendMessage(to="team-lead", message="ESCALATE: <1-sentence reason>")` → team-lead broadcasts with [ESCALATION] marker

@@ -1918,7 +1918,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:85adce46f70d26bdd01a138bcc9f82263769feeb32b288fe31fad016cd1c7bbc",
+      "hash": "sha256:31c86669f1109280dba8264e079ca20a928a06bd484cd5e3f271678e1ee80d80",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1934,7 +1934,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.28.0",
+        "template_version": "1.29.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1948,7 +1948,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8619652da32d24ed6f6dbc32f74bf6c07200d133ad3da7c371a2015e62cc5d90",
+      "hash": "sha256:f9f9d450f50729d3f4e3f23ecfe0c6341d8b543b9b26d268db9d228c5624a1b7",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1963,7 +1963,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.32.0",
+        "template_version": "1.33.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1977,7 +1977,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:3ba8b12739a0a186b05ee31626661505d21b24b7b3afc7ece9bbd03d0aca1f31",
+      "hash": "sha256:9831b547e4b4de91e03a07b16950043dbeb53d243afc6940e8e386241eda186d",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1992,7 +1992,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.37.0",
+        "template_version": "1.38.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2545,7 +2545,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.12.0"
+        "template_version": "1.13.0"
       }
     },
     {

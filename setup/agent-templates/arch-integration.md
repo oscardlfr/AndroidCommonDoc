@@ -394,10 +394,10 @@ After completing review:
 
    ```bash
    # PREP phase
-   bash scripts/sh/write-verdict.sh --phase prep
+   bash scripts/sh/write-verdict.sh --role arch-integration --phase prep
 
    # VERIFY-FINAL phase
-   bash scripts/sh/write-verdict.sh --phase verify-final
+   bash scripts/sh/write-verdict.sh --role arch-integration --phase verify-final
    ```
 2. `SendMessage(to="team-lead", message="APPROVE")` → team-lead does TaskUpdate only (no broadcast)
    OR `SendMessage(to="team-lead", message="ESCALATE: <1-sentence reason>")` → team-lead broadcasts with [ESCALATION] marker
