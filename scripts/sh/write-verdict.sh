@@ -197,24 +197,27 @@ run_verify_final() {
     exit 2
   fi
 
-  local content
-  content="$(cat "$VERDICT_FILE")"
-
-  # Dual-token guard: block if BOTH tokens already present (replay prevention)
+  # Dual-token guard: block if BOTH tokens already present (replay prevention).
+  # Matching is LINE-ANCHORED — prose that mentions a token does NOT trigger the guard.
+  # Accepted forms for APPROVED-PREP:
+  #   - "**Status**: APPROVED-PREP"  (script-written prep)
+  #   - "APPROVED-PREP"              (bare line, manually written by arch)
+  # Accepted forms for APPROVED-VERIFY-FINAL:
+  #   - "**Status**: APPROVED-VERIFY-FINAL"  (script-written verify-final)
+  #   - "APPROVED-VERIFY-FINAL"              (bare line, manually written)
   local has_prep=0 has_final=0
-  [[ "$content" == *"APPROVED-PREP"* ]] && has_prep=1
-  [[ "$content" == *"APPROVED-VERIFY-FINAL"* ]] && has_final=1
+  grep -qE '^\*\*Status\*\*: APPROVED-PREP$|^APPROVED-PREP$' "$VERDICT_FILE" && has_prep=1
+  grep -qE '^\*\*Status\*\*: APPROVED-VERIFY-FINAL$|^APPROVED-VERIFY-FINAL$' "$VERDICT_FILE" && has_final=1
 
   if [[ "$has_prep" -eq 1 && "$has_final" -eq 1 ]]; then
     echo "[write-verdict] ERROR: Verdict file already contains both APPROVED-PREP and APPROVED-VERIFY-FINAL (dual-token replay guard): $VERDICT_FILE" >&2
     exit 2
   fi
 
-  # Legacy heredoc dual-token detection: if the content looks like it was written
-  # via the old heredoc route with both tokens in the body, warn on stderr but do NOT
-  # block — this is a migration path warning only.
-  if [[ "$has_prep" -eq 0 && "$content" == *"APPROVED-FINAL"* ]]; then
-    echo "[write-verdict] WARN: Verdict file has APPROVED-FINAL but no APPROVED-PREP header — possible legacy heredoc write. Proceeding." >&2
+  # Legacy heredoc dual-token detection: warn if APPROVED-FINAL (old token) appears on
+  # its own line but no APPROVED-PREP line is found. Warn only — do not block.
+  if [[ "$has_prep" -eq 0 ]] && grep -qE '^\*\*Status\*\*: APPROVED-FINAL$|^APPROVED-FINAL$' "$VERDICT_FILE"; then
+    echo "[write-verdict] WARN: Verdict file has APPROVED-FINAL but no APPROVED-PREP line — possible legacy heredoc write. Proceeding." >&2
   fi
 
   # Read architect verdict content from stdin (the body written by the architect)
