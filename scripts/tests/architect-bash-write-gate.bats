@@ -916,3 +916,46 @@ EOF" 'arch-testing'
   [[ "$output" == *"WARN"* ]]
   [[ "$output" == *"write-verdict.sh"* ]]
 }
+
+# ── BL-W47 Commit 3: additional node -e + Windows drive-prefix + tee-verdict ──
+# Four cases paired with Commit 3 hook changes:
+#   C3-1 Windows absolute path (backslash) to verdict-named file → BLOCK
+#        hasDrivePrefix fires before verdict-path regex — not exempt.
+#   C3-2 node -e with const-alias fs.writeFileSync to non-exempt path → BLOCK
+#        NODE_FS_WRITE_RE matches through stored require() variable alias.
+#   C3-3 node -e with const-alias fs.writeFileSync to /tmp → ALLOW
+#        isExemptTarget(/tmp/...) returns true before BLOCK.
+#   C3-4 Regression: tee to exempt verdict path → ALLOW
+#        TEE_WRITE_RE extracts target; isExemptTarget(.planning/…/arch-*-verdict.md) → exempt.
+
+@test "C3-1 BLOCK: Windows backslash path to verdict-named file blocked (hasDrivePrefix gate)" {
+  # Even though the filename looks like a verdict, the Windows drive prefix fires
+  # before the verdict-path regex — absolute Windows paths outside tmpdir are BLOCKED.
+  make_input 'cat > C:\Users\user\arch-x-verdict.md <<EOF
+foo
+EOF' 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "C3-2 BLOCK: node -e with const-alias fs.writeFileSync to non-exempt path" {
+  make_input "node -e \"const fs=require('fs'); fs.writeFileSync('foo.md','x')\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"node -e fs-write-api"* ]]
+}
+
+@test "C3-3 ALLOW: node -e with const-alias fs.writeFileSync to /tmp (exempt tmpdir)" {
+  make_input "node -e \"const fs=require('fs'); fs.writeFileSync('/tmp/test.md','x')\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "C3-4 ALLOW: tee to exempt verdict path passes (regression guard)" {
+  # Quoted form required — unquoted tee target is truncated at the first hyphen by
+  # TEE_WRITE_RE's [^-\s|...] class (pre-existing limitation). The quoted form
+  # correctly exercises isExemptTarget on the full .planning/wave-*/arch-*-verdict.md path.
+  make_input 'echo APPROVE | tee ".planning/wave-foo/arch-platform-verdict.md"' 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
