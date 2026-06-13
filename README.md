@@ -429,7 +429,7 @@ Four layers prevent `@Suppress` gaming and enforce quality discipline:
 1. **Detekt rule** (`NoSuppressAnnotationsRule`): blocks `@Suppress` annotations whose reason is not in the allowlist. Default allowlist covers legitimate KMP interop (`UNCHECKED_CAST`, `DEPRECATION`, `unused`, `OPT_IN_USAGE`, `EagerInitialization`). Projects extend via `allowedSuppressions` in `detekt.yml`.
 2. **`/pre-pr` Step 5.5**: diff-based detection — scans the PR diff for NEW `@Suppress` annotations introduced by this change, blocking even if the Detekt rule was not configured.
 3. **`/pre-pr` Step 5.7**: dependency freshness check — runs `check-outdated` CLI and blocks on critical version drift.
-4. **`quality-gater` Step 2.5**: blocks deprecation warnings and outdated dependency warnings that agents might otherwise ignore. **Step 10** writes a PASS stamp (30 min expiry) consumed by the `quality-gate-pre-commit` hook — commits are blocked unless the gate passed recently.
+4. **`quality-gater` Step 2.5**: blocks deprecation warnings and outdated dependency warnings that agents might otherwise ignore. **Step 10** writes a PASS stamp (30 min expiry) verified by the pre-push gate — push is blocked unless both the quality-gate and pre-pr stamps are fresh.
 
 This four-layer approach catches suppressions at build time (Detekt), dependency drift and diff issues at PR time, and quality-gate stamp enforcement at commit time.
 
@@ -527,7 +527,7 @@ Real-time pattern enforcement and context injection during AI-assisted developme
 | `doc-freshness-alert.js` | Session start | Warns when pattern docs are stale relative to upstream sources |
 | `agent-delegation-reminder.js` | Task start | Nudges the agent to delegate to specialized agents instead of doing everything inline |
 | `registry-pre-commit.sh` | PreToolUse (git commit) | Validates registry.json hashes before commit |
-| `quality-gate-pre-commit.sh` | PreToolUse (git commit) | Blocks commit unless a fresh quality-gate PASS stamp exists (30 min expiry) |
+| `push-authorization-gate.js` | PreToolUse (Bash — push) | Blocks push from peer agents; validates quality-gate and pre-pr stamps for main-orchestrator pushes |
 
 ---
 

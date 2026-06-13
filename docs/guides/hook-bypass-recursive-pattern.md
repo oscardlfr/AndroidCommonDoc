@@ -32,7 +32,6 @@ The same pattern applies to any gate using `command.includes()` or `grep` agains
 | Gate file | Blocked substrings | Bypass mechanism |
 |-----------|-------------------|-----------------|
 | `.claude/hooks/kmp-test-runner-gate.js` | `gradlew test`, `gradle test`, `:module:test` | `KMP_TEST_RUNNER_BYPASS=1` env var OR `[KMP_TEST_RUNNER_BYPASS]` inline marker in command |
-| `.claude/hooks/quality-gate-pre-commit.sh` | triggers on `git commit` when stamp missing/stale/FAIL | No env bypass — re-run `/pre-pr` or quality-gater to refresh stamp before committing |
 | `.claude/hooks/architect-bash-write-gate.js` | heredoc/redirect write patterns in Bash | `BASH_WRITE_GATE_BYPASS=1` (introduced BL-W43 PR1 for meta-recursive waves that edit hook files) |
 | `.claude/hooks/wave-phase-gate.js` | `git push`, `gh pr create` (command-start only — body prose exempt after BL-W44 PR4) | `WAVE_PHASE_GATE_BYPASS=1` env var |
 
@@ -83,16 +82,6 @@ EOF
 Canonical scenario: shipping PR4 (wave-phase-gate changes) requires bypassing the gate
 because the gh pr create command itself triggers Rule A. Set `WAVE_PHASE_GATE_BYPASS=1`
 for the duration of that single command, then unset.
-
-### quality-gate-pre-commit.sh
-
-No env-var bypass exists. If the quality-gate stamp is expired (30-minute window), re-run the quality gate before committing:
-
-```
-/pre-pr
-```
-
-The recursive-bootstrap risk here is prose-only: the gate fires on the Bash `git commit` call itself (not the message). Writing commit message content via heredoc or Write tool does not trigger it.
 
 ## Why This Pattern Is by Design
 
