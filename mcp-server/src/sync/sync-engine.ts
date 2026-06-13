@@ -662,16 +662,15 @@ interface HookRegistrationEntry {
   readonly file: string;
 }
 
-/** The 8 L0 enforcement hook registrations (6 unique hook files) that must be present in L1 settings.json. */
+/** The 7 L0 enforcement hook registrations (6 unique hook files) that must be present in L1 settings.json. */
 const L0_REQUIRED_HOOK_REGISTRATIONS: readonly HookRegistrationEntry[] = [
-  { event: 'PreToolUse', matcher: 'Write|Edit', file: 'team-completeness-gate.js' },
-  { event: 'PreToolUse', matcher: 'Bash',       file: 'team-completeness-gate.js' },
-  { event: 'PreToolUse', matcher: 'TaskUpdate', file: 'specialist-task-completion-gate.js' },
-  { event: 'PreToolUse', matcher: 'Write|Edit', file: 'premature-execution-gate.js' },
-  { event: 'PreToolUse', matcher: 'Bash',       file: 'premature-execution-gate.js' },
-  { event: 'PreToolUse', matcher: 'Bash',       file: 'branch-guard.js' },
-  { event: 'PreToolUse', matcher: 'Bash',       file: 'push-authorization-gate.js' },
-  { event: 'PreToolUse', matcher: 'Bash',       file: 'commit-scope-validation-gate.js' },
+  { event: 'PreToolUse', matcher: 'Write|Edit',     file: 'team-completeness-gate.js' },
+  { event: 'PreToolUse', matcher: 'Bash',            file: 'team-completeness-gate.js' },
+  { event: 'PreToolUse', matcher: 'TaskUpdate',      file: 'specialist-task-completion-gate.js' },
+  { event: 'PreToolUse', matcher: 'Write|Edit|Bash', file: 'premature-execution-gate.js' },
+  { event: 'PreToolUse', matcher: 'Bash',            file: 'branch-guard.js' },
+  { event: 'PreToolUse', matcher: 'Bash',            file: 'push-authorization-gate.js' },
+  { event: 'PreToolUse', matcher: 'Bash',            file: 'commit-scope-validation-gate.js' },
 ] as const;
 
 /** Shape of a single hook entry within a matcher block */
