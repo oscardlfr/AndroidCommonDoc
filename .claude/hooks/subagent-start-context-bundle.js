@@ -56,7 +56,8 @@ function resolveWaveSlug(projectRoot) {
 function extractWaveSlugFromFrontmatter(content) {
   // Extract wave_slug from YAML frontmatter block between --- markers.
   // Accepts both `wave_slug: "value"` and `wave_slug: value` forms.
-  const match = /^---\n[\s\S]*?wave_slug:\s*["']?([^"'\n]+)["']?\s*\n[\s\S]*?---/m.exec(content);
+  // No /m flag — ^ must anchor to the very start of the file, not any line start.
+  const match = /^---\n[\s\S]*?wave_slug:\s*["']?([^"'\n]+)["']?\s*\n[\s\S]*?---/.exec(content);
   if (!match) return null;
   return match[1].trim();
 }
