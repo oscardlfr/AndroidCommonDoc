@@ -248,11 +248,6 @@
           },
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/wave-phase-gate.js",
-            "timeout": 5
-          },
-          {
-            "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/git-amend-gate.js",
             "timeout": 5
           },
@@ -289,7 +284,12 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/team-topology-gate.js",
             "timeout": 5
-          },
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Task|Agent",
+        "hooks": [
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/wave-phase-gate.js",
