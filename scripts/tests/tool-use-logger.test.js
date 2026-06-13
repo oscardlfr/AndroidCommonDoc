@@ -152,4 +152,66 @@ assert.strictEqual(t14.line.cp_bypass_blocked, true, 'T14: cp_bypass_blocked tru
 assert.ok(!fs.existsSync(t14Marker), 'T14: marker deleted after read');
 console.log('T14 absent agent_id unknown fallback: PASS');
 
+// T15: non-empty agent_type → agent_name = agent_type, agent_class = "peer"
+const t15 = runHook({ tool_name: 'Bash', tool_input: { command: 'echo t15' }, session_id: 'sess15', agent_type: 'toolkit-specialist' });
+assert.strictEqual(t15.status, 0, 'T15: hook must exit 0');
+assert.ok(t15.line, 'T15: log line must exist');
+assert.strictEqual(t15.line.agent_name, 'toolkit-specialist', 'T15: agent_name equals agent_type');
+assert.strictEqual(t15.line.agent_class, 'peer', 'T15: agent_class is peer for non-empty agent_type');
+console.log('T15 agent_name/agent_class peer: PASS');
+
+// T16: empty agent_type → agent_name = "main", agent_class = "main"
+const t16 = runHook({ tool_name: 'Bash', tool_input: { command: 'echo t16' }, session_id: 'sess16', agent_type: '' });
+assert.strictEqual(t16.status, 0, 'T16: hook must exit 0');
+assert.ok(t16.line, 'T16: log line must exist');
+assert.strictEqual(t16.line.agent_name, 'main', 'T16: agent_name is "main" when agent_type is empty');
+assert.strictEqual(t16.line.agent_class, 'main', 'T16: agent_class is "main" when agent_type is empty');
+console.log('T16 agent_name/agent_class main: PASS');
+
+// T17: rotation — synthetic >20MB log triggers gzip rotation
+// Uses its own isolated tmpdir so the shared LOG path is not disturbed.
+{
+  const rotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tul-rot-'));
+  const logDir = path.join(rotDir, '.androidcommondoc');
+  fs.mkdirSync(logDir);
+  const logPath = path.join(logDir, 'tool-use-log.jsonl');
+
+  // Write a synthetic file just over 20MB (20971521 bytes = 20MB + 1 byte).
+  // Use a 1MB buffer repeated to avoid holding 20MB in a single string allocation.
+  const MB = 1024 * 1024;
+  const chunk = Buffer.alloc(MB, 0x41); // 'A' x 1MB
+  const fd = fs.openSync(logPath, 'w');
+  for (let i = 0; i < 21; i++) fs.writeSync(fd, chunk);
+  fs.closeSync(fd);
+  assert.ok(fs.statSync(logPath).size > 20_971_520, 'T17 pre: synthetic file exceeds 20MB threshold');
+
+  // Run the hook with the synthetic log in place.
+  const input17 = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'echo rotate' }, session_id: 'sess17' });
+  const result17 = spawnSync('node', [HOOK], {
+    input: input17,
+    env: { ...process.env, CLAUDE_PROJECT_DIR: rotDir },
+    encoding: 'utf8',
+  });
+  assert.strictEqual(result17.status, 0, 'T17: hook must exit 0 after rotation');
+
+  // The original .jsonl should be gone (renamed+gzipped) and a fresh .jsonl should exist.
+  assert.ok(!fs.existsSync(logPath) || fs.statSync(logPath).size < 20_971_520,
+    'T17: original oversized .jsonl removed or replaced with small fresh file');
+
+  // At least one .jsonl.gz file must have been created in the log dir.
+  const gzFiles = fs.readdirSync(logDir).filter(f => f.endsWith('.jsonl.gz'));
+  assert.ok(gzFiles.length > 0, 'T17: at least one .jsonl.gz rotation file created');
+
+  // The fresh .jsonl (if it exists) must contain the new entry from this run.
+  if (fs.existsSync(logPath)) {
+    const freshContent = fs.readFileSync(logPath, 'utf8').trim();
+    const freshLine = freshContent ? JSON.parse(freshContent) : null;
+    assert.ok(freshLine, 'T17: fresh .jsonl contains the new entry');
+    assert.strictEqual(freshLine.tool_name, 'Bash', 'T17: fresh entry has correct tool_name');
+  }
+
+  fs.rmSync(rotDir, { recursive: true, force: true });
+  console.log('T17 rotation >20MB: PASS');
+}
+
 console.log('\nAll tool-use-logger tests passed.');
