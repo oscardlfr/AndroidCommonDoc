@@ -100,12 +100,14 @@ const TEE_WRITE_RE = /\btee\s+(?:-a\s+|--append\s+)?(['"]?)([^\s|<>;&'"]+)\1/;
 // checks run — the body may contain `open(` or `write` text that is not Python.
 const NODE_EVAL_RE = /\bnode\s+(?:-e|--eval)\s+(['"])[\s\S]*?\1/g;
 // Detects node -e/--eval bodies containing fs write calls.
-// Captures: (quote char)(body)(quote char)
-const NODE_EVAL_BODY_RE = /\bnode\s+(?:-e|--eval)\s+(['"])([\s\S]*?)\1/;
-// fs write APIs that indicate a file write inside a node -e body
-const NODE_FS_WRITE_RE = /\b(?:writeFileSync|appendFileSync|createWriteStream|(?:fs\.promises\.|promises\.)writeFile)\s*\(\s*(['"]?)([^'")\s]+)\1/;
-// Extract target from fs.writeFileSync('path', ...) etc.
-const NODE_FS_TARGET_RE = /\b(?:writeFileSync|appendFileSync|createWriteStream|(?:fs\.promises\.|promises\.)writeFile)\s*\(\s*(['"])([^'"]+)\1/g;
+// Captures: (quote char)(body)(quote char). Escape-tolerant: body may contain
+// escaped quotes (\' or \") without terminating the match early (CR-1a).
+const NODE_EVAL_BODY_RE = /\bnode\s+(?:-e|--eval)\s+(['"])((?:\\.|(?!\1)[\s\S])*)\1/;
+// fs write APIs that indicate a file write inside a node -e body.
+// Includes callback-style writeFile (no Sync suffix) in addition to Sync forms (CR-1b).
+const NODE_FS_WRITE_RE = /\b(?:writeFileSync|writeFile|appendFileSync|createWriteStream|(?:fs\.promises\.|promises\.)writeFile)\s*\(\s*(['"]?)([^'")\s]+)\1/;
+// Extract target from fs.writeFileSync('path', ...) / fs.writeFile('path', ...) etc.
+const NODE_FS_TARGET_RE = /\b(?:writeFileSync|writeFile|appendFileSync|createWriteStream|(?:fs\.promises\.|promises\.)writeFile)\s*\(\s*(['"])([^'"]+)\1/g;
 
 function isExemptTarget(target) {
   if (!target) return false;
@@ -190,14 +192,15 @@ function detectViolation(cmd) {
     return { kind: 'awk -i inplace' };
   }
 
-  // node -e/--eval detector: block fs write APIs (writeFileSync, appendFileSync,
-  // createWriteStream, fs.promises.writeFile) used inside a node eval body.
-  const nodeEvalMatch = NODE_EVAL_BODY_RE.exec(cmd);
-  if (nodeEvalMatch) {
+  // node -e/--eval detector: block fs write APIs inside node eval bodies.
+  // Uses matchAll (loop) to handle multiple node -e invocations in one command (CR-1a).
+  // Covers both Sync and callback-style writeFile (CR-1b).
+  const nodeEvalBodyRe = new RegExp(NODE_EVAL_BODY_RE.source, 'g');
+  for (const nodeEvalMatch of cmd.matchAll(nodeEvalBodyRe)) {
     const body = nodeEvalMatch[2] || '';
     if (NODE_FS_WRITE_RE.test(body)) {
       let foundNodeTarget = false;
-      for (const match of body.matchAll(NODE_FS_TARGET_RE)) {
+      for (const match of body.matchAll(new RegExp(NODE_FS_TARGET_RE.source, 'g'))) {
         foundNodeTarget = true;
         const target = match[2];
         const resolved = resolveShellVar(target, cmd);
