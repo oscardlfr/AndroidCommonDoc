@@ -213,12 +213,7 @@
           },
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-gate-pre-push.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-push-pre-pr-gate.js",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/push-authorization-gate.js",
             "timeout": 5
           },
           {
