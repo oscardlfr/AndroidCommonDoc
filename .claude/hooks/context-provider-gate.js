@@ -64,12 +64,22 @@ process.stdin.on('end', () => {
           filePath.endsWith('team.json') ||
           filePath.endsWith('config.json');
         if (!isExemptPath) {
+          // Boundary-anchored path classifier (P1a fix: repo-relative paths like
+          // 'docs/guides/foo.md' have no leading sep — regex approach missed them).
+          // dir: 'docs' | 'setup/agent-templates' | '.claude/agents'
+          // Covers repo-relative (startsWith) and absolute (includes).
+          // '.' stays literal — no dynamic regex escape needed.
+          function underDir(fp, dir) {
+            const p = String(fp).replace(/\\/g, '/');
+            return p.startsWith(dir + '/') || p.includes('/' + dir + '/');
+          }
+
           // BL-W35-06 C2: self-template/agent-template read unconditionally blocked for specialists
           // (belt-and-suspenders for template prose ban; A2 unified isPatternDiscovery with flag check
           // so own-template would otherwise be allowed when arch-response flag is set).
           const isSelfTemplatePath =
-            (/[/\\]setup[/\\]agent-templates[/\\]/.test(filePath) ||
-             /[/\\]\.claude[/\\]agents[/\\]/.test(filePath)) && filePath.endsWith('.md');
+            (underDir(filePath, 'setup/agent-templates') ||
+             underDir(filePath, '.claude/agents')) && filePath.endsWith('.md');
           if (isSpecialist && isSelfTemplatePath) {
             process.stdout.write(JSON.stringify({
               decision: 'block',
@@ -78,9 +88,9 @@ process.stdin.on('end', () => {
             process.exit(2);
           }
           const isPatternDiscovery =
-            (/[/\\]docs[/\\]/.test(filePath) && filePath.endsWith('.md')) ||
-            (/[/\\]setup[/\\]agent-templates[/\\]/.test(filePath) && filePath.endsWith('.md')) ||
-            (/[/\\]\.claude[/\\]agents[/\\]/.test(filePath) && filePath.endsWith('.md')) ||
+            (underDir(filePath, 'docs') && filePath.endsWith('.md')) ||
+            (underDir(filePath, 'setup/agent-templates') && filePath.endsWith('.md')) ||
+            (underDir(filePath, '.claude/agents') && filePath.endsWith('.md')) ||
             /skills[/\\][^/\\]+[/\\]SKILL\.md$/.test(filePath);
           if (isPatternDiscovery) {
             let allowed = false;

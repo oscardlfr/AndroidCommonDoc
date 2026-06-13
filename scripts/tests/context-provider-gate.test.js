@@ -268,4 +268,91 @@ const fcr2b = runHook({
 assert.strictEqual(fcr2b.exit, 2, 'CR2-B: Grep with docs/guides path should block');
 console.log('CR2-B Grep docs/guides path blocks: PASS');
 
+// CR2-C: Read with repo-relative 'docs/guides/foo.md' (no leading sep), arch-platform, no flag → BLOCK
+// Codex repro: the Read leg's isSelfTemplatePath/isPatternDiscovery regexes required
+// a leading separator before 'docs', so 'docs/guides/foo.md' bypassed the gate.
+clearSessionFlag('scr2c');
+const fcr2c = runHook({
+  tool_name: 'Read',
+  tool_input: { file_path: 'docs/guides/foo.md' },
+  session_id: 'scr2c',
+  agent_type: 'arch-platform',
+  agent_id: 'arch-platform'
+});
+assert.strictEqual(fcr2c.exit, 2, 'CR2-C: Read with repo-relative docs/guides path should block');
+assert.ok(
+  fcr2c.stdout.includes('"decision":"block"') || fcr2c.stdout.includes('"decision": "block"'),
+  'CR2-C: block decision in stdout'
+);
+console.log('CR2-C Read repo-relative docs/guides path blocks: PASS');
+
+// CR2-D: Read 'setup/agent-templates/foo.md' (no leading sep), arch-platform, no flag → BLOCK
+clearSessionFlag('scr2d');
+const fcr2d = runHook({
+  tool_name: 'Read',
+  tool_input: { file_path: 'setup/agent-templates/foo.md' },
+  session_id: 'scr2d',
+  agent_type: 'arch-platform',
+  agent_id: 'arch-platform'
+});
+assert.strictEqual(fcr2d.exit, 2, 'CR2-D: Read with repo-relative setup/agent-templates path should block');
+assert.ok(
+  fcr2d.stdout.includes('"decision":"block"') || fcr2d.stdout.includes('"decision": "block"'),
+  'CR2-D: block decision in stdout'
+);
+console.log('CR2-D Read repo-relative setup/agent-templates path blocks: PASS');
+
+// CR2-E: Read '.claude/agents/foo.md' (no leading sep), arch-platform, no flag → BLOCK
+clearSessionFlag('scr2e');
+const fcr2e = runHook({
+  tool_name: 'Read',
+  tool_input: { file_path: '.claude/agents/foo.md' },
+  session_id: 'scr2e',
+  agent_type: 'arch-platform',
+  agent_id: 'arch-platform'
+});
+assert.strictEqual(fcr2e.exit, 2, 'CR2-E: Read with repo-relative .claude/agents path should block');
+assert.ok(
+  fcr2e.stdout.includes('"decision":"block"') || fcr2e.stdout.includes('"decision": "block"'),
+  'CR2-E: block decision in stdout'
+);
+console.log('CR2-E Read repo-relative .claude/agents path blocks: PASS');
+
+// CR2-F: isSelfTemplatePath — Read 'setup/agent-templates/foo.md', test-specialist → C2 BLOCK
+// C2 block fires regardless of session/arch-response flag (belt-and-suspenders).
+clearSessionFlag('scr2f');
+// Write arch-response flag so the isPatternDiscovery path would allow — C2 must STILL block.
+writeArchResponseFlag('scr2f', 'test-specialist');
+const fcr2f = runHook({
+  tool_name: 'Read',
+  tool_input: { file_path: 'setup/agent-templates/foo.md' },
+  session_id: 'scr2f',
+  agent_type: 'test-specialist',
+  agent_id: 'test-specialist'
+});
+clearArchResponseFlag('scr2f', 'test-specialist');
+assert.strictEqual(fcr2f.exit, 2, 'CR2-F: isSelfTemplatePath must block test-specialist regardless of flag');
+assert.ok(
+  fcr2f.stdout.includes('"decision":"block"') || fcr2f.stdout.includes('"decision": "block"'),
+  'CR2-F: block decision in stdout'
+);
+// C2 block reason mentions the C2 code
+assert.ok(fcr2f.stdout.includes('C2'), 'CR2-F: C2 block reason cited in stdout');
+console.log('CR2-F isSelfTemplatePath C2 block for test-specialist (regardless of flag): PASS');
+
+// CR2-G: positive control — Read 'docs/guides/foo.md', arch-platform, session flag set → ALLOW
+// After the fix, a CP-consulted peer with the session flag must be allowed (no over-block).
+const sid_cr2g = 'scr2g';
+writeSessionFlag(sid_cr2g);
+const fcr2g = runHook({
+  tool_name: 'Read',
+  tool_input: { file_path: 'docs/guides/foo.md' },
+  session_id: sid_cr2g,
+  agent_type: 'arch-platform',
+  agent_id: 'arch-platform'
+});
+clearSessionFlag(sid_cr2g);
+assert.strictEqual(fcr2g.exit, 0, 'CR2-G: Read docs path with session flag must be allowed');
+console.log('CR2-G Read docs path with session flag allows (positive control): PASS');
+
 console.log('\nAll context-provider-gate tests passed.');
