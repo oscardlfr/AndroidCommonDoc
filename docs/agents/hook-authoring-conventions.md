@@ -33,6 +33,10 @@ process.exit(2);
 
 The `reason` string is shown to the agent. Make it actionable: state what was blocked and how to unblock (e.g. which env var to set, which prerequisite to satisfy).
 
+Use stderr for diagnostic/warning output only — harness does not interpret stderr content.
+
+> **Hook type note**: the exit codes above apply to `PreToolUse` hooks. `SubagentStart` hooks inject `additionalContext` into the spawned agent's context — exit 2 has no blocking effect on spawn. `PostToolUse` hooks are observe-only; exit code is ignored.
+
 ## Stdin Parsing Pattern
 
 The harness writes a JSON event to the hook's stdin. Every hook MUST:
@@ -70,6 +74,8 @@ The harness populates `data.agent_type` and `data.agent_id` in the stdin JSON:
 | Subagent (Agent call) | The subagent's **TYPE** (e.g. `"planner"`) | Type from `subagent_type` field |
 
 **`agent_id` rotates per wake (per respawn or session boundary)** — never use it as an attribution key. Use `agent_type` for all identity checks. This is why session-scoped gates write flags keyed on `session_id` (from `data.session_id`), not `agent_id`.
+
+**`agent_name`** (string|null) — human-readable label sourced from the `CLAUDE_AGENT_NAME` environment variable. Not used for identity checks in hooks; use `agent_type` instead.
 
 Empty `agent_type` reliably identifies the main orchestrator:
 
