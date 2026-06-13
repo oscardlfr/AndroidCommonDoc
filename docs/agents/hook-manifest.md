@@ -4,7 +4,7 @@ sources: [androidcommondoc]
 targets: [all]
 version: 2
 last_updated: "2026-06"
-description: "Consumer hook manifest: classifies all 33 L0 hooks as consumer-required / consumer-optional / l0-internal"
+description: "Consumer hook manifest: classifies all 32 L0 hooks as consumer-required / consumer-optional / l0-internal"
 slug: hook-manifest
 status: active
 layer: L0
@@ -14,7 +14,7 @@ category: agents
 
 # L0 Hook Manifest
 
-Reference classification for all 33 hooks in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
+Reference classification for all 32 hooks in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
 
 > **CI-enforced** — the `hook-manifest-coverage` job in `.github/workflows/drift-audit.yml` fails the build if the hook table below drifts from `.claude/hooks/` (a missing, phantom, or duplicated hook). The table is the source of truth for coverage.
 
@@ -44,7 +44,7 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 
 ## Hook Table
 
-### JavaScript Hooks (29)
+### JavaScript Hooks (28)
 
 | Hook | Status | Rationale |
 |------|--------|-----------|
@@ -70,7 +70,7 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 | `plan-md-write-gate.js` | l0-internal | Restricts PLAN.md writes to planner agent only |
 | `plan-context.js` | l0-internal | Injects MODULE_MAP.md + agent/skill summary as additionalContext on EnterPlanMode |
 | `plan-mode-spawn-planner.js` | l0-internal | Auto-spawns planner on EnterPlanMode |
-| `architect-scope-gate.js` | l0-internal | Restricts arch-* Write/Edit to current wave scope files only |
+
 | `kmp-test-runner-gate.js` | l0-internal | Blocks all Gradle test task variants; agents must use kmp-test-runner CLI |
 | `specialist-task-completion-gate.js` | l0-internal | Blocks specialists from marking tasks completed directly |
 | `bash-cli-spawn-gate.js` | l0-internal | Blocks Bash attempts to spawn Claude agents via --agent-id/--team-name CLI flags |
