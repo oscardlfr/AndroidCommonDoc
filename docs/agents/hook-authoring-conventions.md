@@ -7,6 +7,8 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
+version: 1
+last_updated: "2026-06"
 description: "Canonical authoring conventions for L0 PreToolUse/PostToolUse hook scripts: exit codes, stdin parsing, identity model, matching rules, and bypass pattern"
 ---
 
@@ -67,7 +69,7 @@ The harness populates `data.agent_type` and `data.agent_id` in the stdin JSON:
 | Peer agent (TeamCreate) | The peer's **canonical NAME** (e.g. `"arch-platform"`) | Name set at spawn time |
 | Subagent (Agent call) | The subagent's **TYPE** (e.g. `"planner"`) | Type from `subagent_type` field |
 
-**`agent_id` rotates per tool invocation** — never use it as an attribution key. Use `agent_type` for all identity checks. This is why session-scoped gates write flags keyed on `session_id` (from `data.session_id`), not `agent_id`.
+**`agent_id` rotates per wake (per respawn or session boundary)** — never use it as an attribution key. Use `agent_type` for all identity checks. This is why session-scoped gates write flags keyed on `session_id` (from `data.session_id`), not `agent_id`.
 
 Empty `agent_type` reliably identifies the main orchestrator:
 
