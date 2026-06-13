@@ -78,7 +78,7 @@
         ]
       },
       {
-        "matcher": "EnterPlanMode",
+        "matcher": "EnterPlanMode|ExitPlanMode",
         "hooks": [
           {
             "type": "command",
@@ -103,21 +103,6 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/team-topology-gate.js",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "ExitPlanMode",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/plan-context.js",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/plan-mode-spawn-planner.js",
             "timeout": 10
           }
         ]
