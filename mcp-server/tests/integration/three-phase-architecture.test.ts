@@ -43,8 +43,8 @@ describe('agent template size limits', () => {
   const templates = fs.readdirSync(TEMPLATES_DIR)
     .filter(f => f.endsWith('.md') && f !== 'README.md');
 
-  // arch-int/platform/testing have ≤425 operational tolerance (BL-W35-09 cleanup scheduled; BL-W47-prep-10 C7: +5 lines light reference section)
-  const ARCH_INT_PLATFORM_LIMIT = 425;
+  // arch-int/platform/testing have ≤435 operational tolerance (BL-W47: write-verdict canal added ~5 lines to arch-integration + arch-testing)
+  const ARCH_INT_PLATFORM_LIMIT = 435;
   const STANDARD_LIMIT = 420;
 
   for (const template of templates) {
@@ -312,8 +312,8 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(platformContent).toMatch(/template_version:\s*"\d+\.\d+\.\d+"/);
   });
 
-  it('arch-integration has template version 1.28.0', () => {
-    expect(integrationContent).toContain('template_version: "1.28.0"');
+  it('arch-integration has template version 1.29.0', () => {
+    expect(integrationContent).toContain('template_version: "1.29.0"');
   });
 });
 
@@ -908,8 +908,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.12.0', () => {
-    expect(plannerContent).toContain('template_version: "1.12.0"');
+  it('planner version 1.13.0', () => {
+    expect(plannerContent).toContain('template_version: "1.13.0"');
   });
 
   it('arch-testing has template_version field in frontmatter', () => {
