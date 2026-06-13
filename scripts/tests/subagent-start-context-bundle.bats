@@ -212,34 +212,35 @@ write_bundle() {
   [ -z "$output" ]
 }
 
-@test "B SB-ENV-REJECT-develop: CLAUDE_WAVE_SLUG=develop (env) → hook must reject slug → no bundle injected" {
-  # CodeRabbit #3: env slug must also be reject-listed, not returned blindly.
-  # BEFORE fix: CLAUDE_WAVE_SLUG=develop passes through → hook looks for
-  #   wave-develop/context-bundles/arch-platform.md → not found → exit 0, empty.
-  #   The exit is already 0 but for the wrong reason (miss, not reject-list).
-  # AFTER fix: reject-list applied to env slug → null slug → exit 0, empty (same
-  #   observable outcome, but now correct for any slug value including one that
-  #   accidentally has a matching bundle).
+@test "B SB-BRANCH-REJECT-develop: develop branch → resolveWaveSlug returns null → no bundle injected even when bundle exists" {
+  # subagent-start-context-bundle.js is env-free: resolveWaveSlug() reads the git branch,
+  # never CLAUDE_WAVE_SLUG. On the 'develop' branch the reject-list returns null → no lookup.
   # Create a bundle for the 'develop' slug to prove it is NOT injected (reject fires
-  # before the lookup).
+  # before the bundle lookup). If the reject-list were absent, the hook would find the
+  # bundle and emit additionalContext — that's what this test prevents.
+  git -C "$PROJECT_ROOT" checkout -b develop -q 2>/dev/null || \
+    git -C "$PROJECT_ROOT" checkout develop -q 2>/dev/null
   local dev_bundle_dir="$PROJECT_ROOT/.planning/wave-develop/context-bundles"
   mkdir -p "$dev_bundle_dir"
   printf -- '---\nwave_slug: develop\n---\n# Should not be injected.\n' \
     > "$dev_bundle_dir/arch-platform.md"
   make_input "SubagentStart" "arch-platform"
-  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' CLAUDE_WAVE_SLUG='develop' node '$HOOK' 2>/dev/null"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>/dev/null"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "B SB-ENV-REJECT-master: CLAUDE_WAVE_SLUG=master (env) → hook must reject slug → no bundle injected" {
-  # Same for master slug via env.
+@test "B SB-BRANCH-REJECT-master: master branch → resolveWaveSlug returns null → no bundle injected even when bundle exists" {
+  # Same class as SB-BRANCH-REJECT-develop but for 'master' branch.
+  # Branch-driven path: no CLAUDE_WAVE_SLUG env — resolveWaveSlug() reads git branch.
+  git -C "$PROJECT_ROOT" checkout -b master -q 2>/dev/null || \
+    git -C "$PROJECT_ROOT" checkout master -q 2>/dev/null
   local master_bundle_dir="$PROJECT_ROOT/.planning/wave-master/context-bundles"
   mkdir -p "$master_bundle_dir"
   printf -- '---\nwave_slug: master\n---\n# Should not be injected.\n' \
     > "$master_bundle_dir/arch-platform.md"
   make_input "SubagentStart" "arch-platform"
-  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' CLAUDE_WAVE_SLUG='master' node '$HOOK' 2>/dev/null"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>/dev/null"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }

@@ -34,22 +34,25 @@ const MAX_AGE_SECS = 1800;   // 30 minutes
 const SKEW_TOLERANCE = 120;   // 2 minutes future tolerance
 
 // Detect git push in a bash command string (P2a deep detector: segment-aware + exec-aware).
-// Best-effort: language interpreters (python -c, perl -e) and arbitrary obfuscation remain
+// Best-effort: ANSI-C $'...' quoting is now covered (optional \$? before quote in Pass 1).
+// Escape sequences inside $'...' (e.g. $'\x67it push') and variable indirection remain
 // uncatchable by string parsing; the git-layer pre-push two-stamp is the authoritative backstop.
-// Pass 1: recurse into executed sub-strings (shell -c '...', eval '...', $(...), `...`)
-//   so that `sh -c 'git push'` is caught even though the outer command is sh.
+// Language interpreters (python -c, perl -e) and arbitrary obfuscation are also uncatchable.
+// Pass 1: recurse into executed sub-strings (shell -c '...', $'...', eval '...', $(...), `...`)
+//   so that `sh -c 'git push'` / `sh -c $'git push'` are caught.
 // Pass 2: strip heredoc bodies + quoted spans (prose false-positive prevention),
 //   split on shell control operators (NOT newline), test ^git push per segment
 //   after stripping env-var assignments and common wrapper prefixes (incl. unquoted eval).
-// Guards: `sh -c "echo 'git push'"`, `printf 'git push'`, `echo "$(date) pushed ok"` all ALLOW.
+// Guards: `sh -c "echo 'git push'"`, `printf 'git push'`, `echo $'git push'` (prose) all ALLOW.
 function isGitPushCommand(cmd) {
-  // Pass 1: recurse into executed sub-shells / eval bodies (QUOTED forms).
+  // Pass 1: recurse into executed sub-shells / eval bodies (QUOTED and ANSI-C $'...' forms).
   // Applied to the ORIGINAL cmd (before quote-strip) so payloads stay intact.
+  // \$? before the quote capture handles $'...' and $"..." (ANSI-C quoting).
   const EXEC = [
-    /\b(?:sh|bash|zsh|dash|ksh|ash)\b(?:\s+-\S+)*\s+-[a-z]*c\b\s*(['"])([\s\S]*?)\1/g, // shell -c '...'
-    /\beval\b\s*(['"])([\s\S]*?)\1/g,                                                     // eval '...'
-    /\$\(([\s\S]*?)\)/g,                                                                   // $(...)
-    /`([^`]*)`/g,                                                                          // `...`
+    /\b(?:sh|bash|zsh|dash|ksh|ash)\b(?:\s+-\S+)*\s+-[a-z]*c\b\s*\$?(['"])([\s\S]*?)\1/g, // shell -c '...' / $'...'
+    /\beval\b\s*\$?(['"])([\s\S]*?)\1/g,                                                     // eval '...' / $'...'
+    /\$\(([\s\S]*?)\)/g,                                                                     // $(...)
+    /`([^`]*)`/g,                                                                            // `...`
   ];
   for (const re of EXEC) {
     let m;

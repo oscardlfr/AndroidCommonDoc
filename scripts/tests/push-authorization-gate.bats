@@ -425,6 +425,46 @@ PYEOF
   [[ "$output" == *"push-authorization-gate"* ]]
 }
 
+@test "PA-P2A-24 BLOCK: peer + bash -lc \$'git push origin x' (ANSI-C quoting) → BLOCK" {
+  # ANSI-C quoting $'...' is treated as a quoted span by the Pass-1 quote-strip regex,
+  # so the payload 'git push origin x' is stripped as prose before shell-exec recursion.
+  # Fix: extend Pass-1 regexes to also match $'...' spans so they are NOT stripped.
+  # BEFORE fix: $'git push origin x' stripped → shell-exec payload empty → exits 0. RED.
+  # AFTER fix: $'...' preserved → recursive detection finds 'git push origin x' → exit 2.
+  make_input "bash -lc \$'git push origin x'" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-25 BLOCK: peer + sh -c \$'echo ok && git push origin x' (ANSI-C compound) → BLOCK" {
+  # Compound command inside an ANSI-C-quoted sh -c payload.
+  # BEFORE fix: $'...' stripped → recursive payload empty → exits 0. RED.
+  # AFTER fix: payload preserved → segment split finds 'git push origin x' → exit 2.
+  make_input "sh -c \$'echo ok && git push origin x'" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-26 BLOCK: peer + eval \$'git push origin x' (ANSI-C eval payload) → BLOCK" {
+  # eval with ANSI-C-quoted argument — $'git push origin x' is the executed command.
+  # BEFORE fix: $'...' stripped as prose → 'eval' prefix-stripped → nothing left → exits 0. RED.
+  # AFTER fix: $'...' preserved → eval recursion finds 'git push origin x' → exit 2.
+  make_input "eval \$'git push origin x'" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-27 ALLOW: peer + echo \$'git push' (ANSI-C prose) → ALLOW (no real push)" {
+  # Guard: $'git push' inside an echo argument is prose — must NOT over-block.
+  # Stays GREEN before and after the ANSI-C fix.
+  make_input "echo \$'git push'" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
 @test "PA-P2A-22 ALLOW: peer + echo \"\$(date) pushed ok\" → ALLOW (command-sub in prose, no real push)" {
   # Guard: command substitution \$(date) inside an echo argument is prose — the command
   # inside \$() is 'date', not 'git push'. Must NOT over-block.
