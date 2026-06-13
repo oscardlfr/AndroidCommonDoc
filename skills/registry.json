@@ -1043,7 +1043,7 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e64c85f0dac9a9325a119af416d93d4ce9a6777f2d0b93e88f790f0b03fa52b6",
+      "hash": "sha256:bec49ad6d644453bf45cd5c1315006c87c6bad6c35ca3470b722c85cebd08d7a",
       "dependencies": [
         "scripts/sh/scan-secrets.sh",
         "scripts/sh/catalog-coverage-check.sh",
@@ -1918,7 +1918,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:3f3a66fc9dd400112d8da24768d7cd54bd68220f7a55643f9e073b1efe3f7f60",
+      "hash": "sha256:31c86669f1109280dba8264e079ca20a928a06bd484cd5e3f271678e1ee80d80",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1934,7 +1934,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.28.0",
+        "template_version": "1.29.0",
         "skills": [
           "test",
           "extract-errors"
@@ -1948,7 +1948,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:207a4fbfb95c1d7fa1176477272f47fce4572c7105edd5c76f817b48b1ed9763",
+      "hash": "sha256:764e0ba115343af5b918b5f73a1ddcc4faf3be8a04145b9bbb89216c41aeff60",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1963,7 +1963,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.32.0",
+        "template_version": "1.33.0",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1977,7 +1977,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:54d2506a1c101baee155182434adb3ca953136f637fbf9d4e61e6bb20bf3d1e5",
+      "hash": "sha256:9831b547e4b4de91e03a07b16950043dbeb53d243afc6940e8e386241eda186d",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1992,7 +1992,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.37.0",
+        "template_version": "1.38.0",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2530,7 +2530,7 @@
       "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c142737a9f26cbc65faa6c409f91bb020275adc2e16df37c8936e3f79f21505c",
+      "hash": "sha256:131c3dbb0e4b8331b62196fae359e52d7e9aae93b4ae150bd26b619bbb10eab5",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -2545,7 +2545,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.12.0"
+        "template_version": "1.13.0"
       }
     },
     {

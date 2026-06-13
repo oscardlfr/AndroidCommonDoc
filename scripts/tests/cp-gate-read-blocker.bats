@@ -121,3 +121,55 @@ CONSULTED_HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/context-provider-consulte
   run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
   [ "$status" -eq 0 ]
 }
+
+# ── D12: main orchestrator exemption (empty agent_type) ───────────────────────
+# Empty agent_type means the main orchestrator — always exempt regardless of path
+# or CP flag state (line 44 of gate: if (agentType === '') process.exit(0)).
+
+make_main_input() {
+  local tool="$1" path="$2"
+  printf '%s\n' "{\"tool_name\":\"$tool\",\"tool_input\":{\"file_path\":\"$path\"},\"agent_type\":\"\",\"session_id\":\"$SESSION_ID\"}" > "$INPUT_FILE"
+}
+
+@test "D12: main (empty agent_type) reading CLAUDE.md is always exempt" {
+  # No CP flag set — main must still exit 0 via the empty-agent_type shortcut.
+  make_main_input Read '/project/CLAUDE.md'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "D12: main (empty agent_type) reading tl-session-start.md is always exempt" {
+  make_main_input Read '/project/docs/guides/tl-session-start.md'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+# ── D12: Grep/Glob doc-path boundary — no trailing separator required ─────────
+# Regex fix: /[/\\]docs([/\\]|$)/ — matches /foo/docs with no trailing slash.
+
+make_grep_input() {
+  local search_path="$1" agent="${2:-arch-integration}"
+  printf '%s\n' "{\"tool_name\":\"Grep\",\"tool_input\":{\"path\":\"$search_path\"},\"agent_type\":\"$agent\",\"session_id\":\"$SESSION_ID\"}" > "$INPUT_FILE"
+}
+
+@test "D12: Grep on /foo/docs (no trailing sep) blocked without CP flag" {
+  # No CP flag — docs boundary regex must catch /foo/docs via ($) anchor.
+  make_grep_input '/foo/docs'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
+
+@test "D12: Grep on /foo/docs/ (trailing sep) still blocked without CP flag (regression)" {
+  make_grep_input '/foo/docs/'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
+
+# ── D12: specialist without arch-response flag regression guard ───────────────
+
+@test "D12: toolkit-specialist Grep on docs blocked without arch-response flag (regression)" {
+  # No flags set — specialist must be blocked even without an active CP flag.
+  make_grep_input '/project/docs/testing/testing-patterns.md' 'toolkit-specialist'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+}

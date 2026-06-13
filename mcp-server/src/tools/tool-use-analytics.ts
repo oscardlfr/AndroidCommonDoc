@@ -339,7 +339,7 @@ export function renderToolUseMarkdown(report: ToolUseReport): string {
 
   // Log rotation reminder
   lines.push(
-    "> **Log rotation:** `mv .androidcommondoc/tool-use-log.jsonl .androidcommondoc/tool-use-log-$(date +%Y%m%d).jsonl`",
+    "> **Log rotation:** automatic at 20 MB — hook renames to `.androidcommondoc/tool-use-log-YYYYMMDD.jsonl.gz` (gzip compressed) and starts a fresh log.",
   );
 
   return lines.join("\n");

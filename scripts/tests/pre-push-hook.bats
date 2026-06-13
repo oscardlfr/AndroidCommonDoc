@@ -255,6 +255,21 @@ PYEOF
   [[ "$output" == *"quality-gate.stamp"* ]]
 }
 
+# ── Future-skew guard (BL-W47 Commit 8) ──────────────────────────────────────
+# A stamp whose timestamp is more than 120 s AHEAD of the system clock is
+# treated as tampered/clock-skew and must block the push.
+# The existing write_qg_stamp helper computes:  time.time() - age_secs
+# so passing -600 gives time.time() + 600 (10 minutes in the future).
+
+@test "F1 BLOCK: qg stamp with future timestamp (+10 min) blocked with 'future timestamp' message" {
+  write_qg_stamp -600          # timestamp = now + 600 s (well past the -120 s grace)
+  write_pp_stamp "PASS" 0 "$HEAD_SHA"
+  run_hook "refs/heads/feature/test $HEAD_SHA refs/heads/feature/test $ZERO"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"future timestamp"* ]]
+  [[ "$output" == *"quality-gate.stamp"* ]]
+}
+
 # ── R1: multi-ref pre-check (CodeRabbit PR #209 review) ──────────────────────
 
 @test "R1 BLOCK: multi-ref feature push with distinct tips names the real cause" {

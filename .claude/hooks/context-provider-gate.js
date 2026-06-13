@@ -40,13 +40,16 @@ process.stdin.on('end', () => {
     const agentType = data.agent_type || '';
     const agentId = sanitizeId(data.agent_id || 'unknown');
     if (process.env.CLAUDE_CP_GATE_DISABLED === '1') process.exit(0);
+    // Empty agent_type means main orchestrator — always exempt (main has no agent_type)
+    if (agentType === '') process.exit(0);
     const SPECIALIST_NAMES = [
       'test-specialist', 'toolkit-specialist', 'ui-specialist',
       'domain-model-specialist', 'data-layer-specialist'
     ];
     const isSpecialist = SPECIALIST_NAMES.some(s => agentType === s || agentType.startsWith(s));
     const tmpDir = process.env.TMPDIR || process.env.TMP || os.tmpdir();
-    const EXEMPT_TYPES = ['context-provider', 'project-manager', 'team-lead'];
+    // team-lead exemption removed: main is now caught by empty agent_type check above
+    const EXEMPT_TYPES = ['context-provider', 'project-manager'];
     if (EXEMPT_TYPES.some(e => agentType === e || agentType.startsWith(e))) process.exit(0);
 
     // 2a. Read on pattern-discovery paths requires CP consultation (T-BUG-015)
@@ -124,7 +127,9 @@ process.stdin.on('end', () => {
     // 2c. Block Grep/Glob tool on docs/** or agent-template paths
     if (toolName === 'Grep' || toolName === 'Glob') {
       const queryPath = data.tool_input?.path ?? data.tool_input?.pattern ?? '';
-      const isDocPath = /[/\\]docs[/\\]/.test(queryPath) || /[/\\]setup[/\\]agent-templates[/\\]/.test(queryPath);
+      // Boundary-anchored: matches docs/ at start, after separator, or as full segment.
+      // Prevents bypass via repo-relative paths like "docs" or "docs/guides/..." without leading sep.
+      const isDocPath = /(?:^|[/\\])docs(?:[/\\]|$)/.test(queryPath) || /(?:^|[/\\])setup[/\\]agent-templates(?:[/\\]|$)/.test(queryPath);
       if (!isDocPath) process.exit(0); // non-docs Grep/Glob allowed
       // doc-path Grep/Glob: fall through to session-flag check
     }

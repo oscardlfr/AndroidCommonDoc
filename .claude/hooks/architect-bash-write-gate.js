@@ -94,21 +94,36 @@ const PYTHON_OPEN_TARGET_RE = /\bopen\s*\(\s*['"]([^'"]+)['"][^)]*['"]w[+ab]?['"
 // Declare WITHOUT /g — call sites use new RegExp(PATHLIB_WRITE_RE.source, 'g').
 /* BL-W32-12: handles pathlib.Path.write_text() inside python3 -c wrapper; see backlog */
 const PATHLIB_WRITE_RE = /(?:pathlib\.)?Path\s*\(\s*(["'])([^"']+)\1\s*\)\.(?:write_text|write_bytes)\s*\(/; // BL-W32-12 fix
-const TEE_WRITE_RE = /\btee\s+(?:-a\s+|--append\s+)?(['"]?)([^-\s|<>;&'"]+)\1/;
+const TEE_WRITE_RE = /\btee\s+(?:-a\s+|--append\s+)?(['"]?)([^\s|<>;&'"]+)\1/;
 // Matches `node -e 'body'` or `node --eval "body"` with a single wrapping quote.
 // Used to strip the node body from the command string before PYTHON_WRITE_RE
 // checks run — the body may contain `open(` or `write` text that is not Python.
 const NODE_EVAL_RE = /\bnode\s+(?:-e|--eval)\s+(['"])[\s\S]*?\1/g;
+// Detects node -e/--eval bodies containing fs write calls.
+// Captures: (quote char)(body)(quote char). Escape-tolerant: body may contain
+// escaped quotes (\' or \") without terminating the match early (CR-1a).
+const NODE_EVAL_BODY_RE = /\bnode\s+(?:-e|--eval)\s+(['"])((?:\\.|(?!\1)[\s\S])*)\1/;
+// fs write APIs that indicate a file write inside a node -e body.
+// Includes callback-style writeFile (no Sync suffix) in addition to Sync forms (CR-1b).
+const NODE_FS_WRITE_RE = /\b(?:writeFileSync|writeFile|appendFileSync|createWriteStream|(?:fs\.promises\.|promises\.)writeFile)\s*\(\s*(['"]?)([^'")\s]+)\1/;
+// Extract target from fs.writeFileSync('path', ...) / fs.writeFile('path', ...) etc.
+const NODE_FS_TARGET_RE = /\b(?:writeFileSync|writeFile|appendFileSync|createWriteStream|(?:fs\.promises\.|promises\.)writeFile)\s*\(\s*(['"])([^'"]+)\1/g;
 
 function isExemptTarget(target) {
   if (!target) return false;
   if (target === '/dev/null') return true;
   if (target.startsWith('/dev/')) return true;
+  // Windows drive-prefix (C:\... or C:/...) or backslash path — block unless tmp
+  // A Windows path to a non-tmp location must not be silently exempted by POSIX-only checks.
+  const hasDrivePrefix = /^[A-Za-z]:/.test(target);
+  const hasBackslash = target.includes('\\');
   const norm = normalizePath(target);
   const normTmp = normalizePath(OS_TMPDIR);
   if (norm.startsWith(normTmp + '/') || norm === normTmp) return true;
   if (target.startsWith('/tmp/') || target === '/tmp') return true;
   if (target.startsWith('$TMPDIR/') || target.startsWith('${TMPDIR}/')) return true;
+  // Explicitly block Windows absolute paths that are not in tmpdir (already handled above)
+  if (hasDrivePrefix || hasBackslash) return false;
   if (/\.planning[\\/]wave[\w.-]+[\\/](?:[\w.-]+[\\/])?(?:pr\d+-)?arch-[^\s/\\]+-(?:verdict|cross-verify)\.md$/.test(target)) return true;
   if (/\.androidcommondoc[\\/]audit-log\.jsonl$/.test(target)) return true;
   // Architect verdict files in .claude/wave-quality-gates/arch-*.md
@@ -154,24 +169,65 @@ function detectViolation(cmd) {
     return { kind: isHeredoc ? 'heredoc redirect' : 'shell redirect', target: firstBadRedirect };
   }
 
-  if (SED_INPLACE_RE.test(cmd)) {
+  // (d) Dual-token WARN: heredoc targeting an exempt verdict path but containing
+  // both APPROVED-PREP and APPROVED-FINAL in the body is a legacy pattern — the
+  // canonical path is write-verdict.sh. Emit a warning on stderr but do NOT block.
+  if (HEREDOC_RE.test(cmd) && redirectTargets.some(t => isExemptTarget(resolveShellVar(t, cmd)))) {
+    if (cmd.includes('APPROVED-PREP') && cmd.includes('APPROVED-FINAL')) {
+      process.stderr.write(
+        '[arch-bash-write-gate] WARN: heredoc to verdict path contains both APPROVED-PREP and ' +
+        'APPROVED-FINAL tokens. Use write-verdict.sh --phase verify-final instead of heredoc writes.\n'
+      );
+      // Not a block — fall through to allow
+    }
+  }
+
+  // body-safe: check sed/awk only on non-heredoc-body lines
+  const cmdNonBody = commandLines.join('\n');
+  if (SED_INPLACE_RE.test(cmdNonBody)) {
     return { kind: 'sed -i' };
   }
 
-  if (AWK_INPLACE_RE.test(cmd)) {
+  if (AWK_INPLACE_RE.test(cmdNonBody)) {
     return { kind: 'awk -i inplace' };
+  }
+
+  // node -e/--eval detector: block fs write APIs inside node eval bodies.
+  // Uses matchAll (loop) to handle multiple node -e invocations in one command (CR-1a).
+  // Covers both Sync and callback-style writeFile (CR-1b).
+  const nodeEvalBodyRe = new RegExp(NODE_EVAL_BODY_RE.source, 'g');
+  for (const nodeEvalMatch of cmd.matchAll(nodeEvalBodyRe)) {
+    const body = nodeEvalMatch[2] || '';
+    if (NODE_FS_WRITE_RE.test(body)) {
+      let foundNodeTarget = false;
+      for (const match of body.matchAll(new RegExp(NODE_FS_TARGET_RE.source, 'g'))) {
+        foundNodeTarget = true;
+        const target = match[2];
+        const resolved = resolveShellVar(target, cmd);
+        if (target && !isExemptTarget(resolved)) {
+          return { kind: 'node -e fs-write-api', target };
+        }
+      }
+      if (!foundNodeTarget) {
+        return { kind: 'node -e fs-write-api', target: '<inline>' };
+      }
+    }
   }
 
   // Strip node -e / node --eval quoted bodies so their content (open(), write, etc.)
   // does not false-trigger PYTHON_WRITE_RE or PYTHON_HEREDOC_WRITE_RE below.
   const cmdNoPythonEval = cmd.replace(new RegExp(NODE_EVAL_RE.source, 'g'), '');
 
-  if (PYTHON_WRITE_RE.test(cmdNoPythonEval)) {
+  // body-safe: use non-heredoc-body lines for inline python -c check (e)
+  const cmdNoPythonEvalNonBody = cmdNonBody.replace(new RegExp(NODE_EVAL_RE.source, 'g'), '');
+  if (PYTHON_WRITE_RE.test(cmdNoPythonEvalNonBody)) {
     let foundTarget = false;
-    for (const match of cmdNoPythonEval.matchAll(new RegExp(PYTHON_OPEN_TARGET_RE.source, 'g'))) {
+    for (const match of cmdNoPythonEvalNonBody.matchAll(new RegExp(PYTHON_OPEN_TARGET_RE.source, 'g'))) {
       foundTarget = true;
       const target = match[1];
-      if (target && !isExemptTarget(target)) {
+      // (c) E-live fix: resolve shell vars before exemption check
+      const resolved = resolveShellVar(target, cmd);
+      if (target && !isExemptTarget(resolved)) {
         return { kind: "python -c open(...,'w')", target };
       }
     }
@@ -186,7 +242,9 @@ function detectViolation(cmd) {
     for (const match of cmdNoPythonEval.matchAll(new RegExp(PYTHON_OPEN_TARGET_RE.source, 'g'))) {
       foundTarget = true;
       const target = match[1];
-      if (target && !isExemptTarget(target)) {
+      // (c) E-live fix: resolve shell vars before exemption check
+      const resolved = resolveShellVar(target, cmd);
+      if (target && !isExemptTarget(resolved)) {
         return { kind: "python <<EOF open(...,'w')", target };
       }
     }
@@ -196,14 +254,16 @@ function detectViolation(cmd) {
     }
   }
 
-  // BL-W32-12: strip backslash-escaped quotes before pathlib check (mirrors cmdNoPythonEval at line 147)
-  const cmdNoEscapedQuotes = cmd.replace(/\\(["'])/g, '$1');
+  // BL-W32-12: strip backslash-escaped quotes before pathlib check; use non-body lines (e)
+  const cmdNoEscapedQuotes = cmdNonBody.replace(/\\(["'])/g, '$1');
   if (PATHLIB_WRITE_RE.test(cmdNoEscapedQuotes)) {
     let foundTarget = false;
     for (const match of cmdNoEscapedQuotes.matchAll(new RegExp(PATHLIB_WRITE_RE.source, 'g'))) {
       foundTarget = true;
       const target = match[2]; // group 1 = quote char, group 2 = path
-      if (target && !isExemptTarget(target)) {
+      // (c) E-live fix: resolve shell vars before exemption check
+      const resolved = resolveShellVar(target, cmd);
+      if (target && !isExemptTarget(resolved)) {
         return { kind: "python pathlib.Path(...).write_text()", target };
       }
     }
@@ -213,9 +273,11 @@ function detectViolation(cmd) {
     }
   }
 
-  for (const match of cmd.matchAll(new RegExp(TEE_WRITE_RE.source, 'g'))) {
+  // body-safe: scan tee only on non-heredoc-body lines + resolve shell vars (c)
+  for (const match of cmdNonBody.matchAll(new RegExp(TEE_WRITE_RE.source, 'g'))) {
     const target = match[2];
-    if (target && !isExemptTarget(target)) {
+    const resolved = resolveShellVar(target, cmd);
+    if (target && !isExemptTarget(resolved)) {
       return { kind: 'tee write', target };
     }
   }

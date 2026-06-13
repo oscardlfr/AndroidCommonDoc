@@ -90,11 +90,7 @@ const FULL_L1_SETTINGS = {
             command: "\"$ANDROID_COMMON_DOC\"/.claude/hooks/detekt-pre-commit.sh",
             timeout: 60,
           },
-          {
-            type: "command",
-            command: "\"$ANDROID_COMMON_DOC\"/.claude/hooks/quality-gate-pre-commit.sh",
-            timeout: 5,
-          },
+
         ],
       },
     ],
@@ -175,25 +171,23 @@ describe("mergeHookRegistrations()", () => {
 
     // Original project hooks preserved
     expect(cmds.some((c) => c.includes("detekt-pre-commit.sh"))).toBe(true);
-    expect(cmds.some((c) => c.includes("quality-gate-pre-commit.sh"))).toBe(true);
-
-    // L0 enforcement hooks appended
-    expect(cmds.some((c) => c.includes("team-completeness-gate.js"))).toBe(true);
-    expect(cmds.some((c) => c.includes("premature-execution-gate.js"))).toBe(true);
+    // L0 enforcement hooks appended to Bash block (Commits 10a/10b moved
+    // team-completeness-gate + premature-execution-gate to Write|Edit|Bash matcher)
     expect(cmds.some((c) => c.includes("branch-guard.js"))).toBe(true);
-    expect(cmds.some((c) => c.includes("pre-push-pre-pr-gate.js"))).toBe(true);
+    expect(cmds.some((c) => c.includes("push-authorization-gate.js"))).toBe(true);
     expect(cmds.some((c) => c.includes("commit-scope-validation-gate.js"))).toBe(true);
   });
 
-  // Assertion 4: Write|Edit block CREATED with correct L0 entries
-  it("creates Write|Edit PreToolUse block with team-completeness-gate + premature-execution-gate", async () => {
+  // Assertion 4: Write|Edit|Bash block CREATED with correct L0 entries
+  // (Commits 10a/10b consolidated Write|Edit into Write|Edit|Bash)
+  it("creates Write|Edit|Bash PreToolUse block with team-completeness-gate + premature-execution-gate", async () => {
     await writeSettings(fixtureDir, FULL_L1_SETTINGS);
 
     await mergeHookRegistrations(fixtureDir);
 
     const settings = await readSettings(fixtureDir);
     const preToolUse = (settings.hooks as Record<string, MatcherBlock[]>)["PreToolUse"];
-    const writeEditBlock = preToolUse.find((b) => b.matcher === "Write|Edit");
+    const writeEditBlock = preToolUse.find((b) => b.matcher === "Write|Edit|Bash");
 
     expect(writeEditBlock).toBeDefined();
     const cmds = writeEditBlock!.hooks.map((h) => h.command);
@@ -240,7 +234,7 @@ describe("mergeHookRegistrations()", () => {
     const result2 = await mergeHookRegistrations(fixtureDir);
 
     expect(result2.added).toHaveLength(0);
-    expect(result2.skipped).toHaveLength(8);
+    expect(result2.skipped).toHaveLength(6); // 6 gates after Commits 10a/10b retirement
 
     // Verify no duplicates in any PreToolUse block
     const settings = await readSettings(fixtureDir);
@@ -252,7 +246,7 @@ describe("mergeHookRegistrations()", () => {
   });
 
   // Assertion 8: malformed JSON fail-open
-  it("fails open on malformed JSON — warns, seeds empty structure, adds 8 entries", async () => {
+  it("fails open on malformed JSON — warns, seeds empty structure, adds 6 entries", async () => {
     const claudeDir = join(fixtureDir, ".claude");
     await mkdir(claudeDir, { recursive: true });
     await writeFile(join(claudeDir, "settings.json"), "{ this is not valid json }", "utf-8");
@@ -260,7 +254,7 @@ describe("mergeHookRegistrations()", () => {
     // Should not throw
     const result = await mergeHookRegistrations(fixtureDir);
 
-    expect(result.added).toHaveLength(8);
+    expect(result.added).toHaveLength(6); // 6 gates after Commits 10a/10b retirement
     expect(result.skipped).toHaveLength(0);
 
     // Output must be valid JSON
@@ -274,7 +268,7 @@ describe("mergeHookRegistrations()", () => {
 
     const result = await mergeHookRegistrations(fixtureDir);
 
-    expect(result.added).toHaveLength(8);
+    expect(result.added).toHaveLength(6); // 6 gates after Commits 10a/10b retirement
     expect(existsSync(join(fixtureDir, ".claude", "settings.json"))).toBe(true);
 
     const settings = await readSettings(fixtureDir);
@@ -288,7 +282,7 @@ describe("mergeHookRegistrations()", () => {
     const result = await mergeHookRegistrations(fixtureDir, true);
 
     expect(result.dryRun).toBe(true);
-    expect(result.added).toHaveLength(8);
+    expect(result.added).toHaveLength(6); // 6 gates after Commits 10a/10b retirement
 
     // File must still be the empty object we wrote
     const settings = await readSettings(fixtureDir);

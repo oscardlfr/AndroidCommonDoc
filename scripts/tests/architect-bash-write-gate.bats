@@ -327,10 +327,20 @@ EOF' 'arch-platform'
   [ "$status" -eq 0 ]
 }
 
-# ── Regression: node -e body must not false-trigger PYTHON_WRITE_RE ──────────
+# ── node -e / --eval fs-write detector (BL-W47 Commit 3) ────────────────────
+# node -e bodies containing writeFileSync/appendFileSync/createWriteStream/
+# fs.promises.writeFile to non-exempt targets are now BLOCKED (exit 2).
+# Exempt targets (tmpdir) still ALLOW.
 
-@test "allows node -e with open() or writeFileSync inside quoted body (Deferred-2)" {
+@test "blocks node -e with writeFileSync to non-exempt path" {
   make_input "node -e 'require(\"fs\").writeFileSync(\"foo.md\",\"data\")'" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"node -e fs-write-api"* ]]
+}
+
+@test "allows node -e with writeFileSync to /tmp (exempt tmpdir)" {
+  make_input "node -e 'require(\"fs\").writeFileSync(\"/tmp/debug.txt\",\"data\")'" 'arch-platform'
   run_hook
   [ "$status" -eq 0 ]
 }
@@ -882,8 +892,124 @@ EOF' 'arch-platform'
   [ "$status" -eq 2 ]
 }
 
-@test "BL-W47-prep-19: \$VAR Windows absolute forward-slash verdict path → ALLOW" {
+@test "BL-W47-prep-19: \$VAR Windows absolute forward-slash verdict path → BLOCK (drive-prefix not in tmpdir)" {
+  # Windows absolute paths with drive prefix that are NOT under os.tmpdir() are
+  # now blocked even if the filename matches the verdict pattern — the hasDrivePrefix
+  # guard fires before the verdict-path regex (Commit 3 tightening).
   make_input 'VERDICT="C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc/.planning/wave-bl-w47-prep-19/arch-platform-verdict.md"; echo APPROVE > "$VERDICT"' 'arch-platform'
   run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ── BL-W47 Commit 3: heredoc dual-token WARN (write-verdict.sh migration) ────
+# A heredoc targeting an exempt verdict path that contains both APPROVED-PREP
+# and APPROVED-FINAL tokens emits a WARN on stderr but does NOT block (exit 0).
+# The canonical path is write-verdict.sh --phase verify-final.
+
+@test "BL-W47: heredoc to verdict path with both tokens emits WARN on stderr, exits 0" {
+  make_input "cat <<'EOF' > .planning/wave-bl-w47/arch-testing-verdict.md
+STATUS: APPROVED-PREP
+STATUS: APPROVED-FINAL
+EOF" 'arch-testing'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK' 2>&1"
   [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN"* ]]
+  [[ "$output" == *"write-verdict.sh"* ]]
+}
+
+# ── BL-W47 Commit 3: additional node -e + Windows drive-prefix + tee-verdict ──
+# Four cases paired with Commit 3 hook changes:
+#   C3-1 Windows absolute path (backslash) to verdict-named file → BLOCK
+#        hasDrivePrefix fires before verdict-path regex — not exempt.
+#   C3-2 node -e with const-alias fs.writeFileSync to non-exempt path → BLOCK
+#        NODE_FS_WRITE_RE matches through stored require() variable alias.
+#   C3-3 node -e with const-alias fs.writeFileSync to /tmp → ALLOW
+#        isExemptTarget(/tmp/...) returns true before BLOCK.
+#   C3-4 Regression: tee to exempt verdict path → ALLOW
+#        TEE_WRITE_RE extracts target; isExemptTarget(.planning/…/arch-*-verdict.md) → exempt.
+
+@test "C3-1 BLOCK: Windows backslash path to verdict-named file blocked (hasDrivePrefix gate)" {
+  # Even though the filename looks like a verdict, the Windows drive prefix fires
+  # before the verdict-path regex — absolute Windows paths outside tmpdir are BLOCKED.
+  make_input 'cat > C:\Users\user\arch-x-verdict.md <<EOF
+foo
+EOF' 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "C3-2 BLOCK: node -e with const-alias fs.writeFileSync to non-exempt path" {
+  make_input "node -e \"const fs=require('fs'); fs.writeFileSync('foo.md','x')\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"node -e fs-write-api"* ]]
+}
+
+@test "C3-3 ALLOW: node -e with const-alias fs.writeFileSync to /tmp (exempt tmpdir)" {
+  make_input "node -e \"const fs=require('fs'); fs.writeFileSync('/tmp/test.md','x')\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "C3-4 ALLOW: tee to exempt verdict path passes (regression guard)" {
+  # Quoted form required — unquoted tee target is truncated at the first hyphen by
+  # TEE_WRITE_RE's [^-\s|...] class (pre-existing limitation). The quoted form
+  # correctly exercises isExemptTarget on the full .planning/wave-*/arch-*-verdict.md path.
+  make_input 'echo APPROVE | tee ".planning/wave-foo/arch-platform-verdict.md"' 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# ── FIX-B (e0510a6): TEE_WRITE_RE captures full hyphenated path ───────────────
+# FIX-B extended TEE_WRITE_RE to match hyphens in unquoted tee targets, so
+# .planning/wave-<slug>/arch-<role>-verdict.md is captured without truncation.
+
+@test "FIX-B ALLOW: unquoted tee to hyphenated exempt verdict path → ALLOW (full path captured)" {
+  # Pre-FIX-B: TEE_WRITE_RE stopped at first hyphen → '.planning/wave' captured →
+  # isExemptTarget returned false → BLOCK. Post-FIX-B: full path captured → exempt.
+  make_input 'tee .planning/wave-bl-w47-hook-surgery/arch-platform-verdict.md' 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "FIX-B BLOCK: unquoted tee to non-exempt hyphenated path → BLOCK (full path, not verdict)" {
+  # Regression guard: full-path capture must not accidentally exempt non-verdict files.
+  make_input 'tee .planning/wave-bl-w47-hook-surgery/some-other-file.md' 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ── CR-1 (bd171e8): escape-tolerant node-eval + writeFile variants ────────────
+# bd171e8: NODE_EVAL_BODY_RE handles escaped inner quotes; NODE_FS_WRITE_RE extended
+# to match writeFile (callback-style) and fs.promises.writeFile; detectViolation uses
+# matchAll so multiple node -e in one command are each inspected independently.
+
+@test "CR1-A BLOCK: node -e with writeFileSync to non-exempt path (escape-tolerant body extract)" {
+  # Escaped inner quotes in the node -e body must not truncate body extraction.
+  make_input "node -e 'fs.writeFileSync(\"output.txt\", data)'" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"node -e fs-write-api"* ]]
+}
+
+@test "CR1-B BLOCK: two node -e in one command — first non-exempt match blocks" {
+  # matchAll loop inspects each node -e independently; first non-exempt target blocks.
+  make_input "node -e \"fs.writeFileSync('docs/out.txt', x)\" && node -e \"fs.writeFileSync('docs/out2.txt', y)\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"node -e fs-write-api"* ]]
+}
+
+@test "CR1-C BLOCK: node -e with writeFile (callback-style, no Sync suffix) → BLOCK" {
+  make_input "node -e \"fs.writeFile('out.txt', data, cb)\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"node -e fs-write-api"* ]]
+}
+
+@test "CR1-D BLOCK: node -e with fs.promises.writeFile → BLOCK" {
+  make_input "node -e \"fs.promises.writeFile('out.txt', data)\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"node -e fs-write-api"* ]]
 }

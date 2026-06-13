@@ -9,7 +9,8 @@
 // Fail-open on any parse error or stdin timeout (exit 0).
 
 const KMP_KEYWORDS = ['commonMain', 'kotlinx', 'expect/actual', 'appleMain', 'jvmMain'];
-const GUARDED_AGENTS = ['arch-platform', 'arch-testing'];
+// arch-integration added: also makes KMP claims in cross-cutting wiring docs
+const GUARDED_AGENTS = ['arch-platform', 'arch-testing', 'arch-integration'];
 
 let input = '';
 const stdinTimeout = setTimeout(() => process.exit(0), 5000);
@@ -28,7 +29,8 @@ process.stdin.on('end', () => {
   if (data.tool_name !== 'SendMessage') process.exit(0);
 
   const agentType = (data.agent_type ?? '').toLowerCase();
-  if (!GUARDED_AGENTS.includes(agentType)) process.exit(0);
+  // startsWith for suffix-rotation tolerance (arch-platform-2 etc. still guarded)
+  if (!GUARDED_AGENTS.some(g => agentType.startsWith(g))) process.exit(0);
 
   const messageRaw = data.tool_input?.message;
   const body = typeof messageRaw === 'string' ? messageRaw : JSON.stringify(messageRaw ?? '');

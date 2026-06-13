@@ -23,7 +23,7 @@ manifest:
   generator:
     name: "manual-seed-phase-1"
     version: "0.4.0"
-    notes: "Hand-extracted from setup/agent-templates/*.md frontmatter. 38/38 populated (Phase 1 complete). team-lead retired W31.6 (PR #69) — canonical pattern is main-agent-as-team-lead per docs/agents/main-agent-orchestration-guide.md. ALL surfaced misalignments resolved 2026-04-26: 4 mechanical fixes (platform-auditor, l0-coherence-auditor, module-lifecycle, cross-platform-validator — all SendMessage / dedup); 3 investigations resolved as intentional / out-of-scope (feature-domain-specialist scaffold, runtime drift Anthropic-side, find-pattern retention W27-scope-was-architects-only). Audit #6: 6 scaffolds + 4 manual-only + 1 sporadic doc-migrator + 27 actively-dispatched. Phase 2 (2026-04-27): WARN-mode CI validator wired (scripts/sh/validate-manifest.sh + mcp-server/src/cli/validate-manifest.ts + .github/workflows/drift-audit.yml manifest-drift-warn job). Side fixes shipped alongside: NAMING_CONVENTION regex extended with -detector + -alignment suffixes; UTF-8 mojibake (â€”) in description fields of data-layer-specialist, domain-model-specialist, ui-specialist templates + mirrors restored to em-dash. Phase 3 round 1 (2026-04-27): template-generator lib + CLI shipped; arch-platform / arch-testing / arch-integration SHA-256 baselines populated via surgical line-based writer (replaces yaml Document API which would have rewritten ~900 lines). 16/38 agents already canonical-aligned at round 1 boundary; 22/38 will be canonicalized in subsequent rounds before Phase 4."
+    notes: "Hand-extracted from setup/agent-templates/*.md frontmatter. 38/38 populated (Phase 1 complete; 39/39 after BL-W47 hook-surgery +1 toolkit-specialist). team-lead retired W31.6 (PR #69) — canonical pattern is main-agent-as-team-lead per docs/agents/main-agent-orchestration-guide.md. ALL surfaced misalignments resolved 2026-04-26: 4 mechanical fixes (platform-auditor, l0-coherence-auditor, module-lifecycle, cross-platform-validator — all SendMessage / dedup); 3 investigations resolved as intentional / out-of-scope (feature-domain-specialist scaffold, runtime drift Anthropic-side, find-pattern retention W27-scope-was-architects-only). Audit #6: 6 scaffolds + 4 manual-only + 1 sporadic doc-migrator + 27 actively-dispatched. Phase 2 (2026-04-27): WARN-mode CI validator wired (scripts/sh/validate-manifest.sh + mcp-server/src/cli/validate-manifest.ts + .github/workflows/drift-audit.yml manifest-drift-warn job). Side fixes shipped alongside: NAMING_CONVENTION regex extended with -detector + -alignment suffixes; UTF-8 mojibake (â€”) in description fields of data-layer-specialist, domain-model-specialist, ui-specialist templates + mirrors restored to em-dash. Phase 3 round 1 (2026-04-27): template-generator lib + CLI shipped; arch-platform / arch-testing / arch-integration SHA-256 baselines populated via surgical line-based writer (replaces yaml Document API which would have rewritten ~900 lines). 16/38 agents already canonical-aligned at round 1 boundary; 22/38 will be canonicalized in subsequent rounds before Phase 4."
 
 paths_template:
   template: "setup/agent-templates/{canonical_name}.md"
@@ -88,9 +88,9 @@ invariants:
 # -----------------------------------------------------------------------------
 # Agent entries
 # -----------------------------------------------------------------------------
-# Coverage: 38 / 38 (Phase 1 complete; team-lead retired W31.6 — replaced by docs/agents/main-agent-orchestration-guide.md)
+# Coverage: 39 / 39 (Phase 1 complete; team-lead retired W31.6 — replaced by docs/agents/main-agent-orchestration-guide.md; +1 toolkit-specialist added BL-W47 hook-surgery)
 #   - architects: 3/3
-#   - core-specialist: 4/4
+#   - core-specialist: 5/5
 #   - domain-specialist: 1/1 (feature-domain-specialist — template scaffold for L2 instantiation)
 #   - context: 1/1
 #   - doc-owner: 2/2
@@ -126,8 +126,8 @@ agents:
   arch-platform:
     canonical_name: arch-platform
     subagent_type: arch-platform
-    template_version: "1.32.0"
-    template_frontmatter_sha256: c4c76c5d48fb4a61b1c5477c04a7338f8041368d3f24f4afcda2f87bd7e992b5
+    template_version: "1.33.0"
+    template_frontmatter_sha256: 2b0ad598466c642e8836c9f5fd222353963b1b368ce1b3aac443073e71d4d608
     category: architect
     lifecycle: ephemeral
     description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -181,8 +181,8 @@ agents:
   arch-testing:
     canonical_name: arch-testing
     subagent_type: arch-testing
-    template_version: "1.37.0"
-    template_frontmatter_sha256: 6c6bd5b4dbf9d76541907d7245e88e497faaaadbcf7b5b80dcb4eeb0e0a2dcb2
+    template_version: "1.38.0"
+    template_frontmatter_sha256: ec1cb49c96f77845167db9ceced92132364a328c4d36acbc19e56c88949d8c0d
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -233,8 +233,8 @@ agents:
   arch-integration:
     canonical_name: arch-integration
     subagent_type: arch-integration
-    template_version: "1.28.0"
-    template_frontmatter_sha256: e0906dad06576993f9895c9de3fb03c80ee031539584aa7d5bea35d0145c7db2
+    template_version: "1.29.0"
+    template_frontmatter_sha256: 7c73623b5f267ec015ca3774a869605f5f7ad00e2ed3182a26759f4f88417079
     category: architect
     lifecycle: ephemeral
     description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -1629,8 +1629,8 @@ agents:
   planner:
     canonical_name: planner
     subagent_type: planner
-    template_version: "1.12.0"
-    template_frontmatter_sha256: 78f56e3532dc70a05fbf6e283cfa7b7fd1cb7376e1bbcdbd6ef9bc4b8f8f947f
+    template_version: "1.13.0"
+    template_frontmatter_sha256: 21119aac6529b5f67dbcdc097aedd88bcd042cc899e59e045441f1705b1ffa12
     category: orchestrator
     lifecycle: ephemeral
     description: "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage."

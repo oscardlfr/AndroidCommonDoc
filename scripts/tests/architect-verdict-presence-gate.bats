@@ -166,3 +166,33 @@ PYEOF
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── Identity-tolerance: suffix-rotation + free-name (BL-W47 OQ3) ─────────────
+# ARCH_ROLES uses startsWith — suffix-rotated arch peers must be blocked the
+# same as canonical; free names (no arch- prefix) must pass through.
+
+@test "IT-1 BLOCK: suffix-rotated arch-platform-2 blocked on APPROVE without verdict" {
+  make_input "APPROVE" "arch-platform-2"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "IT-2 BLOCK: suffix-rotated arch-testing-2 blocked on APPROVE without verdict" {
+  make_input "APPROVE" "arch-testing-2"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "IT-3 PASS: free-name agent sending APPROVE allowed (not arch-*)" {
+  make_input "APPROVE" "free-agent"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "IT-4 PASS: suffix-rotated arch-platform-2 APPROVE allowed when verdict exists" {
+  mkdir -p "$BATS_TEST_TMPDIR/.planning/wave-bl-w47"
+  touch "$BATS_TEST_TMPDIR/.planning/wave-bl-w47/arch-platform-verdict.md"
+  make_input "APPROVE" "arch-platform-2"
+  run_hook
+  [ "$status" -eq 0 ]
+}

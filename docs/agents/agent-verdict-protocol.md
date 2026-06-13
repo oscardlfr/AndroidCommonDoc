@@ -8,8 +8,8 @@ parent: agents-hub
 status: active
 layer: L0
 description: "Architect verdict format + disk-write + 1-liner DM protocol. Keeps team-lead context narrow while preserving full audit trail."
-version: 1
-last_updated: "2026-04"
+version: 2
+last_updated: "2026-06"
 ---
 
 # Agent Verdict Protocol
@@ -20,22 +20,28 @@ Architects write a full verdict block to disk and send a 1-liner DM to team-lead
 
 After completing review for wave `{N}`:
 
-1. **Write verdict to** `.planning/wave{N}/arch-{role}-verdict.md` using a Bash heredoc — Write/Edit are denied by `architect-self-edit-gate.js`; this heredoc is the only mechanism. The path `.planning/wave*/arch-*-{verdict,cross-verify}.md` is whitelisted in `architect-bash-write-gate.js:95`.
+1. **Write verdict to** `.planning/wave-{slug}/arch-{role}-verdict.md` using `write-verdict.sh` — this is the canonical mechanism. Write/Edit are denied by `architect-self-edit-gate.js`; Bash is the only path, and `write-verdict.sh` is the required tool.
 
+   **PREP phase** (after completing analysis, before EXECUTE):
    ```bash
-   mkdir -p .planning/wave{N}/
-   cat <<'EOF' > .planning/wave{N}/arch-{role}-verdict.md
-   # arch-{role} verdict — wave {N}
-   {verdict block per the format spec below}
-   EOF
+   bash scripts/sh/write-verdict.sh --role arch-{role} --phase prep
    ```
 
-   - `{N}` = wave number from team-lead dispatch (e.g., `wave22`)
-   - `{role}` = `platform`, `testing`, or `integration`
+   **VERIFY-FINAL phase** (after all specialist work is confirmed done):
+   ```bash
+   bash scripts/sh/write-verdict.sh --role arch-{role} --phase verify-final
+   ```
+
+   - `{role}` = `arch-platform`, `arch-testing`, or `arch-integration` (full name, with `arch-` prefix)
+   - Wave slug is resolved automatically from the git branch name (`feature/<slug>` → slug). Override with `--slug <value>` if needed.
+   - The script enforces two-phase integrity: PREP creates the file (fails if already exists), VERIFY-FINAL appends (fails if no PREP file found, fails if both tokens already present).
+   - Anti-traversal confinement: verdict path is always confined to `.planning/<wave-slug>/arch-{role}-verdict.md` within repo root.
 
    team-lead MUST verify file presence before TaskUpdate (see `tl-verification-gates.md`).
 
-   **WINDOWS PATH WARNING (HARD RULE — BL-W47-prep-15 root cause)**: ALWAYS use the relative path with forward slashes as shown above (`.planning/wave{N}/arch-{role}-verdict.md`). NEVER use absolute Windows paths in the heredoc redirect target. Bash interprets `\<octal-digits>` (e.g. `\346` inside `\34645`) as an octal escape character, mangling the destination path into a single filename in the working directory (e.g. `Usersæ45AndroidStudioProjects...arch-{role}-verdict.md` as an orphan). The hook `architect-bash-write-gate.js` is innocent — the regex correctly exempts both POSIX and Windows path forms; it's bash's path interpretation that corrupts the absolute Windows path before the file is written. If you must reference an absolute path, single-quote it (`'C:\\path\\...'`) — single quotes prevent octal-escape interpretation. Recommended: stick to the canonical relative form above.
+   **Legacy heredoc path**: the old `cat <<'EOF' >` heredoc route to verdict files emits a WARN on stderr (detected by `architect-bash-write-gate.js` dual-token detector). It will BLOCK with `VERDICT_CHANNEL_ENFORCE=1` in the next wave. Use `write-verdict.sh` exclusively.
+
+   **Why the heredoc was replaced**: on Windows, Bash interprets `\<octal-digits>` inside absolute paths as octal escape characters, corrupting the destination filename. `write-verdict.sh` handles path construction internally and is path-safe on all platforms.
 
 2. **SendMessage** to `team-lead`:
    - `"APPROVE"` — clean pass

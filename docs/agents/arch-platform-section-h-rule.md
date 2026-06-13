@@ -13,8 +13,16 @@ Applies to: arch-platform verdict authoring. Referenced from: setup/agent-templa
 ## Rule 1 -- Manifest yaml required when versions bump
 
 IF section G modifies any template_version field for ANY agent template, section H MUST include
-the literal path .claude/registry/agents.manifest.yaml AND skills/registry.json.
-Verdict authoring is blocked if either is absent.
+ALL FOUR of the following literal paths. Verdict authoring is blocked if any is absent:
+
+  .claude/registry/agents.manifest.yaml
+  skills/registry.json
+  setup/agent-templates/MIGRATIONS.json
+  setup/agent-templates/<agent-name>.md   (the bumped template itself)
+
+**MIGRATIONS.json** records the breaking-change migration entry for consumers inheriting the
+new template version. It is required even when the bump is non-breaking — the entry documents
+the version increment so consumers can audit their sync history.
 
 ## Rule 2 -- Literal paths only
 
@@ -33,14 +41,25 @@ Correct form:
 
 ## Self-check before writing verdict heredoc
 
-1. Does section G bump any template_version? If YES -> both agents.manifest.yaml AND
-   skills/registry.json MUST appear in section H as literal paths.
-2. Are ALL section H entries literal paths with recognized file extensions?
+1. Does section G bump any template_version? If YES -> ALL FOUR paths (agents.manifest.yaml,
+   skills/registry.json, MIGRATIONS.json, and the template .md) MUST appear in section H
+   as literal paths.
+2. Is there a MIGRATIONS.json entry drafted for each bumped template_version?
+   If NO -> draft the entry before emitting APPROVED-PREP.
+3. Are ALL section H entries literal paths with recognized file extensions?
    If NO -> replace with literal paths before proceeding.
 
-## Canonical 2-step rehash (always required when section G bumps template_version)
+## Canonical 5-pata ceremony (always required when section G bumps template_version)
 
-  Step 1:  node mcp-server/build/cli/generate-template.js <agent-name> --update-manifest-hash
-  Step 2:  bash scripts/sh/rehash-registry.sh --project-root "$(pwd)"
+Execute in this exact order. Each step produces its own commit:
+
+  Pata 1 (MIGRATIONS.json):  Add migration entry for the new version in
+                              setup/agent-templates/MIGRATIONS.json BEFORE generate-template.
+  Pata 2 (generate-template): node mcp-server/build/cli/generate-template.js <agent-name>
+                               --update-manifest-hash
+  Pata 3 (registry):          bash scripts/sh/rehash-registry.sh --project-root "$(pwd)"
+                               → produces skills/registry.json update
+  Pata 4 (manifest):          Verify .claude/registry/agents.manifest.yaml sha256 updated.
+  Pata 5 (snapshot repin):    Re-pin vitest snapshots if generate output changed hint text.
 
 Source: docs/guides/pre-commit-hooks.md lines 115-117.

@@ -59,7 +59,7 @@ Before drafting any brief that mentions git ops, hooks, /pre-pr, commit-lint, or
 6. For brief items specifying Java/JNI FQN from external dependencies, verify via artifact inspection: `unzip -l <artifact>.aar | grep '\.class$'`. Nested class shows as `Outer$Inner.class`; top-level as `Inner.class`. FQNs from .java source alone are [source-based, NOT artifact-verified].
 7. For brief items specifying class names, module names, file paths, or class/file co-location: query context-provider with explicit "list current public classes in <module>" / "list modules from settings.gradle.kts" / "list files in <package>" BEFORE finalizing brief. Memory-based authoring of identifiers is FORBIDDEN. Same root as #93 (artifact verification): verify against actual state, not assumed state. **code-state verification** mandate.
 
-Active hooks: `pre-push-pre-pr-gate.js`, `git-amend-gate.js`, `commit-scope-validation-gate.js`, `branch-guard.js`, `premature-execution-gate.js`, `specialist-task-completion-gate.js`.
+Active hooks: `push-authorization-gate.js`, `git-amend-gate.js`, `commit-scope-validation-gate.js`, `branch-guard.js`, `premature-execution-gate.js`, `specialist-task-completion-gate.js`.
 
 **INTERMEDIATE PUSHES require fresh /pre-pr stamp.** Plan for this in phase timing OR squash to single push at PR-open time.
 
@@ -198,7 +198,7 @@ At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatche
 ### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
 
 ```
-□ 0. TeamDelete("session-{project-slug}") called before TeamCreate?         → YES or STOP (Bug #3)
+□ 0. TeamDelete(team_name="session-{project-slug}") called before TeamCreate? → YES or STOP (Bug #3)
 □ 1. TeamCreate("session-{project-slug}") called?                           → YES or STOP
 □ 2. context-provider added to session team?                 → YES or STOP
 □ 3. doc-updater added to session team?                      → YES or STOP

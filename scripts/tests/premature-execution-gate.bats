@@ -135,3 +135,36 @@ run_hook() {
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── Identity-tolerance: suffix-rotation + free-name (BL-W47 OQ3) ─────────────
+# SUBJECT_TYPES uses startsWith — suffix-rotated peers (e.g. test-specialist-2)
+# must be caught the same as the canonical name.
+
+@test "IT-1 BLOCK: suffix-rotated specialist (test-specialist-2) blocked without APPROVED-PREP" {
+  # No verdict file — test-specialist-2 startsWith test-specialist → subject → BLOCK
+  make_input "Write" "docs/new-doc.md" "test-specialist-2"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"APPROVED-PREP"* ]]
+}
+
+@test "IT-2 BLOCK: suffix-rotated specialist (toolkit-specialist-2) blocked without APPROVED-PREP" {
+  make_input "Write" "docs/new-doc.md" "toolkit-specialist-2"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"APPROVED-PREP"* ]]
+}
+
+@test "IT-3 PASS: free-name agent (free-agent) allowed without verdict (not a subject type)" {
+  # free-agent does not startWith any SUBJECT_TYPE — not gated, exits 0
+  make_input "Write" "docs/new-doc.md" "free-agent"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "IT-4 PASS: suffix-rotated specialist unblocked when APPROVED-PREP verdict exists" {
+  printf 'STATUS: APPROVED-PREP\n' > "$WAVE_DIR/arch-testing-verdict.md"
+  make_input "Write" "docs/new-doc.md" "test-specialist-2"
+  run_hook
+  [ "$status" -eq 0 ]
+}

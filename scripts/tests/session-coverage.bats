@@ -1495,21 +1495,3 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "context-provider" "$L0_ROOT/docs/agents/agents-hub.md"
 }
 
-# ===========================================================================
-# QG. Quality-gate pre-commit hook tests
-# ===========================================================================
-
-HOOK_SCRIPT="$L0_ROOT/.claude/hooks/quality-gate-pre-commit.sh"
-
-@test "quality-gate hook: file exists and is executable" {
-    [ -f "$HOOK_SCRIPT" ]
-    [ -x "$HOOK_SCRIPT" ]
-}
-
-@test "quality-gate hook: pre-commit stub exits 0 on git commit (stamp check moved to pre-push)" {
-    # $HOOK_SCRIPT must be interpolated by bats — use double quotes around bash -c arg
-    # so the variable expands before the subshell sees it.
-    INPUT='{"tool_input":{"command":"git commit -m test"}}'
-    run bash -c "echo '$INPUT' | bash '$HOOK_SCRIPT'"
-    [ "$status" -eq 0 ]
-}

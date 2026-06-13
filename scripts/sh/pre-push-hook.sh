@@ -95,6 +95,8 @@ except ValueError:
     except Exception:
         fail("unparseable timestamp '%s'" % ts)
 age = int(time.time()) - epoch
+if age < -120:
+    fail("future timestamp (stamp is %d s ahead of system clock — clock skew or tampered stamp)" % (-age))
 if age > max_age:
     fail("stale (%d min old, max 30)" % (age // 60))
 head = stamp.get("head") or "-"

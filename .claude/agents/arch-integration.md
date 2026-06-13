@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
-template_version: "1.28.0"
+template_version: "1.29.0"
 skills:
   - test
   - extract-errors
@@ -390,7 +390,15 @@ Escalate to team-lead when:
 ### Disk-Write + 1-Liner DM (MANDATORY)
 
 After completing review:
-1. Write the full verdict block above to `.planning/wave{N}/arch-integration-verdict.md` via Bash heredoc (Write/Edit denied; see `docs/agents/agent-verdict-protocol.md` for the canonical heredoc snippet).
+1. Write the verdict block to `.planning/wave{N}/arch-integration-verdict.md` using `write-verdict.sh` (Write/Edit denied; see `scripts/sh/write-verdict.sh --help` and `docs/agents/agent-verdict-protocol.md`):
+
+   ```bash
+   # PREP phase
+   bash scripts/sh/write-verdict.sh --role arch-integration --phase prep
+
+   # VERIFY-FINAL phase
+   bash scripts/sh/write-verdict.sh --role arch-integration --phase verify-final
+   ```
 2. `SendMessage(to="team-lead", message="APPROVE")` → team-lead does TaskUpdate only (no broadcast)
    OR `SendMessage(to="team-lead", message="ESCALATE: <1-sentence reason>")` → team-lead broadcasts with [ESCALATION] marker
    NEVER include the full verdict block in the DM — team-lead reads the file if needed.
@@ -399,8 +407,8 @@ Full protocol: `docs/agents/agent-verdict-protocol.md`
 
 ### CRITICAL: APPEND for EXECUTE, OVERWRITE for PREP (BL-bump-ktr-01)
 
-- **PREP phase initial write**: use the Bash heredoc above (`cat <<'EOF' >`) — fresh file, overwrite OK.
-- **EXECUTE phase verdict write**: MUST APPEND to the existing PREP verdict file. Use `fs.appendFileSync()` (or shell `cat <<'EOF' >>` append redirect), NOT `fs.writeFileSync()` or `cat <<'EOF' >`. Overwriting destroys the `APPROVED-PREP` literal token, which `premature-execution-gate` checks at merge time.
+- **PREP phase initial write**: use `write-verdict.sh --phase prep` — creates file; fails exit 2 if APPROVED-PREP already present (duplicate guard).
+- **EXECUTE phase verdict write**: use `write-verdict.sh --phase verify-final` — APPENDS to the existing PREP verdict file; fails exit 2 if APPROVED-PREP is absent or dual-token replay detected. Never overwrite the PREP file directly: destroying the `APPROVED-PREP` literal token causes `premature-execution-gate` to block merge.
 - **Lesson**: PR #166 cost 1 fix-forward when arch-platform overwrote PREP verdict during EXECUTE phase. APPROVED-PREP token erased, gate triggered.
 - **Token asymmetry**: `APPROVED-PREP` is gate-enforced (premature-execution-gate blocks merge if absent); `APPROVED-VERDICT` is record-only (post-execution audit trail, not checked by any hook).
 
