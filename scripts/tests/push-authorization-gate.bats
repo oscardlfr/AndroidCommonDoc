@@ -20,9 +20,17 @@ INPUT_FILE="${BATS_TEST_TMPDIR}/push-auth-input-$$.json"
 
 setup() {
   # Isolated project root in tmpdir; no real .git/hooks present unless the test creates one.
+  # git init + initial commit so getHeadSha() returns a valid 40-hex SHA for stamp binding.
+  # Without git init, HEAD is null and the hook's head-binding check is silently skipped,
+  # masking PA-5 locally when the live repo's pre-push hook leaks in via cwd traversal.
   PROJECT_ROOT="${BATS_TEST_TMPDIR}/proj-$$"
   STAMP_DIR="$PROJECT_ROOT/.androidcommondoc"
   mkdir -p "$STAMP_DIR"
+  git -C "$PROJECT_ROOT" init -q 2>/dev/null
+  git -C "$PROJECT_ROOT" config user.email "bats@test.local"
+  git -C "$PROJECT_ROOT" config user.name "Bats Test"
+  git -C "$PROJECT_ROOT" commit --allow-empty -q -m "init" 2>/dev/null
+  HEAD_SHA="$(git -C "$PROJECT_ROOT" rev-parse HEAD)"
   unset PUSH_AUTHORIZATION_BYPASS
 }
 
@@ -99,9 +107,12 @@ PYEOF
 
 # ── Main orchestrator: no pre-push hook + fallback stamps ───────────────────
 
-@test "PA-5 ALLOW: main + no pre-push hook + valid fresh stamps → allowed" {
-  write_stamp "quality-gate.stamp" "PASS" 0 ""
-  write_stamp "pre-pr.stamp"       "PASS" 0 ""
+@test "PA-5 ALLOW: main + no pre-push hook + valid fresh stamps with matching HEAD → allowed" {
+  # CR-3 (df1a5d1): head must be a valid 40-hex SHA matching current HEAD (unconditional).
+  # setup() now git-inits PROJECT_ROOT and sets HEAD_SHA so binding works in isolation.
+  # Previously: empty head "" → CR-3 blocks unconditionally. Fix: stamp HEAD_SHA from repo.
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 0 ]
