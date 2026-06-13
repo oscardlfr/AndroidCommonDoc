@@ -959,3 +959,22 @@ EOF' 'arch-platform'
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── FIX-B (e0510a6): TEE_WRITE_RE captures full hyphenated path ───────────────
+# FIX-B extended TEE_WRITE_RE to match hyphens in unquoted tee targets, so
+# .planning/wave-<slug>/arch-<role>-verdict.md is captured without truncation.
+
+@test "FIX-B ALLOW: unquoted tee to hyphenated exempt verdict path → ALLOW (full path captured)" {
+  # Pre-FIX-B: TEE_WRITE_RE stopped at first hyphen → '.planning/wave' captured →
+  # isExemptTarget returned false → BLOCK. Post-FIX-B: full path captured → exempt.
+  make_input 'tee .planning/wave-bl-w47-hook-surgery/arch-platform-verdict.md' 'arch-platform'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "FIX-B BLOCK: unquoted tee to non-exempt hyphenated path → BLOCK (full path, not verdict)" {
+  # Regression guard: full-path capture must not accidentally exempt non-verdict files.
+  make_input 'tee .planning/wave-bl-w47-hook-surgery/some-other-file.md' 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+}
