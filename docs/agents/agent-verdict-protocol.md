@@ -8,8 +8,8 @@ parent: agents-hub
 status: active
 layer: L0
 description: "Architect verdict format + disk-write + 1-liner DM protocol. Keeps team-lead context narrow while preserving full audit trail."
-version: 1
-last_updated: "2026-04"
+version: 2
+last_updated: "2026-06"
 ---
 
 # Agent Verdict Protocol

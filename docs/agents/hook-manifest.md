@@ -2,8 +2,8 @@
 scope: [agents, hooks, workflow]
 sources: [androidcommondoc]
 targets: [all]
-version: 1
-last_updated: "2026-05"
+version: 2
+last_updated: "2026-06"
 description: "Consumer hook manifest: classifies all 33 L0 hooks as consumer-required / consumer-optional / l0-internal"
 slug: hook-manifest
 status: active
@@ -44,7 +44,7 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 
 ## Hook Table
 
-### JavaScript Hooks (28)
+### JavaScript Hooks (29)
 
 | Hook | Status | Rationale |
 |------|--------|-----------|
@@ -62,7 +62,8 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 | `team-topology-gate.js` | consumer-optional | Wave model: records peer spawns; checks mandatory peer coverage |
 | `architect-verdict-presence-gate.js` | consumer-optional | Verdict files: blocks arch-* APPROVE without verdict file on disk |
 | `commit-scope-validation-gate.js` | consumer-optional | Commit lint: blocks commit if scope not in `.commitlintrc.json` |
-| `pre-push-pre-pr-gate.js` | consumer-optional | /pre-pr skill: blocks push unless /pre-pr stamp is fresh and PASS |
+| `push-authorization-gate.js` | consumer-required | Push gate: blocks peer/subagent `git push`; main (empty agent_type) validates stamps if git pre-push hook not installed. Replaces legacy `pre-push-pre-pr-gate.js` + `quality-gate-pre-push.sh` |
+| `subagent-start-context-bundle.js` | consumer-optional | SubagentStart adapter: injects context bundle as additionalContext on teammate spawn/wake; absent or stale bundle → fail-open silently |
 | `knowledge-currency-gate.js` | consumer-optional | KMP gating: blocks arch-platform/arch-testing KMP claims without CP marker — see [knowledge-currency-gate](knowledge-currency-gate.md) |
 | `agent-delegation-reminder.js` | consumer-optional | Advisory: reminder when Composable .kt edited without ui-specialist |
 | `doc-freshness-alert.js` | consumer-optional | Advisory: checks if referenced pattern docs are >90 days stale on .kt edit |
@@ -77,15 +78,16 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 | `registry-rehash-reminder.js` | l0-internal | Emits reminder to run --update-manifest-hash after agent template edits |
 | `kickoff-scope-validator.js` | l0-internal | WARN-only: checks commitlint scopes on *-kickoff.md file writes |
 
-### Shell Hooks (5)
+### Shell Hooks (4)
 
 | Hook | Status | Rationale |
 |------|--------|-----------|
 | `detekt-post-write.sh` | consumer-required | Code quality: runs Detekt on every Kotlin Write/Edit |
 | `detekt-pre-commit.sh` | consumer-required | Code quality: validates staged Kotlin files with Detekt before commit |
 | `compile-fail-pre-commit.sh` | consumer-required | Code quality: blocks commit on staged .kt files containing `error()` patterns (peer of detekt-pre-commit) |
-| `quality-gate-pre-push.sh` | consumer-optional | Quality-stamp workflow: verifies quality-gate.stamp is fresh and PASS before push |
 | `registry-pre-commit.sh` | l0-internal | Auto-rehashes registry when L0 agent template files are staged |
+
+> **Note on specialist toolsets**: specialist agent templates do not include the `Grep` tool in their toolset. The `Grep` leg of `context-provider-gate.js` is therefore structurally unreachable for specialists — they are gated via the `claude-arch-responded-{session}-{type}.flag` path instead. Consumers adapting this gate for non-specialist agent types should verify their toolset includes `Grep` before relying on that leg.
 
 
 ## Verdict Canal Script (NOT in this manifest)
