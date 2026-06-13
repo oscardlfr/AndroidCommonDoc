@@ -57,7 +57,9 @@ function extractWaveSlugFromFrontmatter(content) {
   // Extract wave_slug from YAML frontmatter block between --- markers.
   // Accepts both `wave_slug: "value"` and `wave_slug: value` forms.
   // No /m flag — ^ must anchor to the very start of the file, not any line start.
-  const match = /^---\n[\s\S]*?wave_slug:\s*["']?([^"'\n]+)["']?\s*\n[\s\S]*?---/.exec(content);
+  // \r?\n tolerates CRLF line endings (Windows checkouts) — without it a CRLF
+  // bundle would never match and additionalContext would be silently skipped (CR-R2-A).
+  const match = /^---\r?\n[\s\S]*?wave_slug:\s*["']?([^"'\r\n]+)["']?\s*\r?\n[\s\S]*?---/.exec(content);
   if (!match) return null;
   return match[1].trim();
 }
