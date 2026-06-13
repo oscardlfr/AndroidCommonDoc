@@ -59,7 +59,7 @@ Before drafting any brief that mentions git ops, hooks, /pre-pr, commit-lint, or
 6. For brief items specifying Java/JNI FQN from external dependencies, verify via artifact inspection: `unzip -l <artifact>.aar | grep '\.class$'`. Nested class shows as `Outer$Inner.class`; top-level as `Inner.class`. FQNs from .java source alone are [source-based, NOT artifact-verified].
 7. For brief items specifying class names, module names, file paths, or class/file co-location: query context-provider with explicit "list current public classes in <module>" / "list modules from settings.gradle.kts" / "list files in <package>" BEFORE finalizing brief. Memory-based authoring of identifiers is FORBIDDEN. Same root as #93 (artifact verification): verify against actual state, not assumed state. **code-state verification** mandate.
 
-Active hooks: `pre-push-pre-pr-gate.js`, `git-amend-gate.js`, `commit-scope-validation-gate.js`, `branch-guard.js`, `premature-execution-gate.js`, `specialist-task-completion-gate.js`.
+Active hooks: `push-authorization-gate.js`, `git-amend-gate.js`, `commit-scope-validation-gate.js`, `branch-guard.js`, `premature-execution-gate.js`, `specialist-task-completion-gate.js`.
 
 **INTERMEDIATE PUSHES require fresh /pre-pr stamp.** Plan for this in phase timing OR squash to single push at PR-open time.
 

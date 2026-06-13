@@ -230,7 +230,7 @@ If any fail: list specific violations and stop.
 
 ### Step 8.5 — Write pre-pr stamp (PASS only)
 
-On READY/PASS outcome only, write a machine-readable stamp so `pre-push-pre-pr-gate.js` can verify the check was run:
+On READY/PASS outcome only, write a machine-readable stamp so `push-authorization-gate.js` can verify the check was run:
 
 ```bash
 STAMP_PATH="$(pwd)/.androidcommondoc/pre-pr.stamp"

@@ -670,7 +670,7 @@ const L0_REQUIRED_HOOK_REGISTRATIONS: readonly HookRegistrationEntry[] = [
   { event: 'PreToolUse', matcher: 'Write|Edit', file: 'premature-execution-gate.js' },
   { event: 'PreToolUse', matcher: 'Bash',       file: 'premature-execution-gate.js' },
   { event: 'PreToolUse', matcher: 'Bash',       file: 'branch-guard.js' },
-  { event: 'PreToolUse', matcher: 'Bash',       file: 'pre-push-pre-pr-gate.js' },
+  { event: 'PreToolUse', matcher: 'Bash',       file: 'push-authorization-gate.js' },
   { event: 'PreToolUse', matcher: 'Bash',       file: 'commit-scope-validation-gate.js' },
 ] as const;
 
