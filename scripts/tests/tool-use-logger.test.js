@@ -234,13 +234,17 @@ console.log('T16 agent_name/agent_class main: PASS');
   });
   assert.strictEqual(result18.status, 0, 'T18: hook exits 0 after rotation');
 
-  // The .gz filename must contain a timestamp with ms precision (ISO format with ms component)
+  // The .gz filename must contain a full ms-precision ISO timestamp.
+  // b7f18db: toISOString().replace(/[:.]/g, '-') → YYYY-MM-DDTHH-MM-SS-mmmz
+  // Stronger assertion: must have the millisecond group (3 digits before trailing 'z').
   const gzFiles18 = fs.readdirSync(logDir18).filter(f => f.endsWith('.jsonl.gz'));
   assert.ok(gzFiles18.length > 0, 'T18: at least one .jsonl.gz created');
-  // ms-precision: filename contains digits (date part) — not just YYYYMMDD
-  // b7f18db uses toISOString().replace(/[:.]/g, '-') which produces YYYY-MM-DDTHH-MM-SS-mmmZ
   const gzName18 = gzFiles18[0];
-  assert.ok(/\d{4}-\d{2}-\d{2}/.test(gzName18), 'T18: .gz filename contains ISO date portion');
+  // Full ISO date+time+ms: YYYY-MM-DDTHH-MM-SS-mmmz (e.g. 2026-06-13T08-48-50-092z)
+  assert.ok(
+    /\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}z/.test(gzName18),
+    `T18: .gz filename must have ms-precision ISO timestamp (got: ${gzName18})`
+  );
 
   fs.rmSync(rotDir18, { recursive: true, force: true });
   console.log('T18 CR-4 rotation filename has ms-precision ISO stamp: PASS');
@@ -259,12 +263,15 @@ console.log('T16 agent_name/agent_class main: PASS');
   for (let i = 0; i < 21; i++) fs.writeSync(fd19, chunk19);
   fs.closeSync(fd19);
 
-  // First run — triggers rotation
-  spawnSync('node', [HOOK], {
+  // First run — triggers rotation; assert success so T19 doesn't pass on a broken setup
+  const result19a = spawnSync('node', [HOOK], {
     input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'echo first' }, session_id: 'sess19a' }),
     env: { ...process.env, CLAUDE_PROJECT_DIR: rotDir19 },
     encoding: 'utf8',
   });
+  assert.strictEqual(result19a.status, 0, 'T19: first run (rotation trigger) exits 0');
+  const gzFiles19 = fs.readdirSync(logDir19).filter(f => f.endsWith('.jsonl.gz'));
+  assert.ok(gzFiles19.length > 0, 'T19: .gz archive created after first run');
 
   // Second run — should append to the fresh .jsonl, not the archive
   const result19b = spawnSync('node', [HOOK], {
@@ -280,9 +287,15 @@ console.log('T16 agent_name/agent_class main: PASS');
   const hasRead = lines19.some(l => { try { return JSON.parse(l).tool_name === 'Read'; } catch { return false; } });
   assert.ok(hasRead, 'T19: fresh .jsonl contains Read entry from second run (not written to .gz archive)');
 
-  // The .gz archive must NOT contain the second entry
-  const gzFiles19 = fs.readdirSync(logDir19).filter(f => f.endsWith('.jsonl.gz'));
-  assert.ok(gzFiles19.length > 0, 'T19: .gz archive exists');
+  // Verify the .gz archive does NOT contain the second-run entry (Read tool)
+  const gzPath19 = path.join(logDir19, gzFiles19[0]);
+  const gzBuf19 = fs.readFileSync(gzPath19);
+  const { gunzipSync } = require('zlib');
+  const gzContent19 = gunzipSync(gzBuf19).toString('utf8');
+  const gzHasRead = gzContent19.split('\n').filter(Boolean).some(l => {
+    try { return JSON.parse(l).tool_name === 'Read'; } catch { return false; }
+  });
+  assert.ok(!gzHasRead, 'T19: .gz archive must NOT contain the second-run Read entry');
 
   fs.rmSync(rotDir19, { recursive: true, force: true });
   console.log('T19 CR-4 post-rotation entries go to fresh logPath: PASS');
