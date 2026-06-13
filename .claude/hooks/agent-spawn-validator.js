@@ -170,23 +170,38 @@ process.stdin.on('end', () => {
     //   C. Free name: agentName matches no canonical pattern => WARN
     if (agentName !== subagentType) {
       const suffixMatch = /^(.+)-(\d+)$/.exec(agentName);
+      const enforceBlock = process.env.STALE_SUFFIX_ENFORCE === '1';
       if (suffixMatch) {
         const canonicalBase = suffixMatch[1];
-        if (!manifest.agents || !manifest.agents[canonicalBase]) {
-          // Case C: suffix present but canonical base not in manifest => WARN
-          process.stderr.write(
-            '[agent-spawn-validator] WARN: spawning "' + agentName + '" with suffix but canonical "' +
-            canonicalBase + '" is not in manifest. This may be a misconfigured name. ' +
-            'Prefer canonical names per identity-tolerance OQ3.\n'
-          );
+        // Suffix is only valid overflow if the base matches subagentType exactly (CR-6).
+        // A foreign canonical base (name="other-thing-2", subagent_type="arch-platform")
+        // is treated as Case C (misconfigured), not Case A.
+        const isValidOverflow = canonicalBase === subagentType;
+        if (!isValidOverflow) {
+          // Case C: suffix present but base doesn't match subagentType => WARN (or BLOCK)
+          const msg =
+            '[agent-spawn-validator] WARN: spawning "' + agentName + '" with suffix but base "' +
+            canonicalBase + '" does not match subagent_type="' + subagentType + '". ' +
+            'This may be a misconfigured name. Prefer canonical names per identity-tolerance OQ3. ' +
+            'Set STALE_SUFFIX_ENFORCE=1 to block.\n';
+          process.stderr.write(msg);
+          if (enforceBlock) {
+            process.stdout.write(JSON.stringify({ decision: 'block', reason: msg.trim() }));
+            process.exit(2);
+          }
         }
-        // Case A: known canonical with numeric suffix => silently allow (fall through)
+        // Case A: known canonical base == subagentType with numeric suffix => silently allow
       } else {
-        // Case C: free name (no suffix) => WARN, allow
-        process.stderr.write(
+        // Case C: free name (no suffix) => WARN (or BLOCK if STALE_SUFFIX_ENFORCE=1)
+        const msg =
           '[agent-spawn-validator] WARN: name="' + agentName + '" does not match subagent_type="' +
-          subagentType + '" and has no recognized suffix. Canonical name preferred for gate coverage.\n'
-        );
+          subagentType + '" and has no recognized suffix. Canonical name preferred for gate coverage. ' +
+          'Set STALE_SUFFIX_ENFORCE=1 to block.\n';
+        process.stderr.write(msg);
+        if (enforceBlock) {
+          process.stdout.write(JSON.stringify({ decision: 'block', reason: msg.trim() }));
+          process.exit(2);
+        }
       }
     }
   }
