@@ -59,13 +59,15 @@ run_verdict_slug() {
 
 # ── ★V3 FAIL: dual-token in body → verify-final exits 2 (replay guard) ───────
 
-@test "★V3 FAIL: verify-final with both APPROVED-PREP and APPROVED-FINAL present exits 2" {
+@test "★V3 FAIL: verify-final with both APPROVED-PREP and APPROVED-VERIFY-FINAL present exits 2" {
+  # dual-token guard scans for APPROVED-VERIFY-FINAL (4c51929 rename from APPROVED-FINAL)
   mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-PREP\n**Status**: APPROVED-FINAL\n' \
+  printf '**Status**: APPROVED-PREP\n**Status**: APPROVED-VERIFY-FINAL\n' \
     > "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
   run_verdict --role arch-testing --phase verify-final --slug "$WAVE_SLUG"
   [ "$status" -eq 2 ]
   [[ "$output" == *"dual-token"* ]]
+  [[ "$output" == *"APPROVED-VERIFY-FINAL"* ]]
 }
 
 # ── ★V4 FAIL: prep duplicate → exit 2 ────────────────────────────────────────
@@ -81,17 +83,18 @@ run_verdict_slug() {
 
 # ── ★V5 PASS: verify-final appends without overwriting APPROVED-PREP ─────────
 
-@test "★V5 PASS: verify-final appends APPROVED-FINAL while preserving APPROVED-PREP" {
+@test "★V5 PASS: verify-final appends APPROVED-VERIFY-FINAL while preserving APPROVED-PREP" {
+  # Token renamed to APPROVED-VERIFY-FINAL in 4c51929
   mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
   printf '**Status**: APPROVED-PREP\n' \
     > "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
 
-  run_verdict --role arch-testing --phase verify-final --slug "$WAVE_SLUG"
+  run_verdict --role arch-testing --phase verify-final --slug "$WAVE_SLUG" < /dev/null
   [ "$status" -eq 0 ]
 
   local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  grep -q "APPROVED-FINAL" "$verdict"
-  grep -q "APPROVED-PREP"  "$verdict"
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+  grep -q "APPROVED-PREP"         "$verdict"
 }
 
 # ── V6: path traversal in slug → exit 2, nothing written ─────────────────────
@@ -125,6 +128,75 @@ run_verdict_slug() {
   # WARN and "legacy heredoc" must appear (bats captures stderr in $output).
   [[ "$output" == *"WARN"* ]]
   [[ "$output" == *"legacy heredoc"* ]]
+}
+
+# ── VN-1: stdin content prepended before closing block ───────────────────────
+
+@test "VN-1 PASS: verify-final prepends stdin content with separator before APPROVED-VERIFY-FINAL" {
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  printf '**Status**: APPROVED-PREP\n' \
+    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
+
+  run bash -c "echo '## My verdict body' | cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-platform --phase verify-final --slug '$WAVE_SLUG'"
+  # Direct pipe run — bypass run_verdict helper to control stdin
+  (
+    cd "$PROJ"
+    echo "## My verdict body" | CLAUDE_WAVE_SLUG="$WAVE_SLUG" \
+      bash "$SCRIPT" --role arch-platform --phase verify-final --slug "$WAVE_SLUG"
+  )
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
+  # stdin body appears before the closing token
+  grep -q "## My verdict body" "$verdict"
+  # separator line present between body and closing block
+  grep -q "^---$" "$verdict"
+  # closing token present
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+  # body must appear BEFORE the token (line number check)
+  local body_line token_line
+  body_line="$(grep -n "## My verdict body" "$verdict" | cut -d: -f1)"
+  token_line="$(grep -n "APPROVED-VERIFY-FINAL" "$verdict" | cut -d: -f1)"
+  [ "$body_line" -lt "$token_line" ]
+}
+
+# ── VN-2: no stdin (terminal redirect) → closing block only, no separator ────
+
+@test "VN-2 PASS: verify-final with no stdin emits APPROVED-VERIFY-FINAL but no separator" {
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  printf '**Status**: APPROVED-PREP\n' \
+    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
+
+  # Redirect stdin from /dev/null — simulates no piped content (terminal detection fallback)
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-platform --phase verify-final --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+  # No separator: stdin was empty so the '---' block should be absent
+  ! grep -q "^---$" "$verdict"
+}
+
+# ── VN-3: second verify-final (replay guard) → exit 2 ────────────────────────
+
+@test "VN-3 FAIL: second verify-final (replay guard) exits 2, stderr names APPROVED-VERIFY-FINAL" {
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  printf '**Status**: APPROVED-PREP\n' \
+    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
+
+  # First verify-final — must succeed
+  (
+    cd "$PROJ"
+    echo "## First body" | CLAUDE_WAVE_SLUG="$WAVE_SLUG" \
+      bash "$SCRIPT" --role arch-platform --phase verify-final --slug "$WAVE_SLUG"
+  )
+
+  # Second verify-final — must be blocked by dual-token replay guard
+  run bash -c "cd '$PROJ' && echo 'body2' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-platform --phase verify-final --slug '$WAVE_SLUG'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"dual-token"* ]]
+  [[ "$output" == *"APPROVED-VERIFY-FINAL"* ]]
 }
 
 # ── Extra: invalid role → exit 2 ─────────────────────────────────────────────
