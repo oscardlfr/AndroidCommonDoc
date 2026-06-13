@@ -7,10 +7,11 @@
 # PHASES
 #   prep          Creates the verdict file with an APPROVED-PREP header.
 #                 Fails (exit 2) if the file already exists (duplicate guard).
-#   verify-final  Appends an APPROVED-FINAL block to an existing verdict file.
+#   verify-final  Reads architect verdict from stdin, then appends it plus an
+#                 APPROVED-VERIFY-FINAL closing block to the existing prep file.
 #                 Fails (exit 2) if no prep file is found (prevents orphan finals).
 #                 Fails (exit 2) if the file contains a dual-token (both APPROVED-PREP
-#                 AND APPROVED-FINAL already present — replay guard).
+#                 AND APPROVED-VERIFY-FINAL already present — replay guard).
 #
 # SLUG RESOLUTION (priority order)
 #   1. --slug <value>   explicit override
@@ -202,10 +203,10 @@ run_verify_final() {
   # Dual-token guard: block if BOTH tokens already present (replay prevention)
   local has_prep=0 has_final=0
   [[ "$content" == *"APPROVED-PREP"* ]] && has_prep=1
-  [[ "$content" == *"APPROVED-FINAL"* ]] && has_final=1
+  [[ "$content" == *"APPROVED-VERIFY-FINAL"* ]] && has_final=1
 
   if [[ "$has_prep" -eq 1 && "$has_final" -eq 1 ]]; then
-    echo "[write-verdict] ERROR: Verdict file already contains both APPROVED-PREP and APPROVED-FINAL (dual-token replay guard): $VERDICT_FILE" >&2
+    echo "[write-verdict] ERROR: Verdict file already contains both APPROVED-PREP and APPROVED-VERIFY-FINAL (dual-token replay guard): $VERDICT_FILE" >&2
     exit 2
   fi
 
@@ -216,15 +217,24 @@ run_verify_final() {
     echo "[write-verdict] WARN: Verdict file has APPROVED-FINAL but no APPROVED-PREP header — possible legacy heredoc write. Proceeding." >&2
   fi
 
-  cat >> "$VERDICT_FILE" <<EOF
+  # Read architect verdict content from stdin (the body written by the architect)
+  local stdin_content=""
+  if [[ -t 0 ]]; then
+    # stdin is a terminal — no piped content (e.g. direct shell invocation without pipe)
+    stdin_content=""
+  else
+    stdin_content="$(cat)"
+  fi
 
----
-
-**Phase**: VERIFY-FINAL
-**Timestamp**: $NOW
-**Status**: APPROVED-FINAL
-
-EOF
+  {
+    if [[ -n "$stdin_content" ]]; then
+      printf '%s\n' "$stdin_content"
+      printf '\n---\n\n'
+    fi
+    printf '**Phase**: VERIFY-FINAL\n'
+    printf '**Timestamp**: %s\n' "$NOW"
+    printf '**Status**: APPROVED-VERIFY-FINAL\n\n'
+  } >> "$VERDICT_FILE"
 
   echo "[write-verdict] VERIFY-FINAL appended: $VERDICT_FILE" >&2
 }
