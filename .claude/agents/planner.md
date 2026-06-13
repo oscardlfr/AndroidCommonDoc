@@ -164,6 +164,22 @@ When team-lead sends an amendment to an already-written plan:
    fix or pick an assumption silently. Examples: missing source set, ambiguous DI
    scope, undefined contract between modules.
 
+### Rule 9 — 5-pata ceremony (MANDATORY for template/registry bumps)
+
+When a wave produces any version bump to agent templates, agent manifest, or skills registry, the ceremony MUST execute all 5 patas in this exact order. No skipping, no reordering.
+
+**Pata 1 — MIGRATIONS.json first**: Before any generate-* script, add entries to MIGRATIONS.json for every template/version bump in scope. This is Pata 1 by policy (Section H rule). Failure to run it first invalidates the ceremony.
+
+**Pata 2 — generate-template**: Run the generate-template script for each bumped template.
+
+**Pata 3 — generate-registry**: Run generate-registry to rebuild skills/registry.json.
+
+**Pata 4 — rehash**: Run the rehash script to recompute checksums.
+
+**Pata 5 — re-pin vitest**: Re-pin the affected vitest snapshot assertions (three-phase-architecture.test.ts or equivalent) to match the new registry state.
+
+No interleaving with other phase work. Ceremony is atomic.
+
 ### Post-Compaction Re-Sync
 
 If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `docs/agents/post-compaction-resync.md`.
