@@ -7,7 +7,7 @@
  * - Imperative instruction style (detects passive prose anti-patterns)
  * - Tool-body cross-reference (body tool references match frontmatter tools)
  * - Anti-pattern detection (missing triggers, Write on architects, named devs)
- * - Size limits (agents ≤425 lines)
+ * - Size limits (agents ≤435 lines)
  * - Migration version tracking (template_version present, in MIGRATIONS.json)
  *
  * Returns structured JSON with errors, warnings, and summary counts.
@@ -322,7 +322,7 @@ function validateSizeLimits(
   files: Array<{ name: string; content: string }>,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const MAX_LINES = 425; // W31.6: arch templates need PREP/EXECUTE blocks + ban reminders
+  const MAX_LINES = 435; // P13: verdict-canal prose added write-verdict.sh protocol block to arch templates (was 425)
 
   for (const file of files) {
     const lines = file.content.split("\n").length;
