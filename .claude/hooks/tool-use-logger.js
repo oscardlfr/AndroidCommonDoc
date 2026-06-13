@@ -114,13 +114,18 @@ process.stdin.on('end', () => {
     try {
       const size = fs.existsSync(logPath) ? fs.statSync(logPath).size : 0;
       if (size > 20_971_520) { // 20MB
-        const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-        const gzPath = logPath.replace('.jsonl', '-' + stamp + '.jsonl.gz');
+        // Atomic cut-over: rename the live log first so concurrent appends go to a
+        // new file. Then gzip the renamed snapshot. Uses full ISO timestamp (ms) so
+        // same-day rotations produce unique filenames and never overwrite each other (CR-4).
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', 'z');
+        const rotatedPath = logPath.replace('.jsonl', '-' + stamp + '.jsonl');
+        const gzPath = rotatedPath + '.gz';
         try {
-          const raw = fs.readFileSync(logPath);
+          fs.renameSync(logPath, rotatedPath); // atomic hand-off; new entries go to fresh logPath
+          const raw = fs.readFileSync(rotatedPath);
           const compressed = zlib.gzipSync(raw);
           fs.writeFileSync(gzPath, compressed);
-          fs.unlinkSync(logPath); // remove uncompressed after gz written
+          fs.unlinkSync(rotatedPath); // remove uncompressed snapshot after gz written
         } catch {
           // rotation failed (race or permissions) — fall through, keep appending
         }
