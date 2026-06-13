@@ -126,8 +126,8 @@ agents:
   arch-platform:
     canonical_name: arch-platform
     subagent_type: arch-platform
-    template_version: "1.32.0"
-    template_frontmatter_sha256: c4c76c5d48fb4a61b1c5477c04a7338f8041368d3f24f4afcda2f87bd7e992b5
+    template_version: "1.33.0"
+    template_frontmatter_sha256: 2b0ad598466c642e8836c9f5fd222353963b1b368ce1b3aac443073e71d4d608
     category: architect
     lifecycle: ephemeral
     description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."

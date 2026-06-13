@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.32.0"
+template_version: "1.33.0"
 skills:
   - verify-kmp
   - validate-patterns
@@ -342,15 +342,17 @@ Escalate to team-lead when:
 ### Disk-Write + 1-Liner DM (MANDATORY)
 
 After completing review:
-1. Write the full verdict block above to `.planning/wave{N}/arch-platform-verdict.md` (`{N}` = wave number from team-lead dispatch) using a Bash heredoc — Write/Edit are denied; this is the only mechanism:
+1. Write the verdict block to `.planning/wave{N}/arch-platform-verdict.md` using `write-verdict.sh`:
 
    ```bash
-   mkdir -p .planning/wave{N}/
-   cat <<'EOF' > .planning/wave{N}/arch-platform-verdict.md
-   # arch-platform verdict -- wave {N}
-   {verdict block per docs/agents/agent-verdict-protocol.md}
-   EOF
+   # PREP phase (creates file, fails if APPROVED-PREP already present)
+   bash scripts/sh/write-verdict.sh --phase prep
+
+   # VERIFY-FINAL phase (appends; requires APPROVED-PREP already in file)
+   bash scripts/sh/write-verdict.sh --phase verify-final
    ```
+
+   Write/Edit are denied; `write-verdict.sh` is the only sanctioned verdict-write path (L1 canal, wave bl-w47-hook-surgery). Pipe content via stdin or pass --file. See `scripts/sh/write-verdict.sh --help` for full usage.
 
 2. `SendMessage(to="team-lead", message="APPROVE")` → team-lead does TaskUpdate only (no broadcast)
    OR `SendMessage(to="team-lead", message="ESCALATE: <1-sentence reason>")` → team-lead broadcasts with [ESCALATION] marker
@@ -360,8 +362,8 @@ Full protocol: `docs/agents/agent-verdict-protocol.md`
 
 ### CRITICAL: APPEND for EXECUTE, OVERWRITE for PREP (BL-bump-ktr-01)
 
-- **PREP phase initial write**: use the Bash heredoc above (`cat <<'EOF' >`) — fresh file, overwrite OK.
-- **EXECUTE phase verdict write**: MUST APPEND to the existing PREP verdict file. Use `fs.appendFileSync()` (or shell `cat <<'EOF' >>` append redirect), NOT `fs.writeFileSync()` or `cat <<'EOF' >`. Overwriting destroys the `APPROVED-PREP` literal token, which `premature-execution-gate` checks at merge time.
+- **PREP phase initial write**: use `write-verdict.sh --phase prep` — creates file; fails exit 2 if APPROVED-PREP already present (duplicate guard).
+- **EXECUTE phase verdict write**: use `write-verdict.sh --phase verify-final` — APPENDS to the existing PREP verdict file; fails exit 2 if APPROVED-PREP is absent or dual-token replay detected. Never overwrite the PREP file directly: destroying the `APPROVED-PREP` literal token causes `premature-execution-gate` to block merge.
 - **Lesson**: PR #166 cost 1 fix-forward when arch-platform overwrote PREP verdict during EXECUTE phase. APPROVED-PREP token erased, gate triggered.
 - **Token asymmetry**: `APPROVED-PREP` is gate-enforced (premature-execution-gate blocks merge if absent); `APPROVED-VERDICT` is record-only (post-execution audit trail, not checked by any hook).
 
