@@ -123,3 +123,70 @@ teardown() {
   [[ "$status" -eq 0 || "$status" -eq 2 ]]
   rm -f "$dev_sentinel"
 }
+
+# ── B: env reject-list for CLAUDE_WAVE_SLUG (CodeRabbit #3) ──────────────────
+# After the fix, wave-phase-gate must apply the reject-list to CLAUDE_WAVE_SLUG too.
+# develop/master as env slug → gate must skip (fail-open, exit 0) regardless of sentinel.
+# RED now: env slug accepted as-is → sentinel lookup proceeds normally; IF sentinel
+# present exits 0 (accidental pass), if absent exits 2 (accidental block). After fix:
+# explicit reject → exit 0 unconditionally (skip gate for protected branch slugs).
+
+@test "B WPG-ENV-REJECT-develop: CLAUDE_WAVE_SLUG=develop → gate skips (fail-open, exit 0)" {
+  # Sentinel absent — currently gate would block (exit 2) because it looks for
+  # wave-quality-gates/develop.md and doesn't find it. After fix: reject-list fires
+  # before sentinel lookup → exit 0 (skip). RED: exits 2 now.
+  local dev_sentinel="$SENTINEL_DIR/develop.md"
+  rm -f "$dev_sentinel"
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push origin develop\"}}' | CLAUDE_WAVE_SLUG=develop node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "B WPG-ENV-REJECT-master: CLAUDE_WAVE_SLUG=master → gate skips (fail-open, exit 0)" {
+  # Same for master.
+  local master_sentinel="$SENTINEL_DIR/master.md"
+  rm -f "$master_sentinel"
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push origin master\"}}' | CLAUDE_WAVE_SLUG=master node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+# ── C: branch path (no env) for wave-phase-gate (CodeRabbit #5) ──────────────
+# Drive slug resolution via git branch (no CLAUDE_WAVE_SLUG), isolated git repo.
+# Mirrors the subagent-start F1/C1 model used in slug-resolution-matrix.bats.
+
+@test "C WPG-BRANCH-codex: codex/bl-w47-demo branch (no env) → last-segment sentinel found → exit 0" {
+  # Isolated repo on codex/ branch; sentinel at last-segment path.
+  # BEFORE fix: full branch slug → sentinel path embeds slash → miss → exit 2. RED.
+  # AFTER fix: last-segment → sentinel found → exit 0. GREEN.
+  local proj
+  proj="$(mktemp -d)"
+  git -C "$proj" init -q 2>/dev/null
+  git -C "$proj" config user.email "bats@test.local"
+  git -C "$proj" config user.name "Bats Test"
+  git -C "$proj" commit --allow-empty -q -m "init"
+  git -C "$proj" checkout -b "codex/bl-w47-demo" -q 2>/dev/null
+  mkdir -p "$proj/.claude/wave-quality-gates"
+  printf '# sentinel\n' > "$proj/.claude/wave-quality-gates/bl-w47-demo.md"
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push origin codex/bl-w47-demo\"}}' | CLAUDE_PROJECT_DIR='$proj' node '$HOOK'"
+  rm -rf "$proj"
+  [ "$status" -eq 0 ]
+}
+
+@test "C WPG-BRANCH-develop: develop branch (no env) → reject-list → gate skips (exit 0)" {
+  # develop branch detected via git branch → reject-list → fail-open.
+  # BEFORE fix: 'develop' returned by branch parsing → sentinel lookup for develop.md
+  #   → sentinel absent → exit 2. RED.
+  # AFTER fix: reject-list applied to branch-parsed slug → exit 0. GREEN.
+  local proj
+  proj="$(mktemp -d)"
+  git -C "$proj" init -q 2>/dev/null
+  git -C "$proj" config user.email "bats@test.local"
+  git -C "$proj" config user.name "Bats Test"
+  git -C "$proj" commit --allow-empty -q -m "init"
+  # Note: wave-phase-gate.js already has `branch !== 'develop'` guard at Priority 2
+  # (line 37) — so this test confirms that guard fires correctly and exits 0.
+  # No checkout needed: default branch after init may vary; explicitly checkout develop.
+  git -C "$proj" checkout -b "develop" -q 2>/dev/null || git -C "$proj" checkout "develop" -q 2>/dev/null
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push origin develop\"}}' | CLAUDE_PROJECT_DIR='$proj' node '$HOOK'"
+  rm -rf "$proj"
+  [ "$status" -eq 0 ]
+}

@@ -303,13 +303,15 @@ run_verdict_slug() {
   grep -q "APPROVED-PREP" "$PROJ/.planning/wave-bl-w47-demo/arch-testing-verdict.md"
 }
 
-@test "P2b VWV-NF2 BLOCK: reject-list slug 'develop' → exit 2" {
-  # After the P2b fix, write-verdict.sh must reject the 'develop' slug explicitly.
+@test "P2b VWV-NF2 BLOCK: reject-list slug 'develop' → exit 2 (exact)" {
+  # After the P2b fix, write-verdict.sh must reject the 'develop' slug with exit 2
+  # specifically (not just non-zero — exact code confirms deliberate rejection, not crash).
   run_verdict_slug "" --role arch-testing --phase prep --slug "develop"
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 2 ]
 }
 
-@test "P2b VWV-NF3 BLOCK: reject-list slug 'master' → exit 2" {
+@test "P2b VWV-NF3 BLOCK: reject-list slug 'master' → exit 2 (exact)" {
+  # Same for master — exact exit 2 required.
   run_verdict_slug "" --role arch-testing --phase prep --slug "master"
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 2 ]
 }

@@ -33,22 +33,43 @@ const { spawnSync } = require('child_process');
 const MAX_AGE_SECS = 1800;   // 30 minutes
 const SKEW_TOLERANCE = 120;   // 2 minutes future tolerance
 
-// Detect git push in a bash command string (P2a fix: segment-aware).
-// Strips heredoc bodies + quoted spans to prevent prose false-positives, then
-// splits on shell control operators and tests each segment independently.
-// This catches compound pushes like `echo ok && git push origin x` (false-negative
-// in the old substring approach) while allowing `printf 'git push...'` prose (false-positive).
+// Detect git push in a bash command string (P2a deep detector: segment-aware + exec-aware).
+// Best-effort: language interpreters (python -c, perl -e) and arbitrary obfuscation remain
+// uncatchable by string parsing; the git-layer pre-push two-stamp is the authoritative backstop.
+// Pass 1: recurse into executed sub-strings (shell -c '...', eval '...', $(...), `...`)
+//   so that `sh -c 'git push'` is caught even though the outer command is sh.
+// Pass 2: strip heredoc bodies + quoted spans (prose false-positive prevention),
+//   split on shell control operators (NOT newline), test ^git push per segment
+//   after stripping env-var assignments and common wrapper prefixes (incl. unquoted eval).
+// Guards: `sh -c "echo 'git push'"`, `printf 'git push'`, `echo "$(date) pushed ok"` all ALLOW.
 function isGitPushCommand(cmd) {
+  // Pass 1: recurse into executed sub-shells / eval bodies (QUOTED forms).
+  // Applied to the ORIGINAL cmd (before quote-strip) so payloads stay intact.
+  const EXEC = [
+    /\b(?:sh|bash|zsh|dash|ksh|ash)\b(?:\s+-\S+)*\s+-[a-z]*c\b\s*(['"])([\s\S]*?)\1/g, // shell -c '...'
+    /\beval\b\s*(['"])([\s\S]*?)\1/g,                                                     // eval '...'
+    /\$\(([\s\S]*?)\)/g,                                                                   // $(...)
+    /`([^`]*)`/g,                                                                          // `...`
+  ];
+  for (const re of EXEC) {
+    let m;
+    while ((m = re.exec(cmd)) !== null) {
+      if (isGitPushCommand(m[m.length - 1])) return true;
+    }
+  }
+  // Pass 2: strip heredoc bodies + quoted spans, then split and prefix-strip per segment.
+  // `eval` in the prefix-strip catches unquoted `eval git push` (quoted form handled in Pass 1).
   const cleaned = cmd
-    // strip heredoc bodies first — verdict/bundle PROSE reaches the gate this way
     .replace(/<<-?\s*['"]?(\w+)['"]?[\s\S]*?\n\s*\1\b/g, ' <<HEREDOC ')
-    // strip quoted spans — printf/echo prose
     .replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
-  // split on shell control operators (NOT newline — avoids heredoc-line false positives)
   return cleaned.split(/\s*(?:&&|\|\||;|\|)\s*/).some(seg => {
-    const s = seg.trim()
-      .replace(/^(?:[A-Z_][A-Z0-9_]*=[^\s]+\s+)+/, '')  // strip leading VAR=val env
-      .replace(/^rtk\s+/, '').replace(/^sudo\s+/, '');   // strip rtk/sudo prefixes
+    let s = seg.trim(), prev;
+    do {
+      prev = s;
+      s = s
+        .replace(/^(?:[A-Z_][A-Z0-9_]*=[^\s]+\s+)+/, '')  // strip leading VAR=val env
+        .replace(/^(?:rtk|sudo|command|env|xargs|time|nice|nohup|stdbuf|setsid|doas|builtin|exec|eval)\s+(?:-\S+\s+)*/, '');
+    } while (s !== prev);
     return /^git\s+push\b/.test(s);
   });
 }
@@ -110,8 +131,14 @@ function getHeadSha(projectRoot) {
 }
 
 function block(reason) {
-  process.stdout.write(JSON.stringify({ decision: 'block', reason }));
-  process.exit(2);
+  // Write decision JSON to stdout, then flush stdout before exit (CR #2).
+  // process.stdout.write callback ensures the write is flushed before termination.
+  const json = JSON.stringify({ decision: 'block', reason });
+  if (process.stdout.write(json)) {
+    process.exit(2);
+  } else {
+    process.stdout.once('drain', () => process.exit(2));
+  }
 }
 
 let input = '';

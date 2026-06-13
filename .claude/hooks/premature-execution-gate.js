@@ -28,26 +28,29 @@ const SUBJECT_TYPES = [
   'doc-updater',
 ];
 
-// Copied verbatim from wave-phase-gate.js lines 24-66 (Decision 2)
+// Mirrors wave-phase-gate.js getWaveSlug (Decision 2): env-reject + symbolic-ref + alias scan.
 function getWaveSlug(projectRoot) {
-  // Priority 1: explicit env var
-  if (process.env.CLAUDE_WAVE_SLUG) return process.env.CLAUDE_WAVE_SLUG;
+  // Priority 1: explicit env var — trim and validate against reject-list (CR #3).
+  const envSlug = (process.env.CLAUDE_WAVE_SLUG || '').trim();
+  if (envSlug && !['develop', 'master', 'main', 'HEAD'].includes(envSlug)) return envSlug;
 
-  // Priority 2: git branch parsing
+  // Priority 2: git branch parsing (symbolic-ref primary, abbrev-ref fallback).
+  // symbolic-ref works on empty repos (no commits); abbrev-ref handles worktrees.
   try {
-    const result = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-      cwd: projectRoot,
-      timeout: 5000,
-      encoding: 'utf8',
+    const symResult = spawnSync('git', ['symbolic-ref', '--short', 'HEAD'], {
+      cwd: projectRoot, timeout: 5000, encoding: 'utf8',
     });
-    if (result.status === 0) {
-      const branch = (result.stdout || '').trim();
-      if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
-        // P2b fix: always resolve to last segment (covers non-feature branches like codex/*)
-        const slug = branch.split('/').pop();
-        if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD') {
-          return slug;
-        }
+    const abbResult = symResult.status !== 0
+      ? spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+          cwd: projectRoot, timeout: 5000, encoding: 'utf8',
+        })
+      : null;
+    const branch = (symResult.status === 0 ? symResult : abbResult)?.stdout?.trim() || '';
+    if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
+      // P2b: always resolve to last segment (covers non-feature branches like codex/*)
+      const slug = branch.split('/').pop();
+      if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD') {
+        return slug;
       }
     }
   } catch {
@@ -97,8 +100,14 @@ function hasApprovedPrep(waveDir) {
 }
 
 function block(reason) {
-  process.stdout.write(JSON.stringify({ decision: 'block', reason }));
-  process.exit(2);
+  // Write decision JSON to stdout, then flush stdout before exit (CR #2).
+  // Drain-event pattern ensures the write is flushed before termination.
+  const json = JSON.stringify({ decision: 'block', reason });
+  if (process.stdout.write(json)) {
+    process.exit(2);
+  } else {
+    process.stdout.once('drain', () => process.exit(2));
+  }
 }
 
 let input = '';

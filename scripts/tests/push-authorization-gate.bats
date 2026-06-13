@@ -276,6 +276,164 @@ PYEOF
   [ "$status" -eq 0 ]
 }
 
+# ── P2a follow-up: shell-exec wrapper bypass (CodeRabbit/Codex — post-ship) ────
+# The segment-aware quote-strip correctly kills printf/echo prose (PA-P2A-7/8),
+# but also strips the PAYLOAD of sh/bash -c "..." — which is EXECUTED code, not prose.
+# Fix: recurse into sh|bash|zsh|dash|ksh -c/-lc payloads before quote-stripping.
+# PA-P2A-9/10/11: RED now (exits 0, should be 2); GREEN after toolkit's recursive fix.
+# PA-P2A-12/13: guard cases — must stay/go GREEN (no over-block).
+
+@test "PA-P2A-9 BLOCK: peer + sh -c 'git push origin x' → BLOCK (shell-exec wrapper)" {
+  # Bypass: isGitPushCommand strips the quoted 'git push origin x' payload as prose.
+  # Fix: detect sh -c / bash -lc pattern → recurse into quoted payload.
+  # BEFORE fix: exits 0 (push allowed through wrapper). RED.
+  # AFTER fix: recursive detection finds 'git push origin x' → exit 2.
+  make_input "sh -c 'git push origin x'" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-10 BLOCK: peer + bash -lc \"git push origin x\" → BLOCK (login-shell wrapper)" {
+  # Same bypass via bash -lc (login shell invocation).
+  # BEFORE fix: exits 0. RED.
+  # AFTER fix: recursive detection → exit 2.
+  make_input 'bash -lc "git push origin x"' "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-11 BLOCK: peer + sh -c 'echo ok && git push origin x' → BLOCK (compound in payload)" {
+  # Compound command inside sh -c payload — recursive detection must handle && in payload.
+  # BEFORE fix: exits 0. RED.
+  # AFTER fix: recurse into payload → segment-aware split finds 'git push origin x' → exit 2.
+  make_input "sh -c 'echo ok && git push origin x'" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-12 ALLOW: peer + sh -c \"echo 'git push'\" → ALLOW (payload only echoes prose)" {
+  # Guard: recursing into the sh -c payload finds 'echo ...' not a real push.
+  # The echo argument 'git push' is prose inside the payload — must NOT over-block.
+  # Must stay GREEN before and after the fix.
+  make_input "sh -c \"echo 'git push'\"" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "PA-P2A-13 ALLOW: main + printf 'remember: git push origin x' (no stamps) → ALLOW (prose still works)" {
+  # Guard: confirms PA-P2A-7-style prose detection still works after recursive fix.
+  # main role + no stamps + no hook → prose correctly not detected → exit 0.
+  # Must stay GREEN before and after the fix.
+  make_input "printf 'remember: git push origin x\n'"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "PA-P2A-14 BLOCK: peer + zsh -c 'git push origin x' → BLOCK (zsh shell-exec wrapper)" {
+  # Same class of bypass as PA-P2A-9/10 — zsh -c wraps executed payload.
+  # BEFORE fix: exits 0. RED.
+  # AFTER fix: recursive shell-exec detection finds 'git push' → exit 2.
+  make_input "zsh -c 'git push origin x'" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-15 BLOCK: peer + env sh -c 'git push origin x' → BLOCK (env-prefixed shell exec)" {
+  # env sh -c is another shell-exec pattern; 'env' before 'sh' must not bypass detection.
+  # BEFORE fix: exits 0. RED.
+  # AFTER fix: recursive detection handles env-prefixed shell launch → exit 2.
+  make_input "env sh -c 'git push origin x'" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-16 BLOCK: peer + eval 'git push origin x' → BLOCK (eval bypass)" {
+  # eval executes its argument as a shell command — 'git push' inside the string is real.
+  # BEFORE fix: exits 0. RED.
+  # AFTER fix: eval detected as a shell-exec wrapper → recurse → exit 2.
+  make_input "eval 'git push origin x'" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-17 BLOCK: peer + \$(git push origin x) command-substitution → BLOCK" {
+  # Command substitution \$(git push ...) executes the command.
+  # The segment-aware detector strips \$(...) content as a quoted span → bypassed.
+  # BEFORE fix: exits 0. RED.
+  # AFTER fix: command-substitution content inspected → exit 2.
+  make_input '$(git push origin x)' "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-18 BLOCK: peer + backtick \`git push origin x\` command-substitution → BLOCK" {
+  # Backtick command substitution — same as \$(...) but legacy syntax.
+  # BEFORE fix: exits 0. RED.
+  # AFTER fix: backtick content inspected → exit 2.
+  make_input '`git push origin x`' "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-19 BLOCK: peer + command git push origin x → BLOCK (command builtin bypass)" {
+  # 'command' builtin bypasses shell functions/aliases but still executes git push.
+  # isGitPushCommand must recognise 'command git push' as a push.
+  # BEFORE fix: exits 0 (not matched by /^git\s+push\b/ after strip). RED.
+  # AFTER fix: 'command' prefix stripped → git push detected → exit 2.
+  make_input "command git push origin x" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-20 BLOCK: peer + xargs git push → BLOCK (xargs bypass)" {
+  # xargs passes stdin lines as arguments to git push — real push execution.
+  # BEFORE fix: exits 0. RED.
+  # AFTER fix: xargs git push pattern detected → exit 2.
+  make_input "xargs git push" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-21 BLOCK: peer + time git push origin x → BLOCK (time prefix bypass)" {
+  # 'time' measures execution time of the command — git push still executes.
+  # BEFORE fix: exits 0 (time not stripped, git push not first token). RED.
+  # AFTER fix: time/nice/sudo prefix stripping extended → git push detected → exit 2.
+  make_input "time git push origin x" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-23 BLOCK: peer + eval git push origin x (unquoted) → BLOCK (eval prefix-strip)" {
+  # Unquoted form: 'eval git push origin x' — the whole remainder IS the push command.
+  # Differs from PA-P2A-16 which tests eval 'git push origin x' (quoted payload).
+  # BEFORE fix: 'eval' not stripped → first token 'eval' ≠ 'git' → exits 0. RED.
+  # AFTER fix: eval stripped as a prefix → 'git push origin x' detected → exit 2.
+  make_input "eval git push origin x" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-22 ALLOW: peer + echo \"\$(date) pushed ok\" → ALLOW (command-sub in prose, no real push)" {
+  # Guard: command substitution \$(date) inside an echo argument is prose — the command
+  # inside \$() is 'date', not 'git push'. Must NOT over-block.
+  # Stays GREEN before and after the deep fix.
+  make_input 'echo "$(date) pushed ok"' "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
 # ── CR-3 (df1a5d1): unconditional head-sha validation in push-authorization-gate
 
 @test "PA-CR3-A BLOCK: pre-pr.stamp with empty head field → BLOCK (head validation)" {

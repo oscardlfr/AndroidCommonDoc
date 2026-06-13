@@ -130,7 +130,7 @@ resolve_slug() {
 
   # Reject protected branch names and empty slug
   if [[ -z "$slug" || "$slug" =~ ^(develop|master|main|HEAD)$ ]]; then
-    echo "[write-verdict] ERROR: Cannot resolve wave slug from branch '$branch'. Provide --slug or use a feature branch." >&2
+    echo "[write-verdict] ERROR: Cannot resolve wave slug from branch '$branch'. Provide --slug or use a non-protected branch (slug = last path segment)." >&2
     exit 2
   fi
 
