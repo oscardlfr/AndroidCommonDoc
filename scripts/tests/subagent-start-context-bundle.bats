@@ -159,6 +159,26 @@ write_bundle() {
 # a bundle file whose second line starts with '---' (but first char is NOT '---')
 # does NOT produce a false-positive frontmatter match.
 
+# ── CR-R2-A (2364ed2): CRLF line endings in frontmatter tolerated ─────────────
+# 2364ed2 added \r?\n to the frontmatter regex. Without it, a Windows-checkout
+# bundle with CRLF (\r\n) endings would fail to parse the wave_slug, treating
+# the bundle as stale and silently skipping additionalContext injection.
+
+@test "CR-R2-A: CRLF bundle frontmatter (\\r\\n line endings) + matching wave_slug → additionalContext emitted" {
+  # Write bundle with CRLF line endings via printf \r\n sequences.
+  # Frontmatter: ---\r\n wave_slug: bl-w47-test\r\n ---\r\n followed by body.
+  mkdir -p "$BUNDLE_DIR"
+  printf -- '---\r\nwave_slug: bl-w47-test\r\ntitle: test bundle\r\n---\r\n# Context bundle\r\nKey CRLF patterns here.\r\n' \
+    > "$BUNDLE_DIR/arch-platform.md"
+  make_input "SubagentStart" "arch-platform"
+  run_hook
+  [ "$status" -eq 0 ]
+  # stdout must be valid JSON with an additionalContext key
+  [[ "$output" == *'"additionalContext"'* ]]
+  # bundle body content must be present
+  [[ "$output" == *"Key CRLF patterns here"* ]]
+}
+
 @test "CR5-A: bundle with '---' on second line (not first) does NOT produce false-positive match" {
   # File content: line 1 = plain text, line 2 = '---' (looks like frontmatter end but
   # there is no opening '---' at byte 0). Pre-ca13f47 with /m flag, ^ matched line
