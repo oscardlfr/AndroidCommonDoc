@@ -189,3 +189,26 @@ PYEOF
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── CR-3 (df1a5d1): unconditional head-sha validation in push-authorization-gate
+
+@test "PA-CR3-A BLOCK: pre-pr.stamp with empty head field → BLOCK (head validation)" {
+  # df1a5d1: head validation is now unconditional (not gated on live git HEAD lookup).
+  # Empty head string fails the /^[0-9a-f]{40}$/ regex check → BLOCK.
+  write_stamp "quality-gate.stamp" "PASS" 0
+  write_stamp "pre-pr.stamp" "PASS" 0 ""
+  make_input "git push origin feature/x"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"head"* ]]
+}
+
+@test "PA-CR3-B BLOCK: pre-pr.stamp with non-hex head → BLOCK (head validation)" {
+  # Non-hex string 'not-a-sha' fails the /^[0-9a-f]{40}$/ check → BLOCK.
+  write_stamp "quality-gate.stamp" "PASS" 0
+  write_stamp "pre-pr.stamp" "PASS" 0 "not-a-sha"
+  make_input "git push origin feature/x"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"head"* ]]
+}

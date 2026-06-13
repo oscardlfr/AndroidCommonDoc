@@ -153,3 +153,24 @@ write_bundle() {
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+# ── CR-5 (ca13f47): /m flag removed from frontmatter regex ────────────────────
+# ca13f47 removed the /m flag from extractWaveSlugFromFrontmatter regex so that
+# a bundle file whose second line starts with '---' (but first char is NOT '---')
+# does NOT produce a false-positive frontmatter match.
+
+@test "CR5-A: bundle with '---' on second line (not first) does NOT produce false-positive match" {
+  # File content: line 1 = plain text, line 2 = '---' (looks like frontmatter end but
+  # there is no opening '---' at byte 0). Pre-ca13f47 with /m flag, ^ matched line
+  # boundaries so a mid-file '---' could satisfy the regex. Post-fix: ^ is anchored
+  # to start-of-string only, so this file has no valid frontmatter → bundleSlug=null
+  # → stale path → exit 0, stdout empty.
+  mkdir -p "$BUNDLE_DIR"
+  printf 'some content line\n---\nwave_slug: bl-w47-test\nmore content\n' \
+    > "$BUNDLE_DIR/arch-platform.md"
+  make_input "SubagentStart" "arch-platform"
+  # stdout must be empty (no additionalContext injected — false-positive blocked)
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>/dev/null"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}

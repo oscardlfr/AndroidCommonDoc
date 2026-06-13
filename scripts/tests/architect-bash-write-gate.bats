@@ -978,3 +978,38 @@ EOF' 'arch-platform'
   run_hook
   [ "$status" -eq 2 ]
 }
+
+# ── CR-1 (bd171e8): escape-tolerant node-eval + writeFile variants ────────────
+# bd171e8: NODE_EVAL_BODY_RE handles escaped inner quotes; NODE_FS_WRITE_RE extended
+# to match writeFile (callback-style) and fs.promises.writeFile; detectViolation uses
+# matchAll so multiple node -e in one command are each inspected independently.
+
+@test "CR1-A BLOCK: node -e with writeFileSync to non-exempt path (escape-tolerant body extract)" {
+  # Escaped inner quotes in the node -e body must not truncate body extraction.
+  make_input "node -e 'fs.writeFileSync(\"output.txt\", data)'" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"node -e fs-write-api"* ]]
+}
+
+@test "CR1-B BLOCK: two node -e in one command — first non-exempt match blocks" {
+  # matchAll loop inspects each node -e independently; first non-exempt target blocks.
+  make_input "node -e \"fs.writeFileSync('docs/out.txt', x)\" && node -e \"fs.writeFileSync('docs/out2.txt', y)\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"node -e fs-write-api"* ]]
+}
+
+@test "CR1-C BLOCK: node -e with writeFile (callback-style, no Sync suffix) → BLOCK" {
+  make_input "node -e \"fs.writeFile('out.txt', data, cb)\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"node -e fs-write-api"* ]]
+}
+
+@test "CR1-D BLOCK: node -e with fs.promises.writeFile → BLOCK" {
+  make_input "node -e \"fs.promises.writeFile('out.txt', data)\"" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"node -e fs-write-api"* ]]
+}

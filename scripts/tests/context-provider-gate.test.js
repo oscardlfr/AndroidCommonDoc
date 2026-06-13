@@ -244,4 +244,28 @@ assert.strictEqual(f14.exit, 0, 'F14: legacy ISO-string flag must still allow (J
 clearSessionFlag(sid14);
 console.log('F14 legacy ISO-string flag still exits 0 (legacy compat): PASS');
 
+// CR2-A: Grep with bare 'docs' path (no leading slash) — BLOCK (CR-2 / 599548f)
+clearSessionFlag('scr2a');
+const fcr2a = runHook({
+  tool_name: 'Grep',
+  tool_input: { pattern: 'test', path: 'docs' },
+  session_id: 'scr2a',
+  agent_type: 'arch-platform',
+  agent_id: 'arch-platform'
+});
+assert.strictEqual(fcr2a.exit, 2, 'CR2-A: Grep with bare docs path should block');
+console.log('CR2-A Grep bare docs path blocks: PASS');
+
+// CR2-B: Grep with 'docs/guides/foo.md' (no leading slash) — BLOCK
+clearSessionFlag('scr2b');
+const fcr2b = runHook({
+  tool_name: 'Grep',
+  tool_input: { pattern: 'test', path: 'docs/guides/foo.md' },
+  session_id: 'scr2b',
+  agent_type: 'arch-platform',
+  agent_id: 'arch-platform'
+});
+assert.strictEqual(fcr2b.exit, 2, 'CR2-B: Grep with docs/guides path should block');
+console.log('CR2-B Grep docs/guides path blocks: PASS');
+
 console.log('\nAll context-provider-gate tests passed.');

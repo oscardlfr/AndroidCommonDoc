@@ -243,3 +243,38 @@ PYEOF
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── CR-6 (1e1365e): foreign-base suffix now warns/blocks in agent-spawn-validator ─
+# CR-6: isValidOverflow requires canonicalBase === subagentType (not just "in manifest").
+# name="arch-platform-2" + subagent_type="arch-platform" → Case A (same base) → SILENT allow.
+# name="other-thing-2"   + subagent_type="arch-testing"  → Case C (foreign base) → WARN allow.
+# name="other-thing-2"   + subagent_type="arch-testing" + STALE_SUFFIX_ENFORCE=1 → BLOCK.
+# Uses arch-testing (confirmed TeamCreate-peer) and arch-platform (same) as base agents.
+
+@test "CR6-A ALLOW: name=arch-platform-2 + subagent_type=arch-platform → Case A silent allow" {
+  # Regression guard: same-base suffix must NOT emit any WARN on stderr.
+  # isValidOverflow: canonicalBase('arch-platform') === subagentType('arch-platform') → true.
+  make_input "Task" "arch-platform" "session-test" "arch-platform-2"
+  run bash -c "cd '$PROJECT_ROOT' && cat '$INPUT_FILE' | node '$HOOK' 2>&1"
+  [ "$status" -eq 0 ]
+  # CRITICAL: zero WARN output — Case A is the silent path
+  [[ "$output" != *"WARN"* ]]
+}
+
+@test "CR6-B ALLOW with WARN: name=other-thing-2 + subagent_type=arch-testing → Case C warn" {
+  # Foreign base: canonicalBase('other-thing') ≠ subagentType('arch-testing') → Case C.
+  # Should warn on stderr but NOT block (STALE_SUFFIX_ENFORCE not set).
+  make_input "Task" "arch-testing" "session-test" "other-thing-2"
+  run bash -c "cd '$PROJECT_ROOT' && cat '$INPUT_FILE' | node '$HOOK' 2>&1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN"* ]]
+  [[ "$output" == *"other-thing-2"* ]]
+  [[ "$output" == *"arch-testing"* ]]
+}
+
+@test "CR6-C BLOCK: name=other-thing-2 + subagent_type=arch-testing + STALE_SUFFIX_ENFORCE=1 → exit 2" {
+  make_input "Task" "arch-testing" "session-test" "other-thing-2"
+  run bash -c "cd '$PROJECT_ROOT' && cat '$INPUT_FILE' | STALE_SUFFIX_ENFORCE=1 node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"block"* ]]
+}
