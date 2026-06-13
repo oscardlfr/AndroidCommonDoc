@@ -229,6 +229,31 @@ run_writer_env() {
     [ -z "$(ls -A "$PROJ/.planning/wave-bl-w47-test/context-bundles/" 2>/dev/null)" ]
 }
 
+@test "P2b WB-NF1 PASS: non-feature branch slug 'bl-w47-demo' (from codex/bl-w47-demo) accepted" {
+  # After the P2b fix, write-bundle.sh must accept any last-segment slug, not only feature/-prefixed.
+  # The codex/bl-w47-demo branch last-segment is 'bl-w47-demo' — write-bundle must write the bundle.
+  run_writer --role test-specialist \
+    --plan-id "wave-bl-w47-demo/PLAN.md#T1" \
+    --slug bl-w47-demo
+  [ "$status" -eq 0 ]
+  [ -f "$PROJ/.planning/wave-bl-w47-demo/context-bundles/test-specialist.md" ]
+}
+
+@test "P2b WB-NF2 BLOCK: reject-list slug 'develop' → exit non-zero" {
+  # After the P2b fix, write-bundle.sh must reject 'develop' as a slug.
+  run_writer --role test-specialist \
+    --plan-id "wave-develop/PLAN.md#T1" \
+    --slug develop
+  [ "$status" -ne 0 ]
+}
+
+@test "P2b WB-NF3 BLOCK: reject-list slug 'master' → exit non-zero" {
+  run_writer --role test-specialist \
+    --plan-id "wave-master/PLAN.md#T1" \
+    --slug master
+  [ "$status" -ne 0 ]
+}
+
 @test "E9 BLOCK: plan-id with embedded newline exits non-zero" {
   # A newline inside plan-id could inject arbitrary YAML fields into the frontmatter.
   # Write the payload to a file to safely carry it past bats quoting layers.

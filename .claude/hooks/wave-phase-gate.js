@@ -35,10 +35,11 @@ function getWaveSlug(projectRoot) {
     if (result.status === 0) {
       const branch = (result.stdout || '').trim();
       if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
-        if (branch.startsWith('feature/')) {
-          return branch.slice('feature/'.length);
+        // P2b fix: always resolve to last segment (covers non-feature branches like codex/*)
+        const slug = branch.split('/').pop();
+        if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD') {
+          return slug;
         }
-        return branch;
       }
     }
   } catch {

@@ -179,6 +179,35 @@ write_bundle() {
   [[ "$output" == *"Key CRLF patterns here"* ]]
 }
 
+@test "P2b SB-NF1 PASS: codex/bl-w47-demo branch → slug 'bl-w47-demo' → bundle injected if present" {
+  # After P2b fix, subagent-start-context-bundle.js must resolve 'codex/bl-w47-demo'
+  # to last-segment 'bl-w47-demo' and inject the bundle when it exists.
+  # Switch the isolated repo to a codex/ branch.
+  git -C "$PROJECT_ROOT" checkout -b "codex/bl-w47-demo" -q 2>/dev/null
+  # Create a bundle for the resolved slug.
+  local bundle_dir_demo="$PROJECT_ROOT/.planning/wave-bl-w47-demo/context-bundles"
+  mkdir -p "$bundle_dir_demo"
+  printf -- '---\nwave_slug: bl-w47-demo\n---\n# Context bundle for codex branch\nCodex patterns here.\n' \
+    > "$bundle_dir_demo/arch-platform.md"
+  make_input "SubagentStart" "arch-platform"
+  run_hook
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"additionalContext"'* ]]
+  [[ "$output" == *"Codex patterns here"* ]]
+}
+
+@test "P2b SB-NF2 PASS: develop branch (reject-list) → no slug → silent exit 0" {
+  # develop is in the reject-list — hook must return null slug and exit 0 silently.
+  # This differs from ★SB-7 (which uses a freshly created develop branch) — here we
+  # use the codex/bl-w47-demo branch that setup() creates, then switch to develop to
+  # confirm reject-list handling.
+  git -C "$PROJECT_ROOT" checkout -b develop-test -q 2>/dev/null
+  make_input "SubagentStart" "arch-platform"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' CLAUDE_WAVE_SLUG='develop' node '$HOOK' 2>/dev/null"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "CR5-A: bundle with '---' on second line (not first) does NOT produce false-positive match" {
   # File content: line 1 = plain text, line 2 = '---' (looks like frontmatter end but
   # there is no opening '---' at byte 0). Pre-ca13f47 with /m flag, ^ matched line

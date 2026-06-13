@@ -43,10 +43,11 @@ function getWaveSlug(projectRoot) {
     if (result.status === 0) {
       const branch = (result.stdout || '').trim();
       if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
-        if (branch.startsWith('feature/')) {
-          return branch.slice('feature/'.length);
+        // P2b fix: always resolve to last segment (covers non-feature branches like codex/*)
+        const slug = branch.split('/').pop();
+        if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD') {
+          return slug;
         }
-        return branch;
       }
     }
   } catch {
@@ -95,6 +96,11 @@ function hasApprovedPrep(waveDir) {
   return false;
 }
 
+function block(reason) {
+  process.stdout.write(JSON.stringify({ decision: 'block', reason }));
+  process.exit(2);
+}
+
 let input = '';
 const t = setTimeout(() => process.exit(0), 5000);
 process.stdin.setEncoding('utf8');
@@ -139,14 +145,13 @@ process.stdin.on('end', () => {
     if (hasApprovedPrep(waveDir)) process.exit(0);
 
     // Block: specialist + active wave + no APPROVED-PREP
-    process.stderr.write(JSON.stringify({
-      decision: 'block',
-      reason: '[premature-execution-gate] Specialist "' + agentType + '" attempted ' + toolName
+    // P1c fix: block JSON must go to stdout (not stderr) — harness reads stdout for decisions.
+    block(
+      '[premature-execution-gate] Specialist "' + agentType + '" attempted ' + toolName
         + ' before APPROVED-PREP verdict for wave "' + slug + '".\n'
         + 'Expected an APPROVED-PREP verdict file in .planning/wave-' + slug + '/\n'
-        + 'Wait for arch-platform to write the APPROVED-PREP verdict, or set WAVE_PREP_BYPASS=1.',
-    }) + '\n');
-    process.exit(2);
+        + 'Wait for arch-platform to write the APPROVED-PREP verdict, or set WAVE_PREP_BYPASS=1.'
+    );
 
   } catch {
     // Fail-open — never block due to script error

@@ -168,3 +168,41 @@ run_hook() {
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── P1c: block channel — block JSON must appear on STDOUT not stderr ──────────
+# Codex repro (P1c): premature-execution-gate.js at line 142 uses process.stderr.write(...)
+# for the block JSON. All 3 sibling gates use process.stdout. After the fix, the
+# structured block decision must be on stdout so the harness can read it.
+#
+# Test strategy: redirect stderr to /dev/null; assert structured JSON is on stdout.
+# RED before fix: stdout is empty (JSON goes to stderr, lost after redirect).
+# GREEN after fix: JSON block decision is on stdout.
+
+@test "P1c BLOCK: specialist + active wave + no APPROVED-PREP emits block JSON on stdout (not stderr)" {
+  # No verdict file — gate must block. Redirect stderr to /dev/null to prove
+  # the block JSON is on stdout, not leaking through stderr.
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' node '$HOOK' 2>/dev/null"
+  [ "$status" -eq 2 ]
+  # The block decision JSON must be present on stdout (captured in $output by bats).
+  [[ "$output" == *'"decision"'* ]]
+  [[ "$output" == *'"block"'* ]]
+}
+
+# ── P2b: non-feature branch slug resolution for premature-execution-gate ──────
+# Per PLAN Step 10: each resolver file gets a non-feature branch case.
+# Setup: switch CLAUDE_WAVE_SLUG to a non-feature-prefixed slug (last-segment only).
+
+@test "P2b PEG-SLUG: codex/bl-w47-demo branch → slug 'bl-w47-demo' + active wave dir detected" {
+  # After the P2b fix, premature-execution-gate must resolve 'codex/bl-w47-demo' to
+  # last-segment slug 'bl-w47-demo'. Create a wave dir for that slug and confirm the gate
+  # detects the active wave (which means slug resolution worked).
+  local non_feature_slug="bl-w47-demo"
+  local non_feature_wave_dir="$BATS_TEST_TMPDIR/planning/wave-$non_feature_slug"
+  mkdir -p "$non_feature_wave_dir"
+  # No verdict → gate must BLOCK (proves slug was resolved and wave was found).
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' CLAUDE_WAVE_SLUG='$non_feature_slug' node '$HOOK' 2>/dev/null"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"APPROVED-PREP"* ]]
+}

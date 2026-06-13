@@ -24,6 +24,7 @@ File-based context bundles are the **primary contract** for handing structured c
 .planning/wave-{slug}/context-bundles/{role}.md
 ```
 
+- `{slug}` = **last path-segment** of the branch (`${branch##*/}` / `branch.split('/').pop()`). `feature/payment-api` → `payment-api`; `codex/api-redesign` → `api-redesign`. `develop`, `master`, `main`, `HEAD`, and empty values are rejected. See Writer Contract below for full resolution-precedence order.
 - `{role}` = the agent's **canonical name** (= `subagent_type`, e.g. `test-specialist`, `arch-platform`). Overflow peers use their indexed name (`test-specialist-2`).
 - Wave dirs are gitignored (`.gitignore` `.planning/wave*/`) — bundles are session-scoped scratch, never committed.
 - The `.planning/` path is **exempt from the CP read-gate** — a freshly spawned peer can read its bundle BEFORE its gate-ack to context-provider. Bundle read is therefore always the literal first action.
@@ -92,7 +93,7 @@ BODY
 
 - This flag+stdin interface is CANONICAL — it supersedes any positional-arg sketch in wave PLAN.md files.
 - Body arrives on stdin; the script authors the YAML header (UTC `created_at`, slug resolution) and writes `context-bundles/{role}.md`, creating directories as needed.
-- Slug resolution order (mirrors hook layer): `--slug` flag → `CLAUDE_WAVE_SLUG` env → git branch `feature/{slug}`. Unresolvable slug = error (exit ≠ 0), never a guess.
+- Slug resolution order: `--slug` flag → `CLAUDE_WAVE_SLUG` env → git branch **last-segment** (`${branch##*/}`); `develop`, `master`, `main`, `HEAD`, and empty values are rejected. Unresolvable slug = error (exit ≠ 0), never a guess. Note: `subagent-start-context-bundle.js` resolves last-segment only — `CLAUDE_WAVE_SLUG` does not persist to the SubagentStart event, so env is intentionally omitted there.
 - The script writes ONLY under `.planning/wave-{slug}/context-bundles/` — any other target is out of contract. CP's Bash tool is authorized for THIS script invocation only; every other write-capable Bash call remains banned under `CONTEXT_PROVIDER_READ_ONLY`.
 - Portability: in non-Claude environments any file-capable agent may run the same script — the schema, not the orchestrator, is the contract.
 

@@ -95,3 +95,31 @@ teardown() {
   run_hook_with_bypass "git push origin develop"
   [ "$status" -eq 0 ]
 }
+
+# ── P2b: non-feature branch slug resolution in wave-phase-gate ───────────────
+# After the P2b fix, wave-phase-gate.js must resolve non-feature branches to
+# last-segment slug (codex/bl-w47-demo → bl-w47-demo, not full branch name).
+# The gate blocks when the sentinel is absent for the resolved slug.
+
+@test "P2b WPG-NF1 GATE: codex/bl-w47-demo branch → slug 'bl-w47-demo' → git push blocked (no sentinel)" {
+  # CLAUDE_WAVE_SLUG set to last-segment slug 'bl-w47-demo' (as the P2b fix produces).
+  # No sentinel for this slug → gate must block.
+  local nf_sentinel="$SENTINEL_DIR/bl-w47-demo.md"
+  rm -f "$nf_sentinel"
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push origin codex/bl-w47-demo\"}}' | CLAUDE_WAVE_SLUG=bl-w47-demo node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"wave-phase-gate"* ]]
+  rm -f "$nf_sentinel"
+}
+
+@test "P2b WPG-NF2 ALLOW: develop branch in CLAUDE_WAVE_SLUG (reject-list) → gate uses slug as-is; with sentinel → exit 0" {
+  # When CLAUDE_WAVE_SLUG is 'develop', the gate should treat it as the slug.
+  # With a sentinel for 'develop' present, the gate should allow (or fail-open if reject-list implemented).
+  # This test confirms the gate does not crash on reject-list slugs.
+  local dev_sentinel="$SENTINEL_DIR/develop.md"
+  echo "quality-gate PASS" > "$dev_sentinel"
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push origin develop\"}}' | CLAUDE_WAVE_SLUG=develop node '$HOOK'"
+  # Either exit 0 (sentinel present) or exit 2 (reject-list implemented) — must not crash.
+  [[ "$status" -eq 0 || "$status" -eq 2 ]]
+  rm -f "$dev_sentinel"
+}

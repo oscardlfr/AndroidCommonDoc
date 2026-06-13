@@ -81,12 +81,13 @@ if [[ -n "$SLUG_FLAG" ]]; then
 elif [[ -n "${CLAUDE_WAVE_SLUG:-}" ]]; then
   WAVE_SLUG="$CLAUDE_WAVE_SLUG"
 else
-  # Attempt to extract {slug} from feature/{slug} branch name
-  BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-  if [[ "$BRANCH" =~ ^feature/(.+)$ ]]; then
-    WAVE_SLUG="${BASH_REMATCH[1]}"
-  else
-    echo "[write-bundle] ERROR: slug unresolvable — no --slug flag, no CLAUDE_WAVE_SLUG env var, and current branch ('${BRANCH:-unknown}') is not feature/{slug}" >&2
+  # P2b fix: always take last segment so non-feature branches (codex/*, hotfix/*) resolve correctly.
+  # Use symbolic-ref as primary: works on empty repos (no commits yet) and detached HEAD alike.
+  BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  WAVE_SLUG="${BRANCH##*/}"
+  # Reject protected branch names and empty slug
+  if [[ -z "$WAVE_SLUG" || "$WAVE_SLUG" =~ ^(develop|master|main|HEAD)$ ]]; then
+    echo "[write-bundle] ERROR: slug unresolvable — no --slug flag, no CLAUDE_WAVE_SLUG env var, and branch '${BRANCH:-unknown}' resolves to a protected or empty slug." >&2
     exit 1
   fi
 fi
@@ -95,6 +96,12 @@ fi
 # Validate ROLE: only lowercase alphanum segments joined by hyphens.
 if [[ ! "$ROLE" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
   echo "[write-bundle] ERROR: --role value is invalid: '${ROLE}' — must match ^[a-z0-9]+(-[a-z0-9]+)*\$" >&2
+  exit 1
+fi
+
+# Reject protected branch names (P2b: applies to ALL slug sources including --slug).
+if [[ "$WAVE_SLUG" =~ ^(develop|master|main|HEAD)$ ]]; then
+  echo "[write-bundle] ERROR: Slug '$WAVE_SLUG' is a protected branch name and cannot be used as a wave slug." >&2
   exit 1
 fi
 

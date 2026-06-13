@@ -38,12 +38,12 @@ function resolveWaveSlug(projectRoot) {
     if (result.status === 0) {
       const branch = (result.stdout || '').trim();
       if (branch && branch !== 'HEAD') {
-        if (branch.startsWith('feature/')) {
-          return branch.slice('feature/'.length);
-        }
-        // Non-feature branch: return as-is (wave slug may equal branch name)
         if (branch !== 'develop' && branch !== 'master' && branch !== 'main') {
-          return branch;
+          // P2b fix: always resolve to last segment (covers non-feature branches like codex/*)
+          const slug = branch.split('/').pop();
+          if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD') {
+            return slug;
+          }
         }
       }
     }
