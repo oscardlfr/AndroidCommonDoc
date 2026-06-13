@@ -428,6 +428,11 @@
         "date": "2026-06-10",
         "breaking": false,
         "note": "wave-cancellation-detekt: Bump kmp-test-runner version pins v0.10.1 -> v0.14.0. Mechanical version-string bump. Preserved kmp-test-runner-gate.js:88 JS/Wasm gate message (no JS/Wasm changes in v0.14). Historical exclusions: cli-troubleshooting.md:33, cli-tests-js-wasm.md:22/33 unchanged."
+      },
+      "1.38.0": {
+        "date": "2026-06-13",
+        "breaking": false,
+        "note": "BL-W47 hook-surgery: Disk-Write section updated — write-verdict.sh is now the canonical verdict-write path; architect-verdict-presence-gate.js error text instructs write-verdict.sh --role arch-testing --phase prep|verify-final instead of heredoc recipe."
       }
     },
     "arch-platform": {
@@ -566,6 +571,11 @@
         "date": "2026-05-17",
         "breaking": false,
         "note": "BL-W47-prep-10 F1b: add Task Completion Protocol (reference) section -- architects verify READY-FOR-REVIEW from specialist before marking any task completed."
+      },
+      "1.33.0": {
+        "date": "2026-06-13",
+        "breaking": false,
+        "note": "BL-W47 hook-surgery: Disk-Write section updated — write-verdict.sh is now the canonical verdict-write path; architect-verdict-presence-gate.js error text instructs write-verdict.sh --role arch-platform --phase prep|verify-final instead of heredoc recipe."
       }
     },
     "arch-integration": {
@@ -689,6 +699,11 @@
         "date": "2026-05-17",
         "breaking": false,
         "note": "BL-W47-prep-10 F1b: add Task Completion Protocol (reference) section -- architects verify READY-FOR-REVIEW from specialist before marking any task completed."
+      },
+      "1.29.0": {
+        "date": "2026-06-13",
+        "breaking": false,
+        "note": "BL-W47 hook-surgery: Disk-Write section updated — write-verdict.sh is now the canonical verdict-write path; architect-verdict-presence-gate.js error text instructs write-verdict.sh --role arch-integration --phase prep|verify-final instead of heredoc recipe."
       }
     },
     "context-provider": {
