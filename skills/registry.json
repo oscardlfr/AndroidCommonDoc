@@ -1977,7 +1977,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:54d2506a1c101baee155182434adb3ca953136f637fbf9d4e61e6bb20bf3d1e5",
+      "hash": "sha256:3ba8b12739a0a186b05ee31626661505d21b24b7b3afc7ece9bbd03d0aca1f31",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
