@@ -327,10 +327,20 @@ EOF' 'arch-platform'
   [ "$status" -eq 0 ]
 }
 
-# ── Regression: node -e body must not false-trigger PYTHON_WRITE_RE ──────────
+# ── node -e / --eval fs-write detector (BL-W47 Commit 3) ────────────────────
+# node -e bodies containing writeFileSync/appendFileSync/createWriteStream/
+# fs.promises.writeFile to non-exempt targets are now BLOCKED (exit 2).
+# Exempt targets (tmpdir) still ALLOW.
 
-@test "allows node -e with open() or writeFileSync inside quoted body (Deferred-2)" {
+@test "blocks node -e with writeFileSync to non-exempt path" {
   make_input "node -e 'require(\"fs\").writeFileSync(\"foo.md\",\"data\")'" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"node -e fs-write-api"* ]]
+}
+
+@test "allows node -e with writeFileSync to /tmp (exempt tmpdir)" {
+  make_input "node -e 'require(\"fs\").writeFileSync(\"/tmp/debug.txt\",\"data\")'" 'arch-platform'
   run_hook
   [ "$status" -eq 0 ]
 }
@@ -882,8 +892,27 @@ EOF' 'arch-platform'
   [ "$status" -eq 2 ]
 }
 
-@test "BL-W47-prep-19: \$VAR Windows absolute forward-slash verdict path → ALLOW" {
+@test "BL-W47-prep-19: \$VAR Windows absolute forward-slash verdict path → BLOCK (drive-prefix not in tmpdir)" {
+  # Windows absolute paths with drive prefix that are NOT under os.tmpdir() are
+  # now blocked even if the filename matches the verdict pattern — the hasDrivePrefix
+  # guard fires before the verdict-path regex (Commit 3 tightening).
   make_input 'VERDICT="C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc/.planning/wave-bl-w47-prep-19/arch-platform-verdict.md"; echo APPROVE > "$VERDICT"' 'arch-platform'
   run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ── BL-W47 Commit 3: heredoc dual-token WARN (write-verdict.sh migration) ────
+# A heredoc targeting an exempt verdict path that contains both APPROVED-PREP
+# and APPROVED-FINAL tokens emits a WARN on stderr but does NOT block (exit 0).
+# The canonical path is write-verdict.sh --phase verify-final.
+
+@test "BL-W47: heredoc to verdict path with both tokens emits WARN on stderr, exits 0" {
+  make_input "cat <<'EOF' > .planning/wave-bl-w47/arch-testing-verdict.md
+STATUS: APPROVED-PREP
+STATUS: APPROVED-FINAL
+EOF" 'arch-testing'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK' 2>&1"
   [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN"* ]]
+  [[ "$output" == *"write-verdict.sh"* ]]
 }
