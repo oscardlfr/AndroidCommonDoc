@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# ACDOC-PRE-PUSH-GATE: two-stamp push gate (marker — push-authorization-gate.js detects this; do not remove)
 # pre-push-hook.sh — Git pre-push hook: two-stamp push gate (BL-W47 PR-0b).
 #
 # Git-layer backstop below the Claude-layer push gates (quality-gate-pre-push.sh,

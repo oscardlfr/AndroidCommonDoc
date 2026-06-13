@@ -95,11 +95,41 @@ PYEOF
 
 # ── Main orchestrator: pre-push hook installed → ALLOW ──────────────────────
 
-@test "PA-4 ALLOW: main (empty agent_type) + git push + pre-push hook installed → allowed" {
-  # Install a stub pre-push hook so the gate sees it and delegates to the git layer.
+@test "PA-4 ALLOW: main (empty agent_type) + git push + ACDoc pre-push hook installed → allowed" {
+  # P1b fix: gate must verify the hook contains the ACDOC-PRE-PUSH-GATE marker — not just
+  # check existsSync. Install the real marker-bearing hook from the repo source.
+  mkdir -p "$PROJECT_ROOT/.git/hooks"
+  cp "$BATS_TEST_DIRNAME/../sh/pre-push-hook.sh" "$PROJECT_ROOT/.git/hooks/pre-push"
+  chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "PA-4b BLOCK: main + bare stub hook (no ACDOC marker) + no stamps → blocked" {
+  # Codex repro (P1b): a foreign tool's bare stub hook 'exit 0' should NOT skip stamp
+  # validation. Before fix: existsSync alone allowed any hook. After fix: gate reads content
+  # and only trusts hooks bearing the ACDOC-PRE-PUSH-GATE marker.
   mkdir -p "$PROJECT_ROOT/.git/hooks"
   printf '#!/bin/sh\nexit 0\n' > "$PROJECT_ROOT/.git/hooks/pre-push"
   chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
+  # No stamps written — with a bare stub (no marker) gate must fall through to stamp check.
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  # Block reason must be stamp-related (not peer-detection).
+  [[ "$output" == *"stamp"* || "$output" == *"pre-pr"* || "$output" == *"quality-gate"* ]]
+}
+
+@test "PA-4c ALLOW: main + bare stub hook (no ACDOC marker) + valid fresh stamps → allowed via stamp path" {
+  # Bare stub without marker → gate falls through to stamp check. With valid fresh stamps
+  # matching HEAD, the stamp path should allow. This confirms the stub causes stamp-path
+  # fallthrough, not unconditional block.
+  mkdir -p "$PROJECT_ROOT/.git/hooks"
+  printf '#!/bin/sh\nexit 0\n' > "$PROJECT_ROOT/.git/hooks/pre-push"
+  chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 0 ]
@@ -197,6 +227,51 @@ PYEOF
 
 @test "PA-15 ALLOW: malformed JSON → fail-open (exit 0)" {
   printf '%s' '{not json' > "$INPUT_FILE"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# ── CR-3 (df1a5d1): unconditional head-sha validation in push-authorization-gate
+
+# ── P2a: segment-aware push detector — compound + prose false-positive ────────
+# Codex repro cases: the old single-regex isGitPushCommand fired on prose strings
+# and missed compound commands (echo ok && git push ...).
+
+@test "PA-P2A-5 BLOCK: peer + compound 'echo ok && git push origin x' → blocked (segment-aware)" {
+  # Codex repro: old regex didn't catch compound commands — segment-aware fix must catch the
+  # second segment 'git push origin x' even though the full string starts with 'echo ok'.
+  make_input "echo ok && git push origin x" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-6 BLOCK: peer + 'true; git push origin x' (semicolon separator) → blocked" {
+  make_input "true; git push origin x" "arch-platform"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+@test "PA-P2A-7 ALLOW: main + printf prose 'remember: git push origin feature/test' → isGitPushCommand returns false → exit 0" {
+  # False-positive fix (P2a): prose inside a printf/echo string is NOT a real push command.
+  # RED trace: BEFORE fix, the single-regex `\bgit\s+push\b` fires on the literal text
+  # inside the printf argument → isGitPushCommand returns true → gate reaches stamp check
+  # → no stamps + no hook → exit 2 (blocked for wrong reason).
+  # GREEN trace: AFTER fix, the segment-aware detector strips quoted spans (or only inspects
+  # real shell segments) → isGitPushCommand returns false → gate exits 0 immediately at
+  # `if (!isGitPushCommand(cmd)) process.exit(0)` before any stamp logic.
+  # Assertion: plain exit 0 — no stamp fallback reached, no hook checked.
+  make_input "printf 'remember: git push origin feature/test\n'"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "PA-P2A-8 ALLOW: main + 'echo \"git push\"' (push in double-quoted string) → exit 0" {
+  # Same false-positive fix: 'git push' inside a double-quoted echo argument is prose.
+  # BEFORE fix: regex fires on the echo argument text → stamp fallback → exit 2.
+  # AFTER fix: segment-aware detector ignores quoted spans → exit 0.
+  make_input 'echo "git push"'
   run_hook
   [ "$status" -eq 0 ]
 }
