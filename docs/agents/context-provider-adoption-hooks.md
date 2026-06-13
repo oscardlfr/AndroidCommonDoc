@@ -28,7 +28,11 @@ Wave 17-lite installs three hooks: one blocking gate (PreToolUse), one tracker (
 
 **File**: `.claude/hooks/context-provider-gate.js`
 **Trigger**: PreToolUse on `Bash`, `Grep`, `Glob`
-**Behavior**: Blocks the tool call and returns a human-readable rejection unless a session flag (`.androidcommondoc/cp-consulted-{session_id}.flag`) exists, indicating the calling peer has already SendMessage'd context-provider this session.
+**Behavior**: Blocks the tool call and returns a human-readable rejection unless a session flag exists in `os.tmpdir()`, indicating the calling peer has already consulted context-provider this session.
+
+**Flag paths** (both stored in `os.tmpdir()`):
+- Non-specialist agents: `claude-cp-consulted-{session_id}.flag`
+- Specialists (per-agent): `claude-arch-responded-{session_id}-{agent_type}.flag` (written when an arch-* agent SendMessages the specialist)
 
 **Exempt agent types** (never blocked): `doc-updater`, `context-provider`, `quality-gater`, `release-guardian-agent`. Exemptions are matched against `agent_type` from the hook env, not agent name — so `-2`/`-3` overflow variants are also exempt.
 
@@ -40,9 +44,11 @@ Wave 17-lite installs three hooks: one blocking gate (PreToolUse), one tracker (
 
 **File**: `.claude/hooks/context-provider-consulted.js`
 **Trigger**: PostToolUse on `SendMessage`
-**Behavior**: Reads the outgoing message. If `to` is `"context-provider"`, writes `.androidcommondoc/cp-consulted-{session_id}.flag` (touch). This is the flag that gate hook 1 checks.
+**Behavior**: Reads the outgoing message. If `to` is `"context-provider"` (or starts with `"context-provider-"`), writes `os.tmpdir()/claude-cp-consulted-{session_id}.flag`. When an arch-* agent addresses a specialist, writes `os.tmpdir()/claude-arch-responded-{session_id}-{agent_type}.flag` (where `agent_type` is the `to` field, sanitized). These are the flags that gate hook 1 checks.
 
 No blocking, no side effects beyond flag creation. If the flag directory does not exist, the hook creates it.
+
+**Emergency escape**: `rm "$(node -e "console.log(require('os').tmpdir())")/claude-cp-consulted-*.flag"` and the equivalent for `claude-arch-responded-*.flag`. Or: set `CLAUDE_CP_GATE_DISABLED=1` (fail-open).
 
 ## Hook 3: tool-use-logger
 
@@ -57,6 +63,7 @@ No blocking, no side effects beyond flag creation. If the flag directory does no
 | `ts` | ISO 8601 | Timestamp of tool call completion |
 | `session_id` | string | Hook env session identifier |
 | `agent_id` | string | Hook env agent identifier |
+| `agent_name` | string\|null | Agent name from `CLAUDE_AGENT_NAME` env var |
 | `agent_type` | string | Hook env agent type (template name) |
 | `tool` | string | Tool name (e.g. `Bash`, `Grep`, `mcp__tool-use-analytics`) |
 | `mcp_server` | string\|null | MCP server name if tool is MCP, else null |
@@ -65,7 +72,7 @@ No blocking, no side effects beyond flag creation. If the flag directory does no
 | `duration_ms` | number | Wall-clock ms from tool start to PostToolUse hook fire |
 | `cp_bypass_blocked` | boolean | True if gate hook blocked this agent earlier in session |
 
-**Log rotation**: no automatic rotation. File grows until manually archived. Recommend periodic `mv tool-use-log.jsonl tool-use-log-{date}.jsonl` before long sessions.
+**Log rotation**: automatic at 20 MB. When the log file exceeds 20 MB the hook compresses it with gzip to `tool-use-log-{YYYYMMDD}.jsonl.gz` and starts a fresh `tool-use-log.jsonl`. No manual archiving is required.
 
 ## MCP Tool: tool-use-analytics
 
@@ -114,7 +121,7 @@ Invoke: `/metrics` — no arguments required. Optional `--since {ISO date}` pass
 
 ## Falsifiable Hypothesis
 
-From `.planning/wave17-lite-PLAN.md` §2: "Installing a mechanical gate will increase CP consultation rate from ~10% of sessions to ≥60% within 2 weeks, measurable via tool-use-log."
+"Installing a mechanical gate will increase CP consultation rate from ~10% of sessions to ≥60% within 2 weeks, measurable via tool-use-log."
 
 **What to measure** (at ~2-week mark):
 - CP consultation rate: sessions with `cp-consulted-*.flag` / total sessions
