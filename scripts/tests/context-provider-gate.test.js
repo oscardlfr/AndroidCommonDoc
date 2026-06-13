@@ -105,22 +105,27 @@ assert.strictEqual(f4.exit, 0, 'F4: team-lead exempt');
 console.log('F4 team-lead exempt: PASS');
 
 // F5: Bash with ./gradlew build, arch-platform, no flag → ALLOW (non-search bash)
+// agent_type required: L5 made empty agent_type = main-exempt; arch-platform is a peer.
 clearSessionFlag('s5');
 const f5 = runHook({
   tool_name: 'Bash',
   tool_input: { command: './gradlew build' },
   session_id: 's5',
+  agent_type: 'arch-platform',
   agent_id: 'arch-platform'
 });
 assert.strictEqual(f5.exit, 0, 'F5: non-search bash should allow');
 console.log('F5 non-search Bash allow: PASS');
 
 // F6: Bash with grep, arch-platform, no flag → BLOCK
+// agent_type required: L5 made empty agent_type = main-exempt (exit 0); peer must carry
+// agent_type so the gate sees a non-exempt identity and blocks (exit 2).
 clearSessionFlag('s6');
 const f6 = runHook({
   tool_name: 'Bash',
   tool_input: { command: 'grep -r libs.lifecycle .' },
   session_id: 's6',
+  agent_type: 'arch-platform',
   agent_id: 'arch-platform'
 });
 assert.strictEqual(f6.exit, 2, 'F6: search bash should block');
@@ -185,11 +190,13 @@ clearArchResponseFlag('s11', specialistWithHyphen);
 console.log('F11 arch-response flag with hyphenated agent_type (BL-W35-06): PASS');
 
 // F12: NEW — block reason does not reference hardcoded context-provider-2
+// agent_type required: L5 made empty agent_type = main-exempt (exit 0); peer needs agent_type.
 clearSessionFlag('s12');
 const f12 = runHook({
   tool_name: 'Grep',
   tool_input: { pattern: 'x', path: '/project/docs/di/di-patterns-modules.md' },
   session_id: 's12',
+  agent_type: 'arch-platform',
   agent_id: 'arch-platform'
 });
 assert.strictEqual(f12.exit, 2, 'F12: blocked');

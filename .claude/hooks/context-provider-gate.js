@@ -127,8 +127,9 @@ process.stdin.on('end', () => {
     // 2c. Block Grep/Glob tool on docs/** or agent-template paths
     if (toolName === 'Grep' || toolName === 'Glob') {
       const queryPath = data.tool_input?.path ?? data.tool_input?.pattern ?? '';
-      // Use boundary regex: docs/ or docs at end-of-string (no trailing sep required)
-      const isDocPath = /[/\\]docs([/\\]|$)/.test(queryPath) || /[/\\]setup[/\\]agent-templates[/\\]/.test(queryPath);
+      // Boundary-anchored: matches docs/ at start, after separator, or as full segment.
+      // Prevents bypass via repo-relative paths like "docs" or "docs/guides/..." without leading sep.
+      const isDocPath = /(?:^|[/\\])docs(?:[/\\]|$)/.test(queryPath) || /(?:^|[/\\])setup[/\\]agent-templates(?:[/\\]|$)/.test(queryPath);
       if (!isDocPath) process.exit(0); // non-docs Grep/Glob allowed
       // doc-path Grep/Glob: fall through to session-flag check
     }
