@@ -354,11 +354,14 @@ PYEOF
   # -- 7. Write backward-compat stamps ------------------------------------------
   mkdir -p "$ACDOC_DIR"
 
-  printf '{"verdict":"PASS","timestamp":"%s","head":"%s","source":"emit-push-proof.sh run-qg"}\n' \
-    "$now_ts" "$head_sha" > "$QG_STAMP_PATH"
+  local branch_name
+  branch_name="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "UNKNOWN")"
 
-  printf '{"verdict":"PASS","timestamp":"%s","head":"%s","source":"emit-push-proof.sh run-qg"}\n' \
-    "$now_ts" "$head_sha" > "$PP_STAMP_PATH"
+  printf '{"verdict":"PASS","timestamp":"%s","head":"%s","branch":"%s","source":"emit-push-proof.sh run-qg"}\n' \
+    "$now_ts" "$head_sha" "$branch_name" > "$QG_STAMP_PATH"
+
+  printf '{"verdict":"PASS","timestamp":"%s","head":"%s","branch":"%s","source":"emit-push-proof.sh run-qg"}\n' \
+    "$now_ts" "$head_sha" "$branch_name" > "$PP_STAMP_PATH"
 
   # -- 8. Write push-proof.json --------------------------------------------------
   python3 - "$PROOF_PATH" "$now_ts" "$head_sha" "$worktree_id" \
