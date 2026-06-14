@@ -14,6 +14,12 @@ Hook to **BLOCK** spawning any core session role (team-lead, arch-platform/integ
 
 **Source**: filed by user 2026-06-07.
 
+### BL-W47-SUPERSEDE — write-verdict VERIFY-FINAL supersede (MED — harness, ~2-4h) — filed 2026-06-14
+
+Add `--supersede` to `write-verdict.sh --phase verify-final` so a stale VERIFY-FINAL block whose `**HEAD**` no longer matches current HEAD is replaced in place while preserving the PREP token and fail-closed guarantees. Same-HEAD reruns must be idempotent/no-op. Update protocol docs and bats coverage for rerun / supersede / same-HEAD idempotence.
+
+**Source**: PR-0c.2 follow-up (BL-W47), filed 2026-06-14.
+
 ### Wave 38 — Ingestion bundle (LOW urgency, ~2-4h)
 
 | ID | Item |

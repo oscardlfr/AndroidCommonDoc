@@ -3,15 +3,36 @@
 #
 # USAGE
 #   write-verdict.sh --role <arch-role> --phase <prep|verify-final> [--slug <wave-slug>]
+#                    [--supersede]
 #
 # PHASES
 #   prep          Creates the verdict file with an APPROVED-PREP header.
 #                 Fails (exit 2) if the file already exists (duplicate guard).
 #   verify-final  Reads architect verdict from stdin, then appends it plus an
 #                 APPROVED-VERIFY-FINAL closing block to the existing prep file.
+#                 The block is wrapped in delimiter comments:
+#                   <!-- BEGIN VERIFY-FINAL -->
+#                   ...
+#                   <!-- END VERIFY-FINAL -->
 #                 Fails (exit 2) if no prep file is found (prevents orphan finals).
 #                 Fails (exit 2) if the file contains a dual-token (both APPROVED-PREP
 #                 AND APPROVED-VERIFY-FINAL already present — replay guard).
+#                 With --supersede: replaces an existing VERIFY-FINAL block instead of
+#                 failing (opt-in; the replay guard is UNCHANGED on the non-flag path).
+#
+# --supersede (verify-final only, OPT-IN)
+#   Allows re-running --phase verify-final when commits have landed since the last
+#   VERIFY-FINAL write (e.g. after a fixup commit).
+#   - Current HEAD must resolve to 40-hex or ABORT (fail-closed).
+#   - Delimited block present, stored HEAD == current HEAD → idempotent NO-OP (exit 0).
+#   - Delimited block present, stored HEAD != current HEAD → excise entire delimited
+#     block (<!-- BEGIN VERIFY-FINAL --> … <!-- END VERIFY-FINAL -->), append fresh block.
+#   - Legacy un-delimited block present (APPROVED-VERIFY-FINAL exists, no BEGIN delimiter)
+#     → excise from first **HEAD**: line through EOF, append fresh delimited block.
+#   - No VERIFY-FINAL block present → normal first-append (with delimiters).
+#   APPROVED-PREP is NEVER removed or altered. NO token forgery, NO bypass.
+#   After supersede: file has EXACTLY ONE **HEAD**: line (current HEAD) and still
+#   contains APPROVED-VERIFY-FINAL.
 #
 # SLUG RESOLUTION (priority order)
 #   1. --slug <value>   explicit override
@@ -46,6 +67,7 @@ VALID_PHASES=("prep" "verify-final")
 ROLE=""
 PHASE=""
 SLUG_OVERRIDE=""
+SUPERSEDE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -60,6 +82,10 @@ while [[ $# -gt 0 ]]; do
     --slug)
       SLUG_OVERRIDE="${2:-}"
       shift 2
+      ;;
+    --supersede)
+      SUPERSEDE=1
+      shift
       ;;
     -h|--help)
       sed -n '2,/^$/p' "$0"
@@ -203,7 +229,66 @@ EOF
   echo "[write-verdict] PREP written: $VERDICT_FILE" >&2
 }
 
+# ── Delimiter constants ────────────────────────────────────────────────────────
+# These exact strings are used by --supersede to identify and excise old blocks.
+# test-specialist's VS-* bats cases must match these verbatim.
+
+DELIM_BEGIN="<!-- BEGIN VERIFY-FINAL -->"
+DELIM_END="<!-- END VERIFY-FINAL -->"
+
 # ── Phase: verify-final ───────────────────────────────────────────────────────
+
+# _sanitize_stdin — strip reserved delimiter / token lines from piped body content.
+# Emits WARN to stderr for each stripped line. Returns sanitized content via stdout.
+# B1 fix: prevents injected stdin body from poisoning stored_head extraction or
+# confusing the idempotent check via a fake **HEAD**: line.
+_sanitize_stdin() {
+  local raw="$1"
+  local sanitized=""
+  local warned=0
+  while IFS= read -r line; do
+    if [[ "$line" == "$DELIM_BEGIN" || "$line" == "$DELIM_END" ]]; then
+      echo "[write-verdict] WARN: stdin body contained reserved delimiter line (stripped): $line" >&2
+      warned=1
+    elif [[ "$line" =~ ^\*\*HEAD\*\*:\ [0-9a-f]{7,40}$ ]]; then
+      echo "[write-verdict] WARN: stdin body contained reserved **HEAD**: line (stripped): $line" >&2
+      warned=1
+    elif [[ "$line" == "**Status**: APPROVED-VERIFY-FINAL" ]]; then
+      echo "[write-verdict] WARN: stdin body contained reserved APPROVED-VERIFY-FINAL line (stripped): $line" >&2
+      warned=1
+    else
+      sanitized="${sanitized}${sanitized:+$'\n'}${line}"
+    fi
+  done <<< "$raw"
+  printf '%s' "$sanitized"
+}
+
+# _append_delimited_block — write a fresh delimited VERIFY-FINAL block to VERDICT_FILE.
+# Args: $1=head_sha, $2=raw stdin_content (may be empty), $3=now_ts
+# B1 fix: sanitizes stdin_content before writing to prevent reserved-line injection.
+_append_delimited_block() {
+  local head_sha="$1"
+  local stdin_content
+  # Sanitize raw stdin body before write (B1 fix).
+  if [[ -n "$2" ]]; then
+    stdin_content="$(_sanitize_stdin "$2")"
+  else
+    stdin_content=""
+  fi
+  local now_ts="$3"
+  {
+    printf '%s\n' "$DELIM_BEGIN"
+    if [[ -n "$stdin_content" ]]; then
+      printf '%s\n' "$stdin_content"
+      printf '\n---\n\n'
+    fi
+    printf '**HEAD**: %s\n' "$head_sha"
+    printf '**Phase**: VERIFY-FINAL\n'
+    printf '**Timestamp**: %s\n' "$now_ts"
+    printf '**Status**: APPROVED-VERIFY-FINAL\n\n'
+    printf '%s\n' "$DELIM_END"
+  } >> "$VERDICT_FILE"
+}
 
 run_verify_final() {
   if [[ ! -f "$VERDICT_FILE" ]]; then
@@ -224,7 +309,96 @@ run_verify_final() {
   grep -qE '^\*\*Status\*\*: APPROVED-PREP$|^APPROVED-PREP$|^\*\*Verdict: APPROVED-PREP\*\*$' "$VERDICT_FILE" && has_prep=1
   grep -qE '^\*\*Status\*\*: APPROVED-VERIFY-FINAL$|^APPROVED-VERIFY-FINAL$' "$VERDICT_FILE" && has_final=1
 
+  # B2 fix: --supersede on a file with no APPROVED-PREP is a bypass attempt — fail-closed.
+  # Must fire regardless of has_final (catches orphan-final + no-block cases alike).
+  if [[ "$SUPERSEDE" -eq 1 && "$has_prep" -eq 0 ]]; then
+    echo "[write-verdict] ERROR: --supersede requires APPROVED-PREP in verdict file — cannot supersede an orphan VERIFY-FINAL: $VERDICT_FILE" >&2
+    exit 2
+  fi
+
   if [[ "$has_prep" -eq 1 && "$has_final" -eq 1 ]]; then
+    # --supersede opt-in: replace the existing VERIFY-FINAL block instead of failing.
+    if [[ "$SUPERSEDE" -eq 1 ]]; then
+      # Resolve HEAD fail-closed.
+      local head_sha=""
+      head_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+      if [[ ! "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+        echo "[write-verdict] ERROR: git rev-parse HEAD failed or returned non-hex '$head_sha'. Aborting verify-final --supersede — resolve HEAD before writing the verdict." >&2
+        exit 2
+      fi
+
+      # Read stdin before any file modification.
+      local stdin_content=""
+      if [[ ! -t 0 ]]; then
+        stdin_content="$(cat)"
+      fi
+
+      # B4 fix: use LAST-block anchor with exact-line grep so PREP prose mentioning
+      # the delimiter as a substring is never matched. grep -n "^$DELIM_BEGIN$" + tail -1.
+      local begin_line=""
+      begin_line="$(grep -n "^${DELIM_BEGIN}$" "$VERDICT_FILE" | tail -1 | cut -d: -f1)" || true
+
+      if [[ -n "$begin_line" ]]; then
+        # Find the END delimiter following this BEGIN (first END after begin_line).
+        local end_line=""
+        end_line="$(awk -v start="$begin_line" \
+          'NR > start && /^<!-- END VERIFY-FINAL -->$/ { print NR; exit }' \
+          "$VERDICT_FILE")"
+
+        # B1a fix: extract stored HEAD from LAST **HEAD**: line in the block (tail -1).
+        # The block writes HEAD after any stdin body, so tail -1 is the real record.
+        local stored_head=""
+        if [[ -n "$end_line" ]]; then
+          stored_head="$(sed -n "${begin_line},${end_line}p" "$VERDICT_FILE" \
+            | grep '^\*\*HEAD\*\*: ' | tail -1 | sed 's/^\*\*HEAD\*\*: //')" || true
+        fi
+
+        local begin_count
+        begin_count="$(grep -c "^${DELIM_BEGIN}$" "$VERDICT_FILE" || true)"
+
+        if [[ "$begin_count" -eq 1 && "$stored_head" == "$head_sha" ]]; then
+          # Idempotent NO-OP: single canonical block, same HEAD already in file — exit 0 without rewriting.
+          echo "[write-verdict] VERIFY-FINAL --supersede: stored HEAD == current HEAD ($head_sha) — no-op." >&2
+          exit 0
+        fi
+
+        # Different HEAD: excise ALL delimited blocks via awk (handles VS-12 degenerate
+        # case of two blocks), then append fresh block. Temp file for MSYS portability.
+        local tmp_file=""
+        tmp_file="$(mktemp)"
+        awk '
+          /^<!-- BEGIN VERIFY-FINAL -->$/ { skip=1 }
+          !skip { print }
+          /^<!-- END VERIFY-FINAL -->$/ { skip=0 }
+        ' "$VERDICT_FILE" > "$tmp_file"
+        mv "$tmp_file" "$VERDICT_FILE"
+      else
+        # Legacy fallback: un-delimited VERIFY-FINAL block present (pre-wave file).
+        # Excise from the first **HEAD**: line through EOF, then append fresh delimited block.
+        local tmp_file=""
+        tmp_file="$(mktemp)"
+        local head_line_num=""
+        head_line_num="$(awk '/^\*\*HEAD\*\*: /{ print NR; exit }' "$VERDICT_FILE")"
+        if [[ -n "$head_line_num" ]]; then
+          # B3 fix: warn before truncation, naming the line range being excised.
+          local total_lines=""
+          total_lines="$(wc -l < "$VERDICT_FILE" | tr -d ' ')"
+          if [[ "$head_line_num" -le "$total_lines" ]]; then
+            echo "[write-verdict] WARN: --supersede legacy fallback: excising lines ${head_line_num}-${total_lines} from $VERDICT_FILE (content in that range will be replaced by fresh delimited block)" >&2
+          fi
+          head -n "$((head_line_num - 1))" "$VERDICT_FILE" > "$tmp_file"
+        else
+          # No **HEAD**: line found — keep the whole file (nothing to excise).
+          cp "$VERDICT_FILE" "$tmp_file"
+        fi
+        mv "$tmp_file" "$VERDICT_FILE"
+      fi
+
+      _append_delimited_block "$head_sha" "$stdin_content" "$NOW"
+      echo "[write-verdict] VERIFY-FINAL --supersede: replaced with HEAD=$head_sha: $VERDICT_FILE" >&2
+      return
+    fi
+
     echo "[write-verdict] ERROR: Verdict file already contains both APPROVED-PREP and APPROVED-VERIFY-FINAL (dual-token replay guard): $VERDICT_FILE" >&2
     exit 2
   fi
@@ -253,16 +427,9 @@ run_verify_final() {
     exit 2
   fi
 
-  {
-    if [[ -n "$stdin_content" ]]; then
-      printf '%s\n' "$stdin_content"
-      printf '\n---\n\n'
-    fi
-    printf '**HEAD**: %s\n' "$head_sha"
-    printf '**Phase**: VERIFY-FINAL\n'
-    printf '**Timestamp**: %s\n' "$NOW"
-    printf '**Status**: APPROVED-VERIFY-FINAL\n\n'
-  } >> "$VERDICT_FILE"
+  # --supersede with no existing VERIFY-FINAL block: normal first-append (with delimiters).
+  # Also handles the standard (non-supersede) path — both emit a delimited block.
+  _append_delimited_block "$head_sha" "$stdin_content" "$NOW"
 
   echo "[write-verdict] VERIFY-FINAL appended: $VERDICT_FILE" >&2
 }

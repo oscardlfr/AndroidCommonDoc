@@ -319,3 +319,443 @@ run_verdict_slug() {
   run_verdict_slug "" --role arch-testing --phase prep --slug "master"
   [ "$status" -eq 2 ]
 }
+
+# ── VS-1: --supersede with different HEAD replaces old block ─────────────────
+#
+# Contract: PLAN.md §Strict Contract #2 + #3
+# Setup: prep → verify-final (first; HEAD=H1) → new commit (HEAD=H2) →
+#        verify-final --supersede
+# Expected: exit 0; EXACTLY ONE **HEAD**: line in file == H2; old H1 absent;
+#           APPROVED-PREP present; APPROVED-VERIFY-FINAL present.
+
+@test "VS-1 PASS: --supersede with different HEAD replaces old block, preserves PREP" {
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+
+  # First verify-final — captures H1
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+
+  # Capture H1 (the HEAD at first verify-final write)
+  local h1
+  h1="$(git -C "$PROJ" rev-parse HEAD)"
+
+  # Advance HEAD so H2 != H1
+  git -C "$PROJ" -c user.email=test@example.com -c user.name=test \
+      commit -q --allow-empty -m second 2>/dev/null
+  local h2
+  h2="$(git -C "$PROJ" rev-parse HEAD)"
+
+  # --supersede must succeed
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+
+  # Exactly ONE **HEAD**: line in the file
+  local head_count
+  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
+  [ "$head_count" -eq 1 ]
+
+  # That line must reference H2, not H1
+  grep -q "^\*\*HEAD\*\*: $h2$" "$verdict"
+  ! grep -q "$h1" "$verdict"
+
+  # Both required tokens present
+  grep -q "APPROVED-PREP" "$verdict"
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+}
+
+# ── VS-2: --supersede same HEAD — idempotent NO-OP ───────────────────────────
+#
+# Contract: PLAN.md §Strict Contract #2 (stored HEAD == current HEAD → NO-OP)
+# Setup: prep → verify-final → verify-final --supersede (no new commit between)
+# Expected: exit 0; file byte-identical to pre-supersede snapshot;
+#           EXACTLY ONE **HEAD**: line.
+
+@test "VS-2 PASS: --supersede same HEAD is idempotent — file unchanged" {
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+
+  # First verify-final
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+
+  # Snapshot the file content (byte-level)
+  local snapshot
+  snapshot="$(cat "$verdict")"
+
+  # --supersede with same HEAD — must be a NO-OP
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+
+  # File content must be byte-identical to pre-supersede snapshot
+  local after
+  after="$(cat "$verdict")"
+  [ "$snapshot" = "$after" ]
+
+  # Still exactly one **HEAD**: line (no duplicate block)
+  local head_count
+  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
+  [ "$head_count" -eq 1 ]
+}
+
+# ── VS-3: replay guard WITHOUT --supersede still fires ───────────────────────
+#
+# Contract: PLAN.md §Strict Contract #1 + §Test Matrix VS-3
+# --supersede is OPT-IN; without it the dual-token replay guard must be unchanged.
+# Setup: prep → verify-final → verify-final (no flag)
+# Expected: exit 2; "dual-token" in stderr; "APPROVED-VERIFY-FINAL" in stderr.
+# NOTE: This is a distinct case from VN-3 (VN-3 uses arch-platform; VS-3 adds
+#       explicit context that the absence of --supersede is what fires the guard).
+
+@test "VS-3 FAIL: replay guard fires on second verify-final without --supersede flag" {
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+
+  # First verify-final — must succeed
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+
+  # Second verify-final without --supersede — replay guard must fire
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"dual-token"* ]]
+  [[ "$output" == *"APPROVED-VERIFY-FINAL"* ]]
+}
+
+# ── VS-4: fail-closed when HEAD unresolvable ─────────────────────────────────
+#
+# Contract: PLAN.md §Strict Contract #2 (HEAD must resolve to 40-hex or ABORT)
+# Setup: SEPARATE fresh git init with NO seed commit (HEAD unresolvable).
+#        Hand-write a prep file so the script reaches the HEAD-resolution code.
+# Expected: exit 2; stderr names HEAD resolution failure.
+# NOTE: Must NOT reuse the setup() PROJ (which has a seed commit).
+
+@test "VS-4 FAIL: --supersede fails closed when HEAD is unresolvable" {
+  # Fresh repo with no commits — HEAD cannot be resolved to 40-hex
+  local empty_proj
+  empty_proj="$(mktemp -d)"
+  git -C "$empty_proj" init -q 2>/dev/null
+
+  # Hand-write a prep verdict so the script reaches HEAD resolution
+  mkdir -p "$empty_proj/.planning/wave-$WAVE_SLUG"
+  printf '**Status**: APPROVED-PREP\n' \
+    > "$empty_proj/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+
+  run bash -c "cd '$empty_proj' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 2 ]
+  # stderr must name HEAD resolution failure
+  [[ "$output" == *"HEAD"* ]]
+
+  rm -rf "$empty_proj"
+}
+
+# ── VS-5: --supersede on PREP-only file (no prior verify-final) ──────────────
+#
+# Contract: PLAN.md §Strict Contract #2 ("No existing VERIFY-FINAL block →
+#           behave like a normal first verify-final append (with delimiters)")
+# Setup: prep only (no prior verify-final), then verify-final --supersede
+# Expected: exit 0; APPROVED-PREP preserved; APPROVED-VERIFY-FINAL present;
+#           EXACTLY ONE **HEAD**: line.
+
+@test "VS-5 PASS: --supersede on PREP-only file behaves like normal first append" {
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+
+  # --supersede on a file with only APPROVED-PREP (no verify-final block yet)
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+
+  # APPROVED-PREP must be preserved
+  grep -q "APPROVED-PREP" "$verdict"
+
+  # APPROVED-VERIFY-FINAL must be present
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+
+  # Exactly one **HEAD**: line
+  local head_count
+  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
+  [ "$head_count" -eq 1 ]
+}
+
+# ── VS-6: legacy un-delimited VERIFY-FINAL fallback ──────────────────────────
+#
+# Contract: PLAN.md §Implementation Approach — "Belt-and-suspenders fallback:
+#           if --supersede finds an un-delimited (legacy) VERIFY-FINAL block
+#           (file written by the old script before this wave), fall back to
+#           excising from the first **HEAD**: line through EOF."
+# Setup: hand-write a prep file containing an OLD-style VERIFY-FINAL block:
+#        APPROVED-VERIFY-FINAL + a **HEAD**: line at a fake 40-hex SHA,
+#        NO <!-- BEGIN VERIFY-FINAL --> / <!-- END VERIFY-FINAL --> delimiters.
+#        Then call verify-final --supersede.
+# Expected: exit 0; old block excised (fake SHA absent); EXACTLY ONE **HEAD**:
+#           line == current HEAD; APPROVED-PREP preserved; APPROVED-VERIFY-FINAL
+#           present.
+
+@test "VS-6 PASS: --supersede excises legacy un-delimited VERIFY-FINAL block via fallback" {
+  local old_fake_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+
+  # Hand-write a file that looks like it was produced by the pre-wave script:
+  # APPROVED-PREP block + old-style (un-delimited) VERIFY-FINAL block.
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  printf '**Status**: APPROVED-PREP\n\n**HEAD**: %s\n**Phase**: VERIFY-FINAL\n**Timestamp**: 2026-01-01T00:00:00Z\n**Status**: APPROVED-VERIFY-FINAL\n\n' \
+    "$old_fake_sha" > "$verdict"
+
+  # Capture current HEAD (real SHA from setup() seed commit)
+  local current_head
+  current_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  # --supersede must trigger the legacy fallback and succeed
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+
+  # Old fake SHA must be gone
+  ! grep -q "$old_fake_sha" "$verdict"
+
+  # Exactly ONE **HEAD**: line, pointing at the current HEAD
+  local head_count
+  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
+  [ "$head_count" -eq 1 ]
+  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
+
+  # APPROVED-PREP preserved
+  grep -q "APPROVED-PREP" "$verdict"
+
+  # APPROVED-VERIFY-FINAL present
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+}
+
+# ── VS-7: stdin body with <!-- END VERIFY-FINAL --> closes block early ────────
+#
+# Contract: B1 — body line matching the closing delimiter must NOT close the
+# block early. After write: exactly ONE **HEAD**: == current HEAD.
+
+@test "VS-7 FAIL: body containing <!-- END VERIFY-FINAL --> must not break block structure" {
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  local current_head
+  current_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  run bash -c "cd '$PROJ' && printf '## verdict\n<!-- END VERIFY-FINAL -->\nsome prose\n' | \
+    CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG'"
+  [ "$status" -eq 0 ]
+
+  # Exactly ONE **HEAD**: line in the file
+  local head_count
+  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
+  [ "$head_count" -eq 1 ]
+
+  # That HEAD must be the current (script-authored) HEAD
+  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
+
+  # APPROVED-VERIFY-FINAL present
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+}
+
+# ── VS-8: stdin body with **HEAD**: prose line → stored_head must be script HEAD
+#
+# Contract: B1a — body-injected **HEAD**: line must NOT poison stored_head
+# extraction. Supersede called on same HEAD must be a NO-OP (idempotent),
+# not a replacement triggered by fake SHA.
+
+@test "VS-8 FAIL: body **HEAD**: prose line must not poison stored_head extraction" {
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  local current_head
+  current_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  # First verify-final: pipe stdin containing a fake **HEAD**: prose line
+  run bash -c "cd '$PROJ' && printf '**HEAD**: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nsome prose\n' | \
+    CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG'"
+  [ "$status" -eq 0 ]
+
+  # --supersede with same HEAD (no new commit) — must be idempotent NO-OP
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+
+  # Exactly ONE **HEAD**: line — the real current HEAD, not the fake body SHA
+  local head_count
+  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
+  [ "$head_count" -eq 1 ]
+
+  # The body-injected fake SHA must NOT be the **HEAD**: value
+  ! grep -q "^\*\*HEAD\*\*: aaaa" "$verdict"
+}
+
+# ── VS-9: orphan-final (VERIFY-FINAL, no PREP) + --supersede → exit 2 ─────────
+#
+# Contract: B2 — --supersede with APPROVED-VERIFY-FINAL but NO APPROVED-PREP
+# must exit 2 (not fall through to normal append and mint a second block).
+
+@test "VS-9 FAIL: --supersede with orphan VERIFY-FINAL (no PREP) must exit 2" {
+  # Hand-write a verdict with only APPROVED-VERIFY-FINAL — no APPROVED-PREP
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  printf '**Status**: APPROVED-VERIFY-FINAL\n' \
+    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"PREP"* ]]
+}
+
+# ── VS-10: legacy fallback with content below old block → WARN emitted ─────────
+#
+# Contract: B3 — legacy fallback (first-**HEAD**:-through-EOF excision) silently
+# destroys content below the old block. Fix must emit WARN to stderr.
+
+@test "VS-10 FAIL: legacy fallback with content below old block must emit WARN" {
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+
+  # Hand-append a legacy un-delimited VERIFY-FINAL block with content below it
+  printf '\n**HEAD**: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n**Phase**: VERIFY-FINAL\n**Status**: APPROVED-VERIFY-FINAL\n\nsome content below old block\n' \
+    >> "$verdict"
+
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null 2>&1"
+  [ "$status" -eq 0 ]
+
+  # WARN must be emitted about dropped content
+  [[ "$output" == *"WARN"* ]]
+
+  # APPROVED-VERIFY-FINAL present
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+
+  # Exactly ONE **HEAD**: line
+  local head_count
+  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
+  [ "$head_count" -eq 1 ]
+
+  # Old fake SHA absent
+  ! grep -q "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$verdict"
+}
+
+# ── VS-11: BEGIN delimiter in PREP prose → only trailing real block excised ────
+#
+# Contract: B4 — sed range-delete must NOT start at the first occurrence of
+# <!-- BEGIN VERIFY-FINAL --> in prose; it must target only the real trailing
+# delimited block. PREP content and prose mention must be preserved.
+
+@test "VS-11 FAIL: BEGIN delimiter in PREP prose must not cause PREP content to be excised" {
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  # Build file manually: PREP block + prose mentioning the delimiter + real delimited block
+  printf '**Status**: APPROVED-PREP\n\nSome prose mentioning <!-- BEGIN VERIFY-FINAL --> inline.\n\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: cccccccccccccccccccccccccccccccccccccccc\n**Phase**: VERIFY-FINAL\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n' \
+    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  local current_head
+  current_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  # --supersede: old block has fake SHA != current HEAD → should excise real block only
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+
+  # APPROVED-PREP preserved
+  grep -q "APPROVED-PREP" "$verdict"
+
+  # Prose mention of the delimiter preserved
+  grep -q "<!-- BEGIN VERIFY-FINAL --> inline" "$verdict"
+
+  # Exactly ONE **HEAD**: line == current HEAD
+  local head_count
+  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
+  [ "$head_count" -eq 1 ]
+  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
+
+  # Old fake SHA absent
+  ! grep -q "cccccccccccccccccccccccccccccccccccccccc" "$verdict"
+}
+
+# ── VS-12: two stale delimited blocks → collapsed to exactly one current HEAD ──
+#
+# Contract: after supersede on a file with two stale delimited blocks, the result
+# must be exactly ONE **HEAD**: == current HEAD; both fake SHAs absent; APPROVED-PREP
+# and APPROVED-VERIFY-FINAL present.
+
+@test "VS-12 FAIL: two stale delimited blocks must collapse to exactly one current-HEAD block" {
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  printf '**Status**: APPROVED-PREP\n\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: dddddddddddddddddddddddddddddddddddddddd\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n' \
+    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  local current_head
+  current_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+
+  # Exactly ONE **HEAD**: line == current HEAD
+  local head_count
+  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
+  [ "$head_count" -eq 1 ]
+  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
+
+  # Both fake SHAs absent
+  ! grep -q "dddddddddddddddddddddddddddddddddddddddd" "$verdict"
+  ! grep -q "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" "$verdict"
+
+  # Both required tokens present
+  grep -q "APPROVED-PREP" "$verdict"
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+}
+
+# ── VS-13: stale-first + current-last block → must normalize, not short-circuit ─
+#
+# Contract: when file has TWO delimited blocks where the LAST block's stored HEAD
+# == current HEAD, --supersede must NOT take the idempotent no-op exit. It must
+# excise ALL blocks and leave exactly ONE **HEAD**: == current HEAD.
+# (emit-push-proof reads FIRST **HEAD**: match; a stale first block blocks the gate.)
+
+@test "VS-13 FAIL: stale-first + current-last two blocks must normalize to one block, not no-op" {
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  local current_head
+  current_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+
+  # File: PREP + stale first block + current-HEAD last block
+  printf '**Status**: APPROVED-PREP\n\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: ffffffffffffffffffffffffffffffffffffffff\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: %s\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n' \
+    "$current_head" > "$verdict"
+
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  [ "$status" -eq 0 ]
+
+  # Exactly ONE **HEAD**: line == current HEAD
+  local head_count
+  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
+  [ "$head_count" -eq 1 ]
+  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
+
+  # Stale SHA absent
+  ! grep -q "ffffffffffffffffffffffffffffffffffffffff" "$verdict"
+
+  # Both required tokens present
+  grep -q "APPROVED-PREP" "$verdict"
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+}
