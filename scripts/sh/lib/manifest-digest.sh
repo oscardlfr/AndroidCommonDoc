@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# digest-helpers.sh — Canonical protocol_digest computation for quality-gate-manifest.json.
+# manifest-digest.sh — Canonical protocol_digest computation for quality-gate-manifest.json.
 #
 # Usage:
-#   source "$(dirname "${BASH_SOURCE[0]}")/digest-helpers.sh"
+#   source "$SCRIPT_DIR/lib/manifest-digest.sh"
 #   digest=$(canonical_digest "$manifest_path")
 #
 # The digest is sha256 of the canonical JSON serialization of BOTH required_steps AND
