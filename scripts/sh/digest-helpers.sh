@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# manifest-digest.sh — Canonical protocol_digest computation for quality-gate-manifest.json.
+# digest-helpers.sh — Canonical protocol_digest computation for quality-gate-manifest.json.
 #
 # Usage:
-#   source "$SCRIPT_DIR/lib/manifest-digest.sh"
-#   digest=$(compute_manifest_digest "$manifest_path")
+#   source "$(dirname "${BASH_SOURCE[0]}")/digest-helpers.sh"
+#   digest=$(canonical_digest "$manifest_path")
 #
 # The digest is sha256 of the canonical JSON serialization of BOTH required_steps AND
 # conditional_steps arrays (keys sorted, compact, CRLF->LF normalized).
 #
-# This helper is the SINGLE source of truth — sourced by both the manifest writer
-# (scripts/sh/create-manifest-digest.sh) and the emitter (emit-push-proof.sh).
-# Both must produce byte-identical output; keeping logic here prevents drift.
+# This helper is the SINGLE source of truth — sourced by emit-push-proof.sh (T3) so
+# that the manifest writer and the emitter's re-derivation check are byte-identical.
+# Drift in either array (required or conditional) will be caught at mint time.
 #
 # Reuses the rehash-registry.sh sha256+CRLF->LF precedent (rehash-registry.sh:80-85).
 
-compute_manifest_digest() {
+canonical_digest() {
     local manifest_path="$1"
     python3 - "$manifest_path" << 'PYEOF'
 import json, hashlib, sys
