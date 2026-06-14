@@ -111,24 +111,26 @@ Committed to repo root. Versioned (`manifest_version`) so `verify-proof` detects
 
 **Conditional steps** (8) carry a `predicate` field evaluated at mint time. Named predicates (closed enum — unknown predicates are a hard exit-2 error):
 
-| Predicate | True when |
-|-----------|-----------|
-| `project_type_gradle_or_hybrid` | `settings.gradle[.kts]` exists at repo root |
-| `project_type_node_or_hybrid` | `package.json` at root or in any immediate subdir |
-| `kt_files_changed` | Any `.kt` file in `git diff $BASE...$HEAD` range |
-| `kt_changed_and_gradle` | `kt_files_changed` AND `project_type_gradle_or_hybrid` |
-| `task_is_code_changes` | Diff includes non-doc/non-config files |
-| `kt_and_docs_api_and_gradle` | `kt_files_changed` AND `docs/api/` exists AND Gradle |
-| `compose_ui_files_changed` | `ui/` or `compose/` `.kt` files in diff |
-| `runtime_ui_available` | `.androidcommondoc/ui-baseline/` exists |
+| Predicate | True when | env_attested |
+|-----------|-----------|--------------|
+| `project_type_gradle_or_hybrid` | `settings.gradle[.kts]` exists at repo root | — |
+| `project_type_node_or_hybrid` | `package.json` at root or in any immediate subdir | — |
+| `kt_files_changed` | Any `.kt` file in `git diff $BASE...$HEAD` range | — |
+| `kt_changed_and_gradle` | `kt_files_changed` AND `project_type_gradle_or_hybrid` | — |
+| `task_is_code_changes` | Diff includes non-doc/non-config files | — |
+| `kt_and_docs_api_and_gradle` | `kt_files_changed` AND `docs/api/` exists AND Gradle | — |
+| `compose_ui_files_changed` | `ui/` or `compose/` `.kt` files in diff | — |
+| `runtime_ui_available` | `.androidcommondoc/ui-baseline/` exists | yes |
 
-If predicate is `true` and the report shows `SKIP` → `inconsistent-skip` (exit 2). If predicate is `true` and result is `FAIL` → `mandatory-step-not-pass` (exit 2).
+If predicate is `true` and the report shows `SKIP` → `inconsistent-skip` (exit 2), **except** for steps with `env_attested: true` (currently only `runtime-ui-validation`): predicate-true + SKIP + non-empty `reason` is allowed — the runtime environment check is delegated to the quality-gater's attested reason. If predicate is `true` and result is `FAIL` → `mandatory-step-not-pass` (exit 2).
 
 ---
 
 ## Verdict→HEAD Binding
 
 VERIFY-FINAL verdicts written by `write-verdict.sh --phase verify-final` carry a `**HEAD**:` field (sha at emit time). `run-qg` enforces `verdict.head == git rev-parse HEAD` at proof-mint time.
+
+**Required roles**: `run-qg` cross-checks that every role in `quality-gate-manifest.json architect-deliberation.required_roles` has both (a) an entry in `report.deliberation.architects_consulted` and (b) a `VERIFY-FINAL`+HEAD-bound `arch-<role>-verdict.md` in the wave dir. Current required roles: `arch-platform`, `arch-testing`, `arch-integration`. A missing role in either check → exit 2 `deliberation-role-incomplete`.
 
 **Rule**: if any commit lands after VERIFY-FINAL is written, re-run `write-verdict.sh --phase verify-final` before calling `run-qg`. A verdict approved at commit A does not satisfy a proof minted at commit B.
 
