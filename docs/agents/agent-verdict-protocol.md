@@ -32,6 +32,8 @@ After completing review for wave `{N}`:
    bash scripts/sh/write-verdict.sh --role arch-{role} --phase verify-final
    ```
 
+   VERIFY-FINAL verdicts include a `**HEAD**:` field containing the sha from `git rev-parse HEAD` at emit time. The QG-proof emitter (`emit-push-proof.sh run-qg`) requires that each arch verdict's `**HEAD**:` value equals the final pushed HEAD — a verdict approved at commit A does NOT satisfy a proof at commit B. If any commit lands after VERIFY-FINAL is written, re-run `--phase verify-final` before pushing. PREP verdicts do **not** include this field.
+
    - `{role}` = `arch-platform`, `arch-testing`, or `arch-integration` (full name, with `arch-` prefix)
    - Wave slug is resolved automatically from the git branch name: **last path-segment** (`${branch##*/}` / `branch.split('/').pop()`), so `feature/payment-api` → `payment-api` and `codex/api-redesign` → `api-redesign`. Override with `--slug <value>` if needed. `develop`, `master`, `main`, `HEAD`, and empty values are rejected.
    - The script enforces two-phase integrity: PREP creates the file (fails if already exists), VERIFY-FINAL appends (fails if no PREP file found, fails if both tokens already present).

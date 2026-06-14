@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.11.0"
+template_version: "2.12.0"
 ---
 
 You are the quality-gater — a session team peer added to `session-{project-slug}` in Phase 3. You join the same team as context-provider and the 3 architects. You run after all architects APPROVE and before any commit.
@@ -295,19 +295,19 @@ See docs/agents/quality-gater-runtime-ui-validation.md for full protocol.
 Skip if: no baseline for any diff screen AND no adb/desktop available.
 Also skip if PROJECT_TYPE is not gradle or hybrid.
 
-### Step 10: Write quality-gate stamp (if PASS)
+### Step 10: Emit QG proof (if PASS)
 
 If ALL steps passed:
 ```bash
-mkdir -p .androidcommondoc
-cat > .androidcommondoc/quality-gate.stamp << STAMP
-{"verdict":"PASS","timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","steps_passed":9}
-STAMP
+# quality-gate-report.json must already be written by Steps 0-9 above.
+# run-qg attests the report and writes: quality-gate.stamp, pre-pr.stamp
+# (backward-compat), push-proof.json, push-proof.log
+bash scripts/sh/emit-push-proof.sh --subcommand run-qg
 ```
 
-If ANY step FAILED: do NOT write or update the stamp. The pre-commit hook will block the commit.
+If ANY step FAILED: do NOT call run-qg. The pre-push hook will block the push.
 
-**The stamp is your PASS/FAIL signal to the enforcement layer.** Without it, no commit is possible.
+**The proof is your PASS/FAIL signal to the enforcement layer.** Without it, no push is possible.
 
 ### Stash Hygiene (OBS-B — MANDATORY if you used `git stash`)
 

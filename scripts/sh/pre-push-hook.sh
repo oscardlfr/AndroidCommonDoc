@@ -31,6 +31,16 @@ ZERO_SHA="0000000000000000000000000000000000000000"
 # -- 0. Bypass ---------------------------------------------------------------
 if [[ "${SKIP_PUSH_GATE:-}" == "1" ]]; then
   echo "[pre-push-hook] BYPASSED via SKIP_PUSH_GATE=1" >&2
+  # Audit trail: log bypass to push-proof.log (fail-OPEN — never block on log I/O).
+  {
+    _bypass_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+    _bypass_head="$(git rev-parse HEAD 2>/dev/null || echo "unknown")"
+    _bypass_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "unknown")"
+    mkdir -p "$_bypass_root/.androidcommondoc" 2>/dev/null
+    printf '{"ts":"%s","event":"bypass","mechanism":"SKIP_PUSH_GATE","head":"%s"}\n' \
+      "$_bypass_ts" "$_bypass_head" \
+      >> "$_bypass_root/.androidcommondoc/push-proof.log"
+  } 2>/dev/null || true
   exit 0
 fi
 
@@ -146,6 +156,18 @@ for sha in "${gated_shas[@]}"; do
     block "quality-gate.stamp" "is OLDER than the pushed commit — the commit was created/amended/rebased AFTER the quality gate ran. Re-run /quality-gate on the final commit"
   fi
 done
+
+# -- 7. Push-proof verification (QG-proof gate) --------------------------------
+PROOF_SCRIPT="$REPO_ROOT/scripts/sh/emit-push-proof.sh"
+if [[ -f "$PROOF_SCRIPT" ]]; then
+  for sha in "${gated_shas[@]}"; do
+    if ! bash "$PROOF_SCRIPT" --subcommand verify-proof --pushed-sha "$sha" >&2; then
+      block "push-proof" "QG proof is missing, stale, or invalid for pushed commit $sha. Run the canonical QG runner (emit-push-proof.sh run-qg) via /quality-gate, then re-push."
+    fi
+  done
+else
+  block "push-proof" "emit-push-proof.sh not found at $PROOF_SCRIPT. Harness integrity violation."
+fi
 
 echo "[pre-push-hook] OK: both stamps PASS + fresh and match the pushed commit(s)." >&2
 exit 0

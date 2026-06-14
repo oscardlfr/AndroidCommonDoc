@@ -12,6 +12,10 @@ set -euo pipefail
 # Usage:
 #   copilot-parity.sh [--project-root DIR] [--fix] [--verbose]
 #
+# Scope: parity check only (skills <-> copilot-templates). Does NOT run the QG
+# or mint push proof. QG-proof generation is a separate step:
+#   bash scripts/sh/emit-push-proof.sh --subcommand run-qg
+#
 # Exit codes:
 #   0 = parity OK
 #   1 = parity violations found
