@@ -62,7 +62,7 @@ Runs in sequence, failing CLOSED on any integrity violation:
 bash scripts/sh/emit-push-proof.sh --subcommand verify-proof --pushed-sha <sha>
 ```
 
-Eight integrity checks, all fail-CLOSED (exit 2 on failure):
+Seven integrity checks, all fail-CLOSED (exit 2 on failure):
 
 1. `schema_version == 1`
 2. `proof.head == pushed_sha`
