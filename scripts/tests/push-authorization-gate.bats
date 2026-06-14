@@ -70,6 +70,66 @@ with open(path, "w") as f:
 PYEOF
 }
 
+# Write a canonical-valid push-proof.json + quality-gate-report.json (for in-JS 7-check).
+# a7e855e: in-JS fallback recomputes sha256(report, CRLF→LF) — bogus "0"*64 digest blocks
+# at check 7. This helper writes a minimal report and computes the real digest.
+# Args: <head_sha> <project_root> <stamp_dir>
+write_canonical_proof() {
+  local head="$1" root="$2" stamp_dir="$3"
+  # The in-JS check 5 reads quality-gate-manifest.json from project root.
+  # Copy the live manifest into the isolated PROJECT_ROOT so the gate can load it.
+  cp "$BATS_TEST_DIRNAME/../../quality-gate-manifest.json" "$root/quality-gate-manifest.json"
+  python3 - "$head" "$root" "$stamp_dir" <<'PYEOF'
+import hashlib, json, sys, datetime
+
+head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+
+# Minimal quality-gate-report.json with all 6 required steps (ids match manifest required_steps).
+report = {
+  "steps": {
+    "architect-deliberation": {"ran": True, "result": "PASS"},
+    "pre-pr":                 {"ran": True, "result": "PASS"},
+    "test-suite":             {"ran": True, "result": "PASS"},
+    "rule-cross-check":       {"ran": True, "result": "PASS"},
+    "registry-hash":          {"ran": True, "result": "PASS"},
+    "secret-scan":            {"ran": True, "result": "PASS"}
+  }
+}
+report_raw = json.dumps(report, separators=(',', ':')).encode('utf-8')
+# Normalize CRLF→LF (same as gate's byte-by-byte strip) — LF-only content is unchanged.
+normalized = bytes(
+    b for i, b in enumerate(report_raw)
+    if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A)
+)
+digest = hashlib.sha256(normalized).hexdigest()
+
+report_path = stamp_dir + '/quality-gate-report.json'
+with open(report_path, 'wb') as f:
+    f.write(report_raw)
+
+proof = {
+    "schema_version": 1,
+    "head": head,
+    "generated_at": ts,
+    "worktree_id": root,
+    "manifest_version": 1,
+    "steps_executed": [
+        {"step": "architect-deliberation", "result": "PASS", "ran": True},
+        {"step": "pre-pr",                 "result": "PASS", "ran": True},
+        {"step": "test-suite",             "result": "PASS", "ran": True},
+        {"step": "rule-cross-check",       "result": "PASS", "ran": True},
+        {"step": "registry-hash",          "result": "PASS", "ran": True},
+        {"step": "secret-scan",            "result": "PASS", "ran": True}
+    ],
+    "report_digest": digest
+}
+proof_path = stamp_dir + '/push-proof.json'
+with open(proof_path, 'w') as f:
+    json.dump(proof, f)
+PYEOF
+}
+
 # ── Peer/subagent BLOCK cases ────────────────────────────────────────────────
 
 @test "PA-1 BLOCK: peer agent (non-empty agent_type) + git push → blocked unconditionally" {
@@ -121,37 +181,18 @@ PYEOF
   [[ "$output" == *"stamp"* || "$output" == *"pre-pr"* || "$output" == *"quality-gate"* ]]
 }
 
-@test "PA-4c ALLOW: main + bare stub hook (no ACDOC marker) + valid fresh stamps → allowed via stamp path" {
+@test "PA-4c ALLOW: main + bare stub hook (no ACDOC marker) + canonical-valid proof → allowed via stamp path" {
   # Bare stub without marker → gate falls through to stamp check. With valid fresh stamps
-  # matching HEAD, the stamp path should allow. This confirms the stub causes stamp-path
-  # fallthrough, not unconditional block.
+  # and a canonical-valid proof (all 7 checks pass), the stamp path should allow.
+  # No emit-push-proof.sh in isolated PROJECT_ROOT → in-JS fallback taken.
+  # a7e855e: in-JS now does full 7-check including report_digest recompute — bogus "0"*64
+  # would block at check 7. Write real quality-gate-report.json, compute sha256, embed digest.
   mkdir -p "$PROJECT_ROOT/.git/hooks"
   printf '#!/bin/sh\nexit 0\n' > "$PROJECT_ROOT/.git/hooks/pre-push"
   chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
   write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
   write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  # After a62fe89: in-JS fallback now checks worktree_id == projectRoot.
-  # No emit-push-proof.sh in isolated PROJECT_ROOT → in-JS path taken.
-  # worktree_id must match PROJECT_ROOT; pass it as positional arg (heredoc can't expand vars).
-  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" <<'PYEOF'
-import json, sys, datetime
-path, head, worktree = sys.argv[1], sys.argv[2], sys.argv[3]
-ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-proof = {
-  "schema_version": 1, "head": head, "generated_at": ts,
-  "worktree_id": worktree, "manifest_version": 1,
-  "steps_executed": [
-    {"step": "architect-deliberation", "result": "PASS", "ran": True},
-    {"step": "pre-pr",                 "result": "PASS", "ran": True},
-    {"step": "test-suite",             "result": "PASS", "ran": True},
-    {"step": "rule-cross-check",       "result": "PASS", "ran": True},
-    {"step": "registry-hash",          "result": "PASS", "ran": True},
-    {"step": "secret-scan",            "result": "PASS", "ran": True}
-  ],
-  "report_digest": "0" * 64
-}
-with open(path, "w") as f: json.dump(proof, f)
-PYEOF
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 0 ]
@@ -159,32 +200,14 @@ PYEOF
 
 # ── Main orchestrator: no pre-push hook + fallback stamps ───────────────────
 
-@test "PA-5 ALLOW: main + no pre-push hook + valid fresh stamps with matching HEAD → allowed" {
+@test "PA-5 ALLOW: main + no pre-push hook + canonical-valid proof → allowed" {
   # CR-3 (df1a5d1): head must be a valid 40-hex SHA matching current HEAD (unconditional).
   # setup() now git-inits PROJECT_ROOT and sets HEAD_SHA so binding works in isolation.
-  # Previously: empty head "" → CR-3 blocks unconditionally. Fix: stamp HEAD_SHA from repo.
-  # After a62fe89: in-JS fallback also checks worktree_id == projectRoot.
+  # a7e855e: in-JS fallback does full 7-check including report_digest recompute — bogus
+  # "0"*64 digest now blocks at check 7. Use canonical proof with real digest.
   write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
   write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" <<'PYEOF'
-import json, sys, datetime
-path, head, worktree = sys.argv[1], sys.argv[2], sys.argv[3]
-ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-proof = {
-  "schema_version": 1, "head": head, "generated_at": ts,
-  "worktree_id": worktree, "manifest_version": 1,
-  "steps_executed": [
-    {"step": "architect-deliberation", "result": "PASS", "ran": True},
-    {"step": "pre-pr",                 "result": "PASS", "ran": True},
-    {"step": "test-suite",             "result": "PASS", "ran": True},
-    {"step": "rule-cross-check",       "result": "PASS", "ran": True},
-    {"step": "registry-hash",          "result": "PASS", "ran": True},
-    {"step": "secret-scan",            "result": "PASS", "ran": True}
-  ],
-  "report_digest": "0" * 64
-}
-with open(path, "w") as f: json.dump(proof, f)
-PYEOF
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 0 ]
@@ -537,4 +560,124 @@ PYEOF
   run_hook
   [ "$status" -eq 2 ]
   [[ "$output" == *"head"* ]]
+}
+
+# ── a7e855e: in-JS fallback 7-check reject cases (bash hidden; proofScript absent = in-JS path) ──
+# Base: canonical proof + report; mutate one thing per test to assert BLOCK.
+# In all cases: no emit-push-proof.sh in isolated PROJECT_ROOT → in-JS fallback taken.
+# (bash may or may not be available — the gate falls back when fs.existsSync(proofScript) is false)
+
+@test "PA-JS1 BLOCK: in-JS fallback — empty steps_executed → BLOCK (required-step coverage)" {
+  # Check 6: all 6 required steps must be present with result=PASS. Empty array → all missing.
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+  # Overwrite proof with empty steps_executed (keep valid digest for report — digest check
+  # fires AFTER step-coverage check, so any digest value is fine here; step check fires first).
+  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" <<'PYEOF'
+import hashlib, json, sys, datetime
+proof_path, head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
+normalized = bytes(b for i, b in enumerate(report_raw)
+    if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
+digest = hashlib.sha256(normalized).hexdigest()
+proof = {
+    "schema_version": 1, "head": head, "generated_at": ts,
+    "worktree_id": root, "manifest_version": 1,
+    "steps_executed": [],
+    "report_digest": digest
+}
+with open(proof_path, 'w') as f: json.dump(proof, f)
+PYEOF
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"BLOCKED"* ]]
+}
+
+@test "PA-JS2 BLOCK: in-JS fallback — required step result=SKIP → BLOCK (step-not-pass)" {
+  # Check 6: required step 'test-suite' present but result=SKIP (not PASS) → BLOCK.
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" <<'PYEOF'
+import hashlib, json, sys, datetime
+proof_path, head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
+normalized = bytes(b for i, b in enumerate(report_raw)
+    if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
+digest = hashlib.sha256(normalized).hexdigest()
+proof = {
+    "schema_version": 1, "head": head, "generated_at": ts,
+    "worktree_id": root, "manifest_version": 1,
+    "steps_executed": [
+        {"step": "architect-deliberation", "result": "PASS", "ran": True},
+        {"step": "pre-pr",                 "result": "PASS", "ran": True},
+        {"step": "test-suite",             "result": "SKIP", "ran": False},  # mutated
+        {"step": "rule-cross-check",       "result": "PASS", "ran": True},
+        {"step": "registry-hash",          "result": "PASS", "ran": True},
+        {"step": "secret-scan",            "result": "PASS", "ran": True}
+    ],
+    "report_digest": digest
+}
+with open(proof_path, 'w') as f: json.dump(proof, f)
+PYEOF
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"BLOCKED"* ]]
+}
+
+@test "PA-JS3 BLOCK: in-JS fallback — tampered report (report_digest mismatch) → BLOCK" {
+  # Check 7: recomputed sha256(report) != proof.report_digest → BLOCK (forged or tampered).
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+  # Overwrite the report file with different content — digest in proof is now stale.
+  printf '{"tampered":true}' > "$STAMP_DIR/quality-gate-report.json"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"report_digest"* ]]
+}
+
+@test "PA-JS4 BLOCK: in-JS fallback — manifest_version mismatch → BLOCK" {
+  # Check 5: proof.manifest_version != live manifest.manifest_version → BLOCK.
+  # Canonical manifest has manifest_version=1; write proof with manifest_version=99.
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+  # Overwrite push-proof.json with manifest_version=99 but a valid report digest
+  # (digest check fires after manifest_version check only if manifest check passes,
+  # but we need a valid report.json to exist for check 7 — write_canonical_proof wrote it).
+  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" <<'PYEOF'
+import hashlib, json, sys, datetime
+proof_path, head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
+normalized = bytes(b for i, b in enumerate(report_raw)
+    if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
+digest = hashlib.sha256(normalized).hexdigest()
+proof = {
+    "schema_version": 1, "head": head, "generated_at": ts,
+    "worktree_id": root,
+    "manifest_version": 99,   # mutated — live manifest is 1
+    "steps_executed": [
+        {"step": "architect-deliberation", "result": "PASS", "ran": True},
+        {"step": "pre-pr",                 "result": "PASS", "ran": True},
+        {"step": "test-suite",             "result": "PASS", "ran": True},
+        {"step": "rule-cross-check",       "result": "PASS", "ran": True},
+        {"step": "registry-hash",          "result": "PASS", "ran": True},
+        {"step": "secret-scan",            "result": "PASS", "ran": True}
+    ],
+    "report_digest": digest
+}
+with open(proof_path, 'w') as f: json.dump(proof, f)
+PYEOF
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"manifest_version"* ]]
 }
