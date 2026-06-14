@@ -3,10 +3,11 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for the push-proof gate layer (BL-W47 PR-0c2 T7).
 #
-# Coverage map (23 tests):
+# Coverage map (24 tests):
 #   #1-2:   Hard gate + canonical happy path (pre-push-hook proof block/allow)
 #   #3-4:   Partial QG: missing required steps in steps_executed
-#   #5:     stale-verdict / verdict-head-binding (run-qg emitter check): stale HEAD + PREP-only
+#   #5:     verdict-head-binding — stale HEAD (commit-A verdict, commit-B HEAD)
+#   #5b:    verdict-head-binding — PREP-only verdict (no APPROVED-VERIFY-FINAL)
 #   #6:     Manifest-drift: run-qg refuses on protocol_digest mismatch
 #   #7-10:  Deliberation evidence + runtime-report completeness (run-qg exits 2)
 #   #11-13: Conditional step structural coverage + unjustified/justified SKIP
