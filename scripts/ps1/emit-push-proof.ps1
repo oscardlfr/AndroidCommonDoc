@@ -305,65 +305,46 @@ function Invoke-RunQg {
 
     Write-Host "[emit-push-proof] run-qg: validation PASS" -ForegroundColor Green
 
-    # -- 4. Verify arch verdict files (verdict->HEAD binding) --------------------
-    # Mirrors bash step 4: resolves artifact_glob from manifest, globs wave-<slug>/
-    # arch-*-verdict.md files, requires APPROVED-VERIFY-FINAL + HEAD == current HEAD.
-    # Stale or missing final verdicts -> exit 2 (fail-CLOSED).
-    $arbStep = @($manifestJson.required_steps) | Where-Object { $_.id -eq 'architect-deliberation' } | Select-Object -First 1
-    if (-not $arbStep) { Die "manifest missing required_step 'architect-deliberation'" }
-
-    $artifactGlob = $arbStep.artifact_glob
-    if (-not $artifactGlob) { Die "manifest architect-deliberation step has no artifact_glob" }
-
-    # Narrow glob to this wave's slug
-    $waveGlob   = $artifactGlob -replace 'wave-\*', "wave-$waveSlug"
-    $globPattern = Join-Path $repoRoot $waveGlob
-    # PowerShell glob: resolve the directory + filename pattern separately
-    $waveDir     = Split-Path $globPattern -Parent
-    $filePattern = Split-Path $globPattern -Leaf
-    $verdictFiles = @()
-    if (Test-Path $waveDir) {
-        $verdictFiles = @(Get-ChildItem $waveDir -Filter $filePattern -File -ErrorAction SilentlyContinue | Sort-Object Name)
+    # -- 3b. Verify arch verdict files (verdict->HEAD binding) -------------------
+    # Mirrors bash step 3b: reads arch-*-verdict.md directly from .planning/wave-<slug>/.
+    # Every matched file must carry APPROVED-VERIFY-FINAL and **HEAD**: == final HEAD.
+    # No silent PREP-only skip: any matched file missing VERIFY-FINAL is a hard error.
+    $waveDir = Join-Path (Join-Path $repoRoot '.planning') "wave-$waveSlug"
+    if (-not (Test-Path $waveDir -PathType Container)) {
+        Die "verdict-head-binding: wave dir not found: $waveDir"
     }
 
+    $verdictFiles = @(Get-ChildItem $waveDir -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^arch-.*-verdict\.md$' } | Sort-Object Name)
     if ($verdictFiles.Count -eq 0) {
-        Die "deliberation-evidence-absent: no verdict files matched '$waveGlob' under repo root"
+        Die "verdict-head-binding: no arch-*-verdict.md files found in $waveDir"
     }
 
-    $statusFinalRe = [regex]'(?m)^\*\*Status\*\*:\s*APPROVED-VERIFY-FINAL\s*$'
-    $headLineRe    = [regex]'(?m)^\*\*HEAD\*\*:\s*([0-9a-f]{40})\s*$'
-
-    $finalCount      = 0
+    $headLineRe    = [regex]'(?m)^\*\*HEAD\*\*:\s*([0-9a-f]{40})'
     $artifactDigests = [ordered]@{}
 
     foreach ($vf in $verdictFiles) {
-        $raw = [System.IO.File]::ReadAllText($vf.FullName, [System.Text.Encoding]::UTF8)
+        $content = [System.IO.File]::ReadAllText($vf.FullName, [System.Text.Encoding]::UTF8)
+        $fname   = $vf.Name
 
-        # Skip PREP-only files silently (same as bash)
-        if (-not $statusFinalRe.IsMatch($raw)) { continue }
-
-        $finalCount++
-        $verdictName = $vf.BaseName  # e.g. arch-platform-verdict
-
-        # HEAD binding check
-        $headMatch = $headLineRe.Match($raw)
+        # Must contain APPROVED-VERIFY-FINAL (no silent PREP-only skip)
+        if ($content -notmatch 'APPROVED-VERIFY-FINAL') {
+            Die "verdict-head-binding: $fname does not contain APPROVED-VERIFY-FINAL -- re-run VERIFY-FINAL at final HEAD"
+        }
+        # Must contain **HEAD**: <sha> matching final HEAD
+        $headMatch = $headLineRe.Match($content)
         if (-not $headMatch.Success) {
-            Die "stale-verdict: $verdictName has APPROVED-VERIFY-FINAL but no **HEAD** line"
+            Die "verdict-head-binding: $fname missing **HEAD**: field -- re-run write-verdict.sh --phase verify-final at final HEAD"
         }
         $verdictHead = $headMatch.Groups[1].Value
         if ($verdictHead -ne $headSha) {
-            Die "stale-verdict: $verdictName HEAD ($verdictHead) != current HEAD ($headSha). Re-run verify-final after the final commit."
+            Die "verdict-head-binding: $fname HEAD ($verdictHead) != final HEAD ($headSha) -- stale verdict, re-run VERIFY-FINAL"
         }
-
-        # sha256 of verdict file (CRLF->LF, same canonical precedent)
-        $artifactDigests[$verdictName] = Get-FileSha256 $vf.FullName
+        # Digest the file (CRLF->LF)
+        $artifactDigests[$fname] = Get-FileSha256 $vf.FullName
     }
 
-    if ($finalCount -eq 0) {
-        Die "deliberation-evidence-absent: verdict files exist but none have APPROVED-VERIFY-FINAL status. Architects must run verify-final before pushing."
-    }
-
-    Write-Host "[emit-push-proof] run-qg: verdict binding PASS ($finalCount VERIFY-FINAL verdicts, all HEAD-bound)" -ForegroundColor Green
+    Write-Host "[emit-push-proof] run-qg: verdict binding PASS ($($verdictFiles.Count) verdicts, all HEAD-bound)" -ForegroundColor Green
 
     # -- 5. Compute report_digest (sha256, CRLF->LF, byte-identical to bash) ----
     $reportDigest = Get-FileSha256 $reportPath

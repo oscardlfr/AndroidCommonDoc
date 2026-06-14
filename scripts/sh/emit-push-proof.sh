@@ -316,79 +316,53 @@ for cs in manifest.get('conditional_steps', []):
 print("VALIDATION_PASS", file=sys.stderr)
 PYEOF
 
-  # -- 4. Verify arch verdict files (verdict→HEAD binding) ----------------------
-  # Resolves artifact_glob from the manifest's architect-deliberation required_step.
-  # For each arch-*-verdict.md in .planning/wave-<slug>/:
-  #   - Requires **Status**: APPROVED-VERIFY-FINAL (final approval, not just PREP)
-  #   - Requires **HEAD**: <40-hex> matching current HEAD (stale-verdict guard)
-  #   - sha256(file, CRLF->LF) collected into artifact_digests
-  # Fails CLOSED: no VERIFY-FINAL verdicts → deliberation-evidence-absent.
-  # Stale HEAD in any verdict → stale-verdict (exit 2).
+  # -- 3b. Verify arch verdict files (verdict→HEAD binding) ---------------------
+  # Reads arch-*-verdict.md files directly from .planning/wave-<slug>/.
+  # Every matched file must carry APPROVED-VERIFY-FINAL and **HEAD**: == final HEAD.
+  # No silent PREP-only skip: any matched file missing VERIFY-FINAL is a hard error.
+  # sha256(file, CRLF->LF) per verdict collected into artifact_digests for proof.json.
   local artifact_digests_json
-  artifact_digests_json="$(python3 - "$MANIFEST_PATH" "$REPO_ROOT" "$wave_slug" "$head_sha" << 'PYEOF'
-import json, sys, os, re, hashlib, glob
+  artifact_digests_json="$(python3 - "$REPORT_PATH" "$REPO_ROOT" "$wave_slug" "$head_sha" << 'PYEOF'
+import sys, os, re, hashlib, json
 
-manifest_path = sys.argv[1]
-repo_root     = sys.argv[2]
-wave_slug     = sys.argv[3]
-head_sha      = sys.argv[4]
+report_path = sys.argv[1]
+repo_root   = sys.argv[2]
+wave_slug   = sys.argv[3]
+final_head  = sys.argv[4]
 
-def die(msg):
+def die(code, msg):
     print(f"[emit-push-proof] ERROR: {msg}", file=sys.stderr)
-    sys.exit(2)
+    sys.exit(code)
 
-# Resolve artifact_glob from manifest for architect-deliberation step.
-manifest = json.load(open(manifest_path, encoding='utf-8'))
-arb_step = next((s for s in manifest.get('required_steps', []) if s['id'] == 'architect-deliberation'), None)
-if not arb_step:
-    die("manifest missing required_step 'architect-deliberation'")
+wave_dir = os.path.join(repo_root, '.planning', f'wave-{wave_slug}')
+if not os.path.isdir(wave_dir):
+    die(2, f"verdict-head-binding: wave dir not found: {wave_dir}")
 
-artifact_glob = arb_step.get('artifact_glob', '')
-if not artifact_glob:
-    die("manifest architect-deliberation step has no artifact_glob")
+verdict_files = [f for f in os.listdir(wave_dir) if re.match(r'arch-.*-verdict\.md$', f)]
+if not verdict_files:
+    die(2, f"verdict-head-binding: no arch-*-verdict.md files found in {wave_dir}")
 
-# Narrow glob to this wave's slug: replace wave-* with wave-<slug>
-wave_glob = artifact_glob.replace('wave-*', f'wave-{wave_slug}')
-pattern   = os.path.join(repo_root, wave_glob)
-matches   = sorted(glob.glob(pattern))
+digests = {}
+for fname in verdict_files:
+    fpath = os.path.join(wave_dir, fname)
+    with open(fpath, 'r', encoding='utf-8') as f:
+        content = f.read()
+    # Must contain APPROVED-VERIFY-FINAL
+    if 'APPROVED-VERIFY-FINAL' not in content:
+        die(2, f"verdict-head-binding: {fname} does not contain APPROVED-VERIFY-FINAL — re-run VERIFY-FINAL at final HEAD")
+    # Must contain **HEAD**: <sha> matching final HEAD
+    m = re.search(r'^\*\*HEAD\*\*:\s*([0-9a-f]{40})', content, re.MULTILINE)
+    if not m:
+        die(2, f"verdict-head-binding: {fname} missing **HEAD**: field — re-run write-verdict.sh --phase verify-final at final HEAD")
+    verdict_head = m.group(1)
+    if verdict_head != final_head:
+        die(2, f"verdict-head-binding: {fname} HEAD ({verdict_head}) != final HEAD ({final_head}) — stale verdict, re-run VERIFY-FINAL")
+    # Digest the file (CRLF->LF)
+    raw = open(fpath, 'rb').read().replace(b'\r\n', b'\n')
+    digests[fname] = hashlib.sha256(raw).hexdigest()
 
-if not matches:
-    die(f"deliberation-evidence-absent: no verdict files matched glob '{wave_glob}' under repo root")
-
-final_count    = 0
-artifact_digests = {}
-
-STATUS_FINAL_RE = re.compile(r'^\*\*Status\*\*:\s*APPROVED-VERIFY-FINAL\s*$', re.MULTILINE)
-HEAD_RE         = re.compile(r'^\*\*HEAD\*\*:\s*([0-9a-f]{40})\s*$', re.MULTILINE)
-
-for verdict_file in matches:
-    raw = open(verdict_file, encoding='utf-8', errors='replace').read()
-
-    # Only validate files that have reached VERIFY-FINAL phase.
-    # PREP-only files are silently skipped (they are intermediate artifacts).
-    if not STATUS_FINAL_RE.search(raw):
-        continue
-
-    final_count += 1
-    verdict_name = os.path.basename(verdict_file).replace('.md', '')
-
-    # HEAD binding: require **HEAD**: <sha> == current HEAD
-    head_match = HEAD_RE.search(raw)
-    if not head_match:
-        die(f"stale-verdict: {verdict_name} has APPROVED-VERIFY-FINAL but no **HEAD** line")
-    verdict_head = head_match.group(1)
-    if verdict_head != head_sha:
-        die(f"stale-verdict: {verdict_name} HEAD ({verdict_head}) != current HEAD ({head_sha}). Re-run verify-final after the final commit.")
-
-    # sha256 of verdict file (CRLF->LF, canonical precedent)
-    content = open(verdict_file, 'rb').read().replace(b'\r\n', b'\n')
-    digest  = hashlib.sha256(content).hexdigest()
-    artifact_digests[verdict_name] = digest
-
-if final_count == 0:
-    die("deliberation-evidence-absent: verdict files exist but none have APPROVED-VERIFY-FINAL status. Architects must run verify-final before pushing.")
-
-print(json.dumps(artifact_digests))
+# Write digests to stdout as JSON for bash to capture
+print(json.dumps(digests))
 PYEOF
 )"
 
