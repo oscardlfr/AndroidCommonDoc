@@ -18,6 +18,10 @@ setup() {
   # Initialise a throwaway git repo so git rev-parse --show-toplevel resolves
   # to PROJ, never the live repo.
   git -C "$PROJ" init -q 2>/dev/null
+  # Fix #5 (a62fe89): write-verdict.sh verify-final now fail-closes if HEAD is not a
+  # 40-hex SHA. Add an empty commit so HEAD resolves to a real SHA in verify-final tests.
+  git -C "$PROJ" -c user.email=test@example.com -c user.name=test \
+      commit -q --allow-empty -m init 2>/dev/null
   # Prevent ambient CLAUDE_WAVE_SLUG from leaking into error-case tests.
   unset CLAUDE_WAVE_SLUG
 }
