@@ -382,7 +382,11 @@ arb_step = next((s for s in manifest.get('required_steps', []) if s['id'] == 'ar
 required_roles = arb_step.get('required_roles', []) if arb_step else []
 verdict_basenames = set(digests.keys())  # already verified VERIFY-FINAL + HEAD-bound
 for role in required_roles:
-    expected = f'arch-{role}-verdict.md'
+    # required_roles values carry the 'arch-' prefix (e.g. "arch-platform").
+    # write-verdict.sh strips it via ${ROLE#arch-} → file is "arch-platform-verdict.md".
+    # Strip here too so f'arch-{short}-verdict.md' matches what write-verdict.sh produces.
+    short = role[5:] if role.startswith('arch-') else role
+    expected = f'arch-{short}-verdict.md'
     if expected not in verdict_basenames:
         die(2, f"deliberation-role-incomplete: required verdict file '{expected}' missing or not VERIFY-FINAL+HEAD-bound in {wave_dir}")
 

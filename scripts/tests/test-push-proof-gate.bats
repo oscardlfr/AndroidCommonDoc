@@ -3,8 +3,9 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for the push-proof gate layer (BL-W47 PR-0c2 T7).
 #
-# Coverage map (24 tests):
-#   #1-2:   Hard gate + canonical happy path (pre-push-hook proof block/allow)
+# Coverage map (28 tests):
+#   #1:     Hard gate: stamps pass but push-proof.json absent → hook blocks
+#   #2:     Canonical happy path: run-qg mints proof (3 architects); hook exits 0
 #   #3-4:   Partial QG: missing required steps in steps_executed
 #   #5:     verdict-head-binding — stale HEAD (commit-A verdict, commit-B HEAD)
 #   #5b:    verdict-head-binding — PREP-only verdict (no APPROVED-VERIFY-FINAL)
@@ -16,6 +17,10 @@ bats_require_minimum_version 1.5.0
 #   #19:    write-verdict verify-final stamps **HEAD**: field (T1)
 #   #20:    verify-proof covers all required steps with PASS
 #   #21-23: Predicate enforcement (kt_files_changed TRUE/FALSE)
+#   #P1a:   deliberation-role-incomplete Path A (consulted list missing role)
+#   #P1b:   deliberation-role-incomplete Path B (verdict file absent)
+#   #P2a:   env_attested SKIP allowed (runtime-ui-validation + ui-baseline present)
+#   #P2b:   inconsistent-skip (coverage SKIP + kt_files_changed TRUE, no env_attested)
 #
 # Isolation rule: every test uses mktemp -d + git init + teardown rm -rf.
 # Never reads live .androidcommondoc/, live stamps, or live proofs.
@@ -87,16 +92,20 @@ PYEOF
 }
 
 # write_quality_gate_report — writes a valid .androidcommondoc/quality-gate-report.json
-# Optional overrides: $1=extra_steps_json (default ""), $2=override_deliberation (default valid)
+# $1=extra_steps_json (default "") — JSON list of step objects to merge/replace
+# $2=override_deliberation_json (default "") — JSON object to override deliberation block
+#    e.g. '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
 write_quality_gate_report() {
   local extra_steps="${1:-}"
+  local override_deliberation="${2:-}"
   python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" \
-      "${extra_steps}" <<'PYEOF'
+      "${extra_steps}" "${override_deliberation}" <<'PYEOF'
 import json, sys
 
-report_path    = sys.argv[1]
-manifest_path  = sys.argv[2]
-extra_steps_raw = sys.argv[3]
+report_path         = sys.argv[1]
+manifest_path       = sys.argv[2]
+extra_steps_raw     = sys.argv[3]
+override_delib_raw  = sys.argv[4]
 
 manifest = json.load(open(manifest_path, encoding='utf-8'))
 
@@ -118,11 +127,18 @@ if extra_steps_raw.strip():
         by_id[e['step']] = e
     steps = list(by_id.values())
 
+# Default deliberation block (1 architect — sufficient for single-architect tests)
+deliberation = {
+    "architects_consulted": ["arch-testing"],
+    "incorporated_at": "2026-06-14T00:00:00Z",
+}
+# Allow override (e.g. to specify all 3 required roles, or to omit a role for P1a)
+if override_delib_raw.strip():
+    override = json.loads(override_delib_raw)
+    deliberation.update(override)
+
 report = {
-    "deliberation": {
-        "architects_consulted": ["arch-testing"],
-        "incorporated_at": "2026-06-14T00:00:00Z",
-    },
+    "deliberation": deliberation,
     "pre_pr_coverage": {"status": "PASS", "modules": 3},
     "discovered_rules": [
         {"rule": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}
@@ -218,6 +234,31 @@ write_arch_verdict() {
 EOF
 }
 
+# write_all_arch_verdicts — writes APPROVED-VERIFY-FINAL+HEAD-bound verdicts for all 3
+# required roles (arch-platform, arch-testing, arch-integration).
+# $1=head_sha (default HEAD_SHA)
+write_all_arch_verdicts() {
+  local head="${1:-$HEAD_SHA}"
+  local wave_dir="$REPO/.planning/wave-test-push-proof"
+  mkdir -p "$wave_dir"
+  for role in arch-testing arch-platform arch-integration; do
+    cat > "$wave_dir/$role-verdict.md" <<EOF
+# $role verdict — wave-test-push-proof
+
+**Phase**: PREP
+**Timestamp**: 2026-06-14T00:00:00Z
+**Status**: APPROVED-PREP
+
+---
+
+**HEAD**: $head
+**Phase**: VERIFY-FINAL
+**Timestamp**: 2026-06-14T00:00:00Z
+**Status**: APPROVED-VERIFY-FINAL
+EOF
+  done
+}
+
 # ── Hook runner ───────────────────────────────────────────────────────────────
 
 run_hook() {
@@ -257,9 +298,12 @@ run_verifier() {
 # #2  canonical_run_qg_proof_minted_push_allowed
 # Happy path: run-qg mints proof; verify-proof + hook both pass.
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#2 PASS: canonical run-qg mints proof; hook exits 0" {
-  write_quality_gate_report
-  write_arch_verdict "$HEAD_SHA"
+@test "#2 PASS: canonical run-qg mints proof; hook exits 0 (3 architects)" {
+  # architects_consulted must include all 3 required roles; write_all_arch_verdicts covers all 3.
+  write_quality_gate_report \
+    '' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  write_all_arch_verdicts "$HEAD_SHA"
   run_emitter --subcommand run-qg
   [ "$status" -eq 0 ]
 
@@ -347,9 +391,14 @@ PYEOF
 # Setup: verdict anchored to commit-A, final HEAD = commit-B → exit 2.
 # ─────────────────────────────────────────────────────────────────────────────
 @test "#5 BLOCK: verdict-head-binding — stale HEAD (commit-A verdict, commit-B HEAD)" {
-  write_arch_verdict "$HEAD_SHA"
+  # All 3 verdicts anchor to commit-A HEAD_SHA. Then commit-B advances HEAD.
+  # Path B per-role loop passes (all 3 files present), but verdict-head-binding fires
+  # because every file's **HEAD**: still points to commit-A != final HEAD (commit-B).
+  write_all_arch_verdicts "$HEAD_SHA"
   git -C "$REPO" commit --allow-empty --quiet -m "feat: second commit"
-  write_quality_gate_report
+  write_quality_gate_report \
+    '' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
   run_emitter --subcommand run-qg
   [ "$status" -eq 2 ]
   [[ "$output" =~ "verdict-head-binding" ]]
@@ -361,8 +410,13 @@ PYEOF
 # A PREP-only verdict (no APPROVED-VERIFY-FINAL, no **HEAD**:) → exit 2.
 # ─────────────────────────────────────────────────────────────────────────────
 @test "#5b BLOCK: verdict-head-binding — PREP-only verdict (no APPROVED-VERIFY-FINAL)" {
+  # Write arch-platform and arch-integration as valid VERIFY-FINAL verdicts.
+  # Write arch-testing as PREP-only (no APPROVED-VERIFY-FINAL, no **HEAD**:).
+  # The emitter globs all 3 files; the PREP-only arch-testing file triggers verdict-head-binding
+  # (L365: "does not contain APPROVED-VERIFY-FINAL") before reaching the per-role loop.
   local wave_dir="$REPO/.planning/wave-test-push-proof"
-  mkdir -p "$wave_dir"
+  write_all_arch_verdicts "$HEAD_SHA"
+  # Overwrite arch-testing with PREP-only (no VERIFY-FINAL section).
   printf '%s\n' \
     "# arch-testing verdict — wave-test-push-proof" \
     "" \
@@ -370,7 +424,9 @@ PYEOF
     "**Timestamp**: 2026-06-14T00:00:00Z" \
     "**Status**: APPROVED-PREP" \
     > "$wave_dir/arch-testing-verdict.md"
-  write_quality_gate_report
+  write_quality_gate_report \
+    '' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
   run_emitter --subcommand run-qg
   [ "$status" -eq 2 ]
   [[ "$output" =~ "verdict-head-binding" ]]
@@ -440,7 +496,9 @@ PYEOF
 # No pre_pr_coverage key → run-qg exits 2.
 # ─────────────────────────────────────────────────────────────────────────────
 @test "#9 BLOCK: report missing pre_pr_coverage" {
-  write_quality_gate_report
+  write_quality_gate_report \
+    '' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
   python3 - "$ACDOC/quality-gate-report.json" <<'PYEOF'
 import json, sys
 path = sys.argv[1]
@@ -459,7 +517,9 @@ PYEOF
 # discovered_rules entry has no verified_by → run-qg exits 2.
 # ─────────────────────────────────────────────────────────────────────────────
 @test "#10 BLOCK: discovered_rules entry missing verified_by" {
-  write_quality_gate_report
+  write_quality_gate_report \
+    '' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
   python3 - "$ACDOC/quality-gate-report.json" <<'PYEOF'
 import json, sys
 path = sys.argv[1]
@@ -478,7 +538,9 @@ PYEOF
 # 'coverage' step absent from report steps[] → run-qg exits 2 (step-coverage-gap).
 # ─────────────────────────────────────────────────────────────────────────────
 @test "#11 BLOCK: conditional step 'coverage' absent from report steps[]" {
-  write_quality_gate_report
+  write_quality_gate_report \
+    '' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
   # Remove the coverage step
   python3 - "$ACDOC/quality-gate-report.json" <<'PYEOF'
 import json, sys
@@ -498,7 +560,9 @@ PYEOF
 # kdoc SKIP with no reason → run-qg exits 2 (unjustified-skip).
 # ─────────────────────────────────────────────────────────────────────────────
 @test "#12 BLOCK: conditional step 'kdoc' SKIP with no reason" {
-  write_quality_gate_report '[{"step":"kdoc","ran":false,"result":"SKIP","reason":""}]'
+  write_quality_gate_report \
+    '[{"step":"kdoc","ran":false,"result":"SKIP","reason":""}]' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
   run_emitter --subcommand run-qg
   [ "$status" -eq 2 ]
   [[ "$output" =~ "unjustified-skip" ]] || [[ "$output" =~ "reason" ]]
@@ -510,8 +574,9 @@ PYEOF
 # ─────────────────────────────────────────────────────────────────────────────
 @test "#13 PASS: conditional step 'kdoc' SKIP with reason is allowed" {
   write_quality_gate_report \
-    '[{"step":"kdoc","ran":false,"result":"SKIP","reason":"no kt_changed_and_gradle in isolated repo"}]'
-  write_arch_verdict "$HEAD_SHA"
+    '[{"step":"kdoc","ran":false,"result":"SKIP","reason":"no kt_changed_and_gradle in isolated repo"}]' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  write_all_arch_verdicts "$HEAD_SHA"
   run_emitter --subcommand run-qg
   [ "$status" -eq 0 ]
 }
@@ -651,8 +716,11 @@ PYEOF
 
   # production-file-verify also needs PASS (task_is_code_changes TRUE for .kt commits).
   # coverage is SKIP — this is the inconsistency that must be caught.
+  # All 3 architects in consulted + 3 verdict files so Path A/B pass before predicate check.
   write_quality_gate_report \
-    '[{"step":"coverage","ran":false,"result":"SKIP","reason":"baseline skipped"},{"step":"production-file-verify","ran":true,"result":"PASS"}]'
+    '[{"step":"coverage","ran":false,"result":"SKIP","reason":"baseline skipped"},{"step":"production-file-verify","ran":true,"result":"PASS"}]' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  write_all_arch_verdicts "$HEAD_SHA"
 
   run_emitter --subcommand run-qg
   [ "$status" -eq 2 ]
@@ -667,8 +735,9 @@ PYEOF
   # No .kt files committed — diff is empty so all predicates that depend on diff are FALSE.
   # All conditional steps SKIP with reasons (default from write_quality_gate_report).
   write_quality_gate_report \
-    '[{"step":"coverage","ran":false,"result":"SKIP","reason":"no kt files changed in this wave"}]'
-  write_arch_verdict "$HEAD_SHA"
+    '[{"step":"coverage","ran":false,"result":"SKIP","reason":"no kt files changed in this wave"}]' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  write_all_arch_verdicts "$HEAD_SHA"
   run_emitter --subcommand run-qg
   [ "$status" -eq 0 ]
 }
@@ -686,8 +755,101 @@ PYEOF
   HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 
   write_quality_gate_report \
-    '[{"step":"coverage","ran":true,"result":"PASS"},{"step":"production-file-verify","ran":true,"result":"PASS"}]'
-  write_arch_verdict "$HEAD_SHA"
+    '[{"step":"coverage","ran":true,"result":"PASS"},{"step":"production-file-verify","ran":true,"result":"PASS"}]' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  write_all_arch_verdicts "$HEAD_SHA"
   run_emitter --subcommand run-qg
   [ "$status" -eq 0 ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #P1a  deliberation_role_incomplete_consulted — Path A
+# architects_consulted missing a required role → exit 2 deliberation-role-incomplete.
+# die path: L272 "deliberation-role-incomplete: required role '<role>' absent from
+# report.deliberation.architects_consulted [...]"
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#P1a BLOCK: architects_consulted missing required role → exit 2 deliberation-role-incomplete" {
+  # arch-integration omitted from consulted list — Path A fires before Path B.
+  # All 3 verdict files present so Path B (missing verdict file) does NOT fire first.
+  write_quality_gate_report \
+    '' \
+    '{"architects_consulted":["arch-platform","arch-testing"]}'
+  write_all_arch_verdicts "$HEAD_SHA"
+  run_emitter --subcommand run-qg
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "deliberation-role-incomplete" ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #P1b  deliberation_role_incomplete_verdict — Path B
+# Required verdict file absent → exit 2 deliberation-role-incomplete.
+# die path: L387 "deliberation-role-incomplete: required verdict file 'arch-<role>-verdict.md'
+# missing or not VERIFY-FINAL+HEAD-bound in <wave_dir>"
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#P1b BLOCK: required verdict file absent (arch-integration missing) → exit 2 deliberation-role-incomplete" {
+  # All 3 roles in architects_consulted (Path A passes), but arch-integration verdict absent.
+  write_quality_gate_report \
+    '' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  # Write only arch-testing and arch-platform; omit arch-integration-verdict.md.
+  local wave_dir="$REPO/.planning/wave-test-push-proof"
+  mkdir -p "$wave_dir"
+  for role in arch-testing arch-platform; do
+    cat > "$wave_dir/$role-verdict.md" <<EOF
+# $role verdict — wave-test-push-proof
+
+**Phase**: PREP
+**Timestamp**: 2026-06-14T00:00:00Z
+**Status**: APPROVED-PREP
+
+---
+
+**HEAD**: $HEAD_SHA
+**Phase**: VERIFY-FINAL
+**Timestamp**: 2026-06-14T00:00:00Z
+**Status**: APPROVED-VERIFY-FINAL
+EOF
+  done
+  run_emitter --subcommand run-qg
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "deliberation-role-incomplete" ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #P2a  env_attested_skip_allowed
+# runtime-ui-validation has env_attested=true; predicate runtime_ui_available is TRUE
+# when ui-baseline/ dir exists. SKIP + non-empty reason + env_attested + pred_true → ALLOWED.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#P2a PASS: runtime-ui-validation SKIP + ui-baseline present + env_attested + non-empty reason → run-qg ALLOWED" {
+  # Make predicate runtime_ui_available TRUE by creating the ui-baseline dir.
+  mkdir -p "$ACDOC/ui-baseline"
+  write_quality_gate_report \
+    '[{"step":"runtime-ui-validation","ran":false,"result":"SKIP","reason":"adb not available in CI env"}]' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  write_all_arch_verdicts "$HEAD_SHA"
+  run_emitter --subcommand run-qg
+  [ "$status" -eq 0 ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #P2b  inconsistent_skip_no_env_attested
+# coverage step: env_attested=false (not set), kt_files_changed=TRUE (has .kt in diff),
+# result=SKIP with reason → NOT allowed (inconsistent-skip).
+# die path: L324 "inconsistent-skip: predicate 'kt_files_changed' is TRUE but step
+# 'coverage' shows SKIP in report"
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#P2b BLOCK: coverage SKIP + kt_files_changed TRUE + no env_attested → exit 2 inconsistent-skip" {
+  # Commit a .kt file so kt_files_changed predicate evaluates TRUE.
+  printf 'fun foo() {}\n' > "$REPO/Foo.kt"
+  git -C "$REPO" add Foo.kt
+  git -C "$REPO" commit --quiet -m "feat: add kt file"
+  HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
+
+  write_quality_gate_report \
+    '[{"step":"coverage","ran":false,"result":"SKIP","reason":"skipped for speed"}]' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  write_all_arch_verdicts "$HEAD_SHA"
+  run_emitter --subcommand run-qg
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "inconsistent-skip" ]]
 }

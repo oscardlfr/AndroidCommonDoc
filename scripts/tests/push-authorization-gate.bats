@@ -130,6 +130,26 @@ PYEOF
   chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
   write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
   write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  # push-authorization-gate.js checks schema_version, freshness, head (not report_digest/worktree_id).
+  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" <<'PYEOF'
+import json, sys, datetime
+path, head = sys.argv[1], sys.argv[2]
+ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+proof = {
+  "schema_version": 1, "head": head, "generated_at": ts,
+  "worktree_id": "/irrelevant", "manifest_version": 1,
+  "steps_executed": [
+    {"step": "architect-deliberation", "result": "PASS", "ran": True},
+    {"step": "pre-pr",                 "result": "PASS", "ran": True},
+    {"step": "test-suite",             "result": "PASS", "ran": True},
+    {"step": "rule-cross-check",       "result": "PASS", "ran": True},
+    {"step": "registry-hash",          "result": "PASS", "ran": True},
+    {"step": "secret-scan",            "result": "PASS", "ran": True}
+  ],
+  "report_digest": "0" * 64
+}
+with open(path, "w") as f: json.dump(proof, f)
+PYEOF
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 0 ]
@@ -143,6 +163,26 @@ PYEOF
   # Previously: empty head "" → CR-3 blocks unconditionally. Fix: stamp HEAD_SHA from repo.
   write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
   write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  # push-authorization-gate.js checks schema_version, freshness, head (not report_digest/worktree_id).
+  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" <<'PYEOF'
+import json, sys, datetime
+path, head = sys.argv[1], sys.argv[2]
+ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+proof = {
+  "schema_version": 1, "head": head, "generated_at": ts,
+  "worktree_id": "/irrelevant", "manifest_version": 1,
+  "steps_executed": [
+    {"step": "architect-deliberation", "result": "PASS", "ran": True},
+    {"step": "pre-pr",                 "result": "PASS", "ran": True},
+    {"step": "test-suite",             "result": "PASS", "ran": True},
+    {"step": "rule-cross-check",       "result": "PASS", "ran": True},
+    {"step": "registry-hash",          "result": "PASS", "ran": True},
+    {"step": "secret-scan",            "result": "PASS", "ran": True}
+  ],
+  "report_digest": "0" * 64
+}
+with open(path, "w") as f: json.dump(proof, f)
+PYEOF
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 0 ]

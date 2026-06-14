@@ -95,8 +95,99 @@ run_hook_with_env() {
   [[ "$output" == *"/quality-gate"* ]]
 }
 
-@test "★2 PASS: both stamps fresh, pp.head == HEAD_SHA, stamps newer than commit" {
+@test "★2 BLOCK: stamps present but no proof (emit-push-proof.sh absent from repo) → blocked" {
   write_qg_stamp 0
+  write_pp_stamp "PASS" 0 "$HEAD_SHA"
+  # No scripts/sh/ copied into $REPO → pre-push-hook.sh L169 else-branch fires:
+  # "emit-push-proof.sh not found... Harness integrity violation."
+  run_hook "refs/heads/feature/test $HEAD_SHA refs/heads/feature/test $ZERO"
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "push-proof" ]] || [[ "$output" =~ "emit-push-proof" ]]
+}
+
+@test "★2b PASS: stamps fresh + full valid proof → hook exits 0" {
+  # Copy scripts into isolated repo so pre-push-hook can invoke emit-push-proof.sh.
+  mkdir -p "$REPO/scripts/sh/lib"
+  cp "$BATS_TEST_DIRNAME/../sh/emit-push-proof.sh"    "$REPO/scripts/sh/"
+  cp "$BATS_TEST_DIRNAME/../sh/lib/manifest-digest.sh" "$REPO/scripts/sh/lib/"
+  cp "$BATS_TEST_DIRNAME/../sh/lib/audit-append.sh"   "$REPO/scripts/sh/lib/"
+  cp "$BATS_TEST_DIRNAME/../../quality-gate-manifest.json" "$REPO/"
+
+  local wave_dir="$REPO/.planning/wave-test-push-proof"
+  mkdir -p "$wave_dir"
+
+  # Helper: write a valid APPROVED-VERIFY-FINAL+HEAD-bound verdict for a role.
+  write_role_verdict() {
+    local role="$1"
+    printf '%s\n' \
+      "# $role verdict — wave-test-push-proof" \
+      "" \
+      "**Phase**: PREP" \
+      "**Timestamp**: 2026-06-14T00:00:00Z" \
+      "**Status**: APPROVED-PREP" \
+      "" \
+      "**HEAD**: $HEAD_SHA" \
+      "**Phase**: VERIFY-FINAL" \
+      "**Timestamp**: 2026-06-14T00:00:00Z" \
+      "**Status**: APPROVED-VERIFY-FINAL" \
+      > "$wave_dir/$role-verdict.md"
+  }
+  write_role_verdict "arch-platform"
+  write_role_verdict "arch-testing"
+  write_role_verdict "arch-integration"
+
+  # write_quality_gate_report inline (all 3 architects, all steps PASS/SKIP).
+  python3 - "$STAMP_DIR/quality-gate-report.json" "$REPO/quality-gate-manifest.json" <<'PYEOF'
+import json, sys
+report_path, manifest_path = sys.argv[1], sys.argv[2]
+manifest = json.load(open(manifest_path, encoding='utf-8'))
+steps = []
+for rs in manifest.get('required_steps', []):
+    steps.append({"step": rs['id'], "ran": True, "result": "PASS"})
+for cs in manifest.get('conditional_steps', []):
+    steps.append({"step": cs['id'], "ran": False, "result": "SKIP",
+                  "reason": "predicate false in isolated test repo"})
+report = {
+    "deliberation": {
+        "architects_consulted": ["arch-platform", "arch-testing", "arch-integration"],
+        "incorporated_at": "2026-06-14T00:00:00Z",
+    },
+    "pre_pr_coverage": {"status": "PASS", "modules": 3},
+    "discovered_rules": [{"rule": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}],
+    "steps": steps,
+}
+with open(report_path, "w", encoding="utf-8") as f:
+    json.dump(report, f, indent=2); f.write('\n')
+PYEOF
+
+  # write_push_proof inline — worktree_id must be $REPO for verify-proof check.
+  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$REPO" \
+      "$REPO/quality-gate-manifest.json" "$STAMP_DIR/quality-gate-report.json" <<'PYEOF'
+import json, sys, time, datetime, hashlib
+proof_path, head, worktree = sys.argv[1], sys.argv[2], sys.argv[3]
+manifest_path, report_path = sys.argv[4], sys.argv[5]
+ts = datetime.datetime.utcfromtimestamp(time.time()).strftime('%Y-%m-%dT%H:%M:%SZ')
+mv = json.load(open(manifest_path, encoding='utf-8'))['manifest_version']
+content = open(report_path, 'rb').read().replace(b'\r\n', b'\n')
+rd = hashlib.sha256(content).hexdigest()
+proof = {
+    "schema_version": 1, "head": head, "worktree_id": worktree,
+    "generated_at": ts, "wave_slug": "test-push-proof", "manifest_version": mv,
+    "steps_executed": [
+        {"step": "architect-deliberation", "result": "PASS", "ran": True},
+        {"step": "pre-pr",                 "result": "PASS", "ran": True},
+        {"step": "test-suite",             "result": "PASS", "ran": True},
+        {"step": "rule-cross-check",       "result": "PASS", "ran": True},
+        {"step": "registry-hash",          "result": "PASS", "ran": True},
+        {"step": "secret-scan",            "result": "PASS", "ran": True},
+    ],
+    "report_digest": rd,
+}
+with open(proof_path, "w", encoding="utf-8") as f:
+    json.dump(proof, f, indent=2); f.write('\n')
+PYEOF
+
+  write_qg_stamp 0 "$HEAD_SHA"
   write_pp_stamp "PASS" 0 "$HEAD_SHA"
   run_hook "refs/heads/feature/test $HEAD_SHA refs/heads/feature/test $ZERO"
   [ "$status" -eq 0 ]
