@@ -6,7 +6,7 @@ slug: pre-commit-hooks
 status: active
 layer: L0
 category: guides
-description: "Git hooks: registry rehash + manifest drift on commit, Conventional Commits scope whitelist, three-layer pre-push gate (two-stamp + QG-proof)"
+description: "Git hooks: registry rehash + manifest drift on commit, Conventional Commits scope whitelist, two-stamp + QG-proof push gate (fail-closed)"
 version: 3
 last_updated: "2026-06"
 ---
@@ -23,7 +23,7 @@ Three hooks are managed by `scripts/sh/install-git-hooks.sh`:
 |------|--------|---------|
 | `pre-commit` | `scripts/sh/pre-commit-hook.sh` | Block commits with a stale registry hash |
 | `commit-msg` | `scripts/sh/commit-msg-hook.sh` | Enforce Conventional Commits format + scope whitelist |
-| `pre-push` | `scripts/sh/pre-push-hook.sh` | Three-layer push gate: (1) two-stamp validation — quality-gate.stamp + pre-pr.stamp PASS, ≤30 min, matching the pushed commit; (2) QG-proof verification — `emit-push-proof.sh --subcommand verify-proof --pushed-sha $sha` checks push-proof.json schema, HEAD match, freshness, manifest-version, step coverage, and report digest; (3) fallback stamp-only check for repos without push-proof.json. Bypass: `SKIP_PUSH_GATE=1` (explicit user authorization only — logged to push-proof.log). See [qg-proof-push-gate](../agents/qg-proof-push-gate.md) |
+| `pre-push` | `scripts/sh/pre-push-hook.sh` | Fail-CLOSED push gate: (1) two-stamp validation — quality-gate.stamp + pre-pr.stamp PASS, ≤30 min, matching the pushed commit; (2) QG-proof verification — `emit-push-proof.sh --subcommand verify-proof --pushed-sha $sha` checks push-proof.json schema, HEAD match, freshness, manifest-version, step coverage, and report digest. Missing proof or absent verifier → BLOCK (no fallback path). Bypass: `SKIP_PUSH_GATE=1` (explicit user authorization only — logged to push-proof.log). See [qg-proof-push-gate](../agents/qg-proof-push-gate.md) |
 
 ## Installation
 

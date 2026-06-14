@@ -146,5 +146,5 @@ VERIFY-FINAL verdicts written by `write-verdict.sh --phase verify-final` carry a
 
 - [Quality Gate Protocol](quality-gate-protocol.md) — Steps 0-9 that produce `quality-gate-report.json`; Step 10 calls `run-qg`
 - [Agent Verdict Protocol](agent-verdict-protocol.md) — VERIFY-FINAL `**HEAD**:` field requirement and re-run rule
-- [Pre-Commit Hooks](../guides/pre-commit-hooks.md) — three-layer pre-push gate overview
+- [Pre-Commit Hooks](../guides/pre-commit-hooks.md) — fail-CLOSED pre-push gate overview (two-stamp + QG-proof; missing proof → BLOCK)
 - [Hook Manifest](hook-manifest.md) — `push-authorization-gate.js` + git-layer hook classifications
