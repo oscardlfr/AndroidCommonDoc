@@ -476,8 +476,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/[Cc]ross-cutting/);
   });
 
-  it('has template version 2.11.0', () => {
-    expect(content).toContain('template_version: "2.11.0"');
+  it('has template version 2.12.0', () => {
+    expect(content).toContain('template_version: "2.12.0"');
   });
 });
 
@@ -796,27 +796,18 @@ describe('doc-template.md — hub/split rule enforcement', () => {
 describe('quality-gater template — stamp enforcement', () => {
   const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'quality-gater.md'), 'utf-8');
 
-  it('has Step 10 (stamp writer)', () => {
-    expect(content).toMatch(/Step 10.*stamp/i);
+  it('has Step 10 (QG proof emitter)', () => {
+    // Step 10 now delegates to emit-push-proof.sh run-qg (bl-w47-pr-0c2 T6a)
+    expect(content).toContain('emit-push-proof.sh');
+    expect(content).toContain('run-qg');
   });
 
-  it('mentions .androidcommondoc/quality-gate.stamp', () => {
-    expect(content).toContain('.androidcommondoc/quality-gate.stamp');
-  });
-
-  it('stamp is conditional on PASS', () => {
-    expect(content).toMatch(/If ALL steps passed/i);
-    expect(content).toMatch(/If ANY step FAILED.*do NOT/i);
-  });
-
-  it('stamp contains verdict, timestamp, and steps_passed', () => {
-    expect(content).toContain('"verdict":"PASS"');
-    expect(content).toContain('"timestamp"');
-    expect(content).toContain('"steps_passed"');
+  it('Step 10 mentions quality-gate.stamp (backward-compat comment)', () => {
+    expect(content).toContain('quality-gate.stamp');
   });
 
   it('Step 10 appears in report table', () => {
-    expect(content).toMatch(/\| 10\. Stamp/);
+    expect(content).toMatch(/\| 10\./);
   });
 
 
