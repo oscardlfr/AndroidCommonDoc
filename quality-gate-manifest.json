@@ -1,0 +1,22 @@
+{
+  "manifest_version": 1,
+  "protocol_digest": "1a39dd29db4f133c88cd8bb73adbeba863b7ad79f063a8c4c4226be821c53eb5",
+  "required_steps": [
+    {"id": "architect-deliberation", "kind": "judgment",    "artifact_glob": ".planning/wave-*/arch-*-verdict.md", "head_bound": true},
+    {"id": "pre-pr",                 "kind": "automatable", "artifact": ".androidcommondoc/pre-pr-report.json"},
+    {"id": "test-suite",             "kind": "automatable", "artifact": ".androidcommondoc/test-suite-report.json"},
+    {"id": "rule-cross-check",       "kind": "runtime",     "artifact": ".androidcommondoc/quality-gate-report.json"},
+    {"id": "registry-hash",          "kind": "automatable", "artifact": ".androidcommondoc/registry-hash-report.json"},
+    {"id": "secret-scan",            "kind": "automatable", "artifact": ".androidcommondoc/secret-scan-report.json"}
+  ],
+  "conditional_steps": [
+    {"id": "warning-enforcement",    "kind": "automatable", "predicate": "project_type_gradle_or_hybrid",  "description": "Gradle @Suppress + deprecation check",             "source": "quality-gater.md:134 / quality-gate-protocol.md:74"},
+    {"id": "node-verify",            "kind": "automatable", "predicate": "project_type_node_or_hybrid",    "description": "npm test + npm run lint",                          "source": "quality-gater.md:159"},
+    {"id": "coverage",               "kind": "automatable", "predicate": "kt_files_changed",               "description": "Coverage baseline on touched modules",             "source": "quality-gater.md:209 / quality-gate-protocol.md:83"},
+    {"id": "kdoc",                   "kind": "automatable", "predicate": "kt_changed_and_gradle",          "description": "KDoc coverage on changed public APIs",             "source": "quality-gater.md:219 / quality-gate-protocol.md:85"},
+    {"id": "production-file-verify", "kind": "automatable", "predicate": "task_is_code_changes",           "description": "Guard against test-only commits on code tasks",   "source": "quality-gater.md:238 / quality-gate-protocol.md:90"},
+    {"id": "docs-api-freshness",     "kind": "automatable", "predicate": "kt_and_docs_api_and_gradle",     "description": "docs/api/ freshness for modified modules",        "source": "quality-gater.md:247"},
+    {"id": "compose-ui-tests",       "kind": "automatable", "predicate": "compose_ui_files_changed",       "description": "Compose UI test coverage for changed screens",    "source": "quality-gater.md:278 / quality-gate-protocol.md:98"},
+    {"id": "runtime-ui-validation",  "kind": "automatable", "predicate": "runtime_ui_available",           "description": "Runtime UI validation (partially env-dependent)", "source": "quality-gater.md:292"}
+  ]
+}
