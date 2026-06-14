@@ -249,6 +249,7 @@ run_verify_final() {
       printf '%s\n' "$stdin_content"
       printf '\n---\n\n'
     fi
+    printf '**HEAD**: %s\n' "$(git rev-parse HEAD 2>/dev/null || echo UNKNOWN)"
     printf '**Phase**: VERIFY-FINAL\n'
     printf '**Timestamp**: %s\n' "$NOW"
     printf '**Status**: APPROVED-VERIFY-FINAL\n\n'
