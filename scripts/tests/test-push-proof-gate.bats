@@ -3,7 +3,7 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for the push-proof gate layer (BL-W47 PR-0c2 T7).
 #
-# Coverage map (28 tests):
+# Coverage map (30 tests):
 #   #1:     Hard gate: stamps pass but push-proof.json absent → hook blocks
 #   #2:     Canonical happy path: run-qg mints proof (3 architects); hook exits 0
 #   #3-4:   Partial QG: missing required steps in steps_executed
@@ -21,6 +21,8 @@ bats_require_minimum_version 1.5.0
 #   #P1b:   deliberation-role-incomplete Path B (verdict file absent)
 #   #P2a:   env_attested SKIP allowed (runtime-ui-validation + ui-baseline present)
 #   #P2b:   inconsistent-skip (coverage SKIP + kt_files_changed TRUE, no env_attested)
+#   #R1:    required step SKIP (test-suite ran=false result=SKIP) → step-not-pass (a62fe89 #4)
+#   #R2:    required step ran=false result=PASS → step-not-pass (a62fe89 #4)
 #
 # Isolation rule: every test uses mktemp -d + git init + teardown rm -rf.
 # Never reads live .androidcommondoc/, live stamps, or live proofs.
@@ -852,4 +854,32 @@ EOF
   run_emitter --subcommand run-qg
   [ "$status" -eq 2 ]
   [[ "$output" =~ "inconsistent-skip" ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #R1  required_step_skip_blocked (a62fe89 #4 regression)
+# Required step ran=false result=SKIP → must exit 2 step-not-pass.
+# Previously silent (only ran=true+FAIL was caught); now any non-PASS required step fails.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#R1 BLOCK: required step SKIP (test-suite ran=false result=SKIP) → exit 2 step-not-pass" {
+  write_quality_gate_report \
+    '[{"step":"test-suite","ran":false,"result":"SKIP","reason":"skipped by operator"}]' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  run_emitter --subcommand run-qg
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "step-not-pass" ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #R2  required_step_ran_false_blocked (a62fe89 #4 regression)
+# Required step ran=false result=PASS → must exit 2 step-not-pass.
+# The new check requires BOTH ran=true AND result=PASS; ran=false alone is insufficient.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#R2 BLOCK: required step ran=false result=PASS → exit 2 step-not-pass" {
+  write_quality_gate_report \
+    '[{"step":"registry-hash","ran":false,"result":"PASS"}]' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  run_emitter --subcommand run-qg
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "step-not-pass" ]]
 }

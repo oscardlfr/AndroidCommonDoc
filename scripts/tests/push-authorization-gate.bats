@@ -130,14 +130,16 @@ PYEOF
   chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
   write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
   write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  # push-authorization-gate.js checks schema_version, freshness, head (not report_digest/worktree_id).
-  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" <<'PYEOF'
+  # After a62fe89: in-JS fallback now checks worktree_id == projectRoot.
+  # No emit-push-proof.sh in isolated PROJECT_ROOT → in-JS path taken.
+  # worktree_id must match PROJECT_ROOT; pass it as positional arg (heredoc can't expand vars).
+  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" <<'PYEOF'
 import json, sys, datetime
-path, head = sys.argv[1], sys.argv[2]
+path, head, worktree = sys.argv[1], sys.argv[2], sys.argv[3]
 ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 proof = {
   "schema_version": 1, "head": head, "generated_at": ts,
-  "worktree_id": "/irrelevant", "manifest_version": 1,
+  "worktree_id": worktree, "manifest_version": 1,
   "steps_executed": [
     {"step": "architect-deliberation", "result": "PASS", "ran": True},
     {"step": "pre-pr",                 "result": "PASS", "ran": True},
@@ -161,16 +163,16 @@ PYEOF
   # CR-3 (df1a5d1): head must be a valid 40-hex SHA matching current HEAD (unconditional).
   # setup() now git-inits PROJECT_ROOT and sets HEAD_SHA so binding works in isolation.
   # Previously: empty head "" → CR-3 blocks unconditionally. Fix: stamp HEAD_SHA from repo.
+  # After a62fe89: in-JS fallback also checks worktree_id == projectRoot.
   write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
   write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  # push-authorization-gate.js checks schema_version, freshness, head (not report_digest/worktree_id).
-  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" <<'PYEOF'
+  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" <<'PYEOF'
 import json, sys, datetime
-path, head = sys.argv[1], sys.argv[2]
+path, head, worktree = sys.argv[1], sys.argv[2], sys.argv[3]
 ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 proof = {
   "schema_version": 1, "head": head, "generated_at": ts,
-  "worktree_id": "/irrelevant", "manifest_version": 1,
+  "worktree_id": worktree, "manifest_version": 1,
   "steps_executed": [
     {"step": "architect-deliberation", "result": "PASS", "ran": True},
     {"step": "pre-pr",                 "result": "PASS", "ran": True},
