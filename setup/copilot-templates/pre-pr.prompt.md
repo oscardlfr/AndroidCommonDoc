@@ -228,25 +228,20 @@ Report per-module pass/fail. Show failing test names on failure.
 If all pass: "Ready to open PR against `{base}`."
 If any fail: list specific violations and stop.
 
-### Step 8.5 — Write pre-pr stamp (PASS only)
+### Step 8.5 — Emit QG proof (PASS only)
 
-On READY/PASS outcome only, write a machine-readable stamp so `push-authorization-gate.js` can verify the check was run:
+On READY/PASS outcome only, run the canonical QG runner to attest the completed
+quality-gate-report.json and write all gate artifacts (stamps + push-proof.json):
 
 ```bash
-STAMP_PATH="$(pwd)/.androidcommondoc/pre-pr.stamp"
-mkdir -p "$(dirname "$STAMP_PATH")"
-cat > "$STAMP_PATH" <<EOF
-{
-  "verdict": "PASS",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "head": "$(git rev-parse HEAD)",
-  "branch": "$(git branch --show-current)"
-}
-EOF
-echo "Stamp written: $STAMP_PATH"
+# quality-gate-report.json must already be written by Steps 0-8 above.
+# The runner attests it — it does NOT fabricate or re-run the gate steps.
+bash scripts/sh/emit-push-proof.sh --subcommand run-qg
+# Writes: quality-gate.stamp, pre-pr.stamp (backward compat), push-proof.json, push-proof.log
 ```
 
-On BLOCKED/FAIL outcome: do NOT write the stamp (or write with `"verdict": "FAIL"` for audit purposes). The gate hook reads this stamp before any `git push` on feature branches.
+On BLOCKED/FAIL outcome: do NOT run the runner. The gate hook reads push-proof.json
+(and backward-compat stamps) before any `git push` on feature branches.
 
 ## Important Rules
 
