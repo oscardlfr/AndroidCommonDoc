@@ -68,6 +68,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [quality-gater-runtime-ui-validation](quality-gater-runtime-ui-validation.md) | quality-gater Step 9.5 — Runtime UI Validation: Android Layout Diff + Compose Semantic Diff dispatch |
 | [workflow-orchestration](workflow-orchestration.md) | Plan mode, agent delegation table, verification, and autonomous execution rules (extracted from CLAUDE.md prep-6) |
 | [context-bundle-schema](context-bundle-schema.md) | Context bundle schema: portable file-based contract for respawn/rotation context — storage, TTL, header format, PATTERNS-only rules, writer/consumer contracts |
+| [qg-proof-push-gate](qg-proof-push-gate.md) | QG-proof push gate: emit-push-proof.sh (run-qg/verify-proof), quality-gate-manifest.json policy, push-proof.json schema, verdict→HEAD binding, bypass audit trail |
 
 ## Key Concepts
 

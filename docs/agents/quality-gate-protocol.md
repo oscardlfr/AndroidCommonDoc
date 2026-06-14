@@ -101,6 +101,15 @@ The quality-gater does NOT use a hardcoded checklist. It discovers each project'
 - TDD enforced: RED test first, then GREEN
 - **BLOCK** if tests missing, failing, or FALSE GREEN
 
+### Step 10: Proof Emission
+
+After Steps 0-9 pass, the quality-gater calls `emit-push-proof.sh --subcommand run-qg`. This mints `push-proof.json` in `.androidcommondoc/` by:
+- Re-validating `quality-gate-manifest.json` protocol_digest (manifest-drift check)
+- Verifying verdict→HEAD binding: each `arch-*-verdict.md` must carry `APPROVED-VERIFY-FINAL` and a `**HEAD**:` field matching the current HEAD
+- Recording `steps_executed`, `report_digest` (sha256 of `quality-gate-report.json`), and `artifact_digests`
+
+The pre-push hook (`pre-push-hook.sh`) verifies this proof before allowing any push. See [qg-proof-push-gate](qg-proof-push-gate.md) for the full subsystem reference.
+
 ---
 
 ## Coverage Investigation Protocol

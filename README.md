@@ -18,7 +18,7 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custo
 
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
-- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 39 cross-platform pairs + 6 Bash-only utilities
+- **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 40 cross-platform pairs + 12 Bash-only utilities + 1 PS1-only (`verify-push-proof.ps1`)
 - **AI agent skills** for Claude Code and GitHub Copilot -- 61 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 23 hand-written + 5 generated AST-only rules (28 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, security patterns, and testing anti-patterns
