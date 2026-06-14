@@ -86,7 +86,7 @@ Seven integrity checks, all fail-CLOSED (exit 2 on failure):
   "generated_at":     "<ISO-8601 UTC>",
   "wave_slug":        "<branch last-segment>",
   "manifest_version": 1,
-  "steps_executed":   [{"step": "<id>", "result": "PASS|SKIP", "ran": true}],
+  "steps_executed":   [{"step": "<id>", "result": "PASS|SKIP", "ran": true|false}],
   "report_digest":    "<sha256 hex>",
   "artifact_digests": {"arch-<role>-verdict.md": "<sha256 hex>"}
 }
@@ -115,7 +115,7 @@ Committed to repo root. Versioned (`manifest_version`) so `verify-proof` detects
 |-----------|-----------|
 | `project_type_gradle_or_hybrid` | `settings.gradle[.kts]` exists at repo root |
 | `project_type_node_or_hybrid` | `package.json` at root or in any immediate subdir |
-| `kt_files_changed` | Any `.kt` file in `git diff` range HEAD..base |
+| `kt_files_changed` | Any `.kt` file in `git diff $BASE...$HEAD` range |
 | `kt_changed_and_gradle` | `kt_files_changed` AND `project_type_gradle_or_hybrid` |
 | `task_is_code_changes` | Diff includes non-doc/non-config files |
 | `kt_and_docs_api_and_gradle` | `kt_files_changed` AND `docs/api/` exists AND Gradle |
