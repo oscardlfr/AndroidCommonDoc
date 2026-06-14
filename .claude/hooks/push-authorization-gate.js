@@ -227,6 +227,22 @@ process.stdin.on('end', () => {
       );
     }
 
+    // Secondary proof check (fallback: no pre-push hook installed)
+    const proofPath = path.join(stampDir, 'push-proof.json');
+    let proof;
+    try { proof = JSON.parse(fs.readFileSync(proofPath, 'utf8')); }
+    catch { block('[push-authorization-gate] BLOCKED: push-proof.json missing or malformed. Run /quality-gate to mint proof. Bypass: PUSH_AUTHORIZATION_BYPASS=1.'); }
+    if (proof.schema_version !== 1) { block(`[push-authorization-gate] BLOCKED: push-proof.json schema_version unknown (${proof.schema_version}).`); }
+    const now = Math.floor(Date.now() / 1000);
+    const proofEpoch = Math.floor(new Date(proof.generated_at || '').getTime() / 1000);
+    if (isNaN(proofEpoch) || (now - proofEpoch) > MAX_AGE_SECS || (proofEpoch - now) > SKEW_TOLERANCE) {
+      block('[push-authorization-gate] BLOCKED: push-proof.json stale or invalid timestamp.');
+    }
+    const headShaForProof = getHeadSha(projectRoot);
+    if (headShaForProof && proof.head !== headShaForProof) {
+      block(`[push-authorization-gate] BLOCKED: proof head (${proof.head}) ≠ HEAD (${headShaForProof}).`);
+    }
+
     // All checks passed
     process.exit(0);
 

@@ -147,5 +147,17 @@ for sha in "${gated_shas[@]}"; do
   fi
 done
 
+# -- 7. Push-proof verification (QG-proof gate) --------------------------------
+PROOF_SCRIPT="$REPO_ROOT/scripts/sh/emit-push-proof.sh"
+if [[ -f "$PROOF_SCRIPT" ]]; then
+  for sha in "${gated_shas[@]}"; do
+    if ! bash "$PROOF_SCRIPT" --subcommand verify-proof --pushed-sha "$sha" >&2; then
+      block "push-proof" "QG proof is missing, stale, or invalid for pushed commit $sha. Run the canonical QG runner (emit-push-proof.sh run-qg) via /quality-gate, then re-push."
+    fi
+  done
+else
+  block "push-proof" "emit-push-proof.sh not found at $PROOF_SCRIPT. Harness integrity violation."
+fi
+
 echo "[pre-push-hook] OK: both stamps PASS + fresh and match the pushed commit(s)." >&2
 exit 0
