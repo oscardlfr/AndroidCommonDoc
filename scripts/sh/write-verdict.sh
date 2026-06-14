@@ -244,12 +244,21 @@ run_verify_final() {
     stdin_content="$(cat)"
   fi
 
+  # Resolve HEAD fail-closed: never write UNKNOWN into the verdict file,
+  # because the emitter's step 3b rejects any HEAD != final HEAD (including UNKNOWN).
+  local head_sha=""
+  head_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+  if [[ ! "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "[write-verdict] ERROR: git rev-parse HEAD failed or returned non-hex '$head_sha'. Aborting verify-final — resolve HEAD before writing the verdict." >&2
+    exit 2
+  fi
+
   {
     if [[ -n "$stdin_content" ]]; then
       printf '%s\n' "$stdin_content"
       printf '\n---\n\n'
     fi
-    printf '**HEAD**: %s\n' "$(git rev-parse HEAD 2>/dev/null || echo UNKNOWN)"
+    printf '**HEAD**: %s\n' "$head_sha"
     printf '**Phase**: VERIFY-FINAL\n'
     printf '**Timestamp**: %s\n' "$NOW"
     printf '**Status**: APPROVED-VERIFY-FINAL\n\n'

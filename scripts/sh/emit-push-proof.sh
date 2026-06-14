@@ -127,7 +127,7 @@ resolve_slug() {
     return
   fi
   local branch="" slug=""
-  branch="$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+  branch="$(git -C "$REPO_ROOT" symbolic-ref --short HEAD 2>/dev/null || git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
   slug="${branch##*/}"
   if [[ -z "$slug" || "$slug" =~ ^(develop|master|main|HEAD)$ ]]; then
     echo "[emit-push-proof] ERROR: cannot resolve wave slug from branch '$branch'. Use --slug." >&2
@@ -287,13 +287,14 @@ for entry in discovered:
 steps = {s['step']: s for s in (report.get('steps') or []) if 'step' in s}
 
 # ── Required steps coverage ───────────────────────────────────────────────────
+# Required steps must be ran=true AND result=PASS. SKIP / not-ran / absent all fail.
 for rs in manifest.get('required_steps', []):
     sid = rs['id']
     if sid not in steps:
         die(f"step-coverage-gap: required step '{sid}' absent from report steps[]")
     entry = steps[sid]
-    if entry.get('ran') is True and entry.get('result') == 'FAIL':
-        die(f"step-failed: required step '{sid}' has result=FAIL")
+    if entry.get('result') != 'PASS' or not entry.get('ran'):
+        die(f"step-not-pass: required step '{sid}' must be ran=true + result=PASS, got ran={entry.get('ran')!r} result={entry.get('result')!r}")
 
 # ── Conditional steps: structural coverage + predicate enforcement ─────────────
 for cs in manifest.get('conditional_steps', []):

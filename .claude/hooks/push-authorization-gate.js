@@ -244,20 +244,64 @@ process.stdin.on('end', () => {
       );
     }
 
-    // Secondary proof check (fallback: no pre-push hook installed)
-    const proofPath = path.join(stampDir, 'push-proof.json');
-    let proof;
-    try { proof = JSON.parse(fs.readFileSync(proofPath, 'utf8')); }
-    catch { block('[push-authorization-gate] BLOCKED: push-proof.json missing or malformed. Run /quality-gate to mint proof. Bypass: PUSH_AUTHORIZATION_BYPASS=1.'); }
-    if (proof.schema_version !== 1) { block(`[push-authorization-gate] BLOCKED: push-proof.json schema_version unknown (${proof.schema_version}).`); }
-    const now = Math.floor(Date.now() / 1000);
-    const proofEpoch = Math.floor(new Date(proof.generated_at || '').getTime() / 1000);
-    if (isNaN(proofEpoch) || (now - proofEpoch) > MAX_AGE_SECS || (proofEpoch - now) > SKEW_TOLERANCE) {
-      block('[push-authorization-gate] BLOCKED: push-proof.json stale or invalid timestamp.');
-    }
+    // Secondary proof check (fallback: no pre-push hook installed).
+    // Delegates to the canonical verifier (emit-push-proof.sh verify-proof) when bash
+    // is available — single source of truth for all invariants (schema, freshness, head,
+    // worktree_id, manifest_version, steps_executed coverage, report_digest recompute).
+    // Falls back to in-JS checks only when bash is not on PATH.
+    const proofScript = path.join(projectRoot, 'scripts', 'sh', 'emit-push-proof.sh');
     const headShaForProof = getHeadSha(projectRoot);
-    if (headShaForProof && proof.head !== headShaForProof) {
-      block(`[push-authorization-gate] BLOCKED: proof head (${proof.head}) ≠ HEAD (${headShaForProof}).`);
+    let usedCanonical = false;
+    try {
+      const bash = spawnSync('bash', ['-c', 'command -v bash'], { timeout: 2000 });
+      if (bash.status === 0 && fs.existsSync(proofScript) && headShaForProof) {
+        const result = spawnSync(
+          'bash', [proofScript, '--subcommand', 'verify-proof', '--pushed-sha', headShaForProof],
+          { cwd: projectRoot, timeout: 15000, encoding: 'utf8' }
+        );
+        if (result.status !== 0) {
+          block(
+            `[push-authorization-gate] BLOCKED: canonical verify-proof failed. ` +
+            `Run /quality-gate to re-mint proof. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
+          );
+        }
+        usedCanonical = true;
+      }
+    } catch { /* bash not available; fall through to in-JS checks */ }
+
+    if (!usedCanonical) {
+      // In-JS fallback: enforce same invariants as canonical verify-proof.
+      const proofPath = path.join(stampDir, 'push-proof.json');
+      let proof;
+      try { proof = JSON.parse(fs.readFileSync(proofPath, 'utf8')); }
+      catch { block('[push-authorization-gate] BLOCKED: push-proof.json missing or malformed. Run /quality-gate to mint proof. Bypass: PUSH_AUTHORIZATION_BYPASS=1.'); }
+      // schema_version
+      if (proof.schema_version !== 1) { block(`[push-authorization-gate] BLOCKED: push-proof.json schema_version unknown (${proof.schema_version}).`); }
+      // freshness
+      const now2 = Math.floor(Date.now() / 1000);
+      const proofEpoch = Math.floor(new Date(proof.generated_at || '').getTime() / 1000);
+      if (isNaN(proofEpoch) || (now2 - proofEpoch) > MAX_AGE_SECS || (proofEpoch - now2) > SKEW_TOLERANCE) {
+        block('[push-authorization-gate] BLOCKED: push-proof.json stale or invalid timestamp.');
+      }
+      // head binding
+      if (headShaForProof && proof.head !== headShaForProof) {
+        block(`[push-authorization-gate] BLOCKED: proof head (${proof.head}) ≠ HEAD (${headShaForProof}).`);
+      }
+      // worktree_id
+      if (proof.worktree_id && proof.worktree_id !== projectRoot) {
+        block(`[push-authorization-gate] BLOCKED: proof worktree_id (${proof.worktree_id}) ≠ project root (${projectRoot}).`);
+      }
+      // manifest_version present
+      if (typeof proof.manifest_version !== 'number') {
+        block('[push-authorization-gate] BLOCKED: push-proof.json missing manifest_version.');
+      }
+      // required steps all PASS
+      const steps = proof.steps_executed || [];
+      for (const s of steps) {
+        if (s.result !== 'PASS') {
+          block(`[push-authorization-gate] BLOCKED: proof step '${s.step}' result='${s.result}' (not PASS). Re-run /quality-gate.`);
+        }
+      }
     }
 
     // All checks passed

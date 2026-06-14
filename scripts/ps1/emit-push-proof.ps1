@@ -32,6 +32,10 @@ $ErrorActionPreference = 'Stop'
 $MAX_AGE_SECS    = 1800
 $SKEW_TOLERANCE  = 120
 
+# BOM-free UTF-8 encoder: [System.Text.Encoding]::UTF8 emits a BOM, breaking
+# cross-platform digest parity and JSON parsers. Use this for all file writes.
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+
 # -- Helpers -----------------------------------------------------------------
 function Die([string]$msg, [int]$code = 2) {
     Write-Host "[emit-push-proof] ERROR: $msg" -ForegroundColor Red
@@ -42,7 +46,7 @@ function Invoke-Python([string]$script, [string[]]$args_list) {
     # Run inline Python via python3. Stderr passes through. Returns stdout string.
     $tmpFile = [System.IO.Path]::GetTempFileName() + '.py'
     try {
-        [System.IO.File]::WriteAllText($tmpFile, $script, [System.Text.Encoding]::UTF8)
+        [System.IO.File]::WriteAllText($tmpFile, $script, $utf8NoBom)
         $output = & python3 $tmpFile @args_list 2>&1
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         return ($output | Where-Object { $_ -is [string] }) -join "`n"
@@ -268,15 +272,15 @@ function Invoke-RunQg {
         if ($s.step) { $steps[$s.step] = $s }
     }
 
-    # Required steps coverage
+    # Required steps coverage: must be ran=true AND result=PASS. SKIP/not-ran/absent all fail.
     foreach ($rs in @($manifestJson.required_steps)) {
         $sid = $rs.id
         if (-not $steps.ContainsKey($sid)) {
             Die "step-coverage-gap: required step '$sid' absent from report steps[]"
         }
         $entry = $steps[$sid]
-        if ($entry.ran -eq $true -and $entry.result -eq 'FAIL') {
-            Die "step-failed: required step '$sid' has result=FAIL"
+        if ($entry.result -ne 'PASS' -or -not $entry.ran) {
+            Die "step-not-pass: required step '$sid' must be ran=true + result=PASS, got ran=$($entry.ran) result=$($entry.result)"
         }
     }
 
@@ -340,7 +344,7 @@ function Invoke-RunQg {
     $artifactDigests = [ordered]@{}
 
     foreach ($vf in $verdictFiles) {
-        $content = [System.IO.File]::ReadAllText($vf.FullName, [System.Text.Encoding]::UTF8)
+        $content = [System.IO.File]::ReadAllText($vf.FullName, $utf8NoBom)
         $fname   = $vf.Name
 
         # Must contain APPROVED-VERIFY-FINAL (no silent PREP-only skip)
@@ -404,8 +408,8 @@ function Invoke-RunQg {
     New-Item -ItemType Directory -Force -Path $acdocDir | Out-Null
 
     $stampContent = '{"verdict":"PASS","timestamp":"' + $nowTs + '","head":"' + $headSha + '","branch":"' + $branchName + '","source":"emit-push-proof.ps1 run-qg"}' + "`n"
-    [System.IO.File]::WriteAllText($qgStampPath, $stampContent, [System.Text.Encoding]::UTF8)
-    [System.IO.File]::WriteAllText($ppStampPath, $stampContent, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($qgStampPath, $stampContent, $utf8NoBom)
+    [System.IO.File]::WriteAllText($ppStampPath, $stampContent, $utf8NoBom)
 
     # -- 9. Write push-proof.json (includes artifact_digests from step 4) --------
     $proof = [ordered]@{
@@ -421,12 +425,12 @@ function Invoke-RunQg {
     }
 
     $proofJson = $proof | ConvertTo-Json -Depth 10
-    [System.IO.File]::WriteAllText($proofPath, $proofJson + "`n", [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($proofPath, $proofJson + "`n", $utf8NoBom)
 
     # -- 10. Append to push-proof.log (fail-OPEN) --------------------------------
     try {
         $logLine = '{"ts":"' + $nowTs + '","event":"push-proof-emitted","head":"' + $headSha + '","wave_slug":"' + $waveSlug + '","report_digest":"' + $reportDigest + '","worktree_id":"' + $worktreeId + '"}' + "`n"
-        [System.IO.File]::AppendAllText($proofLog, $logLine, [System.Text.Encoding]::UTF8)
+        [System.IO.File]::AppendAllText($proofLog, $logLine, $utf8NoBom)
     }
     catch {
         # Fail-OPEN: log write failure must not block a valid push
