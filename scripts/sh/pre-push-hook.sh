@@ -31,6 +31,16 @@ ZERO_SHA="0000000000000000000000000000000000000000"
 # -- 0. Bypass ---------------------------------------------------------------
 if [[ "${SKIP_PUSH_GATE:-}" == "1" ]]; then
   echo "[pre-push-hook] BYPASSED via SKIP_PUSH_GATE=1" >&2
+  # Audit trail: log bypass to push-proof.log (fail-OPEN — never block on log I/O).
+  {
+    _bypass_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+    _bypass_head="$(git rev-parse HEAD 2>/dev/null || echo "unknown")"
+    _bypass_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "unknown")"
+    mkdir -p "$_bypass_root/.androidcommondoc" 2>/dev/null
+    printf '{"ts":"%s","event":"bypass","mechanism":"SKIP_PUSH_GATE","head":"%s"}\n' \
+      "$_bypass_ts" "$_bypass_head" \
+      >> "$_bypass_root/.androidcommondoc/push-proof.log"
+  } 2>/dev/null || true
   exit 0
 fi
 

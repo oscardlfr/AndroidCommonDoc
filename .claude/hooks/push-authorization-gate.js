@@ -158,8 +158,26 @@ process.stdin.on('end', () => {
     const cmd = data.tool_input?.command || '';
     if (!isGitPushCommand(cmd)) process.exit(0);
 
+    // Resolve projectRoot early — needed for bypass audit log and stamp paths alike.
+    const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+
     // Bypass
-    if (process.env.PUSH_AUTHORIZATION_BYPASS === '1') process.exit(0);
+    if (process.env.PUSH_AUTHORIZATION_BYPASS === '1') {
+      // Audit trail: log bypass to push-proof.log (fail-OPEN — never block on log I/O).
+      try {
+        const bypassLog = path.join(projectRoot, '.androidcommondoc', 'push-proof.log');
+        const bypassHead = (() => {
+          try {
+            const r = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: projectRoot, timeout: 3000, encoding: 'utf8' });
+            return r.status === 0 ? (r.stdout || '').trim() : 'unknown';
+          } catch { return 'unknown'; }
+        })();
+        const bypassEntry = JSON.stringify({ ts: new Date().toISOString(), event: 'bypass', mechanism: 'PUSH_AUTHORIZATION_BYPASS', head: bypassHead }) + '\n';
+        fs.mkdirSync(path.join(projectRoot, '.androidcommondoc'), { recursive: true });
+        fs.appendFileSync(bypassLog, bypassEntry, 'utf8');
+      } catch { /* fail-OPEN */ }
+      process.exit(0);
+    }
 
     const agentType = (data.agent_type || '').trim();
 
@@ -176,7 +194,6 @@ process.stdin.on('end', () => {
     // Main orchestrator (empty agent_type): check if pre-push hook is installed
     // P1b fix: verify identity via ACDOC-PRE-PUSH-GATE marker — presence alone is not enough
     // (a foreign stub or bare `exit 0` would otherwise bypass stamp validation).
-    const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
     const prePushHook = path.join(projectRoot, '.git', 'hooks', 'pre-push');
     let hookIsACDoc = false;
     try {
