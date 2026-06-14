@@ -363,7 +363,11 @@ function Invoke-RunQg {
     # Per-role verdict-file check (P1): each required_role must have a VERIFY-FINAL+HEAD-bound verdict.
     $verifiedFnames = [System.Collections.Generic.HashSet[string]]::new($artifactDigests.Keys)
     foreach ($role in $requiredRoles) {
-        $expectedFile = "arch-$role-verdict.md"
+        # required_roles carry the 'arch-' prefix (e.g. "arch-platform").
+        # write-verdict.sh strips it via ${ROLE#arch-} -> file is "arch-platform-verdict.md".
+        # Strip here too so "arch-$short-verdict.md" matches what write-verdict.sh produces.
+        $short = if ($role.StartsWith('arch-')) { $role.Substring(5) } else { $role }
+        $expectedFile = "arch-$short-verdict.md"
         if (-not $verifiedFnames.Contains($expectedFile)) {
             Die "deliberation-role-incomplete: required verdict file '$expectedFile' missing or not VERIFY-FINAL+HEAD-bound in $waveDir"
         }
