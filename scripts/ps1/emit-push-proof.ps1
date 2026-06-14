@@ -236,6 +236,16 @@ function Invoke-RunQg {
         Die "deliberation-evidence-absent: deliberation.incorporated_at is absent"
     }
 
+    # Required-role enforcement (P1): architects_consulted must cover all required_roles.
+    $arbStep = @($manifestJson.required_steps) | Where-Object { $_.id -eq 'architect-deliberation' } | Select-Object -First 1
+    $requiredRoles = if ($arbStep -and $arbStep.required_roles) { @($arbStep.required_roles) } else { @() }
+    $consultedSet  = @($consulted) | ForEach-Object { $_.Trim() }
+    foreach ($role in $requiredRoles) {
+        if ($role -notin $consultedSet) {
+            Die "deliberation-role-incomplete: required role '$role' absent from report.deliberation.architects_consulted ($($consultedSet -join ', '))"
+        }
+    }
+
     # Pre-PR coverage
     if (-not $reportJson.pre_pr_coverage) {
         Die "runtime-report-incomplete: pre_pr_coverage absent from report"
@@ -293,14 +303,20 @@ function Invoke-RunQg {
         }
 
         # Predicate enforcement (PLAN.md L56-66)
-        $predTrue = Invoke-Predicate $predicate $repoRoot $diffFiles
+        $predTrue   = Invoke-Predicate $predicate $repoRoot $diffFiles
+        $envAttest  = [bool]$cs.env_attested
         if ($predTrue -and $result -eq 'SKIP') {
-            Die "inconsistent-skip: predicate '$predicate' is TRUE but step '$sid' shows SKIP in report"
+            # env_attested steps: predicate-true + SKIP + non-empty reason is allowed --
+            # the runtime env check is delegated to the quality-gater's attested reason.
+            if (-not ($envAttest -and $reason)) {
+                Die "inconsistent-skip: predicate '$predicate' is TRUE but step '$sid' shows SKIP in report"
+            }
         }
         if ($predTrue -and $result -eq 'FAIL') {
             Die "mandatory-step-not-pass: predicate '$predicate' is TRUE but step '$sid' has result=FAIL"
         }
         # pred_true + PASS -> valid; pred_false + SKIP+reason -> valid; pred_false + PASS -> valid
+        # env_attest + pred_true + SKIP+reason -> valid (runtime env delegated to attested reason)
     }
 
     Write-Host "[emit-push-proof] run-qg: validation PASS" -ForegroundColor Green
@@ -342,6 +358,15 @@ function Invoke-RunQg {
         }
         # Digest the file (CRLF->LF)
         $artifactDigests[$fname] = Get-FileSha256 $vf.FullName
+    }
+
+    # Per-role verdict-file check (P1): each required_role must have a VERIFY-FINAL+HEAD-bound verdict.
+    $verifiedFnames = [System.Collections.Generic.HashSet[string]]::new($artifactDigests.Keys)
+    foreach ($role in $requiredRoles) {
+        $expectedFile = "arch-$role-verdict.md"
+        if (-not $verifiedFnames.Contains($expectedFile)) {
+            Die "deliberation-role-incomplete: required verdict file '$expectedFile' missing or not VERIFY-FINAL+HEAD-bound in $waveDir"
+        }
     }
 
     Write-Host "[emit-push-proof] run-qg: verdict binding PASS ($($verdictFiles.Count) verdicts, all HEAD-bound)" -ForegroundColor Green

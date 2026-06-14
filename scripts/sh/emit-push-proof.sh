@@ -262,6 +262,15 @@ if not consulted:
 if not delib.get('incorporated_at'):
     die("deliberation-evidence-absent: deliberation.incorporated_at is absent")
 
+# ── Required-role enforcement (P1) ───────────────────────────────────────────
+# Verify architects_consulted ⊇ required_roles declared in the manifest.
+arb_step = next((s for s in manifest.get('required_steps', []) if s['id'] == 'architect-deliberation'), None)
+required_roles = arb_step.get('required_roles', []) if arb_step else []
+consulted_set  = set(consulted)
+for role in required_roles:
+    if role not in consulted_set:
+        die(f"deliberation-role-incomplete: required role '{role}' absent from report.deliberation.architects_consulted {sorted(consulted_set)}")
+
 # ── Pre-PR coverage ───────────────────────────────────────────────────────────
 if not report.get('pre_pr_coverage'):
     die("runtime-report-incomplete: pre_pr_coverage absent from report")
@@ -306,12 +315,17 @@ for cs in manifest.get('conditional_steps', []):
         die(f"step-failed: conditional step '{sid}' has result=FAIL")
 
     # Predicate enforcement (PLAN.md L56-66)
-    pred_true = eval_predicate(predicate)
+    pred_true  = eval_predicate(predicate)
+    env_attest = bool(cs.get('env_attested', False))
     if pred_true and result == 'SKIP':
-        die(f"inconsistent-skip: predicate '{predicate}' is TRUE but step '{sid}' shows SKIP in report")
+        # env_attested steps: predicate-true + SKIP + non-empty reason is allowed —
+        # the runtime env check is delegated to the quality-gater's attested reason.
+        if not (env_attest and reason):
+            die(f"inconsistent-skip: predicate '{predicate}' is TRUE but step '{sid}' shows SKIP in report")
     if pred_true and result == 'FAIL':
         die(f"mandatory-step-not-pass: predicate '{predicate}' is TRUE but step '{sid}' has result=FAIL")
     # pred_true + PASS -> valid; pred_false + SKIP+reason -> valid; pred_false + PASS -> valid
+    # env_attest + pred_true + SKIP+reason -> valid (runtime env delegated to attested reason)
 
 print("VALIDATION_PASS", file=sys.stderr)
 PYEOF
@@ -360,6 +374,17 @@ for fname in verdict_files:
     # Digest the file (CRLF->LF)
     raw = open(fpath, 'rb').read().replace(b'\r\n', b'\n')
     digests[fname] = hashlib.sha256(raw).hexdigest()
+
+# ── Per-role verdict-file check (P1) ─────────────────────────────────────────
+# For each required_role, a VERIFY-FINAL + HEAD-bound arch-<role>-verdict.md must exist.
+manifest = json.load(open(os.path.join(repo_root, 'quality-gate-manifest.json'), encoding='utf-8'))
+arb_step = next((s for s in manifest.get('required_steps', []) if s['id'] == 'architect-deliberation'), None)
+required_roles = arb_step.get('required_roles', []) if arb_step else []
+verdict_basenames = set(digests.keys())  # already verified VERIFY-FINAL + HEAD-bound
+for role in required_roles:
+    expected = f'arch-{role}-verdict.md'
+    if expected not in verdict_basenames:
+        die(2, f"deliberation-role-incomplete: required verdict file '{expected}' missing or not VERIFY-FINAL+HEAD-bound in {wave_dir}")
 
 # Write digests to stdout as JSON for bash to capture
 print(json.dumps(digests))

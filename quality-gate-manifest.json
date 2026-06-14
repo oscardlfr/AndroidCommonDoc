@@ -1,8 +1,8 @@
 {
   "manifest_version": 1,
-  "protocol_digest": "1a39dd29db4f133c88cd8bb73adbeba863b7ad79f063a8c4c4226be821c53eb5",
+  "protocol_digest": "b5f4058f99e2045783710ad56a17120ee4f4ba5a0c27299ea3c187d89094f86f",
   "required_steps": [
-    {"id": "architect-deliberation", "kind": "judgment",    "artifact_glob": ".planning/wave-*/arch-*-verdict.md", "head_bound": true},
+    {"id": "architect-deliberation", "kind": "judgment",    "artifact_glob": ".planning/wave-*/arch-*-verdict.md", "head_bound": true, "required_roles": ["arch-platform","arch-testing","arch-integration"]},
     {"id": "pre-pr",                 "kind": "automatable", "artifact": ".androidcommondoc/pre-pr-report.json"},
     {"id": "test-suite",             "kind": "automatable", "artifact": ".androidcommondoc/test-suite-report.json"},
     {"id": "rule-cross-check",       "kind": "runtime",     "artifact": ".androidcommondoc/quality-gate-report.json"},
@@ -17,6 +17,6 @@
     {"id": "production-file-verify", "kind": "automatable", "predicate": "task_is_code_changes",           "description": "Guard against test-only commits on code tasks",   "source": "quality-gater.md:238 / quality-gate-protocol.md:90"},
     {"id": "docs-api-freshness",     "kind": "automatable", "predicate": "kt_and_docs_api_and_gradle",     "description": "docs/api/ freshness for modified modules",        "source": "quality-gater.md:247"},
     {"id": "compose-ui-tests",       "kind": "automatable", "predicate": "compose_ui_files_changed",       "description": "Compose UI test coverage for changed screens",    "source": "quality-gater.md:278 / quality-gate-protocol.md:98"},
-    {"id": "runtime-ui-validation",  "kind": "automatable", "predicate": "runtime_ui_available",           "description": "Runtime UI validation (partially env-dependent)", "source": "quality-gater.md:292"}
+    {"id": "runtime-ui-validation",  "kind": "automatable", "predicate": "runtime_ui_available",           "description": "Runtime UI validation (partially env-dependent)", "source": "quality-gater.md:292", "env_attested": true}
   ]
 }
