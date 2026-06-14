@@ -316,7 +316,83 @@ for cs in manifest.get('conditional_steps', []):
 print("VALIDATION_PASS", file=sys.stderr)
 PYEOF
 
-  # -- 4. Compute report_digest (sha256 of report file, CRLF->LF) ---------------
+  # -- 4. Verify arch verdict files (verdict→HEAD binding) ----------------------
+  # Resolves artifact_glob from the manifest's architect-deliberation required_step.
+  # For each arch-*-verdict.md in .planning/wave-<slug>/:
+  #   - Requires **Status**: APPROVED-VERIFY-FINAL (final approval, not just PREP)
+  #   - Requires **HEAD**: <40-hex> matching current HEAD (stale-verdict guard)
+  #   - sha256(file, CRLF->LF) collected into artifact_digests
+  # Fails CLOSED: no VERIFY-FINAL verdicts → deliberation-evidence-absent.
+  # Stale HEAD in any verdict → stale-verdict (exit 2).
+  local artifact_digests_json
+  artifact_digests_json="$(python3 - "$MANIFEST_PATH" "$REPO_ROOT" "$wave_slug" "$head_sha" << 'PYEOF'
+import json, sys, os, re, hashlib, glob
+
+manifest_path = sys.argv[1]
+repo_root     = sys.argv[2]
+wave_slug     = sys.argv[3]
+head_sha      = sys.argv[4]
+
+def die(msg):
+    print(f"[emit-push-proof] ERROR: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+# Resolve artifact_glob from manifest for architect-deliberation step.
+manifest = json.load(open(manifest_path, encoding='utf-8'))
+arb_step = next((s for s in manifest.get('required_steps', []) if s['id'] == 'architect-deliberation'), None)
+if not arb_step:
+    die("manifest missing required_step 'architect-deliberation'")
+
+artifact_glob = arb_step.get('artifact_glob', '')
+if not artifact_glob:
+    die("manifest architect-deliberation step has no artifact_glob")
+
+# Narrow glob to this wave's slug: replace wave-* with wave-<slug>
+wave_glob = artifact_glob.replace('wave-*', f'wave-{wave_slug}')
+pattern   = os.path.join(repo_root, wave_glob)
+matches   = sorted(glob.glob(pattern))
+
+if not matches:
+    die(f"deliberation-evidence-absent: no verdict files matched glob '{wave_glob}' under repo root")
+
+final_count    = 0
+artifact_digests = {}
+
+STATUS_FINAL_RE = re.compile(r'^\*\*Status\*\*:\s*APPROVED-VERIFY-FINAL\s*$', re.MULTILINE)
+HEAD_RE         = re.compile(r'^\*\*HEAD\*\*:\s*([0-9a-f]{40})\s*$', re.MULTILINE)
+
+for verdict_file in matches:
+    raw = open(verdict_file, encoding='utf-8', errors='replace').read()
+
+    # Only validate files that have reached VERIFY-FINAL phase.
+    # PREP-only files are silently skipped (they are intermediate artifacts).
+    if not STATUS_FINAL_RE.search(raw):
+        continue
+
+    final_count += 1
+    verdict_name = os.path.basename(verdict_file).replace('.md', '')
+
+    # HEAD binding: require **HEAD**: <sha> == current HEAD
+    head_match = HEAD_RE.search(raw)
+    if not head_match:
+        die(f"stale-verdict: {verdict_name} has APPROVED-VERIFY-FINAL but no **HEAD** line")
+    verdict_head = head_match.group(1)
+    if verdict_head != head_sha:
+        die(f"stale-verdict: {verdict_name} HEAD ({verdict_head}) != current HEAD ({head_sha}). Re-run verify-final after the final commit.")
+
+    # sha256 of verdict file (CRLF->LF, canonical precedent)
+    content = open(verdict_file, 'rb').read().replace(b'\r\n', b'\n')
+    digest  = hashlib.sha256(content).hexdigest()
+    artifact_digests[verdict_name] = digest
+
+if final_count == 0:
+    die("deliberation-evidence-absent: verdict files exist but none have APPROVED-VERIFY-FINAL status. Architects must run verify-final before pushing.")
+
+print(json.dumps(artifact_digests))
+PYEOF
+)"
+
+  # -- 5. Compute report_digest (sha256 of report file, CRLF->LF) ---------------
   local report_digest
   report_digest="$(python3 - "$REPORT_PATH" << 'PYEOF'
 import hashlib, sys
@@ -325,7 +401,7 @@ print(hashlib.sha256(content).hexdigest())
 PYEOF
 )"
 
-  # -- 5. Collect steps_executed (required steps) --------------------------------
+  # -- 6. Collect steps_executed (required steps) --------------------------------
   local steps_executed_json
   steps_executed_json="$(python3 - "$MANIFEST_PATH" "$REPORT_PATH" << 'PYEOF'
 import json, sys
@@ -341,7 +417,7 @@ print(json.dumps(executed))
 PYEOF
 )"
 
-  # -- 6. Timestamps + identifiers -----------------------------------------------
+  # -- 7. Timestamps + identifiers -----------------------------------------------
   local now_ts worktree_id manifest_version
   now_ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   worktree_id="$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>/dev/null || echo "UNKNOWN")"
@@ -351,7 +427,7 @@ print(json.load(open(sys.argv[1], encoding='utf-8'))['manifest_version'])
 PYEOF
 )"
 
-  # -- 7. Write backward-compat stamps ------------------------------------------
+  # -- 8. Write backward-compat stamps ------------------------------------------
   mkdir -p "$ACDOC_DIR"
 
   local branch_name
@@ -363,19 +439,21 @@ PYEOF
   printf '{"verdict":"PASS","timestamp":"%s","head":"%s","branch":"%s","source":"emit-push-proof.sh run-qg"}\n' \
     "$now_ts" "$head_sha" "$branch_name" > "$PP_STAMP_PATH"
 
-  # -- 8. Write push-proof.json --------------------------------------------------
+  # -- 9. Write push-proof.json (includes artifact_digests from step 4) ---------
   python3 - "$PROOF_PATH" "$now_ts" "$head_sha" "$worktree_id" \
-      "$manifest_version" "$report_digest" "$wave_slug" "$steps_executed_json" << 'PYEOF'
+      "$manifest_version" "$report_digest" "$wave_slug" "$steps_executed_json" \
+      "$artifact_digests_json" << 'PYEOF'
 import json, sys
 
-proof_path       = sys.argv[1]
-now_ts           = sys.argv[2]
-head_sha         = sys.argv[3]
-worktree_id      = sys.argv[4]
-manifest_version = int(sys.argv[5])
-report_digest    = sys.argv[6]
-wave_slug        = sys.argv[7]
-steps_executed   = json.loads(sys.argv[8])
+proof_path        = sys.argv[1]
+now_ts            = sys.argv[2]
+head_sha          = sys.argv[3]
+worktree_id       = sys.argv[4]
+manifest_version  = int(sys.argv[5])
+report_digest     = sys.argv[6]
+wave_slug         = sys.argv[7]
+steps_executed    = json.loads(sys.argv[8])
+artifact_digests  = json.loads(sys.argv[9])
 
 proof = {
     "schema_version":    1,
@@ -386,6 +464,7 @@ proof = {
     "manifest_version":  manifest_version,
     "steps_executed":    steps_executed,
     "report_digest":     report_digest,
+    "artifact_digests":  artifact_digests,
 }
 
 with open(proof_path, 'w', encoding='utf-8') as f:
@@ -393,7 +472,7 @@ with open(proof_path, 'w', encoding='utf-8') as f:
     f.write('\n')
 PYEOF
 
-  # -- 9. Append to push-proof.log (fail-OPEN) -----------------------------------
+  # -- 10. Append to push-proof.log (fail-OPEN) ----------------------------------
   {
     printf '{"ts":"%s","event":"push-proof-emitted","head":"%s","wave_slug":"%s","report_digest":"%s","worktree_id":"%s"}\n' \
       "$now_ts" "$head_sha" "$wave_slug" "$report_digest" "$worktree_id"

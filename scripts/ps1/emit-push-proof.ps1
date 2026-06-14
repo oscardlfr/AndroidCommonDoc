@@ -305,10 +305,70 @@ function Invoke-RunQg {
 
     Write-Host "[emit-push-proof] run-qg: validation PASS" -ForegroundColor Green
 
-    # -- 4. Compute report_digest (sha256, CRLF->LF, byte-identical to bash) ----
+    # -- 4. Verify arch verdict files (verdict->HEAD binding) --------------------
+    # Mirrors bash step 4: resolves artifact_glob from manifest, globs wave-<slug>/
+    # arch-*-verdict.md files, requires APPROVED-VERIFY-FINAL + HEAD == current HEAD.
+    # Stale or missing final verdicts -> exit 2 (fail-CLOSED).
+    $arbStep = @($manifestJson.required_steps) | Where-Object { $_.id -eq 'architect-deliberation' } | Select-Object -First 1
+    if (-not $arbStep) { Die "manifest missing required_step 'architect-deliberation'" }
+
+    $artifactGlob = $arbStep.artifact_glob
+    if (-not $artifactGlob) { Die "manifest architect-deliberation step has no artifact_glob" }
+
+    # Narrow glob to this wave's slug
+    $waveGlob   = $artifactGlob -replace 'wave-\*', "wave-$waveSlug"
+    $globPattern = Join-Path $repoRoot $waveGlob
+    # PowerShell glob: resolve the directory + filename pattern separately
+    $waveDir     = Split-Path $globPattern -Parent
+    $filePattern = Split-Path $globPattern -Leaf
+    $verdictFiles = @()
+    if (Test-Path $waveDir) {
+        $verdictFiles = @(Get-ChildItem $waveDir -Filter $filePattern -File -ErrorAction SilentlyContinue | Sort-Object Name)
+    }
+
+    if ($verdictFiles.Count -eq 0) {
+        Die "deliberation-evidence-absent: no verdict files matched '$waveGlob' under repo root"
+    }
+
+    $statusFinalRe = [regex]'(?m)^\*\*Status\*\*:\s*APPROVED-VERIFY-FINAL\s*$'
+    $headLineRe    = [regex]'(?m)^\*\*HEAD\*\*:\s*([0-9a-f]{40})\s*$'
+
+    $finalCount      = 0
+    $artifactDigests = [ordered]@{}
+
+    foreach ($vf in $verdictFiles) {
+        $raw = [System.IO.File]::ReadAllText($vf.FullName, [System.Text.Encoding]::UTF8)
+
+        # Skip PREP-only files silently (same as bash)
+        if (-not $statusFinalRe.IsMatch($raw)) { continue }
+
+        $finalCount++
+        $verdictName = $vf.BaseName  # e.g. arch-platform-verdict
+
+        # HEAD binding check
+        $headMatch = $headLineRe.Match($raw)
+        if (-not $headMatch.Success) {
+            Die "stale-verdict: $verdictName has APPROVED-VERIFY-FINAL but no **HEAD** line"
+        }
+        $verdictHead = $headMatch.Groups[1].Value
+        if ($verdictHead -ne $headSha) {
+            Die "stale-verdict: $verdictName HEAD ($verdictHead) != current HEAD ($headSha). Re-run verify-final after the final commit."
+        }
+
+        # sha256 of verdict file (CRLF->LF, same canonical precedent)
+        $artifactDigests[$verdictName] = Get-FileSha256 $vf.FullName
+    }
+
+    if ($finalCount -eq 0) {
+        Die "deliberation-evidence-absent: verdict files exist but none have APPROVED-VERIFY-FINAL status. Architects must run verify-final before pushing."
+    }
+
+    Write-Host "[emit-push-proof] run-qg: verdict binding PASS ($finalCount VERIFY-FINAL verdicts, all HEAD-bound)" -ForegroundColor Green
+
+    # -- 5. Compute report_digest (sha256, CRLF->LF, byte-identical to bash) ----
     $reportDigest = Get-FileSha256 $reportPath
 
-    # -- 5. Collect steps_executed (required steps) ------------------------------
+    # -- 6. Collect steps_executed (required steps) ------------------------------
     $stepsExecuted = [System.Collections.Generic.List[object]]::new()
     foreach ($rs in @($manifestJson.required_steps)) {
         $sid   = $rs.id
@@ -320,7 +380,7 @@ function Invoke-RunQg {
         })
     }
 
-    # -- 6. Timestamps + identifiers ---------------------------------------------
+    # -- 7. Timestamps + identifiers ---------------------------------------------
     $nowTs           = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     $worktreeId = $null
     try { $worktreeId = (& git -C $repoRoot rev-parse --show-toplevel 2>$null) | Select-Object -First 1 } catch {}
@@ -330,14 +390,14 @@ function Invoke-RunQg {
     try { $branchName = (& git -C $repoRoot rev-parse --abbrev-ref HEAD 2>$null) | Select-Object -First 1 } catch {}
     if (-not $branchName) { $branchName = 'UNKNOWN' }
 
-    # -- 7. Write backward-compat stamps -----------------------------------------
+    # -- 8. Write backward-compat stamps -----------------------------------------
     New-Item -ItemType Directory -Force -Path $acdocDir | Out-Null
 
     $stampContent = '{"verdict":"PASS","timestamp":"' + $nowTs + '","head":"' + $headSha + '","branch":"' + $branchName + '","source":"emit-push-proof.ps1 run-qg"}' + "`n"
     [System.IO.File]::WriteAllText($qgStampPath, $stampContent, [System.Text.Encoding]::UTF8)
     [System.IO.File]::WriteAllText($ppStampPath, $stampContent, [System.Text.Encoding]::UTF8)
 
-    # -- 8. Write push-proof.json ------------------------------------------------
+    # -- 9. Write push-proof.json (includes artifact_digests from step 4) --------
     $proof = [ordered]@{
         schema_version   = 1
         head             = $headSha
@@ -347,12 +407,13 @@ function Invoke-RunQg {
         manifest_version = $manifestVersion
         steps_executed   = @($stepsExecuted)
         report_digest    = $reportDigest
+        artifact_digests = $artifactDigests
     }
 
     $proofJson = $proof | ConvertTo-Json -Depth 10
     [System.IO.File]::WriteAllText($proofPath, $proofJson + "`n", [System.Text.Encoding]::UTF8)
 
-    # -- 9. Append to push-proof.log (fail-OPEN) ---------------------------------
+    # -- 10. Append to push-proof.log (fail-OPEN) --------------------------------
     try {
         $logLine = '{"ts":"' + $nowTs + '","event":"push-proof-emitted","head":"' + $headSha + '","wave_slug":"' + $waveSlug + '","report_digest":"' + $reportDigest + '","worktree_id":"' + $worktreeId + '"}' + "`n"
         [System.IO.File]::AppendAllText($proofLog, $logLine, [System.Text.Encoding]::UTF8)
