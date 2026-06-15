@@ -173,7 +173,7 @@ process.stdin.on('end', () => {
     try {
       const yaml = loadYaml(projectRoot);
       if (!yaml) process.exit(0); // fail-open if yaml package unavailable
-      const topoPath = path.join(projectRoot, '.claude', 'registry', 'wave-topology.yaml');
+      const topoPath = path.join(__dirname, '..', '..', '.claude', 'registry', 'wave-topology.yaml');
       topology = yaml.parse(fs.readFileSync(topoPath, 'utf8'));
     } catch {
       process.exit(0); // fail-open if topology config unreadable

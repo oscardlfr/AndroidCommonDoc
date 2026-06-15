@@ -157,7 +157,7 @@ process.stdin.on('end', () => {
     try {
       const yaml = loadYaml(projectRoot);
       if (!yaml) process.exit(0); // fail-open if yaml package unavailable
-      const topoPath = path.join(projectRoot, '.claude', 'registry', 'wave-topology.yaml');
+      const topoPath = path.join(__dirname, '..', '..', '.claude', 'registry', 'wave-topology.yaml');
       const topology = yaml.parse(fs.readFileSync(topoPath, 'utf8'));
       // Use class_floors if waveDir known; fall back to mandatory_peers if no active wave
       mandatoryPeers = waveDir
