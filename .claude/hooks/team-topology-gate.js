@@ -126,7 +126,6 @@ process.stdin.on('end', () => {
 
     // ── PostToolUse: record peers spawned for session-* teams ────────────────
     if (data.hook_event_name === 'PostToolUse') {
-      if (data.hook_event_name !== 'PostToolUse') process.exit(0);
 
       try {
         const teamName = data.tool_result?.team_name
