@@ -7,7 +7,7 @@
 # These are read-only content assertions. /pre-pr is a behavioral skill — do NOT
 # attempt to execute it here.
 #
-# 20 assertions: A1·A1b·A2·A2b·A3·A4·A5(×4)·A6(×2)·A6b(×2)·A7·A7b·A8·A8b·A9·A9b
+# 22 assertions: A1·A1b·A2·A2b·A3·A4·A5(×4)·A6(×2)·A6b(×2)·A7·A7b·A8·A8b·A8c·A8d·A9·A9b
 #
 # Invocation: bats scripts/tests/pre-pr-proof.bats  (from repo root)
 
@@ -116,16 +116,28 @@ TEMPLATE="$REPO_ROOT/setup/copilot-templates/pre-pr.prompt.md"
   grep -q "content-check receipt" "$TEMPLATE"
 }
 
-# ── A8 — Gap-1 precision clause in SKILL ─────────────────────────────────────
+# ── A8 — 3-artifact contract clause in SKILL ─────────────────────────────────
 
-@test "A8  SKILL: contains 'one of two prerequisites'" {
-  grep -q "one of two prerequisites" "$SKILL"
+@test "A8  SKILL: contains 'one of THREE required artifacts' (3-artifact contract)" {
+  grep -q "one of THREE required artifacts" "$SKILL"
 }
 
 # ── A8b — same clause present in TEMPLATE ────────────────────────────────────
 
-@test "A8b TEMPLATE: contains 'one of two prerequisites'" {
-  grep -q "one of two prerequisites" "$TEMPLATE"
+@test "A8b TEMPLATE: contains 'one of THREE required artifacts' (3-artifact contract)" {
+  grep -q "one of THREE required artifacts" "$TEMPLATE"
+}
+
+# ── A8c — "quality-gate.stamp" named in SKILL ────────────────────────────────
+
+@test "A8c SKILL: names 'quality-gate.stamp' (previously-omitted artifact)" {
+  grep -q "quality-gate.stamp" "$SKILL"
+}
+
+# ── A8d — same artifact name present in TEMPLATE ─────────────────────────────
+
+@test "A8d TEMPLATE: names 'quality-gate.stamp' (previously-omitted artifact)" {
+  grep -q "quality-gate.stamp" "$TEMPLATE"
 }
 
 # ── A9 — P2-honesty "does NOT assert" banner present in SKILL ────────────────
