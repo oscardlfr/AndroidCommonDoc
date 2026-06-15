@@ -84,7 +84,10 @@ fi
 # Harden-only override: WAVE_CLASS_OVERRIDE=HARNESS (never downgrades)
 # No-op: no active wave dir, or FAST-PATH/HARNESS class staging HARNESS paths
 if [[ "${SKIP_WAVE_CLASS_GATE:-0}" != "1" ]]; then
-  WAVE_SLUG_LIB="$PROJECT_ROOT/scripts/sh/lib/wave-slug.sh"
+  WAVE_SLUG_LIB="$HOOK_DIR/lib/wave-slug.sh"
+  if [[ ! -f "$WAVE_SLUG_LIB" ]]; then
+    WAVE_SLUG_LIB="$PROJECT_ROOT/scripts/sh/lib/wave-slug.sh"
+  fi
   if [[ -f "$WAVE_SLUG_LIB" ]]; then
     # shellcheck source=scripts/sh/lib/wave-slug.sh
     source "$WAVE_SLUG_LIB"
