@@ -233,8 +233,9 @@ If all pass:
    when TruffleHog isn't installed — a SKIP does NOT assert "no secrets" (Step 5.6).
 
 ⚠ This is NOT push authorization, and /pre-pr does NOT mint the proof. The pre-push
-  gate also requires push-proof.json, produced by the quality-gater's Quality Gate
-  phase: it runs the QG Steps 0-9 (this /pre-pr is its Step 2), then at Step 10 emits
+  gate requires the /pre-pr stamp PLUS two artifacts only the quality-gater's Quality
+  Gate phase mints — `quality-gate.stamp` and `push-proof.json`:
+  it runs the QG Steps 0-9 (this /pre-pr is its Step 2), then at Step 10 emits
   the canonical proof —
       bash scripts/sh/emit-push-proof.sh --subcommand run-qg
   Run the full Quality Gate phase before pushing; run-qg is ONLY that final emission
@@ -264,7 +265,7 @@ EOF
 echo "pre-pr.stamp written (content-check receipt — not a push token)."
 ```
 
-On BLOCKED/FAIL outcome: do NOT write the stamp (or write with `"verdict": "FAIL"` for audit purposes). The push gate reads this stamp as one of two prerequisites, but the stamp alone does not authorize a push — `push-proof.json` (minted by the quality-gater's Quality Gate phase: Steps 0-9, then Step 10 `emit-push-proof.sh run-qg`) is also required.
+On BLOCKED/FAIL outcome: do NOT write the stamp (or write with `"verdict": "FAIL"` for audit purposes). The push gate reads this stamp as one of THREE required artifacts; the stamp alone does not authorize a push. It also requires `quality-gate.stamp` and `push-proof.json`, both minted by the quality-gater's Quality Gate phase (Steps 0-9, then Step 10 `emit-push-proof.sh run-qg`).
 
 ## Important Rules
 
