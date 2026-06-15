@@ -165,7 +165,7 @@ process.stdin.on('end', () => {
 
     let topology;
     try {
-      const yaml = require(path.join(projectRoot, 'mcp-server', 'node_modules', 'yaml'));
+      const yaml = require(path.join(__dirname, '..', '..', 'mcp-server', 'node_modules', 'yaml'));
       const topoPath = path.join(projectRoot, '.claude', 'registry', 'wave-topology.yaml');
       topology = yaml.parse(fs.readFileSync(topoPath, 'utf8'));
     } catch {

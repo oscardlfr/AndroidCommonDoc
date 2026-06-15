@@ -149,7 +149,7 @@ process.stdin.on('end', () => {
     // Read topology + resolve floor peers
     let mandatoryPeers;
     try {
-      const yaml = require(path.join(projectRoot, 'mcp-server', 'node_modules', 'yaml'));
+      const yaml = require(path.join(__dirname, '..', '..', 'mcp-server', 'node_modules', 'yaml'));
       const topoPath = path.join(projectRoot, '.claude', 'registry', 'wave-topology.yaml');
       const topology = yaml.parse(fs.readFileSync(topoPath, 'utf8'));
       // Use class_floors if waveDir known; fall back to mandatory_peers if no active wave
