@@ -759,3 +759,54 @@ run_verdict_slug() {
   grep -q "APPROVED-PREP" "$verdict"
   grep -q "APPROVED-VERIFY-FINAL" "$verdict"
 }
+
+# ── VS-14: stdin body with trailing-prose **HEAD**: line → sanitized, WARN emitted ─
+#
+# Codex P1 repro: the $-anchored sanitizer strips bare `**HEAD**: <40hex>` lines but
+# lets through lines with a suffix (e.g. `**HEAD**: <sha> SOME TRAILING PROSE`).
+# The surviving line then becomes the FIRST **HEAD**: match in stored_head extraction,
+# poisoning the idempotency check and appearing as the authoritative HEAD in output.
+#
+# Contract:
+#   1. The injected 40-hex SHA must be ABSENT from every `**HEAD**:` line in output.
+#   2. The file has EXACTLY ONE `**HEAD**:` line == the real current HEAD.
+#   3. A WARN is emitted (stderr) naming the stripped reserved line.
+
+@test "VS-14 FAIL: stdin **HEAD**: line with trailing prose is sanitized and WARN emitted" {
+  local supersede_slug="bl-w47-supersede"
+
+  # Set up: prep + prior verify-final block (so dual-token guard has a block to replace)
+  mkdir -p "$PROJ/.planning/wave-$supersede_slug"
+  local verdict="$PROJ/.planning/wave-$supersede_slug/arch-testing-verdict.md"
+
+  local current_head
+  current_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  # Write a completed prior block (prep + delimited verify-final) so --supersede
+  # has something to excise and the replay-guard won't reject us outright.
+  printf '**Status**: APPROVED-PREP\n\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: %s\n**Phase**: VERIFY-FINAL\n**Timestamp**: 2026-01-01T00:00:00Z\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n' \
+    "$current_head" > "$verdict"
+
+  # Advance HEAD so supersede detects a DIFFERENT HEAD (not idempotent NO-OP)
+  git -C "$PROJ" -c user.email=test@example.com -c user.name=test \
+      commit -q --allow-empty -m "vs14-advance" 2>/dev/null
+  current_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  # Pipe stdin containing the P1 trailing-prose injection line (combined stdout+stderr)
+  run bash -c "cd '$PROJ' && printf '**HEAD**: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa SOME TRAILING PROSE\nsome other verdict prose\n' | \
+    CLAUDE_WAVE_SLUG='$supersede_slug' bash '$SCRIPT' \
+    --role arch-testing --phase verify-final --supersede --slug '$supersede_slug' 2>&1"
+  [ "$status" -eq 0 ]
+
+  # 1. The injected SHA must be ABSENT from every **HEAD**: line
+  ! grep '^\*\*HEAD\*\*:.*aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$verdict"
+
+  # 2. Exactly ONE **HEAD**: line, and it must equal the real current HEAD
+  local head_count
+  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
+  [ "$head_count" -eq 1 ]
+  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
+
+  # 3. A WARN must be emitted naming the stripped reserved line
+  [[ "$output" == *"WARN"* ]]
+}

@@ -247,13 +247,13 @@ _sanitize_stdin() {
   local sanitized=""
   local warned=0
   while IFS= read -r line; do
-    if [[ "$line" == "$DELIM_BEGIN" || "$line" == "$DELIM_END" ]]; then
+    if [[ "$line" == "$DELIM_BEGIN"* || "$line" == "$DELIM_END"* ]]; then
       echo "[write-verdict] WARN: stdin body contained reserved delimiter line (stripped): $line" >&2
       warned=1
-    elif [[ "$line" =~ ^\*\*HEAD\*\*:\ [0-9a-f]{7,40}$ ]]; then
+    elif [[ "$line" == "**HEAD**:"* ]]; then
       echo "[write-verdict] WARN: stdin body contained reserved **HEAD**: line (stripped): $line" >&2
       warned=1
-    elif [[ "$line" == "**Status**: APPROVED-VERIFY-FINAL" ]]; then
+    elif [[ "$line" == "**Status**: APPROVED-VERIFY-FINAL"* ]]; then
       echo "[write-verdict] WARN: stdin body contained reserved APPROVED-VERIFY-FINAL line (stripped): $line" >&2
       warned=1
     else
