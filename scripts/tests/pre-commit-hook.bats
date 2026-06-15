@@ -253,3 +253,101 @@ EOF
     [ "$status" -eq 1 ]
     [[ "$output" == *"[MANIFEST]"* ]]
 }
+
+# ── Gate 3: wave class path-classifier (BL-W47 ex-PR4 D-2) ──────────────────
+#
+# Gate 3 is the third check in pre-commit-hook.sh. It reads the CLASS sentinel
+# from <waveDir>/CLASS and blocks (exit 1, same as Gate 1/2 content-policy) when
+# a HARNESS-pattern path is staged in a lower-class wave (e.g. DOC or FAST-PATH).
+# No wave dir → Gate 3 is a no-op (exit 0).
+# SKIP_WAVE_CLASS_GATE=1 bypasses Gate 3 entirely.
+# WAVE_CLASS_OVERRIDE=HARNESS hardens only (never downgrades).
+#
+# Exit codes: 1 = content-policy block; 2 = infra error. Gate 3 blocks = exit 1.
+
+# Helper: write a CLASS sentinel into a wave dir under WORK_DIR
+write_class_sentinel() {
+    local wave_slug="${1:-bl-w47-expr4}"
+    local class_value="${2:-HARNESS}"
+    mkdir -p "$WORK_DIR/.planning/wave-${wave_slug}"
+    printf '%s' "$class_value" > "$WORK_DIR/.planning/wave-${wave_slug}/CLASS"
+}
+
+@test "(G3-1) Gate 3 BLOCK: DOC-class wave staging .claude/hooks path → exit 1" {
+    init_git_repo
+    write_correct_registry
+    write_class_sentinel "bl-w47-expr4" "DOC"
+
+    mkdir -p "$WORK_DIR/.claude/hooks"
+    printf '// hook\n' > "$WORK_DIR/.claude/hooks/example.js"
+    git -C "$WORK_DIR" add .claude/hooks/example.js
+
+    run bash -c "CLAUDE_WAVE_SLUG='bl-w47-expr4' CLAUDE_PROJECT_DIR='$WORK_DIR' bash '$HOOK_SCRIPT' '$WORK_DIR'"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"[CLASS]"* ]] || [[ "$output" == *"HARNESS"* ]] || [[ "$output" == *"class"* ]]
+}
+
+@test "(G3-2) Gate 3 PASS: HARNESS-class wave staging .claude/hooks path → exit 0" {
+    init_git_repo
+    write_correct_registry
+    write_class_sentinel "bl-w47-expr4" "HARNESS"
+
+    mkdir -p "$WORK_DIR/.claude/hooks"
+    printf '// hook\n' > "$WORK_DIR/.claude/hooks/example.js"
+    git -C "$WORK_DIR" add .claude/hooks/example.js
+
+    run bash -c "CLAUDE_WAVE_SLUG='bl-w47-expr4' CLAUDE_PROJECT_DIR='$WORK_DIR' bash '$HOOK_SCRIPT' '$WORK_DIR'"
+    [ "$status" -eq 0 ]
+}
+
+@test "(G3-3) Gate 3 PASS: no wave dir → Gate 3 is no-op, exit 0" {
+    init_git_repo
+    write_correct_registry
+    # No CLASS sentinel, no wave dir created
+
+    mkdir -p "$WORK_DIR/.claude/hooks"
+    printf '// hook\n' > "$WORK_DIR/.claude/hooks/example.js"
+    git -C "$WORK_DIR" add .claude/hooks/example.js
+
+    run bash -c "CLAUDE_WAVE_SLUG='' CLAUDE_PROJECT_DIR='$WORK_DIR' bash '$HOOK_SCRIPT' '$WORK_DIR'"
+    [ "$status" -eq 0 ]
+}
+
+@test "(G3-4) Gate 3 PASS: SKIP_WAVE_CLASS_GATE=1 bypasses block → exit 0" {
+    init_git_repo
+    write_correct_registry
+    write_class_sentinel "bl-w47-expr4" "DOC"
+
+    mkdir -p "$WORK_DIR/.claude/hooks"
+    printf '// hook\n' > "$WORK_DIR/.claude/hooks/example.js"
+    git -C "$WORK_DIR" add .claude/hooks/example.js
+
+    run bash -c "CLAUDE_WAVE_SLUG='bl-w47-expr4' CLAUDE_PROJECT_DIR='$WORK_DIR' SKIP_WAVE_CLASS_GATE=1 bash '$HOOK_SCRIPT' '$WORK_DIR'"
+    [ "$status" -eq 0 ]
+}
+
+@test "(G3-5) Gate 3 PASS: DOC-class wave staging .kt file (no HARNESS pattern) → exit 0" {
+    init_git_repo
+    write_correct_registry
+    write_class_sentinel "bl-w47-expr4" "DOC"
+
+    mkdir -p "$WORK_DIR/src"
+    printf 'class Foo\n' > "$WORK_DIR/src/Foo.kt"
+    git -C "$WORK_DIR" add src/Foo.kt
+
+    run bash -c "CLAUDE_WAVE_SLUG='bl-w47-expr4' CLAUDE_PROJECT_DIR='$WORK_DIR' bash '$HOOK_SCRIPT' '$WORK_DIR'"
+    [ "$status" -eq 0 ]
+}
+
+@test "(G3-6) Gate 3 PASS: DOC + WAVE_CLASS_OVERRIDE=HARNESS + HARNESS path → exit 0 (override hardening)" {
+    init_git_repo
+    write_correct_registry
+    write_class_sentinel "bl-w47-expr4" "DOC"
+
+    mkdir -p "$WORK_DIR/.claude/hooks"
+    printf '// hook\n' > "$WORK_DIR/.claude/hooks/example.js"
+    git -C "$WORK_DIR" add .claude/hooks/example.js
+
+    run bash -c "CLAUDE_WAVE_SLUG='bl-w47-expr4' CLAUDE_PROJECT_DIR='$WORK_DIR' WAVE_CLASS_OVERRIDE=HARNESS bash '$HOOK_SCRIPT' '$WORK_DIR'"
+    [ "$status" -eq 0 ]
+}

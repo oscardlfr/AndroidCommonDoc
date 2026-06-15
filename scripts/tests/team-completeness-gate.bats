@@ -88,3 +88,52 @@ run_hook() {
   run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='/nonexistent' node '$HOOK'"
   [ "$status" -eq 0 ]
 }
+
+# ── D-1 class_floors: CLASS-aware peer count floor (BL-W47 ex-PR4) ──────────
+#
+# After D-1, team-completeness-gate reads <waveDir>/CLASS sentinel and looks up
+# class_floors[class] in wave-topology.yaml to enforce role-list membership.
+# DOC floor: 4 peers. HARNESS floor: 7 peers.
+# Missing CLASS sentinel → fail-safe to HARNESS.
+#
+# Tests inject CLAUDE_WAVE_SLUG + CLAUDE_PROJECT_DIR so the hook finds
+# ${TMPDIR}/planning/wave-{slug}/CLASS.
+
+write_class_sentinel_tcg() {
+  local slug="${1:-bl-w47-expr4}"
+  local class_val="${2:-HARNESS}"
+  mkdir -p "${TMPDIR}/planning/wave-${slug}"
+  printf '%s' "$class_val" > "${TMPDIR}/planning/wave-${slug}/CLASS"
+}
+
+@test "CF-1 PASS: DOC-class wave + 4 peers after grace period → exit 0 (DOC floor met)" {
+  write_class_sentinel_tcg "bl-w47-expr4" "DOC"
+  make_flag $((60 * 60 * 1000)) '["arch-platform","context-provider","doc-updater","quality-gater"]'
+  make_input "Bash"
+  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-expr4' node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "CF-2 BLOCK: HARNESS-class wave + 4 peers after grace period → exit 2 (HARNESS floor 7 not met)" {
+  write_class_sentinel_tcg "bl-w47-expr4" "HARNESS"
+  make_flag $((60 * 60 * 1000)) '["arch-platform","context-provider","doc-updater","quality-gater"]'
+  make_input "Bash"
+  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-expr4' node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
+
+@test "CF-3 PASS: missing CLASS sentinel → fail-safe HARNESS + 7 peers → exit 0 (floor met)" {
+  # No CLASS sentinel written — hook defaults to HARNESS (fail-safe per Decision 6).
+  make_flag $((60 * 60 * 1000)) '["arch-platform","arch-testing","arch-integration","planner","context-provider","doc-updater","quality-gater"]'
+  make_input "Bash"
+  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-expr4' node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "CF-4 BLOCK: missing CLASS sentinel → fail-safe HARNESS + 4 peers → exit 2 (floor not met)" {
+  # No CLASS sentinel — hook defaults to HARNESS, needs 7 peers, only 4 present.
+  make_flag $((60 * 60 * 1000)) '["arch-platform","context-provider","doc-updater","quality-gater"]'
+  make_input "Bash"
+  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-expr4' node '$HOOK'"
+  [ "$status" -eq 2 ]
+}

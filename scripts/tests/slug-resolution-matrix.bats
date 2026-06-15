@@ -361,3 +361,45 @@ PYEOF
     --role test-specialist --plan-id 'wave-master/PLAN.md#SRM' --slug master"
   [ "$status" -ne 0 ]
 }
+
+# ── Resolver #6: wave-slug.sh bash resolver (BL-W47 ex-PR4) ─────────────────
+#
+# wave-slug.sh is a new shared bash lib (scripts/sh/lib/wave-slug.sh) that exposes
+# get_wave_slug() to gate scripts and pre-commit-hook.sh Gate 3.
+# It mirrors the JS getWaveSlug() logic: env-reject → CLAUDE_WAVE_SLUG env → git branch
+# last-segment (${branch##*/}) with reject-list (develop, master, main, HEAD).
+#
+# API DEPENDENCY: these tests use `get_wave_slug` as the function name.
+# If toolkit-specialist implements the function under a different name, update the
+# function call below. This dependency is flagged explicitly in the READY-FOR-REVIEW
+# message from test-specialist.
+#
+# Status: RED until toolkit-specialist ships scripts/sh/lib/wave-slug.sh.
+
+SCRIPT_WAVE_SLUG="$BATS_TEST_DIRNAME/../sh/lib/wave-slug.sh"
+
+@test "SRM-6a feature branch → correct last-segment slug (wave-slug.sh)" {
+  git -C "$PROJ" checkout -b "feature/bl-w47-pr-0c1" -q 2>/dev/null
+  mkdir -p "$PROJ/.planning/wave-bl-w47-pr-0c1"
+
+  result="$(CLAUDE_PROJECT_DIR="$PROJ" CLAUDE_WAVE_SLUG="" bash -c "source '$SCRIPT_WAVE_SLUG' && get_wave_slug '$PROJ'")"
+  [ "$result" = "bl-w47-pr-0c1" ]
+}
+
+@test "SRM-6b codex/ branch → last-segment slug (wave-slug.sh, P2b regression)" {
+  git -C "$PROJ" checkout -b "codex/bl-w47-demo" -q 2>/dev/null
+  mkdir -p "$PROJ/.planning/wave-bl-w47-demo"
+
+  result="$(CLAUDE_PROJECT_DIR="$PROJ" CLAUDE_WAVE_SLUG="" bash -c "source '$SCRIPT_WAVE_SLUG' && get_wave_slug '$PROJ'")"
+  [ "$result" = "bl-w47-demo" ]
+}
+
+@test "SRM-6c develop branch → rejected (wave-slug.sh env reject-list)" {
+  result="$(CLAUDE_WAVE_SLUG="develop" bash -c "source '$SCRIPT_WAVE_SLUG' && get_wave_slug '${PROJ}'")"
+  [ -z "$result" ]
+}
+
+@test "SRM-6d explicit env slug → returned as-is when not on reject-list (wave-slug.sh)" {
+  result="$(CLAUDE_WAVE_SLUG="bl-w47-expr4" bash -c "source '$SCRIPT_WAVE_SLUG' && get_wave_slug '${PROJ}'")"
+  [ "$result" = "bl-w47-expr4" ]
+}
