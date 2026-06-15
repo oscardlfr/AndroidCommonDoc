@@ -223,12 +223,24 @@ Report per-module pass/fail. Show failing test names on failure.
 ╚══════════════════════════════════════════╝
 ```
 
-If all pass: "Ready to open PR against `{base}`."
+If all pass:
+
+```
+✅ Content validation PASS (commit-lint, Detekt, build+test, secrets…)
+
+⚠ This is NOT push authorization. The pre-push gate requires push-proof.json —
+  minted ONLY by the canonical quality-gate flow (owned by the quality-gater):
+      → run  /quality-gate   (Steps 0-9 → emit-push-proof.sh run-qg)
+  If commits landed after a prior proof, re-bind verdicts first:
+      write-verdict.sh --role arch-<r> --phase verify-final --supersede   (×3)
+  then re-run /quality-gate.
+```
+
 If any fail: list specific violations and stop.
 
 ### Step 8.5 — Write pre-pr stamp (PASS only)
 
-On READY/PASS outcome only, write a machine-readable stamp so `push-authorization-gate.js` can verify the check was run:
+On READY/PASS outcome only, write a machine-readable content-check receipt (not a push token):
 
 ```bash
 STAMP_PATH="$(pwd)/.androidcommondoc/pre-pr.stamp"
@@ -241,10 +253,10 @@ cat > "$STAMP_PATH" <<EOF
   "branch": "$(git branch --show-current)"
 }
 EOF
-echo "Stamp written: $STAMP_PATH"
+echo "pre-pr.stamp written (content-check receipt — not a push token)."
 ```
 
-On BLOCKED/FAIL outcome: do NOT write the stamp (or write with `"verdict": "FAIL"` for audit purposes). The gate hook reads this stamp before any `git push` on feature branches.
+On BLOCKED/FAIL outcome: do NOT write the stamp (or write with `"verdict": "FAIL"` for audit purposes). The stamp is a content-check receipt only; it does not authorize a push.
 
 ## Important Rules
 
