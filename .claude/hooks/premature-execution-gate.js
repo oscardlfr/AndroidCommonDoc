@@ -11,7 +11,8 @@
 //   WAVE_PREP_BYPASS=1 env (session-scoped)
 //   [PREMATURE_EXEC_BYPASS] inline in Bash command string
 //
-// Fail-open: any parse error, missing PLAN.md, stdin error -> exit 0
+// Fail-open: any parse error, no-wave, no-waveDir, stdin error -> exit 0
+// Fail-CLOSED: active wave + specialist + missing PLAN.md or missing Spawn Table -> exit 2
 
 const fs = require('fs');
 const path = require('path');
@@ -149,6 +150,26 @@ process.stdin.on('end', () => {
 
     // Fail-open: wave dir absent — cannot confirm active wave
     if (!waveDir) process.exit(0);
+
+    // Spawn-Table precondition: active-wave + specialist → PLAN.md + Spawn Table required
+    // (Decision 3 corrected fail-closed boundary — BEFORE hasApprovedPrep)
+    const planPath = path.join(waveDir, 'PLAN.md');
+    if (!fs.existsSync(planPath)) {
+      block(
+        '[premature-execution-gate] Active wave "' + slug + '" + specialist "' + agentType + '" but no PLAN.md found.\n'
+        + 'Planner must write PLAN.md before specialists execute.'
+      );
+    }
+    const planContent = fs.readFileSync(planPath, 'utf8');
+    if (!/^###\s+Spawn Table/m.test(planContent)) {
+      if (process.env.SKIP_SPAWN_TABLE === '1') process.exit(0);
+      block(
+        '[premature-execution-gate] PLAN.md missing "### Spawn Table" section for wave "' + slug + '".\n'
+        + 'Planner must add ### Spawn Table before specialists execute.\n'
+        + 'Emergency escape: SKIP_SPAWN_TABLE=1'
+      );
+    }
+    // Spawn Table present — fall through to hasApprovedPrep check
 
     // Active wave confirmed — check for APPROVED-PREP verdict
     if (hasApprovedPrep(waveDir)) process.exit(0);
