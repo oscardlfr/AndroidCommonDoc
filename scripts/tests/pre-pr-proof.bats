@@ -7,7 +7,7 @@
 # These are read-only content assertions. /pre-pr is a behavioral skill — do NOT
 # attempt to execute it here.
 #
-# 16 assertions: A1·A1b·A2·A2b·A3·A4·A5(×4)·A6(×2)·A6b(×2)·A7·A7b
+# 18 assertions: A1·A1b·A2·A2b·A3·A4·A5(×4)·A6(×2)·A6b(×2)·A7·A7b·A8·A8b
 #
 # Invocation: bats scripts/tests/pre-pr-proof.bats  (from repo root)
 
@@ -102,4 +102,16 @@ TEMPLATE="$REPO_ROOT/setup/copilot-templates/pre-pr.prompt.md"
 
 @test "A7b TEMPLATE: contains 'content-check receipt'" {
   grep -q "content-check receipt" "$TEMPLATE"
+}
+
+# ── A8 — Gap-1 precision clause in SKILL ─────────────────────────────────────
+
+@test "A8  SKILL: contains 'one of two prerequisites'" {
+  grep -q "one of two prerequisites" "$SKILL"
+}
+
+# ── A8b — same clause present in TEMPLATE ────────────────────────────────────
+
+@test "A8b TEMPLATE: contains 'one of two prerequisites'" {
+  grep -q "one of two prerequisites" "$TEMPLATE"
 }
