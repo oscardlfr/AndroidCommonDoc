@@ -186,6 +186,11 @@
         "date": "2026-06-13",
         "breaking": false,
         "summary": "BL-W47 hook-surgery: write-verdict.sh as canonical verdict canal; planner hook-list updated with push-authorization-gate.js replacing legacy push gates; 5-pata ceremony order documented (MIGRATIONS.json → generate-template → generate-registry → rehash → snapshot repin)."
+      },
+      "1.14.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "summary": "ex-PR4 adaptive-floor: add ### Spawn Table authoring section (Role/Count/Reason table) for wave-class-aware peer declaration."
       }
     },
     "quality-gater": {
