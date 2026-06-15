@@ -256,7 +256,7 @@ EOF
 echo "pre-pr.stamp written (content-check receipt — not a push token)."
 ```
 
-On BLOCKED/FAIL outcome: do NOT write the stamp (or write with `"verdict": "FAIL"` for audit purposes). The stamp is a content-check receipt only; it does not authorize a push.
+On BLOCKED/FAIL outcome: do NOT write the stamp (or write with `"verdict": "FAIL"` for audit purposes). The push gate reads this stamp as one of two prerequisites, but the stamp alone does not authorize a push — `push-proof.json` (minted by `/quality-gate`) is also required.
 
 ## Important Rules
 
