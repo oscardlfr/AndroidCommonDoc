@@ -125,7 +125,7 @@ process.stdin.on('end', () => {
     const flagPath = getFlagPath(sessionId);
 
     // ── PostToolUse: record peers spawned for session-* teams ────────────────
-    if (data.hook_event_name === 'PostToolUse' || toolName === 'Agent') {
+    if (data.hook_event_name === 'PostToolUse') {
       if (data.hook_event_name !== 'PostToolUse') process.exit(0);
 
       try {
