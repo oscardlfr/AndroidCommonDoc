@@ -1,6 +1,6 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-06-14 (post bl-w47-pr-0c2)
+> **Last updated**: 2026-06-15 (post bl-w47-supersede)
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
@@ -176,12 +176,11 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Shipped (recent)
 
+- **bl-w47-supersede** (2026-06-15) — write-verdict.sh `--supersede`: opt-in re-emit of VERIFY-FINAL at a new HEAD (comment-delimited block excise+replace, same-HEAD idempotent no-op, fail-closed, stdin-sanitized, orphan-PREP rejected, multi-block normalized). Red-team(5)+Codex(1)+QG-CRLF(1) all fixed + regression-tested; 33 supersede bats VS-1..VS-13; full suite 1471/1471. Dogfooded on its own wave-close. — project_wave_bl_w47_supersede_shipped.md
 - **bl-w47-pr-0c2** (2026-06-14) — QG-proof push gate: canonical emit-push-proof.sh runner + verdict→HEAD binding (required-role enforcement: all 3 arch roles must appear in architects_consulted AND carry a VERIFY-FINAL+HEAD-bound verdict file) + env_attested carve-out (runtime-ui-validation may SKIP with reason when predicate-true) + emitter double-prefix fix (Path B verdict-filename) + bypass audit trail; 91-test bats suite (test-push-proof-gate 28 + pre-push-hook + push-authorization-gate); portable-core with PS1 parity. — `project_wave_bl_w47_pr_0c2_shipped.md`
 - **Kotlin 2.4.0 GA** (2026-06-03) — Upgrade L0 to Kotlin 2.4.0 GA. Manifest pins (kotlin→2.4.0 ×3, KSP→2.3.9 decoupled + coupled_versions removed), build-logic toolchain 2.3.0→2.4.0 (build-verified clean), 3 GA claim corrections (Wasm Component Model Experimental-in-GA, context-args nuance, K/N GC flag), new docs/stdlib/ domain (UUID/sorted-order/value-class JS-TS export) + collection literals + Gradle 9.5 compat. 13 commits. — `project_wave_kotlin_2_4_0_ga_shipped.md`
 - **BL-W47-prep-22** (2026-05-31) — Consumer hook-manifest: 34 hooks 12/10/12 + hub + BACKLOG; 100% coverage now CI-enforced (drift-audit hook-manifest-coverage job). PRs #201/#202/#203 — `project_wave_bl_w47_prep_22_shipped.md`
 - **BL-W47-prep-21** (2026-05-31) — BL-W47-RENDER filed (CP-verified ImageComposeScene Skiko API) + 6 Wave-3cd docs promoted draft→active + F3/F4/F5 NOOPs. 2 commits. PR #200 — `project_wave_bl_w47_prep_21_shipped.md`
-- **BL-W47-prep-20** (2026-05-31) — BACKLOG.md refresh (27-day stale): Shipped prune to top-5 + BL-W47-WATCHER + BL-W47 main + 2 prep-19 sub-findings + Mac Platform Shift section. 2 commits. PR #199 — `project_wave_bl_w47_prep_20_shipped.md`
-
 For full wave history: `git log` + memory `project_*shipped.md` files.
 
 ## How to use this document
