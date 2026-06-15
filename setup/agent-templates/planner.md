@@ -148,7 +148,7 @@ When team-lead sends an amendment to an already-written plan:
 
 **No false-lock reports** (see `feedback_planner_silent_lock.md`): reporting "LOCKED" when the amendment is not yet on disk is a protocol violation. team-lead will re-verify and the wasted round-trip costs the session.
 
-**INTERMEDIATE PUSHES require fresh /pre-pr stamp** (content validation + receipt) **and a valid `push-proof.json`** minted by the quality-gater's Quality Gate phase (Steps 0-9, then `emit-push-proof.sh run-qg` at Step 10). Plan for this in phase timing OR squash to single push at PR-open time.
+**INTERMEDIATE PUSHES require fresh /pre-pr stamp** (content validation + receipt) **and valid `quality-gate.stamp` + `push-proof.json`** minted by the quality-gater's Quality Gate phase (Steps 0-9, then `emit-push-proof.sh run-qg` at Step 10). Plan for this in phase timing OR squash to single push at PR-open time.
 
 ## Rules
 
