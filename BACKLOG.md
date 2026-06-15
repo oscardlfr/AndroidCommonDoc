@@ -76,6 +76,12 @@ Hook to **BLOCK** spawning any core session role (team-lead, arch-platform/integ
 
 Core goal of all BL-W47-prep-X waves. Redesigns the wave harness for resilience, mechanical enforcement, and self-improvement. Full plan at `.planning/BL-W47-PLAN.md`.
 
+**Sub-findings from bl-w47-prepr-proof** (deferred, user-consented 2026-06-15):
+
+- **BL-W47-PREPR-1** (MED) — Missing `/quality-gate` command entrypoint: `/quality-gate` is referenced harness-wide (`scripts/sh/pre-push-hook.sh`, `scripts/sh/emit-push-proof.sh` error messages, `docs/agents/context-rotation-guide.md:80`) but no `.claude/commands/quality-gate.md` backs it. Root fix: create `quality-gate.md` command + matching skill/template driving the QG ceremony, OR sweep all refs to the real runner name. Blocked on harness-entrypoint design decision; out of scope for messaging-only waves.
+
+- **BL-W47-PREPR-2** (MED) — quality-gater secret-scan capability gap: quality-gater lacks `mcp__androidcommondoc__scan-secrets` tool; its secret-scan relies on `bash trufflehog` (absent on Windows host), fudged SKIP→PASS this wave. Root fix: give quality-gater canonical secret-scan capability (MCP scanner) OR honest fail-closed on absence; reconcile `/pre-pr` Step-5.6 `SKIPPED=INFO` semantics with the QG manifest's required-`PASS` semantics for the `secret-scan` step.
+
 **Sub-findings from prep-19** (deferred):
 - **SF-prep-19-A** (LOW) — Backslash heredoc Windows path gap: `cat <<'EOF' > C:\...` mangles path in MSYS Bash. Filed by arch-testing. **Obsoleted by Mac migration ~2026-06 → re-eval post-migration.**
 - **SF-prep-19-B** (LOW) — TDD bundling protocol: QG WARN in prep-19 C2 (bats+fix bundled in one commit). Future waves may tighten protocol; defer to post-BL-W47 harness review.
