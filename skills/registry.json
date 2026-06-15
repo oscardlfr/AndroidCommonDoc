@@ -1043,12 +1043,13 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:bec49ad6d644453bf45cd5c1315006c87c6bad6c35ca3470b722c85cebd08d7a",
+      "hash": "sha256:743177dddf03cd86ffce89673ea75871945c73d66b2e3bdf866b628d9b9b7925",
       "dependencies": [
         "scripts/sh/scan-secrets.sh",
         "scripts/sh/catalog-coverage-check.sh",
         "scripts/sh/validate-agent-templates.sh",
-        "scripts/sh/rehash-registry.sh"
+        "scripts/sh/rehash-registry.sh",
+        "scripts/sh/emit-push-proof.sh"
       ],
       "frontmatter": {
         "name": "pre-pr",
@@ -2530,7 +2531,7 @@
       "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:131c3dbb0e4b8331b62196fae359e52d7e9aae93b4ae150bd26b619bbb10eab5",
+      "hash": "sha256:ebbb08e5a560204bef1d10ee38bdbac2fddb32282ebd4c670b88f662fbffb66c",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",

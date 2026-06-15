@@ -225,12 +225,31 @@ Report per-module pass/fail. Show failing test names on failure.
 ╚══════════════════════════════════════════╝
 ```
 
-If all pass: "Ready to open PR against `{base}`."
+If all pass:
+
+```
+✅ Content checks complete (commit-lint, Detekt, lint-resources, build+test,
+   dependency/catalog freshness, registry). Secret-scan = PASS, or INFO/SKIPPED
+   when TruffleHog isn't installed — a SKIP does NOT assert "no secrets" (Step 5.6).
+
+⚠ This is NOT push authorization, and /pre-pr does NOT mint the proof. The pre-push
+  gate requires the /pre-pr stamp PLUS two artifacts only the quality-gater's Quality
+  Gate phase mints — `quality-gate.stamp` and `push-proof.json`:
+  it runs the QG Steps 0-9 (this /pre-pr is its Step 2), then at Step 10 emits
+  the canonical proof —
+      bash scripts/sh/emit-push-proof.sh --subcommand run-qg
+  Run the full Quality Gate phase before pushing; run-qg is ONLY that final emission
+  step and fail-closes without the Steps 0-9 report and the 3 architect VERIFY-FINAL
+  verdicts. If commits landed after a prior proof, re-bind those verdicts first:
+      write-verdict.sh --role arch-<r> --phase verify-final --supersede   (×3)
+  then re-run the Quality Gate phase.
+```
+
 If any fail: list specific violations and stop.
 
 ### Step 8.5 — Write pre-pr stamp (PASS only)
 
-On READY/PASS outcome only, write a machine-readable stamp so `push-authorization-gate.js` can verify the check was run:
+On READY/PASS outcome only, write a machine-readable content-check receipt (not a push token):
 
 ```bash
 STAMP_PATH="$(pwd)/.androidcommondoc/pre-pr.stamp"
@@ -243,10 +262,10 @@ cat > "$STAMP_PATH" <<EOF
   "branch": "$(git branch --show-current)"
 }
 EOF
-echo "Stamp written: $STAMP_PATH"
+echo "pre-pr.stamp written (content-check receipt — not a push token)."
 ```
 
-On BLOCKED/FAIL outcome: do NOT write the stamp (or write with `"verdict": "FAIL"` for audit purposes). The gate hook reads this stamp before any `git push` on feature branches.
+On BLOCKED/FAIL outcome: do NOT write the stamp (or write with `"verdict": "FAIL"` for audit purposes). The push gate reads this stamp as one of THREE required artifacts; the stamp alone does not authorize a push. It also requires `quality-gate.stamp` and `push-proof.json`, both minted by the quality-gater's Quality Gate phase (Steps 0-9, then Step 10 `emit-push-proof.sh run-qg`).
 
 ## Important Rules
 
