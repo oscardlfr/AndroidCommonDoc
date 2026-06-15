@@ -2530,7 +2530,7 @@
       "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:131c3dbb0e4b8331b62196fae359e52d7e9aae93b4ae150bd26b619bbb10eab5",
+      "hash": "sha256:ad93d5f2ea694c82119d4a08df830dc652797b91f418ad75cad910873a373fdf",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",

@@ -61,7 +61,7 @@ Before drafting any brief that mentions git ops, hooks, /pre-pr, commit-lint, or
 
 Active hooks: `push-authorization-gate.js`, `git-amend-gate.js`, `commit-scope-validation-gate.js`, `branch-guard.js`, `premature-execution-gate.js`, `specialist-task-completion-gate.js`.
 
-**INTERMEDIATE PUSHES require fresh /pre-pr stamp.** Plan for this in phase timing OR squash to single push at PR-open time.
+**INTERMEDIATE PUSHES require fresh /pre-pr stamp** (content validation + receipt) **and a valid `push-proof.json`** minted by `/quality-gate` → `emit-push-proof.sh run-qg`. Plan for this in phase timing OR squash to single push at PR-open time.
 
 ## Operating Mode
 
