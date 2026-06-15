@@ -4,7 +4,10 @@
 # Verifies that the class-aware peer floor blocks arch-* spawns when the wave class
 # requires more peers than are currently present in the session flag.
 #
-# Infra: fixture-driven (flag files in BATS_TEST_TMPDIR; no live os.tmpdir() writes).
+# CLASS sentinels written to ${TMPDIR}/.planning/wave-{slug}/ so the hook's
+# .planning check finds them with CLAUDE_PROJECT_DIR=${TMPDIR}. topology+yaml
+# are __dirname-anchored — no CLAUDE_PROJECT_DIR action needed for those.
+# teardown() removes ${TMPDIR}/.planning/wave-bl-w47-ttg-test after each test.
 
 HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/team-topology-gate.js"
 
@@ -19,7 +22,7 @@ setup() {
 teardown() {
   rm -f "${TMPDIR}/claude-team-topology-test-topology-$$.flag"
   rm -f "${TMPDIR}/team-topology-gate-input-$$.json"
-  rm -rf "${TMPDIR}/planning"
+  rm -rf "${TMPDIR}/.planning/wave-bl-w47-ttg-test"
 }
 
 make_input_spawn() {
@@ -43,37 +46,40 @@ PYEOF
 }
 
 write_class_sentinel() {
-  local slug="${1:-bl-w47-expr4}"
+  local slug="${1:-bl-w47-ttg-test}"
   local class_val="${2:-HARNESS}"
-  mkdir -p "${TMPDIR}/planning/wave-${slug}"
-  printf '%s' "$class_val" > "${TMPDIR}/planning/wave-${slug}/CLASS"
+  mkdir -p "${TMPDIR}/.planning/wave-${slug}"
+  printf '%s' "$class_val" > "${TMPDIR}/.planning/wave-${slug}/CLASS"
 }
 
 run_hook() {
-  run bash -c "cat '$INPUT_FILE' | CLAUDE_TOPOLOGY_GATE_DISABLED='' CLAUDE_SESSION_ID='test-topology-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-expr4' node '$HOOK'"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_TOPOLOGY_GATE_DISABLED='' CLAUDE_SESSION_ID='test-topology-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-ttg-test' node '$HOOK'"
 }
 
 @test "TF-1 PASS: DOC-class wave + 4 peers → arch-* spawn allowed (DOC floor met)" {
-  write_class_sentinel "bl-w47-expr4" "DOC"
+  write_class_sentinel "bl-w47-ttg-test" "DOC"
   make_flag 0 '["arch-platform","context-provider","doc-updater","quality-gater"]'
   make_input_spawn "arch-testing"
   run_hook
   [ "$status" -eq 0 ]
+  [[ "$output" != *'"block"'* ]]
 }
 
 @test "TF-2 BLOCK: HARNESS-class wave + 4 peers → arch-* spawn blocked (HARNESS floor 7 not met)" {
-  write_class_sentinel "bl-w47-expr4" "HARNESS"
+  write_class_sentinel "bl-w47-ttg-test" "HARNESS"
   make_flag 0 '["arch-platform","context-provider","doc-updater","quality-gater"]'
   make_input_spawn "arch-testing"
   run_hook
   [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision"'* ]]
+  [[ "$output" == *'"block"'* ]]
 }
 
 @test "TF-3 PASS: CLAUDE_TOPOLOGY_GATE_DISABLED=1 → no block" {
-  write_class_sentinel "bl-w47-expr4" "HARNESS"
+  write_class_sentinel "bl-w47-ttg-test" "HARNESS"
   make_flag 0 '["arch-platform"]'
   make_input_spawn "arch-testing"
-  run bash -c "cat '$INPUT_FILE' | CLAUDE_TOPOLOGY_GATE_DISABLED=1 CLAUDE_SESSION_ID='test-topology-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-expr4' node '$HOOK'"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_TOPOLOGY_GATE_DISABLED=1 CLAUDE_SESSION_ID='test-topology-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-ttg-test' node '$HOOK'"
   [ "$status" -eq 0 ]
 }
 
@@ -84,7 +90,7 @@ run_hook() {
 }
 
 @test "TF-5 PASS: non-arch-* spawn (toolkit-specialist) → not intercepted" {
-  write_class_sentinel "bl-w47-expr4" "HARNESS"
+  write_class_sentinel "bl-w47-ttg-test" "HARNESS"
   make_flag 0 '[]'
   # team-topology-gate PreToolUse only intercepts arch-* subagent_type
   cat > "$INPUT_FILE" <<EOF

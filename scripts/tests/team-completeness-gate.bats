@@ -17,6 +17,7 @@ setup() {
 teardown() {
   rm -f "${TMPDIR}/claude-team-topology-test-session-$$.flag"
   rm -f "${TMPDIR}/team-completeness-gate-input-$$.json"
+  rm -rf "${TMPDIR}/.planning/wave-bl-w47-tcg-test"
 }
 
 make_input() {
@@ -82,12 +83,10 @@ run_hook() {
   [ "$status" -eq 0 ]
 }
 
-@test "FAIL-OPEN: missing topology yaml does not block" {
-  make_flag $((60 * 60 * 1000)) "[]"
-  make_input "Bash"
-  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='/nonexistent' node '$HOOK'"
-  [ "$status" -eq 0 ]
-}
+# NOTE: "FAIL-OPEN: missing topology yaml" test removed in BL-W47 ex-PR4.
+# topoPath is __dirname-anchored — topology is always readable from hook location.
+# CLAUDE_PROJECT_DIR=/nonexistent no longer achieves fail-open; load always succeeds.
+# loadYaml null→exit(0) path exists in code but requires __dirname mock to test — not cheap.
 
 # ── D-1 class_floors: CLASS-aware peer count floor (BL-W47 ex-PR4) ──────────
 #
@@ -96,44 +95,49 @@ run_hook() {
 # DOC floor: 4 peers. HARNESS floor: 7 peers.
 # Missing CLASS sentinel → fail-safe to HARNESS.
 #
-# Tests inject CLAUDE_WAVE_SLUG + CLAUDE_PROJECT_DIR so the hook finds
-# ${TMPDIR}/planning/wave-{slug}/CLASS.
+# Tests set CLAUDE_PROJECT_DIR=${TMPDIR} and write CLASS sentinel to
+# ${TMPDIR}/.planning/wave-{slug}/CLASS. topology+yaml are __dirname-anchored.
+# teardown() removes ${TMPDIR}/.planning/wave-bl-w47-tcg-test after each test.
 
 write_class_sentinel_tcg() {
-  local slug="${1:-bl-w47-expr4}"
+  local slug="${1:-bl-w47-tcg-test}"
   local class_val="${2:-HARNESS}"
-  mkdir -p "${TMPDIR}/planning/wave-${slug}"
-  printf '%s' "$class_val" > "${TMPDIR}/planning/wave-${slug}/CLASS"
+  mkdir -p "${TMPDIR}/.planning/wave-${slug}"
+  printf '%s' "$class_val" > "${TMPDIR}/.planning/wave-${slug}/CLASS"
 }
 
 @test "CF-1 PASS: DOC-class wave + 4 peers after grace period → exit 0 (DOC floor met)" {
-  write_class_sentinel_tcg "bl-w47-expr4" "DOC"
+  write_class_sentinel_tcg "bl-w47-tcg-test" "DOC"
   make_flag $((60 * 60 * 1000)) '["arch-platform","context-provider","doc-updater","quality-gater"]'
   make_input "Bash"
-  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-expr4' node '$HOOK'"
+  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-tcg-test' node '$HOOK'"
   [ "$status" -eq 0 ]
+  [[ "$output" != *"BLOCKED"* ]]
 }
 
 @test "CF-2 BLOCK: HARNESS-class wave + 4 peers after grace period → exit 2 (HARNESS floor 7 not met)" {
-  write_class_sentinel_tcg "bl-w47-expr4" "HARNESS"
+  write_class_sentinel_tcg "bl-w47-tcg-test" "HARNESS"
   make_flag $((60 * 60 * 1000)) '["arch-platform","context-provider","doc-updater","quality-gater"]'
   make_input "Bash"
-  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-expr4' node '$HOOK'"
+  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-tcg-test' node '$HOOK'"
   [ "$status" -eq 2 ]
+  [[ "$output" == *"BLOCKED"* ]] || [[ "$output" == *"Missing"* ]]
 }
 
 @test "CF-3 PASS: missing CLASS sentinel → fail-safe HARNESS + 7 peers → exit 0 (floor met)" {
   # No CLASS sentinel written — hook defaults to HARNESS (fail-safe per Decision 6).
   make_flag $((60 * 60 * 1000)) '["arch-platform","arch-testing","arch-integration","planner","context-provider","doc-updater","quality-gater"]'
   make_input "Bash"
-  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-expr4' node '$HOOK'"
+  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-tcg-test' node '$HOOK'"
   [ "$status" -eq 0 ]
 }
 
 @test "CF-4 BLOCK: missing CLASS sentinel → fail-safe HARNESS + 4 peers → exit 2 (floor not met)" {
-  # No CLASS sentinel — hook defaults to HARNESS, needs 7 peers, only 4 present.
+  # No CLASS sentinel — wave dir created so waveDir resolves; hook defaults CLASS to HARNESS.
+  mkdir -p "${TMPDIR}/.planning/wave-bl-w47-tcg-test"
   make_flag $((60 * 60 * 1000)) '["arch-platform","context-provider","doc-updater","quality-gater"]'
   make_input "Bash"
-  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-expr4' node '$HOOK'"
+  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-tcg-test' node '$HOOK'"
   [ "$status" -eq 2 ]
+  [[ "$output" == *"BLOCKED"* ]] || [[ "$output" == *"Missing"* ]]
 }
