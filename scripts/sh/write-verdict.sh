@@ -382,7 +382,7 @@ run_verify_final() {
         if [[ -n "$head_line_num" ]]; then
           # B3 fix: warn before truncation, naming the line range being excised.
           local total_lines=""
-          total_lines="$(wc -l < "$VERDICT_FILE" | tr -d ' ')"
+          total_lines="$(wc -l < "$VERDICT_FILE" | tr -d ' \r')"
           if [[ "$head_line_num" -le "$total_lines" ]]; then
             echo "[write-verdict] WARN: --supersede legacy fallback: excising lines ${head_line_num}-${total_lines} from $VERDICT_FILE (content in that range will be replaced by fresh delimited block)" >&2
           fi
