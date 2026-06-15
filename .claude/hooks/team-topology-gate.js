@@ -105,6 +105,12 @@ function resolveFloorPeers(topology, waveDir) {
   return Array.isArray(topology.mandatory_peers) ? topology.mandatory_peers : [];
 }
 
+function loadYaml(projectRoot) {
+  try { return require(path.join(__dirname, '..', '..', 'mcp-server', 'node_modules', 'yaml')); } catch {}
+  try { return require(path.join(projectRoot, 'mcp-server', 'node_modules', 'yaml')); } catch {}
+  return null;
+}
+
 let input = '';
 const t = setTimeout(() => process.exit(0), 5000);
 process.stdin.setEncoding('utf8');
@@ -165,7 +171,8 @@ process.stdin.on('end', () => {
 
     let topology;
     try {
-      const yaml = require(path.join(__dirname, '..', '..', 'mcp-server', 'node_modules', 'yaml'));
+      const yaml = loadYaml(projectRoot);
+      if (!yaml) process.exit(0); // fail-open if yaml package unavailable
       const topoPath = path.join(projectRoot, '.claude', 'registry', 'wave-topology.yaml');
       topology = yaml.parse(fs.readFileSync(topoPath, 'utf8'));
     } catch {
