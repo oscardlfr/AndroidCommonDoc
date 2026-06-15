@@ -1043,7 +1043,7 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8ef9bb265d75cc7c66ce87da6d318d41b1b4da1e8135d4b8c8242c780adab767",
+      "hash": "sha256:7272ac108ef5c5011fbae51e9266b9f149e837639234d297984015d17d2be3a0",
       "dependencies": [
         "scripts/sh/scan-secrets.sh",
         "scripts/sh/catalog-coverage-check.sh",
@@ -2530,7 +2530,7 @@
       "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ad93d5f2ea694c82119d4a08df830dc652797b91f418ad75cad910873a373fdf",
+      "hash": "sha256:f94b0b2d89d77cac9fae9f3d6a7d5db9a142a25230cc24462b28772e08110638",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
