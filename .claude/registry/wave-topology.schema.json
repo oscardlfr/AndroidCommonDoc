@@ -5,7 +5,23 @@
   "properties": {
     "manifest": { "type": "object" },
     "session_prefix": { "type": "string" },
-    "mandatory_peers": { "type": "array", "items": { "type": "string" } },
+    "mandatory_peers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Deprecated alias for class_floors.HARNESS. Kept for one-release grace period."
+    },
+    "class_floors": {
+      "type": "object",
+      "description": "Per-class mandatory peer role-lists. Keys are wave class names (HARNESS, DOC, FAST-PATH). Values are arrays of peer role names that must be present in the session team.",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "default_class": {
+      "type": "string",
+      "description": "Default wave class when CLASS sentinel is absent. Fail-safe: HARNESS."
+    },
     "phase_gates": {
       "type": "object",
       "properties": {
