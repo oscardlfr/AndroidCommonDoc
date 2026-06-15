@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-commit hook: chains two consistency gates.
+# Pre-commit hook: chains three consistency gates.
 #
 #   Gate 1 (Wave 21): skill registry hash freshness.
 #     Triggered by staged skills/*/SKILL.md or skills/registry.json.
