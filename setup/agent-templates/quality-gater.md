@@ -308,13 +308,18 @@ REPORT_FILE=".androidcommondoc/quality-gate-report.json"
 
 append_step_json() {
   local step="$1" ran="$2" result="$3" reason="$4"
-  # Append into steps[] array in the existing report file (fail-open if missing)
   if [[ -f "$REPORT_FILE" ]]; then
-    local entry
-    entry="$(printf '{"step":"%s","ran":%s,"result":"%s","reason":"%s"}' \
-      "$step" "$ran" "$result" "$reason")"
-    # Insert before the closing ] of the steps array
-    sed -i "s|][ ]*$|, $entry\n]|" "$REPORT_FILE" 2>/dev/null || true
+    python3 - "$REPORT_FILE" "$step" "$ran" "$result" "$reason" << 'PYEOF'
+import json, sys
+path, step, ran_s, result, reason = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+with open(path, encoding='utf-8') as f:
+    report = json.load(f)
+ran_bool = ran_s == 'true'
+report.setdefault('steps', []).append({'step': step, 'ran': ran_bool, 'result': result, 'reason': reason})
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    json.dump(report, f, indent=2)
+    f.write('\n')
+PYEOF
   fi
 }
 
