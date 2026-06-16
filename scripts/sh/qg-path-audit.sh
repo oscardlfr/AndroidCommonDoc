@@ -149,7 +149,7 @@ echo "[qg-path-audit] Touched files: ${#TOUCHED_FILES[@]}" >&2
 # ── Step 6: Out-of-manifest check ────────────────────────────────────────────
 
 FAIL=0
-for touched in "${TOUCHED_FILES[@]}"; do
+for touched in "${TOUCHED_FILES[@]+"${TOUCHED_FILES[@]}"}"; do
   IN_MAN=0
   for manifest_entry in "${MANIFEST_FILES[@]+"${MANIFEST_FILES[@]}"}"; do
     if [[ "$touched" == "$manifest_entry" ]]; then
