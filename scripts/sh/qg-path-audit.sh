@@ -79,12 +79,12 @@ if [[ ! -f "$CLASS_SENTINEL_FILE" ]]; then
   exit 2
 fi
 
-CLASS_SENTINEL="$(grep -m1 '[^[:space:]]' "$CLASS_SENTINEL_FILE" | tr -d '[:space:]' || true)"
+CLASS_SENTINEL="$(grep -m1 '[^[:space:]]' "$CLASS_SENTINEL_FILE" | tr -d '[:space:]\r' || true)"
 
 # ── Step 2: Read PLAN.md Wave Class ──────────────────────────────────────────
 
 PLAN_CLASS=""
-PLAN_CLASS="$(grep -m1 '\*\*Class\*\*:' "$PLAN_FILE" | sed 's/.*\*\*Class\*\*:[[:space:]]*//' | tr -d '[:space:]')" || true
+PLAN_CLASS="$(grep -m1 '\*\*Class\*\*:' "$PLAN_FILE" | sed 's/.*\*\*Class\*\*:[[:space:]]*//' | tr -d '[:space:]\r')" || true
 
 if [[ -z "$PLAN_CLASS" ]]; then
   echo "[qg-path-audit] ERROR: could not extract **Class**: from PLAN.md" >&2
@@ -123,7 +123,7 @@ while IFS= read -r line; do
     stripped="${stripped%%\`*}"
     stripped="${stripped%% (*}"
     # Strip all whitespace (forward-slash paths have none, but be safe)
-    stripped="$(printf '%s' "$stripped" | tr -d ' ')"
+    stripped="$(printf '%s' "$stripped" | tr -d ' \r')"
     if [[ -n "$stripped" ]]; then
       MANIFEST_FILES+=("$stripped")
     fi

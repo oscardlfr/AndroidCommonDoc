@@ -107,7 +107,7 @@ if [[ "${SKIP_WAVE_CLASS_GATE:-0}" != "1" ]]; then
       wave_class="HARNESS"
       class_sentinel="$wave_dir/CLASS"
       if [[ -f "$class_sentinel" ]]; then
-        raw_class="$(grep -m1 '[^[:space:]]' "$class_sentinel" | tr -d '[:space:]' || true)"
+        raw_class="$(grep -m1 '[^[:space:]]' "$class_sentinel" | tr -d '[:space:]\r' || true)"
         [[ -n "$raw_class" ]] && wave_class="$raw_class"
       fi
 
