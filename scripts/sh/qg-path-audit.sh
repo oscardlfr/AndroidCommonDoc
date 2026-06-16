@@ -85,7 +85,6 @@ CLASS_SENTINEL="$(grep -m1 '[^[:space:]]' "$CLASS_SENTINEL_FILE" | tr -d '[:spac
 
 # ── Step 2: Read PLAN.md Wave Class ──────────────────────────────────────────
 
-PLAN_CLASS=""
 PLAN_CLASS="$(grep -m1 '\*\*Class\*\*:' "$PLAN_FILE" | sed 's/.*\*\*Class\*\*:[[:space:]]*//' | tr -d '[:space:]\r')" || true
 
 if [[ -z "$PLAN_CLASS" ]]; then
