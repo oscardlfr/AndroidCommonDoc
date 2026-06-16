@@ -12,12 +12,19 @@ INPUT_FILE="${BATS_TEST_TMPDIR}/premature-exec-input-$$.json"
 
 # setup() creates a temp .planning/wave-bl-w43/ dir to simulate an active wave.
 # WAVE_PREP_BYPASS is explicitly cleared to prevent accidental bypass leaking.
+# D-3 (BL-W47 ex-PR4): active wave requires PLAN.md + Spawn Table before specialists
+# execute. Pre-existing cases inherit a valid PLAN.md from setup(). Tests that need
+# to exercise the missing-PLAN.md (ST-5) or missing-Spawn-Table (ST-1) boundaries
+# override this by rm -f or write_plan_without_spawn_table in their own body.
 setup() {
   WAVE_DIR="$BATS_TEST_TMPDIR/planning/wave-bl-w43"
   mkdir -p "$WAVE_DIR"
   export CLAUDE_PROJECT_DIR="$BATS_TEST_TMPDIR"
   export CLAUDE_WAVE_SLUG="bl-w43"
   export WAVE_PREP_BYPASS=''
+  # write_plan_with_spawn_table is defined later in this file; bats loads the whole
+  # file before running any test, so the forward-reference is safe.
+  write_plan_with_spawn_table
 }
 
 teardown() {
@@ -200,7 +207,14 @@ run_hook() {
   local non_feature_slug="bl-w47-demo"
   local non_feature_wave_dir="$BATS_TEST_TMPDIR/planning/wave-$non_feature_slug"
   mkdir -p "$non_feature_wave_dir"
-  # No verdict → gate must BLOCK (proves slug was resolved and wave was found).
+  # D-3: wave dir needs PLAN.md + Spawn Table so the gate reaches the APPROVED-PREP check.
+  cat > "$non_feature_wave_dir/PLAN.md" <<'PLANEOF'
+### Spawn Table
+| Role | Count | Reason |
+|---|---|---|
+| arch-platform | 1 | test |
+PLANEOF
+  # No verdict → gate must BLOCK on APPROVED-PREP (proves slug resolved + wave found).
   make_input "Write" "docs/new-doc.md" "test-specialist"
   run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' CLAUDE_WAVE_SLUG='$non_feature_slug' node '$HOOK' 2>/dev/null"
   [ "$status" -eq 2 ]
@@ -252,6 +266,13 @@ run_hook() {
   git -C "$proj" checkout -b "codex/bl-w47-demo" -q 2>/dev/null
   # Create wave dir for the CORRECT last-segment slug.
   mkdir -p "$proj/.planning/wave-bl-w47-demo"
+  # D-3: wave dir needs PLAN.md + Spawn Table so the gate reaches the APPROVED-PREP check.
+  cat > "$proj/.planning/wave-bl-w47-demo/PLAN.md" <<'PLANEOF'
+### Spawn Table
+| Role | Count | Reason |
+|---|---|---|
+| arch-platform | 1 | test |
+PLANEOF
   # Explicitly clear CLAUDE_WAVE_SLUG so setup()'s export doesn't leak into the subprocess
   # and bypass branch parsing (the env-bypass class of bug — S4 lesson).
   make_input "Write" "docs/new-doc.md" "test-specialist"
@@ -261,4 +282,120 @@ run_hook() {
   # AFTER fix: exits 2 (no verdict → gate blocks).
   [ "$status" -eq 2 ]
   [[ "$output" == *"APPROVED-PREP"* ]]
+}
+
+@test "B PEG-SLUG-TRAVERSAL: CLAUDE_WAVE_SLUG=../evil — robustness check (no crash, fail-open via isValidSlug rejection)" {
+  # Robustness: invalid slug (contains /) → isValidSlug rejects → getWaveSlug returns null
+  # → no waveDir resolved → fail-open (exit 0, no block decision).
+  # Non-vacuity for isValidSlug is proven at the bash layer (SRM-TRAVERSAL asserts
+  # wave-slug.sh outputs empty for ../evil vs a valid slug). isValidSlug in JS mirrors
+  # the same allowlist; arch-platform confirmed all 3 getWaveSlug return points are guarded.
+  make_input "Write" "docs/x.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_WAVE_SLUG='../evil' WAVE_PREP_BYPASS='' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
+}
+
+# ── D-3 Spawn-Table check (BL-W47 ex-PR4) ────────────────────────────────────
+#
+# After Decision 3 (CORRECTED fail-open boundary): when waveDir is confirmed +
+# tool is by a SUBJECT_TYPES role, PLAN.md must exist AND contain ### Spawn Table.
+# Missing waveDir still fails open (exit 0). Missing PLAN.md or missing Spawn Table
+# in PLAN.md → exit 2 (BLOCK). SKIP_SPAWN_TABLE=1 is the escape hatch.
+#
+# These cases use the existing setup() wave dir (WAVE_DIR=$BATS_TEST_TMPDIR/planning/wave-bl-w43)
+# and write PLAN.md into it via the helpers below (Option a — simpler, no slug override needed).
+
+write_plan_with_spawn_table() {
+  cat > "$WAVE_DIR/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Path-Manifest
+
+- scripts/sh/pre-commit-hook.sh
+
+### Spawn Table
+
+| Role | Count | Reason |
+|---|---|---|
+| arch-platform | 1 | hook surgery |
+| test-specialist | 1 | bats tests |
+PLANEOF
+}
+
+write_plan_without_spawn_table() {
+  cat > "$WAVE_DIR/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Path-Manifest
+
+- scripts/sh/pre-commit-hook.sh
+
+(no Spawn Table section)
+PLANEOF
+}
+
+@test "ST-1 BLOCK: active wave + specialist Write + PLAN.md missing Spawn Table → exit 2" {
+  write_plan_without_spawn_table
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Spawn Table"* ]]
+}
+
+@test "ST-2 PASS: active wave + specialist Write + PLAN.md has Spawn Table + APPROVED-PREP → exit 0" {
+  write_plan_with_spawn_table
+  printf 'STATUS: APPROVED-PREP\n' > "$WAVE_DIR/arch-testing-verdict.md"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "ST-3 PASS: no wave dir → fail-open exit 0 (fail-open preserved, regression guard)" {
+  # CRITICAL: rm -rf the wave dir created by setup() so the hook sees no active wave.
+  # Without this, the hook finds waveDir present but no PLAN.md → falls into ST-5's
+  # BLOCK path. The rm is load-bearing for this fail-open regression guard.
+  rm -rf "$WAVE_DIR"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "ST-4 PASS: SKIP_SPAWN_TABLE=1 + PLAN.md missing Spawn Table → exit 0 (escape hatch)" {
+  write_plan_without_spawn_table
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' SKIP_SPAWN_TABLE=1 node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "ST-5 BLOCK: wave dir exists + no PLAN.md + specialist Write → exit 2 (old fail-open closed)" {
+  # setup() now writes PLAN.md; remove it so the wave dir exists but has no PLAN.md.
+  # rm -f (not rm -rf) keeps the wave dir — that's what distinguishes ST-5 from ST-3.
+  # Decision 3 CORRECTED: confirmed waveDir + no PLAN.md → BLOCK (not fail-open).
+  rm -f "$WAVE_DIR/PLAN.md"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"PLAN.md"* ]]
+}
+
+# Helper path for .codex mirror (used by codex-identity check below)
+HOOK_CODEX="$BATS_TEST_DIRNAME/../../.codex/hooks/premature-execution-gate.js"
+
+@test "CODEX-1: .codex mirror produces identical exit behavior to canonical (post-sync parity)" {
+  # Run the .codex copy against the same scenario as Case 1 (specialist Write + no APPROVED-PREP → block).
+  # After D-3 full re-sync, both copies must exit 2 with block JSON on stdout.
+  # RED before sync (if .codex still has process.stderr.write): stdout will be empty, test fails.
+  # GREEN after sync: .codex exits 2 with block JSON on stdout, identical to canonical.
+  # .codex/ is gitignored — skip on CI where the mirror is absent.
+  [ -f "$HOOK_CODEX" ] || skip ".codex mirror not present (gitignored)"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' node '$HOOK_CODEX' 2>/dev/null"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision"'* ]]
+  [[ "$output" == *'"block"'* ]]
 }

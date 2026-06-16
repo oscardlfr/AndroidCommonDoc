@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-commit hook: chains two consistency gates.
+# Pre-commit hook: chains three consistency gates.
 #
 #   Gate 1 (Wave 21): skill registry hash freshness.
 #     Triggered by staged skills/*/SKILL.md or skills/registry.json.
@@ -9,8 +9,8 @@
 #     Triggered by staged setup/agent-templates/*.md or .claude/agents/*.md.
 #     Runs `generate-template.js --check --all`. Drift → block.
 #
-# Exit 0: no action / both gates clean
-# Exit 1: stale hash or manifest drift, commit blocked
+# Exit 0: no action / all gates clean
+# Exit 1: stale hash, manifest drift, or out-of-class staged files, commit blocked
 # Exit 2: infrastructure error
 
 set -euo pipefail
@@ -59,22 +59,88 @@ if [[ -n "$manifest_triggers" ]]; then
 
   GENERATE_CLI="$PROJECT_ROOT/mcp-server/build/cli/generate-template.js"
   if [[ ! -f "$GENERATE_CLI" ]]; then
-    log "generate-template.js not built — skipping (run 'cd mcp-server && npm run build')"
-    exit 0
+    log "generate-template.js not built — skipping Gate 2 (run 'cd mcp-server && npm run build')"
+  else
+    if ! GEN_OUT=$(node "$GENERATE_CLI" --check --all 2>&1); then
+      echo "" >&2
+      echo "[MANIFEST] Agent template frontmatter has drifted from manifest baseline." >&2
+      echo "$GEN_OUT" | grep -E '^  DRIFT' | head -5 >&2
+      echo "" >&2
+      echo "[MANIFEST] Fix per drifted agent:" >&2
+      echo "[MANIFEST]   node mcp-server/build/cli/generate-template.js <agent-name> --update-manifest-hash" >&2
+      echo "[MANIFEST]   bash scripts/sh/rehash-registry.sh --project-root \"$(pwd)\"" >&2
+      echo "[MANIFEST] Then stage manifest + templates + mirrors + registry and retry commit." >&2
+      exit 1
+    fi
+    log "manifest drift check clean"
+  fi
+fi
+
+# ── Gate 3: wave class path-classifier ────────────────────────────────────
+# Blocks commits that stage HARNESS-only paths (hooks, scripts, CI, templates,
+# settings.json) when the active wave class is lower than HARNESS.
+# Bypass: SKIP_WAVE_CLASS_GATE=1
+# Harden-only override: WAVE_CLASS_OVERRIDE=HARNESS (never downgrades)
+# No-op: no active wave dir, or FAST-PATH/HARNESS class staging HARNESS paths
+if [[ "${SKIP_WAVE_CLASS_GATE:-0}" != "1" ]]; then
+  WAVE_SLUG_LIB="$HOOK_DIR/lib/wave-slug.sh"
+  if [[ ! -f "$WAVE_SLUG_LIB" ]]; then
+    WAVE_SLUG_LIB="$PROJECT_ROOT/scripts/sh/lib/wave-slug.sh"
+  fi
+  if [[ -f "$WAVE_SLUG_LIB" ]]; then
+    # shellcheck source=scripts/sh/lib/wave-slug.sh
+    source "$WAVE_SLUG_LIB"
+    wave_slug="$(get_wave_slug "$PROJECT_ROOT" || true)"
+  else
+    wave_slug=""
+    log "wave-slug.sh not found — Gate 3 no-op"
   fi
 
-  if ! GEN_OUT=$(node "$GENERATE_CLI" --check --all 2>&1); then
-    echo "" >&2
-    echo "[MANIFEST] Agent template frontmatter has drifted from manifest baseline." >&2
-    echo "$GEN_OUT" | grep -E '^  DRIFT' | head -5 >&2
-    echo "" >&2
-    echo "[MANIFEST] Fix per drifted agent:" >&2
-    echo "[MANIFEST]   node mcp-server/build/cli/generate-template.js <agent-name> --update-manifest-hash" >&2
-    echo "[MANIFEST]   bash scripts/sh/rehash-registry.sh --project-root \"\$(pwd)\"" >&2
-    echo "[MANIFEST] Then stage manifest + templates + mirrors + registry and retry commit." >&2
-    exit 1
+  if [[ -n "$wave_slug" ]]; then
+    wave_dir=""
+    for candidate in "$PROJECT_ROOT/.planning/wave-${wave_slug}" "$PROJECT_ROOT/planning/wave-${wave_slug}"; do
+      [[ -d "$candidate" ]] && wave_dir="$candidate" && break
+    done
+
+    if [[ -n "$wave_dir" ]]; then
+      # Read CLASS sentinel; missing => HARNESS fail-safe (Decision 6)
+      wave_class="HARNESS"
+      class_sentinel="$wave_dir/CLASS"
+      if [[ -f "$class_sentinel" ]]; then
+        raw_class="$(grep -m1 '[^[:space:]]' "$class_sentinel" | tr -d '[:space:]\r' || true)"
+        [[ -n "$raw_class" ]] && wave_class="$raw_class"
+      fi
+
+      # WAVE_CLASS_OVERRIDE hardens only — never downgrades
+      if [[ "${WAVE_CLASS_OVERRIDE:-}" == "HARNESS" ]]; then
+        wave_class="HARNESS"
+      fi
+
+      log "Gate 3: wave=${wave_slug} class=${wave_class}"
+
+      # HARNESS-escalation path patterns (RESEARCH-classifier §1)
+      harness_pattern='(^\.claude/hooks/|^\.claude/registry/|^\.claude/agents/|^scripts/|^setup/agent-templates/|^\.github/|(^|/)settings\.json$)'
+
+      # Check if any staged file matches a HARNESS-only pattern
+      harness_staged=$(echo "$staged" | grep -E "$harness_pattern" || true)
+
+      if [[ -n "$harness_staged" && "$wave_class" != "HARNESS" ]]; then
+        echo "" >&2
+        echo "[WAVE-CLASS] Gate 3 BLOCKED: staged HARNESS-path files in a ${wave_class}-class wave." >&2
+        echo "[WAVE-CLASS] HARNESS-path files require the wave to be declared class HARNESS." >&2
+        echo "[WAVE-CLASS] Staged HARNESS paths:" >&2
+        echo "$harness_staged" | head -10 >&2
+        echo "[WAVE-CLASS] Active wave: ${wave_slug} (class: ${wave_class})" >&2
+        echo "[WAVE-CLASS] To allow: set SKIP_WAVE_CLASS_GATE=1 or re-declare wave class as HARNESS." >&2
+        exit 1
+      fi
+      log "Gate 3 clean: no out-of-class staged paths"
+    else
+      log "Gate 3: no wave dir for slug '${wave_slug}' — no-op"
+    fi
+  else
+    log "Gate 3: no active wave slug — no-op"
   fi
-  log "manifest drift check clean"
 fi
 
 log "all pre-commit gates clean"

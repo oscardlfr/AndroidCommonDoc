@@ -11,7 +11,8 @@
 //   WAVE_PREP_BYPASS=1 env (session-scoped)
 //   [PREMATURE_EXEC_BYPASS] inline in Bash command string
 //
-// Fail-open: any parse error, missing PLAN.md, stdin error -> exit 0
+// Fail-open: any parse error, no-wave, no-waveDir, stdin error -> exit 0
+// Fail-CLOSED: active wave + specialist + missing PLAN.md or missing Spawn Table -> exit 2
 
 const fs = require('fs');
 const path = require('path');
@@ -28,11 +29,18 @@ const SUBJECT_TYPES = [
   'doc-updater',
 ];
 
+// Slug allowlist: ^[A-Za-z0-9._-]+$ — reject empty, ".", "..", slash, backslash.
+function isValidSlug(s) {
+  if (!s || s === '.' || s === '..') return false;
+  if (s.includes('/') || s.includes('\\')) return false;
+  return /^[A-Za-z0-9._-]+$/.test(s);
+}
+
 // Mirrors wave-phase-gate.js getWaveSlug (Decision 2): env-reject + symbolic-ref + alias scan.
 function getWaveSlug(projectRoot) {
   // Priority 1: explicit env var — trim and validate against reject-list (CR #3).
   const envSlug = (process.env.CLAUDE_WAVE_SLUG || '').trim();
-  if (envSlug && !['develop', 'master', 'main', 'HEAD'].includes(envSlug)) return envSlug;
+  if (envSlug && !['develop', 'master', 'main', 'HEAD'].includes(envSlug) && isValidSlug(envSlug)) return envSlug;
 
   // Priority 2: git branch parsing (symbolic-ref primary, abbrev-ref fallback).
   // symbolic-ref works on empty repos (no commits); abbrev-ref handles worktrees.
@@ -49,7 +57,7 @@ function getWaveSlug(projectRoot) {
     if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
       // P2b: always resolve to last segment (covers non-feature branches like codex/*)
       const slug = branch.split('/').pop();
-      if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD') {
+      if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD' && isValidSlug(slug)) {
         return slug;
       }
     }
@@ -68,7 +76,8 @@ function getWaveSlug(projectRoot) {
     });
     if (waveDirsWithPlan.length === 1) {
       // e.g. "wave-bl-w42-pr1" → slug = "bl-w42-pr1"
-      return waveDirsWithPlan[0].slice('wave-'.length);
+      const aliasSlug = waveDirsWithPlan[0].slice('wave-'.length);
+      if (isValidSlug(aliasSlug)) return aliasSlug;
     }
   } catch {
     // fall through
@@ -150,6 +159,28 @@ process.stdin.on('end', () => {
     // Fail-open: wave dir absent — cannot confirm active wave
     if (!waveDir) process.exit(0);
 
+    // Spawn-Table precondition: active-wave + specialist → PLAN.md + Spawn Table required
+    // (Decision 3 corrected fail-closed boundary — BEFORE hasApprovedPrep)
+    const planPath = path.join(waveDir, 'PLAN.md');
+    if (!fs.existsSync(planPath)) {
+      block(
+        '[premature-execution-gate] Active wave "' + slug + '" + specialist "' + agentType + '" but no PLAN.md found.\n'
+        + 'Planner must write PLAN.md before specialists execute.'
+      );
+      return;
+    }
+    const planContent = fs.readFileSync(planPath, 'utf8');
+    if (!/^###\s+Spawn Table/m.test(planContent)) {
+      if (process.env.SKIP_SPAWN_TABLE === '1') process.exit(0);
+      block(
+        '[premature-execution-gate] PLAN.md missing "### Spawn Table" section for wave "' + slug + '".\n'
+        + 'Planner must add ### Spawn Table before specialists execute.\n'
+        + 'Emergency escape: SKIP_SPAWN_TABLE=1'
+      );
+      return;
+    }
+    // Spawn Table present — fall through to hasApprovedPrep check
+
     // Active wave confirmed — check for APPROVED-PREP verdict
     if (hasApprovedPrep(waveDir)) process.exit(0);
 
@@ -161,6 +192,7 @@ process.stdin.on('end', () => {
         + 'Expected an APPROVED-PREP verdict file in .planning/wave-' + slug + '/\n'
         + 'Wait for arch-platform to write the APPROVED-PREP verdict, or set WAVE_PREP_BYPASS=1.'
     );
+    return;
 
   } catch {
     // Fail-open — never block due to script error

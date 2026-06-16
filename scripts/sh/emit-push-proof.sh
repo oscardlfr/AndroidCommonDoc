@@ -182,13 +182,14 @@ PYEOF
   # All validation + predicate enforcement in one Python pass.
   # Predicate evaluation is mirrored from the bash eval_predicate design
   # (PLAN.md L38-51): one explicit check per named predicate, case-equivalent logic.
-  python3 - "$REPORT_PATH" "$MANIFEST_PATH" "$REPO_ROOT" "$diff_files" << 'PYEOF'
+  python3 - "$REPORT_PATH" "$MANIFEST_PATH" "$REPO_ROOT" "$diff_files" "$wave_slug" << 'PYEOF'
 import json, sys, os, re
 
 report_path   = sys.argv[1]
 manifest_path = sys.argv[2]
 repo_root     = sys.argv[3]
 diff_files    = sys.argv[4]   # newline-separated list from git diff
+wave_slug     = sys.argv[5]   # current wave slug (empty string if no active wave)
 
 def die(msg):
     print(f"[emit-push-proof] ERROR: {msg}", file=sys.stderr)
@@ -248,6 +249,15 @@ def eval_predicate(predicate):
         # Mechanical check only: baseline dir exists.
         # Env-dependent part (adb/desktop) is attested in report reason; not re-verified.
         return os.path.isdir(os.path.join(repo_root, '.androidcommondoc', 'ui-baseline'))
+
+    elif predicate == 'wave_plan_present':
+        # True when an active wave PLAN.md exists (.planning/wave-<slug>/PLAN.md).
+        # False (→ honest SKIP) when there is no active wave or no plan file.
+        # Inline slug-validation: defense-in-depth (resolve_slug has no allowlist).
+        if not wave_slug or not re.match(r'^[A-Za-z0-9._-]+$', wave_slug):
+            return False
+        plan_path = os.path.join(repo_root, '.planning', f'wave-{wave_slug}', 'PLAN.md')
+        return os.path.isfile(plan_path)
 
     else:
         die(f"unknown predicate '{predicate}'")

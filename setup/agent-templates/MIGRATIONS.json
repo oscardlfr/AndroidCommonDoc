@@ -186,6 +186,16 @@
         "date": "2026-06-13",
         "breaking": false,
         "summary": "BL-W47 hook-surgery: write-verdict.sh as canonical verdict canal; planner hook-list updated with push-authorization-gate.js replacing legacy push gates; 5-pata ceremony order documented (MIGRATIONS.json → generate-template → generate-registry → rehash → snapshot repin)."
+      },
+      "1.14.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "summary": "ex-PR4 adaptive-floor: add ### Spawn Table authoring section (Role/Count/Reason table) for wave-class-aware peer declaration."
+      },
+      "1.15.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "summary": "CodeRabbit fixes: Spawn Table heading 'MANDATORY for all waves' (matches premature-execution-gate.js which has no class filter); add ### Wave Class section to Output Format code block (QG reads **Class**: from PLAN.md)."
       }
     },
     "quality-gater": {
@@ -253,6 +263,26 @@
         "date": "2026-06-14",
         "breaking": false,
         "note": "bl-w47-pr-0c2 T6a: Step 10 replaced raw heredoc with emit-push-proof.sh run-qg canonical runner call"
+      },
+      "2.13.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "note": "ex-PR4 adaptive-floor: add QG Step X — Wave Class + Path-Manifest audit via qg-path-audit.sh (runs before Step 10 emit-push-proof; SKIP_PATH_AUDIT=1 escape hatch)."
+      },
+      "2.14.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "note": "ex-PR4 D-7 Part C: Step X rewrite — canonical get_wave_slug() sourcing + path-manifest-audit JSON emission into quality-gate-report.json (PASS/FAIL/SKIP with reason); honest SKIP when no PLAN.md found."
+      },
+      "2.15.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "note": "Trim to ≤420 lines — compress Step X prose, Search Dispatch, Per-Session Gate, Stash Hygiene, Gradle Triage; no behavior change."
+      },
+      "2.16.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "note": "CodeRabbit fix: append_step_json creates quality-gate-report.json if absent (init {steps:[]} skeleton) instead of early-return — Step X now works even when Steps 0-9 did not initialize the report file."
       }
     },
     "doc-migrator": {

@@ -4,6 +4,8 @@ manifest:
   description: "Mandatory peer list and phase gate rules for session-* teams"
 session_prefix: "session-*"
 mandatory_peers:
+  # deprecated alias — equals the HARNESS floor; kept for one-release grace period.
+  # Use class_floors: HARNESS for new consumers.
   - arch-platform
   - arch-testing
   - arch-integration
@@ -11,6 +13,23 @@ mandatory_peers:
   - context-provider
   - doc-updater
   - quality-gater
+class_floors:
+  HARNESS:
+    - arch-platform
+    - arch-testing
+    - arch-integration
+    - planner
+    - context-provider
+    - doc-updater
+    - quality-gater
+  DOC:
+    - arch-platform
+    - context-provider
+    - doc-updater
+    - quality-gater
+  FAST-PATH:
+    - context-provider
+default_class: HARNESS
 phase_gates:
   plan_required_before_arch_dispatch: true
   quality_gate_required_before_push: true

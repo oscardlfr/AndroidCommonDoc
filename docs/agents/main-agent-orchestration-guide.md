@@ -42,3 +42,27 @@ Every peer spawn/respawn prompt MUST open with the bundle-read mandate from [con
 > **FIRST: Read your bundle at `.planning/wave-{slug}/context-bundles/{role}.md` before any other action (then gate-ack to context-provider). If it is absent or its `wave_slug` does not match the active wave, report "no valid bundle" to team-lead and proceed without it.**
 
 Bundles are written by context-provider (`write_bundle`, via `scripts/sh/write-bundle.sh`) on YOUR dispatch — always BEFORE a kill-then-respawn rotation, optionally before risky long stretches. File bundles are the PRIMARY context-handoff contract — portable to any file-reading agent; hook-based injection (`SubagentStart` `additionalContext`) is a future optional adapter, never the carrier of this invariant.
+
+### Wave Class Floors
+
+Each wave declares a class in `PLAN.md ### Wave Class` (and the `.planning/wave-{slug}/CLASS` sentinel). The class determines the minimum peer set (floor):
+
+| Class | Min Peers | Required roles |
+|-------|-----------|----------------|
+| HARNESS | 7 | arch-platform, arch-testing, arch-integration, planner, context-provider, doc-updater, quality-gater |
+| DOC | 4 | arch-platform (default), context-provider, doc-updater, quality-gater |
+| FAST-PATH | 1 | context-provider only (orchestrator acts as team-lead directly) |
+
+Missing `CLASS` → fail-safe to HARNESS (strictest). `WAVE_CLASS_OVERRIDE=HARNESS` is a hardening override only — never a FAST-PATH declaration. The planner writes the CLASS sentinel; the `pre-commit-hook.sh` Gate 3 and `premature-execution-gate.js` T2 enforce it mechanically. See `tl-session-start.md` Phase 2 Topology Activation Gate for spawn instructions.
+
+### Task List Sharing
+
+The team-lead creates one shared task list per wave (`CLAUDE_CODE_TASK_LIST_ID` env var propagated to all peers). All peers read the same list.
+
+**Specialist tasks are assignment-only — not open-claim.**
+
+- Specialist tasks transition to `in_progress` ONLY on the bound architect's explicit EXECUTE dispatch.
+- Idle peers MUST NOT auto-claim specialist tasks (doing so creates unbound work with no architect oversight).
+- The mechanical enforcer for this rule is the `specialist-architect-binding-enforcement-queued` gate (BACKLOG; named here as a dependency so the binding is documented before the gate ships).
+
+Team-lead is responsible for assigning specialist tasks explicitly (TaskUpdate `owner` = specialist name) at EXECUTE time.

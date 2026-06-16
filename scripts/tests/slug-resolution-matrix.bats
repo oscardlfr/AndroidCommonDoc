@@ -361,3 +361,62 @@ PYEOF
     --role test-specialist --plan-id 'wave-master/PLAN.md#SRM' --slug master"
   [ "$status" -ne 0 ]
 }
+
+# ── Resolver #6: wave-slug.sh bash resolver (BL-W47 ex-PR4) ─────────────────
+#
+# wave-slug.sh is a new shared bash lib (scripts/sh/lib/wave-slug.sh) that exposes
+# get_wave_slug() to gate scripts and pre-commit-hook.sh Gate 3.
+# It mirrors the JS getWaveSlug() logic: env-reject → CLAUDE_WAVE_SLUG env → git branch
+# last-segment (${branch##*/}) with reject-list (develop, master, main, HEAD).
+#
+# API DEPENDENCY: these tests use `get_wave_slug` as the function name.
+# If toolkit-specialist implements the function under a different name, update the
+# function call below. This dependency is flagged explicitly in the READY-FOR-REVIEW
+# message from test-specialist.
+#
+# Status: RED until toolkit-specialist ships scripts/sh/lib/wave-slug.sh.
+
+SCRIPT_WAVE_SLUG="$BATS_TEST_DIRNAME/../sh/lib/wave-slug.sh"
+
+@test "SRM-6a feature branch → correct last-segment slug (wave-slug.sh)" {
+  git -C "$PROJ" checkout -b "feature/bl-w47-pr-0c1" -q 2>/dev/null
+  mkdir -p "$PROJ/.planning/wave-bl-w47-pr-0c1"
+
+  result="$(CLAUDE_PROJECT_DIR="$PROJ" CLAUDE_WAVE_SLUG="" bash -c "source '$SCRIPT_WAVE_SLUG' && get_wave_slug '$PROJ'")"
+  [ "$result" = "bl-w47-pr-0c1" ]
+}
+
+@test "SRM-6b codex/ branch → last-segment slug (wave-slug.sh, P2b regression)" {
+  git -C "$PROJ" checkout -b "codex/bl-w47-demo" -q 2>/dev/null
+  mkdir -p "$PROJ/.planning/wave-bl-w47-demo"
+
+  result="$(CLAUDE_PROJECT_DIR="$PROJ" CLAUDE_WAVE_SLUG="" bash -c "source '$SCRIPT_WAVE_SLUG' && get_wave_slug '$PROJ'")"
+  [ "$result" = "bl-w47-demo" ]
+}
+
+@test "SRM-6c develop branch → rejected (wave-slug.sh env reject-list)" {
+  result="$(CLAUDE_WAVE_SLUG="develop" bash -c "source '$SCRIPT_WAVE_SLUG' && get_wave_slug '${PROJ}'")"
+  [ -z "$result" ]
+}
+
+@test "SRM-6d explicit env slug → returned as-is when not on reject-list (wave-slug.sh)" {
+  result="$(CLAUDE_WAVE_SLUG="bl-w47-expr4" bash -c "source '$SCRIPT_WAVE_SLUG' && get_wave_slug '${PROJ}'")"
+  [ "$result" = "bl-w47-expr4" ]
+}
+
+@test "SRM-TRAVERSAL: ../evil env slug rejected — falls through to git branch (secure neutralization, not gate-disable)" {
+  # Non-vacuous security proof: CLAUDE_WAVE_SLUG=../evil is rejected by _validate_slug
+  # (contains /), then falls through to git branch detection which returns the REAL slug.
+  # The attacker's env override is NEUTRALIZED — output is the legitimate branch slug,
+  # NOT "../evil". If impl returned empty instead, attacker would disable the gate (worse).
+  local WAVE_SLUG_LIB="$BATS_TEST_DIRNAME/../sh/lib/wave-slug.sh"
+  # Put $PROJ on a valid branch so git fallthrough produces a known slug
+  git -C "$PROJ" checkout -b "bl-w47-test" -q 2>/dev/null || true
+  # Invalid env slug → rejected → falls through → git branch → "bl-w47-test"
+  run bash -c "source '$WAVE_SLUG_LIB' && CLAUDE_WAVE_SLUG='../evil' get_wave_slug '$PROJ'"
+  [ "$status" -eq 0 ]
+  # Must NOT be the injected traversal slug
+  [[ "$output" != *"evil"* ]]
+  # Must BE the legitimate git-branch slug (proves fall-through, not empty fail-open)
+  [ "$output" = "bl-w47-test" ]
+}

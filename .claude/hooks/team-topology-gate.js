@@ -3,7 +3,7 @@
 //
 // TWO-HOOK DESIGN:
 //   PostToolUse (Agent): records which peers have been spawned for a session-* team
-//   PreToolUse (Task|Agent for arch-* subagent_type): checks mandatory peer coverage
+//   PreToolUse (Task|Agent for arch-* subagent_type): checks class floor peer coverage
 //
 // Flag file: os.tmpdir()/claude-team-topology-{sessionId}.flag (JSON)
 // Escape hatch: CLAUDE_TOPOLOGY_GATE_DISABLED=1
@@ -15,6 +15,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 function getTmpDir() {
   return process.env.TMPDIR || process.env.TMP || os.tmpdir();
@@ -40,6 +41,85 @@ function writeFlag(flagPath, data) {
   } catch { /* fail-open */ }
 }
 
+// Slug allowlist: ^[A-Za-z0-9._-]+$ — reject empty, ".", "..", slash, backslash.
+function isValidSlug(s) {
+  if (!s || s === '.' || s === '..') return false;
+  if (s.includes('/') || s.includes('\\')) return false;
+  return /^[A-Za-z0-9._-]+$/.test(s);
+}
+
+// canonical: premature-execution-gate.js getWaveSlug
+function getWaveSlug(projectRoot) {
+  const envSlug = (process.env.CLAUDE_WAVE_SLUG || '').trim();
+  if (envSlug && !['develop', 'master', 'main', 'HEAD'].includes(envSlug) && isValidSlug(envSlug)) return envSlug;
+
+  try {
+    const symResult = spawnSync('git', ['symbolic-ref', '--short', 'HEAD'], {
+      cwd: projectRoot, timeout: 5000, encoding: 'utf8',
+    });
+    const abbResult = symResult.status !== 0
+      ? spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+          cwd: projectRoot, timeout: 5000, encoding: 'utf8',
+        })
+      : null;
+    const branch = (symResult.status === 0 ? symResult : abbResult)?.stdout?.trim() || '';
+    if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
+      const slug = branch.split('/').pop();
+      if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD' && isValidSlug(slug)) {
+        return slug;
+      }
+    }
+  } catch {
+    // fall through to alias scan
+  }
+
+  try {
+    const planningDir = path.join(projectRoot, '.planning');
+    if (!fs.existsSync(planningDir)) return null;
+    const entries = fs.readdirSync(planningDir);
+    const waveDirsWithPlan = entries.filter(e => {
+      if (!/^wave-/.test(e)) return false;
+      return fs.existsSync(path.join(planningDir, e, 'PLAN.md'));
+    });
+    if (waveDirsWithPlan.length === 1) {
+      const aliasSlug = waveDirsWithPlan[0].slice('wave-'.length);
+      if (isValidSlug(aliasSlug)) return aliasSlug;
+    }
+  } catch {
+    // fall through
+  }
+
+  return null;
+}
+
+function resolveFloorPeers(topology, waveDir) {
+  // Read CLASS sentinel; missing => HARNESS fail-safe (Decision 6)
+  let waveClass = 'HARNESS';
+  try {
+    const classPath = path.join(waveDir, 'CLASS');
+    if (fs.existsSync(classPath)) {
+      const lines = fs.readFileSync(classPath, 'utf8').split('\n');
+      const raw = (lines.find(l => l.trim()) || '').trim();
+      if (raw) waveClass = raw;
+    }
+  } catch {
+    // fail-safe to HARNESS
+  }
+
+  const classFloors = topology.class_floors;
+  if (classFloors && Array.isArray(classFloors[waveClass])) {
+    return classFloors[waveClass];
+  }
+  // Deprecated alias fallback
+  return Array.isArray(topology.mandatory_peers) ? topology.mandatory_peers : [];
+}
+
+function loadYaml(projectRoot) {
+  try { return require(path.join(__dirname, '..', '..', 'mcp-server', 'node_modules', 'yaml')); } catch {}
+  try { return require(path.join(projectRoot, 'mcp-server', 'node_modules', 'yaml')); } catch {}
+  return null;
+}
+
 let input = '';
 const t = setTimeout(() => process.exit(0), 5000);
 process.stdin.setEncoding('utf8');
@@ -54,9 +134,7 @@ process.stdin.on('end', () => {
     const flagPath = getFlagPath(sessionId);
 
     // ── PostToolUse: record peers spawned for session-* teams ────────────────
-    if (data.hook_event_name === 'PostToolUse' || toolName === 'Agent') {
-      // Only record on PostToolUse Agent events
-      if (data.hook_event_name !== 'PostToolUse') process.exit(0);
+    if (data.hook_event_name === 'PostToolUse') {
 
       try {
         const teamName = data.tool_result?.team_name
@@ -78,7 +156,7 @@ process.stdin.on('end', () => {
       process.exit(0);
     }
 
-    // ── PreToolUse: check mandatory peers before arch-* spawns ───────────────
+    // ── PreToolUse: check class floor peers before arch-* spawns ─────────────
     if (toolName !== 'Task' && toolName !== 'Agent') process.exit(0);
 
     const subagentType = data.tool_input?.subagent_type || '';
@@ -89,18 +167,30 @@ process.stdin.on('end', () => {
     const flagData = readFlag(flagPath);
     if (!flagData) process.exit(0); // no session yet — fail-open
 
+    // Resolve wave slug + waveDir for CLASS sentinel lookup
+    const slug = getWaveSlug(projectRoot);
+    const waveDir = slug
+      ? (fs.existsSync(path.join(projectRoot, '.planning', `wave-${slug}`))
+          ? path.join(projectRoot, '.planning', `wave-${slug}`)
+          : fs.existsSync(path.join(projectRoot, 'planning', `wave-${slug}`))
+            ? path.join(projectRoot, 'planning', `wave-${slug}`)
+            : null)
+      : null;
+
     let topology;
     try {
-      const yaml = require(path.join(projectRoot, 'mcp-server', 'node_modules', 'yaml'));
-      const topoPath = path.join(projectRoot, '.claude', 'registry', 'wave-topology.yaml');
+      const yaml = loadYaml(projectRoot);
+      if (!yaml) process.exit(0); // fail-open if yaml package unavailable
+      const topoPath = path.join(__dirname, '..', '..', '.claude', 'registry', 'wave-topology.yaml');
       topology = yaml.parse(fs.readFileSync(topoPath, 'utf8'));
     } catch {
       process.exit(0); // fail-open if topology config unreadable
     }
 
-    const mandatoryPeers = (topology && Array.isArray(topology.mandatory_peers))
-      ? topology.mandatory_peers
-      : [];
+    const mandatoryPeers = waveDir
+      ? resolveFloorPeers(topology, waveDir)
+      : (topology && Array.isArray(topology.mandatory_peers) ? topology.mandatory_peers : []);
+
     if (mandatoryPeers.length === 0) process.exit(0);
 
     const seenPeers = flagData.peers || [];
@@ -109,10 +199,10 @@ process.stdin.on('end', () => {
     if (missing.length > 0) {
       process.stdout.write(JSON.stringify({
         decision: 'block',
-        reason: '[team-topology-gate] Cannot spawn "' + subagentType + '": mandatory peers not yet in session.\n'
+        reason: '[team-topology-gate] Cannot spawn "' + subagentType + '": class floor peers not yet in session.\n'
           + 'Missing: ' + missing.join(', ') + '\n'
           + 'Seen: ' + (seenPeers.length ? seenPeers.join(', ') : '(none)') + '\n'
-          + 'Ensure all mandatory_peers from wave-topology.yaml are spawned before dispatching to arch-* agents.\n'
+          + 'Ensure all class floor peers from wave-topology.yaml are spawned before dispatching to arch-* agents.\n'
           + 'Emergency escape: CLAUDE_TOPOLOGY_GATE_DISABLED=1'
       }));
       process.exit(2);
