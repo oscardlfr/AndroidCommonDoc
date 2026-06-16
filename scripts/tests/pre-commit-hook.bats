@@ -372,7 +372,6 @@ write_class_sentinel() {
 
 @test "(G3-8) Gate 3 BLOCK: DOC-class wave staging .claude/registry/ path → exit 1" {
     # MED-4: .claude/registry/ should be a HARNESS-escalation pattern.
-    # RED until toolkit-specialist adds .claude/registry/ to HARNESS_PATTERNS in pre-commit-hook.sh.
     init_git_repo
     write_correct_registry
     write_class_sentinel "bl-w47-expr4" "DOC"
@@ -380,6 +379,7 @@ write_class_sentinel() {
     echo "class_floors: {}" > "$WORK_DIR/.claude/registry/wave-topology.yaml"
     git -C "$WORK_DIR" add .claude/registry/wave-topology.yaml
 
+    # RED until toolkit-specialist adds ^\.claude/registry/ to HARNESS_PATTERNS (MED-4 impl gap)
     run bash -c "CLAUDE_WAVE_SLUG='bl-w47-expr4' CLAUDE_PROJECT_DIR='$WORK_DIR' bash '$HOOK_SCRIPT' '$WORK_DIR'"
     [ "$status" -eq 1 ]
     [[ "$output" == *"[CLASS]"* ]] || [[ "$output" == *"HARNESS"* ]] || [[ "$output" == *"class"* ]]
