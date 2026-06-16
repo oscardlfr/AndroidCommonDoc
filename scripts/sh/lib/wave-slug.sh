@@ -13,6 +13,17 @@
 #
 # grep-assignment safety: all grep captures use || true (set -euo pipefail safe).
 
+# Validate slug against allowlist — returns 0 (valid) or 1 (invalid).
+# Allowlist: ^[A-Za-z0-9._-]+$  Reject: empty, ".", "..", slash, backslash.
+_validate_slug() {
+  local s="$1"
+  [[ -z "$s" ]] && return 1
+  [[ "$s" == "." || "$s" == ".." ]] && return 1
+  [[ "$s" == */* || "$s" == *\\* ]] && return 1
+  [[ "$s" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  return 0
+}
+
 get_wave_slug() {
   local project_root="${1:-$(pwd)}"
   local reject_list="develop master main HEAD"
@@ -26,8 +37,10 @@ get_wave_slug() {
       [[ "$env_slug" == "$r" ]] && is_rejected=1 && break
     done
     if [[ "$is_rejected" -eq 0 ]]; then
-      printf '%s' "$env_slug"
-      return 0
+      if _validate_slug "$env_slug"; then
+        printf '%s' "$env_slug"
+        return 0
+      fi
     fi
   fi
 
@@ -50,8 +63,10 @@ get_wave_slug() {
         [[ "$slug" == "$r" ]] && slug_rejected=1 && break
       done
       if [[ -n "$slug" && "$slug_rejected" -eq 0 ]]; then
-        printf '%s' "$slug"
-        return 0
+        if _validate_slug "$slug"; then
+          printf '%s' "$slug"
+          return 0
+        fi
       fi
     fi
   fi
@@ -66,8 +81,11 @@ get_wave_slug() {
     if [[ "${#wave_dirs[@]}" -eq 1 ]]; then
       local dir_name
       dir_name="$(basename "${wave_dirs[0]}")"
-      printf '%s' "${dir_name#wave-}"
-      return 0
+      local alias_slug="${dir_name#wave-}"
+      if _validate_slug "$alias_slug"; then
+        printf '%s' "$alias_slug"
+        return 0
+      fi
     fi
   fi
 

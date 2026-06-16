@@ -29,11 +29,18 @@ const SUBJECT_TYPES = [
   'doc-updater',
 ];
 
+// Slug allowlist: ^[A-Za-z0-9._-]+$ — reject empty, ".", "..", slash, backslash.
+function isValidSlug(s) {
+  if (!s || s === '.' || s === '..') return false;
+  if (s.includes('/') || s.includes('\\')) return false;
+  return /^[A-Za-z0-9._-]+$/.test(s);
+}
+
 // Mirrors wave-phase-gate.js getWaveSlug (Decision 2): env-reject + symbolic-ref + alias scan.
 function getWaveSlug(projectRoot) {
   // Priority 1: explicit env var — trim and validate against reject-list (CR #3).
   const envSlug = (process.env.CLAUDE_WAVE_SLUG || '').trim();
-  if (envSlug && !['develop', 'master', 'main', 'HEAD'].includes(envSlug)) return envSlug;
+  if (envSlug && !['develop', 'master', 'main', 'HEAD'].includes(envSlug) && isValidSlug(envSlug)) return envSlug;
 
   // Priority 2: git branch parsing (symbolic-ref primary, abbrev-ref fallback).
   // symbolic-ref works on empty repos (no commits); abbrev-ref handles worktrees.
@@ -50,7 +57,7 @@ function getWaveSlug(projectRoot) {
     if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
       // P2b: always resolve to last segment (covers non-feature branches like codex/*)
       const slug = branch.split('/').pop();
-      if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD') {
+      if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD' && isValidSlug(slug)) {
         return slug;
       }
     }
@@ -69,7 +76,8 @@ function getWaveSlug(projectRoot) {
     });
     if (waveDirsWithPlan.length === 1) {
       // e.g. "wave-bl-w42-pr1" → slug = "bl-w42-pr1"
-      return waveDirsWithPlan[0].slice('wave-'.length);
+      const aliasSlug = waveDirsWithPlan[0].slice('wave-'.length);
+      if (isValidSlug(aliasSlug)) return aliasSlug;
     }
   } catch {
     // fall through

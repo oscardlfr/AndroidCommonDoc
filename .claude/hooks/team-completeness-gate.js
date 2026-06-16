@@ -41,10 +41,17 @@ function readFlag(flagPath) {
   }
 }
 
+// Slug allowlist: ^[A-Za-z0-9._-]+$ — reject empty, ".", "..", slash, backslash.
+function isValidSlug(s) {
+  if (!s || s === '.' || s === '..') return false;
+  if (s.includes('/') || s.includes('\\')) return false;
+  return /^[A-Za-z0-9._-]+$/.test(s);
+}
+
 // canonical: premature-execution-gate.js getWaveSlug
 function getWaveSlug(projectRoot) {
   const envSlug = (process.env.CLAUDE_WAVE_SLUG || '').trim();
-  if (envSlug && !['develop', 'master', 'main', 'HEAD'].includes(envSlug)) return envSlug;
+  if (envSlug && !['develop', 'master', 'main', 'HEAD'].includes(envSlug) && isValidSlug(envSlug)) return envSlug;
 
   try {
     const symResult = spawnSync('git', ['symbolic-ref', '--short', 'HEAD'], {
@@ -58,7 +65,7 @@ function getWaveSlug(projectRoot) {
     const branch = (symResult.status === 0 ? symResult : abbResult)?.stdout?.trim() || '';
     if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
       const slug = branch.split('/').pop();
-      if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD') {
+      if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD' && isValidSlug(slug)) {
         return slug;
       }
     }
@@ -75,7 +82,8 @@ function getWaveSlug(projectRoot) {
       return fs.existsSync(path.join(planningDir, e, 'PLAN.md'));
     });
     if (waveDirsWithPlan.length === 1) {
-      return waveDirsWithPlan[0].slice('wave-'.length);
+      const aliasSlug = waveDirsWithPlan[0].slice('wave-'.length);
+      if (isValidSlug(aliasSlug)) return aliasSlug;
     }
   } catch {
     // fall through
