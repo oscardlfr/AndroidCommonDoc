@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.13.0"
+template_version: "2.14.0"
 ---
 
 You are the quality-gater — a session team peer added to `session-{project-slug}` in Phase 3. You join the same team as context-provider and the 3 architects. You run after all architects APPROVE and before any commit.
@@ -297,26 +297,62 @@ Also skip if PROJECT_TYPE is not gradle or hybrid.
 
 ### Step X: Wave Class + Path-Manifest Audit
 
-**Skip if**: no `.planning/wave-*/CLASS` sentinel found (non-wave commit — exit 0).
-
-Resolve the wave dir and merge-base, then run:
+Resolve wave slug via the canonical shared resolver, check for an active PLAN.md, run the audit, and emit the result into `quality-gate-report.json`.
 
 ```bash
-WAVE_DIR=".planning/wave-$(bash scripts/sh/lib/wave-slug.sh 2>/dev/null || true)"
-BASE=$(git merge-base HEAD "$(git rev-parse --verify develop 2>/dev/null && echo develop || echo master)" 2>/dev/null || true)
+source scripts/sh/lib/wave-slug.sh
+wave_slug="$(get_wave_slug "$(pwd)")"
+plan_path=".planning/wave-${wave_slug}/PLAN.md"
 
-if [[ -d "$WAVE_DIR" && -n "$BASE" ]]; then
-  bash scripts/sh/qg-path-audit.sh \
-    --wave-dir "$WAVE_DIR" \
-    --plan    "$WAVE_DIR/PLAN.md" \
-    --base    "$BASE"
+REPORT_FILE=".androidcommondoc/quality-gate-report.json"
+
+append_step_json() {
+  local step="$1" ran="$2" result="$3" reason="$4"
+  # Append into steps[] array in the existing report file (fail-open if missing)
+  if [[ -f "$REPORT_FILE" ]]; then
+    local entry
+    entry="$(printf '{"step":"%s","ran":%s,"result":"%s","reason":"%s"}' \
+      "$step" "$ran" "$result" "$reason")"
+    # Insert before the closing ] of the steps array
+    sed -i "s|][ ]*$|, $entry\n]|" "$REPORT_FILE" 2>/dev/null || true
+  fi
+}
+
+if [[ -z "$wave_slug" || ! -f "$plan_path" ]]; then
+  echo "[Step X] path-manifest-audit: SKIP — no PLAN.md at ${plan_path:-<no slug>}" >&2
+  append_step_json "path-manifest-audit" "false" "SKIP" \
+    "No active wave PLAN.md found — not a HARNESS\/DOC wave or FAST-PATH context."
 else
-  echo "[QG Step X] SKIP: no wave dir or merge-base resolved — non-wave commit."
+  BASE="$(git merge-base HEAD origin/develop 2>/dev/null \
+    || git merge-base HEAD develop 2>/dev/null \
+    || git rev-parse HEAD~1 2>/dev/null \
+    || true)"
+
+  audit_stderr="$(bash scripts/sh/qg-path-audit.sh \
+    --wave-dir ".planning/wave-${wave_slug}" \
+    --plan    "$plan_path" \
+    --base    "$BASE" 2>&1 >/dev/null)" || audit_exit=$?
+  audit_exit="${audit_exit:-0}"
+
+  if [[ "$audit_exit" -eq 0 ]]; then
+    append_step_json "path-manifest-audit" "true" "PASS" \
+      "qg-path-audit.sh exited 0 — CLASS matches, all touched files in manifest."
+  elif [[ "$audit_exit" -eq 1 ]]; then
+    reason="$(printf '%s' "$audit_stderr" | head -3 | tr '\n' ' ' | sed 's/"/\\"/g')"
+    append_step_json "path-manifest-audit" "true" "FAIL" "$reason"
+    echo "[Step X] path-manifest-audit: FAIL — see reason above. QG cannot proceed to Step 10." >&2
+    exit 1   # FAIL QG — do not emit push-proof
+  else
+    append_step_json "path-manifest-audit" "true" "FAIL" \
+      "qg-path-audit.sh exited $audit_exit (infrastructure error)."
+    echo "[Step X] path-manifest-audit: infrastructure error (exit $audit_exit). QG blocked." >&2
+    exit 1
+  fi
 fi
 ```
 
-- **FAIL QG** (do not proceed to Step 10) if `qg-path-audit.sh` exits non-zero.
-- Escape hatch: `SKIP_PATH_AUDIT=1` (env var, bypasses the script entirely — log bypass to report).
+- **FAIL QG** (exit 1, do not proceed to Step 10) if `qg-path-audit.sh` exits non-zero.
+- Escape hatch: `SKIP_PATH_AUDIT=1` passed to `qg-path-audit.sh` via env — the script exits 0 and the step emits `SKIP`.
 
 ### Step 10: Emit QG proof (if PASS)
 

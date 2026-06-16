@@ -263,6 +263,11 @@
         "date": "2026-06-16",
         "breaking": false,
         "note": "ex-PR4 adaptive-floor: add QG Step X — Wave Class + Path-Manifest audit via qg-path-audit.sh (runs before Step 10 emit-push-proof; SKIP_PATH_AUDIT=1 escape hatch)."
+      },
+      "2.14.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "note": "ex-PR4 D-7 Part C: Step X rewrite — canonical get_wave_slug() sourcing + path-manifest-audit JSON emission into quality-gate-report.json (PASS/FAIL/SKIP with reason); honest SKIP when no PLAN.md found."
       }
     },
     "doc-migrator": {
