@@ -19,6 +19,8 @@
 #
 # HARNESS path patterns (match pre-commit-hook.sh Gate 3):
 #   ^\.claude/hooks/
+#   ^\.claude/registry/
+#   ^\.claude/agents/
 #   ^scripts/
 #   ^setup/agent-templates/
 #   ^\.github/
@@ -167,6 +169,8 @@ done
 
 HARNESS_PATTERNS=(
   '^\.claude/hooks/'
+  '^\.claude/registry/'
+  '^\.claude/agents/'
   '^scripts/'
   '^setup/agent-templates/'
   '^\.github/'
