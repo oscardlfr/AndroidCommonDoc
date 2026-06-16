@@ -2,7 +2,7 @@
 # qg-path-audit.sh — QG declared-vs-touched verification step (BL-W47 ex-PR4 D-7).
 #
 # Usage: qg-path-audit.sh --wave-dir <path> --plan <path> --base <git-ref>
-#        [--skip-path-audit]
+#        [--project-root <path>] [--skip-path-audit]
 #
 # Exit 0: all checks pass (CLASS matches, all touched files in manifest)
 # Exit 1: audit failure (CLASS mismatch or out-of-manifest touch)
@@ -37,13 +37,15 @@ set -euo pipefail
 WAVE_DIR=""
 PLAN_FILE=""
 BASE_REF=""
+PROJECT_ROOT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --wave-dir)         WAVE_DIR="$2";  shift 2 ;;
-    --plan)             PLAN_FILE="$2"; shift 2 ;;
-    --base)             BASE_REF="$2";  shift 2 ;;
-    --skip-path-audit)  SKIP_PATH_AUDIT=1; shift ;;
+    --wave-dir)         WAVE_DIR="$2";       shift 2 ;;
+    --plan)             PLAN_FILE="$2";      shift 2 ;;
+    --base)             BASE_REF="$2";       shift 2 ;;
+    --project-root)     PROJECT_ROOT="$2";   shift 2 ;;
+    --skip-path-audit)  SKIP_PATH_AUDIT=1;   shift ;;
     *) echo "[qg-path-audit] ERROR: unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -134,7 +136,8 @@ echo "[qg-path-audit] Manifest has ${#MANIFEST_FILES[@]} entries." >&2
 
 # ── Step 5: Get touched files ─────────────────────────────────────────────────
 # Derive project root from wave dir: <proj>/.planning/wave-<slug> → 2 levels up.
-PROJ_ROOT="$(cd "$WAVE_DIR/../.." && pwd)"
+# --project-root overrides the derived value when the caller knows the root explicitly.
+PROJ_ROOT="${PROJECT_ROOT:-$(cd "$WAVE_DIR/../.." && pwd)}"
 
 TOUCHED_FILES=()
 while IFS= read -r f; do
