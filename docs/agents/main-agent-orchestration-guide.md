@@ -43,6 +43,18 @@ Every peer spawn/respawn prompt MUST open with the bundle-read mandate from [con
 
 Bundles are written by context-provider (`write_bundle`, via `scripts/sh/write-bundle.sh`) on YOUR dispatch — always BEFORE a kill-then-respawn rotation, optionally before risky long stretches. File bundles are the PRIMARY context-handoff contract — portable to any file-reading agent; hook-based injection (`SubagentStart` `additionalContext`) is a future optional adapter, never the carrier of this invariant.
 
+### Wave Class Floors
+
+Each wave declares a class in `PLAN.md ### Wave Class` (and the `.planning/wave-{slug}/CLASS` sentinel). The class determines the minimum peer set (floor):
+
+| Class | Min Peers | Required roles |
+|-------|-----------|----------------|
+| HARNESS | 7 | arch-platform, arch-testing, arch-integration, planner, context-provider, doc-updater, quality-gater |
+| DOC | 4 | arch-platform (default), context-provider, doc-updater, quality-gater |
+| FAST-PATH | 1 | context-provider only (orchestrator acts as team-lead directly) |
+
+Missing `CLASS` → fail-safe to HARNESS (strictest). `WAVE_CLASS_OVERRIDE=HARNESS` is a hardening override only — never a FAST-PATH declaration. The planner writes the CLASS sentinel; the `pre-commit-hook.sh` Gate 3 and `premature-execution-gate.js` T2 enforce it mechanically. See `tl-session-start.md` Phase 2 Topology Activation Gate for spawn instructions.
+
 ### Task List Sharing
 
 The team-lead creates one shared task list per wave (`CLAUDE_CODE_TASK_LIST_ID` env var propagated to all peers). All peers read the same list.
