@@ -1,5 +1,7 @@
 # Backlog — Deferred Work from Wave 25
 
+> **⚠ NOT THE CANONICAL BACKLOG INDEX.** The source-of-truth ordered backlog is the repo-root [`BACKLOG.md`](../BACKLOG.md). This file is a historical Wave-25 deferred-work artifact retained for its trigger conditions — do not add new items here (D6, bl-w47-tail).
+
 > Created: 2026-04-21
 > Scope: items intentionally deferred during Wave 25 to keep blast radius manageable. Each entry has a trigger condition for when it should be picked up.
 > **Last validated against codebase: 2026-06-10 (4 L1 session findings filed; compose-preview-multiplatform-import ingested)**

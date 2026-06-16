@@ -69,6 +69,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [workflow-orchestration](workflow-orchestration.md) | Plan mode, agent delegation table, verification, and autonomous execution rules (extracted from CLAUDE.md prep-6) |
 | [context-bundle-schema](context-bundle-schema.md) | Context bundle schema: portable file-based contract for respawn/rotation context — storage, TTL, header format, PATTERNS-only rules, writer/consumer contracts |
 | [qg-proof-push-gate](qg-proof-push-gate.md) | QG-proof push gate: emit-push-proof.sh (run-qg/verify-proof), quality-gate-manifest.json policy, push-proof.json schema, verdict→HEAD binding, bypass audit trail |
+| [l2-topology-divergence](l2-topology-divergence.md) | Doctrine for L1/L2 spawn-topology divergence from the L0 adaptive floor: document-not-override, preserve consumer-private topology, reconcile after the team-primitive re-eval |
 
 ## Key Concepts
 
