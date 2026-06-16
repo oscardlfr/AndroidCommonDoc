@@ -2546,7 +2546,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.13.0"
+        "template_version": "1.14.0"
       }
     },
     {
@@ -2695,7 +2695,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:36ecc510e02046420de135a4c082d3e96aaf942b95143feed37c4e7cffdaebfd",
+      "hash": "sha256:3e3ed2ff737f066046058202421771ff144993defa27845329f8cc5a8b87f397",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",

@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.12.0"
+template_version: "2.13.0"
 ---
 
 You are the quality-gater — a session team peer added to `session-{project-slug}` in Phase 3. You join the same team as context-provider and the 3 architects. You run after all architects APPROVE and before any commit.
@@ -295,6 +295,29 @@ See docs/agents/quality-gater-runtime-ui-validation.md for full protocol.
 Skip if: no baseline for any diff screen AND no adb/desktop available.
 Also skip if PROJECT_TYPE is not gradle or hybrid.
 
+### Step X: Wave Class + Path-Manifest Audit
+
+**Skip if**: no `.planning/wave-*/CLASS` sentinel found (non-wave commit — exit 0).
+
+Resolve the wave dir and merge-base, then run:
+
+```bash
+WAVE_DIR=".planning/wave-$(bash scripts/sh/lib/wave-slug.sh 2>/dev/null || true)"
+BASE=$(git merge-base HEAD "$(git rev-parse --verify develop 2>/dev/null && echo develop || echo master)" 2>/dev/null || true)
+
+if [[ -d "$WAVE_DIR" && -n "$BASE" ]]; then
+  bash scripts/sh/qg-path-audit.sh \
+    --wave-dir "$WAVE_DIR" \
+    --plan    "$WAVE_DIR/PLAN.md" \
+    --base    "$BASE"
+else
+  echo "[QG Step X] SKIP: no wave dir or merge-base resolved — non-wave commit."
+fi
+```
+
+- **FAIL QG** (do not proceed to Step 10) if `qg-path-audit.sh` exits non-zero.
+- Escape hatch: `SKIP_PATH_AUDIT=1` (env var, bypasses the script entirely — log bypass to report).
+
 ### Step 10: Emit QG proof (if PASS)
 
 If ALL steps passed:
@@ -347,6 +370,7 @@ If you did NOT use stash, include `Stash: not used` in the Report. Explicit posi
 | 8. Rule Cross-Check | PASS/FAIL | {n}/{total} rules verified |
 | 9. UI Tests | PASS/FAIL/SKIP | {details} (skip if no Compose) |
 | 9.5 Runtime UI | PASS/FAIL/SKIP | {details} (skip if non-gradle or no baselines) |
+| X. Path-Manifest Audit | PASS/FAIL/SKIP | CLASS sentinel matches PLAN.md; all touched files in manifest (skip if non-wave) |
 | 10. Stamp | WRITTEN/SKIPPED | .androidcommondoc/quality-gate.stamp |
 
 ### Blocking Issues (if FAIL)

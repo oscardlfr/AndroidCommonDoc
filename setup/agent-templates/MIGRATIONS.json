@@ -258,6 +258,11 @@
         "date": "2026-06-14",
         "breaking": false,
         "note": "bl-w47-pr-0c2 T6a: Step 10 replaced raw heredoc with emit-push-proof.sh run-qg canonical runner call"
+      },
+      "2.13.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "note": "ex-PR4 adaptive-floor: add QG Step X — Wave Class + Path-Manifest audit via qg-path-audit.sh (runs before Step 10 emit-push-proof; SKIP_PATH_AUDIT=1 escape hatch)."
       }
     },
     "doc-migrator": {
