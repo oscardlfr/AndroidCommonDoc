@@ -284,7 +284,12 @@ PLANEOF
   [[ "$output" == *"APPROVED-PREP"* ]]
 }
 
-@test "B PEG-SLUG-TRAVERSAL: CLAUDE_WAVE_SLUG=../evil → treated as no-wave (fail-open, no crash)" {
+@test "B PEG-SLUG-TRAVERSAL: CLAUDE_WAVE_SLUG=../evil — robustness check (no crash, fail-open via isValidSlug rejection)" {
+  # Robustness: invalid slug (contains /) → isValidSlug rejects → getWaveSlug returns null
+  # → no waveDir resolved → fail-open (exit 0, no block decision).
+  # Non-vacuity for isValidSlug is proven at the bash layer (SRM-TRAVERSAL asserts
+  # wave-slug.sh outputs empty for ../evil vs a valid slug). isValidSlug in JS mirrors
+  # the same allowlist; arch-platform confirmed all 3 getWaveSlug return points are guarded.
   make_input "Write" "docs/x.md" "test-specialist"
   run bash -c "cat '$INPUT_FILE' | CLAUDE_WAVE_SLUG='../evil' WAVE_PREP_BYPASS='' node '$HOOK'"
   [ "$status" -eq 0 ]

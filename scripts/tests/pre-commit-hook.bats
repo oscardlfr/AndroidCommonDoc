@@ -354,8 +354,6 @@ write_class_sentinel() {
 
 @test "(G3-7) Gate 3 runs when Gate 2 skips (generate-template.js not built + HARNESS-pattern staged in DOC wave)" {
     # HIGH-1 regression guard: Gate 3 must fire even when Gate 2 short-circuits via "not built" path.
-    # skip guard removed once toolkit-specialist commits the HIGH-1 Gate2→Gate3 fall-through impl fix.
-    skip "HIGH-1 toolkit fix pending"
     init_git_repo
     write_correct_registry
     write_class_sentinel "bl-w47-expr4" "DOC"

@@ -404,9 +404,21 @@ SCRIPT_WAVE_SLUG="$BATS_TEST_DIRNAME/../sh/lib/wave-slug.sh"
   [ "$result" = "bl-w47-expr4" ]
 }
 
-@test "SRM-TRAVERSAL: ../evil slug rejected — getWaveSlug returns null, no path escape" {
-  # Set CLAUDE_WAVE_SLUG to a traversal attempt; hook must treat it as no-wave
-  run bash -c "echo '{}' | CLAUDE_WAVE_SLUG='../evil' WAVE_PREP_BYPASS='' node '$HOOK_PEG'"
+@test "SRM-TRAVERSAL: ../evil slug rejected by wave-slug.sh — outputs empty (validation fired, not incidental fail-open)" {
+  # Non-vacuous: _validate_slug() rejects ../evil (contains /) before any dir resolution.
+  # Valid slug baseline: outputs the slug. ../evil: outputs empty.
+  # Uses isolated $PROJ repo (default branch = master/main, also rejected) so no
+  # git-branch fallthrough produces output — proves the allowlist fired on the env slug.
+  local WAVE_SLUG_LIB="$BATS_TEST_DIRNAME/../sh/lib/wave-slug.sh"
+  # Valid slug baseline — must output the slug (env leg accepted)
+  run bash -c "source '$WAVE_SLUG_LIB' && CLAUDE_WAVE_SLUG='bl-w47-test' get_wave_slug '$PROJ'"
   [ "$status" -eq 0 ]
-  [[ "$output" != *'"decision"'* ]]
+  [ "$output" = "bl-w47-test" ]
+  # Traversal slug — must output empty:
+  #   env leg: ../evil rejected by _validate_slug (contains /)
+  #   git branch leg: master/main → reject-list → rejected
+  #   alias scan: no .planning/wave-*/PLAN.md in $PROJ → no output
+  run bash -c "source '$WAVE_SLUG_LIB' && CLAUDE_WAVE_SLUG='../evil' get_wave_slug '$PROJ'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
 }
