@@ -79,8 +79,7 @@ if [[ ! -f "$CLASS_SENTINEL_FILE" ]]; then
   exit 2
 fi
 
-CLASS_SENTINEL="$(cat "$CLASS_SENTINEL_FILE")"
-CLASS_SENTINEL="${CLASS_SENTINEL// /}"   # strip whitespace
+CLASS_SENTINEL="$(grep -m1 '[^[:space:]]' "$CLASS_SENTINEL_FILE" | tr -d '[:space:]' || true)"
 
 # ── Step 2: Read PLAN.md Wave Class ──────────────────────────────────────────
 
