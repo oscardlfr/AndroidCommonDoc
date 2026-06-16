@@ -476,8 +476,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/[Cc]ross-cutting/);
   });
 
-  it('has template version 2.15.0', () => {
-    expect(content).toContain('template_version: "2.15.0"');
+  it('has template version 2.16.0', () => {
+    expect(content).toContain('template_version: "2.16.0"');
   });
 });
 
@@ -899,8 +899,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.14.0', () => {
-    expect(plannerContent).toContain('template_version: "1.14.0"');
+  it('planner version 1.15.0', () => {
+    expect(plannerContent).toContain('template_version: "1.15.0"');
   });
 
   it('arch-testing has template_version field in frontmatter', () => {

@@ -191,6 +191,11 @@
         "date": "2026-06-16",
         "breaking": false,
         "summary": "ex-PR4 adaptive-floor: add ### Spawn Table authoring section (Role/Count/Reason table) for wave-class-aware peer declaration."
+      },
+      "1.15.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "summary": "CodeRabbit fixes: Spawn Table heading 'MANDATORY for all waves' (matches premature-execution-gate.js which has no class filter); add ### Wave Class section to Output Format code block (QG reads **Class**: from PLAN.md)."
       }
     },
     "quality-gater": {
@@ -273,6 +278,11 @@
         "date": "2026-06-16",
         "breaking": false,
         "note": "Trim to ≤420 lines — compress Step X prose, Search Dispatch, Per-Session Gate, Stash Hygiene, Gradle Triage; no behavior change."
+      },
+      "2.16.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "note": "CodeRabbit fix: append_step_json creates quality-gate-report.json if absent (init {steps:[]} skeleton) instead of early-return — Step X now works even when Steps 0-9 did not initialize the report file."
       }
     },
     "doc-migrator": {

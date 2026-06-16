@@ -913,8 +913,8 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.15.0"
-    template_frontmatter_sha256: f807f64bab00c365da313e6afa692b9d7776ff53ed80509dc3d8e0a21b9228da
+    template_version: "2.16.0"
+    template_frontmatter_sha256: 80815a4b5dae463cc5d41c1529627c1f67429005670f9e95a5564a1c7519e1e6
     category: orchestrator
     lifecycle: ephemeral
     description: "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL."
@@ -1629,8 +1629,8 @@ agents:
   planner:
     canonical_name: planner
     subagent_type: planner
-    template_version: "1.14.0"
-    template_frontmatter_sha256: 449285c47ec740f36251528c9b66fb51fc5130ce1277e39a1b16299b9713a10c
+    template_version: "1.15.0"
+    template_frontmatter_sha256: f031e49ca9b0d2d5ff123693823a35a07720a867d8e639b8277f64ab04a0c97b
     category: orchestrator
     lifecycle: ephemeral
     description: "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage."

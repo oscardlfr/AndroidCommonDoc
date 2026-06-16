@@ -32,6 +32,12 @@ The team-completeness-gate's 30-min grace clock (tmp-file timestamp that gates f
 
 **Source**: deferred from BL-W47-expr4 (2026-06-16).
 
+### Centralize duplicated JS hook helpers (MED — hooks, ~2h) — deferred 2026-06-16
+
+The helpers `isValidSlug`, `getWaveSlug`, `resolveFloorPeers`, and `loadYaml` are duplicated across the 3 JS hooks (`premature-execution-gate.js`, `team-completeness-gate.js`, `team-topology-gate.js`). Extract into a shared module (e.g. `scripts/sh/lib/hook-utils.js` or `.claude/hooks/lib/`) so changes to slug validation or floor resolution only need to happen in one place. CodeRabbit nitpick; deferred per user.
+
+**Source**: CodeRabbit audit during BL-W47-expr4 CodeRabbit review (2026-06-16).
+
 ### Team stale-suffix spawn guard (MED — hook, ~2-3h) — filed 2026-06-07
 
 Hook to **BLOCK** spawning any core session role (team-lead, arch-platform/integration/testing, context-provider, doc-updater, quality-gater, planner, specialists) with a `-2`/`-N` numeric suffix. A suffixed spawn means the canonical name is occupied by a stale/dead peer (stale team dir) → **inter-peer messages misroute to the DEAD original** (gate-acks, consults, dispatches silently lost). The hook should block the spawn and direct the operator to clean `~/.claude/teams/session-{slug}/` first (the work-skill stale-dir check) so the respawn takes the canonical name.

@@ -2531,7 +2531,7 @@
       "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:83a5d00d0ce0f8c0a53504d53fa1912304dcc4d5287122741b43ee9a5fc44462",
+      "hash": "sha256:b050c3acc2f766ff8338e6721a63fe7a8d41ed57c5cef1e4785ce851f24cd28e",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -2695,7 +2695,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ff3db66d8f3671e8dc39eaf2ffb7846092da895ba2894ad12ec3153cb59a9e87",
+      "hash": "sha256:528097b916076cc2dac8b792a698b5d5c527aa74ef7830f6ec0e57c30e68e2fe",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",

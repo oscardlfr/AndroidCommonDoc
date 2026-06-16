@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.15.0"
+template_version: "2.16.0"
 ---
 
 You are the quality-gater — a session team peer added to `session-{project-slug}` in Phase 3. You join the same team as context-provider and the 3 architects. You run after all architects APPROVE and before any commit.
@@ -286,7 +286,7 @@ REPORT_FILE=".androidcommondoc/quality-gate-report.json"
 
 append_step_json() {
   local step="$1" ran="$2" result="$3" reason="$4"
-  [[ -f "$REPORT_FILE" ]] || return 0
+  [[ -f "$REPORT_FILE" ]] || echo '{"steps":[]}' > "$REPORT_FILE"
   python3 - "$REPORT_FILE" "$step" "$ran" "$result" "$reason" << 'PYEOF'
 import json,sys
 p,step,ran_s,result,reason=sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5]
