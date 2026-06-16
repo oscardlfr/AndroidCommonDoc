@@ -1629,8 +1629,8 @@ agents:
   planner:
     canonical_name: planner
     subagent_type: planner
-    template_version: "1.15.0"
-    template_frontmatter_sha256: f031e49ca9b0d2d5ff123693823a35a07720a867d8e639b8277f64ab04a0c97b
+    template_version: "1.16.0"
+    template_frontmatter_sha256: ba8b9174f3752bdce6b1dad063c0c30c80f9ea4eba803ef3276b7de43656b239
     category: orchestrator
     lifecycle: ephemeral
     description: "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage."

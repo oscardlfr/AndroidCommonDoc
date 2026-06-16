@@ -2531,7 +2531,7 @@
       "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b050c3acc2f766ff8338e6721a63fe7a8d41ed57c5cef1e4785ce851f24cd28e",
+      "hash": "sha256:457cbe18d4f94e1a56e00a74deed753dcc700746d7c286750b9cdf7f382a8052",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -2546,7 +2546,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.15.0"
+        "template_version": "1.16.0"
       }
     },
     {

@@ -196,6 +196,11 @@
         "date": "2026-06-16",
         "breaking": false,
         "summary": "CodeRabbit fixes: Spawn Table heading 'MANDATORY for all waves' (matches premature-execution-gate.js which has no class filter); add ### Wave Class section to Output Format code block (QG reads **Class**: from PLAN.md)."
+      },
+      "1.16.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "summary": "Ex-PR1: add Spec-Ambiguity Clarification step — AskUserQuestion (or planner→team-lead relay) for plan-shaping ambiguity BEFORE drafting PLAN.md; spec-ambiguity only, once, never mid-execution (feedback_stop_asking)."
       }
     },
     "quality-gater": {

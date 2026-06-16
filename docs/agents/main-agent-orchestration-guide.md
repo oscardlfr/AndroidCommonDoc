@@ -4,7 +4,7 @@ slug: main-agent-orchestration-guide
 scope: L0
 sources: ["W31.6 retirement of setup/agent-templates/team-lead.md", "docs/agents/tl-session-setup.md", "docs/agents/tl-dispatch-topology.md"]
 targets: [main agent]
-version: 1.2.0
+version: 1.3.0
 description: "Orchestration guide for the main agent running a session: team topology, phase protocol, architect routing, context bundles, quality gates."
 ---
 
@@ -66,3 +66,18 @@ The team-lead creates one shared task list per wave (`CLAUDE_CODE_TASK_LIST_ID` 
 - The mechanical enforcer for this rule is the `specialist-architect-binding-enforcement-queued` gate (BACKLOG; named here as a dependency so the binding is documented before the gate ships).
 
 Team-lead is responsible for assigning specialist tasks explicitly (TaskUpdate `owner` = specialist name) at EXECUTE time.
+
+## Plan-Mode Clarification (before drafting — MANDATORY)
+
+When the main agent acts as orchestrator-planner in plan mode, it MUST surface **2–5 clarifying questions before drafting the plan** whenever the spec is ambiguous on a plan-shaping axis (scope boundary, target files, acceptance criteria, an approach fork, or cross-department impact). Use `AskUserQuestion`; a complete spec → zero questions → draft directly. This mirrors the planner template's *Spec-Ambiguity Clarification* step — one rule, whether the main agent plans directly or dispatches a `planner` peer.
+
+**Bounds (`feedback_stop_asking`)**: spec-ambiguity only, asked once, before drafting — NEVER mid-execution, never for a preference with a sensible default, never to dodge a decision derivable from context.
+
+### Spec-Amendment Pause (worked example)
+
+One pause primitive, two triggers — an explicit clarifying need OR a mid-flight scope change both pause at the next checkpoint:
+
+1. The `planner` peer (or the orchestrator) detects ambiguity / a scope change.
+2. It emits the questions to the orchestrator: `SendMessage(to="team-lead", summary="spec questions", message="Q1… Q2…")` and pauses (does not write or overwrite `PLAN.md` past the pause point).
+3. The orchestrator relays via `AskUserQuestion`, gets the answers, and resumes the planner via `SendMessage` (native auto-resume).
+4. The planner weaves the answers in and continues. No mid-write interruption is possible (no preemption API); the pause lands at the next file/commit boundary.
