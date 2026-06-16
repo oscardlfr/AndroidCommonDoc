@@ -268,6 +268,11 @@
         "date": "2026-06-16",
         "breaking": false,
         "note": "ex-PR4 D-7 Part C: Step X rewrite — canonical get_wave_slug() sourcing + path-manifest-audit JSON emission into quality-gate-report.json (PASS/FAIL/SKIP with reason); honest SKIP when no PLAN.md found."
+      },
+      "2.15.0": {
+        "date": "2026-06-16",
+        "breaking": false,
+        "note": "Trim to ≤420 lines — compress Step X prose, Search Dispatch, Per-Session Gate, Stash Hygiene, Gradle Triage; no behavior change."
       }
     },
     "doc-migrator": {
