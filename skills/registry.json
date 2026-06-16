@@ -2546,7 +2546,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.14.0"
+        "template_version": "1.15.0"
       }
     },
     {
@@ -2711,7 +2711,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.15.0"
+        "template_version": "2.16.0"
       }
     },
     {
