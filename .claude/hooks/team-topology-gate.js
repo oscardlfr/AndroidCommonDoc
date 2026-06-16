@@ -90,7 +90,8 @@ function resolveFloorPeers(topology, waveDir) {
   try {
     const classPath = path.join(waveDir, 'CLASS');
     if (fs.existsSync(classPath)) {
-      const raw = fs.readFileSync(classPath, 'utf8').trim();
+      const lines = fs.readFileSync(classPath, 'utf8').split('\n');
+      const raw = (lines.find(l => l.trim()) || '').trim();
       if (raw) waveClass = raw;
     }
   } catch {
