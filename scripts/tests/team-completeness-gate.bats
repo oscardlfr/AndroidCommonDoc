@@ -141,3 +141,15 @@ write_class_sentinel_tcg() {
   [ "$status" -eq 2 ]
   [[ "$output" == *"BLOCKED"* ]] || [[ "$output" == *"Missing"* ]]
 }
+
+@test "CF-5 PASS: CLASS file with trailing newline → correctly parsed (DOC floor met)" {
+  # CLASS files written by printf '%s' have no newline; printf '%s\n' adds one.
+  # Hook uses .trim() — both forms must produce the same result.
+  mkdir -p "${TMPDIR}/.planning/wave-bl-w47-tcg-test"
+  printf 'DOC\n' > "${TMPDIR}/.planning/wave-bl-w47-tcg-test/CLASS"
+  make_flag $((60 * 60 * 1000)) '["arch-platform","context-provider","doc-updater","quality-gater"]'
+  make_input "Bash"
+  run bash -c "cat '$INPUT_FILE' | TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' CLAUDE_PROJECT_DIR='${TMPDIR}' CLAUDE_WAVE_SLUG='bl-w47-tcg-test' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"BLOCKED"* ]]
+}

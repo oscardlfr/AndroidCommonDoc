@@ -284,6 +284,13 @@ PLANEOF
   [[ "$output" == *"APPROVED-PREP"* ]]
 }
 
+@test "B PEG-SLUG-TRAVERSAL: CLAUDE_WAVE_SLUG=../evil → treated as no-wave (fail-open, no crash)" {
+  make_input "Write" "docs/x.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_WAVE_SLUG='../evil' WAVE_PREP_BYPASS='' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
+}
+
 # ── D-3 Spawn-Table check (BL-W47 ex-PR4) ────────────────────────────────────
 #
 # After Decision 3 (CORRECTED fail-open boundary): when waveDir is confirmed +
@@ -379,6 +386,8 @@ HOOK_CODEX="$BATS_TEST_DIRNAME/../../.codex/hooks/premature-execution-gate.js"
   # After D-3 full re-sync, both copies must exit 2 with block JSON on stdout.
   # RED before sync (if .codex still has process.stderr.write): stdout will be empty, test fails.
   # GREEN after sync: .codex exits 2 with block JSON on stdout, identical to canonical.
+  # .codex/ is gitignored — skip on CI where the mirror is absent.
+  [ -f "$HOOK_CODEX" ] || skip ".codex mirror not present (gitignored)"
   make_input "Write" "docs/new-doc.md" "test-specialist"
   run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' node '$HOOK_CODEX' 2>/dev/null"
   [ "$status" -eq 2 ]

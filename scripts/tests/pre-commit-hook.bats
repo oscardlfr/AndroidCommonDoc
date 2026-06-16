@@ -351,3 +351,36 @@ write_class_sentinel() {
     run bash -c "CLAUDE_WAVE_SLUG='bl-w47-expr4' CLAUDE_PROJECT_DIR='$WORK_DIR' WAVE_CLASS_OVERRIDE=HARNESS bash '$HOOK_SCRIPT' '$WORK_DIR'"
     [ "$status" -eq 0 ]
 }
+
+@test "(G3-7) Gate 3 runs when Gate 2 skips (generate-template.js not built + HARNESS-pattern staged in DOC wave)" {
+    # HIGH-1 regression guard: Gate 3 must fire even when Gate 2 short-circuits via "not built" path.
+    # skip guard removed once toolkit-specialist commits the HIGH-1 Gate2→Gate3 fall-through impl fix.
+    skip "HIGH-1 toolkit fix pending"
+    init_git_repo
+    write_correct_registry
+    write_class_sentinel "bl-w47-expr4" "DOC"
+    # NO mock_generate_template — generate-template.js does not exist (Gate 2 skip path)
+    # Stage a HARNESS-pattern file in a DOC-class wave → Gate 3 must still block
+    mkdir -p "$WORK_DIR/.claude/hooks"
+    echo "// hook" > "$WORK_DIR/.claude/hooks/my-hook.js"
+    git -C "$WORK_DIR" add .claude/hooks/my-hook.js
+
+    run bash -c "CLAUDE_WAVE_SLUG='bl-w47-expr4' CLAUDE_PROJECT_DIR='$WORK_DIR' bash '$HOOK_SCRIPT' '$WORK_DIR'"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"[CLASS]"* ]] || [[ "$output" == *"HARNESS"* ]] || [[ "$output" == *"class"* ]]
+}
+
+@test "(G3-8) Gate 3 BLOCK: DOC-class wave staging .claude/registry/ path → exit 1" {
+    # MED-4: .claude/registry/ should be a HARNESS-escalation pattern.
+    # RED until toolkit-specialist adds .claude/registry/ to HARNESS_PATTERNS in pre-commit-hook.sh.
+    init_git_repo
+    write_correct_registry
+    write_class_sentinel "bl-w47-expr4" "DOC"
+    mkdir -p "$WORK_DIR/.claude/registry"
+    echo "class_floors: {}" > "$WORK_DIR/.claude/registry/wave-topology.yaml"
+    git -C "$WORK_DIR" add .claude/registry/wave-topology.yaml
+
+    run bash -c "CLAUDE_WAVE_SLUG='bl-w47-expr4' CLAUDE_PROJECT_DIR='$WORK_DIR' bash '$HOOK_SCRIPT' '$WORK_DIR'"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"[CLASS]"* ]] || [[ "$output" == *"HARNESS"* ]] || [[ "$output" == *"class"* ]]
+}

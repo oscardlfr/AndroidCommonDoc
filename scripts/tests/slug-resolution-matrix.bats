@@ -403,3 +403,10 @@ SCRIPT_WAVE_SLUG="$BATS_TEST_DIRNAME/../sh/lib/wave-slug.sh"
   result="$(CLAUDE_WAVE_SLUG="bl-w47-expr4" bash -c "source '$SCRIPT_WAVE_SLUG' && get_wave_slug '${PROJ}'")"
   [ "$result" = "bl-w47-expr4" ]
 }
+
+@test "SRM-TRAVERSAL: ../evil slug rejected — getWaveSlug returns null, no path escape" {
+  # Set CLAUDE_WAVE_SLUG to a traversal attempt; hook must treat it as no-wave
+  run bash -c "echo '{}' | CLAUDE_WAVE_SLUG='../evil' WAVE_PREP_BYPASS='' node '$HOOK_PEG'"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
+}
