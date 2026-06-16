@@ -159,6 +159,7 @@ process.stdin.on('end', () => {
         '[premature-execution-gate] Active wave "' + slug + '" + specialist "' + agentType + '" but no PLAN.md found.\n'
         + 'Planner must write PLAN.md before specialists execute.'
       );
+      return;
     }
     const planContent = fs.readFileSync(planPath, 'utf8');
     if (!/^###\s+Spawn Table/m.test(planContent)) {
@@ -168,6 +169,7 @@ process.stdin.on('end', () => {
         + 'Planner must add ### Spawn Table before specialists execute.\n'
         + 'Emergency escape: SKIP_SPAWN_TABLE=1'
       );
+      return;
     }
     // Spawn Table present — fall through to hasApprovedPrep check
 
@@ -182,6 +184,7 @@ process.stdin.on('end', () => {
         + 'Expected an APPROVED-PREP verdict file in .planning/wave-' + slug + '/\n'
         + 'Wait for arch-platform to write the APPROVED-PREP verdict, or set WAVE_PREP_BYPASS=1.'
     );
+    return;
 
   } catch {
     // Fail-open — never block due to script error
