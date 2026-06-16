@@ -384,3 +384,18 @@ write_class_sentinel() {
     [ "$status" -eq 1 ]
     [[ "$output" == *"[CLASS]"* ]] || [[ "$output" == *"HARNESS"* ]] || [[ "$output" == *"class"* ]]
 }
+
+@test "(G3-9) Gate 3 BLOCK: DOC-class wave staging .claude/agents/ path → exit 1" {
+    # MED-4: .claude/agents/ should be a HARNESS-escalation pattern.
+    init_git_repo
+    write_correct_registry
+    write_class_sentinel "bl-w47-expr4" "DOC"
+    mkdir -p "$WORK_DIR/.claude/agents"
+    echo "# agent" > "$WORK_DIR/.claude/agents/some-agent.md"
+    git -C "$WORK_DIR" add .claude/agents/some-agent.md
+
+    # RED until toolkit-specialist adds ^\.claude/agents/ to HARNESS_PATTERNS (MED-4 impl gap)
+    run bash -c "CLAUDE_WAVE_SLUG='bl-w47-expr4' CLAUDE_PROJECT_DIR='$WORK_DIR' bash '$HOOK_SCRIPT' '$WORK_DIR'"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"[CLASS]"* ]] || [[ "$output" == *"HARNESS"* ]] || [[ "$output" == *"class"* ]]
+}
