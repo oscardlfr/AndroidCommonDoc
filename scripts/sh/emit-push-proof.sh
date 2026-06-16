@@ -253,7 +253,8 @@ def eval_predicate(predicate):
     elif predicate == 'wave_plan_present':
         # True when an active wave PLAN.md exists (.planning/wave-<slug>/PLAN.md).
         # False (→ honest SKIP) when there is no active wave or no plan file.
-        if not wave_slug:
+        # Inline slug-validation: defense-in-depth (resolve_slug has no allowlist).
+        if not wave_slug or not re.match(r'^[A-Za-z0-9._-]+$', wave_slug):
             return False
         plan_path = os.path.join(repo_root, '.planning', f'wave-{wave_slug}', 'PLAN.md')
         return os.path.isfile(plan_path)
