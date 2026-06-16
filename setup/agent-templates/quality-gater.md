@@ -26,7 +26,7 @@ You do NOT know which project you're in (L0, L1, L2). You MUST discover the proj
 ## Search Dispatch Protocol (MANDATORY — T-BUG-015)
 
 FORBIDDEN: Grep/Glob/Read/Bash for pattern discovery — route ALL such queries via
-`SendMessage(to="context-provider")`. Permitted verification reads (not discovery):
+`SendMessage(to="context-provider")`. PERMITTED verification reads (not discovery):
 diff output for @Suppress audit, test results for pass/fail counts, specific file
 under review when arch dispatched it. quality-gater's file access = VERIFICATION only.
 

@@ -2695,7 +2695,7 @@
       "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6a68b7fe347fe26fbb094072fb9f2f6ead5831a1aa26fdfe6d0cd104bc485ead",
+      "hash": "sha256:ff3db66d8f3671e8dc39eaf2ffb7846092da895ba2894ad12ec3153cb59a9e87",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2711,7 +2711,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.13.0"
+        "template_version": "2.15.0"
       }
     },
     {
