@@ -1,10 +1,36 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-06-15 (post bl-w47-supersede)
+> **Last updated**: 2026-06-16 (post bl-w47-expr4)
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
 ## Active (proposed wave order)
+
+### Agent-teams completion-message delivery unreliable (HIGH — harness reliability) — user-flagged 2026-06-16
+
+**Symptom**: peers (esp. **quality-gater**) finish their work but the completion message (QG-PASS, READY-FOR-REVIEW, EXECUTE-COMPLETE) does NOT reach the orchestrator → it hangs waiting indefinitely. Recurring across sessions (user: "2 días que el quality gate no responde cuando termina, no podemos seguir así"). Same delivery class seen mid-session bl-w47-expr4: a dispatch "never reached toolkit-specialist's inbox" (routing gap); planner idle-loops; quality-gater re-QG ran 25+ min with no notification while the `quality-gate.stamp` stayed at the prior HEAD.
+
+**Root cause**: the experimental `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` primitive has documented limitations around task coordination / notification delivery (audit A2 #4 — "known limitations"). T3 message delivery is not a reliable carrier of load-bearing results.
+
+**Operational mitigation (apply NOW, no code)**: the orchestrator MUST NOT wait on completion MESSAGES for load-bearing verdicts. Read the result from the T2 disk artifact — `quality-gate.stamp` (HEAD-bound), commit SHAs (`git log`), `arch-*-verdict.md`, `qg-path-audit` exit code — and poke the peer via SendMessage for detail. This is the A0/T2 doctrine (invariants live in files, not messages) — fitting, since ex-PR4 is itself a harness-reliability wave.
+
+**Root fix (this item)**: (a) QG emits a structured `.planning/wave-<slug>/qg-result.json` the orchestrator polls (decouple verdict from message delivery); (b) repro + report the agent-teams notification drop upstream, or add a heartbeat/ack; (c) session-health check that flags peers idle >N min whose on-disk artifact shows completed work.
+
+**Source**: user-flagged 2026-06-16 during bl-w47-expr4.
+
+### Installer sourcing-shim for wave-slug resolver (MED — harness, ~1-2h) — deferred 2026-06-16
+
+The L0 installer/setup does not wire `scripts/sh/lib/wave-slug.sh` (the validated `get_wave_slug` resolver — allowlist `^[A-Za-z0-9._-]+$`, rejects empty/`.`/`..`/slash-backslash traversal) into bash-layer consumers' sourcing path. The resolver exists but consumers re-inline their own slug extraction logic; a sourcing-shim in the installer would prevent per-consumer divergence and keep the validation logic canonical.
+
+**Constraint**: any tmp-file or path referenced by the shim MUST use explicit `$HOME` (not implicit `~`) for portability across environments.
+
+**Source**: deferred from BL-W47-expr4 slug-validation work (2026-06-16).
+
+### Team-completeness-gate grace-clock reset with explicit HOME (MED — harness, ~1h) — deferred 2026-06-16
+
+The team-completeness-gate's 30-min grace clock (tmp-file timestamp that gates floor enforcement after spawn) needs a defined reset trigger (e.g., on wave start) and its tmp-file path must use **explicit `$HOME`** (not implicit `~`), for portability across shell environments and tool invocations that may not expand `~` consistently.
+
+**Source**: deferred from BL-W47-expr4 (2026-06-16).
 
 ### Team stale-suffix spawn guard (MED — hook, ~2-3h) — filed 2026-06-07
 
