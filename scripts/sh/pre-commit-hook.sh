@@ -59,22 +59,21 @@ if [[ -n "$manifest_triggers" ]]; then
 
   GENERATE_CLI="$PROJECT_ROOT/mcp-server/build/cli/generate-template.js"
   if [[ ! -f "$GENERATE_CLI" ]]; then
-    log "generate-template.js not built — skipping (run 'cd mcp-server && npm run build')"
-    exit 0
+    log "generate-template.js not built — skipping Gate 2 (run 'cd mcp-server && npm run build')"
+  else
+    if ! GEN_OUT=$(node "$GENERATE_CLI" --check --all 2>&1); then
+      echo "" >&2
+      echo "[MANIFEST] Agent template frontmatter has drifted from manifest baseline." >&2
+      echo "$GEN_OUT" | grep -E '^  DRIFT' | head -5 >&2
+      echo "" >&2
+      echo "[MANIFEST] Fix per drifted agent:" >&2
+      echo "[MANIFEST]   node mcp-server/build/cli/generate-template.js <agent-name> --update-manifest-hash" >&2
+      echo "[MANIFEST]   bash scripts/sh/rehash-registry.sh --project-root \"$(pwd)\"" >&2
+      echo "[MANIFEST] Then stage manifest + templates + mirrors + registry and retry commit." >&2
+      exit 1
+    fi
+    log "manifest drift check clean"
   fi
-
-  if ! GEN_OUT=$(node "$GENERATE_CLI" --check --all 2>&1); then
-    echo "" >&2
-    echo "[MANIFEST] Agent template frontmatter has drifted from manifest baseline." >&2
-    echo "$GEN_OUT" | grep -E '^  DRIFT' | head -5 >&2
-    echo "" >&2
-    echo "[MANIFEST] Fix per drifted agent:" >&2
-    echo "[MANIFEST]   node mcp-server/build/cli/generate-template.js <agent-name> --update-manifest-hash" >&2
-    echo "[MANIFEST]   bash scripts/sh/rehash-registry.sh --project-root \"\$(pwd)\"" >&2
-    echo "[MANIFEST] Then stage manifest + templates + mirrors + registry and retry commit." >&2
-    exit 1
-  fi
-  log "manifest drift check clean"
 fi
 
 # ── Gate 3: wave class path-classifier ────────────────────────────────────
@@ -120,7 +119,7 @@ if [[ "${SKIP_WAVE_CLASS_GATE:-0}" != "1" ]]; then
       log "Gate 3: wave=${wave_slug} class=${wave_class}"
 
       # HARNESS-escalation path patterns (RESEARCH-classifier §1)
-      harness_pattern='(^\.claude/hooks/|^scripts/|^setup/agent-templates/|^\.github/|(^|/)settings\.json$)'
+      harness_pattern='(^\.claude/hooks/|^\.claude/registry/|^\.claude/agents/|^scripts/|^setup/agent-templates/|^\.github/|(^|/)settings\.json$)'
 
       # Check if any staged file matches a HARNESS-only pattern
       harness_staged=$(echo "$staged" | grep -E "$harness_pattern" || true)
