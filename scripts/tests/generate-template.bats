@@ -71,7 +71,7 @@ agents:
         - Read
         - SendMessage
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [team-lead]
       can_dispatch_to: []
       can_send_to: []

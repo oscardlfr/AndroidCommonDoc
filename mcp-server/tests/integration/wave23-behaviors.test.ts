@@ -193,20 +193,25 @@ describe("arch-dispatch-modes.md content integrity", () => {
 // ---------------------------------------------------------------------------
 
 describe("Bug #3: team-lead session setup calls TeamDelete before TeamCreate (Wave 24)", () => {
-  it("main-agent-orchestration-guide.md has TeamDelete before TeamCreate in session start block (W31.6)", () => {
-    // BL-W45 hub-split: content may be in tl-* sub-docs
+  it("BL-W48: TeamDelete/TeamCreate pattern REMOVED from main-agent-orchestration-guide.md (runtime retired)", () => {
+    // BL-W48: TeamCreate/TeamDelete removed from Claude Code runtime.
+    // The guide no longer documents session-team setup. TeamDelete before TeamCreate
+    // pattern is GONE — the guide now describes single-use Agent() dispatch.
     const raw = readOrchestrationGuide();
-    const deleteIdx = raw.indexOf("TeamDelete(team_name=");
-    const createIdx = raw.indexOf("TeamCreate(team_name=");
-    expect(deleteIdx, "TeamDelete must appear before TeamCreate").toBeGreaterThanOrEqual(0);
-    expect(createIdx, "TeamCreate must be present").toBeGreaterThanOrEqual(0);
-    expect(deleteIdx, "TeamDelete must appear BEFORE TeamCreate").toBeLessThan(createIdx);
+    expect(raw).not.toContain("TeamDelete(team_name=");
+    expect(raw).not.toContain("TeamCreate(team_name=");
+    // Guide should instead document orchestrator/subagent model
+    expect(raw).toMatch(/Agent\(subagent_type|single-use|orchestrator/i);
   });
 
-  it("main-agent-orchestration-guide.md pre-flight checklist has step 0 for TeamDelete (W31.6)", () => {
-    // BL-W45 hub-split: content may be in tl-* sub-docs
+  it("BL-W48: pre-flight checklist uses orchestrator model (no TeamDelete step 0)", () => {
+    // BL-W48: "Step 0: TeamDelete" was the Bug #3 fix for stale session teams.
+    // Post-BL-W48: no session teams exist; the pre-flight checklist uses a
+    // PLAN.md-first or EnterPlanMode protocol instead.
     const raw = readOrchestrationGuide();
-    expect(raw).toMatch(/0\..*TeamDelete.*Bug #3/);
+    expect(raw).not.toMatch(/0\..*TeamDelete.*Bug #3/);
+    // Guide should still describe a pre-dispatch check
+    expect(raw).toMatch(/PLAN\.md|EnterPlanMode|planner/i);
   });
 
   it("team-lead retirement entry exists in MIGRATIONS.json (W31.6)", () => {
