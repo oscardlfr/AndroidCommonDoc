@@ -1,14 +1,13 @@
 /**
- * Anti-regression tests for Wave 30 BL-W30-11.
+ * Anti-regression tests for the planner template (BL-W30-11 + later).
  *
- * Covers:
- *  - BL-W30-11: planner template enforces T-BUG-015 Search Dispatch Protocol
- *    Both setup/agent-templates/planner.md and .claude/agents/planner.md must:
- *    - Have template_version "1.8.0"
- *    - Contain "T-BUG-015" citation
- *    - Contain "Search Dispatch Protocol" section
- *    - Contain "FORBIDDEN at ALL times during planning" enforcement language
- *    - NOT contain the old "read current content first" phrase
+ * Both setup/agent-templates/planner.md and .claude/agents/planner.md must:
+ *  - Have template_version matching the current pin (asserted below)
+ *  - Contain "T-BUG-015" citation + "Search Dispatch Protocol" section
+ *  - Contain "FORBIDDEN at ALL times during planning" enforcement language
+ *  - NOT contain the old "read current content first" phrase
+ *  - NOT reference AskUserQuestion — the planner's tools are Read/Write/Bash/SendMessage,
+ *    so instructing a user-facing prompt tool is role-leakage (CodeRabbit, bl-w47-tail).
  */
 import { describe, it, expect } from "vitest";
 import * as fs from "fs";
@@ -50,9 +49,9 @@ describe("planner template enforces T-BUG-015 Search Dispatch Protocol", () => {
       const frontmatter = extractFrontmatter(raw);
       const body = extractBody(raw);
 
-      it('has template_version "1.16.0"', () => {
+      it('has template_version "1.17.0"', () => {
         expect(frontmatter).not.toBeNull();
-        expect(frontmatter?.template_version).toBe("1.16.0");
+        expect(frontmatter?.template_version).toBe("1.17.0");
       });
 
       it("body contains T-BUG-015", () => {
@@ -69,6 +68,10 @@ describe("planner template enforces T-BUG-015 Search Dispatch Protocol", () => {
 
       it("body does NOT contain old invitation phrase", () => {
         expect(body).not.toContain("read current content first");
+      });
+
+      it("body does NOT reference AskUserQuestion (role-leak guard: planner lacks that tool)", () => {
+        expect(body).not.toContain("AskUserQuestion");
       });
     });
   }

@@ -201,6 +201,11 @@
         "date": "2026-06-16",
         "breaking": false,
         "summary": "Ex-PR1: add Spec-Ambiguity Clarification step — AskUserQuestion (or planner→team-lead relay) for plan-shaping ambiguity BEFORE drafting PLAN.md; spec-ambiguity only, once, never mid-execution (feedback_stop_asking)."
+      },
+      "1.17.0": {
+        "date": "2026-06-17",
+        "breaking": false,
+        "summary": "CodeRabbit fix (PR #218): remove the 'Main orchestrator -> AskUserQuestion' role-leak from the Spec-Ambiguity step — planner tools are Read/Write/Bash/SendMessage (no AskUserQuestion); keep only the planner->team-lead SendMessage relay. Regression guard: planner template must not reference AskUserQuestion."
       }
     },
     "quality-gater": {
