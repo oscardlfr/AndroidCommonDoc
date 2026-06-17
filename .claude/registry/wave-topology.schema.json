@@ -1,26 +1,33 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["session_prefix", "mandatory_peers", "phase_gates"],
+  "required": ["class_artifacts", "phase_gates"],
   "properties": {
     "manifest": { "type": "object" },
-    "session_prefix": { "type": "string" },
-    "mandatory_peers": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Deprecated alias for class_floors.HARNESS. Kept for one-release grace period."
-    },
-    "class_floors": {
+    "class_artifacts": {
       "type": "object",
-      "description": "Per-class mandatory peer role-lists. Keys are wave class names (HARNESS, DOC, FAST-PATH). Values are arrays of peer role names that must be present in the session team.",
+      "description": "Per-class required disk verdict artifacts (BL-W48 artifact-floor). Replaces the obsolete class_floors/mandatory_peers roster. Keys are wave class names (HARNESS, DOC, FAST-PATH).",
       "additionalProperties": {
-        "type": "array",
-        "items": { "type": "string" }
+        "type": "object",
+        "required": ["architects", "qg"],
+        "properties": {
+          "architects": {
+            "description": "Fixed list of arch-<role> whose VERIFY-FINAL verdict is required, OR the sentinel string \"declared\" meaning PLAN.md carries a literal `**Required-Architects**: <role>[, ...]` token the gate resolves.",
+            "oneOf": [
+              { "type": "array", "items": { "type": "string" } },
+              { "type": "string", "enum": ["declared"] }
+            ]
+          },
+          "qg": {
+            "type": "boolean",
+            "description": "Whether canonical QG artifacts (quality-gate-report.json + stamps + push-proof.json) are required before push."
+          }
+        }
       }
     },
     "default_class": {
       "type": "string",
-      "description": "Default wave class when CLASS sentinel is absent. Fail-safe: HARNESS."
+      "description": "Default wave class when the CLASS sentinel / PLAN **Class** token is absent. Fail-safe: HARNESS."
     },
     "phase_gates": {
       "type": "object",

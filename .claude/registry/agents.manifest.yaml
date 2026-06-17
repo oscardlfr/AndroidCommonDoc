@@ -58,13 +58,6 @@ invariants:
       tools.banned.top_level: [Agent, Write, Edit]
     rationale_ref: "memory/feedback_architect_writes_code.md"
 
-  - id: IN_PROCESS_NO_AGENT
-    description: "Agents that run in-process as TeamCreate peers cannot use the Agent tool (Anthropic SDK restriction). Specialist requests must route through team-lead via SendMessage."
-    applies_to: { dispatch.spawn_method: TeamCreate-peer }
-    require:
-      tools.banned.top_level: [Agent]
-    rationale_ref: "GitHub#31977 (in-process peers lose Agent tool)"
-
   - id: NAMING_CONVENTION
     description: "canonical_name must be one of: arch-*, *-specialist, *-orchestrator, *-validator, *-auditor, *-agent, *-mapper, *-strategist, *-creator, *-lead, *-migrator, *-lifecycle, *-detector, *-alignment, context-provider, doc-updater, quality-gater, team-lead, advisor, debugger, researcher, verifier, planner."
     applies_to: {}
@@ -152,7 +145,7 @@ agents:
         grep_patterns: []
         glob_patterns: []
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [team-lead]
       can_dispatch_to: []
       can_send_to:
@@ -205,7 +198,7 @@ agents:
         grep_patterns: []
         glob_patterns: []
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [team-lead]
       can_dispatch_to: []
       can_send_to:
@@ -257,7 +250,7 @@ agents:
         grep_patterns: []
         glob_patterns: []
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [team-lead]
       can_dispatch_to: []
       can_send_to:
@@ -1629,11 +1622,11 @@ agents:
   planner:
     canonical_name: planner
     subagent_type: planner
-    template_version: "1.17.0"
+    template_version: "1.18.0"
     template_frontmatter_sha256: 835a893b7501a725d26ac1ef75e946b984766e2654e827182c11b9b035673a50
     category: orchestrator
     lifecycle: ephemeral
-    description: "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage."
+    description: "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage."
     domain: development
     intent: [plan, scope, breakdown, estimate]
     runtime:
@@ -1644,7 +1637,7 @@ agents:
       banned:
         top_level: [Agent, Edit, Grep, Glob]
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [team-lead]
       can_dispatch_to: []
       can_send_to:
@@ -1733,7 +1726,7 @@ agents:
       banned:
         top_level: [Agent, Write, Edit, Bash]
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [marketing-lead, team-lead, manual-cli]
       can_dispatch_to: []
       can_send_to:
@@ -1769,7 +1762,7 @@ agents:
       banned:
         top_level: [Agent, Write, Edit, Bash]
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [marketing-lead, team-lead, manual-cli]
       can_dispatch_to: []
       can_send_to:
@@ -1804,7 +1797,7 @@ agents:
       banned:
         top_level: [Agent, Write, Edit, Bash]
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [product-lead, team-lead, manual-cli]
       can_dispatch_to: []
       can_send_to:

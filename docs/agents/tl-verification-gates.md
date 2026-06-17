@@ -20,25 +20,26 @@ Reference for team-lead's verification requirements after specialist work: archi
 
 ## Architect Verification Gate (non-negotiable)
 
-After EVERY wave of specialist work, architects verify as session team peers:
+After EVERY wave of specialist work, architects verify and write their verdict files to disk:
 
-1. **All three are session team peers** — they cross-verify via `SendMessage(to="arch-X", ...)`
-2. **Architects request devs from team-lead** via SendMessage — team-lead is the sole Agent() spawner (in-process peers cannot use Agent())
-3. **Collect verdicts**: ALL three must APPROVE before proceeding
-4. **On ESCALATE**: team-lead does NOT code the fix. Instead:
+1. **All three write `arch-{role}-verdict.md`** (HEAD-bound) to `.planning/wave{N}/`
+2. **Cross-verify via SendMessage** (if background peers) or by reading each other's verdict files
+3. **Architects request specialists from orchestrator** via SendMessage — orchestrator is the sole Agent() spawner (background peers cannot use Agent())
+4. **Collect verdicts**: ALL three `arch-*-verdict.md` files must exist on disk with APPROVE status before proceeding
+5. **On ESCALATE**: orchestrator does NOT code the fix. Instead:
    - **Re-planifiable** → delegate to `researcher` + `advisor` for new approach
    - **Blocked** → report to user with clear error
 
 ```
-team-lead (team peer) coordinates
+orchestrator coordinates (reads disk artifacts + dispatches subagents)
   ↓
-┌─ arch-testing ←→ arch-platform ←→ arch-integration ─┐  (peers, SendMessage)
-│  request devs (SendMessage→team-lead) → detect (MCP) → validate │
-│  fix via devs → cross-verify (SendMessage) → re-verify│
+┌─ arch-testing ←→ arch-platform ←→ arch-integration ─┐  (via SendMessage or disk)
+│  request specialists (→orchestrator) → detect (MCP) → validate │
+│  fix via specialists → cross-verify → write verdict to disk │
 └──────────────────────────────────────────────────────┘
   ↓
-All APPROVE → next wave
-Any ESCALATE → team-lead re-plans (never codes)
+All arch-*-verdict.md on disk + APPROVE → next wave
+Any ESCALATE → orchestrator re-plans (never codes)
 ```
 
 ## Verdict Tally Protocol (MANDATORY — TaskList pattern)
@@ -50,8 +51,8 @@ TaskCreate(title="arch-platform verdict", status="in_progress")
 TaskCreate(title="arch-integration verdict", status="in_progress")
 ```
 
-**On receiving `"APPROVE"` from arch-{role}**:
-1. **Verify verdict file**: glob `.planning/wave{N}/arch-{role}-verdict.md`. If missing → DM architect "verdict file not found at expected path; please write it before APPROVE." Do NOT TaskUpdate. Re-await reply.
+**On receiving `"APPROVE"` from arch-{role}** (via SendMessage or subagent return):
+1. **Verify verdict file on disk**: glob `.planning/wave{N}/arch-{role}-verdict.md`. If missing → DM architect "verdict file not found at expected path; please write it before APPROVE." Do NOT TaskUpdate. Re-await reply.
 2. `TaskUpdate(title="arch-{role} verdict", status="completed")` — TaskUpdate ONLY, no broadcast.
 3. `TaskList` → if all 3 verdict tasks = completed → proceed to Phase 3.
 
@@ -76,7 +77,7 @@ Context compaction can cause a peer to loop — echoing the same summary repeate
 
 **On detection**:
 ```
-SendMessage(to="user", message="[COMPACTION-LOOP] arch-{role}: 3 consecutive identical summaries detected. Likely context-compacted. Recommend kill-then-respawn: shutdown_request to arch-{role}, verify team-config entry removed, then Agent(name='arch-{role}', team_name='session-{slug}', ...) with fresh context — never spawn a -2 replacement alongside")
+SendMessage(to="user", message="[COMPACTION-LOOP] arch-{role}: 3 consecutive identical summaries detected. Likely context-compacted. Recommend kill-then-respawn: shutdown_request to arch-{role}, then Agent(name='arch-{role}', subagent_type='arch-{role}', run_in_background=true, ...) with fresh context and bundle-read mandate — never spawn a -2 replacement alongside a live canonical peer")
 ```
 
 Do NOT re-spawn automatically — user decides. Just flag and await instruction.
@@ -130,10 +131,10 @@ Date: <YYYY-MM-DD>
 
 Precision is not the point — the retrospective anchors wave-over-wave trends so team-lead can see when scope creep is burning budget.
 
-## Post-Wave Team Integrity Check (MANDATORY)
+## Post-Wave Artifact Integrity Check (MANDATORY)
 
-After collecting verdicts from all architects at the end of each wave, verify team integrity:
-1. Bash: read team config to list active session team peers
-2. Confirm context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater are ALL alive
-3. Confirm all spawned core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist — whichever were spawned in scope) are ALL alive
-4. If ANY peer is missing: kill-then-respawn — confirm the dead peer's member entry is actually REMOVED from the team config (`~/.claude/teams/session-{slug}/config.json`; if it lingers, escalate to the user for manual cleanup), then IMMEDIATELY re-spawn the CANONICAL name — `Agent(name="X", team_name="session-{slug}", ...)`. NEVER spawn an indexed `X-2` replacement — messages addressed to the canonical name will not reach it (dead-inbox routing, proven twice) and suffixed names evade exact-match gates (matrix E17). Free-form names are gate-invisible (firing matrix §5, incident E18). NEVER skip the integrity check.
+After collecting verdicts from all architects at the end of each wave, verify disk artifacts:
+1. Glob `.planning/wave{N}/arch-*-verdict.md` — confirm all 3 verdict files exist and are HEAD-bound.
+2. If running with background peers: confirm context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater are reachable (SendMessage ACK or disk bundle present).
+3. Confirm any dispatched core specialists have completed their assigned tasks (output artifacts on disk or APPROVE relayed to architect).
+4. If a background peer is missing/unresponsive: kill-then-respawn — CP writes the role bundle first, gracefully terminate the old peer (shutdown_request), then re-spawn the CANONICAL name — `Agent(name="X", subagent_type="X", run_in_background=true, ...)`. NEVER use free-form names for agents holding Write/Bash/gh — non-canonical names are gate-invisible (firing matrix §5). NEVER skip the integrity check.

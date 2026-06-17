@@ -161,6 +161,23 @@ PYEOF
   local wave_slug
   wave_slug="$(resolve_slug)"
 
+  # -- 2b. CLASS-aware required-roles (BL-W48 artifact-floor) -------------------
+  # Resolve required architect roles from the wave CLASS via wave-topology.yaml
+  # class_artifacts (single source of truth). HARNESS == the manifest's static
+  # required_roles; DOC/FAST-PATH are CLASS-correct. Exported so both Python
+  # blocks honor it; they fall back to the manifest value on FALLBACK/error.
+  local _req_roles
+  _req_roles="$(node "$REPO_ROOT/scripts/sh/lib/resolve-required-roles.js" "$REPO_ROOT" "$wave_slug" 2>/dev/null || echo FALLBACK)"
+  if [[ "$_req_roles" == "DECLARED_MISSING" ]]; then
+    echo "[emit-push-proof] ERROR: wave CLASS requires 'declared' architects but PLAN.md has no usable '**Required-Architects**:' token (fail-closed). Add the token or correct the CLASS." >&2
+    exit 2
+  fi
+  if [[ "$_req_roles" == "FALLBACK" ]]; then
+    unset ACDOC_REQUIRED_ROLES
+  else
+    export ACDOC_REQUIRED_ROLES="$_req_roles"
+  fi
+
   # -- 3. Load + validate report + named-predicate enforcement ------------------
   if [[ ! -f "$REPORT_PATH" ]]; then
     echo "[emit-push-proof] ERROR: quality-gate-report.json not found at $REPORT_PATH. Run /quality-gate (Steps 0-9) first." >&2
@@ -273,9 +290,12 @@ if not delib.get('incorporated_at'):
     die("deliberation-evidence-absent: deliberation.incorporated_at is absent")
 
 # ── Required-role enforcement (P1) ───────────────────────────────────────────
-# Verify architects_consulted ⊇ required_roles declared in the manifest.
+# Verify architects_consulted ⊇ required_roles. BL-W48: CLASS-aware required_roles
+# (resolver, exported by bash as ACDOC_REQUIRED_ROLES) overrides the manifest's
+# static value when present; the manifest value is the fallback (identical for HARNESS).
 arb_step = next((s for s in manifest.get('required_steps', []) if s['id'] == 'architect-deliberation'), None)
-required_roles = arb_step.get('required_roles', []) if arb_step else []
+_rr = os.environ.get('ACDOC_REQUIRED_ROLES', '')
+required_roles = json.loads(_rr) if _rr else (arb_step.get('required_roles', []) if arb_step else [])
 consulted_set  = set(consulted)
 for role in required_roles:
     if role not in consulted_set:
@@ -390,7 +410,10 @@ for fname in verdict_files:
 # For each required_role, a VERIFY-FINAL + HEAD-bound arch-<role>-verdict.md must exist.
 manifest = json.load(open(os.path.join(repo_root, 'quality-gate-manifest.json'), encoding='utf-8'))
 arb_step = next((s for s in manifest.get('required_steps', []) if s['id'] == 'architect-deliberation'), None)
-required_roles = arb_step.get('required_roles', []) if arb_step else []
+# BL-W48: CLASS-aware required_roles (resolver, exported by bash as ACDOC_REQUIRED_ROLES)
+# overrides the manifest's static value when present; manifest is the fallback (HARNESS identical).
+_rr = os.environ.get('ACDOC_REQUIRED_ROLES', '')
+required_roles = json.loads(_rr) if _rr else (arb_step.get('required_roles', []) if arb_step else [])
 verdict_basenames = set(digests.keys())  # already verified VERIFY-FINAL + HEAD-bound
 for role in required_roles:
     # required_roles values carry the 'arch-' prefix (e.g. "arch-platform").

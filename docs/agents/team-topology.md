@@ -7,78 +7,65 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "3-phase team model with 10 session team peers (5 at session start + 5 core specialists at Phase 2). Planning → Execution → Quality Gate. Phases are lightweight — session team peers carry context across all three."
-version: 5
-last_updated: "2026-05"
+description: "3-phase model with disk-artifact contract. Orchestrator fans out concurrent Agent subagents (+ optional background peers). Load-bearing results live on disk — PLAN.md, arch-*-verdict.md, QG artifacts. Planning → Execution → Quality Gate."
+version: 6
+last_updated: "2026-06"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
 token_budget: 1500
 ---
 
 # Team Topology: 3-Phase Model
 
-Three sequential phases, each lightweight. Ten **session team peers** live in the `session-{project-slug}` team: five spawned at session start plus five core specialists added when Phase 2 begins. All carry context across phases. The project slug is derived from the project directory name (lowercased, hyphens replacing spaces -- e.g., `MyApp` becomes `my-app`).
+Three sequential phases, each lightweight. The harness is **multi-agent capable**: the orchestrator fans out to concurrent `Agent` subagents, and **background peers + `Task*`/`SendMessage` coordination remain a fully-supported optional accelerator** when the runtime offers them.
+
+**Load-bearing contract (authoritative):** disk artifacts — `PLAN.md`, `arch-*-verdict.md` (HEAD-bound), `quality-gate.stamp`, `quality-gate-report.json`, `push-proof.json`. Orchestrator reads these; correctness is decided here. This contract is runtime-agnostic and survives unreliable or absent messaging.
+
+**Execution / accelerator (supported, not required):** multi-agent fan-out, background peers with `run_in_background`, `Task*`/`SendMessage` coordination. These are progressive enhancements over the disk contract, never a completion dependency.
+
+The project slug is derived from the project directory name (lowercased, hyphens replacing spaces — e.g., `MyApp` becomes `my-app`).
 
 ---
 
-## Session Team Peers (10)
+## Two-Layer Architecture
 
-Five agents join at session start; five core specialists join when Phase 2 begins. All ten stay alive across phases.
+| Layer | What | Status |
+|-------|------|--------|
+| **Load-bearing contract (T1/T2)** | Disk artifacts: `PLAN.md`, `arch-*-verdict.md` (HEAD-bound), stamps, `quality-gate-report.json`, `push-proof.json`, git/CI. Orchestrator reads these; correctness is decided here. | **Authoritative.** Runtime-agnostic. |
+| **Execution / accelerator (T3)** | Orchestrator fans out to concurrent `Agent` subagents (default). Background peers + `Task*`/`SendMessage` coordination remain supported when the runtime offers them. | **Supported & encouraged, but never load-bearing.** |
 
-```
-Session Start (5 agents)
-  team-lead: TeamCreate("session-{project-slug}")
-  team-lead: Agent(name="context-provider", team_name="session-{project-slug}", run_in_background=true)
-  team-lead: Agent(name="doc-updater", team_name="session-{project-slug}", run_in_background=true)
-  team-lead: Agent(name="arch-testing", team_name="session-{project-slug}", run_in_background=true)
-  team-lead: Agent(name="arch-platform", team_name="session-{project-slug}", run_in_background=true)
-  team-lead: Agent(name="arch-integration", team_name="session-{project-slug}", run_in_background=true)
+Rules: (a) any multi-agent path MUST land its load-bearing result as a disk artifact; (b) gates verify those artifacts, not who/how many agents were spawned; (c) `TeamCreate`/`team_name`/named-team dirs are not required — a runtime that offers them may use them, but the harness does not depend on them; (d) messaging is progressive enhancement, never a completion dependency.
 
-Phase 2 Start (+5 core specialists)
-  team-lead: Agent(name="test-specialist", team_name="session-{project-slug}", run_in_background=true)
-  team-lead: Agent(name="ui-specialist", team_name="session-{project-slug}", run_in_background=true)
-  team-lead: Agent(name="domain-model-specialist", team_name="session-{project-slug}", run_in_background=true)
-  team-lead: Agent(name="data-layer-specialist", team_name="session-{project-slug}", run_in_background=true)
-  team-lead: Agent(name="toolkit-specialist", team_name="session-{project-slug}", run_in_background=true)
+---
 
-All 10 peers: SendMessage(to="<agent-name>")  ← always reachable
-```
+## Agent Roles
 
-| Agent | Role | Joined | Used in |
-|-------|------|--------|---------|
-| context-provider | On-demand oracle: patterns, docs, rules, external library docs (Context7) | Session start | All phases |
-| doc-updater | CHANGELOG, docs, KDoc | Session start | Phase 2, 3 |
-| arch-testing | Test strategy, coverage, test gaming | Session start | Phase 2, 3 |
-| arch-platform | Source sets, Gradle, platform boundaries | Session start | Phase 2, 3 |
-| arch-integration | Cross-module deps, DI, API contracts | Session start | Phase 2, 3 |
-| test-specialist | Test compliance, generation, TDD | Phase 2 start | Phase 2 |
-| ui-specialist | Compose UI, accessibility, Material3 | Phase 2 start | Phase 2 |
-| domain-model-specialist | Domain model, sealed hierarchies, mappers | Phase 2 start | Phase 2 |
-| data-layer-specialist | Repositories, data sources, caching | Phase 2 start | Phase 2 |
-| toolkit-specialist | MCP server (TS), hooks, shell scripts, PS1 scripts | Phase 2 start | Phase 2 |
+| Agent | Role | Phase |
+|-------|------|-------|
+| context-provider | On-demand oracle: patterns, docs, rules, external library docs (Context7) | All |
+| doc-updater | CHANGELOG, docs, KDoc | Phase 2, 3 |
+| arch-testing | Test strategy, coverage, test gaming — writes `arch-testing-verdict.md` | Phase 2, 3 |
+| arch-platform | Source sets, Gradle, platform boundaries — writes `arch-platform-verdict.md` | Phase 2, 3 |
+| arch-integration | Cross-module deps, DI, API contracts — writes `arch-integration-verdict.md` | Phase 2, 3 |
+| test-specialist | Test compliance, generation, TDD | Phase 2 |
+| ui-specialist | Compose UI, accessibility, Material3 | Phase 2 |
+| domain-model-specialist | Domain model, sealed hierarchies, mappers | Phase 2 |
+| data-layer-specialist | Repositories, data sources, caching | Phase 2 |
+| toolkit-specialist | MCP server (TS), hooks, shell scripts, PS1 scripts | Phase 2 |
 
-**Why TeamCreate**: team peers don't go "idle" the same way as background agents — no idle/dead confusion, no re-spawning with "v2" suffixes. **context-provider is an on-demand oracle** — agents SendMessage it with specific queries and it loads relevant files on demand (not eagerly), keeping setup cost low. Core devs accumulate layer knowledge across waves, eliminating per-spawn context re-reads. Quality-gater in Phase 3 joins the same team and can SendMessage directly to architects and devs. Context is preserved across all phases.
+**Spawning:** roles are dispatched as single-use foreground `Agent` subagents (default) or as background peers when the runtime supports them. Each lands its result as a disk artifact the orchestrator reads. `context-provider` is an on-demand oracle — loaded when asked, not eagerly. Core specialists accumulate layer knowledge across waves.
 
-**Context rotation**: for long sessions (5+ waves with 10 peers, 7+ waves with 5 peers), rotate kill-then-respawn: CP writes the role's context bundle FIRST (`write_bundle` → `.planning/wave-{slug}/context-bundles/{role}.md`, [context-bundle-schema](context-bundle-schema.md)) → graceful `shutdown_request` → VERIFY the member entry is removed from the team config → re-spawn the CANONICAL name (`Agent(name="arch-platform", team_name="session-{project-slug}", ...)`) with a prompt opening with the bundle-read mandate. Respawn-without-kill SUFFIXES silently (`-2`) and the canonical name routes to a dead inbox — see [context-rotation-guide](context-rotation-guide.md) §3.
-
-### Why Session Team Peers
-
-Previously, architects were background agents (`run_in_background=true`, no team). After each turn they went "idle" — the team-lead confused idle with dead, leading to re-spawns with "v2" suffixes and lost cross-phase context.
-
-Now all 10 are `TeamCreate("session-{project-slug}")` peers. Four advantages:
-- **No idle/dead confusion** — team peers are always reachable via SendMessage, no "v2" re-spawning
-- **Quality-gater has direct access** — joins the session team in Phase 3, SendMessages architects directly
-- **Cross-phase context preserved** — architects accumulate Phase 2 knowledge, quality-gater Step 1.5 can ask "what changed?" and get a real answer
+**Context rotation for long sessions (5+ waves):** CP writes the role's context bundle FIRST (`write_bundle` → `.planning/wave-{slug}/context-bundles/{role}.md`, [context-bundle-schema](context-bundle-schema.md)) → graceful shutdown → re-spawn the CANONICAL name with a prompt opening with the bundle-read mandate. See [context-rotation-guide](context-rotation-guide.md) §3.
 
 
 ## Core Specialist Lifecycle
 
-Five core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist) are spawned at Phase 2 start and persist until session end -- same lifecycle as architects.
+Five core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist) are dispatched at Phase 2 start.
 
-- **Spawn**: team-lead spawns all 5 when Phase 2 begins (not at session start)
-- **Work**: Architects assign tasks via SendMessage; specialists execute across multiple waves
-- **Knowledge**: Specialists accumulate layer expertise across waves -- no re-reading project context
-- **Kill**: Core specialists die at session end only. Never rotated mid-session unless context fills (7+ waves)
-- **Reporting**: Each specialist reports to specific architect(s) -- see Agent table above
+- **Dispatch**: orchestrator spawns all 5 when Phase 2 begins — as single-use subagents or background peers
+- **Work**: Architects assign tasks; specialists execute across waves and land results on disk
+- **Knowledge**: Specialists accumulate layer expertise across waves when run as background peers; single-use subagents receive per-task context
+- **Rotation**: Rotate (kill-then-respawn with context bundle) only when context fills (7+ waves for background peers)
+- **Reporting**: Each specialist reports to specific architect(s) — see Agent table above
 
 ## Pattern Validation Chain
 
@@ -99,34 +86,36 @@ This ensures architects validate every pattern before it reaches specialist code
 When a core specialist is busy and the architect needs parallel work:
 
 1. Architect sends: `SendMessage(to="team-lead", "need extra ui-specialist")`
-2. team-lead spawns: `Agent(name="ui-specialist-2", team_name="session-{project-slug}", prompt="...")` -- named team peer
-3. Extra specialist executes, returns result to team-lead, team-lead relays to architect
-4. After architect verifies -> extra specialist dies
+2. Orchestrator spawns: `Agent(name="ui-specialist-2", subagent_type="ui-specialist", run_in_background=true, prompt="...")` — named subagent
+3. Extra specialist executes, returns result to orchestrator, orchestrator relays to architect
+4. After architect verifies → extra specialist dismissed
 
-**Named extra specialists (MANDATORY):** All overflow specialists MUST be named team peers (`{specialist}-2`, `{specialist}-3`) with `team_name`. Anonymous `Agent()` calls (no name, no team_name) are FORBIDDEN — unnamed specialists go idle and are unreachable via SendMessage.
+**Named extra specialists (MANDATORY):** All overflow specialists MUST be named (`{specialist}-2`, `{specialist}-3`). Anonymous Agent() calls are FORBIDDEN — unnamed specialists are unreachable via SendMessage and invisible to type-keyed gates.
 
-**Architect-name-honoring (MANDATORY):** When an architect requests a specific specialist by name via SendMessage, team-lead MUST spawn that specialist as a named team peer with the requested name. team-lead MUST NOT substitute an anonymous or differently-named agent.
+**Architect-name-honoring (MANDATORY):** When an architect requests a specific specialist by name via SendMessage, the orchestrator MUST spawn that specialist with the requested name. The orchestrator MUST NOT substitute an anonymous or differently-named agent.
 
 ## Overview
 
 ```
-Phase 1 — Planning (temporary planner)
-  planner SendMessage(to="context-provider") for project state
-  Output: structured execution plan
-  ↓ planner dismissed
+Phase 1 — Planning (planner subagent)
+  orchestrator spawns planner (single-use Agent or background peer)
+  planner queries context-provider for project state
+  planner writes PLAN.md to disk
+  orchestrator reads PLAN.md → planner dismissed
 
-Phase 2 — Execution (no TeamCreate — architects are already alive)
-  team-lead SendMessage(to="arch-testing/platform/integration") with plan
-  architects SendMessage(to="context-provider") for patterns/rules
-  Architects assign work to core specialists via SendMessage
-  SendMessage(to="doc-updater") after work
-  All 3 architects APPROVE → phase complete
+Phase 2 — Execution (architects dispatched per plan)
+  orchestrator dispatches arch-testing/platform/integration with plan assignments
+  architects query context-provider for patterns/rules
+  architects assign work to specialists via SendMessage or disk spec
+  each arch writes arch-{role}-verdict.md (HEAD-bound) to disk
+  doc-updater dispatched after work
+  All 3 verdicts on disk + APPROVE → phase complete
 
-Phase 3 — Quality Gate (temporary quality-gater)
-  quality-gater deliberates with persistent architects for Phase 2 context
+Phase 3 — Quality Gate (quality-gater subagent)
+  quality-gater deliberates with architects (via SendMessage or reading verdicts)
   quality-gater runs automated checks (see quality-gate-protocol.md)
-  PASS → commit. FAIL → back to Phase 2
-  ↓ quality-gater dismissed
+  quality-gater writes quality-gate-report.json + stamps + push-proof.json to disk
+  PASS → orchestrator commits. FAIL → back to Phase 2 (max 3 retries → user)
 ```
 
 ---
@@ -135,20 +124,18 @@ Phase 3 — Quality Gate (temporary quality-gater)
 
 **Purpose**: Produce a structured execution plan before any code is written.
 
-**Temporary team**: `TeamCreate("planning-{project-slug}")` with planner only (dismissed after plan delivered).
-
 **Flow**:
-1. team-lead creates planning team and spawns planner: `TeamCreate("planning-{project-slug}")`, `Agent(name="planner", ...)`
-2. Planner `SendMessage(to="context-provider")` for current state (context-provider is a session team peer, reachable by name)
+1. Orchestrator spawns planner: `Agent(subagent_type="planner", ...)` — no `team_name` required
+2. Planner queries context-provider for current state (via SendMessage if context-provider is a live background peer, or by reading its context bundle from disk)
 3. Planner reads architecture docs, specs, MODULE_MAP.md
 4. Planner produces plan with: scope, steps, architect assignments, dependencies, risks
-5. Planner writes plan to `.planning/PLAN.md`
-6. Planner SendMessages path only to team-lead: `"Plan ready: .planning/PLAN.md"`
-7. team-lead reads plan from disk, dismisses planner
+5. Planner writes plan to `.planning/PLAN.md` (disk artifact — authoritative)
+6. Planner notifies orchestrator: `"Plan ready: .planning/PLAN.md"` (via SendMessage if supported, or orchestrator polls the file)
+7. Orchestrator reads plan from disk, planner dismissed
 
-**Cross-department check**: If planner flags product/marketing impact, team-lead spawns product-strategist or content-creator as sub-agents for review before proceeding.
+**Cross-department check**: If planner flags product/marketing impact, orchestrator spawns product-strategist or content-creator as sub-agents for review before proceeding.
 
-**Skip condition**: Simple/obvious tasks (< 5K tokens, clear path) -- team-lead plans inline, no planner needed.
+**Skip condition**: Simple/obvious tasks (< 5K tokens, clear path) — orchestrator plans inline, no planner needed.
 
 ---
 
@@ -156,23 +143,21 @@ Phase 3 — Quality Gate (temporary quality-gater)
 
 **Purpose**: Implement the plan with architect-verified quality.
 
-**No TeamCreate** -- architects are already session team peers. team-lead sends work directly via SendMessage.
-
 **Flow**:
-1. team-lead `SendMessage(to="arch-testing/platform/integration")` with plan assignments
-2. Architects `SendMessage(to="context-provider")` for patterns and project rules
+1. Orchestrator dispatches arch-testing, arch-platform, arch-integration with plan assignments (via SendMessage to live background peers, or as concurrent single-use Agent subagents)
+2. Architects query context-provider for patterns and project rules
 3. Architects detect issues using MCP tools (code-metrics, verify-kmp-packages, dependency-graph, etc.)
-4. Architects assign tasks to core specialists: `SendMessage(to="test-specialist", summary="task", message="...")`
-5. For overflow: architects request extra devs from team-lead via SendMessage
-6. team-lead spawns extras as named agents (no team_name); relays results to architect
-7. Architects cross-verify via `SendMessage(to="arch-X", ...)`
-8. After work: `SendMessage(to="doc-updater")` to update CHANGELOG/docs
-9. All 3 architects: APPROVE -- phase complete
-10. Any ESCALATE -- team-lead re-plans (never codes the fix)
+4. Architects assign tasks to core specialists via SendMessage or by writing a disk spec
+5. For overflow: orchestrator spawns extra specialist subagents on architect request
+6. Architects cross-verify via SendMessage
+7. Each architect writes `arch-{role}-verdict.md` (HEAD-bound) to disk
+8. After work: orchestrator dispatches doc-updater to update CHANGELOG/docs
+9. All 3 verdicts on disk + APPROVE status → phase complete
+10. Any ESCALATE → orchestrator re-plans (never codes the fix)
 
-**Wave pattern**: For large tasks, multiple detect/fix/verify cycles (waves). Persistent architects retain full context between waves.
+**Wave pattern**: For large tasks, multiple detect/fix/verify cycles. Background peers retain full context between waves; single-use subagents receive per-dispatch context.
 
-**Context management**: All 10 session team peers carry context across waves automatically. For long sessions (5+ waves), rotate kill-then-respawn: graceful shutdown_request → verify the member entry is removed from the team config → re-spawn the CANONICAL name. Never spawn a `-2` replacement (dead-inbox routing) — see [context-rotation-guide](context-rotation-guide.md) §3.
+**Context management**: For long sessions (5+ waves with background peers), rotate kill-then-respawn: CP writes context bundle first → graceful shutdown → re-spawn the CANONICAL name. See [context-rotation-guide](context-rotation-guide.md) §3.
 
 ---
 
@@ -180,21 +165,21 @@ Phase 3 — Quality Gate (temporary quality-gater)
 
 **Purpose**: Verify quality before commit. Architect deliberation, then sequential automated gates.
 
-**Temporary agent**: quality-gater (spawned, then dismissed after PASS/FAIL)
+**Temporary subagent**: quality-gater (spawned as single-use Agent, then dismissed after PASS/FAIL)
 
 **Flow**:
-1. team-lead adds quality-gater to session team: `Agent(name="quality-gater", team_name="session-{project-slug}", ...)`
-2. **Architect Deliberation** -- quality-gater consults all 3 persistent architects:
-   - `SendMessage(to="arch-testing")` -- what was tested, known gaps, coverage concerns
-   - `SendMessage(to="arch-platform")` -- source set changes, platform boundary risks
-   - `SendMessage(to="arch-integration")` -- cross-module impacts, DI wiring, API changes
+1. Orchestrator spawns quality-gater: `Agent(subagent_type="quality-gater", ...)` — no `team_name` required
+2. **Architect Deliberation** — quality-gater consults all 3 architects by reading their `arch-*-verdict.md` files, and optionally via SendMessage if architects are live background peers:
+   - arch-testing — what was tested, known gaps, coverage concerns
+   - arch-platform — source set changes, platform boundary risks
+   - arch-integration — cross-module impacts, DI wiring, API changes
 3. quality-gater runs automated protocol (see [quality-gate-protocol](quality-gate-protocol.md))
-4. quality-gater SendMessages structured PASS/FAIL report to team-lead (includes retry count + architect deliberation summary)
-5. PASS -- team-lead commits, dismisses quality-gater
-6. FAIL -- team-lead dismisses quality-gater, re-enters Phase 2 with failure context
-7. **Max 3 retries** -- after 3 FAIL/Phase 2/FAIL cycles on the same issue, escalate to user
+4. quality-gater writes `quality-gate-report.json` + `quality-gate.stamp` + `push-proof.json` to disk (canonical QG truth). Notifies orchestrator via SendMessage if supported.
+5. PASS — orchestrator reads proof from disk, commits, dismisses quality-gater
+6. FAIL — orchestrator re-enters Phase 2 with failure context from `quality-gate-report.json`
+7. **Max 3 retries** — after 3 FAIL/Phase 2/FAIL cycles on the same issue, escalate to user
 
-**Why deliberation matters**: Architects hold Phase 2 context that automated checks cannot see. A test might pass but an architect knows the coverage is shallow. A file might look clean but an architect knows the integration was deferred. Deliberation prevents false positives and catches gaps.
+**Why deliberation matters**: Architects hold Phase 2 context that automated checks cannot see. Reading verdict files captures recorded decisions; direct SendMessage captures live concerns. Deliberation prevents false positives and catches gaps.
 
 See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 
@@ -202,44 +187,34 @@ See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 
 ## Key Constraints
 
-- **team-lead is sole Agent() spawner** -- teammates can't use Agent() in in-process mode (#31977)
+- **Orchestrator is sole Agent() spawner** — background peers cannot use Agent() in in-process mode (#31977)
 - **Architects**: Read, Grep, Glob, Bash, SendMessage (NO Write/Edit/Agent)
-- **10 session team peers** -- 5 at session start (context-provider, doc-updater, arch-testing, arch-platform, arch-integration) + 5 core specialists at Phase 2 start (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist). For long sessions (5+ waves), rotate kill-then-respawn (canonical name; see [context-rotation-guide](context-rotation-guide.md) §3).
-- **No new TeamCreate for Phase 2** -- architects are already in the session team. team-lead sends plan via SendMessage. No additional team creation needed.
-- **Phase 3 deliberation is mandatory** -- quality-gater MUST consult all 3 architects before running automated checks. Skipping deliberation voids the gate.
-- **team-lead FORBIDDEN from spawning core specialists outside Phase 2 start** -- the 5 core specialists are spawned exactly once when Phase 2 begins.
-- **Pattern validation chain** -- specialists NEVER contact context-provider directly; architect is the quality gate.
-- **Project-specific agents MUST be in routing table** -- guardians, validators, domain specialists. If the team-lead routing table doesn't list a domain, architects can't request specialists for it.
+- **Disk artifacts are authoritative** — `arch-*-verdict.md` (HEAD-bound), `quality-gate-report.json`, `push-proof.json`. Gates verify these files, not who/how many agents were spawned.
+- **Phase 3 deliberation is mandatory** — quality-gater MUST read all 3 arch-*-verdict.md files (and optionally SendMessage live architects) before running automated checks. Skipping deliberation voids the gate.
+- **Core specialists dispatched at Phase 2 start** — orchestrator spawns the 5 core specialists when Phase 2 begins. For long sessions with background peers (5+ waves), rotate kill-then-respawn (canonical name; see [context-rotation-guide](context-rotation-guide.md) §3).
+- **Pattern validation chain** — specialists NEVER contact context-provider directly; architect is the quality gate.
+- **Project-specific agents MUST be in routing table** — guardians, validators, domain specialists. If the routing table doesn't list a domain, architects can't request specialists for it.
 
 ---
 
-## When to Use 3-Phase vs Single-Team
+## When to Use 3-Phase vs Single Agent
 
 | Signal | Model |
 |--------|-------|
-| Non-trivial task (3+ files, multiple domains) | 3-phase |
-| Simple bug fix (1-2 files, clear path) | Single agent, no team |
+| Non-trivial task (3+ files, multiple domains) | 3-phase multi-agent |
+| Simple bug fix (1-2 files, clear path) | Single agent, no subagents |
 | Cross-department impact | 3-phase + dept lead sub-agents |
 | Urgent hotfix | Skip planning phase, minimal execution + quality gate |
 
 ---
 
-## Known Platform Limitations
+## Known Platform Considerations
 
-### SendMessage(to="*") broadcast bug
+**Messaging is progressive enhancement**: SendMessage between background peers is a supported optional accelerator. The load-bearing contract is always disk artifacts. If peer messaging is unreliable or absent, the wave still completes because the contract is files.
 
-`SendMessage(to="*")` returns "Not in a team context" even when `TeamCreate` has been called and the team is active.
+**SendMessage routing**: Address peers by canonical role name (e.g., `SendMessage(to="arch-testing")`). Individual messages are more reliable than any broadcast pattern.
 
-**Workaround**: Send individual messages to each target instead of broadcast:
-
-```
-// Instead of: SendMessage(to="*", message="Phase 2 complete")
-SendMessage(to="arch-testing", message="Phase 2 complete")
-SendMessage(to="arch-platform", message="Phase 2 complete")
-SendMessage(to="arch-integration", message="Phase 2 complete")
-```
-
-This applies to all broadcast scenarios: team-lead notifying architects, quality-gater polling specialists, etc.
+**Named team dirs** (`~/.claude/teams/`): present only when the runtime creates them. Gates do not require these dirs — they verify disk artifacts in the wave directory instead.
 
 ## Related Docs
 

@@ -1,39 +1,34 @@
 # yaml-language-server: $schema=./wave-topology.schema.json
 manifest:
-  version: 2
-  description: "Mandatory peer list and phase gate rules for session-* teams"
-session_prefix: "session-*"
-mandatory_peers:
-  # deprecated alias — equals the HARNESS floor; kept for one-release grace period.
-  # Use class_floors: HARNESS for new consumers.
-  - arch-platform
-  - arch-testing
-  - arch-integration
-  - planner
-  - context-provider
-  - doc-updater
-  - quality-gater
-class_floors:
+  version: 3
+  description: "Wave-class -> required disk verdict artifacts (artifact-floor). BL-W48 team-model migration: replaces the obsolete session-* named-team roster floor (class_floors / mandatory_peers) with a disk-artifact contract verified at the push boundary. The harness no longer depends on named-team rosters."
+# class_artifacts: the disk verdicts each wave CLASS must have present + HEAD-bound
+# before push. The artifact-floor is enforced at the PUSH BOUNDARY by
+# emit-push-proof.sh, which resolves the CLASS-aware required architect roles via
+# scripts/sh/lib/resolve-required-roles.js (no dedicated gate hook). NOT a list of
+# peers to spawn — multi-agent topology is an execution detail, the contract is
+# the artifacts.
+#   architects: a fixed list of arch-<role> whose VERIFY-FINAL verdict is required,
+#     OR the sentinel "declared" — meaning PLAN.md MUST carry a literal
+#     `**Required-Architects**: <role>[, <role>...]` token that the gate resolves
+#     (fail-closed if absent/empty for a "declared" class).
+#   qg: true -> canonical QG artifacts required (quality-gate-report.json +
+#     quality-gate.stamp + push-proof.json), enforced by push-authorization-gate.
+class_artifacts:
   HARNESS:
-    - arch-platform
-    - arch-testing
-    - arch-integration
-    - planner
-    - context-provider
-    - doc-updater
-    - quality-gater
+    architects: [arch-platform, arch-testing, arch-integration]
+    qg: true
   DOC:
-    - arch-platform
-    - context-provider
-    - doc-updater
-    - quality-gater
+    architects: declared
+    qg: true
   FAST-PATH:
-    - context-provider
+    architects: []
+    qg: true
 default_class: HARNESS
 phase_gates:
   plan_required_before_arch_dispatch: true
   quality_gate_required_before_push: true
-  # FIND-17 fix (BL-W42 PR1): sentinel moved from gitignored .planning/wave-*/
-  # to tracked .claude/wave-quality-gates/ directory.
+  # FIND-17 fix (BL-W42 PR1): sentinel lives in tracked .claude/wave-quality-gates/
+  # (NOT gitignored .planning/wave-*/).
   sentinel_dir: ".claude/wave-quality-gates"
   sentinel_filename_template: "{slug}.md"

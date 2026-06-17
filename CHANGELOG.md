@@ -5,6 +5,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Changed (bl-w48-team-model-rootfix — team-model runtime migration: disk-artifact contract)
+
+- **Two-layer architecture doctrine** (`docs/agents/team-topology.md`, `main-agent-orchestration-guide.md`): named-team roster (`TeamCreate`/`team_name`/`session-{slug}` dirs) is no longer the runtime contract. Harness is **multi-agent capable** (orchestrator fans out to concurrent `Agent` subagents; background peers + `Task*`/`SendMessage` remain a fully-supported optional accelerator). Load-bearing contract is **disk artifacts**: `PLAN.md`, `arch-*-verdict.md` (HEAD-bound), `quality-gate-report.json`, `push-proof.json`. Gates verify files — not who/how many agents were spawned.
+- **Wave class floors → artifact floors** (`docs/agents/main-agent-orchestration-guide.md`): class floors now declare required disk artifacts per CLASS (HARNESS/DOC/FAST-PATH) instead of required peer counts.
+- **`skills/init-session/SKILL.md` Step 0 `--orchestrate`**: `TeamCreate` + `team_name` peer-spawns replaced with concurrent `Agent` subagent dispatch (no `team_name` required). Load-bearing contract is `.planning/wave-{slug}/` artifacts.
+- **`skills/work/SKILL.md`**: HARD GATE rewritten — checks subagent dispatch, not `~/.claude/teams/` dir presence. Peer-Aware Routing updated to use live background peer check instead of team-config file read. Orchestrator Safety Rule updated: `quality-gater` and `planner` are dispatched as single-use Agent subagents, no `TeamCreate` needed.
+- **`docs/agents/tl-session-start.md`**: Session Team Setup block rewritten — `TeamDelete`/`TeamCreate` removed; dispatch pattern shows both foreground single-use and optional background peer forms; pre-flight checklist keys on subagent dispatch, not team membership.
+- **`docs/agents/tl-session-setup.md`**: Phase 2 core specialist spawns updated to remove `team_name`; Rotation section updated (no `~/.claude/teams/` config-json verify step); "Session Team Setup Patterns" rewritten to show orchestrator fan-out dispatch.
+- **`docs/agents/tl-phase-execution.md`**, **`tl-verification-gates.md`**, **`tl-dispatch-topology.md`**: all named-team-as-runtime prose replaced with orchestrator + single-use subagents + optional background peers framing; post-wave integrity check keys on disk artifacts.
+- **`docs/agents/multi-agent-patterns.md`**: "Hybrid TeamCreate" topology renamed to "Orchestrator + Single-Use Subagents"; `TeamCreate` spawn block replaced with concurrent Agent dispatch.
+- **`docs/agents/spec-driven-workflow.md`**: session-start block updated — `TeamCreate` with 6 peers → 6 concurrent subagent dispatches.
+- **`docs/agents/context-rotation-guide.md`**: guide scoped to background peer rotation; single-use subagents noted as not needing rotation; orchestrator-as-relay pattern updated; anti-patterns table updated.
+
 ### Added (bl-w47-pr-0c2 — QG-proof push gate: verdict→HEAD binding + emit-push-proof + manifest policy)
 
 - **`write-verdict.sh --phase verify-final`** (`scripts/sh/`): now emits a `**HEAD**:` field containing `git rev-parse HEAD` at emit time. `emit-push-proof.sh run-qg` enforces that each arch verdict's `**HEAD**:` equals the final pushed HEAD (verdict→HEAD binding). A verdict written at commit A does not satisfy a proof minted at commit B — stale verdicts block proof emission. PREP verdicts do not carry this field.
