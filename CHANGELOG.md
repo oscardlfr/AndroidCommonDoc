@@ -17,6 +17,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **`docs/agents/multi-agent-patterns.md`**: "Hybrid TeamCreate" topology renamed to "Orchestrator + Single-Use Subagents"; `TeamCreate` spawn block replaced with concurrent Agent dispatch.
 - **`docs/agents/spec-driven-workflow.md`**: session-start block updated — `TeamCreate` with 6 peers → 6 concurrent subagent dispatches.
 - **`docs/agents/context-rotation-guide.md`**: guide scoped to background peer rotation; single-use subagents noted as not needing rotation; orchestrator-as-relay pattern updated; anti-patterns table updated.
+- **Agent templates reframed to the orchestrator/disk-verdict model** (`setup/agent-templates/planner.md` 1.18.0→1.19.0, `arch-platform.md` 1.33.0→1.34.0, `arch-testing.md` 1.38.0→1.39.0, `arch-integration.md` 1.29.0→1.30.0; `.claude/agents/` mirrors regenerated, manifest `template_version` + frontmatter SHA bumped): identity ("TeamCreate peer, spawned by team-lead" → single-use subagent, or optional background peer, dispatched by the orchestrator), activation (no idle-wait; `scope_doc_path` / `.planning/wave-<slug>/PLAN.md`, not bare `.planning/PLAN.md`), and specialist routing (`SendMessage(to="team-lead")` → record the needed fix in the verdict for the orchestrator to dispatch). Supported `SendMessage` coordination (context-provider, peer architects, doc-updater, live specialists) and `docs/agents/*` protocol-doc links preserved.
+- **Test suites repinned to the post-migration contract**: `agent-spawn-validator` / `plan-mode-spawn-planner` / `generate-template` / `team-completeness-gate` / `team-topology-gate` bats + `three-phase-architecture` / `tl-behavioral-rules` / `manifest-validator` / `wave23-behaviors` vitest assert the `Agent` spawn model, retired roster-gate tombstones (exit 0), and bumped template versions. Stale-suffix / `STALE_SUFFIX_ENFORCE` / Check-3-`team_name` cases removed (deletions documented in-file).
+
+### Added (bl-w48-team-model-rootfix — named-team regression guard)
+
+- **`scripts/tests/named-team-regression-guard.bats`** (NEW): fails if any active harness path (`.claude/hooks/`, `skills/`, `agents.manifest.yaml`, `setup/agent-templates/`) reintroduces a `TeamCreate(` call, `spawn_method: TeamCreate-peer`, or a `team_name=` spawn requirement; allows legitimate multi-agent usage (`Agent()` fan-out, `run_in_background`, `SendMessage`, `Task*`). Positive + negative + planted-fixture coverage.
 
 ### Added (bl-w47-pr-0c2 — QG-proof push gate: verdict→HEAD binding + emit-push-proof + manifest policy)
 
