@@ -79,4 +79,4 @@ When `--orchestrate <slug>` is passed:
 - If `MODULE_MAP.md` is missing, suggest running `/map-codebase` to generate it
 - Agent grouping uses the `domain:` frontmatter field; agents without it go under "Ungrouped"
 - Run this at the start of a new session to orient yourself
-- Session naming: `session-<slug>` is the canonical convention used by `/work` peer-detection (BL-W32-07). Pick descriptive slugs (e.g., `bl-w32-07`, `feature-auth`) — they serve as wave identifiers.
+- Session naming: the wave slug names the wave artifact directory (`.planning/wave-<slug>/`). Pick descriptive slugs (e.g., `feature-auth`) — they serve as wave identifiers. The load-bearing contract is the disk artifacts in that directory, not named-team membership.

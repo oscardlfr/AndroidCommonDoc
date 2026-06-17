@@ -785,14 +785,14 @@
       "name": "init-session",
       "type": "skill",
       "path": "skills/init-session/SKILL.md",
-      "description": "Show project context dashboard. Optionally orchestrates session-team setup with --orchestrate <slug> flag (BL-W32-07).",
+      "description": "Show project context dashboard. Optionally kicks off core subagent dispatch with --orchestrate <slug> flag.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:98d25cec037120f3ac5d1cb68b013eb1fe09a519bece6b041c215b74215f11f6",
+      "hash": "sha256:e93c9f2970e7be1cae0da8c892588cca29a7fac16183f5c63421a5c19d4653c6",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",
-        "description": "Show project context dashboard. Optionally orchestrates session-team setup with --orchestrate <slug> flag (BL-W32-07).",
+        "description": "Show project context dashboard. Optionally kicks off core subagent dispatch with --orchestrate <slug> flag.",
         "intent": [
           "session",
           "init",
@@ -1835,7 +1835,7 @@
       "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:480dca1571c52f6df81a141326873015f21446024b0cb527ee90ac27852d1b2e",
+      "hash": "sha256:71765d84adb11c5964c683e9363e12d5d5ac3c73fa19858a4ae026f3deac87a4",
       "dependencies": [],
       "frontmatter": {
         "name": "work",
@@ -2528,14 +2528,14 @@
       "name": "planner",
       "type": "agent",
       "path": ".claude/agents/planner.md",
-      "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
+      "description": "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c11a008706ec921ed82ec596c799b77565a04e09241a48c932fbfbff5023eeff",
+      "hash": "sha256:a33ddfbf0ee8f9e5f8a0d343f874d91fea4de1b6cd7285261ddb7d934ba5714d",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
-        "description": "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage.",
+        "description": "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage.",
         "tools": "Read, Write, Bash, SendMessage",
         "model": "sonnet",
         "domain": "development",
@@ -2546,7 +2546,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.17.0"
+        "template_version": "1.18.0"
       }
     },
     {

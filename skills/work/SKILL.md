@@ -156,7 +156,7 @@ Proceed? (y/n)
 
 ## Notes
 
-- Session naming: `session-{slug}` is the canonical convention shared with `/init-session --orchestrate <slug>` (BL-W32-07). Use the same slug for both commands in a session.
+- Session naming: the wave slug names the wave artifact directory (`.planning/wave-<slug>/`); use the same slug across `/init-session` and `/work` in a session.
 - Level 1 is checked first — it is instant and deterministic
 - Level 2 only runs when Level 1 has no match
 - **Before routing to any agent, verify it exists** in `.claude/agents/` — if not, fall through
@@ -169,7 +169,7 @@ Proceed? (y/n)
 
 **MUST run in main context only. Spawning /work as a subagent causes Agent() tool loss (Claude Code bug #31977).**
 
-- Do NOT invoke `/work` as a subagent with team-lead as the subagent_type — this breaks TeamCreate and Agent() tool availability
+- Do NOT invoke `/work` as a subagent — the orchestrator must run in the main conversation; nested subagents lose reliable Agent()/dispatch (Claude Code bug #31977)
 - /work acts in-process as main-context orchestrator (W31.6 pattern) — team-lead.md was retired in W31.6
 - If you find yourself wanting to spawn /work as an Agent(), you are in the wrong process layer
 
