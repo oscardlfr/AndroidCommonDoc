@@ -35,7 +35,7 @@ When `--orchestrate <slug>` is passed:
 3. Consult context-provider: dispatch a context-provider query to get current project state (MEMORY.md, open items). Wait for response.
 4. Continue to Step 1 (dashboard render)
 
-> **Note**: The `session-<slug>` wave slug determines the wave artifact directory (`.planning/wave-<slug>/`). The load-bearing contract is disk artifacts — verdicts, stamps, and the QG report — not named-team membership.
+> **Note**: The `<slug>` wave slug determines the wave artifact directory (`.planning/wave-<slug>/`). The load-bearing contract is disk artifacts — verdicts, stamps, and the QG report — not named-team membership.
 
 ## Steps
 

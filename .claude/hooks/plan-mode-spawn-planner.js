@@ -93,9 +93,9 @@ process.stdin.on('end', () => {
       process.stdout.write(JSON.stringify({
         decision: 'block',
         reason: [
-          '[plan-mode-spawn-planner] ExitPlanMode blocked: planner peer was not spawned during plan mode.',
+          '[plan-mode-spawn-planner] ExitPlanMode blocked: planner subagent was not spawned during plan mode.',
           'Per docs/agents/main-agent-orchestration-guide.md Phase 1, non-trivial plans require:',
-          '  Agent(name="planner", subagent_type="planner", ...)',
+          '  Agent(subagent_type="planner")   (no team_name — the canonical single-use spawn)',
           'Spawn the planner first (it will write .planning/wave-<slug>/PLAN.md), then ExitPlanMode.',
           'For genuinely trivial tasks (1-line typo fix etc.), set CLAUDE_SKIP_PLANNER=1 before EnterPlanMode.',
         ].join('\n')

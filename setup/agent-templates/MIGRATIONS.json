@@ -212,6 +212,12 @@
         "breaking": true,
         "summary": "BL-W48 team-model-rootfix: migrate spawn_method TeamCreate-peer -> Agent. TeamCreate/team_name are removed from the Claude Code runtime. Planner is now a single-use subagent spawned via Agent(subagent_type='planner') without team_name. Description updated to remove 'session-{slug} team' reference. Also affects: arch-platform, arch-testing, arch-integration (same migration). The IN_PROCESS_NO_AGENT invariant is now a tombstone guard only.",
         "migration_hint": "Spawn planner as: Agent(subagent_type='planner'). Do NOT pass team_name — it is ignored/deprecated. Results are delivered as disk artifacts (PLAN.md), not via message routing. Retiring team-completeness-gate.js and team-topology-gate.js hooks (removed from settings.json)."
+      },
+      "1.19.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 team-model-rootfix (step 1): reframe planner deeper body off the named-team/team-lead model. Spec-Ambiguity, Plan Delivery, Verdict Filename, AMEND, Rules, and Post-Compaction Re-Sync now route through the orchestrator + disk artifacts; canonical plan target is .planning/wave-<slug>/PLAN.md (not bare .planning/PLAN.md); open questions are surfaced in PLAN.md for the orchestrator. SendMessage(to='context-provider') remains supported.",
+        "migration_hint": "Guidance-only reframe; spawn interface unchanged from 1.18.0. No consumer action beyond re-syncing the deployed template."
       }
     },
     "quality-gater": {
