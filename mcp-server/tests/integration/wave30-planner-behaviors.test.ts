@@ -8,6 +8,9 @@
  *  - NOT contain the old "read current content first" phrase
  *  - NOT reference AskUserQuestion — the planner's tools are Read/Write/Bash/SendMessage,
  *    so instructing a user-facing prompt tool is role-leakage (CodeRabbit, bl-w47-tail).
+ *  - KEEP the Ex-PR1 Spec-Ambiguity Clarification step (section header + the
+ *    SendMessage(to="team-lead", summary="spec questions") relay) — positive coverage so the
+ *    feature itself can't be silently deleted with CI still green (P2, bl-w47-tail).
  */
 import { describe, it, expect } from "vitest";
 import * as fs from "fs";
@@ -72,6 +75,12 @@ describe("planner template enforces T-BUG-015 Search Dispatch Protocol", () => {
 
       it("body does NOT reference AskUserQuestion (role-leak guard: planner lacks that tool)", () => {
         expect(body).not.toContain("AskUserQuestion");
+      });
+
+      it("body KEEPS the Ex-PR1 Spec-Ambiguity Clarification step + team-lead relay contract", () => {
+        expect(body).toContain("Spec-Ambiguity Clarification");
+        expect(body).toContain('SendMessage(to="team-lead"');
+        expect(body).toContain('summary="spec questions"');
       });
     });
   }
