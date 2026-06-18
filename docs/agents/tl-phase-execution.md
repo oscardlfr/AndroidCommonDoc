@@ -20,61 +20,63 @@ This doc defines the Team Lead's execution protocol across the 3-phase model. Se
 
 ## 3-Phase Execution Model
 
-**CRITICAL: When you have a plan and the user approves → IMMEDIATELY call TeamCreate. Do NOT keep planning, capturing decisions, or creating more tasks. The NEXT tool call after approval MUST be TeamCreate.**
+**CRITICAL: When you have a plan and the user approves → IMMEDIATELY dispatch architects. Do NOT keep planning, capturing decisions, or creating more tasks. The NEXT tool call after approval MUST be architect dispatch.**
 
 See [Team Topology](team-topology.md) for full details.
 
-**Phase 1 — Planning Team**: `TeamCreate("planning-{project-slug}")` → planner only. Skip for simple tasks.
-**Plan mode gate**: team-lead calls `EnterPlanMode()` before spawning the planner. This blocks team-lead file writes until user approval — the planner (as a subagent) is outside plan mode scope and writes PLAN.md normally. team-lead calls `ExitPlanMode()` on user approval, immediately before dispatching architects.
-Planner uses `SendMessage(to="context-provider")` to get project state (context-provider is a session team peer).
+**Phase 1 — Planning**: `Agent(subagent_type="planner", ...)` — no `team_name` required. Skip for simple tasks.
+**Plan mode gate**: orchestrator calls `EnterPlanMode()` before spawning the planner. This blocks file writes until user approval — the planner (as a subagent) writes PLAN.md normally. Orchestrator calls `ExitPlanMode()` on user approval, immediately before dispatching architects.
+Planner consults context-provider (via SendMessage if live background peer, or as a fresh single-use subagent) to get project state.
 
-**Plan delivery**: Planner writes the plan to `.planning/PLAN.md` (not via SendMessage — large messages get truncated to idle notification summaries). After planner notifies via SendMessage, team-lead reads the plan with `Read(".planning/PLAN.md")`.
+**Plan delivery**: Planner writes the plan to `.planning/PLAN.md` (disk artifact — authoritative). After planner notifies, orchestrator reads the plan from disk with `Read(".planning/PLAN.md")`.
 
 **Wave PLAN.md flow** (mandatory before any architect dispatch):
 1. Create wave dir.
-2. `EnterPlanMode()` → spawn planner (peer in session team) → wait for `PLAN-WRITTEN` reply.
-3. `ExitPlanMode()` → dispatch arch-* peers with `scope_doc_path` pointing to planner-authored PLAN.md.
+2. `EnterPlanMode()` → spawn planner → wait for `PLAN-WRITTEN` reply (or poll disk).
+3. `ExitPlanMode()` → dispatch arch-* subagents with `scope_doc_path` pointing to planner-authored PLAN.md.
 Shortcutting to spawn planner later while dispatching architects → **FORBIDDEN**. No PLAN.md = no architect dispatch.
 
 **Phase 2 — Execution (WHERE CODE GETS WRITTEN)**:
-Architects are already session team peers — no new TeamCreate needed.
+Dispatch architects as concurrent subagents (or SendMessage to background peers if already alive):
 ```
-SendMessage(to="arch-testing", summary="phase 2 start", message="{plan + scope}")
-SendMessage(to="arch-platform", summary="phase 2 start", message="{plan + scope}")
-SendMessage(to="arch-integration", summary="phase 2 start", message="{plan + scope}")
+// Single-use concurrent dispatch (default):
+Agent(subagent_type="arch-testing", prompt="scope_doc_path: .planning/PLAN.md\nmode: EXECUTE\n...")
+Agent(subagent_type="arch-platform", prompt="scope_doc_path: .planning/PLAN.md\nmode: EXECUTE\n...")
+Agent(subagent_type="arch-integration", prompt="scope_doc_path: .planning/PLAN.md\nmode: EXECUTE\n...")
+
+// Background peer dispatch (optional accelerator):
+SendMessage(to="arch-testing", summary="phase 2 start", message="scope_doc_path: .planning/PLAN.md\nmode: EXECUTE\n{plan + scope}")
 ```
-1. team-lead sends plan to session team architects via SendMessage (no new TeamCreate needed)
-2. Architects use `SendMessage(to="context-provider")` for patterns/rules
-3. Architects investigate → SendMessage team-lead requesting devs
-4. **team-lead IMMEDIATELY spawns devs** via Agent() relay
-5. team-lead relays dev results back to requesting architect
-6. After work: `SendMessage(to="doc-updater")` to update CHANGELOG/docs
-7. All 3 APPROVE → **IMMEDIATELY proceed to Phase 3** (do NOT ask user, do NOT commit yet)
+1. Architects use context-provider for patterns/rules (via SendMessage or as subagent)
+2. Architects investigate → request specialists from orchestrator via SendMessage or disk spec
+3. **Orchestrator IMMEDIATELY spawns specialists** via Agent()
+4. Orchestrator relays specialist results back to requesting architect
+5. After work: orchestrator dispatches doc-updater to update CHANGELOG/docs
+6. Each architect writes `arch-{role}-verdict.md` (HEAD-bound) to disk
+7. All 3 verdict files on disk + APPROVE status → **IMMEDIATELY proceed to Phase 3** (do NOT ask user, do NOT commit yet)
 
 **Phase 3 — Quality Gate (MANDATORY before any commit)**:
 ```
-SendMessage(to="quality-gater", message="{phase 2 verdicts and context}")
+Agent(subagent_type="quality-gater", prompt="{phase 2 verdicts summary and context}")
 ```
-quality-gater is already a session peer — no re-spawning needed. Can SendMessage directly to architects (same team — no cross-team complexity). Uses `SendMessage(to="context-provider")` for project rules, AND consults persistent architects for Phase 2 context (decisions, deviations, unresolved concerns).
-PASS → team-lead commits. FAIL → back to Phase 2 (max 3 retries).
+quality-gater reads arch-*-verdict.md files from disk and optionally SendMessages live background peer architects. Uses context-provider for project rules. Writes `quality-gate-report.json` + stamps + `push-proof.json` to disk.
+Orchestrator reads proof from disk. PASS → commit. FAIL → back to Phase 2 (max 3 retries).
 
 **PHASE TRANSITIONS ARE AUTOMATIC — never ask the user between phases:**
 ```
-Plan approved → IMMEDIATELY SendMessage to session team architects (Phase 2)
-All architects APPROVE → IMMEDIATELY spawn quality-gater in session team (Phase 3)
-quality-gater PASS → IMMEDIATELY commit
-quality-gater FAIL → IMMEDIATELY back to SendMessage architects (Phase 2 retry)
+Plan approved → IMMEDIATELY dispatch architects (Phase 2)
+All arch-*-verdict.md on disk + APPROVE → IMMEDIATELY spawn quality-gater (Phase 3)
+quality-gate-report.json PASS on disk → IMMEDIATELY commit
+quality-gate-report.json FAIL → IMMEDIATELY back to architect dispatch (Phase 2 retry)
 ```
 
 **Anti-patterns (each one is a template bug if it happens):**
-- team-lead asks "shall I commit?" before running quality gate → BUG
-- team-lead asks "what next?" after architect approval → BUG
-- team-lead creates tasks/memories between phases instead of proceeding → BUG
-- team-lead spawns extra devs without name or team_name (anonymous Agent() calls) — ALL overflow devs MUST be named peers (`{specialist}-2`) with team_name → BUG
-- Architect requests named specialist via SendMessage and team-lead substitutes anonymous or differently-named agent — team-lead MUST honor the requested name → BUG
-- team-lead uses TeamCreate for architects in Phase 2 (they're persistent, use SendMessage) → BUG
-- team-lead creates new TeamCreate per wave instead of reusing session team → BUG
-- team-lead re-spawns an architect instead of SendMessage to the original → BUG. **RULE: If an architect seems unresponsive → SendMessage first (idle peers wake on message; stopped subagents auto-resume with full context). If no response after 1 retry → kill-then-respawn: dispatch context-provider `write_bundle(role, ...)` so the bundle is on disk pre-kill ([context-bundle-schema](context-bundle-schema.md)), gracefully terminate the old peer (shutdown_request), VERIFY its entry is removed from the team config (escalate to user if it lingers), then re-spawn the CANONICAL name (`Agent(name="arch-platform", team_name="session-{project-slug}", ...)`) with a prompt opening with the bundle-read mandate. NEVER spawn an indexed replacement (`arch-platform-2`) alongside a dead or lingering entry — messages addressed to the canonical name stop arriving (dead-inbox routing, proven twice) and suffixed names evade exact-match gates (matrix E17). Free-form names are invisible to type-keyed gates (firing matrix §5, incident E18).**
+- Orchestrator asks "shall I commit?" before running quality gate → BUG
+- Orchestrator asks "what next?" after architect approval → BUG
+- Orchestrator creates tasks/memories between phases instead of proceeding → BUG
+- Orchestrator spawns extra specialists without a name (anonymous Agent() calls) — ALL overflow specialists MUST be named (`{specialist}-2`) → BUG
+- Architect requests named specialist via SendMessage and orchestrator substitutes differently-named agent — orchestrator MUST honor the requested name → BUG
+- Orchestrator re-spawns a background peer architect instead of SendMessage to the original → BUG. **RULE: If a background peer architect seems unresponsive → SendMessage first. If no response after 1 retry → kill-then-respawn: dispatch context-provider `write_bundle(role, ...)` so the bundle is on disk pre-kill ([context-bundle-schema](context-bundle-schema.md)), gracefully terminate the old peer (shutdown_request), then re-spawn the CANONICAL name (`Agent(name="arch-platform", subagent_type="arch-platform", run_in_background=true, ...)`) with a prompt opening with the bundle-read mandate. NEVER use free-form names for agents holding Write/Bash/gh — non-canonical names are invisible to type-keyed gates (firing matrix §5).**
 
 ## Execution Trigger Checklist
 ```

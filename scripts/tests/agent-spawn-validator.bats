@@ -1,9 +1,24 @@
 #!/usr/bin/env bats
 #
-# Tests for .claude/hooks/agent-spawn-validator.js (Phase 4 sub-deliverable 2).
-# Validates that agent spawns with subagent_type matching the manifest baseline
-# pass through, while unknown subagent_type values and frontmatter drift are
-# blocked. Modeled on scripts/tests/architect-bash-write-gate.bats.
+# Tests for .claude/hooks/agent-spawn-validator.js (BL-W48 team-model migration).
+# The manifest is now a DRIFT REGISTRY for L0 agents, NOT a closed roster:
+#   Check 1 INVERTED: types absent from the manifest PASS (harness-native or any
+#     valid agent the runtime offers — e.g. Explore, Plan, general-purpose).
+#   Check 2 (drift guard): manifest-listed types with template_frontmatter_sha256
+#     still SHA-256 checked; mismatch → block.
+#   Check 3 REMOVED: TeamCreate-peer team_name/name enforcement + stale-suffix
+#     guard are gone. team_name is deprecated/ignored.
+#
+# DELETED cases (removed behavior — NOT changed behavior):
+#   SS-A  (canonical-suffix name arch-testing-2 allows silently)
+#   SS-C1 (suffix-but-unknown-base foo-specialist-2 emits WARN, exits 0)
+#   SS-C2 (free-name free-agent-name emits WARN, exits 0)
+#   SS-REG (TeamCreate-peer without team_name/name blocked — regression guard)
+#   CR6   subsection (STALE_SUFFIX_ENFORCE=1 block + foreign-base WARN cases)
+#   "Check 3: arch-platform without team_name blocked"
+#   "blocks unknown subagent_type" + "blocks unknown subagent_type with helpful agent list"
+#
+# Modeled on scripts/tests/architect-bash-write-gate.bats.
 
 HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/agent-spawn-validator.js"
 PROJECT_ROOT="$BATS_TEST_DIRNAME/../.."
@@ -80,23 +95,64 @@ run_hook() {
   [ "$status" -eq 0 ]
 }
 
-# ── Block scenarios ─────────────────────────────────────────────────────────
+# ── BL-W48 Check-1 inversion: harness-native types now PASS ─────────────────
+# The manifest is a drift registry, NOT a closed roster. Types absent from it
+# are harness-native (Explore / Plan / general-purpose) or any valid runtime
+# agent — multi-agent capability must NOT be gated by L0 membership.
 
-@test "blocks unknown subagent_type" {
-  make_input "Task" "definitely-not-a-real-agent-xyz"
+@test "BL-W48: Explore (harness-native, not in manifest) → PASS (Check 1 inverted)" {
+  make_input "Agent" "Explore"
   run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"not found"* ]]
-  [[ "$output" == *"definitely-not-a-real-agent-xyz"* ]]
-  [[ "$output" == *"\"decision\":\"block\""* ]]
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
 
-@test "blocks unknown subagent_type with helpful agent list in reason" {
-  make_input "Task" "garbage"
+@test "BL-W48: Plan (harness-native, not in manifest) → PASS (Check 1 inverted)" {
+  make_input "Agent" "Plan"
   run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"Known agents:"* ]]
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
+
+@test "BL-W48: general-purpose (harness-native, not in manifest) → PASS (Check 1 inverted)" {
+  make_input "Agent" "general-purpose"
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "BL-W48: arch-platform without team_name → PASS (Check 3 removed)" {
+  # Old behavior: blocked unless team_name+name supplied (TeamCreate-peer).
+  # New behavior: team_name is deprecated/ignored; bare Agent() spawn PASSES.
+  make_input "Agent" "arch-platform"
+  run_hook
+  [ "$status" -eq 0 ]
+  # No block output
+  [[ "$output" != *'"decision":"block"'* ]]
+}
+
+@test "BL-W48: arch-testing without team_name → PASS (Check 3 removed)" {
+  make_input "Agent" "arch-testing"
+  run_hook
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision":"block"'* ]]
+}
+
+@test "BL-W48: arch-integration without team_name → PASS (Check 3 removed)" {
+  make_input "Agent" "arch-integration"
+  run_hook
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision":"block"'* ]]
+}
+
+@test "BL-W48: planner without team_name → PASS (Check 3 removed)" {
+  make_input "Agent" "planner"
+  run_hook
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision":"block"'* ]]
+}
+
+# ── Block scenarios (only drift remains) ─────────────────────────────────────
 
 @test "blocks frontmatter drift (template SHA-256 ≠ manifest baseline)" {
   cp "$PROJECT_ROOT/setup/agent-templates/advisor.md" "$BATS_TEST_TMPDIR/advisor-original.md"
@@ -138,47 +194,6 @@ run_hook() {
   [ "$status" -eq 0 ]
 }
 
-# ── Stale-suffix / identity-tolerance (BL-W47 OQ3, L6e) ─────────────────────
-# TeamCreate-peer agents must supply team_name + name. When name ≠ subagent_type
-# the stale-suffix guard classifies the name as:
-#   A. Canonical + numeric suffix (e.g. arch-testing-2) → ALLOW silently
-#   C. Base not in manifest or free name              → WARN stderr, ALLOW
-# These tests use arch-testing (a confirmed TeamCreate-peer in the manifest).
-
-@test "SS-A PASS: canonical-suffix name (arch-testing-2) allows silently (Case A overflow)" {
-  make_input "Task" "arch-testing" "session-bl-w47" "arch-testing-2"
-  run_hook
-  [ "$status" -eq 0 ]
-  # No block output — Case A silently passes through
-  [[ "$output" != *'"decision":"block"'* ]]
-}
-
-@test "SS-C1 WARN: suffix-but-unknown-base (foo-specialist-2) emits WARN on stderr, exits 0" {
-  # foo-specialist is not in manifest — suffix present but base unknown → Case C WARN
-  make_input "Task" "arch-testing" "session-bl-w47" "foo-specialist-2"
-  # Capture stderr via 2>&1 to check for WARN
-  run bash -c "cd '$PROJECT_ROOT' && cat '$INPUT_FILE' | node '$HOOK' 2>&1"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"WARN"* ]]
-}
-
-@test "SS-C2 WARN: free-name (free-agent-name, no suffix) emits WARN on stderr, exits 0" {
-  # No numeric suffix and name ≠ subagent_type → Case C free name WARN
-  make_input "Task" "arch-testing" "session-bl-w47" "free-agent-name"
-  run bash -c "cd '$PROJECT_ROOT' && cat '$INPUT_FILE' | node '$HOOK' 2>&1"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"WARN"* ]]
-}
-
-@test "SS-REG BLOCK: TeamCreate-peer spawned without team_name/name still blocked (regression)" {
-  # Regression: the TeamCreate-peer gate (team_name + name required) must still fire
-  # even after the stale-suffix logic was added.
-  make_input "Task" "arch-testing" "" ""
-  run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"team_name"* ]]
-}
-
 @test "fails open when template file is missing" {
   mv "$PROJECT_ROOT/setup/agent-templates/advisor.md" "$BATS_TEST_TMPDIR/advisor.bak"
   make_input "Task" "advisor"
@@ -187,25 +202,19 @@ run_hook() {
   [ "$status" -eq 0 ]
 }
 
-# ── Check 3 — TeamCreate-peer enforcement ──────────────────────────────────
+# ── Check 2 still active: manifest-listed agents get drift-checked ───────────
+# An agent listed in the manifest with a template_frontmatter_sha256 baseline
+# must pass the SHA check regardless of whether team_name is supplied.
 
-@test "Check 3: arch-platform with team_name+name allowed" {
+@test "manifest agent with team_name supplied still passes when SHA matches" {
+  # team_name is accepted/ignored; the SHA check still runs and should PASS.
   make_input "Agent" "arch-platform" "session-test" "arch-platform"
   run_hook
   [ "$status" -eq 0 ]
 }
 
-@test "Check 3: arch-platform without team_name blocked" {
-  make_input "Agent" "arch-platform"
-  run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *'TeamCreate-peer'* ]]
-  [[ "$output" == *'arch-platform'* ]]
-}
-
-@test "Check 3: agent with no dispatch key in manifest passes through (fail-open)" {
-  # Create a temporary project root with a minimal manifest (agent without dispatch key)
-  # and a stub yaml loader path so the hook can parse it.
+@test "manifest agent with no dispatch key in manifest passes through (fail-open)" {
+  # Agent with no template_frontmatter_sha256 baseline → no drift check → allow.
   local tmp_root="$BATS_TEST_TMPDIR/fake-root"
   mkdir -p "$tmp_root/.claude/registry"
   mkdir -p "$tmp_root/mcp-server/node_modules"
@@ -229,52 +238,4 @@ with open(path, "w", encoding="utf-8") as f:
 PYEOF
   run bash -c "cd '$tmp_root' && CLAUDE_PROJECT_DIR='$tmp_root' cat '$INPUT_FILE' | node '$HOOK'"
   [ "$status" -eq 0 ]
-}
-
-@test "Check 3: regular subagent (advisor, spawn_method=Agent) without team_name passes through" {
-  # advisor has spawn_method: Agent in manifest — Check 3 must NOT fire
-  make_input "Agent" "advisor"
-  run_hook
-  [ "$status" -eq 0 ]
-}
-
-@test "Check 3: planner with peer params passes full chain (manifest + SHA + Check 3)" {
-  make_input "Agent" "planner" "session-test" "planner"
-  run_hook
-  [ "$status" -eq 0 ]
-}
-
-# ── CR-6 (1e1365e): foreign-base suffix now warns/blocks in agent-spawn-validator ─
-# CR-6: isValidOverflow requires canonicalBase === subagentType (not just "in manifest").
-# name="arch-platform-2" + subagent_type="arch-platform" → Case A (same base) → SILENT allow.
-# name="other-thing-2"   + subagent_type="arch-testing"  → Case C (foreign base) → WARN allow.
-# name="other-thing-2"   + subagent_type="arch-testing" + STALE_SUFFIX_ENFORCE=1 → BLOCK.
-# Uses arch-testing (confirmed TeamCreate-peer) and arch-platform (same) as base agents.
-
-@test "CR6-A ALLOW: name=arch-platform-2 + subagent_type=arch-platform → Case A silent allow" {
-  # Regression guard: same-base suffix must NOT emit any WARN on stderr.
-  # isValidOverflow: canonicalBase('arch-platform') === subagentType('arch-platform') → true.
-  make_input "Task" "arch-platform" "session-test" "arch-platform-2"
-  run bash -c "cd '$PROJECT_ROOT' && cat '$INPUT_FILE' | node '$HOOK' 2>&1"
-  [ "$status" -eq 0 ]
-  # CRITICAL: zero WARN output — Case A is the silent path
-  [[ "$output" != *"WARN"* ]]
-}
-
-@test "CR6-B ALLOW with WARN: name=other-thing-2 + subagent_type=arch-testing → Case C warn" {
-  # Foreign base: canonicalBase('other-thing') ≠ subagentType('arch-testing') → Case C.
-  # Should warn on stderr but NOT block (STALE_SUFFIX_ENFORCE not set).
-  make_input "Task" "arch-testing" "session-test" "other-thing-2"
-  run bash -c "cd '$PROJECT_ROOT' && cat '$INPUT_FILE' | node '$HOOK' 2>&1"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"WARN"* ]]
-  [[ "$output" == *"other-thing-2"* ]]
-  [[ "$output" == *"arch-testing"* ]]
-}
-
-@test "CR6-C BLOCK: name=other-thing-2 + subagent_type=arch-testing + STALE_SUFFIX_ENFORCE=1 → exit 2" {
-  make_input "Task" "arch-testing" "session-test" "other-thing-2"
-  run bash -c "cd '$PROJECT_ROOT' && cat '$INPUT_FILE' | STALE_SUFFIX_ENFORCE=1 node '$HOOK'"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"block"* ]]
 }

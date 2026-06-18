@@ -255,6 +255,28 @@ describe("validateManifest — invariants", () => {
     expect(violations).toHaveLength(1);
   });
 
+  it("BL-W48: flags spawn_method: TeamCreate-peer as obsolete error (even without Agent tool)", () => {
+    // BL-W48: TeamCreate/team_name removed from Claude Code runtime. Any remaining
+    // spawn_method: TeamCreate-peer in the manifest is an error — must be changed to Agent.
+    const root = buildSyntheticProject([
+      {
+        canonical_name: "test-specialist",
+        category: "core-specialist",
+        spawn_method: "TeamCreate-peer",
+        tools_allowed: ["Read", "Bash", "SendMessage"],  // no Agent tool
+      },
+    ]);
+    const r = validateManifest({ projectRoot: root });
+    const violations = r.findings.filter((f) =>
+      f.field === "dispatch.spawn_method" &&
+      f.message.includes("TeamCreate-peer") &&
+      f.message.includes("obsolete"),
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0].severity).toBe("error");
+    expect(violations[0].agent).toBe("test-specialist");
+  });
+
   it("flags NAMING_CONVENTION when canonical_name doesn't match the regex", () => {
     const root = buildSyntheticProject([
       // Does not match pattern in this synthetic manifest.

@@ -6,6 +6,17 @@
 
 ## Active (proposed wave order)
 
+### runtime-adapter-capability-matrix (HIGH — harness portability, follow-up to bl-w48) — 2026-06-18
+
+**Goal**: portable harness contract + per-engine adapters + a capability matrix (Claude / Codex / Copilot / Future × spawn / send / status / result / stop / artifact) + operator-visibility parity. bl-w48 decoupled the load-bearing contract from the `TeamCreate`/named-team runtime (disk-artifact floor + CLASS-aware `required_roles` incl. `FAST-PATH == []`); this wave abstracts execution behind per-engine adapters with graceful degradation. **PRESERVE** the useful concepts (persistent peers, roster/visibility, reuse/respawn/routing, operator control, `SendMessage`/background) — do NOT regress to a least-common-denominator harness.
+
+**Carried residuals — NOT fully decoupled by bl-w48 (explicit; the PR is honest about partial decouple, not sold as done)**:
+- `setup/agent-templates/context-provider.md` still routes `SendMessage(to=team-lead)` in its **ingestion-approval**, **freshness-citation**, **bundle-rotation** (`write_bundle`), and **post-compaction** protocols. Identity was reframed (BL-W48 "On First Contact" + adapter model) but these protocol refs remain team-lead-centric.
+- The 5 core dev specialists retain deeper `team-lead` refs (Receiving-work, Post-Compaction Re-Sync); the regression guard does not flag them; non-breaking.
+- Peer control-plane findings (resume-vs-fresh-spawn deadlock, name-routing unreliability, bats delta-inference limits): memory `project_peer_control_plane_findings.md`.
+
+**Disposition**: own wave; do NOT mix into a closeout.
+
 ### Agent-teams completion-message delivery unreliable (HIGH — harness reliability) — user-flagged 2026-06-16
 
 **Symptom**: peers (esp. **quality-gater**) finish their work but the completion message (QG-PASS, READY-FOR-REVIEW, EXECUTE-COMPLETE) does NOT reach the orchestrator → it hangs waiting indefinitely. Recurring across sessions (user: "2 días que el quality gate no responde cuando termina, no podemos seguir así"). Same delivery class seen mid-session bl-w47-expr4: a dispatch "never reached toolkit-specialist's inbox" (routing gap); planner idle-loops; quality-gater re-QG ran 25+ min with no notification while the `quality-gate.stamp` stayed at the prior HEAD.
@@ -17,16 +28,6 @@
 **Root fix (this item)**: (a) QG emits a structured `.planning/wave-<slug>/qg-result.json` the orchestrator polls (decouple verdict from message delivery); (b) repro + report the agent-teams notification drop upstream, or add a heartbeat/ack; (c) session-health check that flags peers idle >N min whose on-disk artifact shows completed work.
 
 **Source**: user-flagged 2026-06-16 during bl-w47-expr4.
-
-### Team-model migration — named-team routing obsolete (HIGH — harness reliability, root-fix wave) — 2026-06-16
-
-**Structural finding (bl-w47-tail)**: this Claude Code build exposes **no team-CRUD tools** — `TeamCreate`/`TeamDelete`/`TeamList` are gone; only `SendMessage` + `Task*` remain, and `Agent`'s `team_name` is deprecated ("single implicit team"). The BL-W47 harness, the `init-session --orchestrate` skill, `/work` peer-detection, and the team-aware gates were all architected around explicit `session-<slug>` named teams (`~/.claude/teams/session-<slug>/config.json`) with inter-peer routing keyed off that roster. That substrate no longer exists. This is the **structural root cause** of the "Agent-teams completion-message delivery unreliable" item above (QG finishes, the message never arrives).
-
-**Evidence**: `agent-spawn-validator` still enforces `spawn_method=TeamCreate-peer` (requires `team_name`); passing `team_name` silently joins the pre-existing implicit team AND forces mailbox/background mode — the exact unreliable path. Wave slug now resolves from branch / `CLAUDE_WAVE_SLUG`, not a named-team dir.
-
-**Root fix (own wave — do NOT mix into a closeout)**: (a) re-validate every team-aware gate (`team-completeness-gate`, `premature-execution-gate`, `team-topology-gate`, QG-phase enforcement) against the single-implicit-team runtime; (b) decide the canonical execution model (orchestrator + single-use subagents vs `run_in_background` implicit-team peers) and re-point skills/docs/gates/`agent-spawn-validator` at it; (c) retire/rewrite `init-session --orchestrate` Step 0, `/work` peer-detection, the `session-<slug>` convention; (d) make load-bearing verdict delivery disk-artifact-only (already the A0/T2 doctrine).
-
-**Disposition for bl-w47-tail**: adapted to the real runtime (orchestrator + single-use subagents, all verdicts on disk) — explicitly NOT the Topology Pilot. Full discovery: `.planning/wave-bl-w47-tail/FINDING-harness-team-model.md` (local).
 
 **Source**: discovered 2026-06-16 during bl-w47-tail orchestration init; user-directed to backlog the root-fix.
 
@@ -235,6 +236,7 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Shipped (recent)
 
+- **bl-w48-team-model-rootfix** (2026-06-18) — Team-model root-fix: decoupled the harness from the obsolete `TeamCreate`/named-team runtime while KEEPING multi-agent as an optional adapter capability (load-bearing contract = disk artifacts: PLAN / `arch-*-verdict.md` / QG proof). Two-layer doctrine + class→artifact floors; init-session / `/work` / tl-docs / planner+arch+lead+specialist+cross-cutting templates reframed to orchestrator + single-use subagents (background peers optional, `SendMessage`-reachable when supported). `TeamCreate` off lead tool-grants → `optional_capabilities`; specialist Scope Validation Gate → dispatch `scope_doc_path` (no stale `.planning/PLAN.md`); context-provider "On First Contact". `named-team-regression-guard` Patterns 1–5. 4 obsolete roster/topology gates retired/tombstoned; 3 bypass envs removed. Codex-audited (P1/P2 + bats-honesty) clean; QG PASS. Follow-up wave queued: `runtime-adapter-capability-matrix`. — `project_bl_w48_team_model_rootfix_shipped.md`
 - **bl-w47-tail** (2026-06-16) — BL-W47 final closeout: registry drift hotfix (planner 1.15.0 / quality-gater 2.16.0 — #217 squash left `skills/registry.json` stale) + Terminal L1/L2 sync (DawSync `cat /dev/stdin`→`cat`, RESEARCH SUPERSEDED-BY-AUDIT header, new l2-topology-divergence doctrine doc) + Wave-Close (D6/D9/dead-skill rows) + Ex-PR1 planner Q&A. Structural discovery: `TeamCreate`/`TeamList` gone → named-team routing obsolete (root-fix backlogged; explains the 2-day QG message outage). — `project_wave_bl_w47_tail_shipped.md`
 - **bl-w47-supersede** (2026-06-15) — write-verdict.sh `--supersede`: opt-in re-emit of VERIFY-FINAL at a new HEAD (comment-delimited block excise+replace, same-HEAD idempotent no-op, fail-closed, stdin-sanitized, orphan-PREP rejected, multi-block normalized). Red-team(5)+Codex(1)+QG-CRLF(1) all fixed + regression-tested; 33 supersede bats VS-1..VS-13; full suite 1471/1471. Dogfooded on its own wave-close. — project_wave_bl_w47_supersede_shipped.md
 - **bl-w47-pr-0c2** (2026-06-14) — QG-proof push gate: canonical emit-push-proof.sh runner + verdict→HEAD binding (required-role enforcement: all 3 arch roles must appear in architects_consulted AND carry a VERIFY-FINAL+HEAD-bound verdict file) + env_attested carve-out (runtime-ui-validation may SKIP with reason when predicate-true) + emitter double-prefix fix (Path B verdict-filename) + bypass audit trail; 91-test bats suite (test-push-proof-gate 28 + pre-push-hook + push-authorization-gate); portable-core with PS1 parity. — `project_wave_bl_w47_pr_0c2_shipped.md`

@@ -38,25 +38,31 @@ All delegation uses the `Agent` tool. Never Bash + `claude` CLI.
 ```
 1. Human writes SPEC.md / ROADMAP.md (goals + success criteria)
 2. Human asks Claude: "/work implement feature X" or "@team-lead ..."
-3. team-lead orchestrates 3 sequential phases per task:
+3. Orchestrator (main agent / team-lead) runs 3 sequential phases per task:
 
-   Session start: team-lead creates TeamCreate("session-{project-slug}") with 6 peers:
+   Session start: orchestrator dispatches 6 core roles as concurrent Agent subagents
+     (or background peers when runtime supports them):
      context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
+     Load-bearing contract: disk artifacts in .planning/wave-{slug}/
 
-   Phase 1 — Planning (temporary planner):
-     planner SendMessage(to="context-provider"), writes plan to .planning/PLAN.md
-     team-lead reads plan, dismisses planner
+   Phase 1 — Planning (planner subagent):
+     planner consults context-provider, writes plan to .planning/PLAN.md (disk artifact)
+     orchestrator reads plan from disk, planner dismissed
 
-   Phase 2 — Execution (session team peers — no new TeamCreate):
-     Architects detect → team-lead dispatches devs (sub-agents) → architects cross-verify
-     5 core specialists join at Phase 2 start: test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist
-     All 3 APPROVE → proceed to Phase 3
+   Phase 2 — Execution (concurrent Agent subagents, optional background peers):
+     Architects detect → orchestrator dispatches specialists → architects cross-verify
+     Each architect writes arch-{role}-verdict.md (HEAD-bound) to disk
+     5 core specialists dispatched at Phase 2 start: test-specialist, ui-specialist,
+       domain-model-specialist, data-layer-specialist, toolkit-specialist
+     All 3 verdicts on disk + APPROVE → proceed to Phase 3
 
-   Phase 3 — Quality Gate (temporary quality-gater joins session team):
+   Phase 3 — Quality Gate (quality-gater subagent):
+     quality-gater reads verdicts from disk, optionally SendMessages live architect peers
      quality-gater runs: frontmatter → KDoc → tests → coverage → benchmarks → pre-pr → prod-files → UI tests
-     PASS → team-lead commits. FAIL → back to Phase 2
+     quality-gater writes quality-gate-report.json + stamps + push-proof.json to disk
+     PASS (on disk) → orchestrator commits. FAIL → back to Phase 2
 
-4. For parallel worktrees, each team-lead runs its own 3-phase cycle
+4. For parallel worktrees, each orchestrator instance runs its own 3-phase cycle
 5. Claude launches verifier → "did we meet the spec?"
 6. If PASS → merge worktrees + PR
 7. If FAIL → Claude adjusts and relaunches with gaps

@@ -17,14 +17,15 @@ These are **starting points** — adapt to your project's specific modules, cons
 
 | Template | Purpose |
 |----------|---------|
-| `team-lead.md` | 3-phase orchestrator — session team peers + temporary planner/quality-gater |
-| `planner.md` | Temporary planning peer — produces structured plans, writes to `.planning/PLAN.md` |
-| `quality-gater.md` | Session team peer (Phase 3) — runs sequential verification (tests, coverage, pre-pr) |
-| `context-provider.md` | Session team peer — read-only cross-layer context oracle |
-| `doc-updater.md` | Session team peer — updates docs, CHANGELOG, memory after work |
-| `doc-migrator.md` | Sporadic team agent — migrates docs to L0 patterns (hubs, splits, frontmatter) |
+| `planner.md` | Single-use planning subagent — produces structured plans, writes to `.planning/wave-<slug>/PLAN.md` |
+| `quality-gater.md` | Quality-gate subagent (Phase 3) — runs sequential verification (tests, coverage, pre-pr) |
+| `context-provider.md` | Read-only cross-layer context oracle (single-use subagent or optional background peer) |
+| `doc-updater.md` | Updates docs, CHANGELOG, memory after work |
+| `doc-migrator.md` | Sporadic doc-migration agent — migrates docs to L0 patterns (hubs, splits, frontmatter) |
 
-### Architects (session team peers)
+> The orchestrator role runs in the main conversation (W31.6 pattern); there is no separate `team-lead.md` template. Agents are dispatched as single-use subagents (or optional background peers); the load-bearing contract is disk artifacts, not named-team membership.
+
+### Architects
 
 | Template | Purpose |
 |----------|---------|

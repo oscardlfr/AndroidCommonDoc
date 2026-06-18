@@ -29,33 +29,12 @@ If `$ARGUMENTS` starts with or contains a known skill name, route directly to th
 
 Add entries here when promoting a skill to named-route status (conscious promotion step — staleness is intentional).
 
-> **HARD GATE — Session setup blocks ALL work.**
-> If routing to `team-lead` (implement/feature/build/plan/wave keywords): verify session team exists FIRST.
-> Check: does `~/.claude/teams/session-{slug}/` exist with all 6 peers alive?
-> - context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
-> If NO → complete TeamCreate + all 6 peers + pre-flight checklist BEFORE routing any task.
-> DO NOT plan. DO NOT dispatch. DO NOT respond to user task until session is ready.
+> **HARD GATE — Core subagents must be dispatched before any implementation work.**
+> If routing to team-lead/orchestrator (implement/feature/build/plan/wave keywords): verify core subagents are dispatched FIRST.
+> Required roles: context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
+> If NOT dispatched → dispatch all 6 as concurrent Agent subagents (background peers optional) + run pre-flight checklist BEFORE routing any task.
+> DO NOT plan. DO NOT dispatch work agents. DO NOT respond to user task until core setup is done.
 > If ANY pre-flight checkbox fails → fix it first, then re-verify ALL from top.
-
-## Stale Team Dir Check (run before TeamCreate)
-
-Prior sessions leave stale dirs that force `-2`/`-3` suffixes on re-spawn.
-
-```bash
-ls ~/.claude/teams/ | grep "session-{slug}"
-```
-
-If `session-{slug}-2` or `session-{slug}-3` found → stale entry exists.
-
-**Option A (preferred)**: Clean before TeamCreate:
-```bash
-rm -r ~/.claude/teams/session-{slug} 2>/dev/null || true
-rm -r ~/.claude/teams/session-{slug}-2 2>/dev/null || true
-```
-Note: use `rm -r` NOT `rm -rf` (harness deny rule at `.claude/settings.json:L21` blocks `rm -rf *`; also `rm -r` errors visibly on wrong paths instead of silently succeeding).
-If this errors "No such file or directory" — dir is already clean, proceed.
-
-**Option B (fallback)**: Accept `-2`/`-3` suffix and send correction-message to all peers with actual team name.
 
 ## Routing Logic
 
@@ -84,20 +63,16 @@ Check if `$ARGUMENTS` contains cross-department signals:
 
 If no cross-department signal detected, fall through to Level 1.
 
-## Peer-Aware Routing (W32-07)
+## Peer-Aware Routing
 
-Before routing to a peer-eligible agent, detect the active session and check peer aliveness:
+Before routing to a peer-eligible agent, check if a background peer is alive:
 
-```bash
-slug=$(ls -td ~/.claude/teams/session-* 2>/dev/null | head -1 | { read p; [ -n "$p" ] && basename "$p" || echo ""; })
-```
-
-If `slug` is non-empty AND `~/.claude/teams/$slug/config.json` lists `{target}` as alive member:
+If a background peer named `{target}` is known to be alive (was dispatched in this session with `run_in_background=true` and has ACKed):
   → `SendMessage(to="{target}", ...)`
 Else:
-  → `Agent(subagent_type="{target}", team_name="session-{slug-or-new}", name="{target}")`
+  → `Agent(subagent_type="{target}", name="{target}", ...)` — fresh single-use subagent (no `team_name` needed)
 
-Fallback slug if none exists: `session-$(date +%s | tail -c 8)` (portable; sha256sum may be absent on macOS).
+The wave slug (e.g., `bl-w42-pr1`) is the artifact directory key — set via `CLAUDE_WAVE_SLUG` env or derived from the git branch last segment. It determines `.planning/wave-{slug}/` where verdicts and context bundles live.
 
 ### Level 1 — Deterministic Keyword Rules (instant, 0 tokens)
 
@@ -126,8 +101,8 @@ Match `$ARGUMENTS` against these patterns in order. First match wins:
 | `\b(implement\|feature\|build\|scope\|plan\|execute\|wave)\b` | Act as main-context orchestrator (in-process per W31.6) *** |
 
 \* Business agents are opt-in. If the agent doesn't exist in `.claude/agents/`, fall through to Level 2.
-\** Use Peer-Aware Routing block above — SendMessage if peer is alive, else Agent peer-spawn.
-\*** T-BUG-010: orchestrator MUST run in-process (main conversation), NEVER via `Agent()`. Sub-agents cannot TeamCreate or spawn reliably (Claude Code bug #31977). Per W31.6 canonical pattern, the main agent IS the team-lead. Steps: (1) TeamCreate session-{slug}, (2) Spawn 6 core peers as Agent peer-spawns (subagent_type=X, team_name="session-{slug}", name=X), (3) Run pre-flight checklist, (4) Dispatch work with scope_doc_path.
+\** **Standalone tasks only (outside a wave).** Direct specialist routing (the rows above marked \**) applies when `/work` handles a one-off task. Inside an active wave/EXECUTE (`.planning/wave-<slug>/PLAN.md` present with an APPROVED arch PREP verdict, or `CLAUDE_WAVE_SLUG` set), do NOT route directly to the specialist by keyword — the specialist is dispatched and owned by its **reporting architect** (the architect owns the task spec + validation; the orchestrator only does the mechanical `Agent()` spawn). Route to the architect (arch-platform/arch-testing/arch-integration), or surface the need for the planner's Spawn Table. When routing directly (standalone only): use the Peer-Aware Routing block above — `SendMessage` if the peer is alive, else `Agent` peer-spawn (no `team_name`).
+\*** T-BUG-010: orchestrator MUST run in-process (main conversation), NEVER via `Agent()`. Sub-agents cannot spawn reliably at depth (Claude Code bug #31977). Per W31.6 canonical pattern, the main agent IS the team-lead. Steps: (1) Dispatch 6 core subagents as concurrent Agent calls (subagent_type=X, name=X — no TeamCreate, no team_name required), (2) Run pre-flight checklist, (3) Dispatch work with scope_doc_path. Load-bearing contract: disk artifacts (`arch-*-verdict.md`, `quality-gate-report.json`, `push-proof.json`).
 
 ### Level 2 — Frontmatter Discovery (if no Level 1 match)
 
@@ -181,7 +156,7 @@ Proceed? (y/n)
 
 ## Notes
 
-- Session naming: `session-{slug}` is the canonical convention shared with `/init-session --orchestrate <slug>` (BL-W32-07). Use the same slug for both commands in a session.
+- Session naming: the wave slug names the wave artifact directory (`.planning/wave-<slug>/`); use the same slug across `/init-session` and `/work` in a session.
 - Level 1 is checked first — it is instant and deterministic
 - Level 2 only runs when Level 1 has no match
 - **Before routing to any agent, verify it exists** in `.claude/agents/` — if not, fall through
@@ -194,15 +169,17 @@ Proceed? (y/n)
 
 **MUST run in main context only. Spawning /work as a subagent causes Agent() tool loss (Claude Code bug #31977).**
 
-- Do NOT invoke `/work` as a subagent with team-lead as the subagent_type — this breaks TeamCreate and Agent() tool availability
+- Do NOT invoke `/work` as a subagent — the orchestrator must run in the main conversation; nested subagents lose reliable Agent()/dispatch (Claude Code bug #31977)
 - /work acts in-process as main-context orchestrator (W31.6 pattern) — team-lead.md was retired in W31.6
 - If you find yourself wanting to spawn /work as an Agent(), you are in the wrong process layer
 
 ## Orchestrator Safety Rule
 
-**NEVER** spawn orchestrator agents (`quality-gater` or the main orchestrator role) via `Agent()`. These agents need `TeamCreate`, `TeamDelete`, and `Agent` tools which only work at the top-level process.
+**NEVER** spawn the orchestrator role itself via `Agent()`. The orchestrator needs the `Agent` tool which only works at the top-level process.
 
 When routing to an orchestrator:
 1. Act in-process as the main-context orchestrator (W31.6 canonical pattern — main agent IS the team-lead; no separate team-lead template to read)
-2. Follow the inline steps from footnote ***: TeamCreate session-{slug}, spawn 6 core peers, run pre-flight checklist, dispatch work
+2. Follow the inline steps from footnote ***: dispatch 6 core subagents (no `TeamCreate` or `team_name` needed), run pre-flight checklist, dispatch work
 3. The orchestrator role executes **in-process**, not as a sub-agent (T-BUG-010 / Claude Code bug #31977)
+
+`quality-gater` and `planner` are dispatched by the orchestrator as single-use Agent subagents — they DO NOT need `TeamCreate` or `team_name`.

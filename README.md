@@ -651,40 +651,41 @@ Skills primarily useful when working on AndroidCommonDoc (L0) itself:
 
 ## 3-Phase Team Model
 
-Every non-trivial task flows through three sequential phases. Ten **session team peers** in `session-{project-slug}` carry context across phases: 5 spawned at session start + 5 core specialists at Phase 2. Planner and quality-gater are temporary.
+Every non-trivial task flows through three sequential phases. The orchestrator fans out to concurrent `Agent` subagents; **background peers with `run_in_background` remain a supported optional accelerator**. The load-bearing contract is **disk artifacts** — `PLAN.md`, `arch-*-verdict.md` (HEAD-bound), `quality-gate-report.json`, `push-proof.json` — not named-team membership.
 
 ```
-Session start: TeamCreate("session-{project-slug}")
-  context-provider, doc-updater, arch-testing, arch-platform, arch-integration
-Phase 2 start: +5 core specialists
+Session start: dispatch 6 core subagents (no TeamCreate required)
+  context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
+Phase 2 start: +5 core specialists dispatched
   test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist
 
 Phase 1 — Planning               Phase 2 — Execution                Phase 3 — Quality Gate
 ┌─────────────────────┐          ┌──────────────────────────┐       ┌───────────────────────┐
-│ planner (temporary)  │          │ 9 session team peers:     │       │ quality-gater joins    │
-│ SendMessage to       │  ──→    │   5 from session start    │  ──→ │   session team         │
-│   context-provider   │          │   +5 core specialists     │       │ Consults architects    │
-│                      │          │ Architects assign work    │       │   and core specialists  │
-│ Output: .planning/   │          │   via SendMessage          │       │ Output: PASS / FAIL    │
-│   PLAN.md            │          │ team-lead spawns extras on       │       └───────────────────────┘
-└─────────────────────┘          │   architect request       │       FAIL → back to Phase 2
-                                 └──────────────────────────┘       (max 3 retries → user)
+│ planner subagent     │          │ concurrent arch subagents │       │ quality-gater subagent │
+│ consults             │  ──→    │   write arch-*-verdict.md │  ──→ │   reads verdicts       │
+│   context-provider   │          │   (HEAD-bound) to disk    │       │   from disk            │
+│                      │          │ Orchestrator dispatches   │       │ Output: QG report +    │
+│ Output: PLAN.md      │          │   specialists on request  │       │   stamps + push-proof  │
+│   to disk            │          │ doc-updater dispatched    │       │   on disk              │
+└─────────────────────┘          │   at wave end             │       └───────────────────────┘
+                                 └──────────────────────────┘       FAIL → back to Phase 2
+                                                                     (max 3 retries → user)
 ```
 
-**Team Lead** orchestrates all 3 phases. team-lead NEVER writes code — assigns to architects, who manage specialists and guardians.
+**Orchestrator** coordinates all 3 phases. Orchestrator NEVER writes code — dispatches architects, who manage specialists and guardians.
 
 ### Agent Topology
 
-10 persistent session agents (5 at session start + 5 core specialists at Phase 2):
-- `context-provider` — reads project state, answers queries from all agents
-- `doc-updater` — updates docs when agents request changes
-- `arch-testing` — verifies test quality, TDD compliance, coverage
-- `arch-platform` — verifies KMP patterns, source sets, expect/actual
-- `arch-integration` — verifies DI wiring, navigation, compilation
+Core roles (dispatched at session start):
+- `context-provider` — reads project state, answers queries (single-use or background peer)
+- `doc-updater` — updates docs on orchestrator dispatch
+- `arch-testing` — verifies test quality, TDD compliance, coverage; writes `arch-testing-verdict.md`
+- `arch-platform` — verifies KMP patterns, source sets, expect/actual; writes `arch-platform-verdict.md`
+- `arch-integration` — verifies DI wiring, navigation, compilation; writes `arch-integration-verdict.md`
 
-Core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist) are persistent session team peers — spawned at Phase 2 start, accumulate layer knowledge across waves. Extra specialists are disposable — spawned by team-lead on architect request, execute, return result, die.
+Core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist) dispatched at Phase 2 start — as background peers (accumulate context across waves) or single-use subagents. Extra specialists are disposable — dispatched by orchestrator on architect request, execute, return result, dismissed.
 
-Quality gate: `quality-gater` deliberates with all 3 persistent architects (Step 1.5) before running automated checks (`/pre-pr`, tests, coverage). Pattern validation chain: specialist → architect → context-provider ensures architects gate every pattern query.
+Quality gate: `quality-gater` deliberates with all 3 architects by reading their verdict files (and optionally via SendMessage to live background peers) before running automated checks. Pattern validation chain: specialist → architect → context-provider ensures architects gate every pattern query.
 
 ### Context Provider Flow
 

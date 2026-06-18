@@ -383,7 +383,11 @@ function checkInvariants(
     }
   }
 
-  // IN_PROCESS_NO_AGENT
+  // IN_PROCESS_NO_AGENT (BL-W48 tombstone)
+  // TeamCreate/team_name are gone from the Claude Code runtime. No agent should carry
+  // spawn_method: TeamCreate-peer any longer (all 7 migrated to Agent in BL-W48).
+  // This check is kept as a tombstone guard: if a future hand-edit accidentally
+  // re-introduces TeamCreate-peer AND gives the agent the Agent tool, flag it.
   if (entry.dispatch?.spawn_method === "TeamCreate-peer") {
     if (allowed.includes("Agent")) {
       findings.push({
@@ -391,7 +395,16 @@ function checkInvariants(
         agent: canonical,
         category: "invariant",
         field: "tools.allowed",
-        message: `IN_PROCESS_NO_AGENT violated: TeamCreate-peer cannot have Agent tool`,
+        message: `IN_PROCESS_NO_AGENT violated: TeamCreate-peer spawn_method is also obsolete (BL-W48 migration: all agents must use spawn_method: Agent)`,
+      });
+    } else {
+      // spawn_method: TeamCreate-peer itself is now invalid — flag as an error.
+      findings.push({
+        severity: "error",
+        agent: canonical,
+        category: "invariant",
+        field: "dispatch.spawn_method",
+        message: `spawn_method: TeamCreate-peer is obsolete (BL-W48: TeamCreate/team_name removed from Claude Code runtime). Change to spawn_method: Agent`,
       });
     }
   }

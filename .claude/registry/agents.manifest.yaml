@@ -58,13 +58,6 @@ invariants:
       tools.banned.top_level: [Agent, Write, Edit]
     rationale_ref: "memory/feedback_architect_writes_code.md"
 
-  - id: IN_PROCESS_NO_AGENT
-    description: "Agents that run in-process as TeamCreate peers cannot use the Agent tool (Anthropic SDK restriction). Specialist requests must route through team-lead via SendMessage."
-    applies_to: { dispatch.spawn_method: TeamCreate-peer }
-    require:
-      tools.banned.top_level: [Agent]
-    rationale_ref: "GitHub#31977 (in-process peers lose Agent tool)"
-
   - id: NAMING_CONVENTION
     description: "canonical_name must be one of: arch-*, *-specialist, *-orchestrator, *-validator, *-auditor, *-agent, *-mapper, *-strategist, *-creator, *-lead, *-migrator, *-lifecycle, *-detector, *-alignment, context-provider, doc-updater, quality-gater, team-lead, advisor, debugger, researcher, verifier, planner."
     applies_to: {}
@@ -120,14 +113,14 @@ invariants:
 agents:
 
   # ============================================================
-  # ARCHITECTS (3/3) — TeamCreate peers, mini-orchestrators
+  # ARCHITECTS (3/3) — mini-orchestrators (single-use subagents or optional background peers)
   # ============================================================
 
   arch-platform:
     canonical_name: arch-platform
     subagent_type: arch-platform
-    template_version: "1.33.0"
-    template_frontmatter_sha256: 2b0ad598466c642e8836c9f5fd222353963b1b368ce1b3aac443073e71d4d608
+    template_version: "1.34.0"
+    template_frontmatter_sha256: a04ead708a43bd0bb053c510304ad07c0776d061a164bcdaad1f3f207f24eb5f
     category: architect
     lifecycle: ephemeral
     description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -152,7 +145,7 @@ agents:
         grep_patterns: []
         glob_patterns: []
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [team-lead]
       can_dispatch_to: []
       can_send_to:
@@ -181,8 +174,8 @@ agents:
   arch-testing:
     canonical_name: arch-testing
     subagent_type: arch-testing
-    template_version: "1.38.0"
-    template_frontmatter_sha256: ec1cb49c96f77845167db9ceced92132364a328c4d36acbc19e56c88949d8c0d
+    template_version: "1.39.0"
+    template_frontmatter_sha256: 1e35e6f9f5588f807b8e01d077df645c4fcb65aa427b13163a1539fd2b427a25
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -205,7 +198,7 @@ agents:
         grep_patterns: []
         glob_patterns: []
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [team-lead]
       can_dispatch_to: []
       can_send_to:
@@ -233,8 +226,8 @@ agents:
   arch-integration:
     canonical_name: arch-integration
     subagent_type: arch-integration
-    template_version: "1.29.0"
-    template_frontmatter_sha256: 7c73623b5f267ec015ca3774a869605f5f7ad00e2ed3182a26759f4f88417079
+    template_version: "1.30.0"
+    template_frontmatter_sha256: 2d83e3b92f4e8150ee44160150f76517071094bd9aebd60ae4829fa44defc4c5
     category: architect
     lifecycle: ephemeral
     description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -257,7 +250,7 @@ agents:
         grep_patterns: []
         glob_patterns: []
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [team-lead]
       can_dispatch_to: []
       can_send_to:
@@ -289,8 +282,8 @@ agents:
   test-specialist:
     canonical_name: test-specialist
     subagent_type: test-specialist
-    template_version: "1.29.0"
-    template_frontmatter_sha256: 8d08938393714593c78ed602d097668d5bbd808c21078edb3a807b72f00e5d2b
+    template_version: "1.31.0"
+    template_frontmatter_sha256: c18d1c688120b3ec42f336c9816f00b4fc44fc435bccc05afa978e420cf5d1e4
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation."
@@ -346,8 +339,8 @@ agents:
   data-layer-specialist:
     canonical_name: data-layer-specialist
     subagent_type: data-layer-specialist
-    template_version: "1.18.0"
-    template_frontmatter_sha256: 23156d3a62716c75fe4117820f4a78cdbad5d3a7c42d843f6cfaf263fd323f90
+    template_version: "1.20.0"
+    template_frontmatter_sha256: c3df9ce92f051547d759c9af0f435d36b79b723e1f3552b0eb112aa914f3a721
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration."
@@ -403,8 +396,8 @@ agents:
   domain-model-specialist:
     canonical_name: domain-model-specialist
     subagent_type: domain-model-specialist
-    template_version: "1.18.0"
-    template_frontmatter_sha256: 6477b6786a672eed242d7ca971d151e695a862316dfe9ad424b4e841f822c6cf
+    template_version: "1.20.0"
+    template_frontmatter_sha256: a05240eacc5dfa7dbe982b0a671f7213a368822dbecf2e40e34fd60b1608df41
     category: core-specialist
     lifecycle: ephemeral
     description: "Implements domain layer — models, use cases, business logic. Reports to arch-platform."
@@ -459,8 +452,8 @@ agents:
   ui-specialist:
     canonical_name: ui-specialist
     subagent_type: ui-specialist
-    template_version: "1.20.0"
-    template_frontmatter_sha256: 47704b93d911c426a1954203588dbd9502657d4e303f9f7a9e257cc28dcb2179
+    template_version: "1.22.0"
+    template_frontmatter_sha256: 22dbdc000fff75af244f87e50faf44ec3b00a0001086000dd5802970ca503e0b
     category: core-specialist
     lifecycle: ephemeral
     description: "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations."
@@ -517,8 +510,8 @@ agents:
   toolkit-specialist:
     canonical_name: toolkit-specialist
     subagent_type: toolkit-specialist
-    template_version: "1.6.0"
-    template_frontmatter_sha256: 982c547f45dd4ef83cb431bb5f927c502676c2bcbe07ccdb3c7b120babf3e72c
+    template_version: "1.8.0"
+    template_frontmatter_sha256: 8114eaf5a1f83490383066e82a74865892e17322fad341595d8e0e9b8f335cb2
     category: core-specialist
     lifecycle: ephemeral
     description: "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain)."
@@ -580,8 +573,8 @@ agents:
   context-provider:
     canonical_name: context-provider
     subagent_type: context-provider
-    template_version: "3.5.0"
-    template_frontmatter_sha256: e6b394be90d0e5cafea027d738bd1c33e24cf379c6285ef3a9a15955ee47deec
+    template_version: "3.7.0"
+    template_frontmatter_sha256: 183d4fe852e09f440f34d8085480e6b637413a577db26cc0f4d272158299cae2
     category: context
     lifecycle: persistent
     description: "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only."
@@ -639,8 +632,8 @@ agents:
   doc-updater:
     canonical_name: doc-updater
     subagent_type: doc-updater
-    template_version: "2.10.0"
-    template_frontmatter_sha256: adb5889367a79b9c427cd54732944c74c2a220d1c6f46824a11ced25de2dd010
+    template_version: "2.11.0"
+    template_frontmatter_sha256: 1e6c3858fba39a82c5acc7e6ff2a73680d797fbd673e12632bfa98f4331bcfb1
     category: doc-owner
     lifecycle: persistent
     description: "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure)."
@@ -913,11 +906,11 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.16.0"
-    template_frontmatter_sha256: 80815a4b5dae463cc5d41c1529627c1f67429005670f9e95a5564a1c7519e1e6
+    template_version: "2.17.0"
+    template_frontmatter_sha256: bfe05e6f8db1986eccb725c2f4cf1357ba0b98337dcb408e6a57429d99c34e63
     category: orchestrator
     lifecycle: ephemeral
-    description: "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL."
+    description: "QG owner (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL."
     domain: quality
     intent: [gate, verify, pre-pr, coverage, detekt]
     runtime:
@@ -979,8 +972,8 @@ agents:
   marketing-lead:
     canonical_name: marketing-lead
     subagent_type: marketing-lead
-    template_version: "1.1.0"
-    template_frontmatter_sha256: cbe4a2591e7f4345209bddd4491fc2805ffc52bedd8e75dfaccae7c6a10717a4
+    template_version: "1.3.0"
+    template_frontmatter_sha256: 55d17720a02ad1d4fb21d20dd643bc49f1ab0590540c222c66811a3a4994ffea
     category: lead
     lifecycle: persistent
     description: "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists."
@@ -995,7 +988,6 @@ agents:
         - Grep
         - Glob
         - Bash
-        - TeamCreate
         - SendMessage
         - TaskCreate
         - TaskList
@@ -1026,12 +1018,12 @@ agents:
         enforcement: hook
         hook_path: ".claude/hooks/context-provider-gate.js"
     skills_referenced: []
-    optional_capabilities: []
+    optional_capabilities: [TeamCreate]
     memory: null
     notes:
       - "NEVER writes content — banned Write/Edit. All creation delegated to content-creator / landing-page-strategist."
-      - "Has TeamCreate + TaskCreate/TaskList — can spawn marketing sub-team and manage backlog."
-      - "Cannot use Agent (in-process when joined to a team)."
+      - "TeamCreate is an OPTIONAL engine capability (background sub-team spawn) — listed under optional_capabilities, NOT a hard tool grant. Absent in this Claude Code build; orchestrate via TaskCreate/TaskList + delegation."
+      - "Cannot use Agent — banned top-level; delegation handled by orchestrator dispatch."
       - "USAGE: L1/L2 scaffold — propagated via /sync-l0 to consumer projects (e.g., DawSync product launch). Not invoked at L0 itself (toolkit has no marketing team). User confirmed KEEP 2026-04-26 — may activate marketing-lead workflow later."
     aliases: []
     superseded_by: null
@@ -1040,8 +1032,8 @@ agents:
   product-lead:
     canonical_name: product-lead
     subagent_type: product-lead
-    template_version: "1.1.1"
-    template_frontmatter_sha256: 5f919d2cc1a774be283f30d6c430c3189f06459b26566cd4af71754b4c33a21f
+    template_version: "1.3.0"
+    template_frontmatter_sha256: 0a4afeddea782cffc552cc585da8ddd334e6fce5ab06b674e3fb940fba7adcf2
     category: lead
     lifecycle: persistent
     description: "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code."
@@ -1056,7 +1048,6 @@ agents:
         - Grep
         - Glob
         - Bash
-        - TeamCreate
         - SendMessage
         - TaskCreate
         - TaskList
@@ -1086,12 +1077,12 @@ agents:
         enforcement: hook
         hook_path: ".claude/hooks/context-provider-gate.js"
     skills_referenced: []
-    optional_capabilities: []
+    optional_capabilities: [TeamCreate]
     memory: null
     notes:
       - "NEVER writes code — banned Write/Edit. Specs/docs delegated to doc-updater."
       - "USAGE: L1/L2 scaffold — propagated via /sync-l0 to consumer projects. Not invoked at L0 itself (toolkit has no product team). User confirmed KEEP 2026-04-26."
-      - "Has TeamCreate + TaskCreate/TaskList — can spawn product sub-team."
+      - "TeamCreate is an OPTIONAL engine capability (background sub-team spawn) — listed under optional_capabilities, NOT a hard tool grant. Absent in this Claude Code build; orchestrate via TaskCreate/TaskList + delegation."
       - "Analysis routed to product-strategist."
     aliases: []
     superseded_by: null
@@ -1629,11 +1620,11 @@ agents:
   planner:
     canonical_name: planner
     subagent_type: planner
-    template_version: "1.17.0"
-    template_frontmatter_sha256: 835a893b7501a725d26ac1ef75e946b984766e2654e827182c11b9b035673a50
+    template_version: "1.19.0"
+    template_frontmatter_sha256: 61077ccc8f7d7ffdbd18b044a28a129cd915f216d38a47cb70d1d470bef0cd3f
     category: orchestrator
     lifecycle: ephemeral
-    description: "Planning peer in the session-{slug} team. Reads context, specs, architecture to produce structured execution plans. Works alongside context-provider via SendMessage."
+    description: "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage."
     domain: development
     intent: [plan, scope, breakdown, estimate]
     runtime:
@@ -1644,7 +1635,7 @@ agents:
       banned:
         top_level: [Agent, Edit, Grep, Glob]
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [team-lead]
       can_dispatch_to: []
       can_send_to:
@@ -1733,7 +1724,7 @@ agents:
       banned:
         top_level: [Agent, Write, Edit, Bash]
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [marketing-lead, team-lead, manual-cli]
       can_dispatch_to: []
       can_send_to:
@@ -1769,7 +1760,7 @@ agents:
       banned:
         top_level: [Agent, Write, Edit, Bash]
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [marketing-lead, team-lead, manual-cli]
       can_dispatch_to: []
       can_send_to:
@@ -1804,7 +1795,7 @@ agents:
       banned:
         top_level: [Agent, Write, Edit, Bash]
     dispatch:
-      spawn_method: TeamCreate-peer
+      spawn_method: Agent
       dispatched_by: [product-lead, team-lead, manual-cli]
       can_dispatch_to: []
       can_send_to:
@@ -1908,8 +1899,8 @@ agents:
   feature-domain-specialist:
     canonical_name: feature-domain-specialist
     subagent_type: feature-domain-specialist
-    template_version: "1.1.1"
-    template_frontmatter_sha256: eef0b93d2e475ba26c0517cbefdf4c525cdfb6561efa95d3c8bcdf0241ff8f77
+    template_version: "1.2.0"
+    template_frontmatter_sha256: 62c1b4babeda6273f02a0d647ebabb1e2d8a109cce97ad8fb16ca065e69471dc
     category: domain-specialist
     lifecycle: per-task
     description: "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}."

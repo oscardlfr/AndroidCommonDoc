@@ -29,7 +29,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [claude-code-workflow](claude-code-workflow.md) | Team Lead adaptive model, skill usage, verification, release workflow |
 | [multi-agent-patterns](multi-agent-patterns.md) | Topology (chain/fan-out/orchestrator), agent design rules, failure handling, cost control |
 | [arch-topology-protocols](arch-topology-protocols.md) | Architect topology: concern-ownership map (§4), cross-architect coordination, tiebreaker chain (BL-W32-02) |
-| [team-topology](team-topology.md) | 3-phase model with 10 session team peers (5 at start + 5 core specialists) — Planning → Execution → Quality Gate |
+| [team-topology](team-topology.md) | 3-phase model on a portable disk-artifact contract: orchestrator + single-use subagents (optional background peers when the runtime supports them) — Planning → Execution → Quality Gate |
 | [data-handoff-patterns](data-handoff-patterns.md) | Structured markers, severity convention, prose fallback, test gaming detection |
 | [agent-consumption-guide](agent-consumption-guide.md) | How agents load and use pattern docs (frontmatter, assumes_read, hub scanning) |
 | [capability-detection](capability-detection.md) | Graceful degradation for optional tools in agent definitions |
@@ -73,8 +73,8 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 
 ## Key Concepts
 
-- **3-Phase Model** = Planning → Execution → Quality Gate. Ten **session team peers** in `session-{project-slug}` carry context across phases: 5 at session start + 5 persistent core specialists at Phase 2. Planner is temporary.
-- **Session team peers** = context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater (session start) + test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist (Phase 2 start). All alive for the session.
+- **3-Phase Model** = Planning → Execution → Quality Gate. Load-bearing context lives in disk artifacts (PLAN, verdicts, QG proof); the orchestrator dispatches single-use subagents that may optionally persist as background peers (reachable via `SendMessage`) when the runtime supports them — 5 core roles at session start + 5 core specialists at Phase 2 carry context across phases. Planner is temporary.
+- **Core roles** = context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater (session start) + test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist (Phase 2 start). Dispatched as single-use subagents; optionally live as background peers for the session when the runtime supports them.
 - **CLAUDE.md** = workflow instructions (< 80 lines). Contains Agent Roster → triggers agent delegation.
 - **`.claude/agents/`** = canonical agent definitions. Synced via `/sync-l0`.
 - **team-lead** = orchestrator. NEVER codes — orchestrates 3-phase teams, spawns 5 core specialists at Phase 2 start, spawns extras on architect request. Pattern validation chain: specialist → architect → context-provider.

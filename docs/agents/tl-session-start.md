@@ -19,20 +19,20 @@ The main agent (when orchestrating a session) orchestrates the project: plan sco
 
 > ⛔ **CRITICAL — WHO READS THIS TEMPLATE (T-BUG-010)**
 >
-> This template instructs the **main conversation agent (team-lead)** to act as team-lead. You do NOT spawn `team-lead` as a separate peer agent.
+> This template instructs the **main conversation agent (orchestrator)** to act as team-lead. You do NOT spawn `team-lead` as a separate subagent.
 >
-> **FORBIDDEN**: `Agent(name="team-lead", team_name=...)` — creates a redundant peer that cannot reliably spawn architects (see memory: `feedback_agent_depth_limit.md` — "team-lead as subagent can't spawn sub-agents reliably. User=team-lead, launch architects directly.").
+> **FORBIDDEN**: `Agent(name="team-lead", ...)` — creates a redundant subagent that cannot reliably spawn architects (see memory: `feedback_agent_depth_limit.md` — "team-lead as subagent can't spawn sub-agents reliably. User=team-lead, launch architects directly.").
 >
-> **CORRECT MODEL**: the main agent reads this guide → becomes team-lead → `TeamCreate("session-{slug}")` + spawn 6 session peers (context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater) + dispatch waves directly via SendMessage. The session peers SendMessage back to `team-lead` (or to each other), not to a spawned `team-lead` peer.
+> **CORRECT MODEL**: the main agent reads this guide → becomes orchestrator/team-lead → dispatches architects as concurrent `Agent` subagents (or background peers if the runtime supports them) → reads their `arch-*-verdict.md` files from disk.
 >
-> **IF you were spawned AS a peer named `team-lead`**: respond once with `"team-lead-peer spawn detected — team-lead should act as team-lead directly per T-BUG-010. Exiting."` and exit. Do NOT attempt TeamCreate or architect spawns from inside a peer agent — spawn depth is unreliable.
+> **IF you were spawned AS a subagent named `team-lead`**: respond once with `"team-lead-peer spawn detected — orchestrator should act as team-lead directly per T-BUG-010. Exiting."` and exit. Do NOT attempt architect spawns from inside a subagent — spawn depth is unreliable.
 >
-> Why: L2 debug session (2026-04-18) caught team-lead doing BOTH `TeamCreate` AND `Agent(name="team-lead")` — creating two team-lead layers. The spawned team-lead peer went idle waiting for its own team setup, blocking the session. Only one team-lead exists per session: team-lead.
+> Why: the orchestrator role executes in-process (main conversation). Sub-agents carry `agent_type` for gate keying; only the main agent has full tool access for Agent() fan-out.
 
 > **⛔ HARD GATE — Session setup blocks ALL work.**
-> If you receive a user task before creating the session team: RESPOND ONLY with "Setting up session — creating session team first."
+> If you receive a user task before completing session setup: RESPOND ONLY with "Setting up session — dispatching core subagents first."
 > DO NOT plan. DO NOT spawn agents. DO NOT respond to the user task.
-> Complete TeamCreate → all 6 peers → pre-flight checklist FIRST.
+> Dispatch all required subagents per the wave CLASS floor + run pre-flight checklist FIRST.
 > If ANY pre-flight checkbox (1-8) is NO → same response, same restriction, fix it before anything else.
 
 > ⛔ SESSION CLOSURE GATE — Acceptance criteria block session end.
@@ -41,7 +41,7 @@ The main agent (when orchestrating a session) orchestrates the project: plan sco
 > NEVER defer sprint scope without explicit user approval.
 > If ANY sprint objective is not met: ESCALATE to user with exact failures and ask whether to continue or stop.
 
-> **FIRST POST-SETUP ACTION**: Once session team is up and pre-flight passes, immediately: `SendMessage(to="context-provider", summary="project state", message="Read MEMORY.md and report all known bugs, open items, and current project state.")` — DO NOT start planning until context-provider responds.
+> **FIRST POST-SETUP ACTION**: Once core subagents are dispatched and pre-flight passes, immediately consult context-provider: `Agent(subagent_type="context-provider", prompt="Read MEMORY.md and report all known bugs, open items, and current project state.")` — or `SendMessage(to="context-provider", ...)` if context-provider is a live background peer. DO NOT start planning until context-provider responds.
 
 ### Per-Session Gate
 
@@ -81,9 +81,9 @@ You are FORBIDDEN from doing these things directly:
 ### ALLOWED Actions (the ONLY things you can do)
 
 1. **Read** plan files, memory, CLAUDE.md, and project docs (NOT source code)
-2. **TeamCreate** teams with architects + shared services (3-phase model)
-3. **Agent()** to dispatch specialists requested by architects (team-lead-as-relay)
-4. **Collect** verdicts from architects (APPROVE/ESCALATE)
+2. **Agent()** to dispatch architects and specialists as concurrent subagents (default) or background peers
+3. **SendMessage** to coordinate with live background peers (supported optional accelerator)
+4. **Read disk artifacts** — `arch-*-verdict.md`, `quality-gate-report.json`, `push-proof.json` (authoritative results)
 5. **Report** results to the user
 6. **Decide** on escalations: re-plan or report blocked
 
@@ -130,39 +130,37 @@ Why: An L2 consumer session (2026-04-18) — the main agent dispatched grep work
 
 ## Phase 0 — Session start
 
-**If reusing a session slug**: run `TeamDelete(team_name="session-{slug}")` BEFORE `TeamCreate`. This clears stale `members[]` from the prior session entry in `~/.claude/teams/{slug}/config.json`.
+**Project slug**: derive from the project root directory name, lowercased with hyphens. Examples: `my-app`, `my-kmp-libs`, `androidcommondoc`. The slug determines the wave artifact directory (`.planning/wave-{slug}/`).
 
-**If creating a new slug**: no-op. Proceed directly to `TeamCreate`.
-
-**Why**: stale CP entries in the team config cause `TeamCreate` to either fail with "team exists" OR silently spawn a CP peer that hangs on `shutdown_request` from the dead session. This is a known platform behavior — not a CP template bug. See `feedback_cp_shutdown_bug.md` for incident history. Option A (auto-clear hook) is deferred per BL-W32-04 backlog — mechanical discipline (this rule) is the immediate fix.
-
-### Session Start: Session Team Setup (mandatory)
-
-**Project slug**: derive from the project root directory name, lowercased with hyphens. Examples: `my-app`, `my-kmp-libs`, `androidcommondoc`. This prevents team name collisions when multiple Claude Code sessions run simultaneously.
+### Session Start: Core Subagent Dispatch (mandatory)
 
 **FIRST thing when session starts** — before ANY planning or unrelated Agent():
 
-```
-TeamDelete(team_name="session-{project-slug}")  # Bug #3: clear stale prior-session team (prevents -2/-3 suffix on peer names)
-TeamCreate(team_name="session-{project-slug}")
-Agent(name="context-provider", team_name="session-{project-slug}", subagent_type="context-provider", prompt="You are context-provider for this session. FIRST: read your bundle at .planning/wave-{slug}/context-bundles/context-provider.md before any other action (absent or stale wave_slug → report 'no valid bundle' and proceed). Read docs/agents/agent-core-rules.md. Answer pattern/doc/rule queries on demand — load files when asked, never eagerly. NEVER write files (sole carve-out: the write_bundle script protocol in your template, on team-lead dispatch only). NEVER self-assign tasks. NEVER execute CI. Stay alive.", run_in_background=true)
-Agent(name="doc-updater", team_name="session-{project-slug}", subagent_type="doc-updater", prompt="You are doc-updater for this session. FIRST: read your bundle at .planning/wave-{slug}/context-bundles/doc-updater.md before any other action (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Update docs ONLY when team-lead explicitly dispatches you via SendMessage. NEVER self-assign tasks from TaskList. NEVER act without a team-lead dispatch. Stay alive.", run_in_background=true)
-Agent(name="arch-testing", team_name="session-{project-slug}", prompt="You are arch-testing for this session. FIRST: read your bundle at .planning/wave-{slug}/context-bundles/arch-testing.md before any other action (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Manage test-specialist, ui-specialist. Verify test quality, TDD, coverage. Report findings via SendMessage. Stay alive.", run_in_background=true)
-Agent(name="arch-platform", team_name="session-{project-slug}", prompt="You are arch-platform for this session. FIRST: read your bundle at .planning/wave-{slug}/context-bundles/arch-platform.md before any other action (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Manage domain-model-specialist, data-layer-specialist, toolkit-specialist. Verify KMP patterns, encoding, source sets, TS architecture, validator schemas, hook patterns. Report findings via SendMessage. Stay alive.", run_in_background=true)
-Agent(name="arch-integration", team_name="session-{project-slug}", prompt="You are arch-integration for this session. FIRST: read your bundle at .planning/wave-{slug}/context-bundles/arch-integration.md before any other action (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Manage ui-specialist, data-layer-specialist. Verify DI, navigation, wiring, compilation. Report findings via SendMessage. Stay alive.", run_in_background=true)
-Agent(name="quality-gater", team_name="session-{project-slug}", run_in_background=true, prompt="You are quality-gater for this session. FIRST: read your bundle at .planning/wave-{slug}/context-bundles/quality-gater.md before any other action (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. DORMANT until team-lead activates for Phase 3. When activated, read CLAUDE.md and project rules dynamically. Consult context-provider for project rules. Stay alive.")
-```
-
-These **six** are **session team peers for the entire session** (spawned at session start).
-
-### Phase 2 Core Specialists (spawned when Phase 2 starts, NOT at session start)
+Dispatch the 6 core roles as concurrent `Agent` subagents. These may run as foreground single-use subagents or, when the runtime supports it, as background peers — both models are supported. The **load-bearing contract** is disk artifacts: each role writes its result to `.planning/wave-{slug}/` and the orchestrator reads from there. Background peers additionally communicate via SendMessage; single-use subagents return their result directly.
 
 ```
-Agent(name="test-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are test-specialist for this session. FIRST: read your bundle at .planning/wave-{slug}/context-bundles/test-specialist.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Your reporting architect is arch-testing. Stay alive.")
-Agent(name="ui-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are ui-specialist for this session. FIRST: read your bundle at .planning/wave-{slug}/context-bundles/ui-specialist.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Your reporting architect is arch-testing. Stay alive.")
-Agent(name="domain-model-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are domain-model-specialist for this session. FIRST: read your bundle at .planning/wave-{slug}/context-bundles/domain-model-specialist.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Your reporting architect is arch-platform. Stay alive.")
-Agent(name="data-layer-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are data-layer-specialist for this session. FIRST: read your bundle at .planning/wave-{slug}/context-bundles/data-layer-specialist.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Your reporting architects are arch-platform and arch-integration. Stay alive.")
-Agent(name="toolkit-specialist", team_name="session-{project-slug}", run_in_background=true, prompt="You are toolkit-specialist for this session. FIRST: read your bundle at .planning/wave-{slug}/context-bundles/toolkit-specialist.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Your reporting architect is arch-platform. Stay alive.")
+# Foreground single-use dispatch (default — works in any runtime):
+Agent(subagent_type="context-provider", prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/context-provider.md (absent or stale wave_slug → report 'no valid bundle' and proceed). Read docs/agents/agent-core-rules.md. Answer the project state query: read MEMORY.md and report known bugs, open items, and current project state.")
+
+# Background peer dispatch (optional accelerator — when runtime supports it):
+Agent(name="context-provider", subagent_type="context-provider", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/context-provider.md (absent or stale wave_slug → report 'no valid bundle' and proceed). Read docs/agents/agent-core-rules.md. Answer pattern/doc/rule queries on demand. NEVER write files (sole carve-out: the write_bundle script protocol in your template, on orchestrator dispatch only). NEVER self-assign tasks. NEVER execute CI.")
+Agent(name="doc-updater", subagent_type="doc-updater", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/doc-updater.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Update docs ONLY when orchestrator explicitly dispatches you. NEVER self-assign tasks.")
+Agent(name="arch-testing", subagent_type="arch-testing", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/arch-testing.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Verify test quality, TDD, coverage. Write arch-testing-verdict.md to disk.")
+Agent(name="arch-platform", subagent_type="arch-platform", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/arch-platform.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Verify KMP patterns, source sets. Write arch-platform-verdict.md to disk.")
+Agent(name="arch-integration", subagent_type="arch-integration", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/arch-integration.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Verify DI, navigation, wiring. Write arch-integration-verdict.md to disk.")
+Agent(name="quality-gater", subagent_type="quality-gater", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/quality-gater.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. DORMANT until orchestrator activates for Phase 3.")
+```
+
+These **six roles** are the session's core agents. When run as background peers they are always reachable via SendMessage; when run as single-use subagents the orchestrator dispatches a fresh instance per task and reads results from disk.
+
+### Phase 2 Core Specialists (dispatched when Phase 2 starts, NOT at session start)
+
+```
+Agent(name="test-specialist", subagent_type="test-specialist", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/test-specialist.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Your reporting architect is arch-testing.")
+Agent(name="ui-specialist", subagent_type="ui-specialist", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/ui-specialist.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Your reporting architect is arch-testing.")
+Agent(name="domain-model-specialist", subagent_type="domain-model-specialist", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/domain-model-specialist.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Your reporting architect is arch-platform.")
+Agent(name="data-layer-specialist", subagent_type="data-layer-specialist", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/data-layer-specialist.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Your reporting architects are arch-platform and arch-integration.")
+Agent(name="toolkit-specialist", subagent_type="toolkit-specialist", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/toolkit-specialist.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Your reporting architect is arch-platform.")
 ```
 
 **Bundle-read mandate**: every peer spawn/respawn prompt MUST open with the bundle-read line (canonical wording: [context-bundle-schema](context-bundle-schema.md) §Consumer Contract). ALL spawn blocks in this file carry it inline — keep it when copying, and prepend it to ANY respawn prompt. At fresh-session start bundles are normally absent (the conditional makes the line harmless); after a mid-wave session death the bundle on disk IS the resume context.
@@ -195,31 +193,30 @@ Every architect dispatch MUST include `scope_doc_path: .planning/PLAN-W{N}.md` a
 ### Token Meter + Retrospective (MANDATORY at wave end)
 At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatched-message-count × avg-tokens-per-message` (order-of-magnitude; no precision needed), (2) write `.planning/wave{N}/retrospective.md` with wave number, steps completed, token estimate, and verdict outcomes (APPROVE/ESCALATE counts per architect). Threshold: if estimate >80% of model context window → flag to user and propose wave split. Full spec: [tl-verification-gates § Token Meter Gate](tl-verification-gates.md#token-meter-gate).
 
-### Pre-Flight Checklist (MUST verify before ANY TeamCreate)
+### Pre-Flight Checklist (MUST verify before dispatching architects)
 
 ```
-□ 0. TeamDelete(team_name="session-{project-slug}") called before TeamCreate? → YES or STOP (Bug #3)
-□ 1. TeamCreate("session-{project-slug}") called?                           → YES or STOP
-□ 2. context-provider added to session team?                 → YES or STOP
-□ 3. doc-updater added to session team?                      → YES or STOP
-□ 4. arch-testing added to session team?                     → YES or STOP
-□ 5. arch-platform added to session team?                    → YES or STOP
-□ 6. arch-integration added to session team?                 → YES or STOP
-□ 7. quality-gater added to session team?                           → YES or STOP
-□ 8. Agent(planner) called for non-trivial tasks?            → YES or STOP (ENFORCED by .claude/hooks/plan-mode-spawn-planner.js; escape: CLAUDE_SKIP_PLANNER=1)
-□ 9. test-specialist added to session team?              → YES or SKIP (Phase 2 not started)
-□ 10. ui-specialist added to session team?                → YES or SKIP (Phase 2 not started)
-□ 11. domain-model-specialist added to session team?     → YES or SKIP (Phase 2 not started)
-□ 12. data-layer-specialist added to session team?       → YES or SKIP (Phase 2 not started)
-□ 13. toolkit-specialist added to session team?          → YES or SKIP (Phase 2 not started)
+□ 1. context-provider dispatched (subagent or background peer)?    → YES or STOP
+□ 2. doc-updater dispatched?                                        → YES or STOP
+□ 3. arch-testing dispatched?                                       → YES or STOP
+□ 4. arch-platform dispatched?                                      → YES or STOP
+□ 5. arch-integration dispatched?                                   → YES or STOP
+□ 6. quality-gater dispatched?                                      → YES or STOP
+□ 7. context-provider consulted (project state response received)?  → YES or STOP
+□ 8. Agent(planner) called for non-trivial tasks?                   → YES or STOP (ENFORCED by .claude/hooks/plan-mode-spawn-planner.js)
+□ 9. test-specialist dispatched?         → YES or SKIP (Phase 2 not started)
+□ 10. ui-specialist dispatched?          → YES or SKIP (Phase 2 not started)
+□ 11. domain-model-specialist?           → YES or SKIP (Phase 2 not started)
+□ 12. data-layer-specialist?             → YES or SKIP (Phase 2 not started)
+□ 13. toolkit-specialist?                → YES or SKIP (Phase 2 not started)
 ```
 
-**If ANY checkbox is NO → STOP. Do not respond to user tasks. Do not plan. Do not use Agent(). Fix the failing checkbox first, then re-verify ALL from the top.**
+**If ANY checkbox 1-8 is NO → STOP. Do not respond to user tasks. Do not plan. Fix the failing checkbox first, then re-verify ALL from the top.**
 
 ### Planning Phase (EnterPlanMode gate)
 For non-trivial tasks:
 1. **`EnterPlanMode()`** — plan-context.js injects MODULE_MAP.md + agents + skills as additional context. Note: the hook does NOT block team-lead writes — the no-self-write rule below is discipline-enforced, not hook-enforced.
-2. **Spawn planner**: `Agent(name="planner", team_name="session-{project-slug}", subagent_type="planner", prompt="...", run_in_background=true)` — `subagent_type` MUST be `"planner"` (lowercase, custom L0 agent with Read+Write+Bash+SendMessage), NOT `"Plan"` (capital-P built-in; read-only and cannot write plan files).
+2. **Spawn planner**: `Agent(subagent_type="planner", prompt="...")` — `subagent_type` MUST be `"planner"` (lowercase, custom L0 agent with Read+Write+Bash+SendMessage), NOT `"Plan"` (capital-P built-in; read-only and cannot write plan files). No `team_name` required.
 
 **Hook enforcement (BL-W31.7-12)**: The hook `.claude/hooks/plan-mode-spawn-planner.js` mechanically blocks `ExitPlanMode` if planner has not been spawned via `Agent(subagent_type="planner")` during the current plan-mode session. Sentinel: `.planning/.plan-mode-planner-required`. Escape hatch: `CLAUDE_SKIP_PLANNER=1` env var (set BEFORE `EnterPlanMode`) for genuinely trivial work.
 
@@ -227,7 +224,7 @@ For non-trivial tasks:
 4. Present plan summary to user as text output (team-lead needs no file writes during planning)
 5. **On user approval**: call `ExitPlanMode()`
 6. **⛔ MANDATORY Phase 2 Topology Activation Gate (Bug #8 — Wave 26 regression fix)**: AFTER `ExitPlanMode()` and BEFORE any architect EXECUTE dispatch:
-   - **Spawn the peers listed in the PLAN.md Spawn Table**, satisfying the wave class floor (HARNESS: 7 peers; DOC: 4 peers; FAST-PATH: 1 spawned peer (context-provider only)). See `docs/agents/main-agent-orchestration-guide.md` for the class floor table.
+   - **Dispatch the roles listed in the PLAN.md Spawn Table**, satisfying the wave class artifact floor (HARNESS requires 3 arch-*-verdict.md + QG artifacts; DOC requires declared-arch verdicts + QG artifacts; FAST-PATH requires QG artifacts only). See `docs/agents/main-agent-orchestration-guide.md` for the class floor table.
    - **Architect EXECUTE dispatches MUST include the mandate**: `"Your EXECUTE output is SendMessage-to-specialist with edit spec. You MUST NOT use Write or Edit on source/template/test files yourself. If you self-edit, the wave is rolled back."`
    - **Verification after architect APPROVE**: The main agent runs `rtk git log --format='%an' <commit-range>` and confirms commits are authored by the specialist layer (per SendMessage ownership trail), not exclusively by the architect layer. If architects self-edited: STOP, reset, re-dispatch through specialists, update `feedback_plan_mode_exit_topology.md` memory with the violation details.
    - Why this gate exists: Wave 26 BL-W26-01a shipped with 100% architect-authored edits and 0 specialists dispatched. User flagged: "no devs are working and all work has been done by the architects" (literal quote preserved — "devs" was the user's term at the time). Architects hold `Read` + mediation tools only; they do NOT self-implement.

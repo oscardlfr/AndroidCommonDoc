@@ -206,9 +206,27 @@
         "date": "2026-06-17",
         "breaking": false,
         "summary": "CodeRabbit fix (PR #218): remove the 'Main orchestrator -> AskUserQuestion' role-leak from the Spec-Ambiguity step — planner tools are Read/Write/Bash/SendMessage (no AskUserQuestion); keep only the planner->team-lead SendMessage relay. Regression guard: planner template must not reference AskUserQuestion."
+      },
+      "1.18.0": {
+        "date": "2026-06-17",
+        "breaking": true,
+        "summary": "BL-W48 team-model-rootfix: migrate spawn_method TeamCreate-peer -> Agent. TeamCreate/team_name are removed from the Claude Code runtime. Planner is now a single-use subagent spawned via Agent(subagent_type='planner') without team_name. Description updated to remove 'session-{slug} team' reference. Also affects: arch-platform, arch-testing, arch-integration (same migration). The IN_PROCESS_NO_AGENT invariant is now a tombstone guard only.",
+        "migration_hint": "Spawn planner as: Agent(subagent_type='planner'). Do NOT pass team_name — it is ignored/deprecated. Results are delivered as disk artifacts (PLAN.md), not via message routing. Retiring team-completeness-gate.js and team-topology-gate.js hooks (removed from settings.json)."
+      },
+      "1.19.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 team-model-rootfix (step 1): reframe planner deeper body off the named-team/team-lead model. Spec-Ambiguity, Plan Delivery, Verdict Filename, AMEND, Rules, and Post-Compaction Re-Sync now route through the orchestrator + disk artifacts; canonical plan target is .planning/wave-<slug>/PLAN.md (not bare .planning/PLAN.md); open questions are surfaced in PLAN.md for the orchestrator. SendMessage(to='context-provider') remains supported.",
+        "migration_hint": "Guidance-only reframe; spawn interface unchanged from 1.18.0. No consumer action beyond re-syncing the deployed template."
       }
     },
     "quality-gater": {
+      "2.17.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (point-4 strict): reframe identity + description off named-team (session team peer / session-{slug}) to the orchestrator + adapter-capability model — background-peer optional & SendMessage-reachable when supported, else single-use + disk. QG owner role + ownership (runs after architects APPROVE, before commit) preserved.",
+        "migration_hint": "Guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-29",
         "breaking": false,
@@ -322,6 +340,11 @@
         "date": "2026-03-26",
         "breaking": false,
         "note": "Initial architect  --  read-only, SendMessage, APPROVE/ESCALATE"
+      },
+      "1.39.0": {
+        "date": "2026-06-17",
+        "breaking": true,
+        "summary": "BL-W48 team-model-rootfix: migrate spawn_method TeamCreate-peer -> Agent. Spawn as Agent(subagent_type='arch-testing') without team_name. Load-bearing contract: disk artifact arch-testing-verdict.md (HEAD-bound). See planner 1.18.0 for full migration context."
       },
       "1.6.0": {
         "date": "2026-04-05",
@@ -486,6 +509,11 @@
         "breaking": false,
         "note": "Initial architect  --  read-only, SendMessage, APPROVE/ESCALATE"
       },
+      "1.34.0": {
+        "date": "2026-06-17",
+        "breaking": true,
+        "summary": "BL-W48 team-model-rootfix: migrate spawn_method TeamCreate-peer -> Agent. Spawn as Agent(subagent_type='arch-platform') without team_name. Load-bearing contract: disk artifact arch-platform-verdict.md (HEAD-bound), not message delivery. See planner 1.18.0 for full migration context."
+      },
       "1.5.0": {
         "date": "2026-04-05",
         "breaking": false,
@@ -629,6 +657,11 @@
         "breaking": false,
         "note": "Initial architect  --  read-only, SendMessage, APPROVE/ESCALATE"
       },
+      "1.30.0": {
+        "date": "2026-06-17",
+        "breaking": true,
+        "summary": "BL-W48 team-model-rootfix: migrate spawn_method TeamCreate-peer -> Agent. Spawn as Agent(subagent_type='arch-integration') without team_name. Load-bearing contract: disk artifact arch-integration-verdict.md (HEAD-bound). See planner 1.18.0 for full migration context."
+      },
       "1.5.0": {
         "date": "2026-04-05",
         "breaking": false,
@@ -752,6 +785,18 @@
       }
     },
     "context-provider": {
+      "3.7.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex P2): reframed the stale 'On Team Join / joins the session team' phrasing to adapter-neutral 'On First Contact' (freshly dispatched single-use subagent, or newly live background peer when the runtime supports it). Oracle/cache behavior + ownership unchanged.",
+        "migration_hint": "Doc phrasing reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
+      "3.6.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (point-4 strict): reframe identity off named-team (session team peer / team_name / team-lead adds you) to the orchestrator + adapter-capability model — background-peer optional & SendMessage-reachable when the runtime supports it, else single-use + disk artifacts. Oracle/cache role + ownership preserved. Plan-path freshness ref -> .planning/wave-<slug>/PLAN.md.",
+        "migration_hint": "Guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -819,6 +864,12 @@
       }
     },
     "doc-updater": {
+      "2.11.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (point-4 strict): reframe identity off named-team (session team peer / team_name / team-lead adds you) to the orchestrator + adapter-capability model — background-peer optional & SendMessage-reachable when supported, else single-use + disk. Docs/ingestion owner role + ownership preserved.",
+        "migration_hint": "Guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -902,6 +953,18 @@
       }
     },
     "marketing-lead": {
+      "1.3.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): TeamCreate removed from the active tools grant and moved to optional_capabilities (optional adapter capability, not a hard tool); rationale notes reframed. Supersedes the 1.2.0 decision to keep it in tools. Orchestration role unchanged.",
+        "migration_hint": "tools: grant drops TeamCreate; it now lives under optional_capabilities. Re-sync the deployed template."
+      },
+      "1.2.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (point-4 strict): reframe identity off the dead-tool claim (You are a TeamCreate peer) to the orchestrator + adapter-capability model — background-peer optional & SendMessage-reachable when supported, else single-use + disk. Marketing-lead role preserved; TeamCreate kept in tools as an optional engine capability (not deleted).",
+        "migration_hint": "Guidance reframe; spawn interface + tool grants unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -914,6 +977,18 @@
       }
     },
     "product-lead": {
+      "1.3.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): TeamCreate removed from the active tools grant and moved to optional_capabilities (optional adapter capability, not a hard tool); rationale notes reframed. Supersedes the 1.2.0 decision to keep it in tools. Orchestration role unchanged.",
+        "migration_hint": "tools: grant drops TeamCreate; it now lives under optional_capabilities. Re-sync the deployed template."
+      },
+      "1.2.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (point-4 strict): reframe identity off the dead-tool claim (You are a TeamCreate peer) to the orchestrator + adapter-capability model — background-peer optional & SendMessage-reachable when supported, else single-use + disk. Product-lead role preserved; TeamCreate kept in tools as an optional engine capability (not deleted).",
+        "migration_hint": "Guidance reframe; spawn interface + tool grants unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -980,6 +1055,12 @@
       }
     },
     "feature-domain-specialist": {
+      "1.2.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): identity reframed off the named 'session team peer / session-{slug}' model to the adapter-capability model for this {{DOMAIN}} review template — orchestrator does the mechanical Agent() spawn; reporting architect owns task spec + validation; background-peer optional, else single-use + disk artifacts.",
+        "migration_hint": "Coordination-context reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -997,6 +1078,18 @@
       }
     },
     "test-specialist": {
+      "1.31.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex P1): Scope Validation Gate no longer falls back to a bare top-level .planning/PLAN.md (stale-plan risk → off-scope edits). Now verifies the target against the dispatch scope_doc_path (.planning/wave-<slug>/PLAN.md); if absent, STOP + request re-dispatch with explicit scope. Matches the architects' contract.",
+        "migration_hint": "Scope-gate guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
+      "1.30.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): identity reframed off the named 'session team peer / session-{slug}' model to the adapter-capability model — orchestrator does the mechanical Agent() spawn; reporting architect owns task spec + validation; background-peer optional & SendMessage-reachable when the runtime supports it, else single-use + disk artifacts.",
+        "migration_hint": "Coordination-context reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -1135,6 +1228,18 @@
       }
     },
     "ui-specialist": {
+      "1.22.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex P1): Scope Validation Gate no longer falls back to a bare top-level .planning/PLAN.md (stale-plan risk → off-scope edits). Now verifies the target against the dispatch scope_doc_path (.planning/wave-<slug>/PLAN.md); if absent, STOP + request re-dispatch with explicit scope. Matches the architects' contract.",
+        "migration_hint": "Scope-gate guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
+      "1.21.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): identity reframed off the named 'session team peer / session-{slug}' model to the adapter-capability model — orchestrator does the mechanical Agent() spawn; reporting architect owns task spec + validation; background-peer optional & SendMessage-reachable when the runtime supports it, else single-use + disk artifacts.",
+        "migration_hint": "Coordination-context reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -1223,6 +1328,18 @@
       }
     },
     "domain-model-specialist": {
+      "1.20.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex P1): Scope Validation Gate no longer falls back to a bare top-level .planning/PLAN.md (stale-plan risk → off-scope edits). Now verifies the target against the dispatch scope_doc_path (.planning/wave-<slug>/PLAN.md); if absent, STOP + request re-dispatch with explicit scope. Matches the architects' contract.",
+        "migration_hint": "Scope-gate guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
+      "1.19.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): identity reframed off the named 'session team peer / session-{slug}' model to the adapter-capability model — orchestrator does the mechanical Agent() spawn; reporting architect owns task spec + validation; background-peer optional & SendMessage-reachable when the runtime supports it, else single-use + disk artifacts.",
+        "migration_hint": "Coordination-context reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -1301,6 +1418,18 @@
       }
     },
     "data-layer-specialist": {
+      "1.20.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex P1): Scope Validation Gate no longer falls back to a bare top-level .planning/PLAN.md (stale-plan risk → off-scope edits). Now verifies the target against the dispatch scope_doc_path (.planning/wave-<slug>/PLAN.md); if absent, STOP + request re-dispatch with explicit scope. Matches the architects' contract.",
+        "migration_hint": "Scope-gate guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
+      "1.19.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): identity reframed off the named 'session team peer / session-{slug}' model to the adapter-capability model — orchestrator does the mechanical Agent() spawn; reporting architect owns task spec + validation; background-peer optional & SendMessage-reachable when the runtime supports it, else single-use + disk artifacts.",
+        "migration_hint": "Coordination-context reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -1575,6 +1704,18 @@
       }
     },
     "toolkit-specialist": {
+      "1.8.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex P1): Scope Validation Gate no longer falls back to a bare top-level .planning/PLAN.md (stale-plan risk → off-scope edits). Now verifies the target against the dispatch scope_doc_path (.planning/wave-<slug>/PLAN.md); if absent, STOP + request re-dispatch with explicit scope. Matches the architects' contract.",
+        "migration_hint": "Scope-gate guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
+      "1.7.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): identity reframed off the named 'session team peer / session-{slug}' model to the adapter-capability model — orchestrator does the mechanical Agent() spawn; reporting architect owns task spec + validation; background-peer optional & SendMessage-reachable when the runtime supports it, else single-use + disk artifacts.",
+        "migration_hint": "Coordination-context reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-04-30",
         "breaking": false,

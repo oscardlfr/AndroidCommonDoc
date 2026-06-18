@@ -49,10 +49,10 @@ describe("T-BUG-001: architect Activation Sequence (inbox-first)", () => {
       const { claude, template } = readAgent(name);
       for (const content of [claude, template]) {
         expect(content).toMatch(/Activation Sequence \(MANDATORY/);
-        expect(content).toMatch(/Inbox-first|inbox/i);
-        // Wave 23: T-BUG-001 tag label was removed from arch templates in favour
-        // of the condensed Topology Protocols block. The functional content
-        // (Activation Sequence + inbox-first) is still present — checked above.
+        // BL-W48 team-model migration: architects are now single-use subagents that
+        // "Act on it directly — do NOT idle-wait" (inbox-first removed; no team inbox).
+        // Assert the new activation contract: act directly on dispatch, no idle-wait.
+        expect(content).toMatch(/Act on it directly|do NOT idle-wait/i);
       }
     });
   }
@@ -536,11 +536,15 @@ describe("T-BUG-017: all arch-* templates reformed to 'first dispatch only'", ()
       }
     });
 
-    it(`${name} contains 'first dispatch only' reform language`, () => {
+    it(`${name} contains single-use subagent model (BL-W48 team-model migration)`, () => {
       const { claude, template } = readAgent(name);
       for (const content of [claude, template]) {
-        expect(content).toMatch(/first dispatch only/i);
-        expect(content).toMatch(/On-spawn boilerplate/i);
+        // BL-W48: TeamCreate/TeamList gone — arch-* are now single-use subagents.
+        // "first dispatch only / On-spawn boilerplate" removed; the subagent model
+        // means each spawn gets a fresh context from the orchestrator's dispatch.
+        // Assert the new orchestrator-subagent contract is present instead.
+        expect(content).toMatch(/single-use subagent|orchestrator dispatches/i);
+        expect(content).toMatch(/verdict on disk/i);
       }
     });
 
@@ -615,7 +619,11 @@ describe("T-BUG-019: Post-Compaction Re-Sync protocol present in doc + all agent
     expect(content).toMatch(/post-compaction-resync/);
   });
 
-  const ALL_TEMPLATES = [
+  // BL-W48: planner is now a single-use subagent (no team inbox to re-sync from).
+  // Its Post-Compaction Re-Sync section is inline (re-read wave artifacts + consult CP)
+  // rather than pointing to the team-lead-oriented post-compaction-resync.md doc.
+  // Arch templates still reference the doc (they remain available as optional bg peers).
+  const TEMPLATES_WITH_DOC_REF = [
     "arch-platform.md",
     "arch-testing.md",
     "arch-integration.md",
@@ -624,11 +632,16 @@ describe("T-BUG-019: Post-Compaction Re-Sync protocol present in doc + all agent
     "toolkit-specialist.md",
     "domain-model-specialist.md",
     "data-layer-specialist.md",
-    "planner.md",
     "context-provider.md",
     "doc-updater.md",
     "quality-gater.md",
   ];
+
+  const TEMPLATES_INLINE_ONLY = [
+    "planner.md",
+  ];
+
+  const ALL_TEMPLATES = [...TEMPLATES_WITH_DOC_REF, ...TEMPLATES_INLINE_ONLY];
 
   for (const name of ALL_TEMPLATES) {
     it(`${name} has '### Post-Compaction Re-Sync' heading`, () => {
@@ -638,16 +651,28 @@ describe("T-BUG-019: Post-Compaction Re-Sync protocol present in doc + all agent
       }
     });
 
+    it(`${name} setup/ and .claude/agents/ copies are byte-identical`, () => {
+      const { claude, template } = readAgent(name);
+      expect(claude).toBe(template);
+    });
+  }
+
+  for (const name of TEMPLATES_WITH_DOC_REF) {
     it(`${name} references post-compaction-resync.md`, () => {
       const { claude, template } = readAgent(name);
       for (const content of [claude, template]) {
         expect(content).toMatch(/post-compaction-resync\.md/);
       }
     });
+  }
 
-    it(`${name} setup/ and .claude/agents/ copies are byte-identical`, () => {
+  for (const name of TEMPLATES_INLINE_ONLY) {
+    it(`${name} has inline Post-Compaction Re-Sync protocol (re-read wave artifacts on disk)`, () => {
       const { claude, template } = readAgent(name);
-      expect(claude).toBe(template);
+      for (const content of [claude, template]) {
+        // Planner uses inline text: re-read wave artifacts + consult CP
+        expect(content).toMatch(/re-read.*wave artifacts|wave artifacts.*on disk/i);
+      }
     });
   }
 });

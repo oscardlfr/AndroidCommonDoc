@@ -9,12 +9,18 @@ const HOOK = path.resolve(
   "../../../../.claude/hooks/plan-mode-spawn-planner.js"
 );
 
-function runHook(payload: object, cwd?: string): { status: number; stdout: string; stderr: string } {
+function runHook(payload: object, cwd?: string, env?: NodeJS.ProcessEnv): { status: number; stdout: string; stderr: string } {
+  // Strip CLAUDE_SKIP_PLANNER from the inherited shell env so the agent harness
+  // value doesn't bleed into tests that expect sentinel writes to happen.
+  // Tests that specifically want CLAUDE_SKIP_PLANNER=1 pass it explicitly via env.
+  const baseEnv = { ...process.env };
+  delete baseEnv.CLAUDE_SKIP_PLANNER;
   const result = spawnSync("node", [HOOK], {
     input: JSON.stringify(payload),
     cwd: cwd ?? os.tmpdir(),
     encoding: "utf8",
     timeout: 5000,
+    env: { ...baseEnv, ...env },
   });
   return {
     status: result.status ?? -1,
@@ -64,12 +70,15 @@ describe("resolveProjectRoot — via EnterPlanMode sentinel placement", () => {
   it("walk-up fallback: resolves root via .git marker when git rev-parse fails", () => {
     // Provide a fake git that exits non-zero so execFileSync throws,
     // forcing the walk-up path. Keep real PATH so node itself still works.
+    // Hygiene: explicitly unset CLAUDE_SKIP_PLANNER so the hook writes the sentinel
+    // regardless of the harness shell environment (BL-W48 env-hygiene fix).
     const fakeBinDir = mkdtempSync(path.join(base, "fakebin-"));
     writeFileSync(path.join(fakeBinDir, "git"), "#!/usr/bin/env sh\nexit 128\n", { mode: 0o755 });
+    const { CLAUDE_SKIP_PLANNER: _skip, ...envWithoutSkip } = process.env;
     const result = spawnSync("node", [HOOK], {
       input: JSON.stringify({ tool_name: "EnterPlanMode", cwd: subdir }),
       cwd: subdir,
-      env: { ...process.env, PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH}` },
+      env: { ...envWithoutSkip, PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH}` },
       encoding: "utf8",
       timeout: 5000,
     });
@@ -86,10 +95,13 @@ describe("resolveProjectRoot — via EnterPlanMode sentinel placement", () => {
 
     const fakeBinDir = mkdtempSync(path.join(base, "fakebin2-"));
     writeFileSync(path.join(fakeBinDir, "git"), "#!/usr/bin/env sh\nexit 128\n", { mode: 0o755 });
+    // Hygiene: explicitly unset CLAUDE_SKIP_PLANNER so the hook writes the sentinel
+    // regardless of the harness shell environment (BL-W48 env-hygiene fix).
+    const { CLAUDE_SKIP_PLANNER: _skip2, ...envWithoutSkip2 } = process.env;
     const result = spawnSync("node", [HOOK], {
       input: JSON.stringify({ tool_name: "EnterPlanMode", cwd: subdir }),
       cwd: subdir,
-      env: { ...process.env, PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH}` },
+      env: { ...envWithoutSkip2, PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH}` },
       encoding: "utf8",
       timeout: 5000,
     });
@@ -120,13 +132,9 @@ describe("sentinel write — EnterPlanMode", () => {
   });
 
   it("EnterPlanMode with CLAUDE_SKIP_PLANNER=1 does not write sentinel", () => {
-    spawnSync("node", [HOOK], {
-      input: JSON.stringify({ tool_name: "EnterPlanMode", cwd: repo }),
-      cwd: repo,
-      env: { ...process.env, CLAUDE_SKIP_PLANNER: "1" },
-      encoding: "utf8",
-      timeout: 5000,
-    });
+    // Pass CLAUDE_SKIP_PLANNER=1 explicitly — runHook strips it from inherited env
+    // so this test controls the env value rather than relying on harness state.
+    runHook({ tool_name: "EnterPlanMode", cwd: repo }, repo, { CLAUDE_SKIP_PLANNER: "1" });
     expect(existsSync(path.join(repo, ".planning", SENTINEL_NAME))).toBe(false);
   });
 });

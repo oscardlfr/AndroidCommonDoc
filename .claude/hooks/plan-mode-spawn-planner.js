@@ -68,18 +68,12 @@ process.stdin.on('end', () => {
   if (toolName === 'Agent') {
     const subagentType = data.tool_input?.subagent_type;
     if (subagentType === 'planner') {
-      const teamName = data.tool_input?.team_name;
-      const agentName = data.tool_input?.name;
-      if (teamName && agentName === 'planner') {
-        try { fs.unlinkSync(sentinelPath); } catch (_) {}
-        process.exit(0);
-      }
-      // Bare or wrong-name spawn: do NOT clear sentinel, block with explanation
-      process.stdout.write(JSON.stringify({
-        decision: 'block',
-        reason: '[plan-mode-spawn-planner] planner must be spawned as TeamCreate-peer: Agent(subagent_type="planner", team_name="session-{slug}", name="planner"). Bare Agent(subagent_type="planner") does not satisfy the sentinel.'
-      }));
-      process.exit(2);
+      // BL-W48 team-model migration: the planner is a single-use subagent now.
+      // A bare Agent(subagent_type="planner") (no team_name — deprecated/ignored)
+      // is the canonical spawn. Clear the plan-mode sentinel so ExitPlanMode is
+      // unblocked; do NOT demand team_name/name (that forced the broken path).
+      try { fs.unlinkSync(sentinelPath); } catch (_) {}
+      process.exit(0);
     }
     process.exit(0);
   }
@@ -99,10 +93,10 @@ process.stdin.on('end', () => {
       process.stdout.write(JSON.stringify({
         decision: 'block',
         reason: [
-          '[plan-mode-spawn-planner] ExitPlanMode blocked: planner peer was not spawned during plan mode.',
+          '[plan-mode-spawn-planner] ExitPlanMode blocked: planner subagent was not spawned during plan mode.',
           'Per docs/agents/main-agent-orchestration-guide.md Phase 1, non-trivial plans require:',
-          '  Agent(name="planner", subagent_type="planner", ...)',
-          'Spawn the planner first (it will write .planning/PLAN.md), then ExitPlanMode.',
+          '  Agent(subagent_type="planner")   (no team_name — the canonical single-use spawn)',
+          'Spawn the planner first (it will write .planning/wave-<slug>/PLAN.md), then ExitPlanMode.',
           'For genuinely trivial tasks (1-line typo fix etc.), set CLAUDE_SKIP_PLANNER=1 before EnterPlanMode.',
         ].join('\n')
       }));

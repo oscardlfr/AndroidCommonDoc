@@ -35,9 +35,9 @@ SendMessage(
 
 Full protocol, team-lead workflow, and anti-patterns: `docs/agents/arch-dispatch-modes.md`. Fixes Wave 23 Bug #5 (hardcoded `.planning/PLAN.md`) and Bug #6 (no mode tagging).
 
-## Specialist Dispatch — Persistent Core Specialists + Dynamic Scaling
+## Specialist Dispatch — Core Specialists + Dynamic Scaling
 
-**Core specialists** are session team peers spawned at Phase 2 start. They persist across all waves, accumulate layer knowledge, and communicate directly with their architect(s) via SendMessage.
+**Core specialists** are dispatched at Phase 2 start — as background peers (when the runtime supports them) or as single-use Agent subagents. Background peers accumulate layer knowledge and communicate directly with architects via SendMessage; single-use subagents receive per-task context.
 
 ## Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() dispatch)
 
@@ -71,12 +71,12 @@ Specialist NEVER contacts context-provider directly — the architect is the qua
 **Work assignment:** Architects assign tasks to their core specialists via SendMessage. No team-lead relay needed for ongoing work. team-lead only spawns at Phase 2 start.
 
 **Dynamic scaling (extra specialists):** When a core specialist is busy and the architect needs parallel work:
-1. Architect sends: `SendMessage(to="team-lead", summary="need extra ui-specialist", message="Task: {desc}. Files: {list}.")`
-2. team-lead spawns: `Agent(name="ui-specialist-2", team_name="session-{project-slug}", prompt="...", run_in_background=true)` — named team peer
-3. Extra dev executes, returns result to team-lead, team-lead relays to architect
-4. After architect verifies → extra dev dies
+1. Architect sends: `SendMessage(to="orchestrator/team-lead", summary="need extra ui-specialist", message="Task: {desc}. Files: {list}.")`
+2. Orchestrator spawns: `Agent(name="ui-specialist-2", subagent_type="ui-specialist", run_in_background=true, prompt="...")` — named subagent
+3. Extra specialist executes, returns result to orchestrator, orchestrator relays to architect
+4. After architect verifies → extra specialist dismissed
 
-**Named extra devs:** All overflow devs MUST be named team peers (`{specialist}-2`, `{specialist}-3`) with team_name. No anonymous Agent() calls — unnamed devs go idle and are unreachable via SendMessage.
+**Named extra specialists:** All overflow specialists MUST be named (`{specialist}-2`, `{specialist}-3`). No anonymous Agent() calls — unnamed specialists are unreachable via SendMessage and invisible to type-keyed gates.
 
 **Background completion → IMMEDIATELY act**: When ANY background agent completes (task notification received), IMMEDIATELY: (a) read any output files, (b) relay results to relevant architects, (c) proceed to next plan step. Do NOT wait for user prompting.
 
@@ -100,13 +100,13 @@ team-lead **escalates to the user** for:
 - High blast radius changes
 - Conflicting requirements
 
-## Mandatory Team Workflow (non-negotiable)
+## Mandatory Session Workflow (non-negotiable)
 
-Every TeamCreate session MUST include `context-provider` + `doc-updater` as peers.
+Every session MUST include `context-provider` + `doc-updater` dispatch.
 
-1. **START**: `SendMessage(to="context-provider", ...)` — get current state before planning
-2. **WORK**: architects + devs + guardians execute
-3. **END**: `SendMessage(to="doc-updater", ...)` — update CHANGELOG, roadmap, memory, specs
+1. **START**: Consult context-provider (single-use subagent or SendMessage to background peer) — get current state before planning
+2. **WORK**: architects + specialists + guardians execute; each lands results as disk artifacts
+3. **END**: Dispatch doc-updater — update CHANGELOG, roadmap, memory, specs
 
 Skipping step 1 → decisions based on stale/hallucinated context.
 Skipping step 3 → documentation drift, lost decisions, stale roadmap.

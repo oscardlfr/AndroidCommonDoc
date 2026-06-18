@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 // agent-spawn-validator.js — PreToolUse hook for Task / Agent
 //
-// Validates `subagent_type` against `.claude/registry/agents.manifest.yaml`
-// before allowing the spawn. Two checks:
-//   1. subagent_type must exist in the manifest's `agents` map
-//   2. The corresponding template at setup/agent-templates/<name>.md must
-//      have frontmatter SHA-256 matching the manifest's baseline (no drift)
+// Validates `subagent_type` against `.claude/registry/agents.manifest.yaml`.
+// The manifest is a DRIFT REGISTRY for L0 agents, NOT a closed roster
+// (BL-W48 team-model migration). Behavior:
+//   1. subagent_type NOT in the manifest -> ALLOW (harness-native types like
+//      Explore/Plan/general-purpose, or any other valid runtime agent). Multi-
+//      agent capability must not be gated by L0 membership.
+//   2. subagent_type IN the manifest -> the template at
+//      setup/agent-templates/<name>.md must have frontmatter SHA-256 matching
+//      the manifest baseline (drift check); mismatch -> block.
+//   (Former Check 3 — TeamCreate-peer team_name enforcement — REMOVED; team_name
+//    is deprecated/ignored under the single implicit team.)
 //
-// Exempt: agents with `skip: true` in the manifest (e.g.,
-//         feature-domain-specialist scaffold). They pass through.
-//
-// Spawns without `subagent_type` (Anthropic's user-default `general-purpose`
-// agent) are not validated — Anthropic owns that path.
+// Exempt: agents with `skip: true` in the manifest. They pass through.
+// Spawns without `subagent_type` (default general-purpose) are not validated.
 //
 // Hash algorithm mirrors mcp-server/src/registry/template-generator.ts:
 //   - `splitFrontmatterAndBody` extracts the YAML block between `---` markers
@@ -79,20 +82,13 @@ process.stdin.on('end', () => {
 
   const agent = manifest.agents[subagentType];
   if (!agent) {
-    const knownAgents = Object.keys(manifest.agents).slice(0, 10).join(', ');
-    process.stdout.write(
-      JSON.stringify({
-        decision: 'block',
-        reason:
-          '[agent-spawn-validator] subagent_type "' +
-          subagentType +
-          '" not found in .claude/registry/agents.manifest.yaml. ' +
-          'Known agents: ' +
-          knownAgents +
-          ', ... Pass an exact match, omit subagent_type for the default agent, or add the agent to the manifest first.',
-      }),
-    );
-    process.exit(2);
+    // BL-W48 team-model migration: the manifest is a DRIFT registry for L0
+    // agents, NOT a closed roster. A subagent_type absent from it is a
+    // harness-native type (Explore / Plan / general-purpose) or any other valid
+    // agent the runtime offers — multi-agent capability must NOT be gated by L0
+    // membership (this gate previously blocked Explore/Plan). Pass through; the
+    // runtime itself validates the type. L0 agents still get drift-checked below.
+    process.exit(0);
   }
 
   if (agent.skip === true) process.exit(0);
@@ -146,66 +142,13 @@ process.stdin.on('end', () => {
     process.exit(2);
   }
 
-  // Check 3 — TeamCreate-peer enforcement
-  // If the manifest classifies this agent as a TeamCreate-peer, require that the
-  // spawn includes team_name and name parameters. Guards against accidental
-  // subagent spawns of agents intended to live as session peers (BL-W32-07).
-  const spawnMethod = agent?.dispatch?.spawn_method;  // optional chaining mandatory (dispatch may be absent)
-  if (spawnMethod === 'TeamCreate-peer') {
-    const teamName = data.tool_input?.team_name;
-    const agentName = data.tool_input?.name;
-    if (!teamName || !agentName) {
-      process.stdout.write(JSON.stringify({
-        decision: 'block',
-        reason: '[agent-spawn-validator] Agent "' + subagentType + '" has spawn_method=TeamCreate-peer in manifest but was called without team_name and/or name. Use: Agent(subagent_type="' + subagentType + '", team_name="session-{slug}", name="' + subagentType + '")'
-      }));
-      process.exit(2);
-    }
-
-    // Stale-suffix guard (BL-W47 identity-tolerance, L6e)
-    // Three cases when agentName differs from subagentType (canonical):
-    //   A. Intentional overflow: agentName = canonical + -\d+ suffix AND canonical is in manifest
-    //      => ALLOW (rotation pattern; overflow peer)
-    //   B. Accidental same-name: trivially caught by the equality guard above
-    //   C. Free name: agentName matches no canonical pattern => WARN
-    if (agentName !== subagentType) {
-      const suffixMatch = /^(.+)-(\d+)$/.exec(agentName);
-      const enforceBlock = process.env.STALE_SUFFIX_ENFORCE === '1';
-      if (suffixMatch) {
-        const canonicalBase = suffixMatch[1];
-        // Suffix is only valid overflow if the base matches subagentType exactly (CR-6).
-        // A foreign canonical base (name="other-thing-2", subagent_type="arch-platform")
-        // is treated as Case C (misconfigured), not Case A.
-        const isValidOverflow = canonicalBase === subagentType;
-        if (!isValidOverflow) {
-          // Case C: suffix present but base doesn't match subagentType => WARN (or BLOCK)
-          const msg =
-            '[agent-spawn-validator] WARN: spawning "' + agentName + '" with suffix but base "' +
-            canonicalBase + '" does not match subagent_type="' + subagentType + '". ' +
-            'This may be a misconfigured name. Prefer canonical names per identity-tolerance OQ3. ' +
-            'Set STALE_SUFFIX_ENFORCE=1 to block.\n';
-          process.stderr.write(msg);
-          if (enforceBlock) {
-            process.stdout.write(JSON.stringify({ decision: 'block', reason: msg.trim() }));
-            process.exit(2);
-          }
-        }
-        // Case A: known canonical base == subagentType with numeric suffix => silently allow
-      } else {
-        // Case C: free name (no suffix) => WARN (or BLOCK if STALE_SUFFIX_ENFORCE=1)
-        const msg =
-          '[agent-spawn-validator] WARN: name="' + agentName + '" does not match subagent_type="' +
-          subagentType + '" and has no recognized suffix. Canonical name preferred for gate coverage. ' +
-          'Set STALE_SUFFIX_ENFORCE=1 to block.\n';
-        process.stderr.write(msg);
-        if (enforceBlock) {
-          process.stdout.write(JSON.stringify({ decision: 'block', reason: msg.trim() }));
-          process.exit(2);
-        }
-      }
-    }
-  }
-
+  // Check 3 (TeamCreate-peer team_name + name enforcement, + stale-suffix guard)
+  // REMOVED — BL-W48 team-model migration. `Agent.team_name` is deprecated/ignored
+  // ("single implicit team") and passing it forces the broken mailbox/background
+  // path that caused the multi-day QG-message outage. The 7 former TeamCreate-peer
+  // agents now spawn as plain single-use subagents (spawn_method: Agent); no
+  // team_name/name required. Identity is the subagent_type (verified: a foreground
+  // subagent carries agent_type==TYPE), so type-keyed gates downstream still apply.
   process.exit(0);
 });
 

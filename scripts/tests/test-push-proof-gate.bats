@@ -883,3 +883,58 @@ EOF
   [ "$status" -eq 2 ]
   [[ "$output" =~ "step-not-pass" ]]
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BL-W48 Codex P1: CLASS-aware artifact floor (FAST-PATH / HARNESS / DOC).
+# emit-push-proof.sh resolves required_roles from the wave CLASS (via
+# resolve-required-roles.js → wave-topology.yaml class_artifacts) BEFORE gating
+# deliberation/verdicts. FAST-PATH (architects: []) must NOT require architect
+# deliberation or arch-*-verdict.md; HARNESS must still require them; DOC declared
+# without a **Required-Architects** token fails-closed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# resolver_stub <token>
+# Installs a deterministic resolver stub in the isolated repo that emits the given
+# CLASS-resolved token, so emit-push-proof.sh exercises its CLASS-aware gating on it.
+# The real CLASS -> token mapping (wave-topology class_artifacts) is covered by
+# resolve-required-roles.bats; this seam keeps the integration test hermetic (no yaml
+# pkg / wave-topology copy needed). Tokens: "[]" (FAST-PATH), a JSON arch array
+# (HARNESS / DOC-declared), or "DECLARED_MISSING" (DOC declared, no token → fail-closed).
+resolver_stub() {
+  local token="$1"
+  printf '%s' "$token" > "$REPO/.test-req-roles"
+  mkdir -p "$REPO/scripts/sh/lib"
+  cat > "$REPO/scripts/sh/lib/resolve-required-roles.js" <<'JSEOF'
+const fs = require('fs'), path = require('path');
+// argv[2] = repo_root (emit-push-proof.sh passes $REPO_ROOT). Echo the test token.
+process.stdout.write(fs.readFileSync(path.join(process.argv[2], '.test-req-roles'), 'utf8'));
+process.exit(0);
+JSEOF
+}
+
+@test "#FP1 PASS: FAST-PATH run-qg with NO arch verdicts (required_roles==[]) is allowed" {
+  resolver_stub "[]"
+  write_quality_gate_report   # deliberation/verdicts NOT required for FAST-PATH
+  # deliberately NO arch verdict files written
+  run_emitter --subcommand run-qg
+  [ "$status" -eq 0 ]
+}
+
+@test "#FP2 BLOCK: HARNESS run-qg with NO arch verdicts still fails (regression guard)" {
+  resolver_stub '["arch-platform","arch-testing","arch-integration"]'
+  write_quality_gate_report \
+    '' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  # deliberately NO arch verdict files written
+  run_emitter --subcommand run-qg
+  [ "$status" -ne 0 ]
+  [[ "$output" =~ "verdict" ]] || [[ "$output" =~ "deliberation-role-incomplete" ]]
+}
+
+@test "#FP3 BLOCK: DOC declared run-qg with DECLARED_MISSING fails-closed" {
+  resolver_stub "DECLARED_MISSING"
+  write_quality_gate_report
+  run_emitter --subcommand run-qg
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "Required-Architects" ]] || [[ "$output" =~ "declared" ]]
+}

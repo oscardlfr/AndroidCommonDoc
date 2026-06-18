@@ -7,8 +7,8 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "Context window management for TeamCreate teams: rotation with context bundles, archiving, team-lead-as-relay, anti-patterns"
-version: 4
+description: "Context window management for background peer agents: rotation with context bundles, archiving, orchestrator-as-relay, anti-patterns"
+version: 5
 last_updated: "2026-06"
 assumes_read: autonomous-multi-agent-workflow
 token_budget: 1500
@@ -16,19 +16,19 @@ token_budget: 1500
 
 # Context Rotation Guide
 
-How to manage context window growth in TeamCreate teams. Covers signals, rotation strategies, the team-lead-as-relay pattern, and anti-patterns.
+How to manage context window growth in background peer agents. Covers signals, rotation strategies, the orchestrator-as-relay pattern, and anti-patterns. Applies when agents run as background peers with `run_in_background=true`; single-use Agent subagents get fresh context per dispatch and don't need rotation.
 
 ---
 
-## How Context Works in Agent Teams
+## How Context Works in Multi-Agent Dispatch
 
 | Agent type | Context behavior | Freed? |
 |------------|-----------------|--------|
-| **TeamCreate peer** | Accumulates all SendMessages + tool results | Never (until team dissolves) |
-| **Sub-agent (Agent)** | Fresh context (system prompt + task only) | Yes, on completion |
-| **team-lead (session lead)** | Accumulates all team + sub-agent interactions | Never (session lifetime) |
+| **Background peer** (`run_in_background=true`) | Accumulates all SendMessages + tool results | Never (until dismissed or session ends) |
+| **Single-use subagent** (default) | Fresh context (system prompt + task only) | Yes, on completion |
+| **Orchestrator (main agent)** | Accumulates all subagent interactions + disk reads | Never (session lifetime) |
 
-**Key insight**: Peers are expensive (context grows). Sub-agents are cheap (context is temporary). Use sub-agents for workers, peers only for coordinators.
+**Key insight**: Background peers are expensive (context grows). Single-use subagents are cheap (context is temporary). Use single-use subagents for workers; background peers only for long-lived coordinators that need cross-wave context.
 
 > **Context7 queries are stateless**: each `resolve-library-id` / `get-library-docs` call is independent. They do not accumulate context in the context-provider window beyond the response text. Context7 lookups do not contribute to context pressure and do not need to be factored into rotation thresholds.
 
@@ -64,28 +64,26 @@ Wave 3 summary: Fixed 4 encoding issues in data layer (arch-platform).
 Remaining: 1 ESCALATED issue — navigation restructuring needs design decision.
 ```
 
-### 3. Rotate Session Team Peers (kill-then-respawn)
+### 3. Rotate Background Peers (kill-then-respawn)
 
-For long sessions (**5+ waves** with 10 peers, 7+ waves with 5 peers), rotate a peer in four steps:
+For long sessions (**5+ waves** with background peers), rotate a peer in three steps:
 
 0. **Write the bundle BEFORE the kill**: dispatch context-provider `write_bundle(role, plan_id, status_snapshot)` → `.planning/wave-{slug}/context-bundles/{role}.md` ([context-bundle-schema](context-bundle-schema.md)). A dead peer cannot be queried for its state; architect-role bundles carry the verdict state, in-flight findings, and pending dispatches.
-1. **Kill properly**: `SendMessage(to="arch-platform", message={type:"shutdown_request"})` — wait for the peer to approve and terminate.
-2. **Verify removal**: read `~/.claude/teams/session-{project-slug}/config.json` and confirm the member entry is GONE. If it lingers, escalate to the user for manual cleanup — do NOT work around it.
-3. **Re-spawn the CANONICAL name**: `Agent(name="arch-platform", team_name="session-{project-slug}", prompt="...", run_in_background=true)` — the name is collision-free again; the new peer gets a fresh context window with canonical routing and full gate coverage. The respawn prompt MUST open with the bundle-read mandate (schema §Consumer Contract): the fresh peer reads its bundle as the literal first action (the `.planning/` path is CP-gate-exempt, so this works before its gate-ack).
+1. **Kill properly**: `SendMessage(to="arch-platform", message={type:"shutdown_request"})` — wait for the peer to terminate.
+2. **Re-spawn the CANONICAL name**: `Agent(name="arch-platform", subagent_type="arch-platform", run_in_background=true, prompt="...")` — fresh context window with full gate coverage. The respawn prompt MUST open with the bundle-read mandate (schema §Consumer Contract): the fresh peer reads its bundle as the literal first action.
 
-**Anti-pattern — indexed replacement**: spawning `arch-platform-2` as a replacement (or respawning without the kill+verify steps) does NOT rotate the role. Respawn-without-kill SUFFIXES silently; messages addressed to the canonical role name keep routing to the dead inbox (empirically proven twice: feedback_stale_team_suffix_collision + PR #206 saga), and suffixed names evade exact-match gates until identity-tolerant matching ships in PR-0c (matrix E17). Indexed `-2` names are legitimate ONLY as intentional OVERFLOW capacity — a second peer working alongside a LIVE canonical peer, addressed explicitly by its own `-2` name. **Never use free-form names** for agents holding Write/Bash/gh — non-canonical names are invisible to every type-keyed gate (BL-W47 firing matrix §5, incident E18).
+**Anti-pattern — indexed replacement**: spawning `arch-platform-2` as a replacement does NOT rotate the role. Indexed `-2` names are legitimate ONLY as intentional OVERFLOW capacity — a second peer working alongside a LIVE canonical peer, addressed explicitly by its own `-2` name. **Never use free-form names** for agents holding Write/Bash/gh — non-canonical names are invisible to every type-keyed gate (firing matrix §5).
 
-Stopped **subagents** (Agent-tool, no team_name) are different: SendMessage to a stopped subagent auto-resumes it in the background with FULL history (native primitive, matrix E20) — no respawn, no rotation needed.
+**Single-use subagents** need no rotation — they get fresh context per dispatch. If a single-use subagent's result is on disk, simply dispatch another one for the next task.
 
 > Worktree note: stamps (`.androidcommondoc/quality-gate.stamp`, `pre-pr.stamp`) are PER-WORKTREE — a peer working in a linked worktree must run /quality-gate and /pre-pr inside its own worktree or the git pre-push gate blocks its pushes.
 
-### 4. Dissolve and Recreate Team
+### 4. Reset Session (scope change)
 
-If the task changes scope entirely (e.g., from bug fixes to new feature), create a NEW session team:
-1. `SendMessage(to="doc-updater", ...)` — archive current team's findings
-2. Dissolve current team
-3. `TeamCreate(team_name="session-{project-slug}")` — new session team, clean slate
-4. Re-add all 10 session team peers with fresh context (5 at session start, 5 core specialists when Phase 2 resumes)
+If the task changes scope entirely (e.g., from bug fixes to new feature):
+1. Dispatch doc-updater to archive current findings to disk
+2. Gracefully terminate any live background peers (shutdown_request to each)
+3. Start a new dispatch cycle: fresh context-provider consult, fresh subagent dispatch for the new scope
 
 ### 5. Sub-Agent Over Peer When Possible
 
@@ -95,29 +93,29 @@ If an agent only needs to do **one task and return**, use Agent() (fresh context
 // GOOD: researcher does one task, returns, context freed
 Agent(researcher, prompt="Map export patterns in codebase. Context: {context-provider report}")
 
-// BAD: researcher as team peer, accumulates all team messages
-Agent(name="researcher", team_name="session-{project-slug}", prompt="...")
+// BAD: researcher as long-lived background peer when a single task is all that's needed — accumulates all messages
+Agent(name="researcher", run_in_background=true, prompt="...")
 ```
 
 ---
 
-## team-lead-as-Relay Pattern
+## Orchestrator-as-Relay Pattern
 
-team-lead is the only entity that can spawn sub-agents (Agent tool). All other peers must route through team-lead.
+The orchestrator (main agent) is the only entity that can spawn sub-agents (Agent tool). Background peer teammates must route through the orchestrator when they need specialist dispatch.
 
 ```
-Architect detects issue
+Background peer architect detects issue
   → SendMessage(to="team-lead", summary="need test-specialist", message="{structured request}")
-team-lead receives
-  → Agent(test-specialist, prompt="{architect's request + context}")
-Dev returns to team-lead
-  → SendMessage(to="architect", summary="dev result", message="{structured result}")
-Architect verifies
+Orchestrator receives
+  → Agent(subagent_type="test-specialist", prompt="{architect's request + context}")
+Specialist returns to orchestrator
+  → orchestrator relays result to architect via SendMessage
+Architect verifies + writes verdict to disk
 ```
 
-**Why**: In-process teammates don't have the Agent tool. Only the session lead (team-lead) can spawn sub-agents.
+**Why**: In-process background peers don't have the Agent tool. Only the main conversation (orchestrator) can spawn Agent subagents.
 
-**Context benefit**: Dev gets fresh context (only the specific task). Architect doesn't accumulate dev's working context (only the summary).
+**Context benefit**: Specialist gets fresh context (only the specific task). Architect background peer doesn't accumulate specialist's working context (only the summary).
 
 ---
 
@@ -153,15 +151,14 @@ When relaying findings between agents (architect → team-lead → architect), u
 
 ---
 
-## Conditional Team Composition
+## Conditional Dispatch Composition
 
-Default session team (10 peers in `session-{project-slug}`: 5 at session start + 5 core specialists at Phase 2):
+Default dispatch (6 core roles at session start, 5 core specialists at Phase 2):
 ```
-Session start:
-  TeamCreate("session-{project-slug}")
-  + context-provider + doc-updater + arch-testing + arch-platform + arch-integration
-Phase 2 start:
-  + test-specialist + ui-specialist + domain-model-specialist + data-layer-specialist + toolkit-specialist
+Session start dispatch:
+  context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
+Phase 2 dispatch:
+  test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist
 ```
 
 Add ONLY when in scope:
@@ -170,7 +167,7 @@ Add ONLY when in scope:
 + product-lead → pricing decisions, spec changes, roadmap
 ```
 
-**Why**: Official guidance recommends 3-5 teammates. Each peer adds context overhead.
+**Why**: Each background peer adds context overhead. Prefer single-use subagents for work that doesn't need cross-wave context accumulation.
 
 ---
 
@@ -178,12 +175,12 @@ Add ONLY when in scope:
 
 | Anti-pattern | Why it's bad | Fix |
 |-------------|-------------|-----|
-| 5+ waves (10-peer) / 7+ waves (5-peer) without rotation | Context grows to 60K+ tokens | Rotate kill-then-respawn (shutdown_request → verify removal → respawn canonical name), or dissolve/recreate |
-| Extra specialists as team peers | Extras accumulate context they don't need | Core specialists are peers; extras are sub-agents via team-lead (no team_name) |
-| team-lead reading full verdicts | Verdict prose bloats team-lead context | Architects: 3-line summary first, details on request |
-| Not calling doc-updater between waves | Findings lost if session crashes | Archive to disk every 3-5 waves |
-| All dept leads in every team | 8 peers = excessive overhead | Conditional: only when their domain is in scope |
-| Architects calling Agent() | Fails silently in in-process mode | SendMessage to team-lead for dev dispatch |
+| 5+ waves without rotating a context-bloated background peer | Context grows to 60K+ tokens | Rotate kill-then-respawn (bundle → shutdown_request → respawn canonical name) |
+| Extra specialists as background peers | Extras accumulate context they don't need | Use single-use Agent subagents for overflow work |
+| Orchestrator reading full verdict prose | Verdict prose bloats orchestrator context | Read only the verdict file's summary section; get details on demand |
+| Not dispatching doc-updater between waves | Findings lost if session crashes | Archive to disk every 3-5 waves |
+| All dept leads as background peers in every session | Excessive context overhead | Conditional: only when their domain is in scope |
+| Background peer architects calling Agent() | Fails silently in in-process mode | SendMessage to orchestrator for specialist dispatch |
 
 ---
 

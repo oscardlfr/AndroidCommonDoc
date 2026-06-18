@@ -112,22 +112,20 @@ Orchestrator
 
 **When to use**: Complex workflows where later waves depend on earlier results, or where cheap checks should gate expensive ones.
 
-### Hybrid TeamCreate (Peer Network + Sub-agents On Demand)
+### Orchestrator + Single-Use Subagents (Default)
 
-Orchestrators and architects as peers. Workers spawned on demand as sub-agents.
+The orchestrator fans out to concurrent `Agent` subagents. Each subagent receives its task, executes, and lands its result as a disk artifact. The orchestrator reads those artifacts — never dependent on message delivery for correctness.
 
 | Agent type | Communication | When created |
 |------------|---------------|--------------|
-| Team peer (lead, architect, shared service) | SendMessage | At team creation |
-| Sub-agent (dev, guardian, specialist) | Agent() return | On demand by peers |
+| Background peer (optional accelerator) | SendMessage (live) | On demand, when runtime supports them |
+| Single-use subagent (default) | Agent() return + disk artifact | Dispatched per task, dismissed on completion |
 
-**Key**: Peers need ongoing coordination (cross-verify, cross-dept requests). Sub-agents are workers — they receive task, execute, return.
+**Key**: Background peers enable live cross-verify and cross-dept coordination; single-use subagents get fresh context per task. Both patterns are valid — the load-bearing contract is always disk artifacts.
 
-**Session team peers**: `context-provider`, `doc-updater`, and all 3 architects are added at session start; 5 core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist) join at Phase 2 start. All 10 stay alive across phases. See [Team Topology](team-topology.md).
+**3-Phase Model**: The default topology uses 3 sequential phases (Planning → Execution → Quality Gate). The orchestrator fans out subagents for each phase; results accumulate on disk. Background peers are a supported optional accelerator. See [Team Topology](team-topology.md) for the full model.
 
-**3-Phase Model**: The default topology uses 3 sequential phases (Planning → Execution → Quality Gate) with 10 persistent session team peers (5 at session start + 5 core specialists at Phase 2). Planner is temporary. See [Team Topology](team-topology.md) for the full model.
-
-**Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies and team-lead-as-relay pattern.
+**Context management**: See [Context Rotation Guide](context-rotation-guide.md) for rotation strategies and orchestrator-as-relay pattern.
 
 ### Architect Gate Pattern
 
@@ -139,7 +137,7 @@ Between waves, architect peers cross-verify via `SendMessage`. Core devs are per
 
 **Pattern validation chain**: devs ask their architect for patterns; architects query context-provider. Devs NEVER contact context-provider directly.
 
-**Dynamic scaling**: when a core specialist is busy, architects request extra specialists from team-lead. Extras are named but have no team_name -- they die after architect verification.
+**Dynamic scaling**: when a core specialist is busy, architects request extra specialists from the orchestrator. Extras are named subagents (`{specialist}-2`) — they are dismissed after architect verification.
 
 Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the team-lead re-plans (never codes the fix itself).
 
@@ -273,5 +271,5 @@ Aggregation
 - [Agent Consumption Guide](agent-consumption-guide.md) — how agents load and use documentation
 - [Script vs Agent Decision](script-vs-agent-decision.md) — when to use a script instead of an agent
 - [Capability Detection](capability-detection.md) — graceful degradation for optional tools
-- [Context Rotation Guide](context-rotation-guide.md) — context window management for TeamCreate teams
+- [Context Rotation Guide](context-rotation-guide.md) — context window management for background peer agents
 - [Quality Gate Protocol](quality-gate-protocol.md) — sequential verification before commit

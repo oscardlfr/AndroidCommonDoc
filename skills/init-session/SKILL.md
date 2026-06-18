@@ -1,6 +1,6 @@
 ---
 name: init-session
-description: "Show project context dashboard. Optionally orchestrates session-team setup with --orchestrate <slug> flag (BL-W32-07)."
+description: "Show project context dashboard. Optionally kicks off core subagent dispatch with --orchestrate <slug> flag."
 intent: [session, init, context, agents, skills, modules]
 copilot: false
 ---
@@ -13,34 +13,29 @@ Show project context — available agents, skills, modules, and business docs.
 
 ```
 /init-session                              # dashboard-only (read-only, default)
-/init-session --orchestrate <slug>         # orchestrate session-{slug} team setup, then dashboard
+/init-session --orchestrate <slug>         # dispatch core subagents, then dashboard
 ```
 
 The `<slug>` is required when `--orchestrate` is passed. Example: `/init-session --orchestrate bl-w32-07`.
 
-## Step 0 — Session Orchestration (when --orchestrate <slug> is passed)
+## Step 0 — Core Subagent Dispatch (when --orchestrate <slug> is passed)
 
 Skip this step if `--orchestrate` flag is absent. Default behavior is read-only dashboard.
 
 When `--orchestrate <slug>` is passed:
 
 1. Validate slug is present: if `--orchestrate` is passed without a slug, emit error: "Usage: /init-session --orchestrate <slug>" and exit.
-2. Check idempotency: if `~/.claude/teams/session-<slug>/config.json` exists:
-   - Read the config
-   - If all 6 core peers (context-provider, doc-updater, arch-platform, arch-testing, arch-integration, quality-gater) are listed as alive → skip orchestration, proceed to Step 1 (dashboard render)
-   - Else → continue with orchestration
-3. `TeamCreate("session-<slug>")` — creates the session team
-4. Spawn 6 core peers as Agent peer-spawns:
-   - `Agent(subagent_type="context-provider", team_name="session-<slug>", name="context-provider")`
-   - `Agent(subagent_type="doc-updater", team_name="session-<slug>", name="doc-updater")`
-   - `Agent(subagent_type="arch-platform", team_name="session-<slug>", name="arch-platform")`
-   - `Agent(subagent_type="arch-testing", team_name="session-<slug>", name="arch-testing")`
-   - `Agent(subagent_type="arch-integration", team_name="session-<slug>", name="arch-integration")`
-   - `Agent(subagent_type="quality-gater", team_name="session-<slug>", name="quality-gater")`
-5. Verify each peer responds (idle notification or ack message) — proceed when all 6 alive
-6. Continue to Step 1 (dashboard render)
+2. Dispatch 6 core roles as concurrent `Agent` subagents. These may run as background peers (when the runtime supports `run_in_background=true`) or as single-use subagents — both are valid. No `team_name` or `TeamCreate` required:
+   - `Agent(subagent_type="context-provider", name="context-provider", run_in_background=true, prompt="...")`
+   - `Agent(subagent_type="doc-updater", name="doc-updater", run_in_background=true, prompt="...")`
+   - `Agent(subagent_type="arch-platform", name="arch-platform", run_in_background=true, prompt="...")`
+   - `Agent(subagent_type="arch-testing", name="arch-testing", run_in_background=true, prompt="...")`
+   - `Agent(subagent_type="arch-integration", name="arch-integration", run_in_background=true, prompt="...")`
+   - `Agent(subagent_type="quality-gater", name="quality-gater", run_in_background=true, prompt="...")`
+3. Consult context-provider: dispatch a context-provider query to get current project state (MEMORY.md, open items). Wait for response.
+4. Continue to Step 1 (dashboard render)
 
-> **Note**: The `session-<slug>` convention is shared with `/work` peer-detection logic (BL-W32-07). If you run `/work` after `/init-session --orchestrate <slug>`, /work will detect the team via mtime-based slug detection.
+> **Note**: The `<slug>` wave slug determines the wave artifact directory (`.planning/wave-<slug>/`). The load-bearing contract is disk artifacts — verdicts, stamps, and the QG report — not named-team membership.
 
 ## Steps
 
@@ -84,4 +79,4 @@ When `--orchestrate <slug>` is passed:
 - If `MODULE_MAP.md` is missing, suggest running `/map-codebase` to generate it
 - Agent grouping uses the `domain:` frontmatter field; agents without it go under "Ungrouped"
 - Run this at the start of a new session to orient yourself
-- Session naming: `session-<slug>` is the canonical convention used by `/work` peer-detection (BL-W32-07). Pick descriptive slugs (e.g., `bl-w32-07`, `feature-auth`) — they serve as wave identifiers.
+- Session naming: the wave slug names the wave artifact directory (`.planning/wave-<slug>/`). Pick descriptive slugs (e.g., `feature-auth`) — they serve as wave identifiers. The load-bearing contract is the disk artifacts in that directory, not named-team membership.
