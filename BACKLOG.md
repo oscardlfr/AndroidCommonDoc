@@ -6,6 +6,17 @@
 
 ## Active (proposed wave order)
 
+### runtime-adapter-capability-matrix (HIGH — harness portability, follow-up to bl-w48) — 2026-06-18
+
+**Goal**: portable harness contract + per-engine adapters + a capability matrix (Claude / Codex / Copilot / Future × spawn / send / status / result / stop / artifact) + operator-visibility parity. bl-w48 decoupled the load-bearing contract from the `TeamCreate`/named-team runtime (disk-artifact floor + CLASS-aware `required_roles` incl. `FAST-PATH == []`); this wave abstracts execution behind per-engine adapters with graceful degradation. **PRESERVE** the useful concepts (persistent peers, roster/visibility, reuse/respawn/routing, operator control, `SendMessage`/background) — do NOT regress to a least-common-denominator harness.
+
+**Carried residuals — NOT fully decoupled by bl-w48 (explicit; the PR is honest about partial decouple, not sold as done)**:
+- `setup/agent-templates/context-provider.md` still routes `SendMessage(to=team-lead)` in its **ingestion-approval**, **freshness-citation**, **bundle-rotation** (`write_bundle`), and **post-compaction** protocols. Identity was reframed (BL-W48 "On First Contact" + adapter model) but these protocol refs remain team-lead-centric.
+- The 5 core dev specialists retain deeper `team-lead` refs (Receiving-work, Post-Compaction Re-Sync); the regression guard does not flag them; non-breaking.
+- Peer control-plane findings (resume-vs-fresh-spawn deadlock, name-routing unreliability, bats delta-inference limits): memory `project_peer_control_plane_findings.md`.
+
+**Disposition**: own wave; do NOT mix into a closeout.
+
 ### Agent-teams completion-message delivery unreliable (HIGH — harness reliability) — user-flagged 2026-06-16
 
 **Symptom**: peers (esp. **quality-gater**) finish their work but the completion message (QG-PASS, READY-FOR-REVIEW, EXECUTE-COMPLETE) does NOT reach the orchestrator → it hangs waiting indefinitely. Recurring across sessions (user: "2 días que el quality gate no responde cuando termina, no podemos seguir así"). Same delivery class seen mid-session bl-w47-expr4: a dispatch "never reached toolkit-specialist's inbox" (routing gap); planner idle-loops; quality-gater re-QG ran 25+ min with no notification while the `quality-gate.stamp` stayed at the prior HEAD.

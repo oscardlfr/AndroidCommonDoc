@@ -279,27 +279,30 @@ def eval_predicate(predicate):
     else:
         die(f"unknown predicate '{predicate}'")
 
-# ── Deliberation evidence ─────────────────────────────────────────────────────
-delib = report.get('deliberation') or {}
-if not delib:
-    die("deliberation-evidence-absent: 'deliberation' block missing from report")
-consulted = delib.get('architects_consulted') or []
-if not consulted:
-    die("deliberation-evidence-absent: deliberation.architects_consulted is empty")
-if not delib.get('incorporated_at'):
-    die("deliberation-evidence-absent: deliberation.incorporated_at is absent")
-
-# ── Required-role enforcement (P1) ───────────────────────────────────────────
-# Verify architects_consulted ⊇ required_roles. BL-W48: CLASS-aware required_roles
-# (resolver, exported by bash as ACDOC_REQUIRED_ROLES) overrides the manifest's
-# static value when present; the manifest value is the fallback (identical for HARNESS).
+# ── Required-role resolution (P1: CLASS-aware, resolved BEFORE deliberation) ───
+# BL-W48: CLASS-aware required_roles (resolver, exported by bash as ACDOC_REQUIRED_ROLES)
+# overrides the manifest's static value when present; the manifest value is the fallback
+# (identical for HARNESS). FAST-PATH resolves to [] (class_artifacts architects: []) ->
+# architect deliberation + verdicts are NOT required for it.
 arb_step = next((s for s in manifest.get('required_steps', []) if s['id'] == 'architect-deliberation'), None)
 _rr = os.environ.get('ACDOC_REQUIRED_ROLES', '')
 required_roles = json.loads(_rr) if _rr else (arb_step.get('required_roles', []) if arb_step else [])
-consulted_set  = set(consulted)
-for role in required_roles:
-    if role not in consulted_set:
-        die(f"deliberation-role-incomplete: required role '{role}' absent from report.deliberation.architects_consulted {sorted(consulted_set)}")
+
+# ── Deliberation evidence (required ONLY when the CLASS requires architects) ───
+# FAST-PATH (required_roles == []) carries no architect deliberation; skip the floor.
+delib = report.get('deliberation') or {}
+if required_roles:
+    if not delib:
+        die("deliberation-evidence-absent: 'deliberation' block missing from report")
+    consulted = delib.get('architects_consulted') or []
+    if not consulted:
+        die("deliberation-evidence-absent: deliberation.architects_consulted is empty")
+    if not delib.get('incorporated_at'):
+        die("deliberation-evidence-absent: deliberation.incorporated_at is absent")
+    consulted_set = set(consulted)
+    for role in required_roles:
+        if role not in consulted_set:
+            die(f"deliberation-role-incomplete: required role '{role}' absent from report.deliberation.architects_consulted {sorted(consulted_set)}")
 
 # ── Pre-PR coverage ───────────────────────────────────────────────────────────
 if not report.get('pre_pr_coverage'):
@@ -318,8 +321,12 @@ steps = {s['step']: s for s in (report.get('steps') or []) if 'step' in s}
 
 # ── Required steps coverage ───────────────────────────────────────────────────
 # Required steps must be ran=true AND result=PASS. SKIP / not-ran / absent all fail.
+# P1: 'architect-deliberation' is required ONLY when the CLASS requires architects
+# (required_roles non-empty); FAST-PATH (architects: []) does not require it.
 for rs in manifest.get('required_steps', []):
     sid = rs['id']
+    if sid == 'architect-deliberation' and not required_roles:
+        continue
     if sid not in steps:
         die(f"step-coverage-gap: required step '{sid}' absent from report steps[]")
     entry = steps[sid]
@@ -379,41 +386,42 @@ def die(code, msg):
     print(f"[emit-push-proof] ERROR: {msg}", file=sys.stderr)
     sys.exit(code)
 
+# ── CLASS-aware required_roles (P1: resolved FIRST; FAST-PATH == [] skips the floor) ──
+manifest = json.load(open(os.path.join(repo_root, 'quality-gate-manifest.json'), encoding='utf-8'))
+arb_step = next((s for s in manifest.get('required_steps', []) if s['id'] == 'architect-deliberation'), None)
+_rr = os.environ.get('ACDOC_REQUIRED_ROLES', '')
+required_roles = json.loads(_rr) if _rr else (arb_step.get('required_roles', []) if arb_step else [])
+
 wave_dir = os.path.join(repo_root, '.planning', f'wave-{wave_slug}')
-if not os.path.isdir(wave_dir):
-    die(2, f"verdict-head-binding: wave dir not found: {wave_dir}")
-
-verdict_files = [f for f in os.listdir(wave_dir) if re.match(r'arch-.*-verdict\.md$', f)]
-if not verdict_files:
-    die(2, f"verdict-head-binding: no arch-*-verdict.md files found in {wave_dir}")
-
 digests = {}
-for fname in verdict_files:
-    fpath = os.path.join(wave_dir, fname)
-    with open(fpath, 'r', encoding='utf-8') as f:
-        content = f.read()
-    # Must contain APPROVED-VERIFY-FINAL
-    if 'APPROVED-VERIFY-FINAL' not in content:
-        die(2, f"verdict-head-binding: {fname} does not contain APPROVED-VERIFY-FINAL — re-run VERIFY-FINAL at final HEAD")
-    # Must contain **HEAD**: <sha> matching final HEAD
-    m = re.search(r'^\*\*HEAD\*\*:\s*([0-9a-f]{40})', content, re.MULTILINE)
-    if not m:
-        die(2, f"verdict-head-binding: {fname} missing **HEAD**: field — re-run write-verdict.sh --phase verify-final at final HEAD")
-    verdict_head = m.group(1)
-    if verdict_head != final_head:
-        die(2, f"verdict-head-binding: {fname} HEAD ({verdict_head}) != final HEAD ({final_head}) — stale verdict, re-run VERIFY-FINAL")
-    # Digest the file (CRLF->LF)
-    raw = open(fpath, 'rb').read().replace(b'\r\n', b'\n')
-    digests[fname] = hashlib.sha256(raw).hexdigest()
+if required_roles:
+    # The CLASS requires architects: wave dir + VERIFY-FINAL + HEAD-bound verdicts must exist.
+    if not os.path.isdir(wave_dir):
+        die(2, f"verdict-head-binding: wave dir not found: {wave_dir}")
+    verdict_files = [f for f in os.listdir(wave_dir) if re.match(r'arch-.*-verdict\.md$', f)]
+    if not verdict_files:
+        die(2, f"verdict-head-binding: no arch-*-verdict.md files found in {wave_dir}")
+    for fname in verdict_files:
+        fpath = os.path.join(wave_dir, fname)
+        with open(fpath, 'r', encoding='utf-8') as f:
+            content = f.read()
+        # Must contain APPROVED-VERIFY-FINAL
+        if 'APPROVED-VERIFY-FINAL' not in content:
+            die(2, f"verdict-head-binding: {fname} does not contain APPROVED-VERIFY-FINAL — re-run VERIFY-FINAL at final HEAD")
+        # Must contain **HEAD**: <sha> matching final HEAD
+        m = re.search(r'^\*\*HEAD\*\*:\s*([0-9a-f]{40})', content, re.MULTILINE)
+        if not m:
+            die(2, f"verdict-head-binding: {fname} missing **HEAD**: field — re-run write-verdict.sh --phase verify-final at final HEAD")
+        verdict_head = m.group(1)
+        if verdict_head != final_head:
+            die(2, f"verdict-head-binding: {fname} HEAD ({verdict_head}) != final HEAD ({final_head}) — stale verdict, re-run VERIFY-FINAL")
+        # Digest the file (CRLF->LF)
+        raw = open(fpath, 'rb').read().replace(b'\r\n', b'\n')
+        digests[fname] = hashlib.sha256(raw).hexdigest()
 
 # ── Per-role verdict-file check (P1) ─────────────────────────────────────────
 # For each required_role, a VERIFY-FINAL + HEAD-bound arch-<role>-verdict.md must exist.
-manifest = json.load(open(os.path.join(repo_root, 'quality-gate-manifest.json'), encoding='utf-8'))
-arb_step = next((s for s in manifest.get('required_steps', []) if s['id'] == 'architect-deliberation'), None)
-# BL-W48: CLASS-aware required_roles (resolver, exported by bash as ACDOC_REQUIRED_ROLES)
-# overrides the manifest's static value when present; manifest is the fallback (HARNESS identical).
-_rr = os.environ.get('ACDOC_REQUIRED_ROLES', '')
-required_roles = json.loads(_rr) if _rr else (arb_step.get('required_roles', []) if arb_step else [])
+# required_roles was resolved at the top of this block (empty for FAST-PATH -> no-op loop).
 verdict_basenames = set(digests.keys())  # already verified VERIFY-FINAL + HEAD-bound
 for role in required_roles:
     # required_roles values carry the 'arch-' prefix (e.g. "arch-platform").
