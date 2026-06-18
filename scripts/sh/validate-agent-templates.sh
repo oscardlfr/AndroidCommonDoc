@@ -239,7 +239,9 @@ if should_run "role-keywords"; then
                 check_keywords "$f" "TeamCreate" "SendMessage" "FORBIDDEN" "ALLOWED" "IMMEDIATELY"
                 ;;
             planner)
-                check_keywords "$f" "SendMessage" "Execution Plan" "Planning Team"
+                # BL-W48: 'Planning Team' retired with the named-team model. The planner
+                # is a single-use subagent; its load-bearing identity is the PLAN.md it writes.
+                check_keywords "$f" "SendMessage" "Execution Plan" "PLAN.md"
                 ;;
             quality-gater)
                 check_keywords "$f" "SendMessage" "PASS" "FAIL" "Step 0" "Step 1" "Step 2" "Compose UI Tests"
