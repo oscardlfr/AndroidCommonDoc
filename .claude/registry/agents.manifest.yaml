@@ -573,8 +573,8 @@ agents:
   context-provider:
     canonical_name: context-provider
     subagent_type: context-provider
-    template_version: "3.5.0"
-    template_frontmatter_sha256: e6b394be90d0e5cafea027d738bd1c33e24cf379c6285ef3a9a15955ee47deec
+    template_version: "3.6.0"
+    template_frontmatter_sha256: 4a431bfc703803e74c9a71cdfd90fc721460542d799bf12c9e8db6b74e4071d6
     category: context
     lifecycle: persistent
     description: "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only."
@@ -632,8 +632,8 @@ agents:
   doc-updater:
     canonical_name: doc-updater
     subagent_type: doc-updater
-    template_version: "2.10.0"
-    template_frontmatter_sha256: adb5889367a79b9c427cd54732944c74c2a220d1c6f46824a11ced25de2dd010
+    template_version: "2.11.0"
+    template_frontmatter_sha256: 1e6c3858fba39a82c5acc7e6ff2a73680d797fbd673e12632bfa98f4331bcfb1
     category: doc-owner
     lifecycle: persistent
     description: "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure)."
@@ -906,11 +906,11 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.16.0"
-    template_frontmatter_sha256: 80815a4b5dae463cc5d41c1529627c1f67429005670f9e95a5564a1c7519e1e6
+    template_version: "2.17.0"
+    template_frontmatter_sha256: bfe05e6f8db1986eccb725c2f4cf1357ba0b98337dcb408e6a57429d99c34e63
     category: orchestrator
     lifecycle: ephemeral
-    description: "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL."
+    description: "QG owner (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL."
     domain: quality
     intent: [gate, verify, pre-pr, coverage, detekt]
     runtime:
@@ -972,8 +972,8 @@ agents:
   marketing-lead:
     canonical_name: marketing-lead
     subagent_type: marketing-lead
-    template_version: "1.1.0"
-    template_frontmatter_sha256: cbe4a2591e7f4345209bddd4491fc2805ffc52bedd8e75dfaccae7c6a10717a4
+    template_version: "1.2.0"
+    template_frontmatter_sha256: c10cd6273708ab6f48dba6e3f7605797032bc265513745e90b4e5ba5c93e1d86
     category: lead
     lifecycle: persistent
     description: "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists."
@@ -1033,8 +1033,8 @@ agents:
   product-lead:
     canonical_name: product-lead
     subagent_type: product-lead
-    template_version: "1.1.1"
-    template_frontmatter_sha256: 5f919d2cc1a774be283f30d6c430c3189f06459b26566cd4af71754b4c33a21f
+    template_version: "1.2.0"
+    template_frontmatter_sha256: 25013c73262f7acdcfc15e9db309bf837c2c78251d8c61ffd9d4644ac6c71fd6
     category: lead
     lifecycle: persistent
     description: "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code."

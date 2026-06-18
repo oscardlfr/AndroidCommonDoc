@@ -221,6 +221,12 @@
       }
     },
     "quality-gater": {
+      "2.17.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (point-4 strict): reframe identity + description off named-team (session team peer / session-{slug}) to the orchestrator + adapter-capability model — background-peer optional & SendMessage-reachable when supported, else single-use + disk. QG owner role + ownership (runs after architects APPROVE, before commit) preserved.",
+        "migration_hint": "Guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-29",
         "breaking": false,
@@ -779,6 +785,12 @@
       }
     },
     "context-provider": {
+      "3.6.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (point-4 strict): reframe identity off named-team (session team peer / team_name / team-lead adds you) to the orchestrator + adapter-capability model — background-peer optional & SendMessage-reachable when the runtime supports it, else single-use + disk artifacts. Oracle/cache role + ownership preserved. Plan-path freshness ref -> .planning/wave-<slug>/PLAN.md.",
+        "migration_hint": "Guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -846,6 +858,12 @@
       }
     },
     "doc-updater": {
+      "2.11.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (point-4 strict): reframe identity off named-team (session team peer / team_name / team-lead adds you) to the orchestrator + adapter-capability model — background-peer optional & SendMessage-reachable when supported, else single-use + disk. Docs/ingestion owner role + ownership preserved.",
+        "migration_hint": "Guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -929,6 +947,12 @@
       }
     },
     "marketing-lead": {
+      "1.2.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (point-4 strict): reframe identity off the dead-tool claim (You are a TeamCreate peer) to the orchestrator + adapter-capability model — background-peer optional & SendMessage-reachable when supported, else single-use + disk. Marketing-lead role preserved; TeamCreate kept in tools as an optional engine capability (not deleted).",
+        "migration_hint": "Guidance reframe; spawn interface + tool grants unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -941,6 +965,12 @@
       }
     },
     "product-lead": {
+      "1.2.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (point-4 strict): reframe identity off the dead-tool claim (You are a TeamCreate peer) to the orchestrator + adapter-capability model — background-peer optional & SendMessage-reachable when supported, else single-use + disk. Product-lead role preserved; TeamCreate kept in tools as an optional engine capability (not deleted).",
+        "migration_hint": "Guidance reframe; spawn interface + tool grants unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,

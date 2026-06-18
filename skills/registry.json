@@ -2094,7 +2094,7 @@
       "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f0f539f9dbc6fb3f6e237529a7f90cff846a22b3a59b02cc86c25499f9773bf0",
+      "hash": "sha256:7988b96d6dd083214fadb801027ceccfd839ab50391f924490e3184c180375f1",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -2109,7 +2109,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "3.5.0"
+        "template_version": "3.6.0"
       }
     },
     {
@@ -2298,7 +2298,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:78bd15a6c4cb41112ccb95887abb07b4d62112c44325c03c2baf2bc6c6a4a606",
+      "hash": "sha256:90de7ecb3378f382492165b6b24c8ce7a0ec371d32cb46baa7dddfd6c3279b69",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2314,7 +2314,7 @@
           "ingest"
         ],
         "token_budget": 2000,
-        "template_version": "2.10.0",
+        "template_version": "2.11.0",
         "skills": [
           "audit-docs",
           "readme-audit",
@@ -2476,7 +2476,7 @@
       "description": "Marketing orchestrator. Plans campaigns, assigns to content-creator and landing-page-strategist. NEVER writes content — delegates to specialists.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:88c32747a2e853c0871353a0ba28f7ae775fc87c36b06b25d1ef56032237c960",
+      "hash": "sha256:9845ef8f42c665d97a3e7348242c492191a725b5644f97565f2fb7c0989c2c4f",
       "dependencies": [],
       "frontmatter": {
         "name": "marketing-lead",
@@ -2491,7 +2491,7 @@
           "launch"
         ],
         "token_budget": 5000,
-        "template_version": "1.1.0"
+        "template_version": "1.2.0"
       }
     },
     {
@@ -2616,7 +2616,7 @@
       "description": "Product orchestrator. Manages specs, pricing, roadmap, prioritization. Delegates analysis to product-strategist. NEVER writes code.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a7c7891e484188259dbd9d834ae82f0493145d0d01a159c075ac0854bf08bb1c",
+      "hash": "sha256:1bcbf383d4dc458bdb9bc720677150d9520328978c00bb54c56a088a8135a84f",
       "dependencies": [],
       "frontmatter": {
         "name": "product-lead",
@@ -2632,7 +2632,7 @@
           "prioritize"
         ],
         "token_budget": 5000,
-        "template_version": "1.1.1"
+        "template_version": "1.2.0"
       }
     },
     {
@@ -2692,14 +2692,14 @@
       "name": "quality-gater",
       "type": "agent",
       "path": ".claude/agents/quality-gater.md",
-      "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
+      "description": "QG owner (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:528097b916076cc2dac8b792a698b5d5c527aa74ef7830f6ec0e57c30e68e2fe",
+      "hash": "sha256:59a44bc09c259b6ee1a10920462ad40162173dd9b003a72a68aff24b63ea2ec8",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
-        "description": "Session team peer (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
+        "description": "QG owner (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
         "tools": "Read, Grep, Glob, Bash, SendMessage, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__validate-doc-update, mcp__androidcommondoc__tool-use-analytics",
         "model": "sonnet",
         "domain": "quality",
@@ -2711,7 +2711,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.16.0"
+        "template_version": "2.17.0"
       }
     },
     {
