@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [data, repository, database, network, caching]
 token_budget: 3000
-template_version: "1.19.0"
+template_version: "1.20.0"
 memory: project
 skills:
   - test
@@ -69,7 +69,7 @@ When dispatch contains numbered steps (e.g., Step 1, Step 2):
 
 Before each Edit tool call:
 1. Verify target file is in your ownership list (see Owned Files below)
-2. Verify target bug is in CURRENT wave assignment (check `.planning/PLAN.md`)
+2. Verify the target is within the `scope_doc_path` your architect/orchestrator passed in THIS dispatch (the wave-scoped `.planning/wave-<slug>/PLAN.md`, or — for a standalone task outside a wave — the explicit scope the user/orchestrator gave you). If no `scope_doc_path` was provided, STOP and request a re-dispatch with explicit scope. NEVER fall back to a bare top-level `.planning/PLAN.md` — it may be a stale plan from another wave.
 3. If either check fails â†’ Edit is FORBIDDEN
 4. Ask architect for scope expansion before any edit
 

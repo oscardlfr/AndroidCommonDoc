@@ -11,6 +11,10 @@
 #     `optional_capabilities:`, NEVER the active `tools:` grant.
 #   - stale "session team peer/member" identity framing in active templates
 #     (the adapter model says "background peer / single-use subagent + disk artifact").
+#   - a specialist Scope Validation Gate using a bare top-level `.planning/PLAN.md` as a
+#     POSITIVE scope source (BL-W48 Codex P1) — the wave contract is `scope_doc_path`
+#     (`.planning/wave-<slug>/PLAN.md`); a bare `.planning/PLAN.md` may be a stale plan.
+#     A NEGATED warning ("never fall back to `.planning/PLAN.md`") is allowed.
 #
 # Active paths scanned:
 #   - .claude/hooks/   (hook JavaScript)
@@ -395,4 +399,55 @@ EOF
   run bash -c "grep -qiE 'session team (peer|member)|Session Team Peer' '$file' && echo CAUGHT || echo ALLOWED"
   [ "$status" -eq 0 ]
   [[ "$output" == "ALLOWED" ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BL-W48 Codex P1 (Pattern 5): specialist Scope Validation Gate must NOT use a bare
+#   top-level `.planning/PLAN.md` as a positive scope source. The wave contract is
+#   `scope_doc_path` (`.planning/wave-<slug>/PLAN.md`); a bare `.planning/PLAN.md` may be
+#   a stale plan from another wave and can authorize off-scope edits. A NEGATED warning
+#   ("never fall back to `.planning/PLAN.md`") is the CORRECT guidance and is allowed.
+#   Detection: a line matching `.planning/PLAN.md` that does NOT contain "never".
+# ─────────────────────────────────────────────────────────────────────────────
+
+make_dirty_scopegate_fixture() {
+  local file="${BATS_TEST_TMPDIR}/dirty-scopegate-$$.md"
+  cat > "$file" <<'EOF'
+## Scope Validation Gate (HARD STOP)
+1. Verify target file is in your ownership list
+2. Verify target bug is in CURRENT wave assignment (check `.planning/PLAN.md`)
+EOF
+  echo "$file"
+}
+
+make_clean_scopegate_fixture() {
+  local file="${BATS_TEST_TMPDIR}/clean-scopegate-$$.md"
+  cat > "$file" <<'EOF'
+## Scope Validation Gate (HARD STOP)
+2. Verify the target is within the `scope_doc_path` from THIS dispatch
+   (`.planning/wave-<slug>/PLAN.md`). NEVER fall back to a bare `.planning/PLAN.md`.
+EOF
+  echo "$file"
+}
+
+@test "PLANT-10 CATCH: scope gate using positive 'check .planning/PLAN.md' → detected" {
+  local f; f="$(make_dirty_scopegate_fixture)"
+  run bash -c "grep -nE '\.planning/PLAN\.md' '$f' | grep -viE 'never' | grep -q . && echo FOUND || echo CLEAN"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"FOUND"* ]]
+}
+
+@test "PLANT-11 ALLOW: negated 'never fall back to .planning/PLAN.md' warning → not flagged" {
+  local f; f="$(make_clean_scopegate_fixture)"
+  run bash -c "grep -nE '\.planning/PLAN\.md' '$f' | grep -viE 'never' | grep -q . && echo FOUND || echo CLEAN"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "CLEAN" ]]
+}
+
+@test "GUARD-PASS: no active template uses a bare top-level .planning/PLAN.md as a positive scope source" {
+  # Only NEGATED warnings ("never fall back to .planning/PLAN.md") are allowed. The wave-scoped
+  # contract is scope_doc_path (.planning/wave-<slug>/PLAN.md, which does NOT match this pattern).
+  local hits
+  hits=$(grep -rnE --include='*.md' '\.planning/PLAN\.md' "$PROJECT_ROOT/setup/agent-templates/" "$PROJECT_ROOT/.claude/agents/" 2>/dev/null | grep -viE 'never' || true)
+  [ -z "$hits" ]
 }

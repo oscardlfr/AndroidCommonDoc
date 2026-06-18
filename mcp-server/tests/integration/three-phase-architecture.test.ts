@@ -842,8 +842,8 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
     expect(cpContent).toMatch(/find-pattern/);
   });
 
-  it('has template version 3.6.0', () => {
-    expect(cpContent).toContain('template_version: "3.6.0"'); // bumped 3.5.0 → 3.6.0 (BL-W48 point-4 adapter-capability reframe)
+  it('has template version 3.7.0', () => {
+    expect(cpContent).toContain('template_version: "3.7.0"'); // bumped 3.6.0 → 3.7.0 (BL-W48 Codex P2 On-First-Contact reframe)
   });
 
   it('has External Context section with Context7 call sequence', () => {

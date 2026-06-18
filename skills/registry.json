@@ -2094,7 +2094,7 @@
       "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7988b96d6dd083214fadb801027ceccfd839ab50391f924490e3184c180375f1",
+      "hash": "sha256:bf3d285bdb66f4bd4853debfe4f6831b788edf77699fd36839298487b84f55c9",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -2109,7 +2109,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "3.6.0"
+        "template_version": "3.7.0"
       }
     },
     {
@@ -2152,7 +2152,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:04c0a968d4476265265401506cb47c15126e90c3806df34c42557c37fc68cae9",
+      "hash": "sha256:e6e866274d783adb4bc1ad864a8da51a23bf3da5194e445d2aefdd58a5175993",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -2168,7 +2168,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.19.0",
+        "template_version": "1.20.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2329,7 +2329,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:815af0336011d92709e82f2d159ad7134204a204cf062bb1ba6c22ba0c1ae43b",
+      "hash": "sha256:397334f8e388746cc9b8045811246cfbbcd2562a20a427a9529c896fe9cdbc55",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2344,7 +2344,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.19.0",
+        "template_version": "1.20.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2863,7 +2863,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:4ce81d0038e74468d2130deb2ba4193895f0c64b0020267012e4848dcfd21b82",
+      "hash": "sha256:df4b5c92ce12e6371389f5ba82e898fb937284b4277c57b65f2f5c558863e853",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2878,7 +2878,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.30.0",
+        "template_version": "1.31.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2901,7 +2901,7 @@
       "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7b140be959495c6e0f78ad07440603370a25b4c8a31b868f966e31338b83f687",
+      "hash": "sha256:9b21a6fa4fd68b0ec2bfea075f0dee8d9e3d6ff044be79aa1bab5a657d0c8880",
       "dependencies": [],
       "frontmatter": {
         "name": "toolkit-specialist",
@@ -2920,7 +2920,7 @@
           "validator"
         ],
         "token_budget": 3000,
-        "template_version": "1.7.0",
+        "template_version": "1.8.0",
         "memory": "project",
         "skills": [
           "test",
@@ -2935,7 +2935,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:9f86acd1ce71ff92ddd06d46a8217ce2b32e522a038e80919a24198382a8a35c",
+      "hash": "sha256:867597ee810d770522d7ddcd3ffe48dd1d95fb1f650331d14a641726d0d5bd25",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2950,7 +2950,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.21.0",
+        "template_version": "1.22.0",
         "memory": "project",
         "skills": [
           "accessibility",

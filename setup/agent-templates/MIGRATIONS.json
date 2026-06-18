@@ -785,6 +785,12 @@
       }
     },
     "context-provider": {
+      "3.7.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex P2): reframed the stale 'On Team Join / joins the session team' phrasing to adapter-neutral 'On First Contact' (freshly dispatched single-use subagent, or newly live background peer when the runtime supports it). Oracle/cache behavior + ownership unchanged.",
+        "migration_hint": "Doc phrasing reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "3.6.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -1072,6 +1078,12 @@
       }
     },
     "test-specialist": {
+      "1.31.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex P1): Scope Validation Gate no longer falls back to a bare top-level .planning/PLAN.md (stale-plan risk → off-scope edits). Now verifies the target against the dispatch scope_doc_path (.planning/wave-<slug>/PLAN.md); if absent, STOP + request re-dispatch with explicit scope. Matches the architects' contract.",
+        "migration_hint": "Scope-gate guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.30.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -1216,6 +1228,12 @@
       }
     },
     "ui-specialist": {
+      "1.22.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex P1): Scope Validation Gate no longer falls back to a bare top-level .planning/PLAN.md (stale-plan risk → off-scope edits). Now verifies the target against the dispatch scope_doc_path (.planning/wave-<slug>/PLAN.md); if absent, STOP + request re-dispatch with explicit scope. Matches the architects' contract.",
+        "migration_hint": "Scope-gate guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.21.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -1310,6 +1328,12 @@
       }
     },
     "domain-model-specialist": {
+      "1.20.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex P1): Scope Validation Gate no longer falls back to a bare top-level .planning/PLAN.md (stale-plan risk → off-scope edits). Now verifies the target against the dispatch scope_doc_path (.planning/wave-<slug>/PLAN.md); if absent, STOP + request re-dispatch with explicit scope. Matches the architects' contract.",
+        "migration_hint": "Scope-gate guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.19.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -1394,6 +1418,12 @@
       }
     },
     "data-layer-specialist": {
+      "1.20.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex P1): Scope Validation Gate no longer falls back to a bare top-level .planning/PLAN.md (stale-plan risk → off-scope edits). Now verifies the target against the dispatch scope_doc_path (.planning/wave-<slug>/PLAN.md); if absent, STOP + request re-dispatch with explicit scope. Matches the architects' contract.",
+        "migration_hint": "Scope-gate guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.19.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -1674,6 +1704,12 @@
       }
     },
     "toolkit-specialist": {
+      "1.8.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex P1): Scope Validation Gate no longer falls back to a bare top-level .planning/PLAN.md (stale-plan risk → off-scope edits). Now verifies the target against the dispatch scope_doc_path (.planning/wave-<slug>/PLAN.md); if absent, STOP + request re-dispatch with explicit scope. Matches the architects' contract.",
+        "migration_hint": "Scope-gate guidance reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.7.0": {
         "date": "2026-06-18",
         "breaking": false,
