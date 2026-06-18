@@ -416,8 +416,8 @@ describe('planner template — peer role', () => {
 describe('quality-gater template — gate protocol', () => {
   const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'quality-gater.md'), 'utf-8');
 
-  it('describes itself as session team peer in Phase 3', () => {
-    expect(content).toMatch(/session team peer/i);
+  it('describes itself as the QG owner (adapter-capability model) in Phase 3', () => {
+    expect(content).toMatch(/QG owner/i);
     expect(content).toMatch(/Phase 3/);
   });
 
@@ -480,8 +480,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/[Cc]ross-cutting/);
   });
 
-  it('has template version 2.16.0', () => {
-    expect(content).toContain('template_version: "2.16.0"');
+  it('has template version 2.17.0', () => {
+    expect(content).toContain('template_version: "2.17.0"');
   });
 });
 
@@ -842,8 +842,8 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
     expect(cpContent).toMatch(/find-pattern/);
   });
 
-  it('has template version 3.5.0', () => {
-    expect(cpContent).toContain('template_version: "3.5.0"'); // bumped 3.4.4 → 3.5.0 (write_bundle protocol added)
+  it('has template version 3.6.0', () => {
+    expect(cpContent).toContain('template_version: "3.6.0"'); // bumped 3.5.0 → 3.6.0 (BL-W48 point-4 adapter-capability reframe)
   });
 
   it('has External Context section with Context7 call sequence', () => {

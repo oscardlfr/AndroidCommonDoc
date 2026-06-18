@@ -275,8 +275,8 @@ describe('doc-updater template', () => {
     expect(content).toContain('generated: true');
   });
 
-  it('template version bumped to 2.10.0', () => {
-    expect(content).toContain('template_version: "2.10.0"');
+  it('template version bumped to 2.11.0', () => {
+    expect(content).toContain('template_version: "2.11.0"');
   });
 });
 
@@ -305,8 +305,8 @@ describe('quality-gater template', () => {
     expect(content).toContain('Project Rule Cross-Check');
   });
 
-  it('template version 2.16.0', () => {
-    expect(content).toContain('template_version: "2.16.0"');
+  it('template version 2.17.0', () => {
+    expect(content).toContain('template_version: "2.17.0"');
   });
 
   it('has architect deliberation step', () => {
