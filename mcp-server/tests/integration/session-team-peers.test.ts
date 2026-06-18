@@ -1,9 +1,12 @@
 /**
- * Session Team Peer Dev Templates tests.
+ * Core dev specialist template tests (BL-W48 adapter-capability model).
  *
  * Validates that all 4 core dev agent templates exist in setup/agent-templates/
- * with the correct structure, Team Identity section, pattern validation chain,
- * and reporting architect references.
+ * with the correct structure, Coordination Context section (orchestrator + adapter
+ * model — background peer when the runtime supports it, else single-use + disk
+ * artifacts), pattern validation chain, and reporting architect references. The named
+ * session-team coupling (session-{project-slug}, "persistent session team member",
+ * "team-lead spawns you at Phase 2") was retired with TeamCreate/TeamList.
  */
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
@@ -35,10 +38,10 @@ describe('dev template existence', () => {
 // ---------------------------------------------------------------------------
 describe('dev template structure — template_version in frontmatter', () => {
   const EXPECTED_VERSIONS: Record<string, string> = {
-    'test-specialist.md': '1.29.0',
-    'ui-specialist.md': '1.20.0',
-    'data-layer-specialist.md': '1.18.0',
-    'domain-model-specialist.md': '1.18.0',
+    'test-specialist.md': '1.30.0',
+    'ui-specialist.md': '1.21.0',
+    'data-layer-specialist.md': '1.19.0',
+    'domain-model-specialist.md': '1.19.0',
   };
 
   for (const template of DEV_TEMPLATES) {
@@ -55,23 +58,25 @@ describe('dev template structure — template_version in frontmatter', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Each dev template has Team Identity section
+// 3. Each dev template has Coordination Context section (BL-W48 adapter model)
 // ---------------------------------------------------------------------------
-describe('dev template identity — Team Identity section', () => {
+describe('dev template identity — Coordination Context (adapter-capability model)', () => {
   for (const template of DEV_TEMPLATES) {
-    it(`${template} has "Team Identity" section`, () => {
+    it(`${template} has "Coordination Context" section`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
-      expect(content).toMatch(/## Team Identity/i);
+      expect(content).toMatch(/## Coordination Context/i);
     });
 
-    it(`${template} declares itself a persistent session team member`, () => {
+    it(`${template} describes the adapter spawn model (background peer or single-use + disk)`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
-      expect(content).toMatch(/persistent session team member/i);
+      expect(content).toMatch(/background peer/i);
+      expect(content).toMatch(/single-use|disk artifact/i);
     });
 
-    it(`${template} states team-lead spawns it at Phase 2 start`, () => {
+    it(`${template} states the orchestrator mechanically spawns it (named-team framing retired)`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
-      expect(content).toMatch(/team-lead spawns.*Phase 2|spawns you at Phase 2/i);
+      expect(content).toMatch(/orchestrator mechanically spawns/i);
+      expect(content).not.toMatch(/persistent session team member/i);
     });
   }
 });
@@ -123,13 +128,16 @@ describe('dev template architect — reporting architect assignments', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 6. Each dev template references session-{project-slug}
+// 6. BL-W48: named session-team coupling retired (no session-{project-slug})
 // ---------------------------------------------------------------------------
-describe('dev template team — session-{project-slug} reference', () => {
+describe('dev template — named-team coupling retired (adapter model)', () => {
   for (const template of DEV_TEMPLATES) {
-    it(`${template} references session-{project-slug}`, () => {
+    it(`${template} no longer couples to the named session-{project-slug} team`, () => {
       const content = fs.readFileSync(path.join(TEMPLATES_DIR, template), 'utf-8');
-      expect(content).toContain('session-{project-slug}');
+      // BL-W48: TeamCreate/TeamList removed; identity no longer binds to a named
+      // session team. State lands/loads via disk artifacts; architect owns task spec.
+      expect(content).not.toContain('session-{project-slug}');
+      expect(content).toMatch(/disk artifact|Reporting architect/i);
     });
   }
 });

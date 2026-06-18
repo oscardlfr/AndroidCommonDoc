@@ -947,6 +947,12 @@
       }
     },
     "marketing-lead": {
+      "1.3.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): TeamCreate removed from the active tools grant and moved to optional_capabilities (optional adapter capability, not a hard tool); rationale notes reframed. Supersedes the 1.2.0 decision to keep it in tools. Orchestration role unchanged.",
+        "migration_hint": "tools: grant drops TeamCreate; it now lives under optional_capabilities. Re-sync the deployed template."
+      },
       "1.2.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -965,6 +971,12 @@
       }
     },
     "product-lead": {
+      "1.3.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): TeamCreate removed from the active tools grant and moved to optional_capabilities (optional adapter capability, not a hard tool); rationale notes reframed. Supersedes the 1.2.0 decision to keep it in tools. Orchestration role unchanged.",
+        "migration_hint": "tools: grant drops TeamCreate; it now lives under optional_capabilities. Re-sync the deployed template."
+      },
       "1.2.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -1037,6 +1049,12 @@
       }
     },
     "feature-domain-specialist": {
+      "1.2.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): identity reframed off the named 'session team peer / session-{slug}' model to the adapter-capability model for this {{DOMAIN}} review template — orchestrator does the mechanical Agent() spawn; reporting architect owns task spec + validation; background-peer optional, else single-use + disk artifacts.",
+        "migration_hint": "Coordination-context reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -1054,6 +1072,12 @@
       }
     },
     "test-specialist": {
+      "1.30.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): identity reframed off the named 'session team peer / session-{slug}' model to the adapter-capability model — orchestrator does the mechanical Agent() spawn; reporting architect owns task spec + validation; background-peer optional & SendMessage-reachable when the runtime supports it, else single-use + disk artifacts.",
+        "migration_hint": "Coordination-context reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -1192,6 +1216,12 @@
       }
     },
     "ui-specialist": {
+      "1.21.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): identity reframed off the named 'session team peer / session-{slug}' model to the adapter-capability model — orchestrator does the mechanical Agent() spawn; reporting architect owns task spec + validation; background-peer optional & SendMessage-reachable when the runtime supports it, else single-use + disk artifacts.",
+        "migration_hint": "Coordination-context reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -1280,6 +1310,12 @@
       }
     },
     "domain-model-specialist": {
+      "1.19.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): identity reframed off the named 'session team peer / session-{slug}' model to the adapter-capability model — orchestrator does the mechanical Agent() spawn; reporting architect owns task spec + validation; background-peer optional & SendMessage-reachable when the runtime supports it, else single-use + disk artifacts.",
+        "migration_hint": "Coordination-context reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -1358,6 +1394,12 @@
       }
     },
     "data-layer-specialist": {
+      "1.19.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): identity reframed off the named 'session team peer / session-{slug}' model to the adapter-capability model — orchestrator does the mechanical Agent() spawn; reporting architect owns task spec + validation; background-peer optional & SendMessage-reachable when the runtime supports it, else single-use + disk artifacts.",
+        "migration_hint": "Coordination-context reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -1632,6 +1674,12 @@
       }
     },
     "toolkit-specialist": {
+      "1.7.0": {
+        "date": "2026-06-18",
+        "breaking": false,
+        "summary": "BL-W48 (Codex audit): identity reframed off the named 'session team peer / session-{slug}' model to the adapter-capability model — orchestrator does the mechanical Agent() spawn; reporting architect owns task spec + validation; background-peer optional & SendMessage-reachable when the runtime supports it, else single-use + disk artifacts.",
+        "migration_hint": "Coordination-context reframe; spawn interface unchanged. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-04-30",
         "breaking": false,

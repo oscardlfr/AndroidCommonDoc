@@ -6,6 +6,11 @@
 #   - `TeamCreate(` call (the API removed from Claude Code runtime)
 #   - `spawn_method: TeamCreate-peer` in manifests (obsolete spawn method)
 #   - `team_name=` as a REQUIRED spawn parameter in hook/skill code
+#   - `tools:` frontmatter granting TeamCreate as a HARD TOOL (BL-W48 Codex audit) —
+#     TeamCreate is an optional adapter capability; it belongs under
+#     `optional_capabilities:`, NEVER the active `tools:` grant.
+#   - stale "session team peer/member" identity framing in active templates
+#     (the adapter model says "background peer / single-use subagent + disk artifact").
 #
 # Active paths scanned:
 #   - .claude/hooks/   (hook JavaScript)
@@ -266,6 +271,128 @@ agents:
       spawn_method: Agent
 EOF
   run bash -c "grep -qE 'spawn_method:\s*TeamCreate-peer' '$file' && echo CAUGHT || echo ALLOWED"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "ALLOWED" ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BL-W48 Codex-audit hardening (Pattern 3 + Pattern 4)
+#   Pattern 3: TeamCreate granted as a HARD TOOL in the `tools:` frontmatter line.
+#              MUST NOT flag `optional_capabilities: [TeamCreate]` (sanctioned bucket).
+#   Pattern 4: stale "session team peer/member" identity framing in active templates.
+# ─────────────────────────────────────────────────────────────────────────────
+
+make_dirty_toolsgrant_fixture() {
+  local file="${BATS_TEST_TMPDIR}/dirty-toolsgrant-$$.md"
+  cat > "$file" <<'EOF'
+---
+name: bad-lead
+tools: Read, Grep, Bash, TeamCreate, SendMessage
+template_version: "1.0.0"
+---
+A lead that wrongly declares TeamCreate as a hard tool grant.
+EOF
+  echo "$file"
+}
+
+make_clean_optcap_fixture() {
+  local file="${BATS_TEST_TMPDIR}/clean-optcap-$$.md"
+  cat > "$file" <<'EOF'
+---
+name: ok-lead
+tools: Read, Grep, Bash, SendMessage, TaskCreate, TaskList
+optional_capabilities:
+  - TeamCreate
+template_version: "1.0.0"
+---
+TeamCreate is an OPTIONAL engine capability here, not a hard tool grant.
+EOF
+  echo "$file"
+}
+
+make_dirty_sessionphrase_fixture() {
+  local file="${BATS_TEST_TMPDIR}/dirty-sessionphrase-$$.md"
+  cat > "$file" <<'EOF'
+## Team Identity (Session Team Peer)
+You are a persistent session team member in the session-{project-slug} team.
+EOF
+  echo "$file"
+}
+
+make_clean_adapter_fixture() {
+  local file="${BATS_TEST_TMPDIR}/clean-adapter-$$.md"
+  cat > "$file" <<'EOF'
+## Coordination Context
+The orchestrator mechanically spawns you (Agent); if the runtime supports
+background peers you may persist, otherwise you run single-use and land state
+through disk artifacts.
+EOF
+  echo "$file"
+}
+
+@test "PLANT-6 CATCH: tools: line granting TeamCreate → detected" {
+  local f; f="$(make_dirty_toolsgrant_fixture)"
+  run bash -c "grep -qE '^tools:.*\bTeamCreate\b' '$f' && echo FOUND || echo CLEAN"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"FOUND"* ]]
+}
+
+@test "PLANT-7 ALLOW: optional_capabilities: [TeamCreate] (not a tools grant) → not flagged" {
+  local f; f="$(make_clean_optcap_fixture)"
+  run bash -c "grep -qE '^tools:.*\bTeamCreate\b' '$f' && echo FOUND || echo CLEAN"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "CLEAN" ]]
+}
+
+@test "PLANT-8 CATCH: stale 'session team member' phrase → detected" {
+  local f; f="$(make_dirty_sessionphrase_fixture)"
+  run bash -c "grep -qiE 'session team (peer|member)|Session Team Peer' '$f' && echo FOUND || echo CLEAN"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"FOUND"* ]]
+}
+
+@test "PLANT-9 ALLOW: adapter-model identity phrasing → not flagged" {
+  local f; f="$(make_clean_adapter_fixture)"
+  run bash -c "grep -qiE 'session team (peer|member)|Session Team Peer' '$f' && echo FOUND || echo CLEAN"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "CLEAN" ]]
+}
+
+@test "GUARD-PASS: setup/agent-templates/ grants TeamCreate as a hard tool in zero templates" {
+  # TeamCreate must live under optional_capabilities (adapter capability), never the tools: grant.
+  # Scope to *.md templates: MIGRATIONS.json (a historical log) legitimately names TeamCreate.
+  local count
+  count=$(grep -rlE --include='*.md' '^tools:.*\bTeamCreate\b' "$PROJECT_ROOT/setup/agent-templates/" 2>/dev/null | wc -l | tr -d '[:space:]')
+  [ "$count" = "0" ]
+}
+
+@test "GUARD-PASS: .claude/agents/ grants TeamCreate as a hard tool in zero mirrors" {
+  local count
+  count=$(grep -rlE --include='*.md' '^tools:.*\bTeamCreate\b' "$PROJECT_ROOT/.claude/agents/" 2>/dev/null | wc -l | tr -d '[:space:]')
+  [ "$count" = "0" ]
+}
+
+@test "GUARD-PASS: setup/agent-templates/ has zero stale 'session team peer/member' phrases" {
+  # The adapter model retired the named session-team identity framing.
+  # Scope to *.md templates: MIGRATIONS.json (a historical migration log) legitimately
+  # references the old "session team peer" phrase to describe what was reframed away.
+  local count
+  count=$(grep -rliE --include='*.md' 'session team (peer|member)|Session Team Peer' "$PROJECT_ROOT/setup/agent-templates/" 2>/dev/null | wc -l | tr -d '[:space:]')
+  [ "$count" = "0" ]
+}
+
+@test "GUARD-PASS: .claude/agents/ has zero stale 'session team peer/member' phrases" {
+  local count
+  count=$(grep -rliE --include='*.md' 'session team (peer|member)|Session Team Peer' "$PROJECT_ROOT/.claude/agents/" 2>/dev/null | wc -l | tr -d '[:space:]')
+  [ "$count" = "0" ]
+}
+
+@test "NEGATIVE-6: 'background peer' adapter term → not caught by session-team guard" {
+  local file="${BATS_TEST_TMPDIR}/bgpeer-$$.md"
+  cat > "$file" <<'EOF'
+You may persist as a background peer when the runtime supports it.
+EOF
+  run bash -c "grep -qiE 'session team (peer|member)|Session Team Peer' '$file' && echo CAUGHT || echo ALLOWED"
   [ "$status" -eq 0 ]
   [[ "$output" == "ALLOWED" ]]
 }
