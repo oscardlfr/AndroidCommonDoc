@@ -161,14 +161,19 @@ describe('dev template dual-location — also in .claude/agents/', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 9. team-topology broadcast workaround documentation
+// 9. team-topology: two-layer model (BL-W48 — named-team broadcast removed)
 // ---------------------------------------------------------------------------
-describe('team-topology broadcast workaround documentation', () => {
-  it('team-topology documents SendMessage broadcast workaround', () => {
+describe('team-topology: two-layer orchestration model', () => {
+  it('team-topology documents the two-layer orchestration model', () => {
+    // BL-W48 team-model root-fix: TeamCreate/TeamList removed from this Claude Code
+    // build. The named-session-team model is obsolete. Broadcast workaround
+    // (SendMessage(to="*")) required a team; it's removed with the team model.
+    // The new two-layer model: orchestrator (main agent) + single-use subagents
+    // (architects/specialists) coordinating via disk artifacts.
     const content = fs.readFileSync(
       path.join(ROOT, 'docs/agents/team-topology.md'), 'utf-8'
     );
-    expect(content).toContain('SendMessage(to="*")');
-    expect(content).toMatch(/workaround|individual messages/i);
+    // Two-layer model replaces named-team topology
+    expect(content).toMatch(/two-layer|single-use subagent|orchestrator.*subagent/i);
   });
 });

@@ -52,9 +52,11 @@ describe("planner template enforces T-BUG-015 Search Dispatch Protocol", () => {
       const frontmatter = extractFrontmatter(raw);
       const body = extractBody(raw);
 
-      it('has template_version "1.17.0"', () => {
+      it('has template_version "1.19.0"', () => {
+        // BL-W48 team-model migration: bumped 1.17.0 → 1.18.0 (session-team removal),
+        // then 1.18.0 → 1.19.0 (planner reframe as pure single-use subagent).
         expect(frontmatter).not.toBeNull();
-        expect(frontmatter?.template_version).toBe("1.17.0");
+        expect(frontmatter?.template_version).toBe("1.19.0");
       });
 
       it("body contains T-BUG-015", () => {
@@ -77,10 +79,17 @@ describe("planner template enforces T-BUG-015 Search Dispatch Protocol", () => {
         expect(body).not.toContain("AskUserQuestion");
       });
 
-      it("body KEEPS the Ex-PR1 Spec-Ambiguity Clarification step + team-lead relay contract", () => {
+      it("body KEEPS the Ex-PR1 Spec-Ambiguity Clarification step (BL-W48: team-lead relay removed)", () => {
+        // BL-W48 team-model migration: planner is now a pure single-use subagent.
+        // Spec ambiguities are surfaced via PLAN.md ### Open Questions section for the
+        // orchestrator to read from disk — the old SendMessage(to="team-lead") relay
+        // is gone (no team inbox; planner uses disk as the load-bearing carrier).
+        // Spec-Ambiguity Clarification step is KEPT; Q→Open Questions flow is KEPT.
         expect(body).toContain("Spec-Ambiguity Clarification");
-        expect(body).toContain('SendMessage(to="team-lead"');
-        expect(body).toContain('summary="spec questions"');
+        expect(body).toContain("Open Questions");
+        // Planner no longer sends SendMessage(to="team-lead") — verify it doesn't
+        // accidentally re-introduce the retired relay pattern.
+        expect(body).not.toContain('SendMessage(to="team-lead"');
       });
     });
   }
