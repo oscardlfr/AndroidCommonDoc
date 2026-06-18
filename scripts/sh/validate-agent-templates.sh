@@ -306,7 +306,7 @@ if should_run "tool-body-xref"; then
     # Tool call patterns to detect in body (outside code fences)
     declare -A TOOL_PATTERNS=(
         ["TeamCreate"]="TeamCreate("
-        ["Agent"]="Agent("
+        ["Agent"]="Agent([A-Za-z]"
         ["SendMessage"]="SendMessage("
         ["Write"]="Write("
         ["Edit"]="Edit("

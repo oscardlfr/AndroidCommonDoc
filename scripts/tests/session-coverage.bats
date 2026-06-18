@@ -1394,10 +1394,13 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     done
 }
 
-@test "arch: all architects reference Escalate to team-lead (not dev-lead)" {
+@test "arch: all architects escalate to the orchestrator (BL-W48: team-lead retired)" {
     for agent in arch-testing arch-platform arch-integration; do
-        grep -q "Escalate to team-lead" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        # BL-W48: the named-team 'team-lead' router is retired; architects escalate to
+        # the orchestrator and land their verdict on disk (not a named team-lead/dev-lead).
+        grep -q "Escalate to the orchestrator" "$L0_ROOT/setup/agent-templates/${agent}.md"
         ! grep -q "Escalate to dev-lead" "$L0_ROOT/setup/agent-templates/${agent}.md"
+        ! grep -q "Escalate to team-lead" "$L0_ROOT/setup/agent-templates/${agent}.md"
     done
 }
 
