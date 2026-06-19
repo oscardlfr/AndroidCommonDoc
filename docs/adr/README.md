@@ -3,6 +3,7 @@ scope: [agents, workflow, runtime-adapter, multi-agent]
 sources: [androidcommondoc, bl-w48-team-model-rootfix]
 targets: [all]
 slug: adr-index
+category: adr
 description: "Architecture Decision Records (ADR) index and authoring conventions"
 ---
 

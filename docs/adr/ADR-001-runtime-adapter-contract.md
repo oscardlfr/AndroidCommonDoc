@@ -3,6 +3,7 @@ scope: [agents, workflow, runtime-adapter, multi-agent]
 sources: [androidcommondoc, bl-w48-team-model-rootfix]
 targets: [all]
 slug: runtime-adapter-contract
+category: adr
 description: "ADR-001: engine-agnostic runtime adapter contract — multi-agent as an optional accelerator over a disk-artifact floor"
 ---
 
@@ -61,11 +62,9 @@ These are runtime capabilities that the adapter PRESERVES where the engine suppo
 - **Operator visibility**: the roster/tooling that lets the operator see which peers
   are running, their status, and route control-plane messages.
 
-These capabilities:
-- Are OPTIONAL ACCELERATORS (the artifact floor works without them).
-- Must NOT be deleted when references are reclassified.
-- Belong in the `adapter-specific-capability` bucket.
-- The anti-degradation guard (section 6 + constraint 7b) protects them mechanically.
+These capabilities are OPTIONAL ACCELERATORS (artifact floor works without them), belong in
+the `adapter-specific-capability` bucket, and must NOT be deleted when references are
+reclassified. The anti-degradation guard (section 6) protects them mechanically.
 
 ---
 
@@ -86,69 +85,34 @@ hooks, docs, and skills, apply this three-bucket classifier:
 Exhaustive per-line reclassification is an implementation step, gated by the guards.
 The rubric here applies to MAJOR PATTERNS (representative, not exhaustive).
 
-### 2.2 Classification of Major Reference Patterns (from the brief surface)
+### 2.2 Classification Summary of Major Reference Patterns
 
-#### 2.2.1 Hooks (7 hooks — how they reference team-lead)
+**Hooks (all 7)**: Key on `agent_type` values or prefix (`arch-`, empty string for main
+orchestrator). "team-lead" appears only in error/guidance messages as a **portable-role**
+label — NOT as a gate key. `data.agent_id` ROTATES per wake and must never be used as an
+identity contract; `data.agent_type` is the stable gate key. No hook requires changes.
 
-| Hook | Reference type | Classification | Notes |
-|------|---------------|----------------|-------|
-| `addressee-liveness-gate.js` | Error message: "Route to team-lead or an alternate peer instead." | **portable-role** | "team-lead" = role label in human-readable error text. No runtime key. Keep. |
-| `architect-bash-write-gate.js` | Checks `agentType.startsWith('arch-')` — no team-lead key. Routes by `agent_type` prefix. | — | No team-lead reference in logic; brief count likely from docs/comments. |
-| `architect-self-edit-gate.js` | Error message: `SendMessage(to="team-lead", ...)` as recovery instruction. | **portable-role** | Role label in guidance text. Keep. Also names the SendMessage channel — adapter-specific-capability. |
-| `context-provider-gate.js` | Old exemption comment: "team-lead exemption removed: main is now caught by empty agent_type check." The CURRENT logic exempts `agent_type === ''` (main orchestrator). | **portable-role** (historical comment) | The functional exemption is by empty agent_type, not the name "team-lead". Comment is documentation of a past state. Safe to update comment; logic already correct. |
-| `plan-md-write-gate.js` | Checks `agentType === 'planner'` — no team-lead key in logic. | — | No team-lead reference in enforcement logic; possible doc comment. |
-| `premature-execution-gate.js` | Comment: "Excluded: arch-*, team-lead, context-provider, project-manager, quality-gater, planner". SUBJECT_TYPES list does not include team-lead. | **portable-role** | Role label in exclusion comment. Functional exclusion is by SUBJECT_TYPES absence. Comment correct. |
-| `push-authorization-gate.js` | Checks `agent_type` empty = main orchestrator (allow with stamp validation); non-empty = peer/subagent (block). The word "team-lead" does not appear in enforcement logic. | — | Gate keys on empty agent_type for orchestrator identity. Correct. "team-lead" may appear in error messages only. |
+**`tl-*` dispatch docs**: Majority refs are **portable-role** (orchestrator behavior, phase
+boundaries). Two genuine edit targets remain in the manifest: `team_name` in
+`tl-dispatch-topology.md` (L52 → PRUNE) and legacy-framing in `tl-session-start.md`
+(L128 → REFRAME). `arch-topology-protocols.md` has 0 TeamCreate/roster-mechanics content;
+only legacy ref = dangling `team-lead.md` xref (L173, PRUNE).
 
-**Hook summary**: All 7 hooks key on `agent_type` values or `agent_type` prefix patterns
-(e.g., `arch-`, empty string for main). They do NOT hardcode "team-lead" as a gate key.
-References in hook source are either: (a) role labels in error/guidance messages
-(portable-role, keep), or (b) historical comments (can update for clarity, not required).
-**No hook requires changes to unblock the adapter.**
+**Agent templates**: `doc-updater.md` and the 5 core specialists carry
+`SendMessage(to="team-lead", …)` as the canonical Claude-adapter `send(→orchestrator)`
+expression — **correct-as-is, zero rewrite** (verified: 0 named-team-framing hits).
+Lead templates carry `optional_capabilities: [TeamCreate]` (BL-W48 intent preserved).
 
-**Critical note on `data.agent_id` in hooks**: The hook field `data.agent_id` ROTATES
-per wake — it is a per-invocation value, NOT a stable peer identity. Gates MUST NOT key
-on `data.agent_id` as an identity contract. `data.agent_type` is the stable identity
-field hooks use for classification. The adapter's `AgentHandle` is a separate concept
-(see section 3.2).
+**Skills**: `work`, `sync-l0`, `doc-integrity` — all refs are **portable-role**.
 
-#### 2.2.2 `tl-*` Dispatch Docs (docs/agents/)
-
-| Doc | Dominant reference type | Classification |
-|-----|------------------------|----------------|
-| `arch-topology-protocols.md` | Describes orchestrator BEHAVIOR: dispatch sequences, phase boundaries, artifact routing. "team-lead" = the orchestrator's role label. | **portable-role** (majority). **Only legacy ref = the dangling `team-lead.md` xref (L173)** → Claude-legacy-runtime PRUNE. (Verified: 0 `TeamCreate`/`team_name`/roster-mechanics content — the earlier "roster mechanics sections" wording over-claimed.) |
-| `arch-dispatch-modes.md` | Describes how team-lead dispatches architects (PREP → EXECUTE → VERIFY). | **portable-role** |
-| `tl-model-profiles.md` | Per-model behavior notes for the team-lead/orchestrator. References peer behaviors (background, SendMessage). | **portable-role** (model guidance) + **adapter-specific-capability** (peer channels) |
-| `tl-dispatch-topology.md` | Topology: Planning/Execution/QG phases, architect/specialist/CP/doc-updater roles. | **portable-role** (majority) + **Claude-legacy**: `team_name` (L52 → PRUNE) and named-team FRAMING (L48 "session team specialist" / L59 "named team peer" → REFRAME). In the exact manifest. |
-| `tl-verification-gates.md` | Gate conditions the team-lead enforces (APPROVED-PREP, artifact-floor). | **portable-role** |
-| `tl-session-start.md` | Session initialization: CP consultation, planner dispatch, session-start setup. | **portable-role** (protocol, majority) + **legacy-framing** (L128 "session team setup agents" → REFRAME, in the manifest). L219 "No `team_name` required" = EXEMPT (negative/corrected). |
-
-#### 2.2.3 Agent Templates (setup/agent-templates/)
-
-| Template | Dominant reference type | Classification |
-|----------|------------------------|----------------|
-| `doc-updater.md` (18 refs) | Receives dispatch from team-lead; sends results back via SendMessage. | **portable-role** (dispatch relationship) + **adapter-specific-capability** (SendMessage channel) |
-| `context-provider.md` (18 refs) | "On First Contact" protocol; oracle for team-lead queries. | **portable-role** (relationship) |
-| Core specialists (12 refs each) | "Receiving work: team-lead sends tasks via SendMessage"; report to team-lead. | **portable-role** (dispatch rel.) + **adapter-specific-capability** (SendMessage channel). **Verified 0 named-team-framing hits** — the BL-W48 "deeper residual" is RESOLVED as correct-as-is (§5.2 + classification-report §5 Decision 2); zero rewrite. |
-| Leads (10-11 refs each) | `optional_capabilities: [TeamCreate]` (BL-W48). Otherwise orchestrator role. | **adapter-specific-capability** for the optional_capability entry; **portable-role** for rest |
-| `quality-gater.md` (6 refs) | Step 0 activation check: "Confirm you have been activated by team-lead for Phase 3." | **portable-role** |
-
-#### 2.2.4 Skills (skills/)
-
-| Skill | Reference type | Classification |
-|-------|---------------|----------------|
-| `work` | Specialist receiving-work protocol: dispatched by team-lead. | **portable-role** |
-| `sync-l0` | L0 → L1/L2 propagation orchestrated by team-lead. | **portable-role** |
-| `doc-integrity` | Doc integrity checks reported to team-lead. | **portable-role** |
-
-#### 2.2.5 Capabilities to Preserve (NOT to reclassify away)
+### 2.3 Capabilities to Preserve (NOT to reclassify away)
 
 The following are in the `adapter-specific-capability` bucket and must be KEPT:
 - `SendMessage` in 22 template files — the messaging channel; preserved in the adapter interface.
 - `background peer` / `run_in_background` in 25 files — spawn mode; preserved in adapter.
 - `operator` / `roster` / `visibility` in 7 docs — operator control; preserved in adapter.
 
-**These are the inputs to section 6 (anti-degradation guard).**
+**These are the inputs to section 6 (anti-degradation guard).** See `scripts/tests/capability-preservation.bats` (C1–C7) for the mechanical enforcement.
 
 ---
 
@@ -196,28 +160,18 @@ or via a fresh-instance spawn.
 
 **Semantic**: Query whether the agent is running, idle, complete, or failed.
 
-**Artifact-based fallback**: Read the expected disk artifact and validate it:
-- For architects: the verdict file must exist AND contain a valid status marker
-  (`APPROVED-PREP` or `APPROVED-FINAL`) AND the head SHA recorded in the verdict
-  must match the current HEAD (verdict→HEAD binding, BL-W48 finding 5).
-- For the planner: `PLAN.md` must exist and contain `### Spawn Table` (required marker).
-- For the quality-gater: `quality-gate-report.json` must exist AND contain
-  `"verdict": "PASS"` AND the push-proof timestamp must be within the freshness TTL
-  (≤30 min, matching the push-authorization-gate.js stamp model).
-- Bare file presence is NOT sufficient — a valid status marker + HEAD-binding/freshness
-  check is required where applicable.
+**Artifact-based fallback**: Read and validate the expected disk artifact. Architects:
+verdict file + `APPROVED-PREP`/`APPROVED-FINAL` marker + HEAD-binding (finding 5). Planner:
+`PLAN.md` + `### Spawn Table` marker. Quality-gater: `quality-gate-report.json` with
+`"verdict":"PASS"` + stamp within TTL (≤30 min). Bare file presence is NOT sufficient.
 
 #### Op 4: `result(handle) → string | null`
 
 **Semantic**: Retrieve the agent's final return value or summary message.
 
-**Artifact-based fallback**: Read and validate the disk artifact:
-- The disk artifact is ALWAYS the authoritative result (the message channel is an
-  optional accelerator).
-- Validation mirrors Op 3: valid status marker + HEAD-binding for architect verdicts;
-  `"verdict": "PASS"` + freshness for QG artifacts.
-- A verdict file without a valid marker (e.g., stub present but empty, or HEAD mismatch)
-  is treated as `result = null` — the orchestrator must request re-verification.
+**Artifact-based fallback**: Disk artifact is ALWAYS the authoritative result (message
+channel = optional accelerator). Validation mirrors Op 3. A verdict without a valid marker
+or with a HEAD mismatch → `result = null`; orchestrator must request re-verification.
 
 #### Op 5: `stop(handle) → void`
 
@@ -246,36 +200,23 @@ reading/writing artifact paths.
 
 #### Op 7: `operator_visibility(handle) → OperatorView | null`
 
-**Semantic**: Return operator-visible metadata: peer name, observed peer state, last
-active timestamp, message count. Used by orchestrator for liveness tracking.
+**Semantic**: Return operator-visible metadata: peer name, state, last-active timestamp,
+unanswered-message count. `OperatorView` does NOT expose `data.agent_id` (rotating hook
+field) — `runtime_id` is adapter-internal and opaque, not a routing target.
 
-**Note on identity**: The `OperatorView` does NOT expose `data.agent_id` (the rotating
-hook field). It may expose an adapter-internal `runtime_id` if the engine provides one,
-but this is opaque and not a routing target. The orchestrator uses `artifact` presence
-and unanswered-message count (addressee-liveness-gate.js logic) as liveness signals,
-not peer identity tokens.
-
-**Artifact-based fallback**: If operator visibility is absent (no roster API):
-the orchestrator infers liveness from artifact freshness (mtime of the expected
-artifact) and unanswered-message count (addressee-liveness-gate.js logic).
+**Artifact-based fallback**: Infer liveness from artifact mtime + unanswered count
+(addressee-liveness-gate.js logic) when no roster API exists.
 
 #### Op 8: `reuse(name_or_handle) → AgentHandle | null`
 
-**Semantic**: Attempt to reuse/resume an already-running idle peer. The routing
-target is the peer's canonical NAME or an adapter-internal handle (NOT the hook's
-`data.agent_id`, which rotates per wake and is not a routing contract).
+**Semantic**: Attempt to reuse/resume an already-running idle peer by canonical NAME
+or adapter-internal handle (NOT `data.agent_id` — rotating, not a routing contract).
+Treat as best-effort: observed in BL-W48 but not proven cross-context. arch-integration
+RESUME path has a known deadlock (finding 4, confirmed 4×) — NEVER use `reuse` for that
+role; always `spawn` fresh-instance-replacement. Returns null if unavailable.
 
-**Pending-evidence note**: `SendMessage` routing to a parked/idle peer was OBSERVED
-to work in some BL-W48 sessions but is NOT proven as a cross-context contract.
-Treat all `reuse` attempts as best-effort. The arch-integration RESUME path has a
-known deadlock pattern (finding 4, confirmed 4×) — for that role, do NOT use `reuse`;
-always use `spawn` (fresh-instance-replacement).
-
-Returns null if the peer is unavailable or routing is unreliable.
-
-**Artifact-based fallback**: If `reuse` returns null: call `spawn(role, prompt)`
-for a fresh-instance-replacement. NEVER forge a verdict from an ungovernable peer —
-re-verify via a fresh instance (finding 4).
+**Artifact-based fallback**: `reuse` returns null → `spawn(role, prompt)`. NEVER forge
+a verdict from an ungovernable peer — re-verify via a fresh instance (finding 4).
 
 #### Op 9: `overflow(role, index) → AgentHandle`
 
@@ -291,48 +232,23 @@ before the QG.
 
 ### 3.2 Adapter Interface (TypeScript-style pseudocode for documentation)
 
+`AgentHandle` carries: `role` (canonical name), `name` (peer name, may be unreliable for
+routing), `artifactPath` (always reliable), and optional `runtime_id` (adapter-internal
+opaque id — NOT the hook's `data.agent_id` which rotates per wake).
+
+`ArtifactValidation` has four fields: `exists`, `validMarker` (APPROVED-PREP/FINAL + HEAD
+match for verdicts; `"verdict":"PASS"` for QG), `headBound` (verdict HEAD == current HEAD),
+`fresh` (stamp within TTL). `AgentStatus.state` is derived from all four — bare existence
+is NOT sufficient.
+
 ```typescript
-interface AgentHandle {
-  role: string;            // canonical role name (e.g., "arch-platform")
-  runtime_id?: string;     // adapter-internal opaque id (may be absent); NOT the
-                           // hook's data.agent_id (that rotates per wake — different concept)
-  name: string;            // peer name (canonical; may be unreliable for routing)
-  artifactPath: string;    // canonical disk artifact path (always reliable)
-}
-
-interface ArtifactValidation {
-  exists: boolean;
-  // For architect verdicts: true if file contains APPROVED-PREP or APPROVED-FINAL
-  // AND the recorded head SHA matches current HEAD.
-  validMarker: boolean;
-  headBound: boolean;      // head in verdict == current HEAD (where applicable)
-  // For QG artifacts: true if verdict=="PASS" AND stamp age <= TTL (1800s).
-  fresh: boolean;          // within freshness TTL (where applicable)
-}
-
-interface AgentStatus {
-  state: 'spawned' | 'running' | 'idle' | 'complete' | 'failed';
-  // Derived from ArtifactValidation — bare existence is NOT sufficient.
-  // complete = exists && validMarker && headBound (architect) / fresh (QG)
-  artifactValid: ArtifactValidation;
-}
-
-interface OperatorView {
-  name: string;
-  // runtime_id is adapter-internal and opaque; NOT exposed as a routing target.
-  runtime_id?: string;
-  state: AgentStatus['state'];
-  lastActiveMs: number;
-  unansweredMessages: number;
-}
-
 interface RuntimeAdapter {
   spawn(role: string, prompt: string, options?: SpawnOptions): AgentHandle;
   send(handle: AgentHandle, message: string): void;
-  status(handle: AgentHandle): AgentStatus;
+  status(handle: AgentHandle): AgentStatus;   // artifactValid: ArtifactValidation
   result(handle: AgentHandle): string | null;
   stop(handle: AgentHandle): void;
-  artifact(role: string, waveSlug: string): string;  // file path
+  artifact(role: string, waveSlug: string): string;  // canonical file path
   operator_visibility(handle: AgentHandle): OperatorView | null;
   reuse(nameOrHandle: string | AgentHandle): AgentHandle | null;
   overflow(role: string, index: number): AgentHandle;
@@ -340,9 +256,9 @@ interface RuntimeAdapter {
 ```
 
 **Identity contract**: Load-bearing identity is the disk artifact (file path + valid
-content). `runtime_id` in `AgentHandle`/`OperatorView` is adapter-internal and opaque.
-The hook field `data.agent_id` is a SEPARATE, ROTATING value that MUST NOT be used as
-a SendMessage target, gate key, or identity contract anywhere in the harness.
+content). `runtime_id` is adapter-internal and opaque. The hook field `data.agent_id`
+is a SEPARATE, ROTATING value — MUST NOT be used as a SendMessage target, gate key, or
+identity contract anywhere in the harness.
 
 ---
 
@@ -398,43 +314,22 @@ is a delivery mechanism; the authoritative data is the validated file on disk.
 
 ### 4.3 Copilot Adapter
 
-Engine: GitHub Copilot (agent/extensions API).
-Source: brief constraint 4 (explicitly: "document the REAL capability surface or mark pending evidence").
-
-| Op | Copilot Implementation | Notes |
-|----|----------------------|-------|
-| `spawn` | **Pending evidence.** Copilot Workspace may spawn agents; exact API unknown. | Do NOT invent T3 (background-peer messaging) parity. |
-| `send` | **Pending evidence.** No confirmed channel analogous to SendMessage. | |
-| `status` | Disk artifact validation (always the floor). | |
-| `result` | Disk artifact (always the floor). | The artifact floor applies regardless of engine. |
-| `stop` | **Pending evidence.** | |
-| `artifact` | Same canonical paths (engine-agnostic). | |
-| `operator_visibility` | **Pending evidence.** Copilot may have extension-level visibility. | |
-| `reuse` | **Pending evidence.** | |
-| `overflow` | **Pending evidence.** | |
-
-**Copilot adapter posture**: degrade gracefully to the artifact floor (op 6).
-All `send`/`status`/`result` operations use disk artifact fallback until Copilot
-capability is confirmed empirically. NO invented T3 parity.
+Engine: GitHub Copilot (agent/extensions API). Posture: degrade gracefully to the artifact
+floor. All 9 ops except `artifact` and `status`/`result` (disk floor) are **pending evidence**
+— no confirmed spawn/send/stop/operator_visibility/reuse API. Do NOT invent T3
+(background-peer messaging) parity. `artifact` uses the same canonical engine-agnostic paths.
 
 ### 4.4 Future Engine Adapter (graceful degradation baseline)
 
-Any engine not yet implemented degrades to the artifact floor:
+Any unimplemented engine uses the artifact floor: `spawn` = any mechanism that writes the
+artifact; `send` = write to `.planning/wave-<slug>/inbox-<role>.md`; `status`/`result` = read
++ validate artifact (marker + HEAD-binding/freshness per op 3); `stop` = write
+`.planning/wave-<slug>/stop-<role>.flag`; `operator_visibility` = null (infer from artifact
+mtime + unanswered count); `reuse` = null (always fresh-instance-replacement);
+`overflow` = additional spawn + indexed artifact path.
 
-| Op | Future (degraded) Implementation |
-|----|----------------------------------|
-| `spawn` | Any mechanism that starts an agent and eventually writes its artifact. |
-| `send` | Write to `.planning/wave-<slug>/inbox-<role>.md`. |
-| `status` | Read + validate artifact (marker + HEAD-binding/freshness where applicable). |
-| `result` | Read + validate artifact. |
-| `stop` | Write `.planning/wave-<slug>/stop-<role>.flag`. |
-| `artifact` | Canonical path (section 3.1 op 6). |
-| `operator_visibility` | null (operator infers from artifact mtime + unanswered-message count). |
-| `reuse` | null (always fresh-instance-replacement). |
-| `overflow` | Additional spawn + indexed artifact path. |
-
-The artifact floor is the MINIMUM VIABLE multi-agent harness. Any engine that can
-write files can participate.
+The artifact floor is the MINIMUM VIABLE multi-agent harness. Any engine that can write files
+can participate.
 
 ---
 
@@ -492,7 +387,12 @@ unblocks all peers regardless of which op was used.
 
 **Topology preserved**: architect→specialist hierarchy; CP oracle; gate enforcement. ✓
 
-**Existing template refs resolution (closes the "adapter-routing depth" question for context-provider / doc-updater / specialists):** template refs of the form `SendMessage(to="team-lead", …)` ARE the canonical Claude-adapter `send(→orchestrator)` expression — `team-lead` is the portable orchestrator role-label (§1.1); `SendMessage` is the Claude `send` op (Op 2). They are **CORRECT as-is and require NO Phase-3 edit**: routing depth = **zero rewrite**. A template ref becomes non-conformant ONLY if it asserts named-`session-<slug>`-team membership/roster (the §3b legacy-FRAMING surface in the classification report — e.g., "session team peers"). Verified clean (0 named-team-framing hits): `context-provider.md`, `doc-updater.md`, all 5 dev specialists, `ingestion-loop.md`. Their `SendMessage(team-lead)` capability is independently protected from deletion by the anti-degradation guard (C2.1/C2.2/C2.4 below), so "leave as-is" cannot silently degrade into "capability dropped."
+**Template refs resolution**: `SendMessage(to="team-lead", …)` in templates is the
+canonical Claude-adapter `send(→orchestrator)` expression — correct-as-is, zero rewrite.
+Verified 0 named-team-framing hits in `context-provider.md`, `doc-updater.md`, all 5 dev
+specialists, `ingestion-loop.md`. Non-conformance applies only to named-`session-<slug>`-team
+roster assertions. The anti-degradation guard (C2.1/C2.2/C2.4) protects this capability
+from silent deletion.
 
 ### 5.3 Quality Gate Phase
 
@@ -544,182 +444,27 @@ This is harder because:
 
 ### 6.2 Guard Mechanism: Capability Presence Assertions
 
-The anti-degradation guard is a **bats test file** (`capability-preservation.bats`)
-that runs as a PLAIN bats test inside the test-suite / QG bats run — it is NOT a
-manifest `conditional_step` and does NOT require protocol_digest regen. If any
-assertion fails, the guard fails.
+The anti-degradation guard is `scripts/tests/capability-preservation.bats` — a plain bats
+test file that runs alongside `named-team-regression-guard.bats`. It is NOT a manifest
+`conditional_step` and does NOT require protocol_digest regen. The full source is canonical
+at `scripts/tests/capability-preservation.bats`. Summary of the 7 assertion groups:
 
-**Design**: Assertions are organized into named groups (C1–C7). Each group targets
-a specific semantic capability at a canonical location. Superficial grep-for-keyword
-is insufficient — each test checks for a meaningful semantic marker that proves the
-capability is documented and wired, not merely that the word appears.
-
-```bash
-#!/usr/bin/env bats
-# capability-preservation.bats
-# Anti-degradation guard: asserts adapter-specific capabilities are NOT deleted.
-# Runs as a plain bats test alongside named-team-regression-guard.bats.
-# Complements (does not replace) named-team-regression-guard.bats.
-
-# ── C1: All 9 adapter operations documented in ADR ──────────────────────────
-
-@test "C1.1: ADR documents all 9 adapter ops — spawn" {
-  grep -qE '^#### Op [0-9]+: `spawn' docs/adr/ADR-001-runtime-adapter-contract.md
-}
-
-@test "C1.2: ADR documents all 9 adapter ops — send" {
-  # -w prevents matching 'SendMessage'; we want the op-definition line
-  grep -qE '^#### Op [0-9]+: `send' docs/adr/ADR-001-runtime-adapter-contract.md
-}
-
-@test "C1.3: ADR documents all 9 adapter ops — status" {
-  grep -qE '^#### Op [0-9]+: `status' docs/adr/ADR-001-runtime-adapter-contract.md
-}
-
-@test "C1.4: ADR documents all 9 adapter ops — result" {
-  grep -qE '^#### Op [0-9]+: `result' docs/adr/ADR-001-runtime-adapter-contract.md
-}
-
-@test "C1.5: ADR documents all 9 adapter ops — stop" {
-  grep -qE '^#### Op [0-9]+: `stop' docs/adr/ADR-001-runtime-adapter-contract.md
-}
-
-@test "C1.6: ADR documents all 9 adapter ops — artifact" {
-  grep -qE '^#### Op [0-9]+: `artifact' docs/adr/ADR-001-runtime-adapter-contract.md
-}
-
-@test "C1.7: ADR documents all 9 adapter ops — operator_visibility" {
-  grep -qE '^#### Op [0-9]+: `operator_visibility' docs/adr/ADR-001-runtime-adapter-contract.md
-}
-
-@test "C1.8: ADR documents all 9 adapter ops — reuse" {
-  grep -qE '^#### Op [0-9]+: `reuse' docs/adr/ADR-001-runtime-adapter-contract.md
-}
-
-@test "C1.9: ADR documents all 9 adapter ops — overflow" {
-  grep -qE '^#### Op [0-9]+: `overflow' docs/adr/ADR-001-runtime-adapter-contract.md
-}
-
-# ── C2: SendMessage capability preserved in templates ────────────────────────
-
-@test "C2.1: context-provider template documents SendMessage as a channel" {
-  # Must contain SendMessage as a callable operation, not just a mention
-  grep -qE 'SendMessage\s*\(' setup/agent-templates/context-provider.md
-}
-
-@test "C2.2: doc-updater template documents SendMessage as a channel" {
-  grep -qE 'SendMessage\s*\(' setup/agent-templates/doc-updater.md
-}
-
-@test "C2.3: quality-gater template documents SendMessage for activation handshake" {
-  grep -qE 'SendMessage\s*\(' setup/agent-templates/quality-gater.md
-}
-
-@test "C2.4: at least one real dev-specialist template documents SendMessage for result reporting" {
-  # Positively scope to the ACTUAL core dev specialists — must not be satisfiable
-  # via planner / arch-* / leads / context-provider / quality-gater / doc-updater.
-  count=0
-  for s in data-layer-specialist domain-model-specialist test-specialist toolkit-specialist ui-specialist; do
-    grep -qE 'SendMessage\s*\(' "setup/agent-templates/$s.md" && count=$((count+1))
-  done
-  [ "$count" -ge 1 ]
-}
-
-# ── C3: background-peer / run_in_background capability preserved ──────────────
-
-@test "C3.1: team-topology documents the background-peer model" {
-  # The canonical topology/model doc must document background peers (the optional
-  # accelerator layer). NOT arch-topology-protocols (that doc covers the OBS-A /
-  # dispatch-tree gate, never the background-peer model — verified: 0 such refs).
-  grep -qiE 'background.peer|run_in_background|agent_class.*peer' \
-    docs/agents/team-topology.md
-}
-
-@test "C3.2: tl-dispatch-topology documents background-peer or run_in_background" {
-  grep -qiE 'background.peer|run_in_background' docs/agents/tl-dispatch-topology.md
-}
-
-@test "C3.3: at least 20 files preserve background-peer or run_in_background reference" {
-  # Brief surface: 25 files. Allow for some pruning of legacy-only refs, floor at 20.
-  count=$(grep -rliE 'background.peer|run_in_background' \
-    setup/agent-templates/ docs/agents/ skills/ | wc -l)
-  [ "$count" -ge 20 ]
-}
-
-# ── C4: operator visibility capability preserved ──────────────────────────────
-
-@test "C4.1: operator_visibility capability documented via an intentional anchor in a tl-* dispatch doc" {
-  # Codex item-5 fix: the old test greped docs/agents/ BROADLY and matched a single
-  # INCIDENTAL phrase ("peer roster", a cross-ref in tl-phase-execution.md) — floor of 1,
-  # fragile (any reword drops it to 0) and inconsistent with the test name ("tl-* doc").
-  # Now: restricted to docs/agents/tl-*.md AND anchored to a DELIBERATE capability marker
-  # ('operator visibility' / 'operator_visibility'), NOT an incidental phrase. Phase-3 adds
-  # the explicit operator-visibility bullet to tl-dispatch-topology.md (in the exact manifest);
-  # that anchor line is LOAD-BEARING — removing it IS the capability degradation this guard
-  # exists to catch. (C7.3 already greps multiple tl-* docs for the CP oracle, so it is not
-  # at floor 1; only C4.1 needed this hardening.)
-  count=$(grep -rliE 'operator.visib|operator_visibility' docs/agents/tl-*.md | wc -l)
-  [ "$count" -ge 1 ]
-}
-
-@test "C4.2: ADR documents operator_visibility operation semantics" {
-  grep -qiE 'operator.visib' docs/adr/ADR-001-runtime-adapter-contract.md
-}
-
-# ── C5: artifact-fallback semantics preserved ────────────────────────────────
-
-@test "C5.1: ADR documents artifact-based fallback for send" {
-  # ADR must describe what to do when send is absent (disk inbox pattern)
-  grep -qiE 'inbox|disk.*(fallback|floor)' docs/adr/ADR-001-runtime-adapter-contract.md
-}
-
-@test "C5.2: artifact fallback requires a validated check (marker + HEAD-binding + freshness), not bare presence" {
-  adr=docs/adr/ADR-001-runtime-adapter-contract.md
-  # The full validated-artifact contract (ArtifactValidation struct + all 4 fields) must be present.
-  grep -q 'ArtifactValidation' "$adr"
-  grep -q 'validMarker'        "$adr"
-  grep -qiE 'headBound|HEAD.bind' "$adr"
-  grep -qiE '\bfresh'          "$adr"
-  # The status field IS the validated struct (`: ArtifactValidation`), which PROVES the
-  # bare-boolean presence flag is gone. (Positive assertion only: a negative grep for the
-  # old `artifactPresent: boolean` / "poll for presence" would self-match this guard's own
-  # pseudocode, since the promoted ADR documents this very test.)
-  grep -qE ':[[:space:]]*ArtifactValidation' "$adr"
-}
-
-# ── C6: architects-govern-specialists topology preserved ─────────────────────
-
-@test "C6.1: tl-dispatch-topology documents architect→specialist governance" {
-  grep -qiE 'architect.*specialist|specialist.*architect' \
-    docs/agents/tl-dispatch-topology.md
-}
-
-@test "C6.2: premature-execution-gate subject-types still include specialist roles" {
-  grep -q 'test-specialist' .claude/hooks/premature-execution-gate.js
-}
-
-@test "C6.3: architect-self-edit-gate still enforces architect write restriction" {
-  # Gate must still block arch-* from Write/Edit non-verdict files
-  grep -q "arch-" .claude/hooks/architect-self-edit-gate.js
-}
-
-# ── C7: context-provider oracle role preserved ───────────────────────────────
-
-@test "C7.1: context-provider template documents the oracle/pattern role" {
-  grep -qiE 'oracle|pattern.index|knowledge.layer' \
-    setup/agent-templates/context-provider.md
-}
-
-@test "C7.2: context-provider-gate still exempts context-provider from CP consultation" {
-  grep -q 'context-provider' .claude/hooks/context-provider-gate.js
-}
-
-@test "C7.3: at least one tl-* doc documents context-provider as the query oracle" {
-  count=$(grep -rliE 'context.provider.*(oracle|query|consult)|(oracle|query|consult).*context.provider' \
-    docs/agents/ | wc -l)
-  [ "$count" -ge 1 ]
-}
-```
+- **C1 (9 tests)**: ADR-001 contains a `#### Op N: \`<name>\`` header for each of the 9
+  operations: spawn, send, status, result, stop, artifact, operator_visibility, reuse, overflow.
+- **C2 (4 tests)**: `SendMessage(` call-form present in context-provider, doc-updater, and
+  quality-gater templates; at least 1 of the 5 dev-specialist templates also carries it.
+- **C3 (3 tests)**: `background.peer|run_in_background` documented in `team-topology.md`,
+  `tl-dispatch-topology.md`, and at least 20 files across templates/docs/skills.
+- **C4 (2 tests)**: `operator.visib|operator_visibility` in at least 1 `tl-*.md` doc (the
+  anchor in `tl-dispatch-topology.md` is load-bearing); ADR-001 documents the op semantics.
+- **C5 (2 tests)**: ADR documents disk-inbox fallback for `send`; `ArtifactValidation` struct
+  with `validMarker`, `headBound`, `fresh` fields present (proves bare-presence flag removed);
+  `status` field typed `: ArtifactValidation`.
+- **C6 (3 tests)**: `tl-dispatch-topology.md` documents architect→specialist governance;
+  `premature-execution-gate.js` lists `test-specialist`; `architect-self-edit-gate.js`
+  enforces the `arch-` write restriction.
+- **C7 (3 tests)**: context-provider template has oracle/pattern-index marker; context-provider-gate
+  exempts `context-provider`; at least 1 `tl-*` doc pairs context-provider with oracle/consult.
 
 ### 6.3 What the Guard Catches
 
@@ -743,25 +488,7 @@ The QG bats run picks them up automatically as part of the `scripts/tests/*.bats
 
 ---
 
-## Appendix A: Residuals from BL-W48 — RESOLVED this wave (zero rewrite)
+## Appendix A: BL-W48 Residuals — RESOLVED (zero rewrite)
 
-The BL-W48 shipped memory (`project_bl_w48_team_model_rootfix_shipped.md`) noted:
-> "Residual follow-up: deeper team-lead refs in specialist bodies
-> (Receiving-work/Post-Compaction) — not guarded, non-breaking, deferred to the adapter wave."
-
-**Resolution (ADR-finalize):** investigated and **RESOLVED as correct-as-is — NOT
-`Claude-legacy-runtime` candidates, zero rewrite, DISCARDED from the Phase-3 edit surface**
-(classification-report §5 Decisions 1–2 + §5.1):
-- `context-provider.md` (incl. the old §3.7 / "On First Contact"): **0 named-team-framing
-  hits** (`grep 'session team|named team|team_name|TeamCreate'` = 0). Its team-lead refs are
-  the portable orchestrator role + `SendMessage` (the adapter `send` op).
-- The 5 core specialists' "Receiving work" / "Post-Compaction" sections: **0 named-team-framing
-  hits**. "team-lead sends tasks via SendMessage" is the portable + send-op expression; the
-  identity reframe already shipped in BL-W48 (@ `604487b`).
-
-Their `SendMessage` capability is protected from deletion by the anti-degradation guard
-(C2.1/C2.2/C2.4); §5.2 "Existing template refs resolution" documents the mapping. The
-remaining named-team **FRAMING/legacy** surface (the genuine edit targets) is the 9 `docs/agents/*`
-docs in the exact manifest — "session team peers/specialist/architects/setup", the dangling
-`team-lead.md` xrefs (arch-topology + ingestion-loop), and the "(TeamCreate)" peer label —
-NOT the templates.
+BL-W48's deferred "deeper team-lead refs in specialist bodies" are RESOLVED as correct-as-is:
+`context-provider.md` + the 5 dev specialists have 0 named-team-framing hits — `SendMessage(to="team-lead", …)` = portable orchestrator role + adapter `send` op (reframe shipped BL-W48 @ `604487b`; guard C2 protects). Genuine targets = the 9 `docs/agents/*` docs in the Phase-3 manifest, not templates.

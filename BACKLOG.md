@@ -6,6 +6,16 @@
 
 ## Active (proposed wave order)
 
+### Local QG must cover doc frontmatter + size limits (HIGH — QG coverage gap) — flagged 2026-06-19
+
+**Symptom**: the `runtime-adapter-capability-matrix` PR (#220) passed the **local QG** but FAILED GitHub CI on doc validators the local QG does not run: (1) `drift-audit.yml doc-cross-refs` (requires `scope/sources/targets/slug` frontmatter on every `docs/*/*.md`), then (2) `mcp-server/tests/integration/doc-structure.test.ts` (every scanner-discovered doc needs `category` matching its directory, a ≤500-line absolute limit, sub-doc ≤300, and `validate-doc-structure` zero errors). The 2 new ADR docs were created without frontmatter; adding it then activated the stricter size/category rules (ADR-001 was 767 lines → reduced to ≤500).
+
+**Root cause**: the local QG (`/pre-pr` + `emit-push-proof run-qg`) runs bats + vitest + `validate-all` (5 gates) but NOT the `doc-structure` vitest integration test nor the `drift-audit doc-cross-refs` checks. `validate-all` does not include `validate-doc-structure`. New/oversized/mis-categorised docs pass locally and only fail in CI.
+
+**Root fix**: add to the local QG (manifest `conditional_step` or quality-gater protocol) the exact CI assertions for changed `docs/*/*.md`: frontmatter completeness, `category`==directory, size limits (≤500 / sub-doc ≤300 / hub ≤100), `validate-doc-structure` zero errors, and the `doc-cross-refs` frontmatter + relative-link resolution. Goal: local QG green ⇒ CI green for docs.
+
+**Source**: user/Codex-flagged 2026-06-19 during runtime-adapter PR #220 (escaped local QG twice).
+
 ### Agent-teams completion-message delivery unreliable (HIGH — harness reliability) — user-flagged 2026-06-16
 
 **Symptom**: peers (esp. **quality-gater**) finish their work but the completion message (QG-PASS, READY-FOR-REVIEW, EXECUTE-COMPLETE) does NOT reach the orchestrator → it hangs waiting indefinitely. Recurring across sessions (user: "2 días que el quality gate no responde cuando termina, no podemos seguir así"). Same delivery class seen mid-session bl-w47-expr4: a dispatch "never reached toolkit-specialist's inbox" (routing gap); planner idle-loops; quality-gater re-QG ran 25+ min with no notification while the `quality-gate.stamp` stayed at the prior HEAD.
