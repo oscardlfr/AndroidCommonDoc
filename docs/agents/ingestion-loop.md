@@ -88,7 +88,7 @@ The user-approval step is **load-bearing**. It is the single consent point for a
 - License/attribution requirements (Context7 citations, WebFetch source URLs) could be skipped.
 - User preference for slug/category naming could be bypassed.
 
-The **orchestrator** (main agent, in-process per W31.6 — there is no `team-lead.md` template) enforces this gate; see [main-agent-orchestration-guide](main-agent-orchestration-guide.md) for the concrete SendMessage + user-prompt patterns (originally Wave 25).
+The **orchestrator** — the portable `team-lead` logical ROLE (the main agent, in-process per W31.6; **not** the retired `team-lead.md` runtime/template) — owns and enforces this gate. Every `team-lead` reference in this doc denotes that orchestrator role, not a separate runtime agent. The approval topology is unchanged: context-provider flags the gap → orchestrator approval (user consent) → doc-updater materializes. See [main-agent-orchestration-guide](main-agent-orchestration-guide.md) for the concrete SendMessage + user-prompt patterns (originally Wave 25).
 
 ## Rejection cases (all surface back to team-lead)
 

@@ -122,7 +122,7 @@ The adapter interface decouples the orchestrator's logical intent from engine-sp
 API calls. The artifact-based fallback (constraint 6) is the floor for every operation
 when the channel is absent.
 
-```
+```text
 Interface: RuntimeAdapter
 ```
 
