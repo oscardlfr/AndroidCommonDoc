@@ -5,6 +5,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (runtime-adapter-capability-matrix — engine-agnostic runtime adapter contract)
+
+- **`docs/adr/ADR-001-runtime-adapter-contract.md`** (NEW): first repo ADR. Defines an engine-agnostic **runtime adapter contract** so multi-agent execution (background peers, `SendMessage`, operator visibility) is a *supported optional accelerator* over the disk-artifact floor — never a least-common-denominator harness. Establishes the three-concept distinction that must not be conflated (portable orchestrator/`team-lead` ROLE · obsolete `TeamCreate`/`team_name` PRIMITIVE · preservable background-peer/`SendMessage`/operator-visibility CAPABILITIES), a three-bucket classification rubric (`portable-role` keep · `Claude-legacy-runtime` relabel-to-`optional_capability`-or-prune-per-line · `adapter-specific-capability` preserve), and a per-engine capability matrix (Claude / Codex / Copilot / Future × spawn / send / status / result / stop / artifact) with graceful degradation. Enforced by `capability-preservation.bats` + `named-team-regression-guard.bats`.
+- **`docs/adr/README.md`** (NEW): ADR index + authoring convention (`ADR-NNN-<kebab-title>.md`; Status / Context / Decision / Enforced-by; supersede — don't delete).
+- **`scripts/tests/capability-preservation.bats`** (NEW, C1–C7): anti-degradation guard — fails if the reframe regresses the preservable capabilities (background peers, `SendMessage`, operator visibility) into a least-common-denominator harness. Complements `named-team-regression-guard.bats` (which blocks re-introducing a hard `TeamCreate` dependency).
+
+### Changed (runtime-adapter-capability-matrix — named-team refs reclassified per the ADR-001 rubric)
+
+- **10 `docs/agents/*` protocol docs reframed** (`agents-hub`, `arch-topology-protocols`, `arch-testing-dispatch-protocol`, `hook-authoring-conventions`, `ingestion-loop`, `multi-agent-patterns`, `tl-agent-roster`, `tl-dispatch-topology`, `tl-phase-execution`, `tl-session-start`): each `team-lead` / `TeamCreate` / `SendMessage` / capability reference classified per the ADR-001 rubric — portable orchestrator-role refs kept, `Claude-legacy-runtime` primitives relabeled to `optional_capability` or pruned per-line (not global search-and-replace), and `adapter-specific-capability` channels (background peers, `SendMessage`, `run_in_background`, operator roster/visibility) preserved into the adapter framing.
+- **`.claude/commands/work.md`**: dispatch/routing prose aligned to the adapter contract (orchestrator + single-use subagents; optional background peers).
+- **`skills/registry.json`**: regenerated to reflect the reframed docs.
+- **`mcp-server/tests/integration/three-phase-architecture.test.ts`**: Planning-phase assertion repinned (`/Planning Team/` → `/Planning/` + `/planner/i`) to match the engine-agnostic phrasing.
+
 ### Changed (bl-w48-team-model-rootfix — team-model runtime migration: disk-artifact contract)
 
 - **Two-layer architecture doctrine** (`docs/agents/team-topology.md`, `main-agent-orchestration-guide.md`): named-team roster (`TeamCreate`/`team_name`/`session-{slug}` dirs) is no longer the runtime contract. Harness is **multi-agent capable** (orchestrator fans out to concurrent `Agent` subagents; background peers + `Task*`/`SendMessage` remain a fully-supported optional accelerator). Load-bearing contract is **disk artifacts**: `PLAN.md`, `arch-*-verdict.md` (HEAD-bound), `quality-gate-report.json`, `push-proof.json`. Gates verify files — not who/how many agents were spawned.

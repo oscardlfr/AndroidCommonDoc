@@ -170,7 +170,7 @@ verdict file paths attached.
 ## Cross-references
 
 - Template reference: each architect template (arch-platform, arch-testing, arch-integration) references this doc in its OBS-A and Reporter Protocol sections and keeps an abridged actionable checklist inline.
-- `.claude/agents/team-lead.md` — team-lead side of the OBS-A gate (independent enforcement, last line of defense)
+- `docs/agents/main-agent-orchestration-guide.md` — the orchestrator (main agent, in-process per W31.6; there is no separate `team-lead.md` template) holds the team-lead side of the OBS-A gate (independent enforcement, last line of defense)
 - `mcp-server/tests/integration/topology-bugs.test.ts` — T-BUG-011, T-BUG-012 regression tests
 - `setup/agent-templates/MIGRATIONS.json` — migration entries for `arch-platform@1.12.0`, `arch-testing@1.15.0`, `arch-integration@1.12.0`
 

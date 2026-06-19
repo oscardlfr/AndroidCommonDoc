@@ -80,8 +80,8 @@ quality-gate-report.json FAIL → IMMEDIATELY back to architect dispatch (Phase 
 
 ## Execution Trigger Checklist
 ```
-□ Plan approved?           → SendMessage to session team architects NOW
-□ All architects APPROVE?  → SendMessage quality-gater in session team NOW
+□ Plan approved?           → SendMessage the architects NOW (or Agent-spawn if not live)
+□ All architects APPROVE?  → SendMessage the quality-gater NOW (or Agent-spawn if not live)
 □ quality-gater PASS?      → commit NOW
 □ quality-gater FAIL?      → SendMessage to architects NOW (with failure context)
 → If you're asking the user what to do between phases: YOU HAVE A BUG.

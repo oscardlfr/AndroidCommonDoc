@@ -70,7 +70,7 @@ The harness populates `data.agent_type` and `data.agent_id` in the stdin JSON:
 | Scenario | `agent_type` value | Notes |
 |----------|--------------------|-------|
 | Main orchestrator | `""` (empty string) | Always exempt from peer-only gates |
-| Peer agent (TeamCreate) | The peer's **canonical NAME** (e.g. `"arch-platform"`) | Name set at spawn time |
+| Background peer / adapter-created peer | The peer's **canonical NAME** (e.g. `"arch-platform"`) | Name set at spawn time. Claude current runtime: `Agent(run_in_background=true, name=…)`, not TeamCreate |
 | Subagent (Agent call) | The subagent's **TYPE** (e.g. `"planner"`) | Type from `subagent_type` field |
 
 **`agent_id` rotates per wake (per respawn or session boundary)** — never use it as an attribution key. Use `agent_type` for all identity checks. This is why session-scoped gates write flags keyed on `session_id` (from `data.session_id`), not `agent_id`.
