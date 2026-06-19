@@ -72,8 +72,12 @@ describe('team-lead template — 3-phase model', () => {
     expect(content).toMatch(/3-Phase Execution Model/i);
   });
 
-  it('describes Planning Team phase', () => {
-    expect(content).toMatch(/Planning Team/);
+  it('describes the Planning phase (planner subagent, no named "Planning Team")', () => {
+    // runtime-adapter wave: the named-team framing "Planning Team" was reframed out of
+    // the doc corpus (tl-agent-roster.md:25 "Planning Team peer" → "single-use Agent
+    // subagent"). The Planning phase is now described via the 3-phase model + the planner.
+    expect(content).toMatch(/Planning/);
+    expect(content).toMatch(/planner/i);
   });
 
   it('describes Execution phase with persistent architects', () => {
