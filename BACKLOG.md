@@ -1,21 +1,10 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-06-16 (post bl-w47-tail — BL-W47 final closeout)
+> **Last updated**: 2026-06-19 (post runtime-adapter-capability-matrix closeout — pruned oldest per BACKLOG protocol)
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
 ## Active (proposed wave order)
-
-### runtime-adapter-capability-matrix (HIGH — harness portability, follow-up to bl-w48) — 2026-06-18
-
-**Goal**: portable harness contract + per-engine adapters + a capability matrix (Claude / Codex / Copilot / Future × spawn / send / status / result / stop / artifact) + operator-visibility parity. bl-w48 decoupled the load-bearing contract from the `TeamCreate`/named-team runtime (disk-artifact floor + CLASS-aware `required_roles` incl. `FAST-PATH == []`); this wave abstracts execution behind per-engine adapters with graceful degradation. **PRESERVE** the useful concepts (persistent peers, roster/visibility, reuse/respawn/routing, operator control, `SendMessage`/background) — do NOT regress to a least-common-denominator harness.
-
-**Carried residuals — NOT fully decoupled by bl-w48 (explicit; the PR is honest about partial decouple, not sold as done)**:
-- `setup/agent-templates/context-provider.md` still routes `SendMessage(to=team-lead)` in its **ingestion-approval**, **freshness-citation**, **bundle-rotation** (`write_bundle`), and **post-compaction** protocols. Identity was reframed (BL-W48 "On First Contact" + adapter model) but these protocol refs remain team-lead-centric.
-- The 5 core dev specialists retain deeper `team-lead` refs (Receiving-work, Post-Compaction Re-Sync); the regression guard does not flag them; non-breaking.
-- Peer control-plane findings (resume-vs-fresh-spawn deadlock, name-routing unreliability, bats delta-inference limits): memory `project_peer_control_plane_findings.md`.
-
-**Disposition**: own wave; do NOT mix into a closeout.
 
 ### Agent-teams completion-message delivery unreliable (HIGH — harness reliability) — user-flagged 2026-06-16
 
@@ -236,12 +225,12 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Shipped (recent)
 
+- **runtime-adapter-capability-matrix** (2026-06-19) — Engine-agnostic runtime adapter contract over the disk-artifact floor (follow-up to bl-w48). ADR-001 (first repo ADR) defines the three-concept distinction (portable orchestrator/`team-lead` ROLE · obsolete `TeamCreate`/`team_name` PRIMITIVE · preservable background-peer/`SendMessage`/operator-visibility CAPABILITIES), a three-bucket classification rubric (`portable-role` / `Claude-legacy-runtime` / `adapter-specific-capability`), and a per-engine capability matrix (Claude / Codex / Copilot / Future × spawn / send / status / result / stop / artifact) with graceful degradation. 10 `docs/agents/*` protocol docs reframed per the rubric; `capability-preservation.bats` (C1–C7) anti-degradation guard added (multi-agent stays an optional accelerator, never least-common-denominator); `docs/adr/README.md` ADR index; `.claude/commands/work.md` + `skills/registry.json` aligned; three-phase vitest repinned. bl-w48 carried residuals resolved-by-classification (role/`SendMessage` refs = keep-as-is) + peer-control findings homed in `project_peer_control_plane_findings.md`. — `project_runtime_adapter_shipped.md`
 - **bl-w48-team-model-rootfix** (2026-06-18) — Team-model root-fix: decoupled the harness from the obsolete `TeamCreate`/named-team runtime while KEEPING multi-agent as an optional adapter capability (load-bearing contract = disk artifacts: PLAN / `arch-*-verdict.md` / QG proof). Two-layer doctrine + class→artifact floors; init-session / `/work` / tl-docs / planner+arch+lead+specialist+cross-cutting templates reframed to orchestrator + single-use subagents (background peers optional, `SendMessage`-reachable when supported). `TeamCreate` off lead tool-grants → `optional_capabilities`; specialist Scope Validation Gate → dispatch `scope_doc_path` (no stale `.planning/PLAN.md`); context-provider "On First Contact". `named-team-regression-guard` Patterns 1–5. 4 obsolete roster/topology gates retired/tombstoned; 3 bypass envs removed. Codex-audited (P1/P2 + bats-honesty) clean; QG PASS. Follow-up wave queued: `runtime-adapter-capability-matrix`. — `project_bl_w48_team_model_rootfix_shipped.md`
 - **bl-w47-tail** (2026-06-16) — BL-W47 final closeout: registry drift hotfix (planner 1.15.0 / quality-gater 2.16.0 — #217 squash left `skills/registry.json` stale) + Terminal L1/L2 sync (DawSync `cat /dev/stdin`→`cat`, RESEARCH SUPERSEDED-BY-AUDIT header, new l2-topology-divergence doctrine doc) + Wave-Close (D6/D9/dead-skill rows) + Ex-PR1 planner Q&A. Structural discovery: `TeamCreate`/`TeamList` gone → named-team routing obsolete (root-fix backlogged; explains the 2-day QG message outage). — `project_wave_bl_w47_tail_shipped.md`
 - **bl-w47-supersede** (2026-06-15) — write-verdict.sh `--supersede`: opt-in re-emit of VERIFY-FINAL at a new HEAD (comment-delimited block excise+replace, same-HEAD idempotent no-op, fail-closed, stdin-sanitized, orphan-PREP rejected, multi-block normalized). Red-team(5)+Codex(1)+QG-CRLF(1) all fixed + regression-tested; 33 supersede bats VS-1..VS-13; full suite 1471/1471. Dogfooded on its own wave-close. — project_wave_bl_w47_supersede_shipped.md
 - **bl-w47-pr-0c2** (2026-06-14) — QG-proof push gate: canonical emit-push-proof.sh runner + verdict→HEAD binding (required-role enforcement: all 3 arch roles must appear in architects_consulted AND carry a VERIFY-FINAL+HEAD-bound verdict file) + env_attested carve-out (runtime-ui-validation may SKIP with reason when predicate-true) + emitter double-prefix fix (Path B verdict-filename) + bypass audit trail; 91-test bats suite (test-push-proof-gate 28 + pre-push-hook + push-authorization-gate); portable-core with PS1 parity. — `project_wave_bl_w47_pr_0c2_shipped.md`
 - **Kotlin 2.4.0 GA** (2026-06-03) — Upgrade L0 to Kotlin 2.4.0 GA. Manifest pins (kotlin→2.4.0 ×3, KSP→2.3.9 decoupled + coupled_versions removed), build-logic toolchain 2.3.0→2.4.0 (build-verified clean), 3 GA claim corrections (Wasm Component Model Experimental-in-GA, context-args nuance, K/N GC flag), new docs/stdlib/ domain (UUID/sorted-order/value-class JS-TS export) + collection literals + Gradle 9.5 compat. 13 commits. — `project_wave_kotlin_2_4_0_ga_shipped.md`
-- **BL-W47-prep-22** (2026-05-31) — Consumer hook-manifest: 34 hooks 12/10/12 + hub + BACKLOG; 100% coverage now CI-enforced (drift-audit hook-manifest-coverage job). PRs #201/#202/#203 — `project_wave_bl_w47_prep_22_shipped.md`
 
 For full wave history: `git log` + memory `project_*shipped.md` files.
 
