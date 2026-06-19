@@ -30,6 +30,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [multi-agent-patterns](multi-agent-patterns.md) | Topology (chain/fan-out/orchestrator), agent design rules, failure handling, cost control |
 | [arch-topology-protocols](arch-topology-protocols.md) | Architect topology: concern-ownership map (§4), cross-architect coordination, tiebreaker chain (BL-W32-02) |
 | [team-topology](team-topology.md) | 3-phase model on a portable disk-artifact contract: orchestrator + single-use subagents (optional background peers when the runtime supports them) — Planning → Execution → Quality Gate |
+| [ADR-001: Runtime Adapter Contract](../adr/ADR-001-runtime-adapter-contract.md) | Engine-agnostic adapter contract: multi-agent (background peers, `SendMessage`, operator visibility) as an optional accelerator over the disk-artifact floor — 9-op interface, per-engine adapters, anti-degradation guard |
 | [data-handoff-patterns](data-handoff-patterns.md) | Structured markers, severity convention, prose fallback, test gaming detection |
 | [agent-consumption-guide](agent-consumption-guide.md) | How agents load and use pattern docs (frontmatter, assumes_read, hub scanning) |
 | [capability-detection](capability-detection.md) | Graceful degradation for optional tools in agent definitions |
@@ -79,7 +80,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 - **`.claude/agents/`** = canonical agent definitions. Synced via `/sync-l0`.
 - **team-lead** = orchestrator. NEVER codes — orchestrates 3-phase teams, spawns 5 core specialists at Phase 2 start, spawns extras on architect request. Pattern validation chain: specialist → architect → context-provider.
 - **quality-gater** = dynamic rule discovery. Reads CLAUDE.md for project rules, runs `/pre-pr`, cross-checks every rule.
-- **planner** = temporary agent in `planning-{project-slug}` team. Uses `SendMessage(to="context-provider")` for project state. Writes plan to `.planning/PLAN.md`.
+- **planner** = temporary planner `Agent`/subagent; consults context-provider via `SendMessage` when available; writes `PLAN.md`.
 - **Doc Integrity** = `/doc-integrity` pipeline: kdoc-coverage → check-doc-patterns → docs/api freshness → audit-docs. State in `kdoc-state.json`.
 - **Spec-driven agents** = debugger, verifier, advisor, researcher, codebase-mapper for autonomous work.
 - **Skills** = token-efficient script wrappers. Always prefer over manual agent work.

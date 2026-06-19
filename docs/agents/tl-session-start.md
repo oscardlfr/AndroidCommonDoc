@@ -125,7 +125,7 @@ Why: An L2 consumer session (2026-04-18) — the main agent dispatched grep work
 ### FORBIDDEN Agent Launches (non-negotiable)
 - **FORBIDDEN**: Spawning core specialists outside Phase 2 start — the 5 core specialists are spawned exactly once when Phase 2 begins
 - **FORBIDDEN**: Spawning extra specialists without a preceding architect SendMessage to team-lead explicitly requesting it. "I think this needs a specialist" is not sufficient — the architect must ask.
-- **The ONLY agents team-lead launches directly**: planner (Phase 1), session team setup agents (session start), 5 core specialists (Phase 2 start), quality-gater (Phase 3). Extra specialists require an architect SendMessage request.
+- **The ONLY agents team-lead launches directly**: planner (Phase 1), the session-start setup agents (context-provider, doc-updater), 5 core specialists (Phase 2 start), quality-gater (Phase 3). Extra specialists require an architect SendMessage request.
 - **FORBIDDEN**: Writing or editing `.planning/wave-*/PLAN.md` directly — spawn planner and wait for `PLAN-WRITTEN`. See `feedback_planner_owns_plan_md`.
 
 ## Phase 0 — Session start

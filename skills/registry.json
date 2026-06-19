@@ -3732,13 +3732,13 @@
       "name": "work",
       "type": "command",
       "path": ".claude/commands/work.md",
-      "description": "Smart task routing — analyzes your request and delegates to the right agent or skill. Includes HARD GATE (session team check), stale-team dir detection, and 10+ role keyword routing.",
+      "description": "Smart task routing — analyzes your request and delegates to the right agent or skill. Includes a HARD GATE (core-subagent dispatch check) and 10+ role keyword routing.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:3da4ed6f03b9aa928343d452306fe534c43ef82c52b870eb094c2b2f6fd5a79a",
+      "hash": "sha256:42d2b4cebb5db5d1b64e4fe45528c9f59bd2484204c36e67415efcbac2093937",
       "dependencies": [],
       "frontmatter": {
-        "description": "Smart task routing — analyzes your request and delegates to the right agent or skill. Includes HARD GATE (session team check), stale-team dir detection, and 10+ role keyword routing."
+        "description": "Smart task routing — analyzes your request and delegates to the right agent or skill. Includes a HARD GATE (core-subagent dispatch check) and 10+ role keyword routing."
       }
     }
   ]

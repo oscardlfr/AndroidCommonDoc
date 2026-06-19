@@ -129,7 +129,7 @@ The orchestrator fans out to concurrent `Agent` subagents. Each subagent receive
 
 ### Architect Gate Pattern
 
-Between waves, architect peers cross-verify via `SendMessage`. Core devs are persistent session team peers -- architects assign work directly via SendMessage:
+Between waves, architects cross-verify via `SendMessage`. Core devs — when live as background peers — take work directly via `SendMessage`; otherwise the orchestrator dispatches them on the architect's behalf:
 
 - **arch-testing**: TDD compliance, test quality — manages `test-specialist`, `ui-specialist` via SendMessage
 - **arch-platform**: KMP patterns, dependency direction — manages `domain-model-specialist`, `data-layer-specialist` via SendMessage

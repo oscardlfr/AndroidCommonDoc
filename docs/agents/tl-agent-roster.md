@@ -17,12 +17,12 @@ description: "Agent roster and specialist ownership map for the main-agent orche
 
 | Role | Agents | Managed by |
 |------|--------|------------|
-| **Architects** | `arch-testing`, `arch-platform`, `arch-integration` | main agent (session team peers) |
-| **Specialists** | `test-specialist`, `ui-specialist`, `data-layer-specialist`, `domain-model-specialist`, `toolkit-specialist` | Architects (session team peers for core; main agent spawns extras) |
+| **Architects** | `arch-testing`, `arch-platform`, `arch-integration` | main agent (single-use `Agent` subagents; optional background peers) |
+| **Specialists** | `test-specialist`, `ui-specialist`, `data-layer-specialist`, `domain-model-specialist`, `toolkit-specialist` | Architects own the spec; main agent does the `Agent` spawn (optional background peers; extras on architect request) |
 | **Guardians** | `release-guardian-agent`, `cross-platform-validator`, `privacy-auditor`, `api-rate-limit-auditor`, `doc-alignment-agent` | Architects, main agent |
-| **Cross-cutting** | `context-provider`, `doc-updater` | main agent (session team peers) |
-| **Quality Gate** | `quality-gater` | team-lead (session team peer, Phase 3) |
-| **Planning** | `planner` | main agent (Planning Team peer) |
+| **Cross-cutting** | `context-provider`, `doc-updater` | main agent (single-use `Agent` subagents; optional background peers) |
+| **Quality Gate** | `quality-gater` | main agent (single-use `Agent` subagent, Phase 3; optional background peer) |
+| **Planning** | `planner` | main agent (single-use `Agent` subagent) |
 | **Support** | `debugger`, `verifier`, `advisor`, `researcher`, `codebase-mapper` | main agent (direct invocation) |
 | **Business** | `{{product-strategist}}`, `{{content-creator}}`, `{{landing-page-strategist}}` | team-lead (sub-agents for cross-dept) |
 

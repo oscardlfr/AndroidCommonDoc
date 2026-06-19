@@ -45,20 +45,23 @@ BEFORE calling Agent() to spawn a specialist, verify ALL:
 
 > Applies to ALL Agent() calls — code writing, test runs, verification, builds, and any other task a session specialist could handle.
 
-1. **Alive specialist check**: Is there a session team specialist who
-   could do this? If YES → route through their architect via SendMessage.
-   Do NOT spawn Agent(). Specialist already has context.
-2. **Scope check**: Does task touch >3 files? If YES → MUST use session
-   team specialist. Extra capacity = named peers (`{specialist}-2`) with team_name.
+1. **Alive specialist check**: Is there an alive background-peer specialist
+   (when the runtime supports peers) who could do this? If YES → route through
+   their architect via SendMessage. Do NOT spawn a fresh Agent(). The peer already has context.
+2. **Scope check**: Does task touch >3 files? If YES → MUST route to the owning
+   specialist. Extra capacity = additional `Agent` spawns (the adapter `overflow` op);
+   named-peer routing (`{specialist}-2`) is an optional accelerator — no `team_name` required.
 3. **Architect check**: Are architects alive? If YES → SendMessage
    architect with the task. team-lead NEVER dispatches specialists directly when
    architects are alive.
 4. **Pressure check**: Am I dispatching because "it's faster" or "user
    is waiting"? If YES → STOP. That's the bypass anti-pattern. Route
    through architects.
-5. **Architect name request**: When an architect requests a specific specialist by name via SendMessage, team-lead MUST spawn that specialist as a named team peer with the requested name. team-lead MUST NOT substitute an anonymous or differently-named agent.
+5. **Architect name request**: When an architect requests a specific specialist by name via SendMessage, the orchestrator dispatches that specialist for the requested role using its CANONICAL `agent_type` (non-canonical names are invisible to type-keyed gates). Honoring the exact requested name is an optional accelerator for routing continuity — named-peer routing reliability is pending-evidence ([ADR-001](../adr/ADR-001-runtime-adapter-contract.md), Op 8 `reuse`); the load-bearing contract is the specialist's disk artifact, not the peer name.
 
 Violating this gate erodes the architect verification layer — fixes land without architectural review.
+
+**Operator visibility** (`operator_visibility` adapter op): the operator observes the live peer roster and per-peer liveness via the tool-use log (`agent_class=peer`) plus the addressee-liveness signal (unanswered-message count). When the runtime exposes no first-class roster API, this degrades to artifact mtime + unanswered-message count on disk (the artifact-based fallback). Note: hook `data.agent_id` ROTATES per wake — it is NOT an identity key or routing target. This anchor is load-bearing for the capability-preservation guard (C4.1 keys on `operator_visibility` in a `tl-*` doc) — do not remove. See [ADR-001](../adr/ADR-001-runtime-adapter-contract.md) Op 7.
 
 **Pattern validation chain (CRITICAL):**
 ```

@@ -88,7 +88,7 @@ The user-approval step is **load-bearing**. It is the single consent point for a
 - License/attribution requirements (Context7 citations, WebFetch source URLs) could be skipped.
 - User preference for slug/category naming could be bypassed.
 
-team-lead's template (`setup/agent-templates/team-lead.md` §Ingestion-Request Handler) enforces this gate — see Wave 25 PR/commit for the concrete SendMessage + user prompt patterns.
+The **orchestrator** (main agent, in-process per W31.6 — there is no `team-lead.md` template) enforces this gate; see [main-agent-orchestration-guide](main-agent-orchestration-guide.md) for the concrete SendMessage + user-prompt patterns (originally Wave 25).
 
 ## Rejection cases (all surface back to team-lead)
 
@@ -118,7 +118,7 @@ See the canonical templates in `setup/agent-templates/` for the full `tools:` li
 ## Cross-references
 
 - `setup/agent-templates/context-provider.md` — ingestion-request sender
-- `setup/agent-templates/team-lead.md` — approval gate + user prompt
+- [main-agent-orchestration-guide](main-agent-orchestration-guide.md) — the orchestrator's approval gate + user prompt (replaces the retired `team-lead.md`)
 - `setup/agent-templates/doc-updater.md` — ingestion handler §5
 - `mcp-server/src/tools/ingest-content.ts` — the underlying MCP tool
 - [Context Rotation Guide](context-rotation-guide.md) — why the loop is stateless per-query (Context7 is stateless)

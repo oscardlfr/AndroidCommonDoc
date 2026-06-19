@@ -63,7 +63,7 @@ When a specialist reports unexpected coroutine/test behavior:
 
 ### Core Dev Communication (v5.0.0)
 
-Your named core specialists are session team peers — reach them via SendMessage:
+Your core specialists — reach them via `SendMessage` when they are live as background peers (else report the needed work and the orchestrator dispatches them):
 - **test-specialist**: test quality, regression tests, TDD compliance
 - **ui-specialist**: UI test review, Compose test patterns
 
