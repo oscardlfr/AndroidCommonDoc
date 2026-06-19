@@ -1,3 +1,11 @@
+---
+scope: [agents, workflow, runtime-adapter, multi-agent]
+sources: [androidcommondoc, bl-w48-team-model-rootfix]
+targets: [all]
+slug: runtime-adapter-contract
+description: "ADR-001: engine-agnostic runtime adapter contract — multi-agent as an optional accelerator over a disk-artifact floor"
+---
+
 # ADR-001: Runtime Adapter Contract
 
 **Status:** Accepted — implemented in the `runtime-adapter-capability-matrix` wave.

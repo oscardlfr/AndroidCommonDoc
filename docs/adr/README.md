@@ -1,3 +1,11 @@
+---
+scope: [agents, workflow, runtime-adapter, multi-agent]
+sources: [androidcommondoc, bl-w48-team-model-rootfix]
+targets: [all]
+slug: adr-index
+description: "Architecture Decision Records (ADR) index and authoring conventions"
+---
+
 # Architecture Decision Records (ADRs)
 
 This directory records significant, hard-to-reverse architecture decisions for the L0 toolkit. Each ADR captures the context, the decision, and the consequences so future contributors understand *why* — not just *what*.
