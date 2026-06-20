@@ -374,53 +374,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Check relative links in docs/agents/
-        run: |
-          FAIL=0
-          # Extract proper markdown links [text](path.md) only — anchors OK
-          for doc in docs/agents/*.md; do
-            [ -f "$doc" ] || continue
-            dir=$(dirname "$doc")
-            LINKS=$(grep -oE '\[[^]]+\]\(([^)]+\.md[^)]*)\)' "$doc" \
-              | grep -oE '\([^)]+\)' | tr -d '()')
-            for link in $LINKS; do
-              path="${link%%#*}"
-              [ -z "$path" ] && continue
-              echo "$path" | grep -qE '^https?://' && continue
-              target="$dir/$path"
-              if [ ! -f "$target" ] && [ ! -f "$path" ]; then
-                echo "❌ $doc references missing file: $link"
-                FAIL=1
-              fi
-            done
-          done
-
-          if [ $FAIL -eq 0 ]; then
-            echo "✅ All docs/agents/ cross-references resolve"
-          fi
-          exit $FAIL
-
-      - name: Check frontmatter completeness (scope/sources/targets/slug)
-        run: |
-          FAIL=0
-          for f in docs/*/*.md; do
-            [ -f "$f" ] || continue
-            case "$f" in
-              *hub.md) continue ;;
-              docs/archive/*) continue ;;
-            esac
-            fm=$(awk '/^---$/{c++; next} c==1' "$f" 2>/dev/null)
-            for k in scope sources targets slug; do
-              if ! echo "$fm" | grep -qE "^$k:"; then
-                echo "❌ $f: missing frontmatter field '$k'"
-                FAIL=1
-              fi
-            done
-          done
-          if [ $FAIL -eq 0 ]; then
-            echo "✅ All active docs have required frontmatter"
-          fi
-          exit $FAIL
+      - name: Doc validators (cross-refs + frontmatter)
+        run: bash scripts/sh/qg-doc-validators.sh --only cross-refs --project-root "$GITHUB_WORKSPACE"
 
   hook-manifest-coverage:
     name: hook-manifest covers all .claude/hooks/

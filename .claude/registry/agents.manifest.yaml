@@ -906,8 +906,8 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.17.0"
-    template_frontmatter_sha256: bfe05e6f8db1986eccb725c2f4cf1357ba0b98337dcb408e6a57429d99c34e63
+    template_version: "2.18.0"
+    template_frontmatter_sha256: d632478b4dad4b7bba19a0de90ce2d011136c3e9413100cfb35b0c7795e40471
     category: orchestrator
     lifecycle: ephemeral
     description: "QG owner (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL."

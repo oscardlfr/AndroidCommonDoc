@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (qg-doc-coverage — shared doc-validator wrapper + QG parity step) (PR pending)
+
+- **`scripts/sh/qg-doc-validators.sh`** (NEW) + **`scripts/ps1/qg-doc-validators.ps1`** (NEW): toolkit-root-aware wrapper that runs BOTH CI doc-validators in one invocation — `cross_refs` (drift-audit `doc-cross-refs` parity: relative links in `docs/agents/*.md` + frontmatter `scope/sources/targets/slug` in `docs/*/*.md`) and `doc_structure_vitest` (the real `validate-doc-structure` test via `npx vitest run tests/integration/doc-structure.test.ts`) — emitting a combined `.androidcommondoc/doc-validator-report.json`.
+- **`quality-gate-manifest.json`**: new REQUIRED step `doc-validator-parity` — quality-gater Step 7.5 invokes the shared wrapper to run both doc-validators locally. `template_version` 2.17.0 → 2.18.0 (full 5-pata ceremony: manifest hash, template hash, vitest repin, bats coverage, MIGRATIONS.json entry).
+- **`mcp-server/tests/integration/doc-validator-regression.test.ts`** (NEW): regression test suite for the doc-validator wrapper; bats coverage added.
+
+### Changed (qg-doc-coverage — drift-audit workflow unified to shared script)
+
+- **`.github/workflows/drift-audit.yml`** `doc-cross-refs` job refactored to call `scripts/sh/qg-doc-validators.sh` (single source of truth between local QG and CI). Effect: local-QG-green implies CI-green for doc-structure and cross-ref checks, closing the gap that caused two CI failures on PR #220 despite local passes.
+
 ### Added (runtime-adapter-capability-matrix — engine-agnostic runtime adapter contract)
 
 - **`docs/adr/ADR-001-runtime-adapter-contract.md`** (NEW): first repo ADR. Defines an engine-agnostic **runtime adapter contract** so multi-agent execution (background peers, `SendMessage`, operator visibility) is a *supported optional accelerator* over the disk-artifact floor — never a least-common-denominator harness. Establishes the three-concept distinction that must not be conflated (portable orchestrator/`team-lead` ROLE · obsolete `TeamCreate`/`team_name` PRIMITIVE · preservable background-peer/`SendMessage`/operator-visibility CAPABILITIES), a three-bucket classification rubric (`portable-role` keep · `Claude-legacy-runtime` relabel-to-`optional_capability`-or-prune-per-line · `adapter-specific-capability` preserve), and a per-engine capability matrix (Claude / Codex / Copilot / Future × spawn / send / status / result / stop / artifact) with graceful degradation. Enforced by `capability-preservation.bats` + `named-team-regression-guard.bats`.

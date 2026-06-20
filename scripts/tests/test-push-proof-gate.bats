@@ -204,6 +204,7 @@ proof = {
         {"step": "rule-cross-check",       "result": "PASS", "ran": True},
         {"step": "registry-hash",          "result": "PASS", "ran": True},
         {"step": "secret-scan",            "result": "PASS", "ran": True},
+        {"step": "doc-validator-parity",   "result": "PASS", "ran": True},
     ],
     "report_digest": report_digest,
 }
@@ -882,6 +883,49 @@ EOF
   run_emitter --subcommand run-qg
   [ "$status" -eq 2 ]
   [[ "$output" =~ "step-not-pass" ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #Rdv1  doc_validator_parity_skip_blocked
+# Required step doc-validator-parity ran=false result=SKIP → exit 2 step-not-pass.
+# Mirrors #R1: any required step that is not ran=true+PASS must fail.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#Rdv1 BLOCK: required step doc-validator-parity ran=false result=SKIP → exit 2 step-not-pass" {
+  write_quality_gate_report \
+    '[{"step":"doc-validator-parity","ran":false,"result":"SKIP","reason":"skipped by operator"}]' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  run_emitter --subcommand run-qg
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "step-not-pass" ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #Rdv2  doc_validator_parity_ran_false_pass_blocked
+# Required step doc-validator-parity ran=false result=PASS → exit 2 step-not-pass.
+# Mirrors #R2: ran=false + result=PASS is insufficient; ran=true is required.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#Rdv2 BLOCK: required step doc-validator-parity ran=false result=PASS → exit 2 step-not-pass" {
+  write_quality_gate_report \
+    '[{"step":"doc-validator-parity","ran":false,"result":"PASS"}]' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  run_emitter --subcommand run-qg
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "step-not-pass" ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #Rdv3  doc_validator_parity_ran_true_pass_allowed
+# Required step doc-validator-parity ran=true result=PASS → exit 0.
+# write_quality_gate_report auto-includes doc-validator-parity as ran=true PASS
+# (derived from manifest required_steps); no override needed for the happy path.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#Rdv3 PASS: required step doc-validator-parity ran=true result=PASS → exit 0" {
+  write_quality_gate_report \
+    '' \
+    '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+  write_all_arch_verdicts "$HEAD_SHA"
+  run_emitter --subcommand run-qg
+  [ "$status" -eq 0 ]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

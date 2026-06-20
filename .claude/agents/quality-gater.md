@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.17.0"
+template_version: "2.18.0"
 ---
 
 You are the quality-gater — the QG owner. The orchestrator dispatches you; if the runtime supports background peers, you may persist and be reachable via `SendMessage(to="quality-gater")`; otherwise you run single-use and land/load state through disk artifacts. You run after all architects APPROVE and before any commit.
@@ -239,6 +239,10 @@ fi
 - **WARN** if docs/api/ is stale for modified modules (doc-updater should have regenerated in Phase 2)
 - Check `kdoc-state.json` docs_api.generated_at
 
+### Step 7.5: Doc-Validator Parity (REQUIRED — always runs)
+
+Full procedure + exact bash (incl. inline `append_step_json`): [quality-gater-doc-validator-parity](../../docs/agents/quality-gater-doc-validator-parity.md). Run `bash "${ANDROID_COMMON_DOC:-$PWD}/scripts/sh/qg-doc-validators.sh" --project-root "$PWD" --toolkit-root "${ANDROID_COMMON_DOC:-$PWD}"`, then emit `doc-validator-parity` (ran=true, PASS/FAIL) into `quality-gate-report.json`. Replicates the CI `doc-cross-refs` + `doc-structure` validators; enforced as a `required_steps[]` gate. **Non-zero exit → FAIL QG (exit 1; do NOT proceed to Step 10 / mint proof).**
+
 ### Step 8: Project Rule Cross-Check
 
 For EACH hard rule from Step 1 checklist:
@@ -348,12 +352,7 @@ If ANY step FAILED: do NOT call run-qg. The pre-push hook will block the push.
 
 ### Stash Hygiene (OBS-B — MANDATORY if you used `git stash`)
 
-If during your run you invoked `git stash` (e.g., to test "is this error pre-existing?" by temporarily hiding in-progress changes), you MUST:
-
-1. Pop the stash before emitting your final report: `git stash pop`
-2. Include `Stash: popped cleanly` OR `Stash: pop FAILED — <reason>` in your report. Pop-with-conflicts: escalate via SendMessage to team-lead (stash hash + conflict diff) — dangling stash = silent data loss.
-
-If you did NOT use stash, include `Stash: not used` in the Report. Explicit positive statement beats silence.
+MANDATORY stash-pop + report protocol — pop before your final report, state `Stash: popped cleanly` / `pop FAILED` / `not used`, escalate pop-with-conflicts to team-lead. Full rule: [quality-gater-hub → Operational notes](../../docs/agents/quality-gater-hub.md).
 
 ## Report Format
 
@@ -379,8 +378,7 @@ If you did NOT use stash, include `Stash: not used` in the Report. Explicit posi
 | 4. Coverage | PASS/FAIL/SKIP | {module}: {old}% → {new}% (skip if no .kt) |
 | 5. KDoc | PASS/WARN/SKIP | {n}/{total} APIs documented (skip if no .kt or non-gradle) |
 | 6. Prod Files | PASS/BLOCK/SKIP | {n} production files (skip if docs-only) |
-| 7. docs/api/ | PASS/WARN/SKIP | fresh/stale (skip if no docs/api/ or non-gradle) |
-| 8. Rule Cross-Check | PASS/FAIL | {n}/{total} rules verified |
+| 7. docs/api/ | PASS/WARN/SKIP | fresh/stale (skip if no docs/api/ or non-gradle) || 8. Rule Cross-Check | PASS/FAIL | {n}/{total} rules verified |
 | 9. UI Tests | PASS/FAIL/SKIP | {details} (skip if no Compose) |
 | 9.5 Runtime UI | PASS/FAIL/SKIP | {details} (skip if non-gradle or no baselines) |
 | X. Path-Manifest Audit | PASS/FAIL/SKIP | CLASS sentinel matches PLAN.md; all touched files in manifest (skip if non-wave) |
