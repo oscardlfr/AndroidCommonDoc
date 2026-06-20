@@ -38,22 +38,42 @@ setup() {
   git init "$REPO" --quiet
   git -C "$REPO" config user.email "test@test.com"
   git -C "$REPO" config user.name "Test"
+  git -C "$REPO" config core.autocrlf false
   git -C "$REPO" commit --allow-empty --quiet -m "feat(core): init"
   git -C "$REPO" checkout -b feature/test-push-proof --quiet
-  HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
   ACDOC="$REPO/.androidcommondoc"
   mkdir -p "$ACDOC"
   ZERO="0000000000000000000000000000000000000000"
+
+  # .gitignore: hide .androidcommondoc/ and .planning/wave*/ from git status
+  # (required by the new clean-tree assertion in run-qg).
+  # Also ignore resolver_stub test artifacts (.test-req-roles and the per-test
+  # resolve-required-roles.js override) so they don't trigger the clean-tree check.
+  printf '.androidcommondoc/\n.planning/wave*/\n.test-req-roles\nscripts/sh/lib/resolve-required-roles.js\n' > "$REPO/.gitignore"
 
   # Copy live manifest into isolated repo (needed by emitter's manifest-drift check)
   cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
 
   # Mirror scripts/sh/ into isolated repo so the pre-push-hook can find emit-push-proof.sh
   # and its lib/ dependencies at $REPO_ROOT/scripts/sh/ (mirrors real deployment).
+  # Also copy qg-registry-integrity.sh + rehash-registry.sh (called by the new
+  # committed-tree integrity block in run-qg).
   mkdir -p "$REPO/scripts/sh/lib"
-  cp "$SCRIPTS_SRC/sh/emit-push-proof.sh"    "$REPO/scripts/sh/"
-  cp "$SCRIPTS_SRC/sh/lib/manifest-digest.sh" "$REPO/scripts/sh/lib/"
-  cp "$SCRIPTS_SRC/sh/lib/audit-append.sh"   "$REPO/scripts/sh/lib/"
+  cp "$SCRIPTS_SRC/sh/emit-push-proof.sh"           "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/lib/manifest-digest.sh"        "$REPO/scripts/sh/lib/"
+  cp "$SCRIPTS_SRC/sh/lib/audit-append.sh"           "$REPO/scripts/sh/lib/"
+  cp "$SCRIPTS_SRC/sh/qg-registry-integrity.sh"      "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/rehash-registry.sh"            "$REPO/scripts/sh/"
+
+  # Commit ALL fixtures so the tree is CLEAN before run-qg.
+  # Temp repos have NO skills/ directory → run-qg does NOT pass --require-registry
+  # → registry-integrity step returns n/a → only the clean-tree assertion needs satisfying.
+  git -C "$REPO" add -A
+  git -C "$REPO" commit --quiet -m "test(fixtures): initial fixture commit"
+
+  # RE-CAPTURE HEAD_SHA AFTER the fixture commit (architect-flagged highest-prob bug:
+  # HEAD-binding tests #5/#14/#19 fail if HEAD_SHA is captured before this commit).
+  HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 }
 
 teardown() {
@@ -116,10 +136,16 @@ steps = []
 for rs in manifest.get('required_steps', []):
     steps.append({"step": rs['id'], "ran": True, "result": "PASS"})
 
-# Build conditional steps all SKIP with reason (safe default)
+# Build conditional steps.
+# production-file-verify must be PASS because the fixture commit includes .sh scripts
+# (task_is_code_changes=TRUE fires for non-doc, non-yaml files like .sh).
+# All other conditional steps default to SKIP with reason.
 for cs in manifest.get('conditional_steps', []):
-    steps.append({"step": cs['id'], "ran": False, "result": "SKIP",
-                  "reason": "predicate false in isolated test repo"})
+    if cs['id'] == 'production-file-verify':
+        steps.append({"step": cs['id'], "ran": True, "result": "PASS"})
+    else:
+        steps.append({"step": cs['id'], "ran": False, "result": "SKIP",
+                      "reason": "predicate false in isolated test repo"})
 
 # Apply extra overrides (JSON list of step objects to merge/replace)
 if extra_steps_raw.strip():

@@ -28,21 +28,41 @@ setup() {
   git init "$REPO" --quiet
   git -C "$REPO" config user.email "test@test.com"
   git -C "$REPO" config user.name "Test"
+  git -C "$REPO" config core.autocrlf false
   git -C "$REPO" commit --allow-empty --quiet -m "feat(core): init"
   git -C "$REPO" checkout -b feature/test-wp --quiet
-  HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
   ACDOC="$REPO/.androidcommondoc"
   mkdir -p "$ACDOC"
+
+  # .gitignore: hide .androidcommondoc/ and .planning/wave*/ from git status
+  # (required by the new clean-tree assertion in run-qg).
+  printf '.androidcommondoc/\n.planning/wave*/\n' > "$REPO/.gitignore"
+  # Note: emit-push-proof.bats has no resolver_stub helper, so no .test-req-roles
+  # or resolve-required-roles.js overrides to ignore here.
 
   # Copy live manifest into isolated repo (needed by emitter's manifest-drift check)
   cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
 
   # Mirror scripts/sh/ into isolated repo so the emitter can find lib/ dependencies
   # at $REPO_ROOT/scripts/sh/ (mirrors real deployment).
+  # Also copy qg-registry-integrity.sh + rehash-registry.sh (called by the new
+  # committed-tree integrity block in run-qg).
   mkdir -p "$REPO/scripts/sh/lib"
-  cp "$SCRIPTS_SRC/sh/emit-push-proof.sh"     "$REPO/scripts/sh/"
-  cp "$SCRIPTS_SRC/sh/lib/manifest-digest.sh" "$REPO/scripts/sh/lib/"
-  cp "$SCRIPTS_SRC/sh/lib/audit-append.sh"    "$REPO/scripts/sh/lib/"
+  cp "$SCRIPTS_SRC/sh/emit-push-proof.sh"           "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/lib/manifest-digest.sh"        "$REPO/scripts/sh/lib/"
+  cp "$SCRIPTS_SRC/sh/lib/audit-append.sh"           "$REPO/scripts/sh/lib/"
+  cp "$SCRIPTS_SRC/sh/qg-registry-integrity.sh"      "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/rehash-registry.sh"            "$REPO/scripts/sh/"
+
+  # Commit ALL fixtures so the tree is CLEAN before run-qg.
+  # Temp repos have NO skills/ directory → run-qg does NOT pass --require-registry
+  # → registry-integrity step returns n/a → only the clean-tree assertion needs satisfying.
+  git -C "$REPO" add -A
+  git -C "$REPO" commit --quiet -m "test(fixtures): initial fixture commit"
+
+  # RE-CAPTURE HEAD_SHA AFTER the fixture commit (architect-flagged highest-prob bug:
+  # HEAD-binding in write-verdict verify-final uses the live HEAD).
+  HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 }
 
 teardown() {
@@ -73,10 +93,16 @@ steps = []
 for rs in manifest.get('required_steps', []):
     steps.append({"step": rs['id'], "ran": True, "result": "PASS"})
 
-# Build conditional steps all SKIP with reason (safe default)
+# Build conditional steps.
+# production-file-verify must be PASS because the fixture commit includes .sh scripts
+# (task_is_code_changes=TRUE fires for non-doc, non-yaml files like .sh).
+# All other conditional steps default to SKIP with reason.
 for cs in manifest.get('conditional_steps', []):
-    steps.append({"step": cs['id'], "ran": False, "result": "SKIP",
-                  "reason": "predicate false in isolated test repo"})
+    if cs['id'] == 'production-file-verify':
+        steps.append({"step": cs['id'], "ran": True, "result": "PASS"})
+    else:
+        steps.append({"step": cs['id'], "ran": False, "result": "SKIP",
+                      "reason": "predicate false in isolated test repo"})
 
 # Apply extra overrides (JSON list of step objects to merge/replace)
 if extra_steps_raw.strip():
@@ -193,9 +219,13 @@ manifest = json.load(open(sys.argv[2], encoding='utf-8'))
 steps = []
 for rs in manifest.get('required_steps', []):
     steps.append({"step": rs['id'], "ran": True, "result": "PASS"})
-# Deliberately omit path-manifest-audit from conditional steps
+# Deliberately omit path-manifest-audit from conditional steps.
+# production-file-verify must be PASS because the fixture commit includes .sh scripts
+# (task_is_code_changes=TRUE); otherwise inconsistent-skip fires before step-coverage-gap.
 for cs in manifest.get('conditional_steps', []):
-    if cs['id'] != 'path-manifest-audit':
+    if cs['id'] == 'production-file-verify':
+        steps.append({"step": cs['id'], "ran": True, "result": "PASS"})
+    elif cs['id'] != 'path-manifest-audit':
         steps.append({"step": cs['id'], "ran": False, "result": "SKIP",
                       "reason": "predicate false in isolated test repo"})
 report = {

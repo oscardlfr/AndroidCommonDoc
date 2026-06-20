@@ -92,10 +92,8 @@ fi
 # ── Check 1: Hash drift (rehash --check, NEVER write-mode) ───────────────────
 HASH_REPORT_TMP="/tmp/qg-registry-hash-check-$$.json"
 HASH_EXIT=0
-if ! bash "$DIR/rehash-registry.sh" --project-root "$ROOT" --check --verbose \
-        > "$HASH_REPORT_TMP" 2>&1; then
-    HASH_EXIT=$?
-fi
+bash "$DIR/rehash-registry.sh" --project-root "$ROOT" --check --verbose \
+    > "$HASH_REPORT_TMP" 2>&1 || HASH_EXIT=$?
 HASH_OUTPUT="$(cat "$HASH_REPORT_TMP" 2>/dev/null || echo '{}')"
 rm -f "$HASH_REPORT_TMP"
 
@@ -180,13 +178,16 @@ MISSING_SKILL_MD="[]"
 
 if [[ -d "$SKILLS_DIR" ]]; then
     MISSING_LIST="$(python3 -c "
-import os, json, sys
+import os, json, sys, re
 
 skills_dir = sys.argv[1]
+# Exclusion pattern must match the count check: grep -vE 'registry|params|schema'
+# (substring/regex match, same as the CI count logic).
+EXCLUDE_PAT = re.compile(r'registry|params|schema')
 missing = []
 try:
     for name in sorted(os.listdir(skills_dir)):
-        if name in ('registry', 'params', 'schema'):
+        if EXCLUDE_PAT.search(name):
             continue
         full = os.path.join(skills_dir, name)
         if not os.path.isdir(full):
