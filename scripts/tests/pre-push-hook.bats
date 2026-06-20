@@ -43,7 +43,7 @@ write_qg_stamp() {
   python3 - "$STAMP_DIR/quality-gate.stamp" "$age_secs" "$head" <<'PYEOF'
 import json, sys, time, datetime
 path, age_secs, head = sys.argv[1], int(sys.argv[2]), sys.argv[3]
-ts = datetime.datetime.utcfromtimestamp(time.time() - age_secs).strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.fromtimestamp(time.time() - age_secs, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 stamp = {"verdict": "PASS", "timestamp": ts, "steps_passed": 10}
 if head:
     stamp["head"] = head
@@ -62,7 +62,7 @@ write_pp_stamp() {
   python3 - "$STAMP_DIR/pre-pr.stamp" "$verdict" "$age_secs" "$head" "$branch" <<'PYEOF'
 import json, sys, time, datetime
 path, verdict, age_secs, head, branch = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5]
-ts = datetime.datetime.utcfromtimestamp(time.time() - age_secs).strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.fromtimestamp(time.time() - age_secs, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 stamp = {"verdict": verdict, "timestamp": ts, "head": head, "branch": branch}
 with open(path, "w", encoding="utf-8") as f:
     json.dump(stamp, f, indent=2)
@@ -166,7 +166,7 @@ PYEOF
 import json, sys, time, datetime, hashlib
 proof_path, head, worktree = sys.argv[1], sys.argv[2], sys.argv[3]
 manifest_path, report_path = sys.argv[4], sys.argv[5]
-ts = datetime.datetime.utcfromtimestamp(time.time()).strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.fromtimestamp(time.time(), datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 mv = json.load(open(manifest_path, encoding='utf-8'))['manifest_version']
 content = open(report_path, 'rb').read().replace(b'\r\n', b'\n')
 rd = hashlib.sha256(content).hexdigest()
@@ -336,7 +336,7 @@ PYEOF
   python3 - "$STAMP_DIR/quality-gate.stamp" <<'PYEOF'
 import json, sys, time, datetime
 path = sys.argv[1]
-ts = datetime.datetime.utcfromtimestamp(time.time()).strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.fromtimestamp(time.time(), datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 with open(path, "w", encoding="utf-8") as f:
     json.dump({"verdict": "FAIL", "timestamp": ts, "steps_passed": 3}, f)
 PYEOF
