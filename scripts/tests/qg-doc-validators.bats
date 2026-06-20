@@ -299,3 +299,29 @@ PYEOF
   run read_report_field 'step'
   [ "$output" = "doc-validator-parity" ]
 }
+
+# ── #DV11: zero-.md-link file does not abort under set -e/pipefail ───────────
+# Regression guard for the || true fix in the link-grep pipeline.
+# Without the guard: grep exit 1 on zero matches → pipefail → set -e abort → non-zero exit.
+# With the guard: LINKS="" (empty), inner for-loop is a no-op → exit 0, cross_refs PASS.
+
+@test "#DV11 PASS: docs/agents/nolinks.md with valid frontmatter but ZERO .md links → exit 0, cross_refs PASS" {
+  # nolinks.md has all 4 required frontmatter fields but no [text](*.md) links at all.
+  printf '%s\n' \
+    '---' \
+    'scope: [agents]' \
+    'sources: [team]' \
+    'targets: [developers]' \
+    'slug: no-links-doc' \
+    '---' \
+    '# No Links Doc' \
+    '' \
+    'This file contains no markdown links to other .md files.' \
+    'It may reference https://example.com but no relative links.' \
+    > "$FIXTURE/docs/agents/nolinks.md"
+
+  run_cross_refs
+  [ "$status" -eq 0 ]
+  run read_report_field 'subchecks.cross_refs.status'
+  [ "$output" = "PASS" ]
+}

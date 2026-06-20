@@ -84,6 +84,39 @@ After 2-pass empirical drift audit on 2026-05-10, **only ~10 items genuinely pen
 **Source**: L1 ingestion-request fulfilled this wave (feature/cancellation-detekt commit 2)
 **Note**: `docs/compose/compose-preview-multiplatform-import.md` ingested with citation frontmatter. Covers correct CMP @Preview import pattern (org.jetbrains vs androidx), uiToolingPreview accessor, CMP 1.10.x coordinate gotcha. Rule candidate `no-androidx-preview-in-common` tracked in BL-L1-cmp-preview-detekt above.
 
+### 🟡 BL-W49-doc-size-encapsulate — `checkSizeLimits` does not encapsulate the ≤300-line sub-doc limit (filed 2026-06-20)
+**Severity**: MEDIUM
+**Source**: wave qg-doc-coverage out-of-scope finding (user-consented)
+**File**: `mcp-server/src/tools/validate-doc-structure.ts` — `checkSizeLimits` function
+**Problem**: The ≤300-line sub-doc (`parent`) limit is only asserted inline inside `mcp-server/tests/integration/doc-structure.test.ts`; the production `checkSizeLimits` function does not enforce it. If the test and the function ever diverge, the function is the authoritative validator — so the gap is a silent inconsistency.
+**Fix**: Encapsulate the ≤300-line `parent` limit (and the ≤100-line hub limit already present) inside `checkSizeLimits` so both function and test agree on a single source of truth.
+**Trigger**: next `validate-doc-structure` maintenance pass or when a doc-structure test failure is investigated.
+
+### 🟢 BL-W49-verdict-phase-header — `write-verdict.sh` PREP header/footer does not update on `--phase verify-final` re-seal (filed 2026-06-20)
+**Severity**: LOW (cosmetic — `run-qg` HEAD-binding is the authoritative enforcement; header mismatch is misleading but not a security gap)
+**Source**: wave qg-doc-coverage out-of-scope finding (user-consented)
+**File**: `scripts/sh/write-verdict.sh`
+**Problem**: (a) PREP verdicts carry a premature `APPROVED-VERIFY-FINAL` footer scaffold; (b) the top-of-file `Status: APPROVED-PREP` header is not updated when `--phase verify-final` re-seals the file. A reviewer reading the file sees a confusing mix of PREP and VERIFY-FINAL markers.
+**Fix**: On `--phase verify-final`, update the `Status:` header to `APPROVED-VERIFY-FINAL` and ensure the footer reflects the actual phase. On PREP emit, omit or stub the VERIFY-FINAL footer.
+**Trigger**: next `write-verdict.sh` maintenance pass or harness wave.
+
+### 🟡 BL-W49-wave-sentinel-neutral — `plan-md-write-gate.js` stub uses `status: PASS` before QG (filed 2026-06-20)
+**Severity**: MEDIUM (violates closeout-neutral-before-gate law)
+**Source**: wave qg-doc-coverage out-of-scope finding (user-consented)
+**File**: `.claude/hooks/plan-md-write-gate.js`
+**Problem**: The hook auto-creates the wave sentinel (`.claude/wave-quality-gates/<slug>.md`) at PLAN-write time with `# status: PASS (stub)`. This is a premature PASS string inserted before QG runs — a closeout-neutral violation (same class as the BL-W47-expr4 fabrication incident).
+**Fix**: Change the auto-created stub content from `status: PASS (stub)` to `status: PENDING` (or equivalent neutral marker).
+**Trigger**: next hooks maintenance pass; LOW blast radius since sentinels are gitignored.
+
+### 🟢 BL-W49-python-utc-deprecation — bats Python fixtures use deprecated `utcfromtimestamp()`/`utcnow()` (filed 2026-06-20)
+**Severity**: LOW (pre-existing on develop; NOT wave-caused — byte-identical on develop tip, MD5-confirmed)
+**Source**: wave qg-doc-coverage out-of-scope finding (user-consented)
+**Files**: `scripts/tests/pre-push-hook.bats` + `scripts/tests/push-authorization-gate.bats` — inline Python fixtures
+**Problem**: Inline Python uses `utcfromtimestamp()`/`utcnow()` → `DeprecationWarning` under Python 3.13+, causing 4 local bats to fail (test cases 795/854/855/893 approximately).
+**Fix**: Migrate to `datetime.fromtimestamp(ts, datetime.UTC)` (Python 3.12+ preferred form; `datetime.timezone.utc` for 3.9–3.11 compat if needed).
+**Note**: Pre-existing on develop, not introduced by any recent wave. Pick up in next bats maintenance pass or Python compat sweep.
+**Trigger**: next bats suite maintenance pass or Python 3.13 adoption milestone.
+
 ---
 
 ## 🧹 Drift audit results (2026-05-10) — 28 items reconciled
