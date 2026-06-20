@@ -118,7 +118,7 @@ run_cross_refs() {
         [ -f "$doc" ] || continue
         dir=$(dirname "$doc")
         LINKS=$(grep -oE '\[[^]]+\]\(([^)]+\.md[^)]*)\)' "$doc" \
-            | grep -oE '\([^)]+\)' | tr -d '()')
+            | grep -oE '\([^)]+\)' | tr -d '()\r')
         for link in $LINKS; do
             path="${link%%#*}"
             [ -z "$path" ] && continue
