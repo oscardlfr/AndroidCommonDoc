@@ -13,6 +13,8 @@ bats_require_minimum_version 1.5.0
 #   #RI7  no-flag + missing registry.json → exit 0; .result=="n/a"    [GREEN]
 #   #RI8  COUNT-EXCLUSION PRECISION: skill dir named "registry-backup"
 #         (matches exclusion pattern) does NOT inflate count           [GREEN]
+#   #RI9  REGRESSION: zero non-excluded skills dirs → exit 0, result==clean
+#         (grep zero-match guard — would abort before bc32539)         [GREEN]
 #
 # Isolation: every test uses mktemp -d + teardown rm -rf.
 # NEVER reads live skills/registry.json.
@@ -218,4 +220,60 @@ EOF
     [ "$status" -eq 0 ]
     result="$(parse_report_result)"
     [ "$result" = "clean" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #RI9  REGRESSION: zero non-excluded skills dirs does not abort (grep zero-match guard)
+#
+# Before bc32539:  FS_SKILLS=$(ls "$SKILLS_DIR" | grep -vE "registry|params|schema" | wc -l)
+#   → grep exits 1 when NO lines match (zero non-excluded entries); under set -euo pipefail
+#     the bare assignment propagates grep's exit 1 → script aborts before writing any report
+#     → exit 1, NO report file.
+# After  bc32539:  FS_SKILLS=$({ ls "$SKILLS_DIR" | grep -vE ... || true; } | wc -l ...)
+#   → grep exit 1 is swallowed by || true → wc -l sees empty input → FS_SKILLS=0
+#   → counts match REG_SKILLS=0 → exit 0, result=="clean".
+#
+# This case FAILED before bc32539 (exit 1, no report) and PASSES now — true regression guard.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#RI9 regression: zero non-excluded skills dirs does not abort (grep zero-match guard)" {
+    # Use an isolated temp dir so setup()'s my-skill dir does not contaminate the count.
+    RI9_DIR="$(mktemp -d)"
+
+    # skills/ contains ONLY an excluded-name dir → no non-excluded entries (FS_SKILLS=0)
+    mkdir -p "$RI9_DIR/skills/registry-foo"
+    printf 'name: registry-foo\n' > "$RI9_DIR/skills/registry-foo/SKILL.md"
+
+    # Empty agents/ and commands/ dirs (count=0 each, matching empty registry)
+    mkdir -p "$RI9_DIR/.claude/agents"
+    mkdir -p "$RI9_DIR/.claude/commands"
+
+    # registry.json with entries:[] → REG_SKILLS=0, REG_AGENTS=0, REG_COMMANDS=0
+    # All counts match FS counts → clean.
+    cat > "$RI9_DIR/skills/registry.json" << 'EOF'
+{
+  "version": 1,
+  "generated": "deterministic",
+  "l0_root": ".",
+  "entries": []
+}
+EOF
+
+    run bash "$SCRIPT" --project-root "$RI9_DIR" --require-registry
+
+    # exit 0 (NOT 1 — the old grep-abort produced exit 1 with no report)
+    [ "$status" -eq 0 ]
+
+    # report file was written (old bug: script aborted before mkdir -p / write_report_and_exit)
+    [ -f "$RI9_DIR/.androidcommondoc/registry-hash-report.json" ]
+
+    # result == "clean"
+    result="$(python3 - "$RI9_DIR/.androidcommondoc/registry-hash-report.json" << 'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+print(d['result'])
+PYEOF
+)"
+    [ "$result" = "clean" ]
+
+    rm -rf "$RI9_DIR"
 }
