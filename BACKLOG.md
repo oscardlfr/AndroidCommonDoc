@@ -1,20 +1,10 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-06-19 (post runtime-adapter-capability-matrix closeout — pruned oldest per BACKLOG protocol)
+> **Last updated**: 2026-06-21 (post #221/#222 merge — moved qg-doc-coverage + qg-committed-integrity to Shipped, closed resolved doc-QG item, flagged stale Mac-migration)
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
 ## Active (proposed wave order)
-
-### Local QG must cover doc frontmatter + size limits (HIGH — QG coverage gap) — flagged 2026-06-19
-
-**Symptom**: the `runtime-adapter-capability-matrix` PR (#220) passed the **local QG** but FAILED GitHub CI on doc validators the local QG does not run: (1) `drift-audit.yml doc-cross-refs` (requires `scope/sources/targets/slug` frontmatter on every `docs/*/*.md`), then (2) `mcp-server/tests/integration/doc-structure.test.ts` (every scanner-discovered doc needs `category` matching its directory, a ≤500-line absolute limit, sub-doc ≤300, and `validate-doc-structure` zero errors). The 2 new ADR docs were created without frontmatter; adding it then activated the stricter size/category rules (ADR-001 was 767 lines → reduced to ≤500).
-
-**Root cause**: the local QG (`/pre-pr` + `emit-push-proof run-qg`) runs bats + vitest + `validate-all` (5 gates) but NOT the `doc-structure` vitest integration test nor the `drift-audit doc-cross-refs` checks. `validate-all` does not include `validate-doc-structure`. New/oversized/mis-categorised docs pass locally and only fail in CI.
-
-**Root fix**: add to the local QG (manifest `conditional_step` or quality-gater protocol) the exact CI assertions for changed `docs/*/*.md`: frontmatter completeness, `category`==directory, size limits (≤500 / sub-doc ≤300 / hub ≤100), `validate-doc-structure` zero errors, and the `doc-cross-refs` frontmatter + relative-link resolution. Goal: local QG green ⇒ CI green for docs.
-
-**Source**: user/Codex-flagged 2026-06-19 during runtime-adapter PR #220 (escaped local QG twice).
 
 ### Agent-teams completion-message delivery unreliable (HIGH — harness reliability) — user-flagged 2026-06-16
 
@@ -222,9 +212,13 @@ against the manifest (warn-only).
 
 **Source**: BL-W47-prep-22 planning, 2026-05-31.
 
-## Platform Shift (MacBook Pro M5 Max migration in progress)
+## Platform Shift (MacBook Pro M5 Max migration) — STALE (date passed; home model UNDECIDED)
 
-**Target**: ~2026-06-01 to ~2026-06-07 (≤1 week from filing).
+> ⚠️ **STALE (flagged 2026-06-21)**: the ~2026-06-07 target passed — the harness still runs on **Windows/win32** today. macOS is *available* for ad-hoc tasks, **but the switch is NOT decided**: the real model — *Windows-primary + Mac-available* **vs** an *effective migration* — is open. Do NOT read items below as "abandoned" or "still planned".
+>
+> **Follow-up (filed 2026-06-21, owner: user)**: decide the harness home model before acting on any item in this section. No mass re-home of Windows-specific items until that decision (deliberately out of scope for the `qg-reliability-root-fix` wave).
+
+**Target (original, NOT met)**: ~2026-06-01 to ~2026-06-07 (≤1 week from filing).
 **Trigger**: Hardware migration off Windows + MSYS/Git-Bash environment to native macOS.
 
 ### Items that DIE with migration (no follow-up needed)
@@ -255,12 +249,11 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Shipped (recent)
 
+- **qg-committed-integrity** (2026-06-21) — Committed-tree registry integrity mechanized at the QG mint (#222 @ `3ac0c60`): shared `qg-registry-integrity.sh` (run-qg + CI skill-registry job ⇒ local-green⇒CI-green by construction) + clean-tree assertion (allowlist `^.claude/wave-quality-gates/`) + `--require-registry` strict mode + registry digest in push-proof `artifact_digests`; the previously-declared `registry-hash` step is now REAL (quality-gater 2.19.0, 5-pata). CI green first push; 4-QG cascade caught 3 real bugs. — `project_wave_qg_committed_integrity_shipped.md`
+- **qg-doc-coverage** (2026-06-20) — Local QG runs the EXACT CI doc-validators via shared `qg-doc-validators.sh` (cross_refs + doc_structure_vitest) as a REQUIRED `doc-validator-parity` step ⇒ local-green⇒CI-green for docs (#221 @ `7fb802b`; closes the prior doc-frontmatter/size-limit coverage gap). quality-gater 2.18.0; regression vitest + bats #DV1-11. — `project_wave_qg_doc_coverage_shipped.md`
 - **runtime-adapter-capability-matrix** (2026-06-19) — Engine-agnostic runtime adapter contract over the disk-artifact floor (follow-up to bl-w48). ADR-001 (first repo ADR) defines the three-concept distinction (portable orchestrator/`team-lead` ROLE · obsolete `TeamCreate`/`team_name` PRIMITIVE · preservable background-peer/`SendMessage`/operator-visibility CAPABILITIES), a three-bucket classification rubric (`portable-role` / `Claude-legacy-runtime` / `adapter-specific-capability`), and a per-engine capability matrix (Claude / Codex / Copilot / Future × spawn / send / status / result / stop / artifact) with graceful degradation. 10 `docs/agents/*` protocol docs reframed per the rubric; `capability-preservation.bats` (C1–C7) anti-degradation guard added (multi-agent stays an optional accelerator, never least-common-denominator); `docs/adr/README.md` ADR index; `.claude/commands/work.md` + `skills/registry.json` aligned; three-phase vitest repinned. bl-w48 carried residuals resolved-by-classification (role/`SendMessage` refs = keep-as-is) + peer-control findings homed in `project_peer_control_plane_findings.md`. — `project_runtime_adapter_shipped.md`
 - **bl-w48-team-model-rootfix** (2026-06-18) — Team-model root-fix: decoupled the harness from the obsolete `TeamCreate`/named-team runtime while KEEPING multi-agent as an optional adapter capability (load-bearing contract = disk artifacts: PLAN / `arch-*-verdict.md` / QG proof). Two-layer doctrine + class→artifact floors; init-session / `/work` / tl-docs / planner+arch+lead+specialist+cross-cutting templates reframed to orchestrator + single-use subagents (background peers optional, `SendMessage`-reachable when supported). `TeamCreate` off lead tool-grants → `optional_capabilities`; specialist Scope Validation Gate → dispatch `scope_doc_path` (no stale `.planning/PLAN.md`); context-provider "On First Contact". `named-team-regression-guard` Patterns 1–5. 4 obsolete roster/topology gates retired/tombstoned; 3 bypass envs removed. Codex-audited (P1/P2 + bats-honesty) clean; QG PASS. Follow-up wave queued: `runtime-adapter-capability-matrix`. — `project_bl_w48_team_model_rootfix_shipped.md`
 - **bl-w47-tail** (2026-06-16) — BL-W47 final closeout: registry drift hotfix (planner 1.15.0 / quality-gater 2.16.0 — #217 squash left `skills/registry.json` stale) + Terminal L1/L2 sync (DawSync `cat /dev/stdin`→`cat`, RESEARCH SUPERSEDED-BY-AUDIT header, new l2-topology-divergence doctrine doc) + Wave-Close (D6/D9/dead-skill rows) + Ex-PR1 planner Q&A. Structural discovery: `TeamCreate`/`TeamList` gone → named-team routing obsolete (root-fix backlogged; explains the 2-day QG message outage). — `project_wave_bl_w47_tail_shipped.md`
-- **bl-w47-supersede** (2026-06-15) — write-verdict.sh `--supersede`: opt-in re-emit of VERIFY-FINAL at a new HEAD (comment-delimited block excise+replace, same-HEAD idempotent no-op, fail-closed, stdin-sanitized, orphan-PREP rejected, multi-block normalized). Red-team(5)+Codex(1)+QG-CRLF(1) all fixed + regression-tested; 33 supersede bats VS-1..VS-13; full suite 1471/1471. Dogfooded on its own wave-close. — project_wave_bl_w47_supersede_shipped.md
-- **bl-w47-pr-0c2** (2026-06-14) — QG-proof push gate: canonical emit-push-proof.sh runner + verdict→HEAD binding (required-role enforcement: all 3 arch roles must appear in architects_consulted AND carry a VERIFY-FINAL+HEAD-bound verdict file) + env_attested carve-out (runtime-ui-validation may SKIP with reason when predicate-true) + emitter double-prefix fix (Path B verdict-filename) + bypass audit trail; 91-test bats suite (test-push-proof-gate 28 + pre-push-hook + push-authorization-gate); portable-core with PS1 parity. — `project_wave_bl_w47_pr_0c2_shipped.md`
-- **Kotlin 2.4.0 GA** (2026-06-03) — Upgrade L0 to Kotlin 2.4.0 GA. Manifest pins (kotlin→2.4.0 ×3, KSP→2.3.9 decoupled + coupled_versions removed), build-logic toolchain 2.3.0→2.4.0 (build-verified clean), 3 GA claim corrections (Wasm Component Model Experimental-in-GA, context-args nuance, K/N GC flag), new docs/stdlib/ domain (UUID/sorted-order/value-class JS-TS export) + collection literals + Gradle 9.5 compat. 13 commits. — `project_wave_kotlin_2_4_0_ga_shipped.md`
 
 For full wave history: `git log` + memory `project_*shipped.md` files.
 
