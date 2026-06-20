@@ -116,7 +116,7 @@ COUNT_FAIL=0
 COUNT_DELTA=""
 
 if [[ -d "$SKILLS_DIR" ]]; then
-    FS_SKILLS=$(ls "$SKILLS_DIR" | grep -vE "registry|params|schema" | wc -l | tr -d ' \r')
+    FS_SKILLS=$({ ls "$SKILLS_DIR" | grep -vE "registry|params|schema" || true; } | wc -l | tr -d ' \r')
 else
     FS_SKILLS=0
 fi
