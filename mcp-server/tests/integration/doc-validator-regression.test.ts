@@ -149,6 +149,13 @@ describe(">500-line doc: absolute size limit", () => {
     const sizeError = result.errors.find((e) => e.includes("500"));
     expect(sizeError).toBeUndefined();
   });
+
+  it("PASS: exactly 500-line content is at the boundary and returns no size error", () => {
+    const content500 = makeLines(500);
+    const result = checkSizeLimits("docs/agents/limit-doc.md", content500, false);
+    const sizeError = result.errors.find((e) => e.includes("500"));
+    expect(sizeError).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -167,6 +174,13 @@ describe("hub>100-line doc: hub size limit", () => {
   it("PASS: hub doc with 99 lines returns no hub error", () => {
     const content99 = makeLines(99);
     const result = checkSizeLimits("docs/x-hub.md", content99, false);
+    const hubError = result.errors.find((e) => e.includes("hub"));
+    expect(hubError).toBeUndefined();
+  });
+
+  it("PASS: hub doc with exactly 100 lines is at the boundary and returns no hub error", () => {
+    const content100 = makeLines(100);
+    const result = checkSizeLimits("docs/x-hub.md", content100, false);
     const hubError = result.errors.find((e) => e.includes("hub"));
     expect(hubError).toBeUndefined();
   });
