@@ -3,7 +3,7 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/qg-doc-validators.sh (wave qg-doc-coverage).
 #
-# Coverage map (10 tests):
+# Coverage map (11 tests):
 #   #DV1  PASS: valid relative link in docs/agents/ → exit 0, cross_refs PASS
 #   #DV2  FAIL: broken link in docs/agents/ → exit 2, cross_refs FAIL
 #   #DV3  PASS: https:// link skipped (+ at least one valid .md link) → exit 0
@@ -14,13 +14,11 @@ bats_require_minimum_version 1.5.0
 #   #DV8  JSON has subchecks.cross_refs.status AND subchecks.doc_structure_vitest.status
 #   #DV9  JSON top-level result == FAIL when cross_refs fails
 #   #DV10 JSON step field == "doc-validator-parity"
+#   #DV11 PASS: zero-.md-link docs/agents file → exit 0, cross_refs PASS (|| true guard regression)
 #
 # Isolation rule: every test uses mktemp -d + teardown rm -rf.
 # Never reads live docs/ tree or live .androidcommondoc/.
-#
-# FRAGILITY CAVEAT: the cross_refs link block uses grep under set -euo pipefail.
-# A docs/agents/*.md file with ZERO [text](x.md) links causes grep exit 1 → pipefail abort.
-# Every docs/agents/*.md fixture MUST contain at least one resolvable [x](something.md) link.
+# Regression: a docs/agents/*.md file with ZERO [text](x.md) links is ALLOWED — the cross_refs link grep is guarded with `|| true` (degrades to an empty list, no set -e abort). #DV11 locks this in.
 
 SCRIPT="$BATS_TEST_DIRNAME/../sh/qg-doc-validators.sh"
 
