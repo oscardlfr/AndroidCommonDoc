@@ -379,6 +379,54 @@ function Invoke-RunQg {
 
     Write-Host "[emit-push-proof] run-qg: verdict binding PASS ($($verdictFiles.Count) verdicts, all HEAD-bound)" -ForegroundColor Green
 
+    # -- 4. Committed-tree integrity (Part 1: clean-tree + Part 2: registry) ----
+    # Mirrors bash step 4: runs AFTER verdict->HEAD binding, BEFORE report_digest.
+
+    # (A) Clean-tree assertion: git status --porcelain must be empty except
+    #     paths matching ^\.claude/wave-quality-gates/ (QG sentinel files).
+    $gitStatusOutput = $null
+    try { $gitStatusOutput = (& git -C $repoRoot status --porcelain 2>$null) } catch {}
+    $dirtyFail = $false
+    foreach ($line in @($gitStatusOutput)) {
+        if (-not $line -or $line.Trim() -eq '') { continue }
+        # XY + space + path; extract path (3 chars prefix: XY + space)
+        $path = if ($line.Length -gt 3) { $line.Substring(3) } else { $line.Trim() }
+        if ($path -notmatch '^\.claude/wave-quality-gates/') {
+            Write-Host "[emit-push-proof] DIRTY: $line" -ForegroundColor Yellow
+            $dirtyFail = $true
+        }
+    }
+    if ($dirtyFail) {
+        Die "tracked artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG."
+    }
+
+    # (B) Registry integrity: call shared script (same logic as CI skill-registry job).
+    #     Pass --require-registry when the repo has a skills/ directory.
+    $scriptsDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'sh'
+    $integrityScript = Join-Path $scriptsDir 'qg-registry-integrity.sh'
+    $bash = Get-Command bash -ErrorAction SilentlyContinue
+    if ($bash) {
+        $riArgs = @('--project-root', $repoRoot)
+        if (Test-Path (Join-Path $repoRoot 'skills') -PathType Container) {
+            $riArgs += '--require-registry'
+        }
+        & $bash.Source $integrityScript @riArgs
+        if ($LASTEXITCODE -ne 0) {
+            Die "derived artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG."
+        }
+    }
+    else {
+        Write-Host "[emit-push-proof] WARNING: bash not found; skipping registry integrity check (PS1 path)" -ForegroundColor Yellow
+    }
+
+    # (C) Record registry digest into artifact_digests (additive; schema_version stays 1).
+    #     sha256(skills/registry.json, CRLF->LF). Merged before proof-write.
+    $registryPath = Join-Path $repoRoot 'skills' 'registry.json'
+    if (Test-Path $registryPath) {
+        $regDigest = Get-FileSha256 $registryPath
+        $artifactDigests['skills/registry.json'] = $regDigest
+    }
+
     # -- 5. Compute report_digest (sha256, CRLF->LF, byte-identical to bash) ----
     $reportDigest = Get-FileSha256 $reportPath
 

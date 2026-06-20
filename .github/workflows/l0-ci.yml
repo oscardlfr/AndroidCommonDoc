@@ -166,57 +166,9 @@ jobs:
         working-directory: mcp-server
         run: npm run build
 
-      - name: Validate registry matches filesystem
+      - name: Skill Registry Integrity
         run: |
-          # Count actual assets
-          SKILLS=$(ls skills/ | grep -vE "registry|params|schema" | wc -l | tr -d ' ')
-          AGENTS=$(ls .claude/agents/ | wc -l | tr -d ' ')
-          COMMANDS=$(ls .claude/commands/ | wc -l | tr -d ' ')
-          REGISTRY=$(python3 -c "
-          import json
-          d = json.load(open('skills/registry.json'))
-          entries = d.get('skills', d.get('entries', []))
-          skills = sum(1 for e in entries if e.get('type') == 'skill')
-          agents = sum(1 for e in entries if e.get('type') == 'agent')
-          commands = sum(1 for e in entries if e.get('type') == 'command')
-          print(f'{skills} {agents} {commands} {len(entries)}')
-          ")
-          read REG_SKILLS REG_AGENTS REG_COMMANDS REG_TOTAL <<< "$REGISTRY"
-
-          echo "Filesystem: $SKILLS skills, $AGENTS agents, $COMMANDS commands"
-          echo "Registry:   $REG_SKILLS skills, $REG_AGENTS agents, $REG_COMMANDS commands ($REG_TOTAL total)"
-
-          FAIL=0
-          if [ "$SKILLS" != "$REG_SKILLS" ]; then
-            echo "❌ Skills mismatch: filesystem=$SKILLS registry=$REG_SKILLS"
-            FAIL=1
-          fi
-          if [ "$AGENTS" != "$REG_AGENTS" ]; then
-            echo "❌ Agents mismatch: filesystem=$AGENTS registry=$REG_AGENTS"
-            FAIL=1
-          fi
-          if [ "$COMMANDS" != "$REG_COMMANDS" ]; then
-            echo "❌ Commands mismatch: filesystem=$COMMANDS registry=$REG_COMMANDS"
-            FAIL=1
-          fi
-          [ $FAIL -eq 0 ] && echo "✅ Registry in sync" || exit 1
-
-      - name: Validate all skills have SKILL.md
-        run: |
-          FAIL=0
-          for dir in skills/*/; do
-            name=$(basename "$dir")
-            [[ "$name" =~ ^(registry|params|schema)$ ]] && continue
-            if [ ! -f "$dir/SKILL.md" ]; then
-              echo "❌ $dir missing SKILL.md"
-              FAIL=1
-            fi
-          done
-          [ $FAIL -eq 0 ] && echo "✅ All skill dirs have SKILL.md" || exit 1
-
-      - name: Validate all registry hashes are current
-        run: |
-          bash scripts/sh/rehash-registry.sh --project-root . --check --verbose
+          bash scripts/sh/qg-registry-integrity.sh --project-root . --require-registry
 
   # ── CI Gate ─────────────────────────────────────────────────────────────
   # Single stable check name for branch-protection required status checks.

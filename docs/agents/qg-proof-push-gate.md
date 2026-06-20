@@ -51,10 +51,13 @@ Runs in sequence, failing CLOSED on any integrity violation:
 1. **Manifest-drift check**: recomputes `canonical_digest(quality-gate-manifest.json)` and compares to the stored `protocol_digest`. Drift → exit 2.
 2. **Load + validate report**: reads `quality-gate-report.json`. Validates required steps, conditional step structure + named-predicate enforcement, deliberation evidence, pre-PR coverage, discovered rules with `verified_by`.
 3. **Verdict→HEAD binding**: reads every `arch-*-verdict.md` in `.planning/wave-<slug>/`. Each file must contain `APPROVED-VERIFY-FINAL` and a `**HEAD**:` field matching `git rev-parse HEAD`. Missing field or HEAD mismatch → exit 2. Digests each file (sha256, CRLF→LF) into `artifact_digests`. See [agent-verdict-protocol](agent-verdict-protocol.md).
-4. **Compute `report_digest`**: sha256 of `quality-gate-report.json` (CRLF→LF).
-5. **Write backward-compat stamps**: `quality-gate.stamp`, `pre-pr.stamp`.
-6. **Write `push-proof.json`**: see schema below.
-7. **Append to `push-proof.log`** (fail-OPEN — log I/O failure does not block a valid proof).
+4. **Committed-tree integrity** (fail-CLOSED — both parts run after verdict→HEAD binding):
+   - **Part 1 — Clean-tree assertion**: `git status --porcelain` must be empty except paths matching `^\.claude/wave-quality-gates/`. Any other modified/untracked tracked path → exit 2: `[emit-push-proof] ERROR: tracked artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG.` Note: `.planning/wave*/` and `.androidcommondoc/` are gitignored → invisible to `git status` → naturally excluded. The allowlist is exactly ONE narrow entry.
+   - **Part 2 — Registry integrity**: calls `qg-registry-integrity.sh --project-root .` (plus `--require-registry` when `skills/` exists). Recomputes registry hashes against the committed tree and compares to stored hashes, replicating CI's `skill-registry` job. Drift → exit 2: `[emit-push-proof] ERROR: derived artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG.` Writes `.androidcommondoc/registry-hash-report.json` with `result`: `clean` / `drift` / `n/a`. The `n/a` escape (no `registry.json`) is only valid when `--require-registry` is NOT passed — i.e., genuinely-minimal repos without `skills/`. See [quality-gater-registry-integrity](quality-gater-registry-integrity.md).
+5. **Compute `report_digest`**: sha256 of `quality-gate-report.json` (CRLF→LF).
+6. **Write backward-compat stamps**: `quality-gate.stamp`, `pre-pr.stamp`.
+7. **Write `push-proof.json`**: see schema below.
+8. **Append to `push-proof.log`** (fail-OPEN — log I/O failure does not block a valid proof).
 
 ### `verify-proof` — Cheap Git-Layer Verifier (pre-push hook)
 
@@ -88,9 +91,16 @@ Seven integrity checks, all fail-CLOSED (exit 2 on failure):
   "manifest_version": 1,
   "steps_executed":   [{"step": "<id>", "result": "PASS|SKIP", "ran": true|false}],
   "report_digest":    "<sha256 hex>",
-  "artifact_digests": {"arch-<role>-verdict.md": "<sha256 hex>"}
+  "artifact_digests": {
+    "arch-<role>-verdict.md": "<sha256 hex>",
+    "skills/registry.json":   "<sha256 hex, CRLF→LF, record-only>"
+  }
 }
 ```
+
+`artifact_digests` carries two kinds of entries (additive, `schema_version` stays 1):
+- **`arch-*-verdict.md`**: VERIFY-FINAL verdict files; bound at step 3 (verdict→HEAD binding). Digest mismatch after post-mint tampering → `report_digest` cascade blocks push.
+- **`skills/registry.json`**: sha256 (CRLF→LF) of the committed registry file, recorded for audit. `verify-proof` does NOT re-evaluate this digest — the committed-tree integrity check (step 4) already ran at mint time; the digest is a post-hoc record. `schema_version` stays 1.
 
 ---
 

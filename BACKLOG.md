@@ -58,6 +58,26 @@ Hook to **BLOCK** spawning any core session role (team-lead, arch-platform/integ
 
 **Source**: filed by user 2026-06-07.
 
+### BL-W49-committed-manifest-parity — agents.manifest.yaml committed-frontmatter-sha parity (MED — harness) — filed 2026-06-20
+
+**Context**: `qg-committed-integrity` (this wave) enforces committed-tree integrity for `skills/registry.json` via `qg-registry-integrity.sh`. A sibling gap exists for `.claude/registry/agents.manifest.yaml`: CI already BLOCKs on `manifest-drift-warn` (template frontmatter SHA parity), but local QG has no committed-tree enforcement equivalent. If an agent template is edited and the manifest SHA is not updated + committed, CI blocks but local QG does not.
+
+**Scope**: add committed-tree enforcement for `agents.manifest.yaml` `template_frontmatter_sha256` fields at the local QG mint level (analogous to the registry check added this wave). The CI check (`manifest-drift-warn`) already exists; this is the local-side mechanization.
+
+**Deferred**: user-consented deferral during `qg-committed-integrity` planning. The CI gate already prevents broken pushes; the local-QG gap is lower severity than the registry gap was.
+
+**Source**: Phase-0 classification in `qg-committed-integrity` PLAN.md (2026-06-20). Tracking ID: `BL-W49-committed-manifest-parity`.
+
+### `rtk` command-prefix contract for agent-template shell snippets (MED — harness/templates) — filed 2026-06-20
+
+**Problem**: CLAUDE.md mandates "agent templates MUST prefix all git/gh/docker/curl commands with `rtk`", but several bash blocks in `quality-gater.md` (both copies — `setup/agent-templates/` + `.claude/agents/`) use bare `git` at lines 92, 206-209, 224, 308-310 (`git diff`, `git rev-parse`, `git merge-base`). Pre-existing on develop; not introduced by qg-doc-coverage. The same gap is likely present in other templates/docs with shell snippets.
+
+**Scope**: (1) audit `quality-gater.md` (both copies) at the known lines; (2) audit ALL other agent templates + docs with shell snippets for the same gap; (3) DECIDE a portable contract — `rtk` mandatory in exportable templates, OR "use rtk when available, fallback to the raw command" (consumer projects may not have rtk installed); (4) if mandatory, add a mechanical guard/test so the contract is enforced (not reliant on CodeRabbit or manual review); (5) NO partial opportunistic patch — design the contract first, then apply uniformly.
+
+**Trigger**: next agent-template maintenance wave or harness wave; the decision step (3) may be a fast standalone session.
+
+**Source**: CodeRabbit on PR #221 (out-of-scope, pre-existing on develop — deferred per user direction 2026-06-20). Tracking ID: `BL-W49-rtk-command-prefix-contract`.
+
 ### Wave 38 — Ingestion bundle (LOW urgency, ~2-4h)
 
 | ID | Item |

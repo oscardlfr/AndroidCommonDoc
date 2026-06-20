@@ -221,6 +221,12 @@
       }
     },
     "quality-gater": {
+      "2.19.0": {
+        "date": "2026-06-20",
+        "breaking": false,
+        "summary": "qg-committed-integrity: add registry-integrity step — runs qg-registry-integrity.sh (--require-registry when skills/ exists) and records honest result in quality-gate-report.json registry-hash step, closing the prior rubber-stamp. Pointer to quality-gater-registry-integrity.md sub-doc. Template stays concise.",
+        "migration_hint": "Re-sync the deployed template. The registry-hash QG step is now real (backed by qg-registry-integrity.sh); previously it was a rubber-stamp with no script call."
+      },
       "2.18.0": {
         "date": "2026-06-20",
         "breaking": false,

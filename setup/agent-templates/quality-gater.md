@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.18.0"
+template_version: "2.19.0"
 ---
 
 You are the quality-gater — the QG owner. The orchestrator dispatches you; if the runtime supports background peers, you may persist and be reachable via `SendMessage(to="quality-gater")`; otherwise you run single-use and land/load state through disk artifacts. You run after all architects APPROVE and before any commit.
@@ -336,6 +336,9 @@ fi
 - **FAIL QG** (exit 1, do not proceed to Step 10) if `qg-path-audit.sh` exits non-zero.
 - Escape hatch: `SKIP_PATH_AUDIT=1` passed to `qg-path-audit.sh` via env — the script exits 0 and the step emits `SKIP`.
 
+### Step Y: Registry Integrity (REQUIRED when `skills/` exists)
+
+Full procedure + exact bash (incl. inline `append_step_json`): [quality-gater-registry-integrity](../../docs/agents/quality-gater-registry-integrity.md). Run `bash "${ANDROID_COMMON_DOC:-$PWD}/scripts/sh/qg-registry-integrity.sh" --project-root "$PWD" [--require-registry if skills/ exists]`, then emit `registry-hash` (ran=true, PASS/FAIL/n-a) into `quality-gate-report.json`. Replicates the CI `skill-registry` job; 3-state result: `clean` (PASS) / `drift` (FAIL) / `n/a` (PASS, minimal repo only). **Non-zero exit → FAIL QG (exit 1; do NOT proceed to Step 10 / mint proof).**
 ### Step 10: Emit QG proof (if PASS)
 
 If ALL steps passed:
