@@ -30,13 +30,13 @@ $shScript = Join-Path $scriptsRoot 'sh' 'qg-doc-validators.sh'
 
 if (-not (Test-Path $shScript)) {
     Write-Error "Companion bash script not found: $shScript"
-    exit 2
+    exit 1
 }
 
 $bash = Get-Command bash -ErrorAction SilentlyContinue
 if (-not $bash) {
     Write-Error "bash not found on PATH. Install Git for Windows: https://git-scm.com/download/win"
-    exit 2
+    exit 1
 }
 
 if ($null -eq $ArgList) { $ArgList = @() }
