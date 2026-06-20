@@ -378,7 +378,8 @@ MANDATORY stash-pop + report protocol — pop before your final report, state `S
 | 4. Coverage | PASS/FAIL/SKIP | {module}: {old}% → {new}% (skip if no .kt) |
 | 5. KDoc | PASS/WARN/SKIP | {n}/{total} APIs documented (skip if no .kt or non-gradle) |
 | 6. Prod Files | PASS/BLOCK/SKIP | {n} production files (skip if docs-only) |
-| 7. docs/api/ | PASS/WARN/SKIP | fresh/stale (skip if no docs/api/ or non-gradle) || 8. Rule Cross-Check | PASS/FAIL | {n}/{total} rules verified |
+| 7. docs/api/ | PASS/WARN/SKIP | fresh/stale (skip if no docs/api/ or non-gradle) |
+| 8. Rule Cross-Check | PASS/FAIL | {n}/{total} rules verified |
 | 9. UI Tests | PASS/FAIL/SKIP | {details} (skip if no Compose) |
 | 9.5 Runtime UI | PASS/FAIL/SKIP | {details} (skip if non-gradle or no baselines) |
 | X. Path-Manifest Audit | PASS/FAIL/SKIP | CLASS sentinel matches PLAN.md; all touched files in manifest (skip if non-wave) |

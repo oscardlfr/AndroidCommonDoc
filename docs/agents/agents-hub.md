@@ -65,8 +65,10 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [knowledge-currency-gate](knowledge-currency-gate.md) | Knowledge currency gate: CP verification required before any KMP capability claim in arch dispatches |
 | [hook-manifest](hook-manifest.md) | L0 hook classification: consumer-required / consumer-optional / l0-internal for all 34 hooks |
 | [hook-authoring-conventions](hook-authoring-conventions.md) | Canonical authoring conventions for L0 hook scripts: exit codes, stdin parsing, identity model, matching rules, bypass pattern |
-| [main-agent-orchestration-guide](main-agent-orchestration-guide.md) | Orchestration guide for the main agent: team topology, phase protocol, architect routing, quality gates || [workflow-orchestration](workflow-orchestration.md) | Plan mode, agent delegation table, verification, and autonomous execution rules (extracted from CLAUDE.md prep-6) |
-| [context-bundle-schema](context-bundle-schema.md) | Context bundle schema: portable file-based contract for respawn/rotation context — storage, TTL, header format, PATTERNS-only rules, writer/consumer contracts || [l2-topology-divergence](l2-topology-divergence.md) | Doctrine for L1/L2 spawn-topology divergence from the L0 adaptive floor: document-not-override, preserve consumer-private topology, reconcile after the team-primitive re-eval |
+| [main-agent-orchestration-guide](main-agent-orchestration-guide.md) | Orchestration guide for the main agent: team topology, phase protocol, architect routing, quality gates |
+| [workflow-orchestration](workflow-orchestration.md) | Plan mode, agent delegation table, verification, and autonomous execution rules (extracted from CLAUDE.md prep-6) |
+| [context-bundle-schema](context-bundle-schema.md) | Context bundle schema: portable file-based contract for respawn/rotation context — storage, TTL, header format, PATTERNS-only rules, writer/consumer contracts |
+| [l2-topology-divergence](l2-topology-divergence.md) | Doctrine for L1/L2 spawn-topology divergence from the L0 adaptive floor: document-not-override, preserve consumer-private topology, reconcile after the team-primitive re-eval |
 
 ## Key Concepts
 
