@@ -108,14 +108,9 @@ After 2-pass empirical drift audit on 2026-05-10, **only ~10 items genuinely pen
 **Fix**: Change the auto-created stub content from `status: PASS (stub)` to `status: PENDING` (or equivalent neutral marker).
 **Trigger**: next hooks maintenance pass; LOW blast radius since sentinels are gitignored.
 
-### 🟢 BL-W49-python-utc-deprecation — bats Python fixtures use deprecated `utcfromtimestamp()`/`utcnow()` (filed 2026-06-20)
-**Severity**: LOW (pre-existing on develop; NOT wave-caused — byte-identical on develop tip, MD5-confirmed)
-**Source**: wave qg-doc-coverage out-of-scope finding (user-consented)
-**Files**: `scripts/tests/pre-push-hook.bats` + `scripts/tests/push-authorization-gate.bats` — inline Python fixtures
-**Problem**: Inline Python uses `utcfromtimestamp()`/`utcnow()` → `DeprecationWarning` under Python 3.13+, causing 4 local bats to fail (test cases 795/854/855/893 approximately).
-**Fix**: Migrate to `datetime.fromtimestamp(ts, datetime.UTC)` (Python 3.12+ preferred form; `datetime.timezone.utc` for 3.9–3.11 compat if needed).
-**Note**: Pre-existing on develop, not introduced by any recent wave. Pick up in next bats maintenance pass or Python compat sweep.
-**Trigger**: next bats suite maintenance pass or Python 3.13 adoption milestone.
+### ~~🟢 BL-W49-python-utc-deprecation~~ — ~~bats Python fixtures use deprecated `utcfromtimestamp()`/`utcnow()`~~ (filed 2026-06-20)
+**Status**: ~~backlog~~ ✅ RESOLVED in-wave — PR #221, commit `fix(tests): support Python 3.13 UTC timestamps in hook bats`
+**Resolution note**: Turned out load-bearing (develop CI already red; blocked PR #221 merge). Fixed in-wave 2026-06-20. `scripts/tests/pre-push-hook.bats` + `scripts/tests/push-authorization-gate.bats` migrated to `datetime.fromtimestamp(ts, datetime.UTC)`.
 
 ---
 
