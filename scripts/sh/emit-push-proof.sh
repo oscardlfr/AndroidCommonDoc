@@ -437,6 +437,57 @@ print(json.dumps(digests))
 PYEOF
 )"
 
+  # -- 4. Committed-tree integrity (Part 1: clean-tree + Part 2: registry) ------
+  # Runs AFTER verdict->HEAD binding, BEFORE report_digest.
+  # (A) Clean-tree assertion: git status --porcelain must be empty except
+  #     paths matching ^\.claude/wave-quality-gates/ (QG sentinel files).
+  #     .planning/wave*/ and .androidcommondoc/ are gitignored -> invisible.
+  local _dirty_lines _dirty_fail
+  _dirty_lines="$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null || true)"
+  _dirty_fail=0
+  while IFS= read -r _line; do
+    [[ -z "$_line" ]] && continue
+    # XY + space + path; extract path (field 3+)
+    _path="${_line:3}"
+    if [[ ! "$_path" =~ ^\.claude/wave-quality-gates/ ]]; then
+      _dirty_fail=1
+      echo "[emit-push-proof] DIRTY: $_line" >&2
+    fi
+  done <<< "$_dirty_lines"
+  if [[ $_dirty_fail -ne 0 ]]; then
+    echo "[emit-push-proof] ERROR: tracked artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG." >&2
+    exit 2
+  fi
+
+  # (B) Registry integrity: call shared script (same logic as CI skill-registry job).
+  #     Pass --require-registry when the repo has a skills/ directory.
+  local _ri_flags=""
+  if [[ -d "$REPO_ROOT/skills" ]]; then
+    _ri_flags="--require-registry"
+  fi
+  if ! bash "$SCRIPT_DIR/qg-registry-integrity.sh" --project-root "$REPO_ROOT" $_ri_flags >&2; then
+    echo "[emit-push-proof] ERROR: derived artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG." >&2
+    exit 2
+  fi
+
+  # (C) Record registry digest into artifact_digests (additive; schema_version stays 1).
+  #     sha256(skills/registry.json, CRLF->LF). Merged before the proof-write step.
+  if [[ -f "$REPO_ROOT/skills/registry.json" ]]; then
+    local _reg_digest
+    _reg_digest="$(python3 - "$REPO_ROOT/skills/registry.json" << 'PYEOF'
+import hashlib, sys
+content = open(sys.argv[1], 'rb').read().replace(b'\r\n', b'\n')
+print(hashlib.sha256(content).hexdigest())
+PYEOF
+)"
+    artifact_digests_json="$(python3 -c "
+import json, sys
+d = json.loads(sys.argv[1])
+d['skills/registry.json'] = sys.argv[2]
+print(json.dumps(d))
+" "$artifact_digests_json" "$_reg_digest")"
+  fi
+
   # -- 5. Compute report_digest (sha256 of report file, CRLF->LF) ---------------
   local report_digest
   report_digest="$(python3 - "$REPORT_PATH" << 'PYEOF'
