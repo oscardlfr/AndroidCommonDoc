@@ -120,7 +120,8 @@ proof = {
         {"step": "test-suite",             "result": "PASS", "ran": True},
         {"step": "rule-cross-check",       "result": "PASS", "ran": True},
         {"step": "registry-hash",          "result": "PASS", "ran": True},
-        {"step": "secret-scan",            "result": "PASS", "ran": True}
+        {"step": "secret-scan",            "result": "PASS", "ran": True},
+        {"step": "doc-validator-parity",   "result": "PASS", "ran": True}
     ],
     "report_digest": digest
 }
@@ -618,7 +619,8 @@ proof = {
         {"step": "test-suite",             "result": "SKIP", "ran": False},  # mutated
         {"step": "rule-cross-check",       "result": "PASS", "ran": True},
         {"step": "registry-hash",          "result": "PASS", "ran": True},
-        {"step": "secret-scan",            "result": "PASS", "ran": True}
+        {"step": "secret-scan",            "result": "PASS", "ran": True},
+        {"step": "doc-validator-parity",   "result": "PASS", "ran": True}
     ],
     "report_digest": digest
 }
@@ -670,7 +672,8 @@ proof = {
         {"step": "test-suite",             "result": "PASS", "ran": True},
         {"step": "rule-cross-check",       "result": "PASS", "ran": True},
         {"step": "registry-hash",          "result": "PASS", "ran": True},
-        {"step": "secret-scan",            "result": "PASS", "ran": True}
+        {"step": "secret-scan",            "result": "PASS", "ran": True},
+        {"step": "doc-validator-parity",   "result": "PASS", "ran": True}
     ],
     "report_digest": digest
 }

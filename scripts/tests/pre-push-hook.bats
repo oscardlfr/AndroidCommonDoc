@@ -180,6 +180,7 @@ proof = {
         {"step": "rule-cross-check",       "result": "PASS", "ran": True},
         {"step": "registry-hash",          "result": "PASS", "ran": True},
         {"step": "secret-scan",            "result": "PASS", "ran": True},
+        {"step": "doc-validator-parity",   "result": "PASS", "ran": True},
     ],
     "report_digest": rd,
 }
