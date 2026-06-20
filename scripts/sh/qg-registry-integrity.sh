@@ -90,7 +90,7 @@ if [[ ! -f "$REGISTRY" ]]; then
 fi
 
 # ── Check 1: Hash drift (rehash --check, NEVER write-mode) ───────────────────
-HASH_REPORT_TMP="/tmp/qg-registry-hash-check-$$.json"
+HASH_REPORT_TMP="${TMPDIR:-/tmp}/qg-registry-hash-check-$$.json"
 HASH_EXIT=0
 bash "$DIR/rehash-registry.sh" --project-root "$ROOT" --check --verbose \
     > "$HASH_REPORT_TMP" 2>&1 || HASH_EXIT=$?
@@ -116,19 +116,19 @@ COUNT_FAIL=0
 COUNT_DELTA=""
 
 if [[ -d "$SKILLS_DIR" ]]; then
-    FS_SKILLS=$(ls "$SKILLS_DIR" | grep -vE "registry|params|schema" | wc -l | tr -d ' ')
+    FS_SKILLS=$(ls "$SKILLS_DIR" | grep -vE "registry|params|schema" | wc -l | tr -d ' \r')
 else
     FS_SKILLS=0
 fi
 
 if [[ -d "$AGENTS_DIR" ]]; then
-    FS_AGENTS=$(ls "$AGENTS_DIR" | wc -l | tr -d ' ')
+    FS_AGENTS=$(ls "$AGENTS_DIR" | wc -l | tr -d ' \r')
 else
     FS_AGENTS=0
 fi
 
 if [[ -d "$COMMANDS_DIR" ]]; then
-    FS_COMMANDS=$(ls "$COMMANDS_DIR" | wc -l | tr -d ' ')
+    FS_COMMANDS=$(ls "$COMMANDS_DIR" | wc -l | tr -d ' \r')
 else
     FS_COMMANDS=0
 fi
