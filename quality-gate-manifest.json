@@ -1,13 +1,14 @@
 {
   "manifest_version": 1,
-  "protocol_digest": "7294303a0cc5febd36428c3c273b9bd86d7f54d6bb6336a152f6460d44dee38c",
+  "protocol_digest": "55dd154bcc8dc05678d0d4de7c7be8675caec079dad4ddee7dc8284b29abfc16",
   "required_steps": [
     {"id": "architect-deliberation", "kind": "judgment",    "artifact_glob": ".planning/wave-*/arch-*-verdict.md", "head_bound": true, "required_roles": ["arch-platform","arch-testing","arch-integration"]},
     {"id": "pre-pr",                 "kind": "automatable", "artifact": ".androidcommondoc/pre-pr-report.json"},
     {"id": "test-suite",             "kind": "automatable", "artifact": ".androidcommondoc/test-suite-report.json"},
     {"id": "rule-cross-check",       "kind": "runtime",     "artifact": ".androidcommondoc/quality-gate-report.json"},
     {"id": "registry-hash",          "kind": "automatable", "artifact": ".androidcommondoc/registry-hash-report.json"},
-    {"id": "secret-scan",            "kind": "automatable", "artifact": ".androidcommondoc/secret-scan-report.json"}
+    {"id": "secret-scan",            "kind": "automatable", "artifact": ".androidcommondoc/secret-scan-report.json"},
+    {"id": "doc-validator-parity",   "kind": "automatable", "artifact": ".androidcommondoc/doc-validator-report.json"}
   ],
   "conditional_steps": [
     {"id": "warning-enforcement",    "kind": "automatable", "predicate": "project_type_gradle_or_hybrid",  "description": "Gradle @Suppress + deprecation check",             "source": "quality-gater.md:134 / quality-gate-protocol.md:74"},

@@ -221,6 +221,12 @@
       }
     },
     "quality-gater": {
+      "2.18.0": {
+        "date": "2026-06-20",
+        "breaking": false,
+        "summary": "qg-doc-coverage: add Step 7.5 Doc-Validator Parity (required step) — runs scripts/sh/qg-doc-validators.sh (--project-root + --toolkit-root) to replicate CI doc-cross-refs (frontmatter scope/sources/targets/slug + docs/agents/*.md relative-link resolution) and the doc-structure vitest locally, closing the local-QG-vs-CI-green doc-validator gap.",
+        "migration_hint": "Re-sync the deployed template. New required step doc-validator-parity added to quality-gate-manifest.json required_steps; QG runs the wrapper before push."
+      },
       "2.17.0": {
         "date": "2026-06-18",
         "breaking": false,

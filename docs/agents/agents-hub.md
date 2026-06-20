@@ -36,7 +36,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [capability-detection](capability-detection.md) | Graceful degradation for optional tools in agent definitions |
 | [script-vs-agent-decision](script-vs-agent-decision.md) | Decision framework: when a script is better than an agent |
 | [spec-driven-workflow](spec-driven-workflow.md) | Spec-driven agent workflow with 3-phase teams and multi-session departments |
-| [quality-gate-protocol](quality-gate-protocol.md) | Sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) |
+| [quality-gater-hub](quality-gater-hub.md) | quality-gater extended-protocol hub: Step 7.5 Doc-Validator Parity + Step 9.5 Runtime UI Validation + quality-gate-protocol + qg-proof-push-gate (4 sub-docs) |
 | [context-rotation-guide](context-rotation-guide.md) | Context management: rotation strategies, team-lead-as-relay, team dissolution |
 | [cross-layer-protocol](cross-layer-protocol.md) | Cross-layer team coordination: separate teams per layer, filesystem handoff via `.planning/HANDOFF.md`, phase sync |
 | [scope-extension-protocol](scope-extension-protocol.md) | Mechanical scope-extension gate: authorization workflow when architects hit out-of-scope blockers, escape hatch, bypass audit log |
@@ -66,10 +66,8 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [hook-manifest](hook-manifest.md) | L0 hook classification: consumer-required / consumer-optional / l0-internal for all 34 hooks |
 | [hook-authoring-conventions](hook-authoring-conventions.md) | Canonical authoring conventions for L0 hook scripts: exit codes, stdin parsing, identity model, matching rules, bypass pattern |
 | [main-agent-orchestration-guide](main-agent-orchestration-guide.md) | Orchestration guide for the main agent: team topology, phase protocol, architect routing, quality gates |
-| [quality-gater-runtime-ui-validation](quality-gater-runtime-ui-validation.md) | quality-gater Step 9.5 — Runtime UI Validation: Android Layout Diff + Compose Semantic Diff dispatch |
 | [workflow-orchestration](workflow-orchestration.md) | Plan mode, agent delegation table, verification, and autonomous execution rules (extracted from CLAUDE.md prep-6) |
 | [context-bundle-schema](context-bundle-schema.md) | Context bundle schema: portable file-based contract for respawn/rotation context — storage, TTL, header format, PATTERNS-only rules, writer/consumer contracts |
-| [qg-proof-push-gate](qg-proof-push-gate.md) | QG-proof push gate: emit-push-proof.sh (run-qg/verify-proof), quality-gate-manifest.json policy, push-proof.json schema, verdict→HEAD binding, bypass audit trail |
 | [l2-topology-divergence](l2-topology-divergence.md) | Doctrine for L1/L2 spawn-topology divergence from the L0 adaptive floor: document-not-override, preserve consumer-private topology, reconcile after the team-primitive re-eval |
 
 ## Key Concepts

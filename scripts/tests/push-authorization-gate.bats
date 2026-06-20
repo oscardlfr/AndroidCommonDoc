@@ -64,7 +64,7 @@ write_stamp() {
   python3 - "$STAMP_DIR/$fname" "$verdict" "$age_secs" "$head" <<'PYEOF'
 import json, sys, time, datetime
 path, verdict, age_secs, head = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
-ts = datetime.datetime.utcfromtimestamp(time.time() - age_secs).strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.fromtimestamp(time.time() - age_secs, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 with open(path, "w") as f:
     json.dump({"verdict": verdict, "timestamp": ts, "head": head}, f)
 PYEOF
@@ -83,7 +83,7 @@ write_canonical_proof() {
 import hashlib, json, sys, datetime
 
 head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3]
-ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 # Minimal quality-gate-report.json with all 6 required steps (ids match manifest required_steps).
 report = {
@@ -120,7 +120,8 @@ proof = {
         {"step": "test-suite",             "result": "PASS", "ran": True},
         {"step": "rule-cross-check",       "result": "PASS", "ran": True},
         {"step": "registry-hash",          "result": "PASS", "ran": True},
-        {"step": "secret-scan",            "result": "PASS", "ran": True}
+        {"step": "secret-scan",            "result": "PASS", "ran": True},
+        {"step": "doc-validator-parity",   "result": "PASS", "ran": True}
     ],
     "report_digest": digest
 }
@@ -577,7 +578,7 @@ PYEOF
   python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" <<'PYEOF'
 import hashlib, json, sys, datetime
 proof_path, head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
 normalized = bytes(b for i, b in enumerate(report_raw)
     if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
@@ -604,7 +605,7 @@ PYEOF
   python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" <<'PYEOF'
 import hashlib, json, sys, datetime
 proof_path, head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
 normalized = bytes(b for i, b in enumerate(report_raw)
     if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
@@ -618,7 +619,8 @@ proof = {
         {"step": "test-suite",             "result": "SKIP", "ran": False},  # mutated
         {"step": "rule-cross-check",       "result": "PASS", "ran": True},
         {"step": "registry-hash",          "result": "PASS", "ran": True},
-        {"step": "secret-scan",            "result": "PASS", "ran": True}
+        {"step": "secret-scan",            "result": "PASS", "ran": True},
+        {"step": "doc-validator-parity",   "result": "PASS", "ran": True}
     ],
     "report_digest": digest
 }
@@ -655,7 +657,7 @@ PYEOF
   python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" <<'PYEOF'
 import hashlib, json, sys, datetime
 proof_path, head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
 normalized = bytes(b for i, b in enumerate(report_raw)
     if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
@@ -670,7 +672,8 @@ proof = {
         {"step": "test-suite",             "result": "PASS", "ran": True},
         {"step": "rule-cross-check",       "result": "PASS", "ran": True},
         {"step": "registry-hash",          "result": "PASS", "ran": True},
-        {"step": "secret-scan",            "result": "PASS", "ran": True}
+        {"step": "secret-scan",            "result": "PASS", "ran": True},
+        {"step": "doc-validator-parity",   "result": "PASS", "ran": True}
     ],
     "report_digest": digest
 }
