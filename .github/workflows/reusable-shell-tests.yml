@@ -19,7 +19,21 @@ jobs:
         run: npm install -g kmp-test-runner@0.14.0
 
       - name: Run shell tests
-        run: bash scripts/sh/run-bats.sh scripts/tests/*.bats
+        run: |
+          # Authoritative bats result: count "^not ok" lines (npx bats can exit 0 even
+          # with failures in some edge cases). Inlined here (not the run-bats wrapper) so
+          # this reusable stays portable for consumer repos that have scripts/tests/*.bats
+          # but lack the L0 toolkit scripts — see the session-coverage.bats invariant
+          # "reusable workflows ... all have L0 clone fallback". The wrapper is the
+          # local-dev/quality-gater equivalent; here the same check is self-contained.
+          npx bats scripts/tests/*.bats | tee bats-output.log || true
+          not_ok=$(grep -c "^not ok" bats-output.log || true)
+          ok_ct=$(grep -c "^ok " bats-output.log || true)
+          echo "bats: ${ok_ct:-0} ok, ${not_ok:-0} not-ok"
+          if [ "${not_ok:-0}" -gt 0 ] || [ "${ok_ct:-0}" -eq 0 ]; then
+            echo "::error::bats failures (${not_ok:-0} not-ok) or no run evidence (${ok_ct:-0} ok)"
+            exit 1
+          fi
 
       - name: Run Node.js hook tests
         run: |
