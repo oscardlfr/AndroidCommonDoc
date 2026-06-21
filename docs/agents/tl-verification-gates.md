@@ -65,6 +65,8 @@ TaskCreate(title="arch-integration verdict", status="in_progress")
 
 **Stall check**: if 3+ min since last substantive message and a verdict task is still in_progress → broadcast "what's blocking?" to pending architects.
 
+**Idle-QG heartbeat** (Phase 3): while quality-gater is running, poll `.planning/wave-<slug>/qg-result.json`. If `status: running` and `updated_at` is stale > ~20 min, the quality-gater is HUNG — issue TaskStop and lean re-dispatch. If the file is ABSENT, do NOT recover; absence during early execution is normal (quality-gater may not have initialized yet).
+
 Architects don't poll git. They don't read other architects' verdicts unless explicitly tasked. team-lead is the router.
 
 ## Compaction-Loop Detection (S6 — 3-echo threshold)
@@ -135,6 +137,7 @@ Precision is not the point — the retrospective anchors wave-over-wave trends s
 
 After collecting verdicts from all architects at the end of each wave, verify disk artifacts:
 1. Glob `.planning/wave{N}/arch-*-verdict.md` — confirm all 3 verdict files exist and are HEAD-bound.
+   If Phase 3 ran: confirm `.planning/wave-<slug>/qg-result.json` has `status: pass|fail` and `head` matches current HEAD.
 2. If running with background peers: confirm context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater are reachable (SendMessage ACK or disk bundle present).
 3. Confirm any dispatched core specialists have completed their assigned tasks (output artifacts on disk or APPROVE relayed to architect).
 4. If a background peer is missing/unresponsive: kill-then-respawn — CP writes the role bundle first, gracefully terminate the old peer (shutdown_request), then re-spawn the CANONICAL name — `Agent(name="X", subagent_type="X", run_in_background=true, ...)`. NEVER use free-form names for agents holding Write/Bash/gh — non-canonical names are gate-invisible (firing matrix §5). NEVER skip the integrity check.

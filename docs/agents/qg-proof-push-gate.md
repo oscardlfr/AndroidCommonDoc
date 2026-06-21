@@ -31,6 +31,7 @@ The QG-proof push gate closes the loop between the quality-gater (Phase 3) and t
 | `.androidcommondoc/push-proof.log` | Audit: JSONL append, fail-OPEN |
 | `.androidcommondoc/quality-gate.stamp` | Backward-compat stamp (written by `run-qg`) |
 | `.androidcommondoc/pre-pr.stamp` | Backward-compat stamp (written by `run-qg`) |
+| `.planning/wave-<slug>/qg-result.json` | Orchestrator signal; written by `emit-qg-result.sh`; NOT consumed by `verify-proof`/pre-push; NOT a manifest step |
 | `scripts/sh/emit-push-proof.sh` | Canonical emitter + verifier (Bash) |
 | `scripts/ps1/emit-push-proof.ps1` | PS1 parity for `run-qg` subcommand |
 | `scripts/ps1/verify-push-proof.ps1` | PS1 parity for `verify-proof` subcommand |
@@ -101,6 +102,33 @@ Seven integrity checks, all fail-CLOSED (exit 2 on failure):
 `artifact_digests` carries two kinds of entries (additive, `schema_version` stays 1):
 - **`arch-*-verdict.md`**: VERIFY-FINAL verdict files; bound at step 3 (verdict→HEAD binding). Digest mismatch after post-mint tampering → `report_digest` cascade blocks push.
 - **`skills/registry.json`**: sha256 (CRLF→LF) of the committed registry file, recorded for audit. `verify-proof` does NOT re-evaluate this digest — the committed-tree integrity check (step 4) already ran at mint time; the digest is a post-hoc record. `schema_version` stays 1.
+
+---
+
+## `qg-result.json` Schema
+
+Written by `emit-qg-result.sh` to `.planning/wave-<slug>/qg-result.json` (gitignored path). Provides orchestrator-layer heartbeat and final verdict signal.
+
+```json
+{
+  "schema_version": 1,
+  "status": "running | pass | fail",
+  "head": "<40-char sha>",
+  "wave_slug": "<branch last-segment>",
+  "phase": "<step-label>",
+  "started_at": "<ISO-8601 UTC>",
+  "updated_at": "<ISO-8601 UTC>",
+  "steps": [{"step": "<id>", "result": "PASS|FAIL|SKIP|RUNNING"}],
+  "suite_summary": {"total": 0, "passed": 0, "failed": 0, "skipped": 0}
+}
+```
+
+**Boundary list** — what `qg-result.json` is NOT:
+- NOT consumed by `verify-proof` or the pre-push hook
+- NOT push authorization (push requires `push-proof.json`)
+- NOT a `quality-gate-manifest.json` step
+- NOT referenced in `quality-gate-report.json`
+- Lives in a gitignored path (`.planning/wave-*/` is gitignored); not a committed artifact
 
 ---
 

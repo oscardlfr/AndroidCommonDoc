@@ -55,6 +55,8 @@ Each wave declares a class in `PLAN.md ### Wave Class` (and the `.planning/wave-
 
 Gates verify **files on disk**, not who/how many agents were spawned. Missing `CLASS` → fail-safe to HARNESS (strictest). The planner writes the CLASS sentinel; the `premature-execution-gate.js` T2 and `emit-push-proof.sh` enforce it mechanically. See `tl-session-start.md` Phase 2 Topology Activation Gate for dispatch instructions.
 
+> **`qg-result.json`** (at `.planning/wave-<slug>/qg-result.json`) is the orchestrator-layer verdict/heartbeat SIGNAL — NOT an enforced floor artifact. It is not minted by `emit-push-proof.sh`, not consumed by `verify-proof`, and absent from the table above. See [qg-proof-push-gate § qg-result.json Schema](qg-proof-push-gate.md#qg-resultjson-schema) for details.
+
 ### Task List Sharing
 
 The team-lead creates one shared task list per wave (`CLAUDE_CODE_TASK_LIST_ID` env var propagated to all peers). All peers read the same list.
