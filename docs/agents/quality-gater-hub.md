@@ -34,7 +34,7 @@ Extended-protocol detail for the [quality-gater](../../setup/agent-templates/qua
 
 Suite output MUST go to `.androidcommondoc/suite-*.log`, NOT agent context. Call `run-bats.sh`; `^not ok` count in the log is authoritative — `npx bats` exits 0 even when tests fail, so always grep the log. Empty or absent log → treat as not-pass.
 
-`emit-qg-result.sh` lifecycle: `--init` at Phase 3 start (writes `status: running`), `--phase <step>` after each step (updates `updated_at`), final write at Step 11 (writes `status: pass|fail` with current HEAD). See [quality-gate-protocol Steps 3 & 11](quality-gate-protocol.md#step-3-test-suite) for step detail.
+`emit-qg-result.sh` lifecycle: `--init` at Phase 3 start (writes `status: running`), `--phase before each LONG step (/pre-pr, test-suite)` (updates `updated_at`), final write at Step 11 (writes `status: pass|fail` with current HEAD). See [quality-gate-protocol Steps 3 & 11](quality-gate-protocol.md#step-3-test-suite) for step detail.
 
 ### Stash Hygiene (OBS-B — MANDATORY if you used `git stash`)
 

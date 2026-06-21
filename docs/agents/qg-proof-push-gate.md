@@ -119,7 +119,7 @@ Written by `emit-qg-result.sh` to `.planning/wave-<slug>/qg-result.json` (gitign
   "started_at": "<ISO-8601 UTC>",
   "updated_at": "<ISO-8601 UTC>",
   "steps": [{"step": "<id>", "result": "PASS|FAIL|SKIP|RUNNING"}],
-  "suite_summary": {"total": 0, "passed": 0, "failed": 0, "skipped": 0}
+  "suite_summary": {"bats_total": 0, "bats_not_ok": 0, "bats_ok": 0}
 }
 ```
 

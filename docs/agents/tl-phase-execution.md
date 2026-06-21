@@ -66,7 +66,7 @@ quality-gater reads arch-*-verdict.md files from disk and optionally SendMessage
 | `qg-result.json` state | Orchestrator action |
 |------------------------|---------------------|
 | **File ABSENT** | WAIT — do NOT attempt recovery; absence does not mean failure. Fresh-spawn false-trigger guard: quality-gater may not have initialized yet. |
-| **`status: running` + `updated_at` stale > ~20 min** | HUNG — quality-gater is stuck. TaskStop the peer, then lean re-dispatch: spawn fresh quality-gater with the same scope. |
+| **`status: running` + `updated_at` stale > ~20 min** | HUNG — quality-gater is stuck (a healthy long step does NOT false-trigger: the gater bumps `--phase` before each long step — /pre-pr, test-suite — so `updated_at` stays fresh throughout). TaskStop the peer, then lean re-dispatch: spawn fresh quality-gater with the same scope. |
 | **`status: pass` or `status: fail`, HEAD-matched** | Proceed: `pass` → commit; `fail` → back to Phase 2 (max 3 retries). |
 
 HEAD-match check: `qg-result.json ".head"` must equal `git rev-parse HEAD`. A result for a prior commit is stale; treat as ABSENT.
