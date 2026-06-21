@@ -149,10 +149,10 @@ if [[ "$PROJECT_TYPE" == "node" || "$PROJECT_TYPE" == "hybrid" ]]; then
     PKG_DIR="."
     [[ -f "package.json" ]] || PKG_DIR=$(find . -maxdepth 2 -name package.json -not -path '*/node_modules/*' -not -path '*/build/*' -not -path '*/.git/*' | head -1 | xargs dirname 2>/dev/null || echo ".")
     (
-        cd "$PKG_DIR"
+        ROOT="$PWD"; mkdir -p "$ROOT/.androidcommondoc"; cd "$PKG_DIR"
         if jq -e '.scripts.test' package.json >/dev/null 2>&1; then
             echo "[STEP 2.6] Running npm test in $PKG_DIR"
-            npm test --silent > .androidcommondoc/suite-vitest.log 2>&1 || { echo "[Step 2.6] node tests FAILED — tail:"; tail -40 .androidcommondoc/suite-vitest.log; exit 1; }
+            npm test --silent > "$ROOT/.androidcommondoc/suite-vitest.log" 2>&1 || { echo "[Step 2.6] node tests FAILED — tail:"; tail -40 "$ROOT/.androidcommondoc/suite-vitest.log"; exit 1; }
         else
             echo "[STEP 2.6 SKIP] no .scripts.test in $PKG_DIR/package.json"
         fi
