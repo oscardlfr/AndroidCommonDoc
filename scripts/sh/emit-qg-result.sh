@@ -31,7 +31,7 @@
 #
 # Fail-safe rules (final mode):
 #   - Missing report file      => status:fail
-#   - No bats evidence         => status:fail
+#   - No bats evidence (ok==0) => status:fail  (1..0 plan-only log is NOT evidence)
 #   - not_ok > 0               => status:fail
 #   - Any required step !PASS  => status:fail
 #   - All above OK             => status:pass, exit 0
@@ -228,10 +228,9 @@ if [[ -f "$BATS_LOG_PATH" ]]; then
     BATS_NOT_OK=${not_ok_raw:-0}
     ok_raw=$(grep -c "^ok " "$BATS_LOG_PATH" || true)
     BATS_OK=${ok_raw:-0}
-    plan_raw=$(grep -cE "^1\.\.[0-9]+" "$BATS_LOG_PATH" || true)
-    plan_ct=${plan_raw:-0}
 
-    if [[ "$BATS_OK" -gt 0 || "$plan_ct" -gt 0 ]]; then
+    # Evidence requires at least one ok line (a 1..0 plan-only log is NOT evidence)
+    if [[ "$BATS_OK" -gt 0 ]]; then
         BATS_EVIDENCE=true
         BATS_TOTAL=$(( BATS_OK + BATS_NOT_OK ))
     fi

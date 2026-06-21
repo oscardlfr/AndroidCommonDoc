@@ -16,7 +16,7 @@
 #   <bats-targets...>    Bats targets (default: scripts/tests/*.bats)
 #
 # Rules:
-#   - no evidence (ok_ct==0 AND plan==0) => error + exit 1 (dead/empty suite MUST NOT read green)
+#   - ok_ct == 0          => error + exit 1 (no ok lines = no tests ran; MUST NOT read green)
 #   - not_ok > 0          => print "FAIL: N not-ok" + not-ok lines, exit 1
 #   - else                => print "PASS: 0 not-ok, <ok_ct> ok", exit 0
 
@@ -89,19 +89,17 @@ not_ok=$(grep -c "^not ok" "$LOG" || true)
 not_ok=${not_ok:-0}
 ok_ct=$(grep -c "^ok " "$LOG" || true)
 ok_ct=${ok_ct:-0}
-plan=$(grep -cE "^1\.\.[0-9]+" "$LOG" || true)
-plan=${plan:-0}
 
-# No evidence → dead/empty suite MUST NOT read green
-if [[ "$ok_ct" -eq 0 && "$plan" -eq 0 ]]; then
-    echo "[run-bats] ERROR: no run evidence in log (no 'ok' lines, no '1..N' plan) — dead or empty suite" >&2
+# ok_ct == 0 → zero tests ran (a "1..0" plan-only log or dead suite MUST NOT read green)
+if [[ "$ok_ct" -eq 0 ]]; then
+    echo "[run-bats] ERROR: no ok lines in log (ok=$ok_ct, not_ok=$not_ok) — no tests ran" >&2
     echo "[run-bats] Log: $LOG" >&2
     exit 1
 fi
 
-# Authoritative verdict
+# Authoritative verdict: content-driven not-ok count
 if [[ "$not_ok" -gt 0 ]]; then
-    echo "[run-bats] FAIL: $not_ok not-ok" >&2
+    echo "[run-bats] FAIL: $not_ok not-ok, $ok_ct ok" >&2
     echo "--- not-ok lines ---" >&2
     grep "^not ok" "$LOG" >&2 || true
     echo "--------------------" >&2

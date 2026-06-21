@@ -3,7 +3,7 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/emit-qg-result.sh
 #
-# Coverage map (8 tests):
+# Coverage map (9 tests):
 #   #QR1  status:pass when report all-PASS + clean bats log
 #   #QR2  status:fail when bats log has ^not ok (even if bats exited 0)
 #   #QR3  empty bats log → status:fail (no evidence = not pass)
@@ -14,6 +14,8 @@ bats_require_minimum_version 1.5.0
 #   #QR7  GUARDRAIL (b): verify-proof behaves identically with vs without
 #         qg-result.json present (not consumed by verify-proof)
 #   #QR8  --phase <name> updates phase + updated_at on existing file
+#   #QR9  REGRESSION: 1..0 bats log (plan present, zero ok) → status:fail, bats_ok:0
+#         (CI parity: emit-qg-result must treat zero-ok as no evidence)
 #
 # Isolation: every test uses mktemp -d + git init + teardown rm -rf.
 # Fixtures written via --report / --bats-log / --out; NEVER touch live state.
@@ -404,4 +406,45 @@ PYEOF
     # status must still be running (not changed by --phase)
     status_field="$(parse_json_field "$out" "status")"
     [ "$status_field" = "running" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR9  REGRESSION: 1..0 bats log (plan present, zero ok) → status:fail, bats_ok:0
+#
+# A TAP log containing only "1..0" has a plan line but ZERO ok lines.
+# Before the fix, emit-qg-result.sh would read ok_raw=0 but only check
+# BATS_NOT_OK > 0 to fail — a "1..0" log has 0 not-ok AND 0 ok, so
+# BATS_EVIDENCE was never set to true, meaning it correctly fails on
+# BATS_EVIDENCE==false.  This test pins that contract explicitly so any
+# regression (e.g. changing the ok>0 evidence guard) is caught.
+#
+# Contract:
+#   - exit 1 (verdict = fail)
+#   - status field = "fail"
+#   - suite_summary.bats_ok = 0  (matches CI: ok_ct==0 is the zero-evidence sentinel)
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR9 REGRESSION: 1..0 bats log (plan present, zero ok) → status:fail, bats_ok:0 (CI parity)" {
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    # Only a TAP plan line — no ok or not ok lines (simulates 1..0 zero-test suite)
+    printf '1..0\n' > "$log"
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    [ "$status" -eq 1 ]
+    [ -f "$out" ]
+
+    # status must be fail
+    status_field="$(parse_json_field "$out" "status")"
+    [ "$status_field" = "fail" ]
+
+    # bats_ok in suite_summary must be 0
+    bats_ok_field="$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+print(d.get('suite_summary', {}).get('bats_ok', -1))
+" "$out")"
+    [ "$bats_ok_field" = "0" ]
 }

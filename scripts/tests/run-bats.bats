@@ -3,12 +3,14 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/run-bats.sh (--eval-only --log <path> mode).
 #
-# Coverage map (4 tests):
+# Coverage map (5 tests):
 #   #RB1  ^not ok line present in log → exit 1  [headline false-green fix]
 #   #RB2  empty/no-evidence log (no ^ok, no 1..N plan) → exit 1
 #   #RB3  CLEAN log (1..N plan + all ok N lines) → exit 0
 #   #RB4  REGRESSION: clean log → zero not-ok → grep -c does NOT abort under
 #         set -euo pipefail (exits 0 cleanly, no abort on zero-match)
+#   #RB5  REGRESSION: 1..0 plan-only log (plan present, zero ok lines) → exit 1
+#         (CI parity: a suite that ran 0 tests is NOT green)
 #
 # Isolation: every test uses mktemp + teardown rm -rf.
 # NEVER reads live suite logs.
@@ -78,4 +80,20 @@ teardown() {
     run bash "$SCRIPT" --eval-only --log "$LOG"
     # Must exit 0 (not 1 from grep-abort)
     [ "$status" -eq 0 ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #RB5  REGRESSION: 1..0 plan-only log → exit 1  (CI parity fix)
+# A log containing only a TAP plan line "1..0" with ZERO ok lines means bats
+# planned 0 tests and ran 0 tests.  Before the fix, run-bats.sh would PASS on
+# this input because it only checked ^not ok count (which is 0).  CI fails
+# because ok_ct == 0.  After the fix, ok_ct == 0 is an explicit error path
+# that exits 1 — closing the local-green-but-CI-red gap.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#RB5 REGRESSION: 1..0 plan-only log (plan present, zero ok) → exit 1 (CI parity)" {
+    # Only a TAP plan line — no ok or not ok lines.
+    printf '1..0\n' > "$LOG"
+
+    run bash "$SCRIPT" --eval-only --log "$LOG"
+    [ "$status" -eq 1 ]
 }
