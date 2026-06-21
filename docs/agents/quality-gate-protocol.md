@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Quality gate protocol: sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit"
-version: 3
-last_updated: "2026-04"
+version: 4
+last_updated: "2026-06-21"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
 token_budget: 1500
 ---
@@ -80,6 +80,7 @@ The quality-gater does NOT use a hardcoded checklist. It discovers each project'
 - `/test-full-parallel --fresh-daemon` — all modules must pass
 - **BLOCK** on any failure
 - **Lean execution**: suite output MUST go to `.androidcommondoc/suite-*.log`, NOT agent context. Use `run-bats.sh`; `^not ok` count is authoritative — `npx bats` exits 0 even when tests fail, so grep the log. Empty or absent log → treat as not-pass.
+- **Full-suite completeness required**: see [§ Bats Evidence Contract](#bats-evidence-contract) below. A partial run (truncated, interrupted, or stale re-read) with 0 `not ok` is NOT a pass.
 
 ### Step 4: Coverage Baseline
 - `/coverage` on touched modules — drop >1% → INVESTIGATE → **BLOCK**
@@ -157,6 +158,107 @@ arch-testing detects these via grep on new/modified test files.
 The `quality-gater` agent template (`setup/agent-templates/quality-gater.md`) implements this protocol. It consults the 3 persistent architects (Step 0) and context-provider before running automated gates (Steps 1-8).
 
 Distinct from `quality-gate-orchestrator` (L0 internal validator for toolkit consistency -- script-parity, template-sync).
+
+---
+
+## Bats Evidence Contract
+
+Documented here per wave `qg-suite-completeness` (2026-06-21). Mechanism lives in
+`scripts/sh/run-bats.sh` + `scripts/sh/emit-qg-result.sh` + CI inline guard; the
+`quality-gater.md` template is NOT edited (auto-discovery preserves the no-5-pata scope).
+
+### Canonical Full-Run Metric
+
+A bats run is COMPLETE-and-GREEN iff ALL four conditions hold (content-authoritative;
+never rely on `npx bats` exit code alone):
+
+| # | Check | Guards against |
+|---|-------|---------------|
+| (a) | `ok_ct > 0` | Empty run / `1..0` plan |
+| (b) | `not_ok == 0` (`grep -c "^not ok"`) | Any test failure |
+| (c) | Exactly one `1..N` plan line AND `(ok_ct + not_ok) == N` | Truncated / partial / raced run |
+| (d) | No `# bats warning: Executed X instead of expected Y tests` line | teardown_file inflation |
+
+**None of these checks subsumes another.** A file that fails to LOAD collapses to `1..1` +
+`not ok` — caught by (b), not (c). A partial run with 0 failures passes (b) but fails (c).
+
+**Expected N** is parsed from the single `^1\.[.][0-9]+` plan line in the evaluated TAP log
+(anchor-free, CRLF-safe via `tr -d '\r'`). Self-contained; zero TOCTOU.
+
+**Optional cross-check** (`--cross-check-count`, execution/CI only): on a clean run,
+`grep -c "^ok "` == `npx bats --count scripts/tests/*.bats` == plan `N` == 1631.
+Guard with `command -v npx`; skip silently if npx absent, never hard-fail.
+
+**EXACT equality** (`== N`), never `>= N`: `teardown_file` failures can make
+`(ok + not_ok) > N`, inflating the total.
+
+### Run-ID-Bound Handoff (run-bats.sh → emit-qg-result.sh)
+
+**Problem**: `suite-bats.log` is a shared overwritable file. If bats runs more than once
+during a QG session (e.g., `/pre-pr` Step 2 + Step 3 `run-bats.sh`), `emit-qg-result.sh`
+re-reading the shared log may capture an intermediate, not the authoritative single run.
+
+**Solution**: `run-bats.sh` (full-run mode) writes a **unique-per-run handoff** file:
+`.androidcommondoc/bats-result.<BATS_RUN_ID>.env` (gitignored scratch; atomic temp+mv).
+
+**Handoff fields:**
+
+| Field | Description |
+|-------|-------------|
+| `BATS_OK` | Count of `^ok ` lines |
+| `BATS_NOT_OK` | Count of `^not ok` lines |
+| `BATS_EXPECTED` | Plan N from `1..N` line |
+| `BATS_TOTAL` | `BATS_OK + BATS_NOT_OK` |
+| `BATS_COMPLETE` | `true`\|`false` (4-part check) |
+| `BATS_VERDICT` | `pass`\|`fail` |
+| `BATS_LOG` | Absolute path of TAP log evaluated |
+| `BATS_HEAD` | `git rev-parse HEAD` at run time |
+| `BATS_RUN_ID` | Unique per invocation (timestamp+pid+rand) |
+| `BATS_GENERATED_AT` | Sortable UTC timestamp (same format as `qg-result.json` `started_at`) |
+
+**emit-qg-result.sh discovery algorithm** (final mode):
+
+1. Read `started_at` from `qg-result.json` (written at `--init`). If absent → skip handoff,
+   use fallback.
+2. Among `.androidcommondoc/bats-result.*.env`, a candidate is VALID iff ALL of:
+   - `BATS_HEAD == current HEAD`
+   - `BATS_RUN_ID` non-empty
+   - `BATS_GENERATED_AT >= started_at` (produced during THIS QG run, not a leftover)
+   - All completeness fields present and well-formed
+3. If ≥1 valid: select MAX `BATS_GENERATED_AT` (deterministic, not a bare cross-time
+   "latest"); source `suite_summary` from it; bats verdict = `BATS_COMPLETE==true AND
+   BATS_VERDICT==pass AND BATS_NOT_OK==0`, else `status: fail`.
+4. If 0 valid: fallback — re-grep the TAP log with the same 4-part completeness assertion.
+   Incomplete / empty log → `status: fail`.
+
+**Key invariant**: a handoff from a PREVIOUS QG on the same HEAD is REJECTED by the
+`BATS_GENERATED_AT >= started_at` guard. `started_at` and `BATS_GENERATED_AT` MUST share
+one sortable UTC format (lexicographic compare) — no fragile `date -d` parsing.
+
+`--init` / `--phase` heartbeat modes are **untouched** (run before bats; no bats logic
+in those modes). No `--bats-result` flag; no `quality-gater.md` edit.
+
+### CI-Parity Invariant
+
+The CI inline bats guard (`.github/workflows/reusable-shell-tests.yml`) is **self-contained**
+— it does NOT call `run-bats.sh` (consumer-portability / `session-coverage.bats`
+L0-clone-fallback invariant; a prior wave reverted `bash run-bats.sh` here).
+
+**Parity requirement**: the CI inline guard MUST implement the same 4-part completeness
+check as `run-bats.sh`:
+- plan-parse (`^1\.[.][0-9]+` grep, same anchor-free pattern)
+- `total = ok + not_ok`
+- fail if `total != expected`
+- fail if `Executed … instead of expected` warning line present
+- same target glob as `run-bats.sh`
+
+This invariant is enforced by `scripts/tests/ci-bats-parity.bats` (C4, this wave), which
+asserts the yml contains all four logic patterns. Reciprocal comments in both files
+document the keep-in-parity requirement.
+
+**Local-green ⇒ CI-green** by construction when this invariant holds.
+
+---
 
 ## Related Docs
 
