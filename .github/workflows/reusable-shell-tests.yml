@@ -26,14 +26,39 @@ jobs:
           # but lack the L0 toolkit scripts — see the session-coverage.bats invariant
           # "reusable workflows ... all have L0 clone fallback". The wrapper is the
           # local-dev/quality-gater equivalent; here the same check is self-contained.
+          #
+          # Target glob: scripts/tests/*.bats — identical to run-bats.sh default targets.
+          # CI-PARITY: keep this completeness logic identical to
+          #   scripts/sh/run-bats.sh — pinned by scripts/tests/ci-bats-parity.bats
           npx bats scripts/tests/*.bats | tee scripts/tests/bats-output.log || true
-          not_ok=$(grep -c "^not ok" scripts/tests/bats-output.log || true)
-          ok_ct=$(grep -c "^ok " scripts/tests/bats-output.log || true)
+          # Strip \r before all greps (CRLF safety on Windows-produced logs)
+          clean_log=$(tr -d '\r' < scripts/tests/bats-output.log)
+          not_ok=$(echo "$clean_log" | grep -c "^not ok" || true)
+          ok_ct=$(echo "$clean_log" | grep -c "^ok " || true)
           echo "bats: ${ok_ct:-0} ok, ${not_ok:-0} not-ok"
           if [ "${not_ok:-0}" -gt 0 ] || [ "${ok_ct:-0}" -eq 0 ]; then
             echo "::error::bats failures (${not_ok:-0} not-ok) or no run evidence (${ok_ct:-0} ok)"
             exit 1
           fi
+          # Completeness assertion: total must equal the plan line 1..N
+          # Leading ^ anchor required; trailing $ omitted (CRLF safety).
+          plan_count=$(echo "$clean_log" | grep -c "^1\.\.[0-9]" || true)
+          if [ "${plan_count:-0}" -ne 1 ]; then
+            echo "::error::expected exactly one ^1..N plan line, found ${plan_count:-0}"
+            exit 1
+          fi
+          expected=$(echo "$clean_log" | grep "^1\.\.[0-9]" | sed 's/^1\.\.\([0-9][0-9]*\).*/\1/')
+          total=$(( ${ok_ct:-0} + ${not_ok:-0} ))
+          if [ "$total" -ne "${expected:-0}" ]; then
+            echo "::error::completeness check failed — ran $total / expected ${expected:-0} (partial or truncated run)"
+            exit 1
+          fi
+          # bats warning: Executed X instead of expected Y tests (teardown race or over-count)
+          if echo "$clean_log" | grep -q "bats warning: Executed"; then
+            echo "::error::bats emitted 'Executed instead of expected' warning — test count mismatch"
+            exit 1
+          fi
+          echo "bats completeness OK: $total / $expected (complete)"
 
       - name: Run Node.js hook tests
         run: |

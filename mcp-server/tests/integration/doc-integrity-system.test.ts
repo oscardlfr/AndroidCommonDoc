@@ -335,8 +335,8 @@ describe('quality-gate-protocol doc', () => {
     expect(content).toContain('Production File Verification');
   });
 
-  it('version bumped to 3', () => {
-    expect(content).toContain('version: 3');
+  it('version bumped to 4', () => {
+    expect(content).toContain('version: 4');
   });
 
   it('has architect deliberation step', () => {
