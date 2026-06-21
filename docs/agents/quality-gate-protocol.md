@@ -79,6 +79,7 @@ The quality-gater does NOT use a hardcoded checklist. It discovers each project'
 ### Step 3: Test Suite
 - `/test-full-parallel --fresh-daemon` — all modules must pass
 - **BLOCK** on any failure
+- **Lean execution**: suite output MUST go to `.androidcommondoc/suite-*.log`, NOT agent context. Use `run-bats.sh`; `^not ok` count is authoritative — `npx bats` exits 0 even when tests fail, so grep the log. Empty or absent log → treat as not-pass.
 
 ### Step 4: Coverage Baseline
 - `/coverage` on touched modules — drop >1% → INVESTIGATE → **BLOCK**
@@ -109,6 +110,10 @@ After Steps 0-9 pass, the quality-gater calls `emit-push-proof.sh --subcommand r
 - Recording `steps_executed`, `report_digest` (sha256 of `quality-gate-report.json`), and `artifact_digests`
 
 The pre-push hook (`pre-push-hook.sh`) verifies this proof before allowing any push. See [qg-proof-push-gate](qg-proof-push-gate.md) for the full subsystem reference.
+
+### Step 11: Emit qg-result.json (final)
+
+After Step 10 completes, `emit-qg-result.sh` writes the final `qg-result.json` to `.planning/wave-<slug>/` with `status: pass|fail` and `head` matching current HEAD. This is the orchestrator-layer verdict signal (NOT a push gate artifact). See [qg-proof-push-gate § qg-result.json Schema](qg-proof-push-gate.md#qg-resultjson-schema) for field definitions and boundary list.
 
 ---
 

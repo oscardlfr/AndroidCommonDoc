@@ -59,15 +59,24 @@ SendMessage(to="arch-testing", summary="phase 2 start", message="scope_doc_path:
 ```
 Agent(subagent_type="quality-gater", prompt="{phase 2 verdicts summary and context}")
 ```
-quality-gater reads arch-*-verdict.md files from disk and optionally SendMessages live background peer architects. Uses context-provider for project rules. Writes `quality-gate-report.json` + stamps + `push-proof.json` to disk.
-Orchestrator reads proof from disk. PASS → commit. FAIL → back to Phase 2 (max 3 retries).
+quality-gater reads arch-*-verdict.md files from disk and optionally SendMessages live background peer architects. Uses context-provider for project rules. Writes `quality-gate-report.json` + stamps + `push-proof.json` + `qg-result.json` to disk.
+
+**Orchestrator polls `qg-result.json`** at `.planning/wave-<slug>/qg-result.json` — three DISTINCT branches:
+
+| `qg-result.json` state | Orchestrator action |
+|------------------------|---------------------|
+| **File ABSENT** | WAIT — do NOT attempt recovery; absence does not mean failure. Fresh-spawn false-trigger guard: quality-gater may not have initialized yet. |
+| **`status: running` + `updated_at` stale > ~20 min** | HUNG — quality-gater is stuck (a healthy long step does NOT false-trigger: the gater bumps `--phase` before each long step — /pre-pr, test-suite — so `updated_at` stays fresh throughout). TaskStop the peer, then lean re-dispatch: spawn fresh quality-gater with the same scope. |
+| **`status: pass` or `status: fail`, HEAD-matched** | Proceed: `pass` → commit; `fail` → back to Phase 2 (max 3 retries). |
+
+HEAD-match check: `qg-result.json ".head"` must equal `git rev-parse HEAD`. A result for a prior commit is stale; treat as ABSENT.
 
 **PHASE TRANSITIONS ARE AUTOMATIC — never ask the user between phases:**
 ```
 Plan approved → IMMEDIATELY dispatch architects (Phase 2)
 All arch-*-verdict.md on disk + APPROVE → IMMEDIATELY spawn quality-gater (Phase 3)
-quality-gate-report.json PASS on disk → IMMEDIATELY commit
-quality-gate-report.json FAIL → IMMEDIATELY back to architect dispatch (Phase 2 retry)
+qg-result.json status:pass (HEAD-matched) on disk → IMMEDIATELY commit
+qg-result.json status:fail (HEAD-matched) → IMMEDIATELY back to architect dispatch (Phase 2 retry)
 ```
 
 **Anti-patterns (each one is a template bug if it happens):**
@@ -80,10 +89,12 @@ quality-gate-report.json FAIL → IMMEDIATELY back to architect dispatch (Phase 
 
 ## Execution Trigger Checklist
 ```
-□ Plan approved?           → SendMessage the architects NOW (or Agent-spawn if not live)
-□ All architects APPROVE?  → SendMessage the quality-gater NOW (or Agent-spawn if not live)
-□ quality-gater PASS?      → commit NOW
-□ quality-gater FAIL?      → SendMessage to architects NOW (with failure context)
+□ Plan approved?                                    → SendMessage the architects NOW (or Agent-spawn if not live)
+□ All architects APPROVE?                           → SendMessage the quality-gater NOW (or Agent-spawn if not live)
+□ qg-result.json status:pass (HEAD-matched)?        → commit NOW
+□ qg-result.json status:fail (HEAD-matched)?        → SendMessage to architects NOW (with failure context)
+□ qg-result.json absent?                            → WAIT (do not recover)
+□ qg-result.json status:running + stale >~20 min?  → TaskStop + lean re-dispatch
 → If you're asking the user what to do between phases: YOU HAVE A BUG.
 ```
 

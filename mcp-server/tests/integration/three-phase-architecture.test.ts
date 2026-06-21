@@ -44,11 +44,12 @@ describe('agent template size limits', () => {
     .filter(f => f.endsWith('.md') && f !== 'README.md');
 
   // arch-int/platform/testing have ≤435 operational tolerance (BL-W47: write-verdict canal added ~5 lines to arch-integration + arch-testing)
+  // qg-reliability-root-fix: quality-gater.md joins the 435 tolerance — lean-execution hooks (run-bats.sh + emit-qg-result.sh --init/--phase/Step-11 heartbeat) added ~14 lines; canonical cap is 435 per validate-agent-templates.sh.
   const ARCH_INT_PLATFORM_LIMIT = 435;
   const STANDARD_LIMIT = 420;
 
   for (const template of templates) {
-    const limit = (template === 'arch-integration.md' || template === 'arch-platform.md' || template === 'arch-testing.md')
+    const limit = (template === 'arch-integration.md' || template === 'arch-platform.md' || template === 'arch-testing.md' || template === 'quality-gater.md')
       ? ARCH_INT_PLATFORM_LIMIT
       : STANDARD_LIMIT;
     it(`${template} is ≤${limit} lines`, () => {
@@ -488,8 +489,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/[Cc]ross-cutting/);
   });
 
-  it('has template version 2.19.0', () => {
-    expect(content).toContain('template_version: "2.19.0"');
+  it('has template version 2.20.0', () => {
+    expect(content).toContain('template_version: "2.20.0"');
   });
 });
 
