@@ -67,15 +67,16 @@ if [[ -z "$LOG" ]]; then
 fi
 
 if [[ "${#TARGETS[@]}" -eq 0 ]]; then
-    TARGETS=("$ROOT/scripts/tests/*.bats")
+    shopt -s nullglob
+    TARGETS=( "$ROOT"/scripts/tests/*.bats )
+    shopt -u nullglob
 fi
 
 # ── Run bats (unless --eval-only) ────────────────────────────────────────────
 if [[ "$EVAL_ONLY" == "false" ]]; then
     mkdir -p "$(dirname "$LOG")"
     bats_rc=0
-    # shellcheck disable=SC2068
-    npx bats ${TARGETS[@]} > "$LOG" 2>&1 || bats_rc=$?
+    npx bats "${TARGETS[@]}" > "$LOG" 2>&1 || bats_rc=$?
     echo "[run-bats] bats exited $bats_rc (content-authoritative eval follows)" >&2
 fi
 

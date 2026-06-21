@@ -250,10 +250,10 @@ try:
     report = json.load(open(sys.argv[1], encoding='utf-8'))
     steps = report.get('steps', [])
     steps_json = json.dumps(steps)
-    all_pass = all(
+    required_steps = [s for s in steps if s.get('required', True)]
+    all_pass = bool(required_steps) and all(
         s.get('result', '') == 'PASS'
-        for s in steps
-        if s.get('required', True)
+        for s in required_steps
     )
     print(steps_json)
     print('all_required_pass=' + str(all_pass).lower())

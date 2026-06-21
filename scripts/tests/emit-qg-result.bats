@@ -363,6 +363,7 @@ PYEOF
     # Step 1: run-qg WITHOUT qg-result.json — record the outcome
     run bash -c "CLAUDE_WAVE_SLUG='$slug' bash '$REPO/scripts/sh/emit-push-proof.sh' --subcommand run-qg --repo-root '$REPO'"
     local rq_status="$status"
+    [ "$rq_status" -eq 0 ]
 
     # Verify push-proof.json was created
     [ -f "$ACDOC/push-proof.json" ]
@@ -394,7 +395,8 @@ PYEOF
     local before_updated_at
     before_updated_at="$(parse_json_field "$out" "updated_at")"
 
-    # Write a --phase update
+    # Write a --phase update (sleep 1 so updated_at can advance at second resolution)
+    sleep 1
     run bash "$SCRIPT" --phase "step-2-vitest" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 0 ]
     [ -f "$out" ]
@@ -402,6 +404,11 @@ PYEOF
     # phase field must be updated
     phase_field="$(parse_json_field "$out" "phase")"
     [ "$phase_field" = "step-2-vitest" ]
+
+    # updated_at must have advanced (heartbeat regression guard)
+    local after_updated_at
+    after_updated_at="$(parse_json_field "$out" "updated_at")"
+    [ "$after_updated_at" != "$before_updated_at" ]
 
     # status must still be running (not changed by --phase)
     status_field="$(parse_json_field "$out" "status")"
