@@ -2717,7 +2717,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.19.0"
+        "template_version": "2.20.0"
       }
     },
     {
