@@ -2701,7 +2701,7 @@
       "description": "QG owner (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:93e4d30d148df0e504a945f4a20f274d55fcd7424412cc9e0a69ef705a17d6ae",
+      "hash": "sha256:20c75f03a285eaa449036511e8a864d6707861c3c5268b02bab40fe76c388686",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",

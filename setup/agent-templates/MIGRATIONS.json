@@ -323,6 +323,11 @@
         "date": "2026-06-16",
         "breaking": false,
         "note": "CodeRabbit fix: append_step_json creates quality-gate-report.json if absent (init {steps:[]} skeleton) instead of early-return — Step X now works even when Steps 0-9 did not initialize the report file."
+      },
+      "2.20.0": {
+        "date": "2026-06-21",
+        "breaking": false,
+        "summary": "qg-reliability-root-fix: lean execution (suites->logs, run-bats.sh authoritative ^not ok) + emit-qg-result.sh --init/--phase/Step-11 verdict signal"
       }
     },
     "doc-migrator": {
