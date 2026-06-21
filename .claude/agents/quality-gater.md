@@ -104,6 +104,7 @@ If you suspect context compaction dropped state (stale assumptions, forgotten ta
 ### Step 2: Full Validation Pipeline
 
 ```bash
+bash scripts/sh/emit-qg-result.sh --phase "pre-pr"
 /pre-pr
 ```
 
@@ -112,7 +113,6 @@ This runs the project's complete validation suite dynamically:
 - Detekt with project-specific rules (including string hardcoding, architecture violations)
 - `/lint-resources` (string resource completeness)
 - Architecture guards (source sets, dependencies, KMP patterns)
-- All project-configured checks
 
 **BLOCK** on any failure. `/pre-pr` output IS the authoritative validation.
 
@@ -152,7 +152,7 @@ if [[ "$PROJECT_TYPE" == "node" || "$PROJECT_TYPE" == "hybrid" ]]; then
         cd "$PKG_DIR"
         if jq -e '.scripts.test' package.json >/dev/null 2>&1; then
             echo "[STEP 2.6] Running npm test in $PKG_DIR"
-            npm test --silent 2>&1 | tee .androidcommondoc/suite-vitest.log | grep -E "FAIL|Error|failed" || true
+            npm test --silent > .androidcommondoc/suite-vitest.log 2>&1 || { echo "[Step 2.6] node tests FAILED — tail:"; tail -40 .androidcommondoc/suite-vitest.log; exit 1; }
         else
             echo "[STEP 2.6 SKIP] no .scripts.test in $PKG_DIR/package.json"
         fi
