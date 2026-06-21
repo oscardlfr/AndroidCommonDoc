@@ -3,7 +3,7 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/emit-qg-result.sh
 #
-# Coverage map (9 tests):
+# Coverage map (12 tests):
 #   #QR1  status:pass when report all-PASS + clean bats log
 #   #QR2  status:fail when bats log has ^not ok (even if bats exited 0)
 #   #QR3  empty bats log → status:fail (no evidence = not pass)
@@ -16,6 +16,12 @@ bats_require_minimum_version 1.5.0
 #   #QR8  --phase <name> updates phase + updated_at on existing file
 #   #QR9  REGRESSION: 1..0 bats log (plan present, zero ok) → status:fail, bats_ok:0
 #         (CI parity: emit-qg-result must treat zero-ok as no evidence)
+#   #QR10 VALID handoff (HEAD + non-empty run-id + generated_at >= started_at +
+#         complete) → status:pass, suite_summary.bats_ok sourced from handoff
+#   #QR11 INVALID handoff → status:fail + bats_complete:false; two sub-cases:
+#         (a) generated_at < started_at (previous-QG leftover rejected → fallback + partial)
+#         (b) HEAD mismatch (rejected → fallback + partial → fail)
+#   #QR12 NO handoff present → fallback to clean complete TAP log → status:pass
 #
 # Isolation: every test uses mktemp -d + git init + teardown rm -rf.
 # Fixtures written via --report / --bats-log / --out; NEVER touch live state.
@@ -454,4 +460,278 @@ d = json.load(open(sys.argv[1], encoding='utf-8'))
 print(d.get('suite_summary', {}).get('bats_ok', -1))
 " "$out")"
     [ "$bats_ok_field" = "0" ]
+}
+
+# ── Helpers for handoff tests ─────────────────────────────────────────────────
+
+# write_handoff <dir> <run_id> <head> <generated_at> <ok> <not_ok> <expected> <complete> <verdict>
+# Writes a synthetic .androidcommondoc/bats-result.<run_id>.env handoff file
+# mirroring the format emitted by run-bats.sh (one KEY=VALUE per line, no eval).
+write_handoff() {
+    local dir="$1"
+    local run_id="$2"
+    local head="$3"
+    local generated_at="$4"
+    local ok="$5"
+    local not_ok="$6"
+    local expected="$7"
+    local complete="$8"
+    local verdict="$9"
+    local total=$(( ok + not_ok ))
+
+    mkdir -p "$dir"
+    local path="$dir/bats-result.${run_id}.env"
+    printf 'BATS_OK=%s\n'           "$ok"           >  "$path"
+    printf 'BATS_NOT_OK=%s\n'       "$not_ok"       >> "$path"
+    printf 'BATS_EXPECTED=%s\n'     "$expected"      >> "$path"
+    printf 'BATS_TOTAL=%s\n'        "$total"         >> "$path"
+    printf 'BATS_COMPLETE=%s\n'     "$complete"      >> "$path"
+    printf 'BATS_VERDICT=%s\n'      "$verdict"       >> "$path"
+    printf 'BATS_LOG=%s\n'          "/dev/null"      >> "$path"
+    printf 'BATS_HEAD=%s\n'         "$head"          >> "$path"
+    printf 'BATS_RUN_ID=%s\n'       "$run_id"        >> "$path"
+    printf 'BATS_GENERATED_AT=%s\n' "$generated_at"  >> "$path"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR10  VALID handoff → status:pass; bats_ok sourced from the handoff
+#
+# A .androidcommondoc/bats-result.<RUN_ID>.env file that satisfies ALL four
+# validation criteria (HEAD match, non-empty run-id, BATS_GENERATED_AT >=
+# started_at, completeness fields present) must be selected by emit-qg-result.sh
+# and the counts it recorded (BATS_OK=1631) must appear verbatim in the emitted
+# qg-result.json suite_summary.bats_ok — proving the handoff is consumed, not
+# the TAP log.
+#
+# The TAP fallback log is intentionally written with a DIFFERENT ok count (2)
+# so any regression that falls back to the log is immediately caught.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR10 PASS: VALID handoff (HEAD + run-id + generated_at>=started_at + complete) → status:pass, bats_ok from handoff" {
+    # 1. Commit a file so HEAD is a real sha
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR10"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    # 2. Write --init first (to set started_at in the JSON so handoff discovery has a gate)
+    local started_at
+    started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    python3 -c "
+import json, sys
+obj = {'schema_version': 1, 'status': 'running', 'started_at': sys.argv[1],
+       'head': sys.argv[2], 'wave_slug': 'test-slug', 'updated_at': sys.argv[1],
+       'steps': [], 'suite_summary': {}}
+with open(sys.argv[3], 'w') as f: json.dump(obj, f, indent=2); f.write('\n')
+" "$started_at" "$current_head" "$out"
+
+    # 3. Write a VALID handoff with BATS_OK=1631 (distinctive sentinel)
+    #    BATS_GENERATED_AT is 1 second AFTER started_at — satisfies >=
+    local generated_at
+    generated_at="$(date -u -d '+1 second' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || \
+                    python3 -c "from datetime import datetime,timedelta,timezone; \
+                    t=datetime.now(timezone.utc)+timedelta(seconds=1); \
+                    print(t.strftime('%Y-%m-%dT%H:%M:%SZ'))")"
+
+    write_handoff "$ACDOC" "run-abc-1" "$current_head" "$generated_at" \
+                  1631 0 1631 true pass
+
+    # 4. Write the fallback TAP log with a DIFFERENT ok count (2) —
+    #    ensures the test fails if emit falls back to the log instead of the handoff
+    printf '1..2\nok 1 first\nok 2 second\n' > "$log"
+
+    # 5. Write all-pass report
+    write_report_all_pass "$rpt"
+
+    # 6. Run emit in final mode, pointing at the REPO root so it can find the handoff
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+             --project-root "$REPO" --slug "test-slug"
+    [ "$status" -eq 0 ]
+    [ -f "$out" ]
+
+    status_field="$(parse_json_field "$out" "status")"
+    [ "$status_field" = "pass" ]
+
+    # bats_ok must be 1631 (from the handoff), NOT 2 (from the fallback log)
+    bats_ok_field="$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+print(d.get('suite_summary', {}).get('bats_ok', -1))
+" "$out")"
+    [ "$bats_ok_field" = "1631" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR11a  INVALID handoff: BATS_GENERATED_AT < started_at → rejected → fallback
+#          + partial log → status:fail + bats_complete:false
+#
+# A handoff from a PREVIOUS QG run on the same HEAD has a BATS_GENERATED_AT
+# that pre-dates the current QG's started_at.  The discovery logic must reject
+# it (criterion iii).  With no valid handoff the fallback re-greps the TAP log;
+# the fixture log is partial (2 ok out of 1..5) → completeness fails → status:fail.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR11a FAIL: handoff BATS_GENERATED_AT < started_at (previous-QG leftover rejected) → fallback + partial log → status:fail" {
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR11a"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    # started_at is NOW; handoff generated_at is BEFORE started_at → stale
+    local started_at
+    started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    local old_generated_at="2020-01-01T00:00:00Z"
+
+    python3 -c "
+import json, sys
+obj = {'schema_version': 1, 'status': 'running', 'started_at': sys.argv[1],
+       'head': sys.argv[2], 'wave_slug': 'test-slug', 'updated_at': sys.argv[1],
+       'steps': [], 'suite_summary': {}}
+with open(sys.argv[3], 'w') as f: json.dump(obj, f, indent=2); f.write('\n')
+" "$started_at" "$current_head" "$out"
+
+    # Stale handoff: generated_at predates started_at → must be rejected
+    write_handoff "$ACDOC" "run-stale-1" "$current_head" "$old_generated_at" \
+                  1631 0 1631 true pass
+
+    # Fallback log is PARTIAL: 2 ok but plan says 1..5 → completeness fails
+    printf '1..5\nok 1 alpha\nok 2 beta\n' > "$log"
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+             --project-root "$REPO" --slug "test-slug"
+    [ "$status" -eq 1 ]
+    [ -f "$out" ]
+
+    status_field="$(parse_json_field "$out" "status")"
+    [ "$status_field" = "fail" ]
+
+    bats_complete_field="$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+print(d.get('suite_summary', {}).get('bats_complete', 'MISSING'))
+" "$out")"
+    [ "$bats_complete_field" = "False" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR11b  INVALID handoff: BATS_HEAD != current HEAD → rejected → fallback
+#          + partial log → status:fail + bats_complete:false
+#
+# A handoff produced against a different commit (different HEAD) must be
+# rejected by criterion (i).  The fallback again uses a partial log → fail.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR11b FAIL: handoff BATS_HEAD != current HEAD (HEAD mismatch rejected) → fallback + partial log → status:fail" {
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR11b"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    local started_at
+    started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    local generated_at
+    generated_at="$(date -u -d '+1 second' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || \
+                    python3 -c "from datetime import datetime,timedelta,timezone; \
+                    t=datetime.now(timezone.utc)+timedelta(seconds=1); \
+                    print(t.strftime('%Y-%m-%dT%H:%M:%SZ'))")"
+
+    python3 -c "
+import json, sys
+obj = {'schema_version': 1, 'status': 'running', 'started_at': sys.argv[1],
+       'head': sys.argv[2], 'wave_slug': 'test-slug', 'updated_at': sys.argv[1],
+       'steps': [], 'suite_summary': {}}
+with open(sys.argv[3], 'w') as f: json.dump(obj, f, indent=2); f.write('\n')
+" "$started_at" "$current_head" "$out"
+
+    # Handoff uses a WRONG HEAD (deadbeef…) — must be rejected by criterion (i)
+    local wrong_head="deadbeef0000000000000000000000000000000000"
+    write_handoff "$ACDOC" "run-wrong-head-1" "$wrong_head" "$generated_at" \
+                  1631 0 1631 true pass
+
+    # Fallback log is PARTIAL
+    printf '1..5\nok 1 alpha\nok 2 beta\n' > "$log"
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+             --project-root "$REPO" --slug "test-slug"
+    [ "$status" -eq 1 ]
+    [ -f "$out" ]
+
+    status_field="$(parse_json_field "$out" "status")"
+    [ "$status_field" = "fail" ]
+
+    bats_complete_field="$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+print(d.get('suite_summary', {}).get('bats_complete', 'MISSING'))
+" "$out")"
+    [ "$bats_complete_field" = "False" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR12  NO handoff present → fallback to clean complete TAP log → status:pass
+#
+# When no .androidcommondoc/bats-result.*.env files exist (e.g. this is an
+# --eval-only run, or the scratch dir was cleared), emit-qg-result.sh must
+# fall back gracefully to re-grepping the TAP log and apply the same 4-part
+# completeness assertion.  A clean complete log (1..N + N ok + 0 not ok) must
+# still produce status:pass — confirming the fallback path is also green-capable.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR12 PASS: NO handoff present → fallback to complete TAP log → status:pass" {
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR12"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    # Write --init so started_at is present (handoff discovery only runs if started_at exists)
+    local started_at
+    started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    python3 -c "
+import json, sys
+obj = {'schema_version': 1, 'status': 'running', 'started_at': sys.argv[1],
+       'head': sys.argv[2], 'wave_slug': 'test-slug', 'updated_at': sys.argv[1],
+       'steps': [], 'suite_summary': {}}
+with open(sys.argv[3], 'w') as f: json.dump(obj, f, indent=2); f.write('\n')
+" "$started_at" "$current_head" "$out"
+
+    # Ensure no handoff files exist in ACDOC (freshly created dir in setup — should be empty)
+    # (ACDOC is $REPO/.androidcommondoc; teardown removes the whole REPO)
+
+    # Complete TAP log: 3 ok, plan 1..3, no not-ok, no Executed warning
+    printf '1..3\nok 1 alpha\nok 2 beta\nok 3 gamma\n' > "$log"
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+             --project-root "$REPO" --slug "test-slug"
+    [ "$status" -eq 0 ]
+    [ -f "$out" ]
+
+    status_field="$(parse_json_field "$out" "status")"
+    [ "$status_field" = "pass" ]
+
+    # bats_complete must be true (4-part completeness passed on the fallback log)
+    bats_complete_field="$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+print(d.get('suite_summary', {}).get('bats_complete', 'MISSING'))
+" "$out")"
+    [ "$bats_complete_field" = "True" ]
 }
