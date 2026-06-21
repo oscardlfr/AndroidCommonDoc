@@ -8,7 +8,7 @@
 # Modes:
 #   --init               Write status:running, started_at, head
 #   --phase <name>       Bump updated_at + phase (heartbeat)
-#   (default / final)    Read report + bats log → compute verdict →
+#   (default / final)    Discover run-bats handoff OR re-grep log → compute verdict →
 #                        write status:pass|fail. Exit 0 iff pass.
 #
 # Usage:
@@ -27,14 +27,23 @@
 #
 # Schema:
 #   {schema_version, status(running|pass|fail), head, wave_slug, phase?,
-#    started_at, updated_at, steps[], suite_summary{bats_total,bats_not_ok,bats_ok}}
+#    started_at, updated_at, steps[],
+#    suite_summary{bats_total,bats_not_ok,bats_ok,bats_expected,bats_complete}}
 #
 # Fail-safe rules (final mode):
-#   - Missing report file      => status:fail
-#   - No bats evidence (ok==0) => status:fail  (1..0 plan-only log is NOT evidence)
-#   - not_ok > 0               => status:fail
-#   - Any required step !PASS  => status:fail
-#   - All above OK             => status:pass, exit 0
+#   - Missing report file          => status:fail
+#   - No bats evidence (ok==0)     => status:fail  (1..0 plan-only log is NOT evidence)
+#   - not_ok > 0                   => status:fail
+#   - Completeness check fails     => status:fail  (partial / truncated run)
+#   - Any required step !PASS      => status:fail
+#   - All above OK                 => status:pass, exit 0
+#
+# Handoff discovery (final mode, LD2):
+#   run-bats.sh (full-run) writes .androidcommondoc/bats-result.<RUN_ID>.env.
+#   emit discovers the best valid candidate: HEAD-match + run-id non-empty +
+#   BATS_GENERATED_AT >= started_at + completeness fields well-formed.
+#   If none valid, falls back to re-grepping the TAP log with the same 4-part check.
+#   SECURITY: handoff files are parsed key-by-key — NOT blindly sourced.
 
 set -euo pipefail
 
@@ -146,6 +155,15 @@ atomic_write() {
     mv "$tmpfile" "$target"
 }
 
+# parse_handoff_key FILE KEY
+# Extracts a single value from a handoff .env file by parsing the known KEY=value
+# line explicitly — NOT via `source`. A tampered file cannot execute code this way.
+parse_handoff_key() {
+    local file="$1"
+    local key="$2"
+    grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2-
+}
+
 # ── Mode: --init ──────────────────────────────────────────────────────────────
 if [[ "$MODE" == "init" ]]; then
     HEAD="$(get_head)"
@@ -217,22 +235,141 @@ if [[ -f "$OUT_PATH" ]]; then
     EXISTING_JSON="$(cat "$OUT_PATH")"
 fi
 
-# Evaluate bats log ────────────────────────────────────────────────────────────
+# Extract started_at from the existing qg-result.json for handoff validation.
+# started_at is written at --init time; format is %Y-%m-%dT%H:%M:%SZ (same as
+# BATS_GENERATED_AT in run-bats.sh handoff) enabling lexicographic >= compare.
+STARTED_AT=$(python3 -c "
+import json, sys
+try:
+    obj = json.loads(sys.argv[1])
+    print(obj.get('started_at', ''))
+except Exception:
+    print('')
+" "$EXISTING_JSON" 2>/dev/null || true)
+STARTED_AT=${STARTED_AT:-}
+
+# ── Handoff discovery (LD2) ───────────────────────────────────────────────────
+# Enumerate .androidcommondoc/bats-result.*.env scratch files.
+# A candidate is VALID iff ALL of:
+#   (i)   BATS_HEAD == current HEAD
+#   (ii)  BATS_RUN_ID non-empty
+#   (iii) BATS_GENERATED_AT >= started_at (lexicographic; same UTC format — no date -d)
+#   (iv)  completeness fields present and well-formed
+# Among valid candidates, pick MAX BATS_GENERATED_AT (deterministic).
+# SECURITY: parse known keys individually — never `source` the scratch file.
+
+HANDOFF_DIR="$PROJECT_ROOT/.androidcommondoc"
+BEST_HANDOFF=""
+BEST_GENERATED_AT=""
+
+if [[ -n "$STARTED_AT" ]]; then
+    for env_file in "$HANDOFF_DIR"/bats-result.*.env; do
+        [[ -f "$env_file" ]] || continue
+
+        h_head=$(parse_handoff_key "$env_file" "BATS_HEAD")
+        h_run_id=$(parse_handoff_key "$env_file" "BATS_RUN_ID")
+        h_generated_at=$(parse_handoff_key "$env_file" "BATS_GENERATED_AT")
+        h_expected=$(parse_handoff_key "$env_file" "BATS_EXPECTED")
+        h_total=$(parse_handoff_key "$env_file" "BATS_TOTAL")
+        h_ok=$(parse_handoff_key "$env_file" "BATS_OK")
+        h_not_ok=$(parse_handoff_key "$env_file" "BATS_NOT_OK")
+        h_complete=$(parse_handoff_key "$env_file" "BATS_COMPLETE")
+        h_verdict=$(parse_handoff_key "$env_file" "BATS_VERDICT")
+
+        # (i) HEAD must match
+        [[ "$h_head" == "$HEAD" ]] || continue
+
+        # (ii) RUN_ID must be non-empty
+        [[ -n "$h_run_id" ]] || continue
+
+        # (iii) BATS_GENERATED_AT >= started_at (lexicographic — both are %Y-%m-%dT%H:%M:%SZ)
+        [[ -n "$h_generated_at" ]] || continue
+        [[ "$h_generated_at" > "$STARTED_AT" || "$h_generated_at" == "$STARTED_AT" ]] || continue
+
+        # (iv) completeness fields must be present and well-formed (non-empty)
+        [[ -n "$h_expected" && -n "$h_total" && -n "$h_ok" && -n "$h_not_ok" && -n "$h_complete" && -n "$h_verdict" ]] || continue
+
+        # Candidate is valid — track MAX by BATS_GENERATED_AT
+        if [[ -z "$BEST_GENERATED_AT" || "$h_generated_at" > "$BEST_GENERATED_AT" ]]; then
+            BEST_GENERATED_AT="$h_generated_at"
+            BEST_HANDOFF="$env_file"
+        fi
+    done
+else
+    echo "[emit-qg-result] INFO: no started_at in qg-result.json — skipping handoff discovery, using fallback" >&2
+fi
+
+# ── Source suite_summary from best valid handoff (or fallback) ────────────────
 BATS_EVIDENCE=false
 BATS_NOT_OK=0
 BATS_OK=0
 BATS_TOTAL=0
+BATS_EXPECTED=0
+BATS_COMPLETE=false
 
-if [[ -f "$BATS_LOG_PATH" ]]; then
-    not_ok_raw=$(grep -c "^not ok" "$BATS_LOG_PATH" || true)
-    BATS_NOT_OK=${not_ok_raw:-0}
-    ok_raw=$(grep -c "^ok " "$BATS_LOG_PATH" || true)
-    BATS_OK=${ok_raw:-0}
+if [[ -n "$BEST_HANDOFF" ]]; then
+    echo "[emit-qg-result] INFO: using handoff: $BEST_HANDOFF (generated_at=$BEST_GENERATED_AT)" >&2
 
-    # Evidence requires at least one ok line (a 1..0 plan-only log is NOT evidence)
-    if [[ "$BATS_OK" -gt 0 ]]; then
+    BATS_OK=$(parse_handoff_key "$BEST_HANDOFF" "BATS_OK")
+    BATS_OK=${BATS_OK:-0}
+    BATS_NOT_OK=$(parse_handoff_key "$BEST_HANDOFF" "BATS_NOT_OK")
+    BATS_NOT_OK=${BATS_NOT_OK:-0}
+    BATS_EXPECTED=$(parse_handoff_key "$BEST_HANDOFF" "BATS_EXPECTED")
+    BATS_EXPECTED=${BATS_EXPECTED:-0}
+    BATS_TOTAL=$(parse_handoff_key "$BEST_HANDOFF" "BATS_TOTAL")
+    BATS_TOTAL=${BATS_TOTAL:-0}
+    h_complete_raw=$(parse_handoff_key "$BEST_HANDOFF" "BATS_COMPLETE")
+    h_verdict_raw=$(parse_handoff_key "$BEST_HANDOFF" "BATS_VERDICT")
+
+    # Bats verdict from handoff: COMPLETE==true AND VERDICT==pass AND NOT_OK==0
+    if [[ "$h_complete_raw" == "true" && "$h_verdict_raw" == "pass" && "$BATS_NOT_OK" -eq 0 ]]; then
+        BATS_COMPLETE=true
         BATS_EVIDENCE=true
-        BATS_TOTAL=$(( BATS_OK + BATS_NOT_OK ))
+    else
+        BATS_COMPLETE=false
+        # Treat as evidence if ok > 0 (for accurate count reporting), but verdict is fail
+        if [[ "$BATS_OK" -gt 0 ]]; then
+            BATS_EVIDENCE=true
+        fi
+    fi
+
+else
+    # ── Fallback: re-grep the TAP log + same 4-part completeness assertion ────────
+    echo "[emit-qg-result] INFO: no valid handoff found — falling back to TAP log: $BATS_LOG_PATH" >&2
+
+    if [[ -f "$BATS_LOG_PATH" ]]; then
+        # Strip \r before all greps (CRLF safety — mirrors run-bats.sh)
+        clean_log="$(tr -d '\r' < "$BATS_LOG_PATH")"
+
+        not_ok_raw=$(grep -c "^not ok" <<< "$clean_log" || true)
+        BATS_NOT_OK=${not_ok_raw:-0}
+        ok_raw=$(grep -c "^ok " <<< "$clean_log" || true)
+        BATS_OK=${ok_raw:-0}
+
+        # Evidence requires at least one ok line
+        if [[ "$BATS_OK" -gt 0 ]]; then
+            BATS_EVIDENCE=true
+            BATS_TOTAL=$(( BATS_OK + BATS_NOT_OK ))
+
+            # 4-part completeness assertion (mirrors run-bats.sh LD1)
+            plan_count=$(grep -c "^1\.\.[0-9]" <<< "$clean_log" || true)
+            plan_count=${plan_count:-0}
+
+            if [[ "$plan_count" -eq 1 ]]; then
+                BATS_EXPECTED=$(grep "^1\.\.[0-9]" <<< "$clean_log" | sed 's/^1\.\.\([0-9][0-9]*\).*/\1/')
+                BATS_EXPECTED=${BATS_EXPECTED:-0}
+
+                has_exec_warning=false
+                if grep -q "bats warning: Executed" <<< "$clean_log" 2>/dev/null; then
+                    has_exec_warning=true
+                fi
+
+                if [[ "$BATS_TOTAL" -eq "$BATS_EXPECTED" && "$has_exec_warning" == "false" && "$BATS_NOT_OK" -eq 0 ]]; then
+                    BATS_COMPLETE=true
+                fi
+            fi
+            # plan_count != 1 → BATS_COMPLETE stays false (incomplete/malformed)
+        fi
     fi
 fi
 
@@ -276,9 +413,11 @@ FAIL_REASON=""
 if [[ "$REPORT_EXISTS" == "false" ]]; then
     FAIL_REASON="report file not found: $REPORT_PATH"
 elif [[ "$BATS_EVIDENCE" == "false" ]]; then
-    FAIL_REASON="no bats run evidence in log: $BATS_LOG_PATH"
+    FAIL_REASON="no bats run evidence (ok==0 or no log)"
 elif [[ "$BATS_NOT_OK" -gt 0 ]]; then
     FAIL_REASON="bats not_ok=$BATS_NOT_OK"
+elif [[ "$BATS_COMPLETE" == "false" ]]; then
+    FAIL_REASON="bats completeness check failed (partial or truncated run; ok=$BATS_OK expected=$BATS_EXPECTED)"
 elif [[ "$ALL_REQUIRED_PASS" == "false" ]]; then
     FAIL_REASON="one or more required report steps not PASS"
 else
@@ -286,6 +425,7 @@ else
 fi
 
 # Build final JSON ─────────────────────────────────────────────────────────────
+# suite_summary is extended with bats_expected + bats_complete (additive, backward-compatible)
 PAYLOAD="$(python3 -c "
 import json, sys
 
@@ -299,6 +439,8 @@ bats_total = int(sys.argv[7])
 bats_not_ok = int(sys.argv[8])
 bats_ok = int(sys.argv[9])
 fail_reason = sys.argv[10]
+bats_expected = int(sys.argv[11])
+bats_complete_str = sys.argv[12]
 
 try:
     existing = json.loads(existing_raw)
@@ -320,6 +462,8 @@ obj = {
         'bats_total': bats_total,
         'bats_not_ok': bats_not_ok,
         'bats_ok': bats_ok,
+        'bats_expected': bats_expected,
+        'bats_complete': bats_complete_str == 'true',
     },
 }
 if fail_reason:
@@ -328,6 +472,7 @@ if fail_reason:
 print(json.dumps(obj, indent=2))
 " "$EXISTING_JSON" "$HEAD" "$WAVE_SLUG" "$VERDICT" "$NOW" \
   "$STEPS_JSON" "$BATS_TOTAL" "$BATS_NOT_OK" "$BATS_OK" "$FAIL_REASON" \
+  "$BATS_EXPECTED" "$BATS_COMPLETE" \
   2>/dev/null || echo '{"schema_version":1,"status":"fail","error":"serialization-failed"}')"
 
 atomic_write "$OUT_PATH" "$PAYLOAD"
