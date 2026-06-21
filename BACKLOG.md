@@ -1,6 +1,6 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-06-21 (post #221/#222 merge — moved qg-doc-coverage + qg-committed-integrity to Shipped, closed resolved doc-QG item, flagged stale Mac-migration)
+> **Last updated**: 2026-06-21 (post #221/#222 merge — moved qg-doc-coverage + qg-committed-integrity to Shipped, closed resolved doc-QG item, flagged stale Mac-migration) + qg-reliability-root-fix wave-close (QG-green + verify-proof PASS + full suite confirmed; pending merge)
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
@@ -16,9 +16,23 @@
 
 **Root fix (this item)**: (a) QG emits a structured `.planning/wave-<slug>/qg-result.json` the orchestrator polls (decouple verdict from message delivery); (b) repro + report the agent-teams notification drop upstream, or add a heartbeat/ack; (c) session-health check that flags peers idle >N min whose on-disk artifact shows completed work.
 
+**Status (2026-06-21)**: (a) poll-able `qg-result.json` verdict + (c) heartbeat/session-health recovery SHIPPED in `qg-reliability-root-fix` (orchestrator reads the verdict from disk, NOT the completion message — demonstrated live). Remaining: (b) repro/report the upstream agent-teams notification drop. That wave's QG verification also surfaced a partial-run-detection gap → HIGH follow-up below.
+
 **Source**: user-flagged 2026-06-16 during bl-w47-expr4.
 
 **Source**: discovered 2026-06-16 during bl-w47-tail orchestration init; user-directed to backlog the root-fix.
+
+### QG bats wrapper must assert the FULL expected suite ran (HIGH — harness reliability) — surfaced 2026-06-21
+
+run-bats.sh / emit-qg-result.sh / the CI inline guard decide PASS on `not_ok==0 AND ok_ct>0` but do NOT assert the full expected suite ran — a PARTIAL run (a .bats file failing to load, an interrupted run) gives fewer `ok` + 0 `not ok` → reads PASS. Same class as the user-flagged `1..0` false-green, extended to partial runs. Live evidence: qg-reliability-root-fix's final QG captured a 1517-ok intermediate in suite-bats.log vs the authoritative 1629 full run. **Design constraint**: needs a reconciled metric first — a confirmed full run shows `grep -c "^ok "`=1629 vs `npx bats --count`=1631 (~2-test TAP/skip nuance); define the canonical full-run metric then assert (deliberate design, NOT a late-cycle hack).
+
+**Source**: orchestrator-surfaced during qg-reliability-root-fix final-QG verification (2026-06-21); user-directed HIGH.
+
+### emit-qg-result.sh bats-count observability — stale intermediate read (MED — harness, linked to HIGH above) — surfaced 2026-06-21
+
+qg-result.json recorded bats_total:1517 vs the authoritative 1629/last-ok-1631. emit-qg-result.sh's count LOGIC is correct (identical `grep -c "^ok "` to run-bats.sh); cause = suite-bats.log is written by >1 bats invocation during the multi-step QG (e.g. /pre-pr + Step-3 run-bats.sh) so emit captures an intermediate. status:pass was correct (driven by not_ok==0). Fix candidates: emit-qg-result consumes run-bats.sh's result/exit directly (not a re-read of a shared overwritable log), OR unique-per-run log path.
+
+**Source**: surfaced 2026-06-21; user-directed MED.
 
 ### Installer sourcing-shim for wave-slug resolver (MED — harness, ~1-2h) — deferred 2026-06-16
 
@@ -249,11 +263,11 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Shipped (recent)
 
+- **qg-reliability-root-fix** (2026-06-21) — Made the QG RELIABLE: verdict load-bearing in a polled disk artifact `.planning/wave-<slug>/qg-result.json` (orchestrator reads PASS/FAIL from disk, NEVER the completion message — demonstrated live) + status/updated_at heartbeat (--init/--phase before each long step) so a hung quality-gater is detectable → TaskStop + lean re-dispatch (not a multi-day hang). New `scripts/sh/run-bats.sh` makes `grep -c "^not ok"` AUTHORITATIVE (npx bats exits 0 even with not-ok) + reused in CI (local-green⇒CI-green); lean quality-gater (suites→logs, no context-bloat stall). quality-gater 2.20.0 (5-pata). GUARDRAIL held: qg-result.json (gitignored) does NOT trip the #222 clean-tree gate, NOT consumed by verify-proof/pre-push, NOT a push-proof step. 2 review rounds caught 4 real bugs (node-verify false-green, run-bats/CI ok_ct==0 parity, heartbeat-once, node-verify subdir-package.json log-path false-red). RUN VERIFIED: full bats (1631) 0 not-ok + verify-proof PASS + push-proof minted @ aca2ec4; PENDING push/CI/CodeRabbit/Codex/merge. Follow-ups: full-suite-ran assertion (HIGH) + count observability (MED). — `project_wave_qg_reliability_root_fix_shipped.md`
 - **qg-committed-integrity** (2026-06-21) — Committed-tree registry integrity mechanized at the QG mint (#222 @ `3ac0c60`): shared `qg-registry-integrity.sh` (run-qg + CI skill-registry job ⇒ local-green⇒CI-green by construction) + clean-tree assertion (allowlist `^.claude/wave-quality-gates/`) + `--require-registry` strict mode + registry digest in push-proof `artifact_digests`; the previously-declared `registry-hash` step is now REAL (quality-gater 2.19.0, 5-pata). CI green first push; 4-QG cascade caught 3 real bugs. — `project_wave_qg_committed_integrity_shipped.md`
 - **qg-doc-coverage** (2026-06-20) — Local QG runs the EXACT CI doc-validators via shared `qg-doc-validators.sh` (cross_refs + doc_structure_vitest) as a REQUIRED `doc-validator-parity` step ⇒ local-green⇒CI-green for docs (#221 @ `7fb802b`; closes the prior doc-frontmatter/size-limit coverage gap). quality-gater 2.18.0; regression vitest + bats #DV1-11. — `project_wave_qg_doc_coverage_shipped.md`
 - **runtime-adapter-capability-matrix** (2026-06-19) — Engine-agnostic runtime adapter contract over the disk-artifact floor (follow-up to bl-w48). ADR-001 (first repo ADR) defines the three-concept distinction (portable orchestrator/`team-lead` ROLE · obsolete `TeamCreate`/`team_name` PRIMITIVE · preservable background-peer/`SendMessage`/operator-visibility CAPABILITIES), a three-bucket classification rubric (`portable-role` / `Claude-legacy-runtime` / `adapter-specific-capability`), and a per-engine capability matrix (Claude / Codex / Copilot / Future × spawn / send / status / result / stop / artifact) with graceful degradation. 10 `docs/agents/*` protocol docs reframed per the rubric; `capability-preservation.bats` (C1–C7) anti-degradation guard added (multi-agent stays an optional accelerator, never least-common-denominator); `docs/adr/README.md` ADR index; `.claude/commands/work.md` + `skills/registry.json` aligned; three-phase vitest repinned. bl-w48 carried residuals resolved-by-classification (role/`SendMessage` refs = keep-as-is) + peer-control findings homed in `project_peer_control_plane_findings.md`. — `project_runtime_adapter_shipped.md`
 - **bl-w48-team-model-rootfix** (2026-06-18) — Team-model root-fix: decoupled the harness from the obsolete `TeamCreate`/named-team runtime while KEEPING multi-agent as an optional adapter capability (load-bearing contract = disk artifacts: PLAN / `arch-*-verdict.md` / QG proof). Two-layer doctrine + class→artifact floors; init-session / `/work` / tl-docs / planner+arch+lead+specialist+cross-cutting templates reframed to orchestrator + single-use subagents (background peers optional, `SendMessage`-reachable when supported). `TeamCreate` off lead tool-grants → `optional_capabilities`; specialist Scope Validation Gate → dispatch `scope_doc_path` (no stale `.planning/PLAN.md`); context-provider "On First Contact". `named-team-regression-guard` Patterns 1–5. 4 obsolete roster/topology gates retired/tombstoned; 3 bypass envs removed. Codex-audited (P1/P2 + bats-honesty) clean; QG PASS. Follow-up wave queued: `runtime-adapter-capability-matrix`. — `project_bl_w48_team_model_rootfix_shipped.md`
-- **bl-w47-tail** (2026-06-16) — BL-W47 final closeout: registry drift hotfix (planner 1.15.0 / quality-gater 2.16.0 — #217 squash left `skills/registry.json` stale) + Terminal L1/L2 sync (DawSync `cat /dev/stdin`→`cat`, RESEARCH SUPERSEDED-BY-AUDIT header, new l2-topology-divergence doctrine doc) + Wave-Close (D6/D9/dead-skill rows) + Ex-PR1 planner Q&A. Structural discovery: `TeamCreate`/`TeamList` gone → named-team routing obsolete (root-fix backlogged; explains the 2-day QG message outage). — `project_wave_bl_w47_tail_shipped.md`
 
 For full wave history: `git log` + memory `project_*shipped.md` files.
 
