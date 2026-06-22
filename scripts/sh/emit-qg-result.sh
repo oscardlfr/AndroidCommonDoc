@@ -168,6 +168,8 @@ parse_handoff_key() {
 if [[ "$MODE" == "init" ]]; then
     HEAD="$(get_head)"
     NOW="$(now_utc)"
+    # Reset report scratch so prior-run prose cannot survive into this QG run.
+    printf '{"steps":[]}\n' > "$REPORT_PATH"
     PAYLOAD="$(python3 -c "
 import json, sys
 
@@ -422,6 +424,20 @@ elif [[ "$ALL_REQUIRED_PASS" == "false" ]]; then
     FAIL_REASON="one or more required report steps not PASS"
 else
     VERDICT="pass"
+fi
+
+# Freshness check — if stale, override verdict to fail (blocking, no || true).
+if [[ -f "$REPORT_PATH" ]]; then
+    freshness_exit=0
+    bash "$SCRIPT_DIR/lib/qg-report-freshness.sh" \
+        --report "$REPORT_PATH" \
+        --head   "$HEAD" \
+        --bats-count "$BATS_OK" \
+        --repo-root  "$PROJECT_ROOT" 2>&1 || freshness_exit=$?
+    if [[ "$freshness_exit" -ne 0 ]]; then
+        VERDICT="fail"
+        FAIL_REASON="report-freshness check failed: stale step reasons detected (exit $freshness_exit)"
+    fi
 fi
 
 # Build final JSON ─────────────────────────────────────────────────────────────
