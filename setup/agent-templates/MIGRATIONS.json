@@ -328,6 +328,11 @@
         "date": "2026-06-21",
         "breaking": false,
         "summary": "qg-reliability-root-fix: lean execution (suites->logs, run-bats.sh authoritative ^not ok) + emit-qg-result.sh --init/--phase/Step-11 verdict signal"
+      },
+      "2.21.0": {
+        "date": "2026-06-22",
+        "breaking": false,
+        "summary": "qg-report-freshness: Step Z pre-mint freshness gate (sub-doc quality-gater-freshness-gate.md) + --init resets report scratch + emit-qg-result.sh final-mode blocking freshness + structured carry metadata."
       }
     },
     "doc-migrator": {
