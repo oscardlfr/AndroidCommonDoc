@@ -293,6 +293,74 @@ PYEOF
 # content (excluding the protocol_digest field). Detects drift between manifest and digest.
 # This test may GREEN immediately if the manifest digest is already stable.
 # ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# #SS-WP-1  secret-scan step result=FAIL → run-qg blocked (exit 2)
+# The required step 'secret-scan' has result=FAIL — run-qg must reject the proof.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#SS-WP-1 BLOCK: secret-scan step result=FAIL → run-qg exits 2" {
+  write_arch_verdicts "test-slug"
+  # Override secret-scan to FAIL (it is a required step: ran=true, result=FAIL)
+  write_quality_gate_report '[{"step":"secret-scan","ran":true,"result":"FAIL"}]'
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  # Output must reference the blocking step
+  [[ "$output" == *"secret-scan"* ]] || [[ "$output" == *"step-not-pass"* ]] || [[ "$output" == *"FAIL"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #SS-WP-2  secret-scan step result=SKIP → run-qg blocked (exit 2)
+# secret-scan is a required step; SKIP is not an acceptable result.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#SS-WP-2 BLOCK: secret-scan step result=SKIP → run-qg exits 2" {
+  write_arch_verdicts "test-slug"
+  # Override secret-scan to SKIP (required step — SKIP is not PASS)
+  write_quality_gate_report '[{"step":"secret-scan","ran":false,"result":"SKIP","reason":"skipped for test"}]'
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"secret-scan"* ]] || [[ "$output" == *"step-not-pass"* ]] || [[ "$output" == *"SKIP"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #SS-WP-3  secret-scan step absent from steps[] → run-qg blocked (exit 2)
+# A required step missing from the report triggers step-coverage-gap.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#SS-WP-3 BLOCK: secret-scan step absent from steps[] → run-qg exits 2 (step-coverage-gap)" {
+  write_arch_verdicts "test-slug"
+  # Write report with secret-scan explicitly removed from steps[]
+  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" <<'PYEOF'
+import json, sys
+manifest = json.load(open(sys.argv[2], encoding='utf-8'))
+steps = []
+for rs in manifest.get('required_steps', []):
+    if rs['id'] == 'secret-scan':
+        continue  # deliberately omit secret-scan
+    steps.append({"step": rs['id'], "ran": True, "result": "PASS"})
+# production-file-verify: PASS (fixture has .sh files)
+# All other conditional steps: SKIP
+for cs in manifest.get('conditional_steps', []):
+    if cs['id'] == 'production-file-verify':
+        steps.append({"step": cs['id'], "ran": True, "result": "PASS"})
+    else:
+        steps.append({"step": cs['id'], "ran": False, "result": "SKIP",
+                      "reason": "predicate false in isolated test repo"})
+report = {
+    "deliberation": {
+        "architects_consulted": ["arch-platform", "arch-testing", "arch-integration"],
+        "incorporated_at": "2026-06-14T00:00:00Z",
+    },
+    "pre_pr_coverage": {"status": "PASS", "modules": 3},
+    "discovered_rules": [{"rule": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}],
+    "steps": steps,
+}
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump(report, f, indent=2); f.write('\n')
+PYEOF
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"secret-scan"* ]] || [[ "$output" == *"step-coverage-gap"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 @test "#WP6 PASS: quality-gate-manifest.json protocol_digest matches canonical digest" {
   local manifest="$MANIFEST_SRC"
   local stored_digest
