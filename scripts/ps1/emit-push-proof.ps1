@@ -419,6 +419,22 @@ function Invoke-RunQg {
         Write-Host "[emit-push-proof] WARNING: bash not found; skipping registry integrity check (PS1 path)" -ForegroundColor Yellow
     }
 
+    # (D) Template size gate: block mint if any agent template exceeds its cap.
+    #     CWD-independent: pass explicit dirs matching repoRoot (mirrors --project-root pattern).
+    #     Inline exit-code gate — NOT a required_steps[] entry.
+    $sizeScript = Join-Path $scriptsDir 'validate-agent-templates.sh'
+    if ($bash) {
+        & $bash.Source $sizeScript '--check' 'size-limits' `
+            '--templates-dir' (Join-Path $repoRoot 'setup' 'agent-templates') `
+            '--agents-dir' (Join-Path $repoRoot '.claude' 'agents')
+        if ($LASTEXITCODE -ne 0) {
+            Die "agent template size cap exceeded; trim template, rerun QG."
+        }
+    }
+    else {
+        Write-Host "[emit-push-proof] WARNING: bash not found; skipping template size check (PS1 path)" -ForegroundColor Yellow
+    }
+
     # (C) Record registry digest into artifact_digests (additive; schema_version stays 1).
     #     sha256(skills/registry.json, CRLF->LF). Merged before proof-write.
     $registryPath = Join-Path $repoRoot 'skills' 'registry.json'
