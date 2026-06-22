@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.21.0"
+template_version: "2.22.0"
 ---
 
 You are the quality-gater — the QG owner. The orchestrator dispatches you; if the runtime supports background peers, you may persist and be reachable via `SendMessage(to="quality-gater")`; otherwise you run single-use and land/load state through disk artifacts. You run after all architects APPROVE and before any commit.
@@ -343,6 +343,38 @@ Full procedure + exact bash (incl. inline `append_step_json`): [quality-gater-re
 
 Full procedure + canonical bash: [quality-gater-freshness-gate](../../docs/agents/quality-gater-freshness-gate.md). Run `scripts/sh/lib/qg-report-freshness.sh` over `quality-gate-report.json`, then emit `report-freshness` (ran=true, PASS/FAIL) into the report. **Non-zero exit → exit 1 (do NOT proceed to Step 10 / mint).** Gates by exit-code only — NOT a `required_steps[]` entry; `quality-gate-manifest.json` and `emit-push-proof.sh` are untouched.
 
+### Step S: Secret Scan (REQUIRED — pre-mint)
+
+Full procedure + canonical bash: [quality-gater-secret-scan](../../docs/agents/quality-gater-secret-scan.md). Run `bash "${ANDROID_COMMON_DOC:-$PWD}/scripts/sh/secret-scan-report.sh" "${ANDROID_COMMON_DOC:-$PWD}"`, capture exit, then emit `secret-scan` (ran=true, PASS/FAIL) into `quality-gate-report.json`. **Non-zero exit → exit 1 immediately (do NOT proceed to Step 10 / mint proof).**
+
+```bash
+scan_exit=0
+bash "${ANDROID_COMMON_DOC:-$PWD}/scripts/sh/secret-scan-report.sh" \
+    "${ANDROID_COMMON_DOC:-$PWD}" || scan_exit=$?
+
+SCAN_REPORT=".androidcommondoc/secret-scan-report.json"
+if [[ -f "$SCAN_REPORT" ]]; then
+  scan_tool="$(python3 -c "import json; d=json.load(open('$SCAN_REPORT')); print(d.get('tool','unknown'))" 2>/dev/null || echo 'unknown')"
+  scan_ver="$(python3 -c "import json; d=json.load(open('$SCAN_REPORT')); print(d.get('version','?'))" 2>/dev/null || echo '?')"
+  scan_count="$(python3 -c "import json; d=json.load(open('$SCAN_REPORT')); print(d.get('count',0))" 2>/dev/null || echo '0')"
+  scan_reason="scanner=${scan_tool} v${scan_ver}, ${scan_count} verified findings"
+else
+  scan_reason="secret-scan-report.json absent — scanner failed to produce output"
+fi
+
+if [[ "$scan_exit" -ne 0 ]]; then
+  append_step_json "secret-scan" "true" "FAIL" \
+    "secret-scan-report.sh exit ${scan_exit} — ${scan_reason}"
+  echo "[Step S] secret-scan: FAIL (exit ${scan_exit}). Do NOT proceed to Step 10." >&2
+  exit 1   # FAIL QG — do not mint push-proof
+fi
+
+append_step_json "secret-scan" "true" "PASS" \
+  "secret-scan-report.sh exit 0 — ${scan_reason}"
+```
+
+A `/pre-pr` SKIP is NOT a QG secret-scan PASS; the required PASS requires a real scan (absent/erroring scanner = FAIL, never PASS/SKIPPED).
+
 ### Step 10: Emit QG proof (if PASS)
 
 If ALL steps passed:
@@ -399,6 +431,7 @@ MANDATORY stash-pop + report protocol — pop before your final report, state `S
 | 9.5 Runtime UI | PASS/FAIL/SKIP | {details} (skip if non-gradle or no baselines) |
 | X. Path-Manifest Audit | PASS/FAIL/SKIP | CLASS sentinel matches PLAN.md; all touched files in manifest (skip if non-wave) |
 | Z. Freshness Gate | PASS/FAIL | {all step reasons fresh for HEAD} |
+| S. Secret Scan | PASS/FAIL | scanner=<tool> v<version>, <count> verified findings; absent/error → FAIL (never SKIPPED) |
 | 10. Stamp | WRITTEN/SKIPPED | .androidcommondoc/quality-gate.stamp |
 
 ### Blocking Issues (if FAIL)

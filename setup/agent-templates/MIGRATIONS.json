@@ -333,6 +333,11 @@
         "date": "2026-06-22",
         "breaking": false,
         "summary": "qg-report-freshness: Step Z pre-mint freshness gate (sub-doc quality-gater-freshness-gate.md) + --init resets report scratch + emit-qg-result.sh final-mode blocking freshness + structured carry metadata."
+      },
+      "2.22.0": {
+        "date": "2026-06-22",
+        "breaking": false,
+        "summary": "qg-proof-honesty-hardening: Step S — Secret Scan REQUIRED pre-mint step (sub-doc quality-gater-secret-scan.md); invokes secret-scan-report.sh (exit 0=PASS, non-zero=FAIL); absent/erroring scanner = FAIL never PASS/SKIPPED; fail-closed producer closes /pre-pr SKIP loophole."
       }
     },
     "doc-migrator": {
