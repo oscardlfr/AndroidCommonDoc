@@ -103,33 +103,65 @@ fi
 echo "[qg-path-audit] CLASS check: $CLASS_SENTINEL == $PLAN_CLASS OK" >&2
 
 # ── Step 4: Extract Path-Manifest file list ───────────────────────────────────
-# Lines between ### Path-Manifest header and next ### header.
-# Strip leading "- `" or "- " and trailing "`" + any parenthetical.
+# Anchor: section starts on the FIRST line matching exactly:
+#   ^###[[:space:]]+Path-Manifest[[:space:]]*$
+# Boundary terminators (first match ends the section):
+#   (a) ^#{1,6}[[:space:]]          — any markdown heading (H1–H6)
+#   (b) ^[[:space:]]*\*\*[Ee]xcluded — a bold Excluded marker
+#   (c) ^[[:space:]]*<!--[[:space:]]*end[[:space:]]+Path-Manifest — explicit end comment
+# Path-only counting: a line is a manifest entry ONLY when, after stripping a
+#   leading "- " (with optional surrounding backtick), trailing backtick, and
+#   trailing " (…)" annotation, the remaining token matches ^[A-Za-z0-9._/-]+$
+#   (non-empty, no spaces). Bold sub-headers like "**New files (create)**" are
+#   skipped; only "- path/to/file" bullets are counted. Non-Excluded bold labels
+#   do NOT end the section — only the Excluded marker does.
+# Exit 2: if the ### Path-Manifest header is never found in PLAN.md.
 
 MANIFEST_FILES=()
 IN_MANIFEST=0
+FOUND_MANIFEST=0
 while IFS= read -r line; do
-  if [[ "$line" =~ ^###[[:space:]]+Path-Manifest ]]; then
+  if [[ "$line" =~ ^###[[:space:]]+Path-Manifest[[:space:]]*$ ]]; then
+    FOUND_MANIFEST=1
     IN_MANIFEST=1
     continue
   fi
-  if [[ $IN_MANIFEST -eq 1 && "$line" =~ ^###[[:space:]] ]]; then
-    break
-  fi
   if [[ $IN_MANIFEST -eq 1 ]]; then
-    # Strip leading "- `" or "- " prefix
+    # Boundary terminator (a): any markdown heading H1–H6
+    if [[ "$line" =~ ^#{1,6}[[:space:]] ]]; then
+      break
+    fi
+    # Boundary terminator (b): bold Excluded marker
+    if [[ "$line" =~ ^[[:space:]]*\*\*[Ee]xcluded ]]; then
+      break
+    fi
+    # Boundary terminator (c): explicit end-marker comment
+    if [[ "$line" =~ ^[[:space:]]*\<\!--[[:space:]]*end[[:space:]]+Path-Manifest ]]; then
+      break
+    fi
+    # Path-only counting: strip leading "- `" or "- " prefix
     stripped="${line#- \`}"
     stripped="${stripped#- }"
-    # Strip trailing "`" and any trailing parenthetical
+    # Strip trailing backtick and any trailing parenthetical annotation
     stripped="${stripped%%\`*}"
     stripped="${stripped%% (*}"
-    # Strip all whitespace (forward-slash paths have none, but be safe)
-    stripped="$(printf '%s' "$stripped" | tr -d ' \r')"
-    if [[ -n "$stripped" ]]; then
+    # Strip surrounding whitespace and carriage returns
+    stripped="${stripped#"${stripped%%[! ]*}"}"
+    stripped="${stripped%"${stripped##*[! ]}"}"
+    stripped="${stripped//$'\r'/}"
+    # Accept ONLY tokens matching ^[A-Za-z0-9._/-]+$ (path characters only)
+    if [[ -n "$stripped" && "$stripped" =~ ^[A-Za-z0-9._/-]+$ ]]; then
       MANIFEST_FILES+=("$stripped")
     fi
+    # Non-matching lines (prose, bold sub-headers, blank lines, --- rules) are skipped
   fi
 done < "$PLAN_FILE"
+
+if [[ $FOUND_MANIFEST -eq 0 ]]; then
+  echo "[qg-path-audit] ERROR: ### Path-Manifest header not found in PLAN.md — cannot build allow-list."
+  echo "[qg-path-audit] ERROR: ### Path-Manifest header not found in PLAN.md — cannot build allow-list." >&2
+  exit 2
+fi
 
 echo "[qg-path-audit] Manifest has ${#MANIFEST_FILES[@]} entries." >&2
 
