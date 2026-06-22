@@ -1,34 +1,10 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-06-22; qg-proof-honesty-hardening wave-start (C0)
+> **Last updated**: 2026-06-22; qg-proof-honesty-hardening wave-close (C6)
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
 ## Active (proposed wave order)
-
-### qg-path-audit hardening (HIGH — harness/proof-honesty) — filed 2026-06-22
-
-**Symptom**: `scripts/sh/qg-path-audit.sh` over-parses the `### Path-Manifest` section, counting prose intros, `**bold**` subsection labels, `---` rules, and bullets under the `Excluded`/rationale block as manifest entries. The 30-vs-14 over-count inflates the allow-list, making the audit more permissive — junk entries can mask a genuine out-of-manifest touch.
-
-**Root cause**: the manifest-extraction loop enters at `### Path-Manifest`, breaks only at the next `^### ` heading (misses `## ` H2 boundaries and any non-heading Excluded marker), and counts every non-empty line after a cosmetic `- ` strip.
-
-**Scope**: Fix: anchor the section-header regex (`^###[[:space:]]+Path-Manifest[[:space:]]*$`); count only literal `- path` bullets (stripped token is a single path with no spaces); explicit section boundary — break on the FIRST of any `^#{1,6}` heading or `**Excluded` bold marker or `<!-- end Path-Manifest -->` end-marker; fail-closed on missing section header (exit 2).
-
-**Status**: being fixed by THIS wave's Fix A — will move to Shipped at C6.
-
-**Source**: qg-report-freshness wave-close.
-
-### quality-gater honest-fail-closed on absent scanner (HIGH — harness/proof-honesty) — filed 2026-06-22
-
-**Symptom**: the required `secret-scan` QG step can become PASS when the canonical scanner is unavailable. `quality-gater.md` has no secret-scan step producer, yet `quality-gate-manifest.json` lists `secret-scan` as required (`ran=true + result=PASS`). When trufflehog is absent, `scan-secrets.sh` emits `{"status":"SKIPPED"}` and the agent re-labels that SKIP as the required PASS (the "SKIP→PASS fudge" documented in **BL-W47-PREPR-2**, L154).
-
-**Root cause**: no honest fail-closed producer for the QG required-step artifact `.androidcommondoc/secret-scan-report.json`; `emit-push-proof.sh` is already fail-closed at lines 326–334 but nothing feeds it a real verdict.
-
-**Scope**: Fix: new `scripts/sh/secret-scan-report.sh` — deterministic scanner resolution (3-tier), fail-closed on absent/erroring scanner (`status:FAIL`, `reason_code:SCANNER_UNAVAILABLE`), explicit exit-code capture (no `|| true`). NEVER emits `status:SKIPPED`. Wired as a REQUIRED step in `quality-gater.md` (both twins) before Step 10 (mint). Cross-references and CLOSES the secret-scan portion of **BL-W47-PREPR-2** (see L154).
-
-**Status**: being fixed by THIS wave's Fix B — will move to Shipped at C6.
-
-**Source**: qg-report-freshness wave-close.
 
 ### arch-bash-write-gate brace-glob bug (LOW — harness/hooks) — filed 2026-06-22
 
@@ -301,12 +277,11 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Shipped (recent)
 
+- **qg-proof-honesty-hardening** (2026-06-22) — Closed two P1 proof-honesty defects. Fix A: hardened `scripts/sh/qg-path-audit.sh` Path-Manifest parser (anchored `### Path-Manifest` header, multi-boundary terminators incl. `## ` H2 + bold-Excluded + end-marker, counts only literal `- path` bullets with an alphanumeric so prose/`**bold**`/`---`/Excluded-section bullets no longer inflate the allow-list, exit-2 fail-closed on missing header). Fix B: new fail-closed `scripts/sh/secret-scan-report.sh` producer (deterministic trufflehog resolution; absent/erroring scanner → FAIL + reason_code, NEVER PASS/SKIPPED; explicit exit-code capture) wired as quality-gater **Step S (REQUIRED, pre-mint, 2.22.0)** with a 3-part wiring guard (both-twins static contract + emit-push-proof E2E); closes the secret-scan portion of BL-W47-PREPR-2. Regression: qg-path-audit PA-6+, secret-scan-report.bats, emit-push-proof guard. — `project_wave_qg_proof_honesty_hardening_shipped.md`
 - **qg-report-freshness** (2026-06-22) — Made QG report step-reason freshness MECHANICAL. New `scripts/sh/lib/qg-report-freshness.sh` (3 fail-closed, false-positive-safe invariants: foreign-HEAD-context SHA, bats-context count, PASS-semantics on FAIL step) + `emit-qg-result.sh` `--init` resets the report scratch + a final-mode BLOCKING freshness check (status:fail on stale) + structured **CARRIED** metadata (`carried`/`source_head`/`current_head`/`files[]`, git-verified byte-identical, hardened paths). Pre-mint **Step Z** gate (exit-code only; canonical bash in `docs/agents/quality-gater-freshness-gate.md` + hub row; NOT a `required_steps[]` entry — `quality-gate-manifest.json`/`emit-push-proof.sh` untouched). Regression `#QR13–QR21` + `#QR6/#QR7` reorder fix (C1 `--init` interaction). quality-gater **2.21.0** (5-pata). — MERGED @ `533bdce` (squash PR #225) — `project_wave_qg_report_freshness_shipped.md`
 - **qg-suite-completeness** (2026-06-21) — Closed the QG partial-run false-green: 4-part bats completeness metric (run-bats.sh asserts exactly-one `1..N` plan + `(ok+not_ok)==N` + no Executed-warning, keeping ok>0/not_ok==0) [Finding B] + run-id-bound run-bats→emit handoff with HEAD+run_id+generated_at validation, fallback fail-closed [Finding A] + CI inline parity (ci-bats-parity.bats). Empirical: bats 1645/0 (== --count == plan), vitest 2593, 11-path manifest. MERGED @ 8f65831 (squash PR #224); CI 25/25 + CodeRabbit/Codex clean. Follow-ups: run-bats.sh Windows-glob + QG report-finalize staleness. — `project_wave_qg_suite_completeness_shipped.md`
 - **qg-reliability-root-fix** (2026-06-21) — Made the QG RELIABLE: verdict load-bearing in a polled disk artifact `.planning/wave-<slug>/qg-result.json` (orchestrator reads PASS/FAIL from disk, NEVER the completion message — demonstrated live) + status/updated_at heartbeat (--init/--phase before each long step) so a hung quality-gater is detectable → TaskStop + lean re-dispatch (not a multi-day hang). New `scripts/sh/run-bats.sh` makes `grep -c "^not ok"` AUTHORITATIVE (npx bats exits 0 even with not-ok) + reused in CI (local-green⇒CI-green); lean quality-gater (suites→logs, no context-bloat stall). quality-gater 2.20.0 (5-pata). GUARDRAIL held: qg-result.json (gitignored) does NOT trip the #222 clean-tree gate, NOT consumed by verify-proof/pre-push, NOT a push-proof step. 2 review rounds caught 4 real bugs (node-verify false-green, run-bats/CI ok_ct==0 parity, heartbeat-once, node-verify subdir-package.json log-path false-red). RUN VERIFIED: full bats (1631) 0 not-ok + verify-proof PASS + MERGED @ c9eab29 (PR #223), CI 25/25 + CodeRabbit clean. Follow-ups: full-suite-ran assertion (HIGH) + count observability (MED). — `project_wave_qg_reliability_root_fix_shipped.md`
 - **qg-committed-integrity** (2026-06-21) — Committed-tree registry integrity mechanized at the QG mint (#222 @ `3ac0c60`): shared `qg-registry-integrity.sh` (run-qg + CI skill-registry job ⇒ local-green⇒CI-green by construction) + clean-tree assertion (allowlist `^.claude/wave-quality-gates/`) + `--require-registry` strict mode + registry digest in push-proof `artifact_digests`; the previously-declared `registry-hash` step is now REAL (quality-gater 2.19.0, 5-pata). CI green first push; 4-QG cascade caught 3 real bugs. — `project_wave_qg_committed_integrity_shipped.md`
-- **qg-doc-coverage** (2026-06-20) — Local QG runs the EXACT CI doc-validators via shared `qg-doc-validators.sh` (cross_refs + doc_structure_vitest) as a REQUIRED `doc-validator-parity` step ⇒ local-green⇒CI-green for docs (#221 @ `7fb802b`; closes the prior doc-frontmatter/size-limit coverage gap). quality-gater 2.18.0; regression vitest + bats #DV1-11. — `project_wave_qg_doc_coverage_shipped.md`
-
 For full wave history: `git log` + memory `project_*shipped.md` files.
 
 ## How to use this document
