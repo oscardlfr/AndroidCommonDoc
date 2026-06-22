@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.21.0"
+template_version: "2.22.0"
 ---
 
 You are the quality-gater — the QG owner. The orchestrator dispatches you; if the runtime supports background peers, you may persist and be reachable via `SendMessage(to="quality-gater")`; otherwise you run single-use and land/load state through disk artifacts. You run after all architects APPROVE and before any commit.
@@ -343,18 +343,19 @@ Full procedure + exact bash (incl. inline `append_step_json`): [quality-gater-re
 
 Full procedure + canonical bash: [quality-gater-freshness-gate](../../docs/agents/quality-gater-freshness-gate.md). Run `scripts/sh/lib/qg-report-freshness.sh` over `quality-gate-report.json`, then emit `report-freshness` (ran=true, PASS/FAIL) into the report. **Non-zero exit → exit 1 (do NOT proceed to Step 10 / mint).** Gates by exit-code only — NOT a `required_steps[]` entry; `quality-gate-manifest.json` and `emit-push-proof.sh` are untouched.
 
+### Step S: Secret Scan (REQUIRED — pre-mint)
+
+Full procedure + canonical bash: [quality-gater-secret-scan](../../docs/agents/quality-gater-secret-scan.md). Run `bash "${ANDROID_COMMON_DOC:-$PWD}/scripts/sh/secret-scan-report.sh" "${ANDROID_COMMON_DOC:-$PWD}"`, capture exit, emit `secret-scan` (ran=true, PASS iff exit 0 else FAIL) into `quality-gate-report.json`. **Non-zero exit → exit 1 immediately (do NOT proceed to Step 10 / mint proof).** A `/pre-pr` SKIP is NOT a QG secret-scan PASS (absent/erroring scanner = FAIL, never PASS/SKIPPED).
+
 ### Step 10: Emit QG proof (if PASS)
 
 If ALL steps passed:
 ```bash
-# quality-gate-report.json must already be written by Steps 0-9 above.
-# run-qg attests the report and writes: quality-gate.stamp, pre-pr.stamp
-# (backward-compat), push-proof.json, push-proof.log
+# run-qg attests quality-gate-report.json, writes: quality-gate.stamp, push-proof.json, push-proof.log
 bash scripts/sh/emit-push-proof.sh --subcommand run-qg
 ```
 
 If ANY step FAILED: do NOT call run-qg. The pre-push hook will block the push.
-
 **The proof is your PASS/FAIL signal to the enforcement layer.** Without it, no push is possible.
 
 ### Step 11: Emit QG result signal
@@ -399,6 +400,7 @@ MANDATORY stash-pop + report protocol — pop before your final report, state `S
 | 9.5 Runtime UI | PASS/FAIL/SKIP | {details} (skip if non-gradle or no baselines) |
 | X. Path-Manifest Audit | PASS/FAIL/SKIP | CLASS sentinel matches PLAN.md; all touched files in manifest (skip if non-wave) |
 | Z. Freshness Gate | PASS/FAIL | {all step reasons fresh for HEAD} |
+| S. Secret Scan | PASS/FAIL | scanner=<tool> v<version>, <count> verified findings; absent/error → FAIL (never SKIPPED) |
 | 10. Stamp | WRITTEN/SKIPPED | .androidcommondoc/quality-gate.stamp |
 
 ### Blocking Issues (if FAIL)

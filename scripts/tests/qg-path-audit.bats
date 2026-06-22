@@ -102,3 +102,118 @@ touch_file() {
   run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
   [ "$status" -eq 1 ]
 }
+
+# ── PA-6+ Over-parse / boundary / missing-header tests ───────────────────────
+
+# Write a PLAN.md with a prose intro line, bold sub-headers, real path bullets,
+# a --- rule, and a ### Excluded Paths section with path-looking bullets.
+# Returns (via $WAVE_DIR/PLAN.md) a plan whose manifest section contains exactly
+# 3 real path entries — the exact count to assert in PA-6.
+write_overparse_plan() {
+  local class_val="${1:-HARNESS}"
+  cat > "$WAVE_DIR/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Path-Manifest
+
+This section lists every file this wave may touch.
+
+**New files (create)**
+
+- scripts/sh/qg-path-audit.sh
+- scripts/sh/secret-scan-report.sh
+
+**Modified files (edit)**
+
+- scripts/tests/qg-path-audit.bats
+
+---
+
+### Excluded Paths
+
+**Excluded** files that should NOT be parsed as manifest entries:
+
+- docs/agents/quality-gater.md
+- .planning/wave-test/PLAN.md
+
+### Spawn Table
+
+| Role | Count | Reason |
+|---|---|---|
+| arch-testing | 1 | owns tests |
+PLANEOF
+  # Patch the Class line if a different class was requested
+  if [[ "$class_val" != "HARNESS" ]]; then
+    sed -i "s/- \*\*Class\*\*: HARNESS/- **Class**: ${class_val}/" "$WAVE_DIR/PLAN.md"
+  fi
+}
+
+@test "PA-6 PASS: over-parse fixture — parser counts exactly 3 real path bullets" {
+  # Fixture has: 2 bold sub-headers, 3 real path bullets, 1 '---' rule,
+  # and a ### Excluded Paths section with 2 path-looking bullets.
+  # Parser must count ONLY the 3 real bullets inside ### Path-Manifest.
+  write_class "HARNESS"
+  write_overparse_plan "HARNESS"
+  # Touch all 3 in-manifest files so the run hits exit 0
+  touch_file "scripts/sh/qg-path-audit.sh"
+  touch_file "scripts/sh/secret-scan-report.sh"
+  touch_file "scripts/tests/qg-path-audit.bats"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 0 ]
+  # Verify count via the manifest-has-N-entries stderr line
+  [[ "$output" == *"Manifest has 3 entries."* ]]
+}
+
+@test "PA-7 FAIL: file only in Excluded Paths section is out-of-manifest → exit 1" {
+  # docs/agents/quality-gater.md appears only in ### Excluded Paths — touching it
+  # must produce an out-of-manifest failure.
+  write_class "HARNESS"
+  write_overparse_plan "HARNESS"
+  # Touch only the excluded file (not a real manifest entry)
+  touch_file "docs/agents/quality-gater.md"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"out-of-manifest"* ]]
+}
+
+@test "PA-8 PASS: '---' rule and bold label inside manifest are NOT counted as entries" {
+  # The fixture contains a '---' separator and two '**bold**' sub-headers inside
+  # ### Path-Manifest; none should be counted as path entries.
+  # If they were mis-counted the total would be >3; we verify count==3.
+  write_class "HARNESS"
+  write_overparse_plan "HARNESS"
+  touch_file "scripts/sh/qg-path-audit.sh"
+  touch_file "scripts/sh/secret-scan-report.sh"
+  touch_file "scripts/tests/qg-path-audit.bats"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 0 ]
+  # Count must be exactly 3 — not 4, 5, or more from mis-parsed rules/labels
+  [[ "$output" == *"Manifest has 3 entries."* ]]
+  [[ "$output" != *"Manifest has 4 entries."* ]]
+  [[ "$output" != *"Manifest has 5 entries."* ]]
+}
+
+@test "PA-9 FAIL: missing ### Path-Manifest header in PLAN.md → exit 2" {
+  write_class "HARNESS"
+  # Write a PLAN.md that has no ### Path-Manifest header at all
+  cat > "$WAVE_DIR/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Spawn Table
+
+| Role | Count | Reason |
+|---|---|---|
+| arch-testing | 1 | owns tests |
+PLANEOF
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Path-Manifest header not found"* ]] || [[ "$output" == *"Path-Manifest"* ]]
+}
