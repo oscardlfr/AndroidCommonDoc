@@ -288,13 +288,11 @@ PYEOF
     git -C "$REPO" commit --quiet -m "test(fixtures): QR6 fixture commit"
     HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 
-    # Write a valid QG report
-    write_report_all_pass "$ACDOC/quality-gate-report.json"
-
-    # Write arch verdicts for the slug
     local slug="test-slug"
     local wave_dir="$REPO/.planning/wave-$slug"
     mkdir -p "$wave_dir"
+
+    # Write arch verdicts for the slug
     for role in arch-testing arch-platform arch-integration; do
         cat > "$wave_dir/$role-verdict.md" << EOF
 # $role verdict
@@ -316,7 +314,15 @@ EOF
     printf '### Wave Class\n- **Class**: HARNESS\n### Spawn Table\n| Role | Count | Reason |\n|---|---|---|\n| arch-testing | 1 | test |\n' \
         > "$wave_dir/PLAN.md"
 
-    # Write the path-manifest-audit step as PASS so run-qg does not block on it
+    # Production order: --init FIRST (resets REPORT_PATH scratch), THEN build the report.
+    # This matches the quality-gater template sequence: --init → steps populate report → mint.
+    # C1 made --init reset quality-gate-report.json; so --init must precede report-building.
+    local qg_out="$wave_dir/qg-result.json"
+    run bash "$SCRIPT" --init --out "$qg_out" --project-root "$REPO" --slug "$slug"
+    [ "$status" -eq 0 ]
+    [ -f "$qg_out" ]
+
+    # Build report AFTER --init (--init reset the file; now populate it fresh)
     write_report_all_pass "$ACDOC/quality-gate-report.json"
     python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" << 'PYEOF'
 import json, sys
@@ -332,12 +338,6 @@ rpt['steps'] = list(by_id.values())
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
-
-    # NOW write qg-result.json into the gitignored path (the key action under test)
-    local qg_out="$wave_dir/qg-result.json"
-    run bash "$SCRIPT" --init --out "$qg_out" --project-root "$REPO" --slug "$slug"
-    [ "$status" -eq 0 ]
-    [ -f "$qg_out" ]
 
     # Confirm qg-result.json is gitignored (git status must NOT list it)
     local dirty_lines
@@ -376,8 +376,6 @@ PYEOF
     git -C "$REPO" commit --quiet -m "test(fixtures): QR7 fixture commit"
     HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 
-    write_report_all_pass "$ACDOC/quality-gate-report.json"
-
     local slug="test-slug"
     local wave_dir="$REPO/.planning/wave-$slug"
     mkdir -p "$wave_dir"
@@ -401,6 +399,14 @@ EOF
     printf '### Wave Class\n- **Class**: HARNESS\n### Spawn Table\n| Role | Count | Reason |\n|---|---|---|\n| arch-testing | 1 | test |\n' \
         > "$wave_dir/PLAN.md"
 
+    # Production order: --init FIRST (resets REPORT_PATH scratch), THEN build the report.
+    # C1 made --init reset quality-gate-report.json; --init must precede report-building so
+    # the report seen by run-qg (step 1) and verify-proof (step 3) is byte-identical.
+    local qg_out="$wave_dir/qg-result.json"
+    bash "$SCRIPT" --init --out "$qg_out" --project-root "$REPO" --slug "$slug"
+
+    # Build the report AFTER --init — the report that run-qg will hash into push-proof.json.
+    write_report_all_pass "$ACDOC/quality-gate-report.json"
     python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" << 'PYEOF'
 import json, sys
 rpt_path = sys.argv[1]
@@ -415,7 +421,8 @@ with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
 
-    # Step 1: run-qg WITHOUT qg-result.json — record the outcome
+    # Step 1: run-qg WITHOUT additional qg-result.json content — record the outcome.
+    # qg-result.json exists (--init wrote it above) but is gitignored so clean-tree passes.
     run bash -c "CLAUDE_WAVE_SLUG='$slug' bash '$REPO/scripts/sh/emit-push-proof.sh' --subcommand run-qg --repo-root '$REPO'"
     local rq_status="$status"
     [ "$rq_status" -eq 0 ]
@@ -423,12 +430,11 @@ PYEOF
     # Verify push-proof.json was created
     [ -f "$ACDOC/push-proof.json" ]
 
-    # Step 2: NOW write qg-result.json into the gitignored path
-    local qg_out="$wave_dir/qg-result.json"
-    bash "$SCRIPT" --init --out "$qg_out" --project-root "$REPO" --slug "$slug"
+    # Step 2: qg-result.json was already written by --init above; it's present in the gitignored path.
     [ -f "$qg_out" ]
 
-    # Step 3: verify-proof — must behave identically (qg-result.json not consumed)
+    # Step 3: verify-proof — must behave identically (qg-result.json not consumed).
+    # The report file is byte-identical to what run-qg hashed (no further writes occurred).
     run bash -c "bash '$REPO/scripts/sh/emit-push-proof.sh' --subcommand verify-proof --pushed-sha '$HEAD_SHA' --repo-root '$REPO'"
     # verify-proof must exit 0 (PASS) regardless of qg-result.json presence
     # (it only reads push-proof.json + quality-gate-manifest.json + quality-gate-report.json)
