@@ -21,6 +21,7 @@ Extended-protocol detail for the [quality-gater](../../setup/agent-templates/qua
 | [quality-gater-runtime-ui-validation](quality-gater-runtime-ui-validation.md) | Step 9.5 | Runtime UI Validation — Android Layout Diff + Compose Semantic Diff dispatch (platform-aware) |
 | [quality-gater-registry-integrity](quality-gater-registry-integrity.md) | registry-hash | Registry Integrity (REQUIRED when `skills/` exists) — runs `qg-registry-integrity.sh --require-registry`; 3-state result (clean/drift/n/a); closes the registry-hash rubber-stamp |
 | [quality-gater-freshness-gate](quality-gater-freshness-gate.md) | Step Z | Report Freshness Gate (REQUIRED pre-mint) — runs qg-report-freshness.sh; blocks mint (exit 1) on stale step reasons; structured carry contract |
+| [quality-gater-secret-scan](quality-gater-secret-scan.md) | Secret Scan (REQUIRED — pre-mint) | Fail-closed QG secret scan — runs secret-scan-report.sh; absent/erroring scanner = FAIL; never SKIPPED; blocks mint on non-PASS |
 
 ## Protocol & push-gate references
 
