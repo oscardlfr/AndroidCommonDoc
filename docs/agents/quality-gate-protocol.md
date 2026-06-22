@@ -260,6 +260,27 @@ document the keep-in-parity requirement.
 
 ---
 
+---
+
+## Committed Manifest SHA Parity (Fix 3 — composition note)
+
+Committed `agents.manifest.yaml` `template_frontmatter_sha256` parity is enforced by construction:
+
+- `scripts/tests/manifest-sha-parity.bats` (in the bats suite run by the QG `test-suite` required step) verifies working-tree template-frontmatter SHA vs working-tree manifest SHA.
+- `emit-push-proof.sh`'s clean-tree assertion (worktree == HEAD at mint) means that if bats PASS + clean-tree PASS, then committed template frontmatter SHA == committed manifest SHA.
+
+No dedicated gate is needed; parity is guaranteed by composition of these two existing checks.
+
+## `/pre-pr` Scanner Semantics (distinct from QG Step S)
+
+The MCP `scan-secrets` tool and `scripts/sh/scan-secrets.sh` (used by `/pre-pr` Step 5.6) are now hardened:
+
+- **absent scanner** → `status: SKIPPED` (non-blocking INFO — does not assert "no secrets")
+- **present but erroring** → `status: FAIL` + `reason_code: SCANNER_ERROR` (blocks)
+- **clean scan** → `status: PASS`
+
+This is distinct from the QG Step S path (`secret-scan-report.sh`), where absent/erroring scanner → FAIL (never SKIPPED). Both paths agree: present-but-erroring = FAIL.
+
 ## Related Docs
 
 - [Team Topology](team-topology.md) — 3-phase model where Quality Gate is Phase 3
