@@ -345,48 +345,17 @@ Full procedure + canonical bash: [quality-gater-freshness-gate](../../docs/agent
 
 ### Step S: Secret Scan (REQUIRED — pre-mint)
 
-Full procedure + canonical bash: [quality-gater-secret-scan](../../docs/agents/quality-gater-secret-scan.md). Run `bash "${ANDROID_COMMON_DOC:-$PWD}/scripts/sh/secret-scan-report.sh" "${ANDROID_COMMON_DOC:-$PWD}"`, capture exit, then emit `secret-scan` (ran=true, PASS/FAIL) into `quality-gate-report.json`. **Non-zero exit → exit 1 immediately (do NOT proceed to Step 10 / mint proof).**
-
-```bash
-scan_exit=0
-bash "${ANDROID_COMMON_DOC:-$PWD}/scripts/sh/secret-scan-report.sh" \
-    "${ANDROID_COMMON_DOC:-$PWD}" || scan_exit=$?
-
-SCAN_REPORT=".androidcommondoc/secret-scan-report.json"
-if [[ -f "$SCAN_REPORT" ]]; then
-  scan_tool="$(python3 -c "import json; d=json.load(open('$SCAN_REPORT')); print(d.get('tool','unknown'))" 2>/dev/null || echo 'unknown')"
-  scan_ver="$(python3 -c "import json; d=json.load(open('$SCAN_REPORT')); print(d.get('version','?'))" 2>/dev/null || echo '?')"
-  scan_count="$(python3 -c "import json; d=json.load(open('$SCAN_REPORT')); print(d.get('count',0))" 2>/dev/null || echo '0')"
-  scan_reason="scanner=${scan_tool} v${scan_ver}, ${scan_count} verified findings"
-else
-  scan_reason="secret-scan-report.json absent — scanner failed to produce output"
-fi
-
-if [[ "$scan_exit" -ne 0 ]]; then
-  append_step_json "secret-scan" "true" "FAIL" \
-    "secret-scan-report.sh exit ${scan_exit} — ${scan_reason}"
-  echo "[Step S] secret-scan: FAIL (exit ${scan_exit}). Do NOT proceed to Step 10." >&2
-  exit 1   # FAIL QG — do not mint push-proof
-fi
-
-append_step_json "secret-scan" "true" "PASS" \
-  "secret-scan-report.sh exit 0 — ${scan_reason}"
-```
-
-A `/pre-pr` SKIP is NOT a QG secret-scan PASS; the required PASS requires a real scan (absent/erroring scanner = FAIL, never PASS/SKIPPED).
+Full procedure + canonical bash: [quality-gater-secret-scan](../../docs/agents/quality-gater-secret-scan.md). Run `bash "${ANDROID_COMMON_DOC:-$PWD}/scripts/sh/secret-scan-report.sh" "${ANDROID_COMMON_DOC:-$PWD}"`, capture exit, emit `secret-scan` (ran=true, PASS iff exit 0 else FAIL) into `quality-gate-report.json`. **Non-zero exit → exit 1 immediately (do NOT proceed to Step 10 / mint proof).** A `/pre-pr` SKIP is NOT a QG secret-scan PASS (absent/erroring scanner = FAIL, never PASS/SKIPPED).
 
 ### Step 10: Emit QG proof (if PASS)
 
 If ALL steps passed:
 ```bash
-# quality-gate-report.json must already be written by Steps 0-9 above.
-# run-qg attests the report and writes: quality-gate.stamp, pre-pr.stamp
-# (backward-compat), push-proof.json, push-proof.log
+# run-qg attests quality-gate-report.json, writes: quality-gate.stamp, push-proof.json, push-proof.log
 bash scripts/sh/emit-push-proof.sh --subcommand run-qg
 ```
 
 If ANY step FAILED: do NOT call run-qg. The pre-push hook will block the push.
-
 **The proof is your PASS/FAIL signal to the enforcement layer.** Without it, no push is possible.
 
 ### Step 11: Emit QG result signal
