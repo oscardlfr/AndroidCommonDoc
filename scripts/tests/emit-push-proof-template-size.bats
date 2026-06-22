@@ -18,6 +18,7 @@ bats_require_minimum_version 1.5.0
 #   TSZ-3: ps1 runtime — if powershell.exe/pwsh available, 436-line over-cap → exit!=0 + no stamp
 #   TSZ-4: static guard — BOTH sh+ps1 contain explicit --templates-dir + --agents-dir near size-limits
 #   TSZ-5: CWD-independence proof — non-repo CWD + over-cap → gate fires (exit!=0 + no stamp)
+#   TSZ-6: absent-dir guard — no setup/agent-templates/ → gate is a no-op → exit 0 + stamp written
 #
 # Isolation: every test uses mktemp -d + git init + teardown rm -rf.
 # Setup mirrors emit-push-proof.bats exactly (same harness).
@@ -414,4 +415,42 @@ PYEOF
 
   # The stamp MUST NOT have been written
   [ ! -f "$ACDOC/quality-gate.stamp" ]
+}
+
+# TSZ-6  absent-dir guard -- no setup/agent-templates/ -> gate is a no-op -> run_qg succeeds
+#
+# The (D) gate is guarded by:
+#   bash:  [[ -d "$REPO_ROOT/setup/agent-templates" ]]
+#   ps1:   Test-Path $templatesDir -PathType Container
+#
+# When setup/agent-templates/ is absent the gate is entirely skipped — no validate-agent-templates.sh
+# call, no exit 2.  This allows template-less repos (fixtures, L1/L2 projects) to mint proofs without
+# error.  It is NOT a bypass: there are no templates to size-check, so N/A is correct behavior.
+#
+# Regression guard: if someone removes the -d guard in the future, run_qg would call
+# validate-agent-templates.sh against an absent dir → TOTAL_FILES==0 → exit 1 → run_qg exits 2
+# → stamp never written.  This test catches that regression.
+#
+# Setup: TEMPLATES_DIR is created in setup() but NOT populated here — we explicitly
+# remove it so the guard condition is false.  All other run_qg preconditions are satisfied
+# (clean tree, manifest, arch verdicts, valid report) so the ONLY variable is the absent dir.
+@test "TSZ-6 NO-OP (bash): absent setup/agent-templates/ → (D) gate skipped → exit 0 AND stamp written" {
+  # Explicitly ensure setup/agent-templates/ does NOT exist in the temp repo.
+  # setup() creates TEMPLATES_DIR but has not written anything into it;
+  # remove it so the -d guard condition is false.
+  rm -rf "$TEMPLATES_DIR"
+
+  # No templates to commit — tree is already clean from setup() initial commit.
+  # HEAD_SHA is still valid from setup().
+
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+
+  run bash -c "cd '$REPO' && CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+
+  # Exit must be 0: the (D) gate is a no-op when setup/agent-templates/ is absent
+  [ "$status" -eq 0 ]
+
+  # The stamp MUST have been written: run_qg completes normally
+  [ -f "$ACDOC/quality-gate.stamp" ]
 }

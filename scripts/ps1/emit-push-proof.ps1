@@ -420,19 +420,24 @@ function Invoke-RunQg {
     }
 
     # (D) Template size gate: block mint if any agent template exceeds its cap.
+    #     Guard: only when setup/agent-templates/ exists (mirrors registry Test-Path skills guard).
+    #     Repos/fixtures without the dir have no templates to size-check -- N/A, not a bypass.
     #     CWD-independent: pass explicit dirs matching repoRoot (mirrors --project-root pattern).
-    #     Inline exit-code gate — NOT a required_steps[] entry.
-    $sizeScript = Join-Path $scriptsDir 'validate-agent-templates.sh'
-    if ($bash) {
-        & $bash.Source $sizeScript '--check' 'size-limits' `
-            '--templates-dir' (Join-Path $repoRoot 'setup' 'agent-templates') `
-            '--agents-dir' (Join-Path $repoRoot '.claude' 'agents')
-        if ($LASTEXITCODE -ne 0) {
-            Die "agent template size cap exceeded; trim template, rerun QG."
+    #     Inline exit-code gate -- NOT a required_steps[] entry.
+    $templatesDir = Join-Path $repoRoot 'setup' 'agent-templates'
+    if (Test-Path $templatesDir -PathType Container) {
+        $sizeScript = Join-Path $scriptsDir 'validate-agent-templates.sh'
+        if ($bash) {
+            & $bash.Source $sizeScript '--check' 'size-limits' `
+                '--templates-dir' $templatesDir `
+                '--agents-dir' (Join-Path $repoRoot '.claude' 'agents')
+            if ($LASTEXITCODE -ne 0) {
+                Die "agent template size cap exceeded; trim template, rerun QG."
+            }
         }
-    }
-    else {
-        Write-Host "[emit-push-proof] WARNING: bash not found; skipping template size check (PS1 path)" -ForegroundColor Yellow
+        else {
+            Write-Host "[emit-push-proof] WARNING: bash not found; skipping template size check (PS1 path)" -ForegroundColor Yellow
+        }
     }
 
     # (C) Record registry digest into artifact_digests (additive; schema_version stays 1).
