@@ -149,11 +149,13 @@ while IFS= read -r line; do
     stripped="${stripped#"${stripped%%[! ]*}"}"
     stripped="${stripped%"${stripped##*[! ]}"}"
     stripped="${stripped//$'\r'/}"
-    # Accept ONLY tokens matching ^[A-Za-z0-9._/-]+$ (path characters only)
-    if [[ -n "$stripped" && "$stripped" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+    # Accept ONLY tokens matching ^[A-Za-z0-9._/-]+$ AND containing at least one
+    # alphanumeric char — this drops pure-punctuation rules like ---, ***, ___ whose
+    # chars are all within the allowed set but are never real paths.
+    if [[ -n "$stripped" && "$stripped" =~ ^[A-Za-z0-9._/-]+$ && "$stripped" =~ [A-Za-z0-9] ]]; then
       MANIFEST_FILES+=("$stripped")
     fi
-    # Non-matching lines (prose, bold sub-headers, blank lines, --- rules) are skipped
+    # Non-matching lines (prose, bold sub-headers, blank lines, ---, *** rules) are skipped
   fi
 done < "$PLAN_FILE"
 
