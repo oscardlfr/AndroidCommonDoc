@@ -24,6 +24,7 @@ interface SecretFinding {
 
 interface ScanResult {
   status: "PASS" | "FAIL" | "SKIPPED";
+  reason_code?: string;
   findings: SecretFinding[];
   summary: string;
 }
@@ -38,22 +39,24 @@ export function parseOutput(stdout: string): ScanResult {
 
   if (lines.length === 0) {
     return {
-      status: "PASS",
+      status: "FAIL",
+      reason_code: "SCANNER_ERROR",
       findings: [],
-      summary: "No secrets detected.",
+      summary: "Scanner produced no output (treated as error).",
     };
   }
 
-  // Check first line for SKIPPED sentinel
+  // Check first line for sentinel objects (SKIPPED / PASS / FAIL) or findings JSONL
   let firstParsed: unknown;
   try {
     firstParsed = JSON.parse(lines[0]);
   } catch {
-    // not JSON — treat as no output
+    // not JSON — treat as scanner error (fail-closed)
     return {
-      status: "PASS",
+      status: "FAIL",
+      reason_code: "SCANNER_ERROR",
       findings: [],
-      summary: "No secrets detected.",
+      summary: "Scanner produced non-JSON output (treated as error).",
     };
   }
 
@@ -63,6 +66,22 @@ export function parseOutput(stdout: string): ScanResult {
       status: "SKIPPED",
       findings: [],
       summary: String(firstObj.reason ?? "trufflehog not installed"),
+    };
+  }
+  if (firstObj.status === "PASS") {
+    return {
+      status: "PASS",
+      reason_code: String(firstObj.reason_code ?? "OK"),
+      findings: [],
+      summary: "No secrets detected.",
+    };
+  }
+  if (firstObj.status === "FAIL") {
+    return {
+      status: "FAIL",
+      reason_code: String(firstObj.reason_code ?? "SCANNER_ERROR"),
+      findings: [],
+      summary: "Scanner reported failure.",
     };
   }
 

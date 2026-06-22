@@ -13,11 +13,16 @@ set -euo pipefail
 # Arguments:
 #   $1 = project_root (default: ".")
 #
-# Output:
-#   JSONL lines from trufflehog (one JSON object per finding), or
-#   a single JSON object: {"status":"SKIPPED","reason":"trufflehog not installed"}
+# Output (when scanner is present):
+#   RC=0 + empty stdout   → {"status":"PASS","reason_code":"OK"}        (clean; bare empty stdout is NEVER a legitimate clean signal)
+#   RC=0 + JSONL stdout   → JSONL findings (one JSON object per finding)
+#   RC!=0                 → {"status":"FAIL","reason_code":"SCANNER_ERROR"} + exit 1
+#   scanner absent        → {"status":"SKIPPED","reason":"trufflehog not installed"} + exit 0
 #
-# Exit code: always 0 — severity handling is done in the TypeScript layer.
+# Exit code:
+#   0  — scanner absent (SKIPPED) or scanner ran without error (PASS or findings).
+#   1  — scanner present but exited with an error (fail-closed; never silently passes).
+#   Severity handling is done in the TypeScript layer.
 
 PROJECT_ROOT="${1:-.}"
 
@@ -29,5 +34,21 @@ fi
 
 # Run trufflehog in filesystem mode with verified-only JSON output.
 # --no-update suppresses the update check banner on stderr.
-# The "|| true" ensures we always exit 0 regardless of findings.
-trufflehog filesystem "$PROJECT_ROOT" --only-verified --json --no-update 2>/dev/null || true
+# Capture RC explicitly — no "|| true" (fail-closed: scanner error → FAIL, exit 1).
+OUT=""; RC=0
+if OUT="$(trufflehog filesystem "$PROJECT_ROOT" --only-verified --json --no-update 2>/dev/null)"; then RC=0; else RC=$?; fi
+
+if [[ $RC -ne 0 ]]; then
+    printf '{"status":"FAIL","reason_code":"SCANNER_ERROR"}\n'
+    exit 1
+fi
+
+if [[ -z "$OUT" ]]; then
+    # Clean run — emit explicit PASS sentinel (bare empty stdout is never a clean signal)
+    printf '{"status":"PASS","reason_code":"OK"}\n'
+    exit 0
+fi
+
+# Findings present — emit JSONL for TypeScript layer to parse
+printf '%s\n' "$OUT"
+exit 0

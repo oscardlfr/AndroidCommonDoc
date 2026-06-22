@@ -1043,7 +1043,7 @@
       "description": "Run all pre-PR checks locally before opening a pull request. Validates commit messages, string resources, architecture guards, and KMP safety patterns. Use before every PR to catch CI failures locally.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:743177dddf03cd86ffce89673ea75871945c73d66b2e3bdf866b628d9b9b7925",
+      "hash": "sha256:8f452bb57babb5de421733f31cb67efcb6fb10a34661e48173b00deecc57be10",
       "dependencies": [
         "scripts/sh/scan-secrets.sh",
         "scripts/sh/catalog-coverage-check.sh",

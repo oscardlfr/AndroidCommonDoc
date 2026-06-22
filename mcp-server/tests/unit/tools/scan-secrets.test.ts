@@ -177,4 +177,42 @@ describe("scan-secrets tool", () => {
     expect(result.findings).toHaveLength(1);
     expect(result.summary).toContain("no CRITICAL or HIGH");
   });
+
+  // ── parseOutput exact-contract cases (Fix 2: fail-closed empty/non-JSON) ──────
+  //
+  // CONTRACT CHANGE: empty output and non-JSON output now fail-closed.
+  // Prior behavior: empty → PASS, non-JSON → PASS (open/permissive).
+  // New behavior:   empty → FAIL+SCANNER_ERROR, non-JSON → FAIL+SCANNER_ERROR.
+  // Rationale: bare empty stdout is NEVER a legitimate clean signal; non-JSON
+  // output indicates the scanner errored before producing structured output.
+  // These are intentional fail-closed changes, NOT weakening of existing tests.
+
+  it("parseOutput('') → FAIL + reason_code SCANNER_ERROR (contract change: empty now fail-closed)", () => {
+    const result = parseOutput("");
+    expect(result.status).toBe("FAIL");
+    expect(result.reason_code).toBe("SCANNER_ERROR");
+  });
+
+  it("parseOutput non-JSON → FAIL + reason_code SCANNER_ERROR (contract change: non-JSON now fail-closed)", () => {
+    const result = parseOutput("not json\n");
+    expect(result.status).toBe("FAIL");
+    expect(result.reason_code).toBe("SCANNER_ERROR");
+  });
+
+  it("parseOutput PASS sentinel → status PASS + reason_code OK", () => {
+    const result = parseOutput('{"status":"PASS","reason_code":"OK"}');
+    expect(result.status).toBe("PASS");
+    expect(result.reason_code).toBe("OK");
+  });
+
+  it("parseOutput FAIL sentinel → status FAIL + reason_code SCANNER_ERROR", () => {
+    const result = parseOutput('{"status":"FAIL","reason_code":"SCANNER_ERROR"}');
+    expect(result.status).toBe("FAIL");
+    expect(result.reason_code).toBe("SCANNER_ERROR");
+  });
+
+  it("parseOutput SKIPPED sentinel → status SKIPPED (unchanged by Fix 2)", () => {
+    const result = parseOutput('{"status":"SKIPPED","reason":"trufflehog not installed"}');
+    expect(result.status).toBe("SKIPPED");
+  });
 });

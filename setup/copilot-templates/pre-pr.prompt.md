@@ -120,6 +120,7 @@ bash scripts/sh/scan-secrets.sh "$(pwd)"
 ```
 
 - status=SKIPPED (trufflehog not installed): INFO — do not block
+- status=FAIL with reason_code SCANNER_ERROR (trufflehog present but erroring): ERROR (blocks)
 - status=PASS: continue
 - findings with severity CRITICAL or HIGH: ERROR (blocks)
 - findings with severity MEDIUM or LOW: WARNING (report, do not block)
