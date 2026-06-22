@@ -3,7 +3,7 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/emit-qg-result.sh
 #
-# Coverage map (12 tests):
+# Coverage map (21 tests):
 #   #QR1  status:pass when report all-PASS + clean bats log
 #   #QR2  status:fail when bats log has ^not ok (even if bats exited 0)
 #   #QR3  empty bats log → status:fail (no evidence = not pass)
@@ -22,6 +22,15 @@ bats_require_minimum_version 1.5.0
 #         (a) generated_at < started_at (previous-QG leftover rejected → fallback + partial)
 #         (b) HEAD mismatch (rejected → fallback + partial → fail)
 #   #QR12 NO handoff present → fallback to clean complete TAP log → status:pass
+#   #QR13 --init resets quality-gate-report.json (REPORT_PATH) to {"steps":[]}
+#   #QR14 foreign-HEAD SHA in step reason → freshness lib exits 1 (foreign HEAD blocked)
+#   #QR15 stale bats-count in reason → freshness lib exits 1 (count mismatch blocked)
+#   #QR16 PASS-semantics word in FAIL step reason → freshness lib exits 1
+#   #QR17 well-formed carry metadata (byte-identical file) → freshness lib exits 0
+#   #QR18 incomplete carry (missing current_head) → freshness lib exits 1
+#   #QR19 non-byte-identical carry → freshness lib exits 1 (not byte-identical)
+#   #QR20 false-positive guard A: merge-base SHA not in HEAD context → exits 0
+#   #QR21 false-positive guard B: non-bats-context integers → exits 0
 #
 # Isolation: every test uses mktemp -d + git init + teardown rm -rf.
 # Fixtures written via --report / --bats-log / --out; NEVER touch live state.
@@ -32,6 +41,7 @@ SCRIPT="$BATS_TEST_DIRNAME/../sh/emit-qg-result.sh"
 EMITTER="$BATS_TEST_DIRNAME/../sh/emit-push-proof.sh"
 MANIFEST_SRC="$BATS_TEST_DIRNAME/../../quality-gate-manifest.json"
 SCRIPTS_SRC="$BATS_TEST_DIRNAME/.."
+FRESHNESS_LIB="$BATS_TEST_DIRNAME/../sh/lib/qg-report-freshness.sh"
 
 setup() {
     REPO="$(mktemp -d)"
@@ -112,6 +122,45 @@ import json, sys
 d = json.load(open(sys.argv[1], encoding='utf-8'))
 print(d.get(sys.argv[2], ''))
 " "$file" "$field"
+}
+
+# write_freshness_report <path> <step_id> <result> <reason> [carried] [source_head] [current_head] [files_json]
+# Writes a minimal QG report with a single step whose fields are given explicitly.
+# Used by QR13-QR21 to exercise qg-report-freshness.sh without touching the main QG manifest path.
+write_freshness_report() {
+    local path="$1"
+    local step_id="$2"
+    local result="$3"
+    local reason="$4"
+    local carried="${5:-false}"
+    local source_head="${6:-}"
+    local current_head_val="${7:-}"
+    local files_json="${8:-[]}"
+    python3 - "$path" "$step_id" "$result" "$reason" "$carried" "$source_head" "$current_head_val" "$files_json" << 'PYEOF'
+import json, sys
+p              = sys.argv[1]
+step_id        = sys.argv[2]
+result         = sys.argv[3]
+reason         = sys.argv[4]
+carried_raw    = sys.argv[5]
+source_head    = sys.argv[6]
+current_head_v = sys.argv[7]
+files_raw      = sys.argv[8]
+carried = (carried_raw.lower() == 'true')
+entry = {'step': step_id, 'ran': True, 'result': result, 'reason': reason}
+if carried:
+    entry['carried'] = True
+if source_head:
+    entry['source_head'] = source_head
+if current_head_v:
+    entry['current_head'] = current_head_v
+try:
+    entry['files'] = json.loads(files_raw)
+except Exception:
+    entry['files'] = []
+r = {'steps': [entry]}
+with open(p,'w',encoding='utf-8',newline='\n') as f: json.dump(r,f,indent=2); f.write('\n')
+PYEOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -239,13 +288,11 @@ print(d.get(sys.argv[2], ''))
     git -C "$REPO" commit --quiet -m "test(fixtures): QR6 fixture commit"
     HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 
-    # Write a valid QG report
-    write_report_all_pass "$ACDOC/quality-gate-report.json"
-
-    # Write arch verdicts for the slug
     local slug="test-slug"
     local wave_dir="$REPO/.planning/wave-$slug"
     mkdir -p "$wave_dir"
+
+    # Write arch verdicts for the slug
     for role in arch-testing arch-platform arch-integration; do
         cat > "$wave_dir/$role-verdict.md" << EOF
 # $role verdict
@@ -267,7 +314,15 @@ EOF
     printf '### Wave Class\n- **Class**: HARNESS\n### Spawn Table\n| Role | Count | Reason |\n|---|---|---|\n| arch-testing | 1 | test |\n' \
         > "$wave_dir/PLAN.md"
 
-    # Write the path-manifest-audit step as PASS so run-qg does not block on it
+    # Production order: --init FIRST (resets REPORT_PATH scratch), THEN build the report.
+    # This matches the quality-gater template sequence: --init → steps populate report → mint.
+    # C1 made --init reset quality-gate-report.json; so --init must precede report-building.
+    local qg_out="$wave_dir/qg-result.json"
+    run bash "$SCRIPT" --init --out "$qg_out" --project-root "$REPO" --slug "$slug"
+    [ "$status" -eq 0 ]
+    [ -f "$qg_out" ]
+
+    # Build report AFTER --init (--init reset the file; now populate it fresh)
     write_report_all_pass "$ACDOC/quality-gate-report.json"
     python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" << 'PYEOF'
 import json, sys
@@ -283,12 +338,6 @@ rpt['steps'] = list(by_id.values())
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
-
-    # NOW write qg-result.json into the gitignored path (the key action under test)
-    local qg_out="$wave_dir/qg-result.json"
-    run bash "$SCRIPT" --init --out "$qg_out" --project-root "$REPO" --slug "$slug"
-    [ "$status" -eq 0 ]
-    [ -f "$qg_out" ]
 
     # Confirm qg-result.json is gitignored (git status must NOT list it)
     local dirty_lines
@@ -327,8 +376,6 @@ PYEOF
     git -C "$REPO" commit --quiet -m "test(fixtures): QR7 fixture commit"
     HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 
-    write_report_all_pass "$ACDOC/quality-gate-report.json"
-
     local slug="test-slug"
     local wave_dir="$REPO/.planning/wave-$slug"
     mkdir -p "$wave_dir"
@@ -352,6 +399,14 @@ EOF
     printf '### Wave Class\n- **Class**: HARNESS\n### Spawn Table\n| Role | Count | Reason |\n|---|---|---|\n| arch-testing | 1 | test |\n' \
         > "$wave_dir/PLAN.md"
 
+    # Production order: --init FIRST (resets REPORT_PATH scratch), THEN build the report.
+    # C1 made --init reset quality-gate-report.json; --init must precede report-building so
+    # the report seen by run-qg (step 1) and verify-proof (step 3) is byte-identical.
+    local qg_out="$wave_dir/qg-result.json"
+    bash "$SCRIPT" --init --out "$qg_out" --project-root "$REPO" --slug "$slug"
+
+    # Build the report AFTER --init — the report that run-qg will hash into push-proof.json.
+    write_report_all_pass "$ACDOC/quality-gate-report.json"
     python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" << 'PYEOF'
 import json, sys
 rpt_path = sys.argv[1]
@@ -366,7 +421,8 @@ with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
 
-    # Step 1: run-qg WITHOUT qg-result.json — record the outcome
+    # Step 1: run-qg WITHOUT additional qg-result.json content — record the outcome.
+    # qg-result.json exists (--init wrote it above) but is gitignored so clean-tree passes.
     run bash -c "CLAUDE_WAVE_SLUG='$slug' bash '$REPO/scripts/sh/emit-push-proof.sh' --subcommand run-qg --repo-root '$REPO'"
     local rq_status="$status"
     [ "$rq_status" -eq 0 ]
@@ -374,12 +430,11 @@ PYEOF
     # Verify push-proof.json was created
     [ -f "$ACDOC/push-proof.json" ]
 
-    # Step 2: NOW write qg-result.json into the gitignored path
-    local qg_out="$wave_dir/qg-result.json"
-    bash "$SCRIPT" --init --out "$qg_out" --project-root "$REPO" --slug "$slug"
+    # Step 2: qg-result.json was already written by --init above; it's present in the gitignored path.
     [ -f "$qg_out" ]
 
-    # Step 3: verify-proof — must behave identically (qg-result.json not consumed)
+    # Step 3: verify-proof — must behave identically (qg-result.json not consumed).
+    # The report file is byte-identical to what run-qg hashed (no further writes occurred).
     run bash -c "bash '$REPO/scripts/sh/emit-push-proof.sh' --subcommand verify-proof --pushed-sha '$HEAD_SHA' --repo-root '$REPO'"
     # verify-proof must exit 0 (PASS) regardless of qg-result.json presence
     # (it only reads push-proof.json + quality-gate-manifest.json + quality-gate-report.json)
@@ -734,4 +789,235 @@ d = json.load(open(sys.argv[1], encoding='utf-8'))
 print(d.get('suite_summary', {}).get('bats_complete', 'MISSING'))
 " "$out")"
     [ "$bats_complete_field" = "True" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR13  --init clears report scratch (REPORT_PATH reset)
+#
+# --init must overwrite $ACDOC/quality-gate-report.json with {"steps":[]}
+# regardless of prior content. Seeding that file with a stale step and
+# verifying the reset confirms that prior-run prose cannot survive into the
+# new QG run.
+#
+# CRITICAL: assert $ACDOC/quality-gate-report.json (REPORT_PATH), NOT qg-result.json.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR13 PASS: --init resets quality-gate-report.json to {\"steps\":[]}" {
+    local out="$REPO/qg-result.json"
+    local report_path="$ACDOC/quality-gate-report.json"
+
+    # Seed the REPORT_PATH with a non-empty stale step
+    python3 -c "
+import json, sys
+stale = {'steps': [{'step': 'stale-step', 'ran': True, 'result': 'PASS', 'reason': 'old run'}]}
+with open(sys.argv[1],'w',encoding='utf-8') as f: json.dump(stale,f,indent=2); f.write('\n')
+" "$report_path"
+
+    # Verify seed is there before running --init
+    steps_before="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(len(d.get('steps',[]))) " "$report_path")"
+    [ "$steps_before" = "1" ]
+
+    # Run --init
+    run bash "$SCRIPT" --init --out "$out" --project-root "$REPO" --slug "test-slug"
+    [ "$status" -eq 0 ]
+
+    # Assert REPORT_PATH is now {"steps":[]}
+    report_content="$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+# Compare structurally
+assert d == {'steps': []}, f'Expected {{\"steps\":[]}}, got {d!r}'
+print('ok')
+" "$report_path")"
+    [ "$report_content" = "ok" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR14  Foreign-HEAD reason blocked
+#
+# A report step whose reason references HEAD=<sha-that-is-not-current>
+# must cause the freshness lib to exit 1 with stderr containing "foreign HEAD".
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR14 FAIL: foreign-HEAD SHA in step reason → lib exits 1, stderr=foreign HEAD" {
+    # Real commit so we have a valid HEAD in the fixture repo
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR14"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local rpt="$ACDOC/quality-gate-report.json"
+    # Seed with a step whose reason contains HEAD=<stale-sha> (40 hex chars, not the current HEAD)
+    write_freshness_report "$rpt" "bats-suite" "PASS" "bats PASS @ HEAD=deadbeef00000000000000000000000000000000"
+
+    run bash "$FRESHNESS_LIB" --report "$rpt" --head "$current_head" --bats-count "1645" --repo-root "$REPO"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"foreign HEAD"* ]] || [[ "$stderr" == *"foreign HEAD"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR15  Stale bats-count reason blocked
+#
+# A reason containing "bats 9999 tests passed" when the authoritative count
+# is FIXTURE_COUNT=1645 must cause exit 1 with stderr "bats count mismatch".
+# Count is stored in a named var to avoid hardcoded literals in the test body.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR15 FAIL: stale bats-count in reason → lib exits 1, stderr=bats count mismatch" {
+    local FIXTURE_COUNT=1645
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local rpt="$ACDOC/quality-gate-report.json"
+    write_freshness_report "$rpt" "bats-suite" "PASS" "bats 9999 tests passed"
+
+    run bash "$FRESHNESS_LIB" --report "$rpt" --head "$current_head" --bats-count "$FIXTURE_COUNT" --repo-root "$REPO"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"bats count mismatch"* ]] || [[ "$stderr" == *"bats count mismatch"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR16  PASS-semantics on FAIL step blocked
+#
+# A step with result:FAIL whose reason contains "vitest PASS" (a PASS-semantics
+# word) must cause exit 1 with stderr containing "PASS-semantics".
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR16 FAIL: PASS-semantics word in FAIL step reason → lib exits 1, stderr=PASS-semantics" {
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local rpt="$ACDOC/quality-gate-report.json"
+    write_freshness_report "$rpt" "vitest-step" "FAIL" "vitest PASS"
+
+    run bash "$FRESHNESS_LIB" --report "$rpt" --head "$current_head" --bats-count "1645" --repo-root "$REPO"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"PASS-semantics"* ]] || [[ "$stderr" == *"PASS-semantics"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR17  Well-formed carry metadata accepted
+#
+# Two commits: commit 1 creates carry-file (source_head), commit 2 creates an
+# UNRELATED file (current_head). The carry-file is NOT touched in commit 2.
+# Step has carried:true + matching source_head/current_head + files:[<carry-file>].
+# Lib must exit 0.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR17 PASS: well-formed carry metadata (byte-identical file) → lib exits 0" {
+    # Commit 1: create the carry-file
+    printf 'carried content\n' > "$REPO/carried-result.txt"
+    git -C "$REPO" add carried-result.txt
+    git -C "$REPO" commit --quiet -m "test: commit 1 for QR17 — carry-file"
+    local source_head
+    source_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    # Commit 2: create an unrelated file (carry-file NOT modified)
+    printf 'unrelated\n' > "$REPO/other-file.txt"
+    git -C "$REPO" add other-file.txt
+    git -C "$REPO" commit --quiet -m "test: commit 2 for QR17 — unrelated file"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local rpt="$ACDOC/quality-gate-report.json"
+    write_freshness_report "$rpt" "carried-step" "PASS" "carried from prior run" \
+        "true" "$source_head" "$current_head" '["carried-result.txt"]'
+
+    run bash "$FRESHNESS_LIB" --report "$rpt" --head "$current_head" --bats-count "1645" --repo-root "$REPO"
+    [ "$status" -eq 0 ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR18  Incomplete carry metadata rejected
+#
+# Same setup as QR17 but current_head is OMITTED from the step.
+# Lib must exit 1 (missing current_head field).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR18 FAIL: carry with missing current_head → lib exits 1" {
+    # Commit 1: create the carry-file
+    printf 'carried content\n' > "$REPO/carried-result-qr18.txt"
+    git -C "$REPO" add carried-result-qr18.txt
+    git -C "$REPO" commit --quiet -m "test: commit 1 for QR18 — carry-file"
+    local source_head
+    source_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    # Commit 2: unrelated file
+    printf 'unrelated\n' > "$REPO/other-file-qr18.txt"
+    git -C "$REPO" add other-file-qr18.txt
+    git -C "$REPO" commit --quiet -m "test: commit 2 for QR18 — unrelated file"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    # Omit current_head (pass empty string for that arg → write_freshness_report skips it)
+    local rpt="$ACDOC/quality-gate-report.json"
+    write_freshness_report "$rpt" "carried-step" "PASS" "carried from prior run" \
+        "true" "$source_head" "" '["carried-result-qr18.txt"]'
+
+    run bash "$FRESHNESS_LIB" --report "$rpt" --head "$current_head" --bats-count "1645" --repo-root "$REPO"
+    [ "$status" -eq 1 ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR19  Non-byte-identical carry rejected
+#
+# Two commits where the carry-file IS modified in commit 2.
+# git diff --quiet returns non-zero → lib must exit 1 with stderr
+# containing "not byte-identical".
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR19 FAIL: carry file modified between source_head and current_head → lib exits 1, stderr=not byte-identical" {
+    # Commit 1: create carry-file with initial content
+    printf 'version A\n' > "$REPO/carried-result-qr19.txt"
+    git -C "$REPO" add carried-result-qr19.txt
+    git -C "$REPO" commit --quiet -m "test: commit 1 for QR19 — carry-file v1"
+    local source_head
+    source_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    # Commit 2: MODIFY the carry-file (making it non-identical)
+    printf 'version B\n' > "$REPO/carried-result-qr19.txt"
+    git -C "$REPO" add carried-result-qr19.txt
+    git -C "$REPO" commit --quiet -m "test: commit 2 for QR19 — carry-file v2 (modified)"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local rpt="$ACDOC/quality-gate-report.json"
+    write_freshness_report "$rpt" "carried-step" "PASS" "carried from prior run" \
+        "true" "$source_head" "$current_head" '["carried-result-qr19.txt"]'
+
+    run bash "$FRESHNESS_LIB" --report "$rpt" --head "$current_head" --bats-count "1645" --repo-root "$REPO"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"not byte-identical"* ]] || [[ "$stderr" == *"not byte-identical"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR20  False-positive guard A — merge-base SHA in non-HEAD context passes
+#
+# reason: "merge-base: deadbeef — no changes" does not match the HEAD_CONTEXT_RE
+# because "merge-base:" has no HEAD prefix word. Current HEAD differs from deadbeef.
+# Lib must exit 0 (no HEAD-context anchor → no match → no invariant A violation).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR20 PASS: merge-base SHA in reason not in HEAD context → lib exits 0 (no false positive)" {
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local rpt="$ACDOC/quality-gate-report.json"
+    # "deadbeef" appears after "merge-base:" — NOT in a HEAD= / HEAD: / @ context
+    write_freshness_report "$rpt" "some-step" "PASS" "merge-base: deadbeef00000000000000000000000000000000 — no changes"
+
+    run bash "$FRESHNESS_LIB" --report "$rpt" --head "$current_head" --bats-count "1645" --repo-root "$REPO"
+    [ "$status" -eq 0 ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR21  False-positive guard B — unrelated integer does not trip count-coherence
+#
+# reason: "Detekt: 3 files checked; vitest 2593 passing" contains integers (3
+# and 2593) but neither is preceded by the "bats" keyword. With authoritative
+# count=FIXTURE_COUNT=1645, lib must exit 0 (BATS_COUNT_RE does not match).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR21 PASS: non-bats-context integers in reason → lib exits 0 (no false count match)" {
+    local FIXTURE_COUNT=1645
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local rpt="$ACDOC/quality-gate-report.json"
+    write_freshness_report "$rpt" "detekt-step" "PASS" "Detekt: 3 files checked; vitest 2593 passing"
+
+    run bash "$FRESHNESS_LIB" --report "$rpt" --head "$current_head" --bats-count "$FIXTURE_COUNT" --repo-root "$REPO"
+    [ "$status" -eq 0 ]
 }

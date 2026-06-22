@@ -20,6 +20,7 @@ Extended-protocol detail for the [quality-gater](../../setup/agent-templates/qua
 | [quality-gater-doc-validator-parity](quality-gater-doc-validator-parity.md) | Step 7.5 | Doc-Validator Parity (REQUIRED) — runs `qg-doc-validators.sh` (cross_refs + doc_structure_vitest); local↔CI doc-validator parity that closes the PR #220 gap |
 | [quality-gater-runtime-ui-validation](quality-gater-runtime-ui-validation.md) | Step 9.5 | Runtime UI Validation — Android Layout Diff + Compose Semantic Diff dispatch (platform-aware) |
 | [quality-gater-registry-integrity](quality-gater-registry-integrity.md) | registry-hash | Registry Integrity (REQUIRED when `skills/` exists) — runs `qg-registry-integrity.sh --require-registry`; 3-state result (clean/drift/n/a); closes the registry-hash rubber-stamp |
+| [quality-gater-freshness-gate](quality-gater-freshness-gate.md) | Step Z | Report Freshness Gate (REQUIRED pre-mint) — runs qg-report-freshness.sh; blocks mint (exit 1) on stale step reasons; structured carry contract |
 
 ## Protocol & push-gate references
 
