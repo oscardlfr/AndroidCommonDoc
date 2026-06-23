@@ -295,4 +295,33 @@ describe("scan-secrets tool", () => {
     const result = parseOutput('{"status":"SKIPPED","reason":"trufflehog not installed"}');
     expect(result.status).toBe("SKIPPED");
   });
+
+  // ── parseOutput malformed-line-after-valid (Fix 1 regression guard) ──────────
+  //
+  // CONTRACT: a malformed JSONL line ANYWHERE in the findings loop → FAIL+SCANNER_ERROR.
+  // This closes the "low-severity valid + later malformed → false PASS" hole.
+  // The implementation returns early from the JSONL loop on any JSON.parse failure,
+  // so even a valid LOW finding on line 1 does NOT survive a banner on line 2.
+
+  it("parseOutput: valid LOW finding + malformed line → FAIL + SCANNER_ERROR (fail-closed)", () => {
+    const input =
+      '{"DetectorName":"X","severity":"LOW"}\n' +
+      "===ERROR banner===\n";
+
+    const result = parseOutput(input);
+
+    expect(result.status).toBe("FAIL");
+    expect(result.reason_code).toBe("SCANNER_ERROR");
+  });
+
+  it("parseOutput: valid CRITICAL finding + malformed line → FAIL + SCANNER_ERROR (malformed wins)", () => {
+    const input =
+      '{"DetectorName":"AWS","severity":"CRITICAL","Raw":"AKIAIOSFODNN7EXAMPLE"}\n' +
+      "not-json-banner\n";
+
+    const result = parseOutput(input);
+
+    expect(result.status).toBe("FAIL");
+    expect(result.reason_code).toBe("SCANNER_ERROR");
+  });
 });

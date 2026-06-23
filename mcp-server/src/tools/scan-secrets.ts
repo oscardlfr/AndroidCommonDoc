@@ -92,7 +92,12 @@ export function parseOutput(stdout: string): ScanResult {
       const obj = JSON.parse(line) as SecretFinding;
       findings.push(obj);
     } catch {
-      // skip malformed lines
+      return {
+        status: "FAIL",
+        reason_code: "SCANNER_ERROR",
+        findings: [],
+        summary: "Scanner produced malformed JSONL output (treated as error).",
+      };
     }
   }
 

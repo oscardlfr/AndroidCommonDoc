@@ -84,16 +84,30 @@ MOCKEOF
 # ─────────────────────────────────────────────────────────────────────────────
 # SSS-2  absent (no trufflehog on PATH) → "SKIPPED" + exit 0
 #
-# Uses an isolated PATH with no trufflehog binary to trigger the absent branch.
+# Uses a CONTROLLED PATH containing ONLY a known-empty bin dir — no /usr/bin,
+# no /bin, no system dirs that might have trufflehog installed on the test host.
+# scan-secrets.sh only needs bash builtins (command -v, printf) which are
+# available via the invoking shell regardless of PATH, so the minimal PATH is safe.
+#
+# The script is invoked by absolute path via `bash "$SCRIPT"` to avoid relying
+# on PATH to find the script itself.
 # ─────────────────────────────────────────────────────────────────────────────
 @test "SSS-2 SKIP: absent (no trufflehog on PATH) → status:SKIPPED + exit 0" {
-  # Isolated PATH with a known-empty bin dir (no trufflehog)
+  # Controlled PATH: only a known-empty dir — guaranteed no trufflehog on any host.
+  # scan-secrets.sh uses only bash builtins (command -v, printf) so no system dirs
+  # are required. The script is invoked via `bash '$SCRIPT'` (absolute path), so
+  # PATH is not needed to locate bash or the script itself.
   local empty_bin="$WORK/empty_bin"
   mkdir -p "$empty_bin"
 
+  # Resolve the absolute path to bash BEFORE stripping PATH.
+  # $BASH is set by bash to the path of the running shell — always absolute.
+  local bash_abs
+  bash_abs="$(command -v bash)"
+
   run bash -c "
-    export PATH='$empty_bin:/usr/bin:/bin'
-    bash '$SCRIPT' '$WORK'
+    export PATH='$empty_bin'
+    '$bash_abs' '$SCRIPT' '$WORK'
   "
 
   # Exit must be 0 (SKIPPED is not an error)

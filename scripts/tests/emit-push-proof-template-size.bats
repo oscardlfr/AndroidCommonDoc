@@ -21,6 +21,7 @@ bats_require_minimum_version 1.5.0
 #   TSZ-6: absent-dir guard — no setup/agent-templates/ → gate is a no-op → exit 0 + stamp written
 #   TSZ-7: ps1 static — no-bash branch for (D) size-gate must Die, not warn-skip
 #   TSZ-8: ps1 static — no-bash branch for (B) registry-integrity must Die, not warn-skip
+#   TSZ-9: ps1 static — no 3-arg Join-Path (PowerShell 5.1 compat; 3-arg form requires PS 6+)
 #
 # Isolation: every test uses mktemp -d + git init + teardown rm -rf.
 # Setup mirrors emit-push-proof.bats exactly (same harness).
@@ -482,4 +483,17 @@ PYEOF
   [ "$output" = "0" ]
   run grep -c 'Die "bash not found; cannot run registry integrity check' "$ps1"
   [ "$output" != "0" ]
+}
+
+# TSZ-9  ps1 static — no 3-arg Join-Path (PowerShell 5.1 compat)
+#
+# PowerShell 5.1 supports only 2-argument Join-Path.
+# The 3-argument form `Join-Path A B C` (using -AdditionalChildPath) requires PS 6+.
+# All 3-arg Join-Path calls must be nested: `Join-Path (Join-Path A B) C`.
+# This guard catches any regression back to the 3-arg form.
+@test "TSZ-9 ps1 uses no 3-arg Join-Path (PowerShell 5.1 compat)" {
+  local ps1="$BATS_TEST_DIRNAME/../ps1/emit-push-proof.ps1"
+  # 3-arg form 'Join-Path A B C' requires PS 6+ (-AdditionalChildPath); 5.1 supports only 2 args
+  run grep -cE "Join-Path +'?[^()'|]+'? +'?[^()'|]+'? +'?[^()'|]+'?" "$ps1"
+  [ "$output" = "0" ]
 }

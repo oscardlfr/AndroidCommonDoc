@@ -424,13 +424,13 @@ function Invoke-RunQg {
     #     Repos/fixtures without the dir have no templates to size-check -- N/A, not a bypass.
     #     CWD-independent: pass explicit dirs matching repoRoot (mirrors --project-root pattern).
     #     Inline exit-code gate -- NOT a required_steps[] entry.
-    $templatesDir = Join-Path $repoRoot 'setup' 'agent-templates'
+    $templatesDir = Join-Path (Join-Path $repoRoot 'setup') 'agent-templates'
     if (Test-Path $templatesDir -PathType Container) {
         $sizeScript = Join-Path $scriptsDir 'validate-agent-templates.sh'
         if ($bash) {
             & $bash.Source $sizeScript '--check' 'size-limits' `
                 '--templates-dir' $templatesDir `
-                '--agents-dir' (Join-Path $repoRoot '.claude' 'agents')
+                '--agents-dir' (Join-Path (Join-Path $repoRoot '.claude') 'agents')
             if ($LASTEXITCODE -ne 0) {
                 Die "agent template size cap exceeded; trim template, rerun QG."
             }
@@ -442,7 +442,7 @@ function Invoke-RunQg {
 
     # (C) Record registry digest into artifact_digests (additive; schema_version stays 1).
     #     sha256(skills/registry.json, CRLF->LF). Merged before proof-write.
-    $registryPath = Join-Path $repoRoot 'skills' 'registry.json'
+    $registryPath = Join-Path (Join-Path $repoRoot 'skills') 'registry.json'
     if (Test-Path $registryPath) {
         $regDigest = Get-FileSha256 $registryPath
         $artifactDigests['skills/registry.json'] = $regDigest
