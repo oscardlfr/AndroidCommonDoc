@@ -13,25 +13,30 @@
 #   - reference:  skills with copilot-template-type: reference (full body under ## Reference header)
 #
 # Options:
-#   --clean   Remove orphaned templates whose skill is now copilot: false
+#   --project-root DIR  Project root containing skills/ and setup/copilot-templates/
+#   --clean             Remove orphaned templates whose skill is now copilot: false
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CLEAN=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --project-root)
+      REPO_ROOT="$2"
+      shift 2
+      ;;
+    --clean) CLEAN=true; shift ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
 
 cd "$REPO_ROOT"
 
 SKILLS_DIR="skills"
 OUTPUT_DIR="setup/copilot-templates"
 PARAMS_FILE="skills/params.json"
-CLEAN=false
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --clean) CLEAN=true; shift ;;
-    *) echo "Unknown option: $1" >&2; exit 1 ;;
-  esac
-done
 
 mkdir -p "$OUTPUT_DIR"
 

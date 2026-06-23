@@ -17,7 +17,7 @@
 #   --expected <N>         Assert that the plan line 1..N equals N (optional override)
 #   --cross-check-count    Cross-check ok_ct against `npx bats --count` (full-run mode only;
 #                          skipped silently if npx is absent; not valid with --eval-only)
-#   <bats-targets...>      Bats targets (default: scripts/tests/*.bats)
+#   <bats-targets...>      Bats targets (default: scripts/tests directory)
 #
 # Rules (all four are complementary — none subsumes another):
 #   - ok_ct == 0                             => error + exit 1 (no tests ran)
@@ -91,9 +91,7 @@ if [[ -z "$LOG" ]]; then
 fi
 
 if [[ "${#TARGETS[@]}" -eq 0 ]]; then
-    shopt -s nullglob
-    TARGETS=( "$ROOT"/scripts/tests/*.bats )
-    shopt -u nullglob
+    TARGETS=( "$ROOT/scripts/tests" )
 fi
 
 # ── Generate a unique run-id ONCE at start ────────────────────────────────────

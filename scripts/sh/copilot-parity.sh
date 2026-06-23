@@ -245,7 +245,7 @@ if $FIX; then
     echo ""
     echo "Auto-fixing with copilot-adapter.sh --clean..."
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    bash "$SCRIPT_DIR/../../adapters/copilot-adapter.sh" --clean
+    bash "$SCRIPT_DIR/../../adapters/copilot-adapter.sh" --project-root "$TOOLKIT_ROOT" --clean
     echo "Fix applied. Run this check again to verify."
 fi
 

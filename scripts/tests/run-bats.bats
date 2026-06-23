@@ -3,7 +3,7 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/run-bats.sh (--eval-only --log <path> mode).
 #
-# Coverage map (10 tests):
+# Coverage map (12 tests):
 #   #RB1  ^not ok line present in log → exit 1  [headline false-green fix]
 #   #RB2  empty/no-evidence log (no ^ok, no 1..N plan) → exit 1
 #   #RB3  CLEAN log (1..N plan + all ok N lines) → exit 0
@@ -18,6 +18,8 @@ bats_require_minimum_version 1.5.0
 #         with --expected 3 → exit 0
 #   #RB10 PLAN-LINE policy: ok lines but no 1..N → exit 1;
 #         log with TWO 1..N lines → exit 1
+#   #RB11 DEFAULT TARGET: no explicit targets passes scripts/tests directory to npx
+#   #RB12 EXPLICIT TARGETS: caller-supplied targets pass through unchanged
 #
 # Isolation: every test uses mktemp + teardown rm -rf.
 # NEVER reads live suite logs.
@@ -194,4 +196,43 @@ teardown() {
 
     run bash "$SCRIPT" --eval-only --log "$LOG"
     [ "$status" -eq 1 ]
+}
+
+write_fake_npx() {
+    mkdir -p "$WORK_DIR/bin"
+    cat > "$WORK_DIR/bin/npx" << EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$WORK_DIR/npx-args"
+if [[ "\$1" == "bats" && "\${2:-}" == "--count" ]]; then
+    printf '2\n'
+else
+    printf '1..2\nok 1 alpha\nok 2 beta\n'
+fi
+EOF
+    chmod +x "$WORK_DIR/bin/npx"
+}
+
+@test "#RB11 DEFAULT TARGET: no explicit targets passes scripts/tests directory to npx (no expanded glob)" {
+    write_fake_npx
+
+    run env PATH="$WORK_DIR/bin:$PATH" bash "$SCRIPT" --project-root "$WORK_DIR" --log "$LOG"
+    [ "$status" -eq 0 ]
+
+    mapfile -t args < "$WORK_DIR/npx-args"
+    [ "${#args[@]}" -eq 2 ]
+    [ "${args[0]}" = "bats" ]
+    [ "${args[1]}" = "$WORK_DIR/scripts/tests" ]
+}
+
+@test "#RB12 EXPLICIT TARGETS: caller-supplied bats targets pass through unchanged" {
+    write_fake_npx
+
+    run env PATH="$WORK_DIR/bin:$PATH" bash "$SCRIPT" --project-root "$WORK_DIR" --log "$LOG" "$WORK_DIR/one.bats" "$WORK_DIR/two.bats"
+    [ "$status" -eq 0 ]
+
+    mapfile -t args < "$WORK_DIR/npx-args"
+    [ "${#args[@]}" -eq 3 ]
+    [ "${args[0]}" = "bats" ]
+    [ "${args[1]}" = "$WORK_DIR/one.bats" ]
+    [ "${args[2]}" = "$WORK_DIR/two.bats" ]
 }
