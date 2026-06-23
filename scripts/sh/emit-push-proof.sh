@@ -470,6 +470,21 @@ PYEOF
     exit 2
   fi
 
+  # (D) Template size gate: block mint if any agent template exceeds its cap.
+  #     Guard: only when setup/agent-templates/ exists (mirrors registry -d skills guard).
+  #     Repos/fixtures without the dir have no templates to size-check — N/A, not a bypass.
+  #     CWD-independent: pass explicit dirs matching REPO_ROOT (mirrors --project-root pattern).
+  #     Inline exit-code gate — NOT a required_steps[] entry.
+  if [[ -d "$REPO_ROOT/setup/agent-templates" ]]; then
+    if ! bash "$SCRIPT_DIR/validate-agent-templates.sh" \
+        --check size-limits \
+        --templates-dir "$REPO_ROOT/setup/agent-templates" \
+        --agents-dir "$REPO_ROOT/.claude/agents" >&2; then
+      echo "[emit-push-proof] ERROR: agent template size cap exceeded; trim template, rerun QG." >&2
+      exit 2
+    fi
+  fi
+
   # (C) Record registry digest into artifact_digests (additive; schema_version stays 1).
   #     sha256(skills/registry.json, CRLF->LF). Merged before the proof-write step.
   if [[ -f "$REPO_ROOT/skills/registry.json" ]]; then

@@ -61,6 +61,17 @@ A `/pre-pr` secret-scan result of `SKIPPED` (e.g., from `mcp__androidcommondoc__
 
 ---
 
+### Hardened `/pre-pr` MCP scanner semantics
+
+The MCP `scan-secrets` tool (used by `/pre-pr` Step 5.6) is now fail-closed for the present-but-erroring case:
+
+- **absent scanner** → `status: SKIPPED` (non-blocking INFO; preserved for `/pre-pr` where "I couldn't scan" ≠ "no secrets found")
+- **present but erroring** → `status: FAIL` + `reason_code: SCANNER_ERROR` (blocks `/pre-pr`)
+- **CRITICAL or HIGH findings detected** → `status: FAIL` + `reason_code: SECRETS_FOUND` (blocks `/pre-pr`)
+- **clean scan** → `status: PASS` + `reason_code: OK`
+
+This preserves the intentional semantic split: `/pre-pr` absent → SKIPPED/INFO (non-blocking), while QG Step S (`secret-scan-report.sh`) absent → FAIL (blocking). Both paths now agree: **present-but-erroring = FAIL; findings = FAIL**.
+
 ## Canonical Step S Bash Block
 
 Run inside the quality-gater's Bash session after Step Z completes.

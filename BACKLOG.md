@@ -1,100 +1,50 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-06-22; qg-proof-honesty-hardening wave-close (C6)
+> **Last updated**: 2026-06-22; qg-proof-honesty-hardening merged; wave qg-local-ci-security-closure in progress
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
 ## Active (proposed wave order)
 
-### arch-bash-write-gate brace-glob bug (LOW — harness/hooks) — filed 2026-06-22
+### Wave H1 — QG local-CI/security closure (HIGH — harness/QG, IN PROGRESS)
 
-**Symptom**: in `.claude/hooks/architect-bash-write-gate.js`, the advertised write-exemption pattern `arch-*-{verdict,cross-verify}.md` (comment ~L19, block message ~L61) is a literal brace string — JavaScript string literals do not brace-expand. The documentation/advertised-pattern diverges from the enforcing regex at ~L127 (which is a proper regex and works correctly).
+**Intent**: stop adding one-off QG follow-ups and close the remaining **local-QG-green ⇒ CI-green/security-honest** gaps as one coherent PR. This is the natural follow-up to `qg-doc-coverage`, `qg-committed-integrity`, `qg-reliability-root-fix`, `qg-suite-completeness`, `qg-report-freshness`, and `qg-proof-honesty-hardening`.
 
-**Root cause**: documentation/comment inconsistency vs implementation. The gate works correctly in practice because the regex at L127 is the actual enforcer, but the comment and block message advertise the non-functional brace syntax, creating reader confusion.
+**Scope bundle (do together, not as micro-waves)**:
 
-**Scope**: Fix-later only — do NOT touch the hook this wave. Update the comment and block message to reflect the actual regex pattern.
+- **C0 housekeeping**: reconcile `BACKLOG.md` + memory for the merged PR #226 (`develop` @ `58d9465`) and compact `MEMORY.md` below its size cap without losing links to detailed wave files.
+- **Local QG blocks agent-template/MCP template-size drift**: PR #226 proved CI catches `quality-gater.md` line-cap/vitest drift that local QG did not. Add a local blocking check for the same surfaces CI uses (`validate-agent-templates.sh` and the relevant `mcp-server` vitest/template-size assertions, preferably through a shared script if that keeps parity by construction).
+- **Harden `/pre-pr`/MCP scan-secrets present-but-erroring false PASS**: `scripts/sh/scan-secrets.sh` currently suppresses a present scanner's non-zero exit via `2>/dev/null || true`; `mcp-server/src/tools/scan-secrets.ts` treats empty/non-JSON output as PASS. Preserve the intended "scanner absent can be SKIPPED/INFO for `/pre-pr`/MCP" semantics if still desired, but make **present-but-erroring** explicit FAIL/ERROR. QG required-step path is already fail-closed via `secret-scan-report.sh`.
+- **Committed manifest parity**: add local-QG committed-tree enforcement for `.claude/registry/agents.manifest.yaml` `template_frontmatter_sha256` parity, analogous to the registry committed-integrity check. CI already blocks via `manifest-drift-warn`; local QG should catch it before push.
+- **run-bats Windows default portability** *(deferred — no directory-arg path exists in run-bats.sh today; both run-bats.sh and CI use the same glob; adding a new invocation path risks CI drift; documented in PLAN.md Fix 4)*: `run-bats.sh` default glob can exceed Windows command-line limits. If a future plan proves directory==glob==CI parity with no portability regression, switch default.
+- **Protocol/doc reconciliation only if touched**: update QG docs/protocol references made stale by these checks (required-step counts, scanner semantics, template-size parity) as part of the same wave.
 
-**Source**: qg-proof-honesty-hardening C0 audit.
+**Non-goals for H1**: hook/control-plane refactors, RTK global contract, agent-teams upstream bug report, runtime-adapter work, and unrelated old waves.
 
-### scan-secrets present-but-erroring → false PASS (MED — harness/proof-honesty) — filed 2026-06-22
+**Definition of done**: a clean local QG mechanically covers the known CI-only/QG-security gaps above; every new/modified executable or load-bearing behavior has targeted regression coverage (positive + negative where applicable); no test is weakened to make the wave pass; no new finding is parked without either being fixed in-wave or explicitly assigned to a named package/owner with user consent.
 
-**Symptom**: `scripts/sh/scan-secrets.sh:33` runs trufflehog with `2>/dev/null || true`, so a PRESENT-but-ERRORING scanner yields empty stdout. `mcp-server/src/tools/scan-secrets.ts` treats empty stdout as PASS (0 findings). This affects `/pre-pr` Step-5.6 and MCP callers.
+**Source**: grouped from qg-proof-honesty-hardening, qg-committed-integrity, qg-suite-completeness, and PR #226 CI lessons. Detailed context lives in `project_harness_next_grouped_work.md`.
 
-**Root cause**: `|| true` suppresses the scanner's non-zero exit code; empty output is ambiguous between "0 findings" and "scanner errored silently."
+### Wave H2 — Hook/control-plane hardening bundle (MED/HIGH — harness/hooks)
 
-**Scope**: `scripts/sh/scan-secrets.sh` and `mcp-server/src/tools/scan-secrets.ts` must stay byte-UNCHANGED this wave (the QG required-step producer `secret-scan-report.sh` is immune — it captures the exit code explicitly and never uses `|| true`). The residual present-but-erroring hole in `/pre-pr` is tracked here for a future wave.
+**Intent**: consolidate hook/runtime-control residue into one focused PR instead of scattering hook fixes across QG waves.
 
-**Source**: qg-proof-honesty-hardening Fix-B scoping.
+**Scope bundle**:
 
-### Agent-teams completion-message delivery unreliable (HIGH — harness reliability) — user-flagged 2026-06-16
+- **arch-bash-write-gate brace-glob doc/message bug**: `.claude/hooks/architect-bash-write-gate.js` advertises `arch-*-{verdict,cross-verify}.md`, but JavaScript string literals do not brace-expand; enforcing regex works, comment/block message are misleading.
+- **Installer sourcing-shim for wave-slug resolver**: wire `scripts/sh/lib/wave-slug.sh` into bash-layer consumers so slug validation is canonical; use explicit `$HOME`, not `~`, for temp/path references.
+- **Team-completeness-gate grace-clock reset**: define reset trigger and explicit `$HOME` path for the grace-clock tmp marker.
+- **Centralize duplicated JS hook helpers**: extract shared `isValidSlug`, `getWaveSlug`, `resolveFloorPeers`, and `loadYaml` from the 3 JS hooks.
+- **Team stale-suffix spawn guard**: block core session roles spawning as `-2`/`-N`; instruct operator to clean stale session dirs before respawn so canonical names route correctly.
+- **RTK command-prefix contract**: decide a portable rule first (`rtk` mandatory vs `rtk`-when-available fallback), then audit/enforce all agent-template shell snippets mechanically. No opportunistic partial patch.
 
-**Symptom**: peers (esp. **quality-gater**) finish their work but the completion message (QG-PASS, READY-FOR-REVIEW, EXECUTE-COMPLETE) does NOT reach the orchestrator → it hangs waiting indefinitely. Recurring across sessions (user: "2 días que el quality gate no responde cuando termina, no podemos seguir así"). Same delivery class seen mid-session bl-w47-expr4: a dispatch "never reached toolkit-specialist's inbox" (routing gap); planner idle-loops; quality-gater re-QG ran 25+ min with no notification while the `quality-gate.stamp` stayed at the prior HEAD.
+**Non-goals for H2**: QG local-CI parity and secret-scan semantics already belong to H1.
 
-**Root cause**: the experimental `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` primitive has documented limitations around task coordination / notification delivery (audit A2 #4 — "known limitations"). T3 message delivery is not a reliable carrier of load-bearing results. **Structural root cause identified (bl-w47-tail):** `TeamCreate`/`TeamDelete`/`TeamList` no longer exist in this Claude Code build — the named-team coordination substrate the peers and gates were built on is obsolete (single implicit team now). See the "Team-model migration" root-fix entry directly below.
+**Source**: BL-W47/BL-W49 hook residue, CodeRabbit RTK finding, and stale-peer memories.
 
-**Operational mitigation (apply NOW, no code)**: the orchestrator MUST NOT wait on completion MESSAGES for load-bearing verdicts. Read the result from the T2 disk artifact — `quality-gate.stamp` (HEAD-bound), commit SHAs (`git log`), `arch-*-verdict.md`, `qg-path-audit` exit code — and poke the peer via SendMessage for detail. This is the A0/T2 doctrine (invariants live in files, not messages) — fitting, since ex-PR4 is itself a harness-reliability wave.
+### Agent-teams upstream notification delivery report (LOW/MED — upstream/runtime)
 
-**Root fix (this item)**: (a) QG emits a structured `.planning/wave-<slug>/qg-result.json` the orchestrator polls (decouple verdict from message delivery); (b) repro + report the agent-teams notification drop upstream, or add a heartbeat/ack; (c) session-health check that flags peers idle >N min whose on-disk artifact shows completed work.
-
-**Status (2026-06-21)**: (a) poll-able `qg-result.json` verdict + (c) heartbeat/session-health recovery SHIPPED in `qg-reliability-root-fix` (orchestrator reads the verdict from disk, NOT the completion message — demonstrated live). Remaining: (b) repro/report the upstream agent-teams notification drop. That wave's QG verification also surfaced a partial-run-detection gap → resolved in `qg-suite-completeness`.
-
-**Source**: user-flagged 2026-06-16 during bl-w47-expr4.
-
-**Source**: discovered 2026-06-16 during bl-w47-tail orchestration init; user-directed to backlog the root-fix.
-
-### run-bats.sh default glob fails on Windows (LOW — harness portability) — surfaced 2026-06-21
-
-run-bats.sh's default `"$ROOT"/scripts/tests/*.bats` glob expands to 88 file args → "command line too long" on Windows. Workaround used by the QG: pass the directory arg (`bash run-bats.sh scripts/tests`). Fix: default to the directory (bats expands internally); verify CI-parity (directory == top-level glob == same 1645 set) before cutover.
-
-**Source**: surfaced during qg-suite-completeness QG (2026-06-21).
-
-### Installer sourcing-shim for wave-slug resolver (MED — harness, ~1-2h) — deferred 2026-06-16
-
-The L0 installer/setup does not wire `scripts/sh/lib/wave-slug.sh` (the validated `get_wave_slug` resolver — allowlist `^[A-Za-z0-9._-]+$`, rejects empty/`.`/`..`/slash-backslash traversal) into bash-layer consumers' sourcing path. The resolver exists but consumers re-inline their own slug extraction logic; a sourcing-shim in the installer would prevent per-consumer divergence and keep the validation logic canonical.
-
-**Constraint**: any tmp-file or path referenced by the shim MUST use explicit `$HOME` (not implicit `~`) for portability across environments.
-
-**Source**: deferred from BL-W47-expr4 slug-validation work (2026-06-16).
-
-### Team-completeness-gate grace-clock reset with explicit HOME (MED — harness, ~1h) — deferred 2026-06-16
-
-The team-completeness-gate's 30-min grace clock (tmp-file timestamp that gates floor enforcement after spawn) needs a defined reset trigger (e.g., on wave start) and its tmp-file path must use **explicit `$HOME`** (not implicit `~`), for portability across shell environments and tool invocations that may not expand `~` consistently.
-
-**Source**: deferred from BL-W47-expr4 (2026-06-16).
-
-### Centralize duplicated JS hook helpers (MED — hooks, ~2h) — deferred 2026-06-16
-
-The helpers `isValidSlug`, `getWaveSlug`, `resolveFloorPeers`, and `loadYaml` are duplicated across the 3 JS hooks (`premature-execution-gate.js`, `team-completeness-gate.js`, `team-topology-gate.js`). Extract into a shared module (e.g. `scripts/sh/lib/hook-utils.js` or `.claude/hooks/lib/`) so changes to slug validation or floor resolution only need to happen in one place. CodeRabbit nitpick; deferred per user.
-
-**Source**: CodeRabbit audit during BL-W47-expr4 CodeRabbit review (2026-06-16).
-
-### Team stale-suffix spawn guard (MED — hook, ~2-3h) — filed 2026-06-07
-
-Hook to **BLOCK** spawning any core session role (team-lead, arch-platform/integration/testing, context-provider, doc-updater, quality-gater, planner, specialists) with a `-2`/`-N` numeric suffix. A suffixed spawn means the canonical name is occupied by a stale/dead peer (stale team dir) → **inter-peer messages misroute to the DEAD original** (gate-acks, consults, dispatches silently lost). The hook should block the spawn and direct the operator to clean `~/.claude/teams/session-{slug}/` first (the work-skill stale-dir check) so the respawn takes the canonical name.
-
-**Trigger**: Kotlin 2.4.0 session, post-reboot (2026-06-07) — respawned `context-provider` + `quality-gater` collided with the dead originals → `context-provider-2` / `quality-gater-2` → broken messaging (user-observed live). The work-skill's manual stale-dir cleanup is easy to skip; make it a mechanical block. Relates to Wave 39 session-teardown hook + memory `feedback_stale_team_suffix_collision`.
-
-**Source**: filed by user 2026-06-07.
-
-### BL-W49-committed-manifest-parity — agents.manifest.yaml committed-frontmatter-sha parity (MED — harness) — filed 2026-06-20
-
-**Context**: `qg-committed-integrity` (this wave) enforces committed-tree integrity for `skills/registry.json` via `qg-registry-integrity.sh`. A sibling gap exists for `.claude/registry/agents.manifest.yaml`: CI already BLOCKs on `manifest-drift-warn` (template frontmatter SHA parity), but local QG has no committed-tree enforcement equivalent. If an agent template is edited and the manifest SHA is not updated + committed, CI blocks but local QG does not.
-
-**Scope**: add committed-tree enforcement for `agents.manifest.yaml` `template_frontmatter_sha256` fields at the local QG mint level (analogous to the registry check added this wave). The CI check (`manifest-drift-warn`) already exists; this is the local-side mechanization.
-
-**Deferred**: user-consented deferral during `qg-committed-integrity` planning. The CI gate already prevents broken pushes; the local-QG gap is lower severity than the registry gap was.
-
-**Source**: Phase-0 classification in `qg-committed-integrity` PLAN.md (2026-06-20). Tracking ID: `BL-W49-committed-manifest-parity`.
-
-### `rtk` command-prefix contract for agent-template shell snippets (MED — harness/templates) — filed 2026-06-20
-
-**Problem**: CLAUDE.md mandates "agent templates MUST prefix all git/gh/docker/curl commands with `rtk`", but several bash blocks in `quality-gater.md` (both copies — `setup/agent-templates/` + `.claude/agents/`) use bare `git` at lines 92, 206-209, 224, 308-310 (`git diff`, `git rev-parse`, `git merge-base`). Pre-existing on develop; not introduced by qg-doc-coverage. The same gap is likely present in other templates/docs with shell snippets.
-
-**Scope**: (1) audit `quality-gater.md` (both copies) at the known lines; (2) audit ALL other agent templates + docs with shell snippets for the same gap; (3) DECIDE a portable contract — `rtk` mandatory in exportable templates, OR "use rtk when available, fallback to the raw command" (consumer projects may not have rtk installed); (4) if mandatory, add a mechanical guard/test so the contract is enforced (not reliant on CodeRabbit or manual review); (5) NO partial opportunistic patch — design the contract first, then apply uniformly.
-
-**Trigger**: next agent-template maintenance wave or harness wave; the decision step (3) may be a fast standalone session.
-
-**Source**: CodeRabbit on PR #221 (out-of-scope, pre-existing on develop — deferred per user direction 2026-06-20). Tracking ID: `BL-W49-rtk-command-prefix-contract`.
+The in-repo root fix for unreliable quality-gater completion messages is already shipped: poll-able `qg-result.json` + heartbeat/session-health recovery. Remaining work is an upstream repro/report for the experimental agent-teams notification drop. This is **not** a blocker for the QG harness and should not drive another local harness wave unless a new in-repo failure appears.
 
 ### Wave 38 — Ingestion bundle (LOW urgency, ~2-4h)
 
@@ -277,7 +227,7 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Shipped (recent)
 
-- **qg-proof-honesty-hardening** (2026-06-22) — Closed two P1 proof-honesty defects. Fix A: hardened `scripts/sh/qg-path-audit.sh` Path-Manifest parser (anchored `### Path-Manifest` header, multi-boundary terminators incl. `## ` H2 + bold-Excluded + end-marker, counts only literal `- path` bullets with an alphanumeric so prose/`**bold**`/`---`/Excluded-section bullets no longer inflate the allow-list, exit-2 fail-closed on missing header). Fix B: new fail-closed `scripts/sh/secret-scan-report.sh` producer (deterministic trufflehog resolution; absent/erroring scanner → FAIL + reason_code, NEVER PASS/SKIPPED; explicit exit-code capture) wired as quality-gater **Step S (REQUIRED, pre-mint, 2.22.0)** with a 3-part wiring guard (both-twins static contract + emit-push-proof E2E); closes the secret-scan portion of BL-W47-PREPR-2. Regression: qg-path-audit PA-6+, secret-scan-report.bats, emit-push-proof guard. — `project_wave_qg_proof_honesty_hardening_shipped.md`
+- **qg-proof-honesty-hardening** (2026-06-22) — MERGED @ `58d9465` (squash PR #226). Closed two P1 proof-honesty defects. Fix A: hardened `scripts/sh/qg-path-audit.sh` Path-Manifest parser (anchored `### Path-Manifest` header, multi-boundary terminators incl. `## ` H2 + bold-Excluded + end-marker, counts only literal `- path` bullets with an alphanumeric so prose/`**bold**`/`---`/Excluded-section bullets no longer inflate the allow-list, exit-2 fail-closed on missing header). Fix B: new fail-closed `scripts/sh/secret-scan-report.sh` producer (deterministic trufflehog resolution; absent/erroring scanner → FAIL + reason_code, NEVER PASS/SKIPPED; explicit exit-code capture) wired as quality-gater **Step S (REQUIRED, pre-mint, 2.22.0)** with a 3-part wiring guard (both-twins static contract + emit-push-proof E2E); closes the secret-scan portion of BL-W47-PREPR-2. Regression: qg-path-audit PA-6+, secret-scan-report.bats, emit-push-proof guard. — `project_wave_qg_proof_honesty_hardening_shipped.md`
 - **qg-report-freshness** (2026-06-22) — Made QG report step-reason freshness MECHANICAL. New `scripts/sh/lib/qg-report-freshness.sh` (3 fail-closed, false-positive-safe invariants: foreign-HEAD-context SHA, bats-context count, PASS-semantics on FAIL step) + `emit-qg-result.sh` `--init` resets the report scratch + a final-mode BLOCKING freshness check (status:fail on stale) + structured **CARRIED** metadata (`carried`/`source_head`/`current_head`/`files[]`, git-verified byte-identical, hardened paths). Pre-mint **Step Z** gate (exit-code only; canonical bash in `docs/agents/quality-gater-freshness-gate.md` + hub row; NOT a `required_steps[]` entry — `quality-gate-manifest.json`/`emit-push-proof.sh` untouched). Regression `#QR13–QR21` + `#QR6/#QR7` reorder fix (C1 `--init` interaction). quality-gater **2.21.0** (5-pata). — MERGED @ `533bdce` (squash PR #225) — `project_wave_qg_report_freshness_shipped.md`
 - **qg-suite-completeness** (2026-06-21) — Closed the QG partial-run false-green: 4-part bats completeness metric (run-bats.sh asserts exactly-one `1..N` plan + `(ok+not_ok)==N` + no Executed-warning, keeping ok>0/not_ok==0) [Finding B] + run-id-bound run-bats→emit handoff with HEAD+run_id+generated_at validation, fallback fail-closed [Finding A] + CI inline parity (ci-bats-parity.bats). Empirical: bats 1645/0 (== --count == plan), vitest 2593, 11-path manifest. MERGED @ 8f65831 (squash PR #224); CI 25/25 + CodeRabbit/Codex clean. Follow-ups: run-bats.sh Windows-glob + QG report-finalize staleness. — `project_wave_qg_suite_completeness_shipped.md`
 - **qg-reliability-root-fix** (2026-06-21) — Made the QG RELIABLE: verdict load-bearing in a polled disk artifact `.planning/wave-<slug>/qg-result.json` (orchestrator reads PASS/FAIL from disk, NEVER the completion message — demonstrated live) + status/updated_at heartbeat (--init/--phase before each long step) so a hung quality-gater is detectable → TaskStop + lean re-dispatch (not a multi-day hang). New `scripts/sh/run-bats.sh` makes `grep -c "^not ok"` AUTHORITATIVE (npx bats exits 0 even with not-ok) + reused in CI (local-green⇒CI-green); lean quality-gater (suites→logs, no context-bloat stall). quality-gater 2.20.0 (5-pata). GUARDRAIL held: qg-result.json (gitignored) does NOT trip the #222 clean-tree gate, NOT consumed by verify-proof/pre-push, NOT a push-proof step. 2 review rounds caught 4 real bugs (node-verify false-green, run-bats/CI ok_ct==0 parity, heartbeat-once, node-verify subdir-package.json log-path false-red). RUN VERIFIED: full bats (1631) 0 not-ok + verify-proof PASS + MERGED @ c9eab29 (PR #223), CI 25/25 + CodeRabbit clean. Follow-ups: full-suite-ran assertion (HIGH) + count observability (MED). — `project_wave_qg_reliability_root_fix_shipped.md`

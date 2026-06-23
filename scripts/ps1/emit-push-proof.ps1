@@ -415,13 +415,34 @@ function Invoke-RunQg {
             Die "derived artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG."
         }
     }
-    else {
-        Write-Host "[emit-push-proof] WARNING: bash not found; skipping registry integrity check (PS1 path)" -ForegroundColor Yellow
+    elseif (Test-Path (Join-Path $repoRoot 'skills') -PathType Container) {
+        Die "bash not found; cannot run registry integrity check against skills/ -- install bash or run from WSL/Git Bash."
+    }
+
+    # (D) Template size gate: block mint if any agent template exceeds its cap.
+    #     Guard: only when setup/agent-templates/ exists (mirrors registry Test-Path skills guard).
+    #     Repos/fixtures without the dir have no templates to size-check -- N/A, not a bypass.
+    #     CWD-independent: pass explicit dirs matching repoRoot (mirrors --project-root pattern).
+    #     Inline exit-code gate -- NOT a required_steps[] entry.
+    $templatesDir = Join-Path (Join-Path $repoRoot 'setup') 'agent-templates'
+    if (Test-Path $templatesDir -PathType Container) {
+        $sizeScript = Join-Path $scriptsDir 'validate-agent-templates.sh'
+        if ($bash) {
+            & $bash.Source $sizeScript '--check' 'size-limits' `
+                '--templates-dir' $templatesDir `
+                '--agents-dir' (Join-Path (Join-Path $repoRoot '.claude') 'agents')
+            if ($LASTEXITCODE -ne 0) {
+                Die "agent template size cap exceeded; trim template, rerun QG."
+            }
+        }
+        else {
+            Die "bash not found; cannot run template size check against setup/agent-templates/ -- install bash or run from WSL/Git Bash."
+        }
     }
 
     # (C) Record registry digest into artifact_digests (additive; schema_version stays 1).
     #     sha256(skills/registry.json, CRLF->LF). Merged before proof-write.
-    $registryPath = Join-Path $repoRoot 'skills' 'registry.json'
+    $registryPath = Join-Path (Join-Path $repoRoot 'skills') 'registry.json'
     if (Test-Path $registryPath) {
         $regDigest = Get-FileSha256 $registryPath
         $artifactDigests['skills/registry.json'] = $regDigest
