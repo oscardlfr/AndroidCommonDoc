@@ -415,8 +415,8 @@ function Invoke-RunQg {
             Die "derived artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG."
         }
     }
-    else {
-        Write-Host "[emit-push-proof] WARNING: bash not found; skipping registry integrity check (PS1 path)" -ForegroundColor Yellow
+    elseif (Test-Path (Join-Path $repoRoot 'skills') -PathType Container) {
+        Die "bash not found; cannot run registry integrity check against skills/ -- install bash or run from WSL/Git Bash."
     }
 
     # (D) Template size gate: block mint if any agent template exceeds its cap.
@@ -436,7 +436,7 @@ function Invoke-RunQg {
             }
         }
         else {
-            Write-Host "[emit-push-proof] WARNING: bash not found; skipping template size check (PS1 path)" -ForegroundColor Yellow
+            Die "bash not found; cannot run template size check against setup/agent-templates/ -- install bash or run from WSL/Git Bash."
         }
     }
 

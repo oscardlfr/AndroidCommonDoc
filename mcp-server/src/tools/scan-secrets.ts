@@ -103,12 +103,13 @@ export function parseOutput(stdout: string): ScanResult {
   });
 
   const status: "PASS" | "FAIL" = hasCriticalOrHigh ? "FAIL" : "PASS";
+  const reason_code: string = hasCriticalOrHigh ? "SECRETS_FOUND" : "OK";
   const summary =
     findings.length === 0
       ? "No secrets detected."
       : `${findings.length} finding(s) detected${hasCriticalOrHigh ? " — CRITICAL or HIGH severity present" : " — no CRITICAL or HIGH severity"}.`;
 
-  return { status, findings, summary };
+  return { status, reason_code, findings, summary };
 }
 
 // ── Tool registration ─────────────────────────────────────────────────────────

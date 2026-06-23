@@ -186,7 +186,8 @@ never rely on `npx bats` exit code alone):
 (anchor-free, CRLF-safe via `tr -d '\r'`). Self-contained; zero TOCTOU.
 
 **Optional cross-check** (`--cross-check-count`, execution/CI only): on a clean run,
-`grep -c "^ok "` == `npx bats --count scripts/tests/*.bats` == plan `N` == 1631.
+`grep -c "^ok "` == `npx bats --count scripts/tests/*.bats` == plan `N`
+(the authoritative count emitted by `run-bats.sh`; not pinned here — it changes as tests are added).
 Guard with `command -v npx`; skip silently if npx absent, never hard-fail.
 
 **EXACT equality** (`== N`), never `>= N`: `teardown_file` failures can make
@@ -277,9 +278,10 @@ The MCP `scan-secrets` tool and `scripts/sh/scan-secrets.sh` (used by `/pre-pr` 
 
 - **absent scanner** → `status: SKIPPED` (non-blocking INFO — does not assert "no secrets")
 - **present but erroring** → `status: FAIL` + `reason_code: SCANNER_ERROR` (blocks)
-- **clean scan** → `status: PASS`
+- **CRITICAL or HIGH findings detected** → `status: FAIL` + `reason_code: SECRETS_FOUND` (blocks)
+- **clean scan** → `status: PASS` + `reason_code: OK`
 
-This is distinct from the QG Step S path (`secret-scan-report.sh`), where absent/erroring scanner → FAIL (never SKIPPED). Both paths agree: present-but-erroring = FAIL.
+This is distinct from the QG Step S path (`secret-scan-report.sh`), where absent/erroring scanner → FAIL (never SKIPPED). Both paths agree: present-but-erroring = FAIL; findings = FAIL.
 
 ## Related Docs
 

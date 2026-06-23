@@ -19,6 +19,8 @@ bats_require_minimum_version 1.5.0
 #   TSZ-4: static guard — BOTH sh+ps1 contain explicit --templates-dir + --agents-dir near size-limits
 #   TSZ-5: CWD-independence proof — non-repo CWD + over-cap → gate fires (exit!=0 + no stamp)
 #   TSZ-6: absent-dir guard — no setup/agent-templates/ → gate is a no-op → exit 0 + stamp written
+#   TSZ-7: ps1 static — no-bash branch for (D) size-gate must Die, not warn-skip
+#   TSZ-8: ps1 static — no-bash branch for (B) registry-integrity must Die, not warn-skip
 #
 # Isolation: every test uses mktemp -d + git init + teardown rm -rf.
 # Setup mirrors emit-push-proof.bats exactly (same harness).
@@ -453,4 +455,31 @@ PYEOF
 
   # The stamp MUST have been written: run_qg completes normally
   [ -f "$ACDOC/quality-gate.stamp" ]
+}
+
+# TSZ-7  ps1 static — no-bash branch for (D) size-gate must Die, not warn-skip
+#
+# When bash is absent the ps1 (D) size-gate must call Die (fail-closed), NOT emit a
+# "WARNING: bash not found; skipping..." message and continue.  A warn-skip would
+# silently bypass the size check on environments without bash.
+# Static grep asserts the correct strings are/are-not present.
+@test "TSZ-7 ps1 (D) size-gate no-bash branch must Die not warn-skip" {
+  local ps1="$BATS_TEST_DIRNAME/../ps1/emit-push-proof.ps1"
+  run grep -c 'WARNING: bash not found; skipping template size check' "$ps1"
+  [ "$output" = "0" ]
+  run grep -c 'Die "bash not found; cannot run template size check' "$ps1"
+  [ "$output" != "0" ]
+}
+
+# TSZ-8  ps1 static — no-bash branch for (B) registry-integrity must Die, not warn-skip
+#
+# Same fail-closed contract for the (B) registry integrity gate: when bash is absent
+# AND a skills/ directory is present, the ps1 must Die rather than silently skip.
+# A warn-skip would bypass the registry integrity check on environments without bash.
+@test "TSZ-8 ps1 registry-integrity no-bash+skills branch must Die not warn-skip" {
+  local ps1="$BATS_TEST_DIRNAME/../ps1/emit-push-proof.ps1"
+  run grep -c 'WARNING: bash not found; skipping registry integrity check' "$ps1"
+  [ "$output" = "0" ]
+  run grep -c 'Die "bash not found; cannot run registry integrity check' "$ps1"
+  [ "$output" != "0" ]
 }

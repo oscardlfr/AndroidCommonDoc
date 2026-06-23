@@ -67,9 +67,10 @@ The MCP `scan-secrets` tool (used by `/pre-pr` Step 5.6) is now fail-closed for 
 
 - **absent scanner** → `status: SKIPPED` (non-blocking INFO; preserved for `/pre-pr` where "I couldn't scan" ≠ "no secrets found")
 - **present but erroring** → `status: FAIL` + `reason_code: SCANNER_ERROR` (blocks `/pre-pr`)
-- **clean scan** → `status: PASS`
+- **CRITICAL or HIGH findings detected** → `status: FAIL` + `reason_code: SECRETS_FOUND` (blocks `/pre-pr`)
+- **clean scan** → `status: PASS` + `reason_code: OK`
 
-This preserves the intentional semantic split: `/pre-pr` absent → SKIPPED/INFO (non-blocking), while QG Step S (`secret-scan-report.sh`) absent → FAIL (blocking). Both paths now agree: **present-but-erroring = FAIL**.
+This preserves the intentional semantic split: `/pre-pr` absent → SKIPPED/INFO (non-blocking), while QG Step S (`secret-scan-report.sh`) absent → FAIL (blocking). Both paths now agree: **present-but-erroring = FAIL; findings = FAIL**.
 
 ## Canonical Step S Bash Block
 
