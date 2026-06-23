@@ -12,7 +12,7 @@ REAL_PROJECT_ROOT="$BATS_TEST_DIRNAME/../.."
 TMP_DIR="${BATS_TEST_TMPDIR:-/tmp}/gen-template-smoke-$$"
 
 # Ensure mcp-server is built before any test that invokes the CLI directly.
-# CI runs `npx bats scripts/tests/*.bats` without a prior build step (the
+# CI runs `npx bats scripts/tests` without a prior build step (the
 # Shell Script Tests workflow only installs bats), so this suite is responsible
 # for its own toolchain. Local runs typically have build/ already populated;
 # this is a no-op in that case.

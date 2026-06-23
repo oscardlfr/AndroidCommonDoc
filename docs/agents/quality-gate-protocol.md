@@ -186,7 +186,7 @@ never rely on `npx bats` exit code alone):
 (anchor-free, CRLF-safe via `tr -d '\r'`). Self-contained; zero TOCTOU.
 
 **Optional cross-check** (`--cross-check-count`, execution/CI only): on a clean run,
-`grep -c "^ok "` == `npx bats --count scripts/tests/*.bats` == plan `N`
+`grep -c "^ok "` == `npx bats --count scripts/tests` == plan `N`
 (the authoritative count emitted by `run-bats.sh`; not pinned here — it changes as tests are added).
 Guard with `command -v npx`; skip silently if npx absent, never hard-fail.
 
