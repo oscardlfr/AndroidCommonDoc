@@ -41,6 +41,15 @@ EOF' 'arch-platform'
   [[ "$output" == *"heredoc redirect"* ]]
 }
 
+@test "block reason uses explicit verdict and cross-verify suffixes, not brace-glob prose" {
+  make_input "echo body > docs/new.md" 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *".planning/wave*/arch-*-verdict.md"* ]]
+  [[ "$output" == *".planning/wave*/arch-*-cross-verify.md"* ]]
+  [[ "$output" != *"{verdict,cross-verify}"* ]]
+}
+
 @test "blocks heredoc with redirect AFTER the EOF marker (cat << EOF > file)" {
   make_input 'cat << EOF > foo.md
 body

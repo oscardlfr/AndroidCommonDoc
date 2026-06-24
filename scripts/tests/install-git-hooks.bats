@@ -9,6 +9,8 @@ bats_require_minimum_version 1.5.0
 #   - run with target-dir arg → installs pre-push into <target-dir>/.git/hooks/
 #   - installed pre-push contains the ACDOC-PRE-PUSH-GATE marker
 #   - installed pre-push is executable
+#   - installs lib/wave-slug.sh beside the git hooks so pre-commit does not
+#     depend on falling back to the source tree copy
 #
 # Env isolation (HARD — S4 lesson):
 #   All tests create a temp git repo via mktemp -d + git init.
@@ -56,4 +58,23 @@ teardown() {
 @test "IH-4 PASS: installer exits 0 when given a valid target-dir" {
   run bash "$SCRIPT" "$TMP_REPO"
   [ "$status" -eq 0 ]
+}
+
+@test "IH-5 PASS: installer copies wave-slug helper into .git/hooks/lib" {
+  bash "$SCRIPT" "$TMP_REPO"
+  [ -f "$TMP_REPO/.git/hooks/lib/wave-slug.sh" ]
+}
+
+@test "IH-6 PASS: installed pre-commit resolves wave-slug from .git/hooks/lib without repo fallback" {
+  bash "$SCRIPT" "$TMP_REPO"
+  mkdir -p "$TMP_REPO/.planning/wave-fixture" "$TMP_REPO/scripts"
+  printf '# plan\n' > "$TMP_REPO/.planning/wave-fixture/PLAN.md"
+  printf 'HARNESS\n' > "$TMP_REPO/.planning/wave-fixture/CLASS"
+  printf '#!/usr/bin/env bash\n' > "$TMP_REPO/scripts/example.sh"
+  git -C "$TMP_REPO" add .planning/wave-fixture/PLAN.md .planning/wave-fixture/CLASS scripts/example.sh
+
+  run bash -c "VERBOSE=1 bash '$TMP_REPO/.git/hooks/pre-commit' '$TMP_REPO' 2>&1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Gate 3: wave=fixture class=HARNESS"* ]]
+  [[ "$output" != *"wave-slug.sh not found"* ]]
 }

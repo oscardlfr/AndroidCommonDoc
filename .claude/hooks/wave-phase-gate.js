@@ -19,58 +19,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
-
-function getWaveSlug(projectRoot) {
-  // Priority 1: explicit env var — trim and validate against reject-list (CR #3).
-  const envSlug = (process.env.CLAUDE_WAVE_SLUG || '').trim();
-  if (envSlug) {
-    if (['develop', 'master', 'main', 'HEAD'].includes(envSlug)) return null;
-    return envSlug;
-  }
-
-  // Priority 2: git branch parsing (symbolic-ref primary, abbrev-ref fallback).
-  // symbolic-ref works on empty repos (no commits); abbrev-ref handles worktrees.
-  try {
-    const symResult = spawnSync('git', ['symbolic-ref', '--short', 'HEAD'], {
-      cwd: projectRoot, timeout: 5000, encoding: 'utf8',
-    });
-    const abbResult = symResult.status !== 0
-      ? spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-          cwd: projectRoot, timeout: 5000, encoding: 'utf8',
-        })
-      : null;
-    const branch = (symResult.status === 0 ? symResult : abbResult)?.stdout?.trim() || '';
-    if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
-      // P2b: always resolve to last segment (covers non-feature branches like codex/*)
-      const slug = branch.split('/').pop();
-      if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD') {
-        return slug;
-      }
-    }
-  } catch {
-    // fall through to alias scan
-  }
-
-  // Priority 3: alias scan — infer from .planning/wave-*/ dirs with PLAN.md
-  try {
-    const planningDir = path.join(projectRoot, '.planning');
-    if (!fs.existsSync(planningDir)) return null;
-    const entries = fs.readdirSync(planningDir);
-    const waveDirsWithPlan = entries.filter(e => {
-      if (!/^wave-/.test(e)) return false;
-      return fs.existsSync(path.join(planningDir, e, 'PLAN.md'));
-    });
-    if (waveDirsWithPlan.length === 1) {
-      // e.g. "wave-bl-w42-pr1" → slug = "bl-w42-pr1"
-      return waveDirsWithPlan[0].slice('wave-'.length);
-    }
-  } catch {
-    // fall through
-  }
-
-  return null;
-}
+const { getWaveSlug } = require('./hook-control-plane-utils');
 
 function getSentinelPath(projectRoot, slug) {
   // FIND-17 fix: sentinel is now in tracked .claude/wave-quality-gates/ dir
@@ -101,7 +50,7 @@ process.stdin.on('end', () => {
       }
       if (!isGatedCommand(command)) process.exit(0);
 
-      const slug = getWaveSlug(projectRoot);
+      const slug = getWaveSlug(projectRoot, { protectedEnvReturnsNull: true });
       if (!slug) process.exit(0); // cannot determine wave context — fail-open
 
       const sentinelPath = getSentinelPath(projectRoot, slug);
@@ -126,7 +75,7 @@ process.stdin.on('end', () => {
     const subagentType = data.tool_input?.subagent_type || '';
     if (!/^arch-/.test(subagentType)) process.exit(0);
 
-    const slug = getWaveSlug(projectRoot);
+    const slug = getWaveSlug(projectRoot, { protectedEnvReturnsNull: true });
     if (!slug) process.exit(0); // cannot determine wave context — fail-open
 
     const waveDir = path.join(projectRoot, '.planning', `wave-${slug}`);

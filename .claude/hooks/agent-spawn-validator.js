@@ -7,7 +7,9 @@
 //   1. subagent_type NOT in the manifest -> ALLOW (harness-native types like
 //      Explore/Plan/general-purpose, or any other valid runtime agent). Multi-
 //      agent capability must not be gated by L0 membership.
-//   2. subagent_type IN the manifest -> the template at
+//   2. subagent_type matching a stale suffixed core role (name-2/name-N) ->
+//      BLOCK with cleanup guidance for $HOME/.claude/teams/ session dirs.
+//   3. subagent_type IN the manifest -> the template at
 //      setup/agent-templates/<name>.md must have frontmatter SHA-256 matching
 //      the manifest baseline (drift check); mismatch -> block.
 //   (Former Check 3 — TeamCreate-peer team_name enforcement — REMOVED; team_name
@@ -33,6 +35,15 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { loadYaml } = require('./hook-control-plane-utils');
+
+const STALE_SUFFIX_CATEGORIES = new Set([
+  'architect',
+  'core-specialist',
+  'context',
+  'doc-owner',
+  'orchestrator',
+]);
 
 let input = '';
 const stdinTimeout = setTimeout(() => process.exit(0), 5000);
@@ -63,14 +74,8 @@ process.stdin.on('end', () => {
   );
   if (!fs.existsSync(manifestPath)) process.exit(0);
 
-  let yaml;
-  try {
-    yaml = require(
-      path.join(projectRoot, 'mcp-server', 'node_modules', 'yaml'),
-    );
-  } catch {
-    process.exit(0);
-  }
+  const yaml = loadYaml(projectRoot);
+  if (!yaml) process.exit(0);
 
   let manifest;
   try {
@@ -79,6 +84,22 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
   if (!manifest || !manifest.agents) process.exit(0);
+
+  const staleSuffix = getStaleSuffixViolation(subagentType, manifest.agents);
+  if (staleSuffix) {
+    block(
+      '[agent-spawn-validator] Stale suffixed core role spawn blocked: "' +
+        subagentType +
+        '".\n' +
+        'Canonical role: ' +
+        staleSuffix.base +
+        '\n' +
+        'Fix: clean stale session directories under $HOME/.claude/teams/ for the previous session, then respawn the canonical subagent_type "' +
+        staleSuffix.base +
+        '".'
+    );
+    return;
+  }
 
   const agent = manifest.agents[subagentType];
   if (!agent) {
@@ -142,7 +163,7 @@ process.stdin.on('end', () => {
     process.exit(2);
   }
 
-  // Check 3 (TeamCreate-peer team_name + name enforcement, + stale-suffix guard)
+  // Check 3 (TeamCreate-peer team_name + name enforcement)
   // REMOVED — BL-W48 team-model migration. `Agent.team_name` is deprecated/ignored
   // ("single implicit team") and passing it forces the broken mailbox/background
   // path that caused the multi-day QG-message outage. The 7 former TeamCreate-peer
@@ -151,6 +172,23 @@ process.stdin.on('end', () => {
   // subagent carries agent_type==TYPE), so type-keyed gates downstream still apply.
   process.exit(0);
 });
+
+function block(reason) {
+  process.stdout.write(JSON.stringify({ decision: 'block', reason }));
+  process.exit(2);
+}
+
+function getStaleSuffixViolation(subagentType, agents) {
+  const match = /^(.+)-([1-9]\d*)$/.exec(subagentType);
+  if (!match) return null;
+  const suffixNumber = Number(match[2]);
+  if (!Number.isInteger(suffixNumber) || suffixNumber < 2) return null;
+  const base = match[1];
+  const agent = agents[base];
+  if (!agent) return null;
+  if (!STALE_SUFFIX_CATEGORIES.has(agent.category)) return null;
+  return { base, suffix: match[2] };
+}
 
 // Extract the YAML block between the first two `---` markers, mirroring
 // splitFrontmatterAndBody from template-generator.ts. Returns null when the

@@ -1,6 +1,6 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-06-24; harness-test-runner-hygiene merged; H2 hook/control-plane hardening is next active wave
+> **Last updated**: 2026-06-24; H2 hook/control-plane hardening implemented on `feature/hook-control-plane-hardening`; RTK template sweep remains deferred pending separate approval
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
@@ -10,14 +10,19 @@
 
 **Intent**: consolidate hook/runtime-control residue into one focused PR instead of scattering hook fixes across QG waves.
 
-**Scope bundle**:
+**Status**: implementation branch in local verification. Do not open RTK/template ceremony from this wave.
 
-- **arch-bash-write-gate brace-glob doc/message bug**: `.claude/hooks/architect-bash-write-gate.js` advertises `arch-*-{verdict,cross-verify}.md`, but JavaScript string literals do not brace-expand; enforcing regex works, comment/block message are misleading.
-- **Installer sourcing-shim for wave-slug resolver**: wire `scripts/sh/lib/wave-slug.sh` into bash-layer consumers so slug validation is canonical; use explicit `$HOME`, not `~`, for temp/path references.
-- **Team-completeness-gate grace-clock reset**: define reset trigger and explicit `$HOME` path for the grace-clock tmp marker.
-- **Centralize duplicated JS hook helpers**: extract shared `isValidSlug`, `getWaveSlug`, `resolveFloorPeers`, and `loadYaml` from the 3 JS hooks.
-- **Team stale-suffix spawn guard**: block core session roles spawning as `-2`/`-N`; instruct operator to clean stale session dirs before respawn so canonical names route correctly.
-- **RTK command-prefix contract**: decide a portable rule first (`rtk` mandatory vs `rtk`-when-available fallback), then audit/enforce all agent-template shell snippets mechanically. No opportunistic partial patch.
+**Closed in H2 core**:
+
+- **arch-bash-write-gate brace-glob doc/message bug**: hook comments/block reason and protocol docs use explicit `arch-*-verdict.md` / `arch-*-cross-verify.md` targets; enforcement remains unchanged.
+- **Installer sourcing-shim for wave-slug resolver**: `install-git-hooks.sh` installs `.git/hooks/lib/wave-slug.sh`; tests prove installed hooks resolve the helper from hook-local lib without source-tree fallback.
+- **Team-completeness-gate grace-clock reset**: classified stale; tombstone remains no-op and tests pin that no TMPDIR/HOME grace-clock marker is written.
+- **Centralized duplicated JS hook helpers**: shared top-level CommonJS helper owns slug validation/resolution and YAML loading for hook consumers.
+- **Team stale-suffix spawn guard**: canonical core roles spawned as `-2`/`-N` are blocked with `$HOME/.claude/teams/` cleanup guidance while unknown runtime agents remain allowed.
+
+**Explicitly deferred**:
+
+- **RTK command-prefix contract sweep**: recommendation only in H2. Any enforcement across agent templates/mirrors/registries requires a separate STOP, exact manifest, template ceremony, and user approval.
 
 **Non-goals for H2**: test-runner hygiene shipped in `harness-test-runner-hygiene`; QG local-CI/security parity is already shipped by `qg-local-ci-security-closure`.
 

@@ -8,6 +8,7 @@
 #
 # These tests assert the retirement contract:
 #   - hook exits 0 in ALL scenarios, including cases that would previously block
+#   - hook does not read/write a grace-clock marker under TMPDIR or $HOME
 #   - positive case: expected no-op
 #   - "would-have-blocked-before" cases: previously CF-2 (HARNESS + 4 peers) and
 #     CF-4 (missing CLASS, 4 peers) blocked with exit 2 — now must exit 0
@@ -129,4 +130,14 @@ write_class_sentinel_tcg() {
   make_input "Bash"
   run_hook
   [ "$status" -eq 0 ]
+}
+
+@test "RETIRED-NO-GRACE-CLOCK: tombstone does not create TMPDIR or HOME grace markers" {
+  local fake_home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "$fake_home"
+  make_input "Bash"
+  run bash -c "cat '$INPUT_FILE' | HOME='$fake_home' TEAM_COMPLETENESS_BYPASS='' CLAUDE_SESSION_ID='test-session-$$' TMPDIR='${TMPDIR}' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [ ! -e "${TMPDIR}/team-completeness-grace-clock.json" ]
+  [ ! -e "$fake_home/.claude/teams/test-session-$$/team-completeness-grace-clock.json" ]
 }

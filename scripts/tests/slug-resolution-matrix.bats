@@ -404,6 +404,20 @@ SCRIPT_WAVE_SLUG="$BATS_TEST_DIRNAME/../sh/lib/wave-slug.sh"
   [ "$result" = "bl-w47-expr4" ]
 }
 
+@test "SRM-6e env slug trims edge whitespace only (wave-slug.sh)" {
+  result="$(env "CLAUDE_WAVE_SLUG=  bl-w47-expr4  " bash -c "source '$SCRIPT_WAVE_SLUG' && get_wave_slug '${PROJ}'")"
+  [ "$result" = "bl-w47-expr4" ]
+}
+
+@test "SRM-6f env slug with internal whitespace is rejected, not compacted (wave-slug.sh)" {
+  git -C "$PROJ" checkout -b "feature/bl-w47-fallback" -q 2>/dev/null
+  mkdir -p "$PROJ/.planning/wave-bl-w47-fallback"
+
+  result="$(env "CLAUDE_WAVE_SLUG=foo bar" bash -c "source '$SCRIPT_WAVE_SLUG' && get_wave_slug '${PROJ}'")"
+  [ "$result" = "bl-w47-fallback" ]
+  [ "$result" != "foobar" ]
+}
+
 @test "SRM-TRAVERSAL: ../evil env slug rejected — falls through to git branch (secure neutralization, not gate-disable)" {
   # Non-vacuous security proof: CLAUDE_WAVE_SLUG=../evil is rejected by _validate_slug
   # (contains /), then falls through to git branch detection which returns the REAL slug.

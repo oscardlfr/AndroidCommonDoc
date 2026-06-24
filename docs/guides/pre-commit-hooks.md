@@ -33,12 +33,12 @@ Run from the repository root:
 bash scripts/sh/install-git-hooks.sh
 ```
 
-This copies `scripts/sh/pre-commit-hook.sh` into `.git/hooks/pre-commit`, installs `scripts/sh/commit-msg-hook.sh` as `.git/hooks/commit-msg`, and installs `scripts/sh/pre-push-hook.sh` as `.git/hooks/pre-push`.
+This copies `scripts/sh/pre-commit-hook.sh` into `.git/hooks/pre-commit`, installs `scripts/sh/commit-msg-hook.sh` as `.git/hooks/commit-msg`, installs `scripts/sh/pre-push-hook.sh` as `.git/hooks/pre-push`, and installs the shared slug resolver at `.git/hooks/lib/wave-slug.sh` for the pre-commit wave-class gate.
 
 To verify hooks are installed:
 
 ```bash
-ls -la .git/hooks/pre-commit .git/hooks/commit-msg .git/hooks/pre-push
+ls -la .git/hooks/pre-commit .git/hooks/commit-msg .git/hooks/pre-push .git/hooks/lib/wave-slug.sh
 ```
 
 ## Three-Layer Commit-Scope Enforcement

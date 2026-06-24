@@ -30,7 +30,7 @@ get_wave_slug() {
 
   # Priority 1: explicit env var
   local env_slug
-  env_slug="$(printf '%s' "${CLAUDE_WAVE_SLUG:-}" | tr -d '[:space:]')"
+  env_slug="$(printf '%s' "${CLAUDE_WAVE_SLUG:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
   if [[ -n "$env_slug" ]]; then
     local is_rejected=0
     for r in $reject_list; do

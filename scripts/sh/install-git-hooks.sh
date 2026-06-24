@@ -19,12 +19,17 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Optional target repo dir (default: current directory).
 TARGET_REPO="${1:-.}"
 HOOKS_DIR="$TARGET_REPO/.git/hooks"
+HOOKS_LIB_DIR="$HOOKS_DIR/lib"
 
 echo "Installing git hooks..."
+
+mkdir -p "$HOOKS_LIB_DIR"
 
 # Pre-commit: registry hash gate + pattern-lint (sourced from pre-commit-hook.sh)
 cp "$SCRIPT_DIR/pre-commit-hook.sh" "$HOOKS_DIR/pre-commit"
 chmod +x "$HOOKS_DIR/pre-commit"
+cp "$SCRIPT_DIR/lib/wave-slug.sh" "$HOOKS_LIB_DIR/wave-slug.sh"
+chmod +x "$HOOKS_LIB_DIR/wave-slug.sh"
 
 # Commit-msg: validate Conventional Commits format + scope whitelist
 # Uses the versioned script (DRY + testable) rather than an inline heredoc.
@@ -37,5 +42,5 @@ chmod +x "$HOOKS_DIR/commit-msg"
 cp "$SCRIPT_DIR/pre-push-hook.sh" "$HOOKS_DIR/pre-push"
 chmod +x "$HOOKS_DIR/pre-push"
 
-echo "Installed: pre-commit (registry-rehash, manifest-drift), commit-msg (format + scope whitelist), pre-push (two-stamp gate)"
-echo "   To uninstall: rm $HOOKS_DIR/pre-commit $HOOKS_DIR/commit-msg $HOOKS_DIR/pre-push"
+echo "Installed: pre-commit (registry-rehash, manifest-drift, wave-class helper), commit-msg (format + scope whitelist), pre-push (two-stamp gate)"
+echo "   To uninstall: rm $HOOKS_DIR/pre-commit $HOOKS_DIR/commit-msg $HOOKS_DIR/pre-push $HOOKS_LIB_DIR/wave-slug.sh"

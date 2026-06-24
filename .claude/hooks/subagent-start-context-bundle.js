@@ -22,36 +22,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { getWaveSlug } = require('./hook-control-plane-utils');
 
 const STDIN_TIMEOUT_MS = 5000;
-
-function resolveWaveSlug(projectRoot) {
-  // Branch-name resolution only: env var does not persist between Bash calls (by design).
-  // Uses symbolic-ref as primary (works on empty repos / unborn branches);
-  // falls back to abbrev-ref for detached-HEAD / worktree edge cases.
-  // P2b: always resolve to last segment so codex/*, hotfix/* etc. work correctly.
-  try {
-    const symResult = spawnSync('git', ['symbolic-ref', '--short', 'HEAD'], {
-      cwd: projectRoot, timeout: 3000, encoding: 'utf8',
-    });
-    const abbResult = symResult.status !== 0
-      ? spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-          cwd: projectRoot, timeout: 3000, encoding: 'utf8',
-        })
-      : null;
-    const branch = (symResult.status === 0 ? symResult : abbResult)?.stdout?.trim() || '';
-    if (branch && branch !== 'HEAD' && branch !== 'develop' && branch !== 'master' && branch !== 'main') {
-      const slug = branch.split('/').pop();
-      if (slug && slug !== 'develop' && slug !== 'master' && slug !== 'main' && slug !== 'HEAD') {
-        return slug;
-      }
-    }
-  } catch {
-    // git not available or failed — fail-open
-  }
-  return null;
-}
 
 function extractWaveSlugFromFrontmatter(content) {
   // Extract wave_slug from YAML frontmatter block between --- markers.
@@ -83,7 +56,11 @@ process.stdin.on('end', () => {
     const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
     // Resolve wave slug from git branch
-    const waveSlug = resolveWaveSlug(projectRoot);
+    const waveSlug = getWaveSlug(projectRoot, {
+      useEnv: false,
+      useAlias: false,
+      gitTimeoutMs: 3000,
+    });
     if (!waveSlug) process.exit(0); // no active wave — skip silently
 
     // Bundle path: .planning/wave-<slug>/context-bundles/<role>.md

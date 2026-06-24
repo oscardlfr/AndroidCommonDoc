@@ -21,10 +21,11 @@
 # Optional flags:
 #   --slug <value>    Explicit wave slug override.
 #
-# Slug resolution order (mirrors hook layer):
+# Slug resolution order (mirrors hook layer via scripts/sh/lib/wave-slug.sh):
 #   1. --slug flag
 #   2. CLAUDE_WAVE_SLUG environment variable
-#   3. git branch: extract {slug} from feature/{slug} pattern
+#   3. git branch: extract last path segment
+#   4. single .planning/wave-*/PLAN.md alias
 #   Unresolvable slug => error, exit non-zero (never guessed).
 #
 # Output: .planning/wave-{slug}/context-bundles/{role}.md
@@ -33,6 +34,15 @@
 # Fails CLOSED on missing required flags or unresolvable slug.
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WAVE_SLUG_LIB="$SCRIPT_DIR/lib/wave-slug.sh"
+if [[ ! -f "$WAVE_SLUG_LIB" ]]; then
+  echo "[write-bundle] ERROR: wave slug helper not found: $WAVE_SLUG_LIB" >&2
+  exit 1
+fi
+# shellcheck source=scripts/sh/lib/wave-slug.sh
+source "$WAVE_SLUG_LIB"
 
 # -- 1. Parse flags -------------------------------------------------------------
 ROLE=""
@@ -73,21 +83,16 @@ if [[ ! "$PLAN_ID" =~ ^[A-Za-z0-9][A-Za-z0-9/#._-]*$ ]]; then
   exit 1
 fi
 
-# -- 3. Resolve wave slug -------------------------------------------------------
+# -- 3. Resolve repo root + wave slug ------------------------------------------
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 WAVE_SLUG=""
 
 if [[ -n "$SLUG_FLAG" ]]; then
   WAVE_SLUG="$SLUG_FLAG"
-elif [[ -n "${CLAUDE_WAVE_SLUG:-}" ]]; then
-  WAVE_SLUG="$CLAUDE_WAVE_SLUG"
 else
-  # P2b fix: always take last segment so non-feature branches (codex/*, hotfix/*) resolve correctly.
-  # Use symbolic-ref as primary: works on empty repos (no commits yet) and detached HEAD alike.
-  BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-  WAVE_SLUG="${BRANCH##*/}"
-  # Reject protected branch names and empty slug
-  if [[ -z "$WAVE_SLUG" || "$WAVE_SLUG" =~ ^(develop|master|main|HEAD)$ ]]; then
-    echo "[write-bundle] ERROR: slug unresolvable — no --slug flag, no CLAUDE_WAVE_SLUG env var, and branch '${BRANCH:-unknown}' resolves to a protected or empty slug." >&2
+  WAVE_SLUG="$(get_wave_slug "$REPO_ROOT" || true)"
+  if [[ -z "$WAVE_SLUG" ]]; then
+    echo "[write-bundle] ERROR: slug unresolvable — no --slug flag, no valid CLAUDE_WAVE_SLUG env var, no non-protected branch slug, and no single .planning/wave-*/PLAN.md alias." >&2
     exit 1
   fi
 fi
@@ -122,7 +127,6 @@ if (( LINE_COUNT > 60 )); then
 fi
 
 # -- 6. Compute output path ----------------------------------------------------
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 BUNDLE_DIR="$REPO_ROOT/.planning/wave-${WAVE_SLUG}/context-bundles"
 BUNDLE_FILE="$BUNDLE_DIR/${ROLE}.md"
 
