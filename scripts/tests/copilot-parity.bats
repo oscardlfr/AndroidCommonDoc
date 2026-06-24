@@ -366,6 +366,18 @@ EOF
     [ ! -f "$WORK_DIR/setup/copilot-templates/debug.prompt.md" ]
 }
 
+@test "adapter: --project-root without argument exits with clear error" {
+    run bash "$ADAPTER_SCRIPT" --project-root
+    [ "$status" -eq 1 ]
+    echo "$output" | grep -q -- "--project-root requires a directory argument"
+}
+
+@test "adapter: --project-root rejects another flag as its argument" {
+    run bash "$ADAPTER_SCRIPT" --project-root --clean
+    [ "$status" -eq 1 ]
+    echo "$output" | grep -q -- "--project-root requires a directory argument"
+}
+
 @test "adapter: generates behavioral template for copilot-template-type: behavioral" {
     write_params_file
     write_behavioral_skill "accessibility"

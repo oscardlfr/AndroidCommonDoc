@@ -24,6 +24,10 @@ CLEAN=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --project-root)
+      if [[ $# -lt 2 || "${2:-}" == --* ]]; then
+        echo "ERROR: --project-root requires a directory argument" >&2
+        exit 1
+      fi
       REPO_ROOT="$2"
       shift 2
       ;;
