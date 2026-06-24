@@ -153,40 +153,36 @@ process.stdin.on('end', () => {
     .digest('hex');
 
   if (computed !== baseline) {
-    process.stdout.write(
-      JSON.stringify({
-        decision: 'block',
-        reason:
-          '[agent-spawn-validator] Template setup/agent-templates/' +
-          subagentType +
-          '.md frontmatter SHA-256 has drifted from the manifest baseline.\n' +
-          'Baseline: ' +
-          baseline +
-          '\n' +
-          'Computed: ' +
-          computed +
-          '\n' +
-          'Fix: run `node mcp-server/build/cli/generate-template.js ' +
-          subagentType +
-          ' --update-manifest-hash` and `bash scripts/sh/rehash-registry.sh --project-root .`, then commit.',
-      }),
+    block(
+      '[agent-spawn-validator] Template setup/agent-templates/' +
+        subagentType +
+        '.md frontmatter SHA-256 has drifted from the manifest baseline.\n' +
+        'Baseline: ' +
+        baseline +
+        '\n' +
+        'Computed: ' +
+        computed +
+        '\n' +
+        'Fix: run `node mcp-server/build/cli/generate-template.js ' +
+        subagentType +
+        ' --update-manifest-hash` and `bash scripts/sh/rehash-registry.sh --project-root .`, then commit.',
     );
-    process.exit(2);
+    return;
   }
 
-  // Check 3 (TeamCreate-peer team_name + name enforcement)
-  // REMOVED — BL-W48 team-model migration. `Agent.team_name` is deprecated/ignored
-  // ("single implicit team") and passing it forces the broken mailbox/background
-  // path that caused the multi-day QG-message outage. The 7 former TeamCreate-peer
-  // agents now spawn as plain single-use subagents (spawn_method: Agent); no
-  // team_name/name required. Identity is the subagent_type (verified: a foreground
-  // subagent carries agent_type==TYPE), so type-keyed gates downstream still apply.
+  // BL-W48: TeamCreate/team_name enforcement remains removed. The H2
+  // stale-suffix guard runs before manifest drift validation above; after drift
+  // checks pass, single-use Agent spawns are allowed without team_name/name.
   process.exit(0);
 });
 
 function block(reason) {
-  process.stdout.write(JSON.stringify({ decision: 'block', reason }));
-  process.exit(2);
+  const json = JSON.stringify({ decision: 'block', reason });
+  if (process.stdout.write(json)) {
+    process.exit(2);
+  } else {
+    process.stdout.once('drain', () => process.exit(2));
+  }
 }
 
 function getStaleSuffixViolation(subagentType, subagentName, agents) {
