@@ -484,7 +484,7 @@ at `scripts/tests/capability-preservation.bats`. Summary of the 7 assertion grou
 `capability-preservation.bats` is added to `scripts/tests/` alongside
 `named-team-regression-guard.bats`. Both run as plain bats tests in the existing
 bats suite — no new manifest `conditional_step`, no protocol_digest regen required.
-The QG bats run picks them up automatically as part of the `scripts/tests/*.bats` glob.
+The QG bats run picks them up automatically as part of the `scripts/tests` directory target.
 
 ---
 

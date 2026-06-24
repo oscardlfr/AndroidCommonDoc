@@ -14,6 +14,10 @@ teardown() {
     rm -rf "$WORK_DIR"
 }
 
+write_params_file() {
+    echo '{"parameters":{}}' > "$WORK_DIR/skills/params.json"
+}
+
 # Helper: write a skill with copilot: true and scripted implementation
 write_scripted_skill() {
     local name="$1"
@@ -341,81 +345,131 @@ EOF
 # ============================
 
 @test "adapter: generates scripted template for copilot:true skill with Implementation" {
+    write_params_file
     write_scripted_skill "adapter-scripted"
-    # Need params.json for adapter
-    echo '{"parameters":{}}' > "$WORK_DIR/skills/params.json"
 
-    run bash "$ADAPTER_SCRIPT" <<< ""
-    # adapter works on repo root, need to simulate
-    # Instead test via the full pipeline on the real repo
-    skip "adapter runs on repo root — tested via integration"
+    run bash "$ADAPTER_SCRIPT" --project-root "$WORK_DIR"
+    [ "$status" -eq 0 ]
+    [ -f "$WORK_DIR/setup/copilot-templates/adapter-scripted.prompt.md" ]
+    grep -q "^## Implementation" "$WORK_DIR/setup/copilot-templates/adapter-scripted.prompt.md"
+    echo "$output" | grep -q "Generated (scripted)"
 }
 
 @test "adapter: skips copilot:false skills" {
-    # Verify by running adapter on real repo and checking output
-    cd "$BATS_TEST_DIRNAME/../.."
-    run bash "$ADAPTER_SCRIPT"
+    write_params_file
+    write_excluded_skill "debug"
+
+    run bash "$ADAPTER_SCRIPT" --project-root "$WORK_DIR"
+    [ "$status" -eq 0 ]
     echo "$output" | grep -q "Skipped (copilot: false)"
     echo "$output" | grep -q "skipped"
+    [ ! -f "$WORK_DIR/setup/copilot-templates/debug.prompt.md" ]
+}
+
+@test "adapter: --project-root without argument exits with clear error" {
+    run bash "$ADAPTER_SCRIPT" --project-root
+    [ "$status" -eq 1 ]
+    echo "$output" | grep -q -- "--project-root requires a directory argument"
+}
+
+@test "adapter: --project-root rejects another flag as its argument" {
+    run bash "$ADAPTER_SCRIPT" --project-root --clean
+    [ "$status" -eq 1 ]
+    echo "$output" | grep -q -- "--project-root requires a directory argument"
 }
 
 @test "adapter: generates behavioral template for copilot-template-type: behavioral" {
-    cd "$BATS_TEST_DIRNAME/../.."
-    run bash "$ADAPTER_SCRIPT"
+    write_params_file
+    write_behavioral_skill "accessibility"
+
+    run bash "$ADAPTER_SCRIPT" --project-root "$WORK_DIR"
+    [ "$status" -eq 0 ]
     echo "$output" | grep -q "Generated (behavioral)"
+    grep -q "^## Instructions" "$WORK_DIR/setup/copilot-templates/accessibility.prompt.md"
 }
 
 @test "adapter: reports correct counts" {
-    cd "$BATS_TEST_DIRNAME/../.."
-    run bash "$ADAPTER_SCRIPT"
+    write_params_file
+    write_scripted_skill "scripted-one"
+    write_behavioral_skill "behavioral-one"
+    write_excluded_skill "excluded-one"
+
+    run bash "$ADAPTER_SCRIPT" --project-root "$WORK_DIR"
     [ "$status" -eq 0 ]
-    # Should have scripted, behavioral, and skipped counts
     echo "$output" | grep -q "prompts generated"
     echo "$output" | grep -q "scripted"
     echo "$output" | grep -q "behavioral"
     echo "$output" | grep -q "skipped"
+    echo "$output" | grep -q "2 prompts generated"
 }
 
 @test "adapter: --clean removes orphaned templates" {
-    cd "$BATS_TEST_DIRNAME/../.."
-    # Create a fake orphan
-    echo "orphan" > setup/copilot-templates/BATS-TEST-ORPHAN.prompt.md
+    write_params_file
+    write_scripted_skill "adapter-scripted"
+    echo "orphan" > "$WORK_DIR/setup/copilot-templates/BATS-TEST-ORPHAN.prompt.md"
 
-    run bash "$ADAPTER_SCRIPT" --clean
+    run bash "$ADAPTER_SCRIPT" --project-root "$WORK_DIR" --clean
     [ "$status" -eq 0 ]
-    [ ! -f "setup/copilot-templates/BATS-TEST-ORPHAN.prompt.md" ]
+    [ ! -f "$WORK_DIR/setup/copilot-templates/BATS-TEST-ORPHAN.prompt.md" ]
     echo "$output" | grep -q "Cleaned orphan: BATS-TEST-ORPHAN"
 }
 
-@test "adapter: behavioral templates have ## Instructions section" {
-    cd "$BATS_TEST_DIRNAME/../.."
-    bash "$ADAPTER_SCRIPT" > /dev/null 2>&1
+@test "parity: --fix respects --project-root from real repo and leaves live templates unchanged" {
+    write_params_file
+    write_excluded_skill "orphan-owner"
+    echo "orphan" > "$WORK_DIR/setup/copilot-templates/orphan-owner.prompt.md"
 
-    # Check a known behavioral skill (accessibility)
-    grep -q "^## Instructions" setup/copilot-templates/accessibility.prompt.md
+    local repo_root live_before live_after
+    repo_root="$BATS_TEST_DIRNAME/../.."
+    live_before="$(git -C "$repo_root" status --porcelain -- setup/copilot-templates)"
+
+    cd "$repo_root"
+    run bash "$PARITY_SCRIPT" --project-root "$WORK_DIR" --fix
+    [ "$status" -eq 1 ]
+    [ ! -f "$WORK_DIR/setup/copilot-templates/orphan-owner.prompt.md" ]
+    echo "$output" | grep -q "Templates: $WORK_DIR/setup/copilot-templates"
+    echo "$output" | grep -q "Cleaned orphan: orphan-owner.prompt.md"
+
+    live_after="$(git -C "$repo_root" status --porcelain -- setup/copilot-templates)"
+    [ "$live_before" = "$live_after" ]
+}
+
+@test "adapter: behavioral templates have ## Instructions section" {
+    write_params_file
+    write_behavioral_skill "accessibility"
+
+    bash "$ADAPTER_SCRIPT" --project-root "$WORK_DIR" > /dev/null 2>&1
+
+    grep -q "^## Instructions" "$WORK_DIR/setup/copilot-templates/accessibility.prompt.md"
 }
 
 @test "adapter: scripted templates have ## Implementation section" {
-    cd "$BATS_TEST_DIRNAME/../.."
-    bash "$ADAPTER_SCRIPT" > /dev/null 2>&1
+    write_params_file
+    write_scripted_skill "test"
 
-    # Check a known scripted skill (test)
-    grep -q "^## Implementation" setup/copilot-templates/test.prompt.md
+    bash "$ADAPTER_SCRIPT" --project-root "$WORK_DIR" > /dev/null 2>&1
+
+    grep -q "^## Implementation" "$WORK_DIR/setup/copilot-templates/test.prompt.md"
 }
 
 @test "adapter: no template generated for copilot:false skills" {
-    cd "$BATS_TEST_DIRNAME/../.."
-    bash "$ADAPTER_SCRIPT" > /dev/null 2>&1
+    write_params_file
+    write_excluded_skill "debug"
+    write_excluded_skill "decide"
+    write_excluded_skill "work"
 
-    # debug is copilot: false
-    [ ! -f "setup/copilot-templates/debug.prompt.md" ]
-    [ ! -f "setup/copilot-templates/decide.prompt.md" ]
-    [ ! -f "setup/copilot-templates/work.prompt.md" ]
+    bash "$ADAPTER_SCRIPT" --project-root "$WORK_DIR" > /dev/null 2>&1
+
+    [ ! -f "$WORK_DIR/setup/copilot-templates/debug.prompt.md" ]
+    [ ! -f "$WORK_DIR/setup/copilot-templates/decide.prompt.md" ]
+    [ ! -f "$WORK_DIR/setup/copilot-templates/work.prompt.md" ]
 }
 
 @test "adapter: generated templates have GENERATED header" {
-    cd "$BATS_TEST_DIRNAME/../.."
-    bash "$ADAPTER_SCRIPT" > /dev/null 2>&1
+    write_params_file
+    write_scripted_skill "test"
 
-    head -1 setup/copilot-templates/test.prompt.md | grep -q "GENERATED from"
+    bash "$ADAPTER_SCRIPT" --project-root "$WORK_DIR" > /dev/null 2>&1
+
+    head -1 "$WORK_DIR/setup/copilot-templates/test.prompt.md" | grep -q "GENERATED from"
 }

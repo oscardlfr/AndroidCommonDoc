@@ -22,15 +22,15 @@ jobs:
         run: |
           # Authoritative bats result: count "^not ok" lines (npx bats can exit 0 even
           # with failures in some edge cases). Inlined here (not the run-bats wrapper) so
-          # this reusable stays portable for consumer repos that have scripts/tests/*.bats
+          # this reusable stays portable for consumer repos that have shell tests
           # but lack the L0 toolkit scripts — see the session-coverage.bats invariant
           # "reusable workflows ... all have L0 clone fallback". The wrapper is the
           # local-dev/quality-gater equivalent; here the same check is self-contained.
           #
-          # Target glob: scripts/tests/*.bats — identical to run-bats.sh default targets.
+          # Target directory: scripts/tests — identical to run-bats.sh default targets.
           # CI-PARITY: keep this completeness logic identical to
           #   scripts/sh/run-bats.sh — pinned by scripts/tests/ci-bats-parity.bats
-          npx bats scripts/tests/*.bats | tee scripts/tests/bats-output.log || true
+          npx bats scripts/tests | tee scripts/tests/bats-output.log || true
           # Strip \r before all greps (CRLF safety on Windows-produced logs)
           clean_log=$(tr -d '\r' < scripts/tests/bats-output.log)
           not_ok=$(echo "$clean_log" | grep -c "^not ok" || true)

@@ -24,7 +24,10 @@ const { spawnSync } = require('child_process');
 function getWaveSlug(projectRoot) {
   // Priority 1: explicit env var — trim and validate against reject-list (CR #3).
   const envSlug = (process.env.CLAUDE_WAVE_SLUG || '').trim();
-  if (envSlug && !['develop', 'master', 'main', 'HEAD'].includes(envSlug)) return envSlug;
+  if (envSlug) {
+    if (['develop', 'master', 'main', 'HEAD'].includes(envSlug)) return null;
+    return envSlug;
+  }
 
   // Priority 2: git branch parsing (symbolic-ref primary, abbrev-ref fallback).
   // symbolic-ref works on empty repos (no commits); abbrev-ref handles worktrees.

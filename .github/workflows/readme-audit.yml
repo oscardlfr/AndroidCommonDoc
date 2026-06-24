@@ -139,7 +139,7 @@ jobs:
 
           # Bats test count (run bats --count)
           if command -v npx &>/dev/null && [ -d "scripts/tests" ]; then
-            BATS_TESTS=$(npx bats --count scripts/tests/*.bats 2>/dev/null | tail -1 || echo "skip")
+            BATS_TESTS=$(npx bats --count scripts/tests 2>/dev/null | tail -1 || echo "skip")
           else
             BATS_TESTS="skip"
           fi

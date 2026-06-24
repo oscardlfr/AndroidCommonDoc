@@ -35,7 +35,7 @@
 ## Testing
 
 <!-- How was this tested? -->
-- [ ] `npx bats scripts/tests/*.bats` — shell tests pass
+- [ ] `npx bats scripts/tests` — shell tests pass
 - [ ] `cd mcp-server && npx vitest run` — vitest pass
 - [ ] Manual verification on a consumer project (if applicable)
 
