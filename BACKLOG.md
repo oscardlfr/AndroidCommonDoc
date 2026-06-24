@@ -1,27 +1,10 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-06-23; qg-local-ci-security-closure merged; next grouped harness wave selected
+> **Last updated**: 2026-06-24; harness-test-runner-hygiene merged; H2 hook/control-plane hardening is next active wave
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
 ## Active (proposed wave order)
-
-### Wave H1 — Harness test-runner hygiene bundle (MED/HIGH — harness/tests)
-
-**Intent**: close the remaining **test-runner determinism / live-tree hygiene** residue discovered while hardening the QG, as one coherent PR rather than another chain of micro-waves. `qg-local-ci-security-closure` closed the local-CI/security parity bundle; this wave cleans the test harness edges it deliberately deferred.
-
-**Scope bundle (do together, not as micro-waves)**:
-
-- **run-bats Windows default portability**: `run-bats.sh` default glob can exceed Windows command-line limits as the suite grows. Implement the safe default path only after proving `directory == explicit glob == CI` for the same bats set; preserve the full-suite completeness oracle and local⇄CI parity.
-- **copilot-parity live-tree-write isolation**: `scripts/tests/copilot-parity.bats` writes an orphan template into live `setup/copilot-templates/`; a mid-run abort can leave residue that trips the next clean-tree/template-sync gate. Move the test to isolated temp fixtures and add a regression proving no live-tree writes occur.
-- **Same-class test hygiene audit**: within `scripts/tests/*.bats` touched by this wave, check for host-PATH coupling and live-repo writes. Fix only same-class, tightly related issues; if the audit expands beyond test-runner hygiene, STOP and ask before widening scope.
-- **Docs/protocol reconciliation only if touched**: update QG/test-runner docs only where behavior changes. No living hardcoded bats counts.
-
-**Non-goals for H1**: hook/control-plane refactors, RTK global contract, agent-teams upstream bug report, runtime-adapter work, quality-gater template redesign, and unrelated old waves.
-
-**Definition of done**: every changed executable/test path has meaningful regression coverage; `run-bats` remains full-suite and CI-parity safe; `copilot-parity.bats` cannot dirty the live tree even on failure; no test is weakened, skipped, broadened, or made less deterministic to make the wave pass; any same-class finding is either fixed in-wave or STOPped with a named owner and user consent.
-
-**Source**: follow-ups from `qg-suite-completeness` and `qg-local-ci-security-closure`, plus `project_bl_copilot_parity_live_tree_write.md`. Detailed context lives in `project_harness_next_grouped_work.md`.
 
 ### Wave H2 — Hook/control-plane hardening bundle (MED/HIGH — harness/hooks)
 
@@ -36,7 +19,7 @@
 - **Team stale-suffix spawn guard**: block core session roles spawning as `-2`/`-N`; instruct operator to clean stale session dirs before respawn so canonical names route correctly.
 - **RTK command-prefix contract**: decide a portable rule first (`rtk` mandatory vs `rtk`-when-available fallback), then audit/enforce all agent-template shell snippets mechanically. No opportunistic partial patch.
 
-**Non-goals for H2**: test-runner hygiene belongs to H1; QG local-CI/security parity is already shipped by `qg-local-ci-security-closure`.
+**Non-goals for H2**: test-runner hygiene shipped in `harness-test-runner-hygiene`; QG local-CI/security parity is already shipped by `qg-local-ci-security-closure`.
 
 **Source**: BL-W47/BL-W49 hook residue, CodeRabbit RTK finding, and stale-peer memories.
 
@@ -225,11 +208,11 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Shipped (recent)
 
+- **harness-test-runner-hygiene** (2026-06-24) — MERGED @ `2a852b2` (squash PR #228; branch final HEAD `e248874b`). Closed H1 test-runner hygiene bundle: `run-bats.sh` now defaults to the `scripts/tests` directory target while preserving `1..N` + `ok+not_ok==N` completeness and proving explicit glob == directory == CI count (`1688`); CI workflows/docs use the directory target with no second fragile glob path; `copilot-parity --project-root <temp> --fix` routes through `copilot-adapter.sh --project-root`, cleans temp, and leaves live `setup/copilot-templates/` untouched; adapter now validates missing/flag-valued `--project-root`; `wave-phase-gate.js` rejects explicit env slugs (`develop`/`master`/`main`/`HEAD`) without branch fallback. Regression: WPG env-reject 2/2, targeted wrapper 53/53, full Bats 1688/1688, MCP vitest/lint, secret scan, path audit. GitHub exposed 24/24 green check contexts + CodeRabbit clean + Codex clean. — `project_wave_harness_test_runner_hygiene_shipped.md`
 - **qg-local-ci-security-closure** (2026-06-23) — MERGED @ `2725eeb` (squash PR #227; QG-HEAD `3da7395`). Closed H1 local-CI/security parity bundle: local QG now blocks agent-template size drift via inline `emit-push-proof.sh`/`.ps1` template-size gate; `/pre-pr`/MCP `scan-secrets` now fail-closes present scanner errors, malformed JSONL, empty/non-JSON, and CRITICAL/HIGH findings (`SCANNER_ERROR` / `SECRETS_FOUND`); committed manifest parity proved composed by existing clean-tree + manifest-sha bats. Regression coverage: TSZ-1..9, SSS-1..4, `scan-secrets.test.ts` 16/16 with `vi.mock(runScript)`. CI 25/25 + CodeRabbit clean + Codex clean. Deferred deliberately: run-bats Windows default glob and copilot-parity live-tree-write isolation. — `project_wave_qg_local_ci_security_closure_shipped.md`
 - **qg-proof-honesty-hardening** (2026-06-22) — MERGED @ `58d9465` (squash PR #226). Closed two P1 proof-honesty defects. Fix A: hardened `scripts/sh/qg-path-audit.sh` Path-Manifest parser (anchored `### Path-Manifest` header, multi-boundary terminators incl. `## ` H2 + bold-Excluded + end-marker, counts only literal `- path` bullets with an alphanumeric so prose/`**bold**`/`---`/Excluded-section bullets no longer inflate the allow-list, exit-2 fail-closed on missing header). Fix B: new fail-closed `scripts/sh/secret-scan-report.sh` producer (deterministic trufflehog resolution; absent/erroring scanner → FAIL + reason_code, NEVER PASS/SKIPPED; explicit exit-code capture) wired as quality-gater **Step S (REQUIRED, pre-mint, 2.22.0)** with a 3-part wiring guard (both-twins static contract + emit-push-proof E2E); closes the secret-scan portion of BL-W47-PREPR-2. Regression: qg-path-audit PA-6+, secret-scan-report.bats, emit-push-proof guard. — `project_wave_qg_proof_honesty_hardening_shipped.md`
 - **qg-report-freshness** (2026-06-22) — Made QG report step-reason freshness MECHANICAL. New `scripts/sh/lib/qg-report-freshness.sh` (3 fail-closed, false-positive-safe invariants: foreign-HEAD-context SHA, bats-context count, PASS-semantics on FAIL step) + `emit-qg-result.sh` `--init` resets the report scratch + a final-mode BLOCKING freshness check (status:fail on stale) + structured **CARRIED** metadata (`carried`/`source_head`/`current_head`/`files[]`, git-verified byte-identical, hardened paths). Pre-mint **Step Z** gate (exit-code only; canonical bash in `docs/agents/quality-gater-freshness-gate.md` + hub row; NOT a `required_steps[]` entry — `quality-gate-manifest.json`/`emit-push-proof.sh` untouched). Regression `#QR13–QR21` + `#QR6/#QR7` reorder fix (C1 `--init` interaction). quality-gater **2.21.0** (5-pata). — MERGED @ `533bdce` (squash PR #225) — `project_wave_qg_report_freshness_shipped.md`
 - **qg-suite-completeness** (2026-06-21) — Closed the QG partial-run false-green: 4-part bats completeness metric (run-bats.sh asserts exactly-one `1..N` plan + `(ok+not_ok)==N` + no Executed-warning, keeping ok>0/not_ok==0) [Finding B] + run-id-bound run-bats→emit handoff with HEAD+run_id+generated_at validation, fallback fail-closed [Finding A] + CI inline parity (ci-bats-parity.bats). Empirical: bats 1645/0 (== --count == plan), vitest 2593, 11-path manifest. MERGED @ 8f65831 (squash PR #224); CI 25/25 + CodeRabbit/Codex clean. Follow-ups: run-bats.sh Windows-glob + QG report-finalize staleness. — `project_wave_qg_suite_completeness_shipped.md`
-- **qg-reliability-root-fix** (2026-06-21) — Made the QG RELIABLE: verdict load-bearing in a polled disk artifact `.planning/wave-<slug>/qg-result.json` (orchestrator reads PASS/FAIL from disk, NEVER the completion message — demonstrated live) + status/updated_at heartbeat (--init/--phase before each long step) so a hung quality-gater is detectable → TaskStop + lean re-dispatch (not a multi-day hang). New `scripts/sh/run-bats.sh` makes `grep -c "^not ok"` AUTHORITATIVE (npx bats exits 0 even with not-ok) + reused in CI (local-green⇒CI-green); lean quality-gater (suites→logs, no context-bloat stall). quality-gater 2.20.0 (5-pata). GUARDRAIL held: qg-result.json (gitignored) does NOT trip the #222 clean-tree gate, NOT consumed by verify-proof/pre-push, NOT a push-proof step. 2 review rounds caught 4 real bugs (node-verify false-green, run-bats/CI ok_ct==0 parity, heartbeat-once, node-verify subdir-package.json log-path false-red). RUN VERIFIED: full bats (1631) 0 not-ok + verify-proof PASS + MERGED @ c9eab29 (PR #223), CI 25/25 + CodeRabbit clean. Follow-ups: full-suite-ran assertion (HIGH) + count observability (MED). — `project_wave_qg_reliability_root_fix_shipped.md`
 For full wave history: `git log` + memory `project_*shipped.md` files.
 
 ## How to use this document
