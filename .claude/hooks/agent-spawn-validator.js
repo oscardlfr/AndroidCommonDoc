@@ -178,11 +178,7 @@ process.stdin.on('end', () => {
 
 function block(reason) {
   const json = JSON.stringify({ decision: 'block', reason });
-  if (process.stdout.write(json)) {
-    process.exit(2);
-  } else {
-    process.stdout.once('drain', () => process.exit(2));
-  }
+  process.stdout.write(json, () => process.exit(2));
 }
 
 function getStaleSuffixViolation(subagentType, subagentName, agents) {
