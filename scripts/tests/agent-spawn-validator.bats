@@ -8,8 +8,10 @@
 #     still SHA-256 checked; mismatch → block.
 #   Check 3 REMOVED: TeamCreate-peer team_name/name enforcement is gone.
 #     team_name is deprecated/ignored.
-#   Narrow stale-suffix guard RESTORED: canonical core roles may not respawn as
-#     stale `-2` / `-N` variants.
+#   Narrow stale-suffix guard RESTORED: persistent control-plane roles may not
+#     respawn as stale `-2` / `-N` variants in either `subagent_type` or `name`.
+#     Named core-specialist overflow (`ui-specialist-2` with canonical
+#     subagent_type `ui-specialist`) remains legitimate additional capacity.
 #
 # DELETED cases (removed behavior — NOT changed behavior):
 #   SS-A  (canonical-suffix name arch-testing-2 allows silently) — restored as
@@ -155,14 +157,26 @@ run_hook() {
   [[ "$output" != *'"decision":"block"'* ]]
 }
 
-@test "H2: blocks stale suffixed architect role arch-platform-2" {
+@test "H2: blocks stale suffixed architect subagent_type arch-platform-2" {
   make_input "Agent" "arch-platform-2"
   run_hook
   [ "$status" -eq 2 ]
   [[ "$output" == *'"decision":"block"'* ]]
   [[ "$output" == *"Stale suffixed core role spawn blocked"* ]]
+  [[ "$output" == *"Field: subagent_type"* ]]
   [[ "$output" == *"Canonical role: arch-platform"* ]]
   [[ "$output" == *'$HOME/.claude/teams/'* ]]
+}
+
+@test "H2: blocks stale suffixed architect name with canonical subagent_type" {
+  make_input "Agent" "arch-platform" "" "arch-platform-2"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"Stale suffixed core role spawn blocked"* ]]
+  [[ "$output" == *"Field: name"* ]]
+  [[ "$output" == *"Canonical role: arch-platform"* ]]
+  [[ "$output" == *'Agent(name=\"arch-platform\", subagent_type=\"arch-platform\")'* ]]
 }
 
 @test "H2: blocks multi-digit stale suffixed architect role arch-platform-10" {
@@ -183,6 +197,20 @@ run_hook() {
 
 @test "H2: allows unknown suffixed runtime role because manifest is not a closed roster" {
   make_input "Agent" "foo-specialist-2"
+  run_hook
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision":"block"'* ]]
+}
+
+@test "H2: allows named overflow core specialist with canonical subagent_type" {
+  make_input "Agent" "ui-specialist" "" "ui-specialist-2"
+  run_hook
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision":"block"'* ]]
+}
+
+@test "H2: allows suffixed core-specialist runtime type because overflow is legitimate" {
+  make_input "Agent" "ui-specialist-2"
   run_hook
   [ "$status" -eq 0 ]
   [[ "$output" != *'"decision":"block"'* ]]

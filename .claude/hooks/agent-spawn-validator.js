@@ -7,8 +7,10 @@
 //   1. subagent_type NOT in the manifest -> ALLOW (harness-native types like
 //      Explore/Plan/general-purpose, or any other valid runtime agent). Multi-
 //      agent capability must not be gated by L0 membership.
-//   2. subagent_type matching a stale suffixed core role (name-2/name-N) ->
-//      BLOCK with cleanup guidance for $HOME/.claude/teams/ session dirs.
+//   2. subagent_type or name matching a stale suffixed persistent control-plane
+//      role (name-2/name-N) -> BLOCK with cleanup guidance for
+//      $HOME/.claude/teams/ session dirs. Specialist overflow names such as
+//      ui-specialist-2 remain valid additional capacity and are not blocked here.
 //   3. subagent_type IN the manifest -> the template at
 //      setup/agent-templates/<name>.md must have frontmatter SHA-256 matching
 //      the manifest baseline (drift check); mismatch -> block.
@@ -39,7 +41,6 @@ const { loadYaml } = require('./hook-control-plane-utils');
 
 const STALE_SUFFIX_CATEGORIES = new Set([
   'architect',
-  'core-specialist',
   'context',
   'doc-owner',
   'orchestrator',
@@ -63,6 +64,7 @@ process.stdin.on('end', () => {
   if (toolName !== 'Task' && toolName !== 'Agent') process.exit(0);
 
   const subagentType = data.tool_input?.subagent_type;
+  const subagentName = data.tool_input?.name;
   if (!subagentType) process.exit(0);
 
   const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
@@ -85,18 +87,27 @@ process.stdin.on('end', () => {
   }
   if (!manifest || !manifest.agents) process.exit(0);
 
-  const staleSuffix = getStaleSuffixViolation(subagentType, manifest.agents);
+  const staleSuffix = getStaleSuffixViolation(
+    subagentType,
+    subagentName,
+    manifest.agents,
+  );
   if (staleSuffix) {
     block(
       '[agent-spawn-validator] Stale suffixed core role spawn blocked: "' +
-        subagentType +
+        staleSuffix.value +
         '".\n' +
+        'Field: ' +
+        staleSuffix.field +
+        '\n' +
         'Canonical role: ' +
         staleSuffix.base +
         '\n' +
-        'Fix: clean stale session directories under $HOME/.claude/teams/ for the previous session, then respawn the canonical subagent_type "' +
+        'Fix: clean stale session directories under $HOME/.claude/teams/ for the previous session, then respawn the canonical Agent(name="' +
         staleSuffix.base +
-        '".'
+        '", subagent_type="' +
+        staleSuffix.base +
+        '").'
     );
     return;
   }
@@ -178,16 +189,30 @@ function block(reason) {
   process.exit(2);
 }
 
-function getStaleSuffixViolation(subagentType, agents) {
-  const match = /^(.+)-([1-9]\d*)$/.exec(subagentType);
+function getStaleSuffixViolation(subagentType, subagentName, agents) {
+  const subagentTypeViolation = getStaleSuffixCandidate(
+    'subagent_type',
+    subagentType,
+    subagentType,
+    agents,
+  );
+  if (subagentTypeViolation) return subagentTypeViolation;
+
+  return getStaleSuffixCandidate('name', subagentName, subagentType, agents);
+}
+
+function getStaleSuffixCandidate(field, value, subagentType, agents) {
+  if (!value) return null;
+  const match = /^(.+)-([1-9]\d*)$/.exec(value);
   if (!match) return null;
   const suffixNumber = Number(match[2]);
   if (!Number.isInteger(suffixNumber) || suffixNumber < 2) return null;
   const base = match[1];
+  if (field === 'name' && subagentType !== base) return null;
   const agent = agents[base];
   if (!agent) return null;
   if (!STALE_SUFFIX_CATEGORIES.has(agent.category)) return null;
-  return { base, suffix: match[2] };
+  return { base, suffix: match[2], field, value };
 }
 
 // Extract the YAML block between the first two `---` markers, mirroring
