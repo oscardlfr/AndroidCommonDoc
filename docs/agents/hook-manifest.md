@@ -4,7 +4,7 @@ sources: [androidcommondoc]
 targets: [all]
 version: 2
 last_updated: "2026-06"
-description: "Consumer hook manifest: classifies all 32 L0 hooks as consumer-required / consumer-optional / l0-internal"
+description: "Consumer hook manifest: classifies all 33 L0 hook files as consumer-required / consumer-optional / l0-internal"
 slug: hook-manifest
 status: active
 layer: L0
@@ -14,7 +14,7 @@ category: agents
 
 # L0 Hook Manifest
 
-Reference classification for all 32 hooks in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
+Reference classification for all 33 hook files in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
 
 > **CI-enforced** — the `hook-manifest-coverage` job in `.github/workflows/drift-audit.yml` fails the build if the hook table below drifts from `.claude/hooks/` (a missing, phantom, or duplicated hook). The table is the source of truth for coverage.
 
@@ -24,7 +24,7 @@ Reference classification for all 32 hooks in `.claude/hooks/`. Consumers use thi
 |--------|---------|
 | `consumer-required` | Hook enforces a topology or safety rule the consumer inherits. Missing registration creates a silent gap. |
 | `consumer-optional` | Hook implements a wave-model or advisory feature. Valuable but not universally required. |
-| `l0-internal` | Hook is specific to L0 authoring workflows (planner, registry, plan-mode). Do not install in consumer projects. |
+| `l0-internal` | L0 authoring hook or hook runtime helper. Do not register as a consumer hook; helper files may still be copied when propagated hooks import them. |
 
 ## Propagation vs Registration
 
@@ -32,6 +32,7 @@ These are two separate steps — both must be completed for a hook to be active.
 
 **File copy (propagation)**:
 - `.js` hooks: copied to the consumer by `/sync-l0` (see `skills/sync-l0/SKILL.md:140-160`). Opt out per-hook via `selection.exclude_hooks` in `l0-manifest.json`.
+- `.js` runtime helpers: copied as files when imported by propagated hooks, but never registered in `settings.json`.
 - `.sh` hooks: NOT in `/sync-l0` scope. `setup/install-hooks.sh` copies exactly 3 files: `detekt-post-write.sh`, `detekt-pre-commit.sh`, `branch-guard.js`.
 
 **settings.json registration**:
@@ -44,7 +45,7 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 
 ## Hook Table
 
-### JavaScript Hooks (28)
+### JavaScript Hooks (29)
 
 | Hook | Status | Rationale |
 |------|--------|-----------|
@@ -52,6 +53,7 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 | `architect-self-edit-gate.js` | consumer-required | Topology: arch-* cannot Write/Edit project files directly |
 | `context-provider-gate.js` | consumer-required | Gating: CP consult required before search ops — see [context-provider-adoption-hooks](context-provider-adoption-hooks.md) |
 | `context-provider-consulted.js` | consumer-required | Gating: sets the session flag the gate checks (pair with context-provider-gate) — see [context-provider-adoption-hooks](context-provider-adoption-hooks.md) |
+| `hook-control-plane-utils.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks; copy with importing hooks, never register in `settings.json` |
 | `premature-execution-gate.js` | consumer-required | Gating: blocks specialist Write/Edit/Bash before APPROVED-PREP verdict |
 | `branch-guard.js` | consumer-required | Branch protection: blocks write-git ops on develop/master — see [branch-guard](branch-guard.md) |
 | `git-amend-gate.js` | consumer-required | Amend discipline: blocks `git commit --amend` without explicit authorization |

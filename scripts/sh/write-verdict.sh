@@ -34,11 +34,11 @@
 #   After supersede: file has EXACTLY ONE **HEAD**: line (current HEAD) and still
 #   contains APPROVED-VERIFY-FINAL.
 #
-# SLUG RESOLUTION (priority order)
+# SLUG RESOLUTION (priority order via scripts/sh/lib/wave-slug.sh)
 #   1. --slug <value>   explicit override
-#   2. $CLAUDE_WAVE_SLUG env var   (NOTE: does NOT persist between Bash calls in Claude;
-#                                   branch resolution below is the effective path)
-#   3. git branch name  feature/<slug> → slug extracted from suffix after last '/'
+#   2. $CLAUDE_WAVE_SLUG env var
+#   3. git branch name  last segment after '/'
+#   4. single .planning/wave-*/PLAN.md alias
 #
 # ANTI-TRAVERSAL
 #   The verdict file path is confined to .planning/<wave-slug>/arch-<role>-verdict.md
@@ -61,6 +61,15 @@ set -euo pipefail
 
 VALID_ROLES=("arch-platform" "arch-testing" "arch-integration")
 VALID_PHASES=("prep" "verify-final")
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WAVE_SLUG_LIB="$SCRIPT_DIR/lib/wave-slug.sh"
+if [[ ! -f "$WAVE_SLUG_LIB" ]]; then
+  echo "[write-verdict] ERROR: wave slug helper not found: $WAVE_SLUG_LIB" >&2
+  exit 2
+fi
+# shellcheck source=scripts/sh/lib/wave-slug.sh
+source "$WAVE_SLUG_LIB"
 
 # ── Argument parsing ─────────────────────────────────────────────────────────
 
@@ -130,33 +139,32 @@ if [[ "$phase_valid" -ne 1 ]]; then
   exit 2
 fi
 
-# ── Slug resolution ───────────────────────────────────────────────────────────
-# Priority: --slug > $CLAUDE_WAVE_SLUG > git branch last-segment
-# P2b fix: always extract last segment so non-feature branches (codex/*, hotfix/*)
-# resolve correctly. develop/master/main/HEAD are rejected unconditionally.
+# ── Repo root + slug resolution ───────────────────────────────────────────────
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# Priority: --slug > shared resolver ($CLAUDE_WAVE_SLUG > git branch > alias scan).
+# Explicit --slug remains first so architect commands can pin a wave in ambiguous
+# sessions while still using the shared validation contract.
 
 resolve_slug() {
   if [[ -n "$SLUG_OVERRIDE" ]]; then
+    if ! _validate_slug "$SLUG_OVERRIDE"; then
+      if [[ "$SLUG_OVERRIDE" == *".."* || "$SLUG_OVERRIDE" == *"/"* || "$SLUG_OVERRIDE" == *"\\"* ]]; then
+        echo "[write-verdict] ERROR: Traversal attempt detected in slug '$SLUG_OVERRIDE'" >&2
+      else
+        echo "[write-verdict] ERROR: Invalid slug '$SLUG_OVERRIDE'." >&2
+      fi
+      exit 2
+    fi
     echo "$SLUG_OVERRIDE"
     return
   fi
 
-  if [[ -n "${CLAUDE_WAVE_SLUG:-}" ]]; then
-    echo "$CLAUDE_WAVE_SLUG"
-    return
-  fi
-
-  # Branch-name resolution: always take last segment (works for feature/* AND codex/* etc.)
-  # Use symbolic-ref as primary: works on empty repos (no commits yet) and detached HEAD alike.
-  # Fall back to abbrev-ref for worktrees and other edge cases.
-  local branch=""
   local slug=""
-  branch="$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
-  slug="${branch##*/}"
-
-  # Reject protected branch names and empty slug
-  if [[ -z "$slug" || "$slug" =~ ^(develop|master|main|HEAD)$ ]]; then
-    echo "[write-verdict] ERROR: Cannot resolve wave slug from branch '$branch'. Provide --slug or use a non-protected branch (slug = last path segment)." >&2
+  slug="$(get_wave_slug "$REPO_ROOT" || true)"
+  if [[ -z "$slug" ]]; then
+    echo "[write-verdict] ERROR: Cannot resolve wave slug. Provide --slug or use CLAUDE_WAVE_SLUG, a non-protected branch, or a single .planning/wave-*/PLAN.md alias." >&2
     exit 2
   fi
 
@@ -186,7 +194,6 @@ fi
 
 # ── Repo root + verdict path (confinement) ────────────────────────────────────
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 PLANNING_DIR="$REPO_ROOT/.planning"
 WAVE_DIR="$PLANNING_DIR/wave-$WAVE_SLUG"
 VERDICT_FILE="$WAVE_DIR/arch-${ROLE#arch-}-verdict.md"

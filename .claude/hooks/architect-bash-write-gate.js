@@ -16,7 +16,7 @@
 //   - os.tmpdir()/*              (debug temp files, cross-platform — Windows + POSIX)
 //   - /tmp/* and $TMPDIR/*       (debug temp files, POSIX literal fallback)
 //   - /dev/null and /dev/std*    (stream sinks)
-//   - .planning/wave*/arch-*-{verdict,cross-verify}.md   (architect write targets)
+//   - .planning/wave*/arch-*-verdict.md and arch-*-cross-verify.md (architect write targets)
 //   - .androidcommondoc/audit-log.jsonl   (telemetry append)
 //   - .claude/wave-quality-gates/arch-*.md   (architect verdict files — BL-W44-S2 fix)
 //
@@ -58,7 +58,7 @@ process.stdin.on('end', () => {
   const violation = detectViolation(cmd);
   if (!violation) process.exit(0);
 
-  const reason = '[arch-bash-write-gate] Architect "' + agentType + '" attempted Bash write via "' + violation.kind + '" (target: ' + (violation.target ?? '<inline>') + '). Architects MUST NOT write project files — even via Bash bypass. Delegate via SendMessage(to="team-lead", summary="need {dev}", message="..."). Exempt write targets: /tmp/*, /dev/null, .planning/wave*/arch-*-{verdict,cross-verify}.md, .androidcommondoc/audit-log.jsonl, .claude/wave-quality-gates/arch-*.md.';
+  const reason = '[arch-bash-write-gate] Architect "' + agentType + '" attempted Bash write via "' + violation.kind + '" (target: ' + (violation.target ?? '<inline>') + '). Architects MUST NOT write project files — even via Bash bypass. Delegate via SendMessage(to="team-lead", summary="need {dev}", message="..."). Exempt write targets: /tmp/*, /dev/null, .planning/wave*/arch-*-verdict.md, .planning/wave*/arch-*-cross-verify.md, .androidcommondoc/audit-log.jsonl, .claude/wave-quality-gates/arch-*.md.';
 
   process.stdout.write(JSON.stringify({ decision: 'block', reason }));
   process.exit(2);
@@ -175,7 +175,7 @@ function detectViolation(cmd) {
   if (HEREDOC_RE.test(cmd) && redirectTargets.some(t => isExemptTarget(resolveShellVar(t, cmd)))) {
     if (cmd.includes('APPROVED-PREP') && cmd.includes('APPROVED-FINAL')) {
       process.stderr.write(
-        '[arch-bash-write-gate] WARN: heredoc to verdict path contains both APPROVED-PREP and ' +
+        '[arch-bash-write-gate] WARN: heredoc to arch-*-verdict.md or arch-*-cross-verify.md contains both APPROVED-PREP and ' +
         'APPROVED-FINAL tokens. Use write-verdict.sh --phase verify-final instead of heredoc writes.\n'
       );
       // Not a block — fall through to allow

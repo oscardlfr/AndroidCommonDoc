@@ -17,6 +17,11 @@
 // Intentionally a no-op. Kept as a greppable tombstone so the retirement is
 // EXPLICIT (not a silent disappearance). Its .claude/settings.json registration
 // is now inert and is slated for removal in the hook-manifest bulk pass.
+//
+// H2 pin: there is no active grace-clock reset marker. If a future gate
+// reintroduces one, the marker must live under
+// $HOME/.claude/teams/<session-id>/team-completeness-grace-clock.json.
+// Do not use TMPDIR or "~" path literals for control-plane state.
 let _stdin = '';
 process.stdin.on('data', d => { _stdin += d; });
 process.stdin.on('end', () => process.exit(0));
