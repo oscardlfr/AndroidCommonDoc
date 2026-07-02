@@ -230,3 +230,25 @@ else:
   [ "$status" -eq 2 ]
   [[ "$output" == *"--bash-only cannot be combined with --file"* ]]
 }
+
+# ── P1 escape closure: --file must resolve inside REPO_ROOT ────────────────────────────────
+
+@test "WSD-13 FAIL: --file resolving outside repo (absolute /tmp/foo) exits 2" {
+  _seed_plan "$WAVE_SLUG"
+  run bash -c "cd '$PROJ' && printf 'task\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --architect arch-testing --specialist test-specialist \
+    --file /tmp/foo --slug '$WAVE_SLUG'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"outside the repository root"* ]]
+  # Nothing written for an out-of-repo target.
+  [ ! -d "$PROJ/.planning/wave-$WAVE_SLUG/specialist-dispatches/test-specialist" ]
+}
+
+@test "WSD-14 FAIL: --file with ../ escape (../foo) exits 2" {
+  _seed_plan "$WAVE_SLUG"
+  run bash -c "cd '$PROJ' && printf 'task\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --architect arch-testing --specialist test-specialist \
+    --file ../foo --slug '$WAVE_SLUG'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"outside the repository root"* ]]
+}

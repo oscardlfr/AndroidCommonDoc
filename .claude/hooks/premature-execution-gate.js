@@ -189,22 +189,31 @@ process.stdin.on('end', () => {
     }
 
     // (6) Write/Edit: target must be in the UNION of files[] across current NON-bash-only
-    //     dispatches. Out-of-repo / unlisted targets are BLOCKED (Codex P1: the acceptance
-    //     contract is "no write outside files[]"; a scope-binding gate must not exempt escapes
-    //     like /tmp, ../parent, or global paths). bash_only dispatches authorize execution-Bash
-    //     only and contribute NO Write/Edit files (P2). Out-of-tree scratch work uses Bash.
+    //     dispatches. Two escape closures (Codex P1 + follow-up hardening):
+    //     (a) any target resolving OUTSIDE the repo is BLOCKED up front — before files[] can
+    //         authorize it — so a hand-crafted/malformed dispatch listing an out-of-repo path
+    //         (/tmp/foo, ../foo, globals) can never authorize an out-of-tree write; AND
+    //     (b) out-of-repo files[] entries are ignored when building the allowed set.
+    //     bash_only dispatches contribute NO Write/Edit files (P2). Out-of-tree work uses Bash.
     if (toolName === 'Write' || toolName === 'Edit') {
       const fp = data.tool_input?.file_path || '';
+      const isOutside = p => p === '..' || p.startsWith('..' + path.sep) || path.isAbsolute(p);
       const rel = path.relative(projectRoot, path.resolve(projectRoot, fp));
+      if (isOutside(rel)) {
+        block('[premature-execution-gate] Target "' + rel + '" resolves outside the repository root for specialist "' + canonical + '" — out-of-tree Write/Edit is never authorized (files[] cannot escape the repo). Use Bash with a current dispatch for out-of-tree work.');
+        return;
+      }
       const allowed = new Set();
       for (const d of currentDispatches) {
         if (d.bash_only === true) continue;
         for (const wf of (Array.isArray(d.files) ? d.files : [])) {
-          allowed.add(path.relative(projectRoot, path.resolve(projectRoot, wf)));
+          const wfRel = path.relative(projectRoot, path.resolve(projectRoot, wf));
+          if (isOutside(wfRel)) continue; // ignore out-of-repo files[] entries (defense-in-depth)
+          allowed.add(wfRel);
         }
       }
       if (!allowed.has(rel)) {
-        block('[premature-execution-gate] Target "' + rel + '" is outside the authorized files[] of any current dispatch for specialist "' + canonical + '" (out-of-repo and unlisted paths are blocked). Ask the orchestrator/architect for a dispatch covering this file, or use Bash with a current dispatch for out-of-tree work.');
+        block('[premature-execution-gate] Target "' + rel + '" is outside the authorized files[] of any current dispatch for specialist "' + canonical + '". Ask the orchestrator/architect for a dispatch covering this file, or use Bash with a current dispatch for out-of-tree work.');
         return;
       }
       process.exit(0);

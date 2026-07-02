@@ -700,6 +700,48 @@ PYEOF
   [ "$status" -eq 2 ]
 }
 
+# ── P1 escape closure: an out-of-repo target is BLOCKED even if a dispatch lists it ──────────
+# The writer already rejects out-of-repo --file values; these prove the GATE is independently
+# closed — a hand-crafted/malformed dispatch JSON listing /tmp/foo or ../foo cannot authorize
+# an out-of-tree Write (blocked up front + the out-of-repo files[] entry is ignored).
+
+_write_escape_dispatch() {  # $1=out-of-repo path to plant in files[]
+  local dir="$WAVE_DIR/specialist-dispatches/test-specialist"
+  mkdir -p "$dir"
+  local head plan_sha256
+  head="$(git -C "$CLAUDE_PROJECT_DIR" rev-parse HEAD)"
+  plan_sha256="$(_real_sha256 "$WAVE_DIR/PLAN.md")"
+  WD_HEAD="$head" WD_PLAN_SHA256="$plan_sha256" WD_OUT="$dir/arch-testing-esc-$$-${RANDOM}.json" WD_FILE="$1" \
+  python3 - <<'PYEOF'
+import json, os
+payload = {
+    "schema": "specialist-dispatch/v1", "wave_slug": "bl-w43", "architect": "arch-testing",
+    "specialist": "test-specialist", "head": os.environ["WD_HEAD"],
+    "plan_path": ".planning/wave-bl-w43/PLAN.md", "plan_sha256": os.environ["WD_PLAN_SHA256"],
+    "files": [os.environ["WD_FILE"]], "bash_only": False, "allowed_tools": [],
+    "summary": "adversarial escape", "task": "x", "created_at": "2026-01-01T00:00:00Z",
+}
+with open(os.environ["WD_OUT"], "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, indent=2)
+PYEOF
+}
+
+@test "RT-P1-ESCAPE-1 BLOCK: Write /tmp/foo blocked even if a dispatch lists /tmp/foo" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  _write_escape_dispatch "/tmp/foo"
+  make_input "Write" "/tmp/foo" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "RT-P1-ESCAPE-2 BLOCK: Write ../foo blocked even if a dispatch lists ../foo" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  _write_escape_dispatch "../foo"
+  make_input "Write" "../foo" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
 # ── bash-only dispatch: authorizes execution-Bash only, never Write/Edit ────────────────────
 
 # RT-12 PASS: bash-only dispatch (empty files[]) allows Bash.

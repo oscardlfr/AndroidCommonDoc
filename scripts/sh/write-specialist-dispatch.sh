@@ -267,6 +267,29 @@ if [[ "${#FILES[@]}" -eq 0 && "$BASH_ONLY" -ne 1 ]]; then
   exit 2
 fi
 
+# _file_in_repo <path> — return 0 if <path> resolves inside REPO_ROOT, 1 otherwise.
+# Lexical checks first (work without realpath); realpath -m confirms mid-path (a/../../b) escapes.
+_file_in_repo() {
+  local f="$1" abs repo_canon
+  if [[ "$f" == /* && "$f" != "$REPO_ROOT" && "$f" != "$REPO_ROOT"/* ]]; then
+    return 1  # absolute path not under REPO_ROOT
+  fi
+  if [[ "$f" == ".." || "$f" == ../* ]]; then
+    return 1  # relative path escaping upward
+  fi
+  if command -v realpath >/dev/null 2>&1; then
+    repo_canon="$(realpath -m -- "$REPO_ROOT" 2>/dev/null || echo "$REPO_ROOT")"
+    case "$f" in
+      /*) abs="$(realpath -m -- "$f" 2>/dev/null || echo "$f")" ;;
+      *)  abs="$(realpath -m -- "$REPO_ROOT/$f" 2>/dev/null || echo "$REPO_ROOT/$f")" ;;
+    esac
+    if [[ "$abs" != "$repo_canon" && "$abs" != "$repo_canon"/* ]]; then
+      return 1  # realpath-resolved target escapes the repo
+    fi
+  fi
+  return 0
+}
+
 NORMALIZED_FILES=()
 if [[ "${#FILES[@]}" -gt 0 ]]; then
   for f in "${FILES[@]}"; do
@@ -274,8 +297,14 @@ if [[ "${#FILES[@]}" -gt 0 ]]; then
       echo "[write-specialist-dispatch] ERROR: --file requires a non-empty path argument." >&2
       exit 2
     fi
-    # Best-effort lexical normalization to repo-relative form. The gate re-normalizes
-    # both sides (tool_input.file_path and files[]) the same way at comparison time.
+    # Reject --file targets resolving OUTSIDE the repo root (absolute-outside or ../-escape).
+    # A dispatch files[] entry must be an in-repo Write/Edit target; out-of-tree work uses Bash.
+    # Closes the P1 escape where a listed out-of-repo path would authorize an out-of-repo Write.
+    if ! _file_in_repo "$f"; then
+      echo "[write-specialist-dispatch] ERROR: --file '$f' resolves outside the repository root ($REPO_ROOT). files[] entries must be in-repo targets; use Bash for out-of-tree work." >&2
+      exit 2
+    fi
+    # Normalize to repo-relative form. The gate re-normalizes both sides the same way.
     if [[ "$f" == "$REPO_ROOT"/* ]]; then
       f="${f#"$REPO_ROOT"/}"
     fi
