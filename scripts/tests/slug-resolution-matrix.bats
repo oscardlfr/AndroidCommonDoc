@@ -150,6 +150,9 @@ run_wpg_branch_path() {
 }
 
 @test "SRM-F4: write-verdict.sh: --slug bl-w47-pr-0c1 accepted → verdict created" {
+  # write-verdict.sh --phase prep now requires the wave PLAN.md to exist (fail-closed
+  # PREP binding). Seed a minimal PLAN.md for this fixture so prep can hash it.
+  mkdir -p "$PROJ/.planning/wave-bl-w47-pr-0c1" && printf '# PLAN\n' > "$PROJ/.planning/wave-bl-w47-pr-0c1/PLAN.md"
   run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG=bl-w47-pr-0c1 bash '$SCRIPT_VERDICT' \
     --role arch-testing --phase prep --slug bl-w47-pr-0c1"
   [ "$status" -eq 0 ]
@@ -206,6 +209,9 @@ run_wpg_branch_path() {
 }
 
 @test "SRM-C4: write-verdict.sh: --slug bl-w47-demo accepted → verdict created" {
+  # write-verdict.sh --phase prep now requires the wave PLAN.md to exist (fail-closed
+  # PREP binding). Seed a minimal PLAN.md for this fixture so prep can hash it.
+  mkdir -p "$PROJ/.planning/wave-bl-w47-demo" && printf '# PLAN\n' > "$PROJ/.planning/wave-bl-w47-demo/PLAN.md"
   run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG=bl-w47-demo bash '$SCRIPT_VERDICT' \
     --role arch-testing --phase prep --slug bl-w47-demo"
   [ "$status" -eq 0 ]
@@ -261,6 +267,9 @@ run_wpg_branch_path() {
   # through to the ERROR exit.
   # After fix: ${branch##*/} applied regardless of slash, then reject-list checked.
   git -C "$PROJ" checkout -b "wip" -q 2>/dev/null
+  # write-verdict.sh --phase prep now requires the wave PLAN.md to exist (fail-closed
+  # PREP binding). Seed a minimal PLAN.md for the branch-derived 'wip' slug.
+  mkdir -p "$PROJ/.planning/wave-wip" && printf '# PLAN\n' > "$PROJ/.planning/wave-wip/PLAN.md"
   run bash -c "cd '$PROJ' && bash '$SCRIPT_VERDICT' \
     --role arch-testing --phase prep"
   [ "$status" -eq 0 ]
