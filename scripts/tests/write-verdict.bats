@@ -44,9 +44,31 @@ run_verdict_slug() {
   run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$slug' bash '$SCRIPT' $*"
 }
 
+# _seed_plan <slug> — writes a minimal PLAN.md at .planning/wave-<slug>/PLAN.md inside PROJ.
+# WS-2: run_prep() now requires PLAN.md to exist (PREP fails closed when the plan cannot be
+# resolved) — every REAL `--phase prep` test must seed one first.
+_seed_plan() {
+  local slug="$1"
+  mkdir -p "$PROJ/.planning/wave-$slug"
+  printf '# Plan\n\nSome plan content for %s.\n' "$slug" > "$PROJ/.planning/wave-$slug/PLAN.md"
+}
+
+# _real_sha256 <file> — portable sha256 (mirrors _sha256_file in write-verdict.sh).
+# CORE NON-VACUITY MANDATE: PREP-HEAD/PLAN_SHA256 assertions always compare against a value
+# derived from this helper (or a real `git rev-parse HEAD`) at test-run time, never a
+# hardcoded constant.
+_real_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
 # ── ★V1 PASS: prep creates verdict file at correct confinement path ───────────
 
 @test "★V1 PASS: prep creates verdict file with APPROVED-PREP at correct path" {
+  _seed_plan "$WAVE_SLUG"
   run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
   [ "$status" -eq 0 ]
   [ -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ]
@@ -293,6 +315,7 @@ run_verdict_slug() {
   # After fix: ${branch##*/} applied for any non-empty, non-protected branch name.
   # NOTE: This test exercises the branch-detection path (no --slug, no CLAUDE_WAVE_SLUG).
   git -C "$PROJ" checkout -b "wip" -q 2>/dev/null
+  _seed_plan "wip"
   run bash -c "cd '$PROJ' && bash '$SCRIPT' --role arch-testing --phase prep"
   [ "$status" -eq 0 ]
   [ -f "$PROJ/.planning/wave-wip/arch-testing-verdict.md" ]
@@ -301,6 +324,7 @@ run_verdict_slug() {
 
 @test "P2b VWV-NF1 PASS: non-feature slug 'bl-w47-demo' (from codex/bl-w47-demo) accepted by --slug" {
   # write-verdict.sh receives the pre-resolved last-segment; this test confirms it works.
+  _seed_plan "bl-w47-demo"
   run_verdict_slug "bl-w47-demo" --role arch-testing --phase prep --slug "bl-w47-demo"
   [ "$status" -eq 0 ]
   [ -f "$PROJ/.planning/wave-bl-w47-demo/arch-testing-verdict.md" ]
@@ -329,6 +353,7 @@ run_verdict_slug() {
 #           APPROVED-PREP present; APPROVED-VERIFY-FINAL present.
 
 @test "VS-1 PASS: --supersede with different HEAD replaces old block, preserves PREP" {
+  _seed_plan "$WAVE_SLUG"
   run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
   [ "$status" -eq 0 ]
 
@@ -359,9 +384,11 @@ run_verdict_slug() {
   head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
   [ "$head_count" -eq 1 ]
 
-  # That line must reference H2, not H1
+  # That line must reference H2, not H1. Line-anchored to **HEAD**: specifically — h1 now
+  # legitimately also appears on the **PREP-HEAD**: line (WS-2), so a bare substring search
+  # for "$h1" would be a false positive. Only the **HEAD**: line matters here.
   grep -q "^\*\*HEAD\*\*: $h2$" "$verdict"
-  ! grep -q "$h1" "$verdict"
+  ! grep -q "^\*\*HEAD\*\*: $h1$" "$verdict"
 
   # Both required tokens present
   grep -q "APPROVED-PREP" "$verdict"
@@ -376,6 +403,7 @@ run_verdict_slug() {
 #           EXACTLY ONE **HEAD**: line.
 
 @test "VS-2 PASS: --supersede same HEAD is idempotent — file unchanged" {
+  _seed_plan "$WAVE_SLUG"
   run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
   [ "$status" -eq 0 ]
 
@@ -416,6 +444,7 @@ run_verdict_slug() {
 #       explicit context that the absence of --supersede is what fires the guard).
 
 @test "VS-3 FAIL: replay guard fires on second verify-final without --supersede flag" {
+  _seed_plan "$WAVE_SLUG"
   run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
   [ "$status" -eq 0 ]
 
@@ -469,6 +498,7 @@ run_verdict_slug() {
 #           EXACTLY ONE **HEAD**: line.
 
 @test "VS-5 PASS: --supersede on PREP-only file behaves like normal first append" {
+  _seed_plan "$WAVE_SLUG"
   run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
   [ "$status" -eq 0 ]
 
@@ -546,6 +576,7 @@ run_verdict_slug() {
 # block early. After write: exactly ONE **HEAD**: == current HEAD.
 
 @test "VS-7 FAIL: body containing <!-- END VERIFY-FINAL --> must not break block structure" {
+  _seed_plan "$WAVE_SLUG"
   run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
   [ "$status" -eq 0 ]
 
@@ -576,6 +607,7 @@ run_verdict_slug() {
 # not a replacement triggered by fake SHA.
 
 @test "VS-8 FAIL: body **HEAD**: prose line must not poison stored_head extraction" {
+  _seed_plan "$WAVE_SLUG"
   run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
   [ "$status" -eq 0 ]
 
@@ -625,6 +657,7 @@ run_verdict_slug() {
 # destroys content below the old block. Fix must emit WARN to stderr.
 
 @test "VS-10 FAIL: legacy fallback with content below old block must emit WARN" {
+  _seed_plan "$WAVE_SLUG"
   run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
   [ "$status" -eq 0 ]
 
@@ -809,4 +842,66 @@ run_verdict_slug() {
 
   # 3. A WARN must be emitted naming the stripped reserved line
   [[ "$output" == *"WARN"* ]]
+}
+
+# ── WS-2 (wave-runtime-topology-disk-first-binding): PREP binds to current HEAD + PLAN sha256 ─
+#
+# Contract: .planning/wave-runtime-topology-disk-first-binding/DECISIONS.md (WS-2 ordering
+# note) + our-execution-brief-is-shimmying-snowflake.md WS-2. run_prep() appends
+# **PREP-HEAD**: <sha> and **PLAN_SHA256**: <sha> to the PREP block; PREP now fails closed
+# when PLAN.md is absent or HEAD is unresolvable.
+#
+# CORE NON-VACUITY MANDATE: expected head/plan_sha256 values are derived from a REAL
+# `git rev-parse HEAD` + REAL sha256 of the seeded PLAN.md (via _real_sha256), computed at
+# test-run time — never hardcoded. Assertions are line-anchored exact equality, never mere
+# key-presence.
+
+@test "WS2-1 PASS: PREP verdict includes line-anchored **PREP-HEAD** matching real git rev-parse HEAD" {
+  _seed_plan "$WAVE_SLUG"
+  local real_head
+  real_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  grep -q "^\*\*PREP-HEAD\*\*: $real_head\$" "$verdict"
+}
+
+@test "WS2-2 PASS: PREP verdict includes line-anchored **PLAN_SHA256** matching real sha256 of PLAN.md" {
+  _seed_plan "$WAVE_SLUG"
+  local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
+  local real_plan_sha256
+  real_plan_sha256="$(_real_sha256 "$plan_path")"
+
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  grep -q "^\*\*PLAN_SHA256\*\*: $real_plan_sha256\$" "$verdict"
+}
+
+@test "WS2-3 FAIL: prep fails closed when PLAN.md is absent" {
+  # Deliberately do NOT _seed_plan — $WAVE_DIR/PLAN.md must not exist.
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Plan file not found"* ]]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ]
+}
+
+@test "WS2-4 FAIL: prep fails closed when HEAD is unresolvable (fresh repo, no commit)" {
+  # Mirrors VS-4: SEPARATE fresh git init with NO seed commit (HEAD unresolvable).
+  local empty_proj
+  empty_proj="$(mktemp -d)"
+  git -C "$empty_proj" init -q 2>/dev/null
+  mkdir -p "$empty_proj/.planning/wave-$WAVE_SLUG"
+  printf '# Plan\n' > "$empty_proj/.planning/wave-$WAVE_SLUG/PLAN.md"
+
+  run bash -c "cd '$empty_proj' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"HEAD"* ]]
+  [ ! -f "$empty_proj/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ]
+
+  rm -rf "$empty_proj"
 }
