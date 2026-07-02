@@ -33,8 +33,8 @@ Path: `.planning/wave-<slug>/specialist-dispatches/<specialist>/<architect>-<YYY
 | `head` | string | `git rev-parse HEAD` (40-hex) at write time |
 | `plan_path` | string | `.planning/wave-<slug>/PLAN.md` — hardcoded, no override flag (symmetry with `write-verdict.sh`) |
 | `plan_sha256` | string | sha256 of `plan_path` raw bytes at write time |
-| `files[]` | string[] | repo-relative Write/Edit targets; required non-empty unless `bash_only` |
-| `bash_only` | bool | `true` permits empty `files[]`; authorizes execution-`Bash` only, never `Write`/`Edit` |
+| `files[]` | string[] | repo-relative Write/Edit targets; required non-empty unless `bash_only` (mutually exclusive with `bash_only` — a bash-only dispatch carries no `files[]`) |
+| `bash_only` | bool | `true` permits (and requires) empty `files[]`; authorizes execution-`Bash` only, never `Write`/`Edit`. The writer rejects `--bash-only` combined with `--file`. |
 | `allowed_tools[]` | string[] | audit/provenance record — **informational-only in v1** |
 | `summary` | string | short human-readable task summary |
 | `task` | string | full task body (stdin at write time) |
@@ -54,7 +54,7 @@ For a core specialist (`test-specialist`, `toolkit-specialist`, `ui-specialist`,
 
 a. **PREP currency** — an `arch-*-verdict.md` must contain `APPROVED-PREP` **and** `**PLAN_SHA256**` equal to the current PLAN hash (exact match) **and** a `**PREP-HEAD**` that is an ancestor of (or equal to) current HEAD, via `git merge-base --is-ancestor <prepHead> <currentHead>` (exit 0 = current). None found → BLOCK.
 b. **Dispatch currency** — a dispatch artifact whose `plan_sha256` exactly matches the current PLAN hash **and** whose `head` is an ancestor of (or equal to) current HEAD (same ancestry check). None found → BLOCK.
-c. **`Write`/`Edit` scope** — the normalized repo-relative target must be a member of the **union** of `files[]` across **all** currently-valid dispatches for that specialist (stale + current dispatch files accumulate in the directory; union, not just the newest). Out-of-repo targets (resolve outside the repo root — e.g. scratchpad, `/tmp`) are exempt from this check.
+c. **`Write`/`Edit` scope** — the normalized repo-relative target must be a member of the **union** of `files[]` across **all** currently-valid **non-`bash_only`** dispatches for that specialist (stale + current dispatch files accumulate in the directory; union, not just the newest). Any target outside that union is BLOCKED — **including out-of-repo targets** (`/tmp`, `../parent`, global paths): a scope-binding gate must not exempt escapes from the "no write outside `files[]`" contract. Out-of-tree scratch work goes through `Bash` (dispatch-gated, no file parse).
 d. **`Bash`** — requires a current dispatch (check b) regardless of `files[]` contents; the command string is **not** parsed for file targets.
 
 **Ancestry, not exact-equality**, is deliberate: exact `head === currentHead` would self-block every multi-commit wave (a PREP written once at the wave's first commit becomes stale the instant a second commit lands, with no way to refresh it). `PLAN_SHA256`/`plan_sha256` exact-match binds authorization to *this wave's exact PLAN content*; ancestry adds "same git lineage," rejecting a coincidentally PLAN-identical PREP or dispatch from an unrelated branch.

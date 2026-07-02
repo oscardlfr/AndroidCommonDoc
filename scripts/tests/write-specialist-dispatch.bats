@@ -218,3 +218,15 @@ else:
   [ "$(_json_get "$dispatch_file" files)" = "[]" ]
   [ "$(_json_get "$dispatch_file" allowed_tools)" = '["Bash"]' ]
 }
+
+@test "WSD-12 FAIL: --bash-only combined with --file exits 2 (mutually exclusive, Codex P2)" {
+  # A bash-only dispatch authorizes execution-Bash only and must carry no Write/Edit targets;
+  # combining --bash-only with --file is rejected so the invariant bash_only <=> empty files[]
+  # holds and the gate cannot be tricked into authorizing Write/Edit via a bash_only dispatch.
+  _seed_plan "$WAVE_SLUG"
+  run bash -c "cd '$PROJ' && printf 'run the migration\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --architect arch-testing --specialist test-specialist \
+    --bash-only --file docs/foo.md --slug '$WAVE_SLUG'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--bash-only cannot be combined with --file"* ]]
+}

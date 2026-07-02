@@ -647,24 +647,57 @@ HOOK_CODEX="$BATS_TEST_DIRNAME/../../.codex/hooks/premature-execution-gate.js"
   [ "$status" -eq 2 ]
 }
 
-# ── arch-integration MEDIUM: out-of-repo target carve-out (Write/Edit) ──────────────────────
+# ── Codex P1: out-of-repo Write/Edit is BLOCKED (no files[] escape) ─────────────────────────
+# Supersedes the earlier arch-integration MEDIUM carve-out: it contradicted the acceptance
+# contract "specialist cannot write outside its dispatch files[]" and allowed /tmp, ../parent,
+# and global-path escapes. Out-of-tree scratch work goes through Bash (dispatch-gated, no parse).
 
-# RT-10 PASS: out-of-repo Write target (/tmp) allowed even with no matching files[].
-@test "RT-10 PASS: out-of-repo Write target (/tmp) allowed even with no matching files[]" {
+# RT-10 BLOCK: out-of-repo Write target (/tmp) is BLOCKED even with a current dispatch.
+@test "RT-10 BLOCK: out-of-repo Write target (/tmp) blocked (no files[] escape)" {
   write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
   write_dispatch "test-specialist" "docs/only-this-is-authorized.md"
   make_input "Write" "/tmp/scratch-out-of-repo-$$.md" "test-specialist"
   run_hook
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ (files|scope|target) ]]
 }
 
-# RT-11 PASS: ..-escaping Write target (resolves outside repo) allowed even with no matching files[].
-@test "RT-11 PASS: ..-escaping Write target (resolves outside repo) allowed even with no matching files[]" {
+# RT-11 BLOCK: ..-escaping Write target (resolves outside repo) is BLOCKED.
+@test "RT-11 BLOCK: ..-escaping Write target (resolves outside repo) blocked (no files[] escape)" {
   write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
   write_dispatch "test-specialist" "docs/only-this-is-authorized.md"
   make_input "Write" "../outside-repo-escape.md" "test-specialist"
   run_hook
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ (files|scope|target) ]]
+}
+
+# RT-P2-GATE BLOCK: a bash_only:true dispatch that ALSO lists files[] (only creatable by hand —
+# the writer rejects --bash-only + --file) must NOT authorize Write/Edit. The gate skips
+# bash_only dispatches when building the files[] union (Codex P2, defense-in-depth).
+@test "RT-P2-GATE BLOCK: bash_only:true dispatch carrying files[] does not authorize Write" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  local dir="$WAVE_DIR/specialist-dispatches/test-specialist"
+  mkdir -p "$dir"
+  local head plan_sha256
+  head="$(git -C "$CLAUDE_PROJECT_DIR" rev-parse HEAD)"
+  plan_sha256="$(_real_sha256 "$WAVE_DIR/PLAN.md")"
+  WD_HEAD="$head" WD_PLAN_SHA256="$plan_sha256" WD_OUT="$dir/arch-testing-p2-$$.json" \
+  python3 - <<'PYEOF'
+import json, os
+payload = {
+    "schema": "specialist-dispatch/v1", "wave_slug": "bl-w43", "architect": "arch-testing",
+    "specialist": "test-specialist", "head": os.environ["WD_HEAD"],
+    "plan_path": ".planning/wave-bl-w43/PLAN.md", "plan_sha256": os.environ["WD_PLAN_SHA256"],
+    "files": ["docs/sneaky.md"], "bash_only": True, "allowed_tools": ["Bash"],
+    "summary": "adversarial", "task": "x", "created_at": "2026-01-01T00:00:00Z",
+}
+with open(os.environ["WD_OUT"], "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, indent=2)
+PYEOF
+  make_input "Write" "docs/sneaky.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
 }
 
 # ── bash-only dispatch: authorizes execution-Bash only, never Write/Edit ────────────────────

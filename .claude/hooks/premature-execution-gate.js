@@ -13,8 +13,9 @@
 //     and whose **PREP-HEAD** is an ancestor of (or equal to) current HEAD.
 //   - Dispatch: specialist-dispatches/<canonical>/*.json whose plan_sha256 matches sha256(PLAN.md)
 //     and whose head is an ancestor of (or equal to) current HEAD.
-//   - Write/Edit: target file must be in the union of files[] across all current dispatches
-//     (in-repo targets only — out-of-repo paths are exempt).
+//   - Write/Edit: target file must be in the union of files[] across all current non-bash-only
+//     dispatches. Out-of-repo / unlisted targets are BLOCKED (no files[] escape). bash_only
+//     dispatches authorize execution-Bash only and contribute no Write/Edit files.
 //   - doc-updater is PREP-gated only — exempt from the dispatch/files[] requirement (D4).
 //
 // Bypasses:
@@ -187,22 +188,24 @@ process.stdin.on('end', () => {
       return;
     }
 
-    // (6) Write/Edit: target must be in the UNION of files[] across current dispatches. Out-of-repo exempt.
+    // (6) Write/Edit: target must be in the UNION of files[] across current NON-bash-only
+    //     dispatches. Out-of-repo / unlisted targets are BLOCKED (Codex P1: the acceptance
+    //     contract is "no write outside files[]"; a scope-binding gate must not exempt escapes
+    //     like /tmp, ../parent, or global paths). bash_only dispatches authorize execution-Bash
+    //     only and contribute NO Write/Edit files (P2). Out-of-tree scratch work uses Bash.
     if (toolName === 'Write' || toolName === 'Edit') {
       const fp = data.tool_input?.file_path || '';
       const rel = path.relative(projectRoot, path.resolve(projectRoot, fp));
-      const outOfRepo = rel.startsWith('..') || path.isAbsolute(rel);
-      if (!outOfRepo) {
-        const allowed = new Set();
-        for (const d of currentDispatches) {
-          for (const wf of (Array.isArray(d.files) ? d.files : [])) {
-            allowed.add(path.relative(projectRoot, path.resolve(projectRoot, wf)));
-          }
+      const allowed = new Set();
+      for (const d of currentDispatches) {
+        if (d.bash_only === true) continue;
+        for (const wf of (Array.isArray(d.files) ? d.files : [])) {
+          allowed.add(path.relative(projectRoot, path.resolve(projectRoot, wf)));
         }
-        if (!allowed.has(rel)) {
-          block('[premature-execution-gate] Target "' + rel + '" is outside the authorized files[] of any current dispatch for specialist "' + canonical + '". Ask the orchestrator/architect for a dispatch covering this file, or stay within scope.');
-          return;
-        }
+      }
+      if (!allowed.has(rel)) {
+        block('[premature-execution-gate] Target "' + rel + '" is outside the authorized files[] of any current dispatch for specialist "' + canonical + '" (out-of-repo and unlisted paths are blocked). Ask the orchestrator/architect for a dispatch covering this file, or use Bash with a current dispatch for out-of-tree work.');
+        return;
       }
       process.exit(0);
     }

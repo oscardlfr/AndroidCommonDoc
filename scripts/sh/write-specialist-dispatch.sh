@@ -23,7 +23,8 @@
 # --bash-only
 #   Authorizes execution-Bash for the specialist with NO Write/Edit file targets. Records
 #   bash_only:true + allowed_tools:["Bash"] in the JSON and permits an empty files[].
-#   Without this flag, at least one --file is required (empty files[] -> exit 2).
+#   MUTUALLY EXCLUSIVE with --file (a bash-only dispatch must carry no files[]; combining
+#   them is exit 2). Without --bash-only, at least one --file is required (empty files[] -> exit 2).
 #
 # --file <path>
 #   Repeatable. Each value is stored repo-relative in files[]. allowed_tools[] is
@@ -251,6 +252,15 @@ if [[ -z "$PLAN_SHA256" ]]; then
 fi
 
 # ── Validate + normalize files[] ──────────────────────────────────────────────
+
+# --bash-only is mutually exclusive with --file: a bash-only dispatch authorizes
+# execution-Bash ONLY and must carry no Write/Edit targets (P2). Rejecting the combination
+# keeps the invariant bash_only <=> empty files[] so the gate cannot be tricked into
+# authorizing Write/Edit via a bash_only dispatch's files[].
+if [[ "$BASH_ONLY" -eq 1 && "${#FILES[@]}" -gt 0 ]]; then
+  echo "[write-specialist-dispatch] ERROR: --bash-only cannot be combined with --file. A bash-only dispatch authorizes execution-Bash only (no Write/Edit targets); omit --file." >&2
+  exit 2
+fi
 
 if [[ "${#FILES[@]}" -eq 0 && "$BASH_ONLY" -ne 1 ]]; then
   echo "[write-specialist-dispatch] ERROR: --file is required at least once (or pass --bash-only to authorize execution-only Bash with no Write/Edit targets)." >&2
