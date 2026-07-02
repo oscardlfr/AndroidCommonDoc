@@ -27,6 +27,8 @@ After completing review for wave `{N}`:
    bash scripts/sh/write-verdict.sh --role arch-{role} --phase prep
    ```
 
+   PREP verdicts append `**PREP-HEAD**` (current HEAD) and `**PLAN_SHA256**` (hash of the wave's `PLAN.md`), binding the approval to this wave's exact HEAD + PLAN content — consumed by the specialist dispatch gate. See [specialist-dispatch-protocol.md](specialist-dispatch-protocol.md).
+
    **VERIFY-FINAL phase** (after all specialist work is confirmed done):
    ```bash
    bash scripts/sh/write-verdict.sh --role arch-{role} --phase verify-final
