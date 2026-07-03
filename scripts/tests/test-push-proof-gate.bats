@@ -698,6 +698,9 @@ PYEOF
 @test "#19 PASS: write-verdict verify-final stamps **HEAD**: field" {
   local WAVE_SLUG="test-push-proof"
   mkdir -p "$REPO/.planning/wave-$WAVE_SLUG"
+  # write-verdict.sh --phase prep now requires the wave PLAN.md to exist (fail-closed
+  # PREP binding). Seed a minimal PLAN.md so prep can hash it.
+  printf '# PLAN\n' > "$REPO/.planning/wave-$WAVE_SLUG/PLAN.md"
 
   # Phase prep first
   run bash -c "cd '$REPO' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$WRITE_VERDICT' \

@@ -49,7 +49,7 @@ SendMessage(to="arch-testing", summary="phase 2 start", message="scope_doc_path:
 ```
 1. Architects use context-provider for patterns/rules (via SendMessage or as subagent)
 2. Architects investigate → request specialists from orchestrator via SendMessage or disk spec
-3. **Orchestrator IMMEDIATELY spawns specialists** via Agent()
+3. **Orchestrator IMMEDIATELY spawns specialists** via Agent() — first writing a disk dispatch artifact scoping the specialist's authorized `files[]` (see [specialist-dispatch-protocol.md](specialist-dispatch-protocol.md))
 4. Orchestrator relays specialist results back to requesting architect
 5. After work: orchestrator dispatches doc-updater to update CHANGELOG/docs
 6. Each architect writes `arch-{role}-verdict.md` (HEAD-bound) to disk

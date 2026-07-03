@@ -39,6 +39,8 @@ Full protocol, team-lead workflow, and anti-patterns: `docs/agents/arch-dispatch
 
 **Core specialists** are dispatched at Phase 2 start — as background peers (when the runtime supports them) or as single-use Agent subagents. Background peers accumulate layer knowledge and communicate directly with architects via SendMessage; single-use subagents receive per-task context.
 
+Dispatch is **disk-first**: the orchestrator materializes a dispatch artifact (`.planning/wave-<slug>/specialist-dispatches/<specialist>/`) bound to current HEAD + PLAN content before a specialist executes `Write`/`Edit`/`Bash`. `TaskList` is tracking-only — it never authorizes execution. `SendMessage` is an optional adapter — never harness authority. Full protocol: [specialist-dispatch-protocol.md](specialist-dispatch-protocol.md).
+
 ## Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() dispatch)
 
 BEFORE calling Agent() to spawn a specialist, verify ALL:

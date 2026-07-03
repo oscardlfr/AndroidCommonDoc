@@ -22,6 +22,13 @@ setup() {
   export CLAUDE_PROJECT_DIR="$BATS_TEST_TMPDIR"
   export CLAUDE_WAVE_SLUG="bl-w43"
   export WAVE_PREP_BYPASS=''
+  # wave-runtime-topology-disk-first-binding (WS-3): the hardened gate resolves
+  # `git rev-parse HEAD` in CLAUDE_PROJECT_DIR (D5 fail-closed) before checking
+  # PREP/dispatch currency, so CLAUDE_PROJECT_DIR must be a real git repo with at
+  # least one commit.
+  git -C "$CLAUDE_PROJECT_DIR" init -q 2>/dev/null
+  git -C "$CLAUDE_PROJECT_DIR" -c user.email=test@example.com -c user.name=test \
+      commit -q --allow-empty -m init 2>/dev/null
   # write_plan_with_spawn_table is defined later in this file; bats loads the whole
   # file before running any test, so the forward-reference is safe.
   write_plan_with_spawn_table
@@ -48,6 +55,121 @@ PYEOF
 
 run_hook() {
   run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' node '$HOOK'"
+}
+
+# ── wave-runtime-topology-disk-first-binding (WS-3) helpers ─────────────────────────────────
+#
+# These tests target the HARDENED gate (WS-3, toolkit-specialist), which does not exist yet
+# at the time this suite is written — the RT-* cases below are expected to be RED until WS-3
+# lands. The helpers themselves are correct against the CONTRACT (DECISIONS.md F1/F2/F3/F5,
+# arch-integration HIGH/MEDIUM) regardless of the current gate implementation.
+#
+# CORE NON-VACUITY MANDATE: every "current" fixture derives head/plan_sha256 from a REAL
+# `git rev-parse HEAD` + REAL sha256 of the ACTUAL PLAN.md on disk, computed at test-run
+# time — never hardcoded matching constants. "Stale" fixtures use REAL-but-wrong values
+# (a real divergent commit SHA, a real sha256 of different content) — never fabricated hex.
+
+# _real_sha256 <file> — portable sha256 (mirrors _sha256_file in write-verdict.sh /
+# write-specialist-dispatch.sh; matches the Node crypto Buffer-based hash the gate uses — F2).
+_real_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+# _make_divergent_branch_head <dir> — creates two branches diverging from <dir>'s current
+# HEAD. On return, <dir> is checked out on the SECOND branch (its new HEAD becomes <dir>'s
+# "current" HEAD for the rest of the test) and DIVERGENT_HEAD (global) holds the commit SHA
+# on the FIRST branch — a real commit that is NOT an ancestor of <dir>'s current HEAD
+# (`git merge-base --is-ancestor DIVERGENT_HEAD <current>` exits non-zero). Used to build
+# genuinely-unrelated "stale" HEAD fixtures per F1 (ancestry, not exact-equality).
+DIVERGENT_HEAD=""
+_make_divergent_branch_head() {
+  local dir="$1"
+  local base_branch
+  base_branch="$(git -C "$dir" symbolic-ref --short HEAD 2>/dev/null)"
+  git -C "$dir" checkout -b "diverge-a" -q 2>/dev/null
+  git -C "$dir" -c user.email=test@example.com -c user.name=test \
+      commit -q --allow-empty -m "diverge-a" 2>/dev/null
+  DIVERGENT_HEAD="$(git -C "$dir" rev-parse HEAD)"
+  git -C "$dir" checkout "$base_branch" -q 2>/dev/null
+  git -C "$dir" checkout -b "diverge-b" -q 2>/dev/null
+  git -C "$dir" -c user.email=test@example.com -c user.name=test \
+      commit -q --allow-empty -m "diverge-b" 2>/dev/null
+}
+
+# write_current_prep_raw <verdict-file> <head> <plan-sha256> — low-level: writes an
+# APPROVED-PREP verdict with EXPLICIT **PREP-HEAD**/**PLAN_SHA256** values (may be current or
+# deliberately stale, caller's choice).
+write_current_prep_raw() {
+  local file="$1" head="$2" plan_sha256="$3"
+  printf '**Status**: APPROVED-PREP\n**PREP-HEAD**: %s\n**PLAN_SHA256**: %s\n' \
+    "$head" "$plan_sha256" > "$file"
+}
+
+# write_current_prep <verdict-file> — CURRENT PREP: **PREP-HEAD** == real current HEAD of
+# $CLAUDE_PROJECT_DIR, **PLAN_SHA256** == real sha256 of $WAVE_DIR/PLAN.md, both derived at
+# call-time (CORE NON-VACUITY MANDATE).
+write_current_prep() {
+  local file="$1"
+  local head plan_sha256
+  head="$(git -C "$CLAUDE_PROJECT_DIR" rev-parse HEAD)"
+  plan_sha256="$(_real_sha256 "$WAVE_DIR/PLAN.md")"
+  write_current_prep_raw "$file" "$head" "$plan_sha256"
+}
+
+# write_dispatch_raw <specialist> <head> <plan-sha256> [file...] — low-level: writes a
+# dispatch JSON under $WAVE_DIR/specialist-dispatches/<specialist>/ with EXPLICIT head/
+# plan_sha256 (current or deliberately stale). Remaining args are files[]; if none given,
+# bash_only:true + files:[] is written (bash-only dispatch).
+write_dispatch_raw() {
+  local specialist="$1" head="$2" plan_sha256="$3"
+  shift 3
+  local dir="$WAVE_DIR/specialist-dispatches/$specialist"
+  mkdir -p "$dir"
+  local ts
+  ts="$(date -u '+%Y%m%dT%H%M%SZ')-$$-${RANDOM}"
+  local out="$dir/arch-testing-${ts}.json"
+  local bash_only_flag=0
+  [ "$#" -eq 0 ] && bash_only_flag=1
+  WD_SPECIALIST="$specialist" WD_HEAD="$head" WD_PLAN_SHA256="$plan_sha256" \
+  WD_FILES="$(printf '%s\n' "$@")" WD_BASH_ONLY="$bash_only_flag" WD_OUT="$out" \
+  python3 - <<'PYEOF'
+import json, os
+files_raw = os.environ.get("WD_FILES", "")
+files = [f for f in files_raw.split("\n") if f != ""]
+bash_only = os.environ.get("WD_BASH_ONLY", "0") == "1"
+payload = {
+    "schema": "specialist-dispatch/v1",
+    "wave_slug": "bl-w43",
+    "architect": "arch-testing",
+    "specialist": os.environ["WD_SPECIALIST"],
+    "head": os.environ["WD_HEAD"],
+    "plan_path": ".planning/wave-bl-w43/PLAN.md",
+    "plan_sha256": os.environ["WD_PLAN_SHA256"],
+    "files": files,
+    "bash_only": bash_only,
+    "allowed_tools": ["Bash"] if bash_only else [],
+    "summary": "test dispatch",
+    "task": "test task body",
+    "created_at": "2026-01-01T00:00:00Z",
+}
+with open(os.environ["WD_OUT"], "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, indent=2)
+PYEOF
+}
+
+# write_dispatch <specialist> [file...] — CURRENT dispatch: head/plan_sha256 derived from
+# real git/shasum at call-time (CORE NON-VACUITY MANDATE). No files => bash-only dispatch.
+write_dispatch() {
+  local specialist="$1"
+  shift
+  local head plan_sha256
+  head="$(git -C "$CLAUDE_PROJECT_DIR" rev-parse HEAD)"
+  plan_sha256="$(_real_sha256 "$WAVE_DIR/PLAN.md")"
+  write_dispatch_raw "$specialist" "$head" "$plan_sha256" "$@"
 }
 
 # ── BLOCK scenarios ─────────────────────────────────────────────────────────
@@ -78,9 +200,12 @@ run_hook() {
 
 # ── PASS scenarios ──────────────────────────────────────────────────────────
 
-# Case 4 PASS: specialist Write + APPROVED-PREP present -> exit 0
-@test "Case 4: allows specialist Write when APPROVED-PREP verdict is present" {
-  printf 'STATUS: APPROVED-PREP\n' > "$WAVE_DIR/pr3-arch-platform-verdict.md"
+# Case 4 PASS: specialist Write + a CURRENT APPROVED-PREP + matching dispatch -> exit 0
+# (wave-runtime-topology-disk-first-binding, WS-3: a bare APPROVED-PREP with no
+# PREP-HEAD/PLAN_SHA256/dispatch is no longer sufficient — see RT-1.)
+@test "Case 4: allows specialist Write when a CURRENT APPROVED-PREP + matching dispatch are present" {
+  write_current_prep "$WAVE_DIR/pr3-arch-platform-verdict.md"
+  write_dispatch "test-specialist" "docs/new-doc.md"
   make_input "Write" "docs/new-doc.md" "test-specialist"
   run_hook
   [ "$status" -eq 0 ]
@@ -127,17 +252,22 @@ run_hook() {
   [ "$status" -eq 0 ]
 }
 
-# Case 10 PASS: arch-integration-verdict.md with APPROVED-PREP unblocks specialist (BL-W47-prep-2)
-@test "Case 10: allows specialist Write when arch-integration-verdict.md contains APPROVED-PREP" {
-  printf 'STATUS: APPROVED-PREP\n' > "$WAVE_DIR/arch-integration-verdict.md"
+# Case 10 PASS: arch-integration-verdict.md CURRENT PREP + matching dispatch unblocks
+# specialist (BL-W47-prep-2; hardened to current-PREP+dispatch by
+# wave-runtime-topology-disk-first-binding, WS-3).
+@test "Case 10: allows specialist Write when arch-integration-verdict.md has a CURRENT APPROVED-PREP + matching dispatch" {
+  write_current_prep "$WAVE_DIR/arch-integration-verdict.md"
+  write_dispatch "toolkit-specialist" "docs/new-doc.md"
   make_input "Write" "docs/new-doc.md" "toolkit-specialist"
   run_hook
   [ "$status" -eq 0 ]
 }
 
-# Case 11 PASS: arch-testing-verdict.md with APPROVED-PREP unblocks specialist (BL-W47-prep-2)
-@test "Case 11: allows specialist Write when arch-testing-verdict.md contains APPROVED-PREP" {
-  printf 'STATUS: APPROVED-PREP\n' > "$WAVE_DIR/arch-testing-verdict.md"
+# Case 11 PASS: arch-testing-verdict.md CURRENT PREP + matching dispatch unblocks specialist
+# (BL-W47-prep-2; hardened to current-PREP+dispatch by wave-runtime-topology-disk-first-binding, WS-3).
+@test "Case 11: allows specialist Write when arch-testing-verdict.md has a CURRENT APPROVED-PREP + matching dispatch" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist" "docs/new-doc.md"
   make_input "Write" "docs/new-doc.md" "test-specialist"
   run_hook
   [ "$status" -eq 0 ]
@@ -169,8 +299,13 @@ run_hook() {
   [ "$status" -eq 0 ]
 }
 
-@test "IT-4 PASS: suffix-rotated specialist unblocked when APPROVED-PREP verdict exists" {
-  printf 'STATUS: APPROVED-PREP\n' > "$WAVE_DIR/arch-testing-verdict.md"
+@test "IT-4 PASS: suffix-rotated specialist unblocked when CURRENT PREP + dispatch exist" {
+  # Dispatch is written under the CANONICAL specialist dir ("test-specialist"), not the
+  # suffix-rotated agent_type ("test-specialist-2") — the gate resolves
+  # canonical = SUBJECT_TYPES.find(s => agentType.startsWith(s)) before the dispatch lookup,
+  # so a canonical dispatch dir must still authorize a suffix-rotated peer.
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist" "docs/new-doc.md"
   make_input "Write" "docs/new-doc.md" "test-specialist-2"
   run_hook
   [ "$status" -eq 0 ]
@@ -347,9 +482,10 @@ PLANEOF
   [[ "$output" == *"Spawn Table"* ]]
 }
 
-@test "ST-2 PASS: active wave + specialist Write + PLAN.md has Spawn Table + APPROVED-PREP → exit 0" {
+@test "ST-2 PASS: active wave + specialist Write + PLAN.md has Spawn Table + CURRENT PREP + dispatch → exit 0" {
   write_plan_with_spawn_table
-  printf 'STATUS: APPROVED-PREP\n' > "$WAVE_DIR/arch-testing-verdict.md"
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist" "docs/new-doc.md"
   make_input "Write" "docs/new-doc.md" "test-specialist"
   run_hook
   [ "$status" -eq 0 ]
@@ -398,4 +534,359 @@ HOOK_CODEX="$BATS_TEST_DIRNAME/../../.codex/hooks/premature-execution-gate.js"
   [ "$status" -eq 2 ]
   [[ "$output" == *'"decision"'* ]]
   [[ "$output" == *'"block"'* ]]
+}
+
+# ── wave-runtime-topology-disk-first-binding (WS-3): disk-first specialist<->architect binding ─
+#
+# RT-* cases target the HARDENED gate (WS-3, toolkit-specialist) — EXPECTED RED until WS-3
+# lands (replaces hasApprovedPrep() per DECISIONS.md F1/F2/F3/F5 + arch-integration
+# HIGH/MEDIUM). Do NOT force-green by weakening assertions; these prove the failure class in
+# project_specialist_architect_binding_enforcement_queued.md is closed.
+
+# RT-1 BLOCK: bare APPROVED-PREP alone (no PREP-HEAD/PLAN_SHA256) is stale/generic — must block.
+@test "RT-1 BLOCK: bare APPROVED-PREP with no PREP-HEAD/PLAN_SHA256 (stale/generic PREP) blocks" {
+  printf 'STATUS: APPROVED-PREP\n' > "$WAVE_DIR/arch-testing-verdict.md"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# RT-2 PASS: current PREP + current dispatch allows matching Edit (Write already covered by
+# the converted Case 4/10/11).
+@test "RT-2 PASS: current PREP + current dispatch allows matching Edit" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist" "docs/existing-doc.md"
+  make_input "Edit" "docs/existing-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# RT-3 BLOCK: target outside dispatch files[] blocks with a discriminating message.
+@test "RT-3 BLOCK: target outside dispatch files[] blocks with a discriminating message" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist" "docs/allowed-only.md"
+  make_input "Write" "docs/not-in-dispatch.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ (files|scope|target) ]]
+}
+
+# ── F1 ancestry: stale PREP / stale dispatch use a genuinely UNRELATED head (divergent
+# branch, not merely a different sha); a legitimate descendant commit must NOT self-block ────
+
+# RT-4 BLOCK: stale PREP — **PREP-HEAD** on an unrelated (non-ancestor) divergent commit.
+@test "RT-4 BLOCK: stale PREP (PREP-HEAD on an unrelated/divergent commit) blocks" {
+  _make_divergent_branch_head "$CLAUDE_PROJECT_DIR"
+  local plan_sha256
+  plan_sha256="$(_real_sha256 "$WAVE_DIR/PLAN.md")"
+  write_current_prep_raw "$WAVE_DIR/arch-testing-verdict.md" "$DIVERGENT_HEAD" "$plan_sha256"
+  write_dispatch "test-specialist" "docs/new-doc.md"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# RT-5 BLOCK: stale PREP via **PLAN_SHA256** mismatch (real hash of DIFFERENT content).
+@test "RT-5 BLOCK: stale PREP via PLAN_SHA256 mismatch blocks" {
+  local head wrong_plan_sha256
+  head="$(git -C "$CLAUDE_PROJECT_DIR" rev-parse HEAD)"
+  printf 'unrelated content, not the real PLAN.md\n' > "$BATS_TEST_TMPDIR/other-plan.md"
+  wrong_plan_sha256="$(_real_sha256 "$BATS_TEST_TMPDIR/other-plan.md")"
+  write_current_prep_raw "$WAVE_DIR/arch-testing-verdict.md" "$head" "$wrong_plan_sha256"
+  write_dispatch "test-specialist" "docs/new-doc.md"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# RT-6 BLOCK: stale dispatch — head on an unrelated (non-ancestor) divergent commit.
+@test "RT-6 BLOCK: stale dispatch (head on an unrelated/divergent commit) blocks" {
+  _make_divergent_branch_head "$CLAUDE_PROJECT_DIR"
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  local plan_sha256
+  plan_sha256="$(_real_sha256 "$WAVE_DIR/PLAN.md")"
+  write_dispatch_raw "test-specialist" "$DIVERGENT_HEAD" "$plan_sha256" "docs/new-doc.md"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# RT-7 BLOCK: stale dispatch via plan_sha256 mismatch (real hash of DIFFERENT content).
+@test "RT-7 BLOCK: stale dispatch via plan_sha256 mismatch blocks" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  local head wrong_plan_sha256
+  head="$(git -C "$CLAUDE_PROJECT_DIR" rev-parse HEAD)"
+  printf 'unrelated content for dispatch mismatch test\n' > "$BATS_TEST_TMPDIR/other-plan-2.md"
+  wrong_plan_sha256="$(_real_sha256 "$BATS_TEST_TMPDIR/other-plan-2.md")"
+  write_dispatch_raw "test-specialist" "$head" "$wrong_plan_sha256" "docs/new-doc.md"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# RT-8 PASS: PREP + dispatch remain current after a legitimate in-wave DESCENDANT commit
+# (proves ancestry — not exact-equality — permits normal wave progress; the core F1 fix).
+@test "RT-8 PASS: PREP + dispatch remain current after a legitimate in-wave descendant commit" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist" "docs/new-doc.md"
+  git -C "$CLAUDE_PROJECT_DIR" -c user.email=test@example.com -c user.name=test \
+      commit -q --allow-empty -m "in-wave descendant commit" 2>/dev/null
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# ── arch-integration HIGH: dispatch-scan fails CLOSED, never crash-to-allow ──────────────────
+
+# RT-9 BLOCK: current PREP but the dispatch dir does not exist at all (never dispatched).
+@test "RT-9 BLOCK: current PREP but dispatch dir absent (never dispatched) blocks, not crash-to-allow" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  # Deliberately do NOT create $WAVE_DIR/specialist-dispatches/ at all.
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ── Codex P1: out-of-repo Write/Edit is BLOCKED (no files[] escape) ─────────────────────────
+# Supersedes the earlier arch-integration MEDIUM carve-out: it contradicted the acceptance
+# contract "specialist cannot write outside its dispatch files[]" and allowed /tmp, ../parent,
+# and global-path escapes. Out-of-tree scratch work goes through Bash (dispatch-gated, no parse).
+
+# RT-10 BLOCK: out-of-repo Write target (/tmp) is BLOCKED even with a current dispatch.
+@test "RT-10 BLOCK: out-of-repo Write target (/tmp) blocked (no files[] escape)" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist" "docs/only-this-is-authorized.md"
+  make_input "Write" "/tmp/scratch-out-of-repo-$$.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ (files|scope|target) ]]
+}
+
+# RT-11 BLOCK: ..-escaping Write target (resolves outside repo) is BLOCKED.
+@test "RT-11 BLOCK: ..-escaping Write target (resolves outside repo) blocked (no files[] escape)" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist" "docs/only-this-is-authorized.md"
+  make_input "Write" "../outside-repo-escape.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ (files|scope|target) ]]
+}
+
+# RT-P2-GATE BLOCK: a bash_only:true dispatch that ALSO lists files[] (only creatable by hand —
+# the writer rejects --bash-only + --file) must NOT authorize Write/Edit. The gate skips
+# bash_only dispatches when building the files[] union (Codex P2, defense-in-depth).
+@test "RT-P2-GATE BLOCK: bash_only:true dispatch carrying files[] does not authorize Write" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  local dir="$WAVE_DIR/specialist-dispatches/test-specialist"
+  mkdir -p "$dir"
+  local head plan_sha256
+  head="$(git -C "$CLAUDE_PROJECT_DIR" rev-parse HEAD)"
+  plan_sha256="$(_real_sha256 "$WAVE_DIR/PLAN.md")"
+  WD_HEAD="$head" WD_PLAN_SHA256="$plan_sha256" WD_OUT="$dir/arch-testing-p2-$$.json" \
+  python3 - <<'PYEOF'
+import json, os
+payload = {
+    "schema": "specialist-dispatch/v1", "wave_slug": "bl-w43", "architect": "arch-testing",
+    "specialist": "test-specialist", "head": os.environ["WD_HEAD"],
+    "plan_path": ".planning/wave-bl-w43/PLAN.md", "plan_sha256": os.environ["WD_PLAN_SHA256"],
+    "files": ["docs/sneaky.md"], "bash_only": True, "allowed_tools": ["Bash"],
+    "summary": "adversarial", "task": "x", "created_at": "2026-01-01T00:00:00Z",
+}
+with open(os.environ["WD_OUT"], "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, indent=2)
+PYEOF
+  make_input "Write" "docs/sneaky.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ── P1 escape closure: an out-of-repo target is BLOCKED even if a dispatch lists it ──────────
+# The writer already rejects out-of-repo --file values; these prove the GATE is independently
+# closed — a hand-crafted/malformed dispatch JSON listing /tmp/foo or ../foo cannot authorize
+# an out-of-tree Write (blocked up front + the out-of-repo files[] entry is ignored).
+
+_write_escape_dispatch() {  # $1=out-of-repo path to plant in files[]
+  local dir="$WAVE_DIR/specialist-dispatches/test-specialist"
+  mkdir -p "$dir"
+  local head plan_sha256
+  head="$(git -C "$CLAUDE_PROJECT_DIR" rev-parse HEAD)"
+  plan_sha256="$(_real_sha256 "$WAVE_DIR/PLAN.md")"
+  WD_HEAD="$head" WD_PLAN_SHA256="$plan_sha256" WD_OUT="$dir/arch-testing-esc-$$-${RANDOM}.json" WD_FILE="$1" \
+  python3 - <<'PYEOF'
+import json, os
+payload = {
+    "schema": "specialist-dispatch/v1", "wave_slug": "bl-w43", "architect": "arch-testing",
+    "specialist": "test-specialist", "head": os.environ["WD_HEAD"],
+    "plan_path": ".planning/wave-bl-w43/PLAN.md", "plan_sha256": os.environ["WD_PLAN_SHA256"],
+    "files": [os.environ["WD_FILE"]], "bash_only": False, "allowed_tools": [],
+    "summary": "adversarial escape", "task": "x", "created_at": "2026-01-01T00:00:00Z",
+}
+with open(os.environ["WD_OUT"], "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, indent=2)
+PYEOF
+}
+
+@test "RT-P1-ESCAPE-1 BLOCK: Write /tmp/foo blocked even if a dispatch lists /tmp/foo" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  _write_escape_dispatch "/tmp/foo"
+  make_input "Write" "/tmp/foo" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "RT-P1-ESCAPE-2 BLOCK: Write ../foo blocked even if a dispatch lists ../foo" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  _write_escape_dispatch "../foo"
+  make_input "Write" "../foo" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ── bash-only dispatch: authorizes execution-Bash only, never Write/Edit ────────────────────
+
+# RT-12 PASS: bash-only dispatch (empty files[]) allows Bash.
+@test "RT-12 PASS: bash-only dispatch (empty files[]) allows Bash" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist"
+  make_input "Bash" "echo hello" "test-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# RT-13 BLOCK: bash-only dispatch (empty files[]) blocks Write.
+@test "RT-13 BLOCK: bash-only dispatch (empty files[]) blocks Write" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# RT-14 BLOCK: bash-only dispatch (empty files[]) blocks Edit.
+@test "RT-14 BLOCK: bash-only dispatch (empty files[]) blocks Edit" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist"
+  make_input "Edit" "docs/existing-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ── Bash: dispatch-presence gated, never file-parsed ─────────────────────────────────────────
+
+# RT-15 PASS: Bash with a current (non-bash-only) dispatch is allowed even when the command
+# targets a file NOT in files[] — proves the gate does not parse Bash commands for file targets.
+@test "RT-15 PASS: Bash with current dispatch allowed even targeting a file outside files[] (no file-parse for Bash)" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist" "docs/only-this-is-authorized.md"
+  make_input "Bash" "echo hello > docs/totally-different-file.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# RT-16 BLOCK: Bash with current PREP but NO dispatch at all blocks.
+@test "RT-16 BLOCK: Bash with current PREP but no dispatch at all blocks" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  make_input "Bash" "echo hello" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ── F5: files[] membership = UNION across ALL current dispatches ────────────────────────────
+
+# RT-17 PASS: a stale dispatch alongside a current one — the current one's files still
+# authorize (union across all dispatch files in the directory, not just the newest).
+@test "RT-17 PASS: multi-dispatch union — stale dispatch alongside current one still authorizes the current one's files" {
+  _make_divergent_branch_head "$CLAUDE_PROJECT_DIR"
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  local plan_sha256
+  plan_sha256="$(_real_sha256 "$WAVE_DIR/PLAN.md")"
+  # Stale dispatch (head pinned to the abandoned divergent branch) — authorizes a DIFFERENT file.
+  write_dispatch_raw "test-specialist" "$DIVERGENT_HEAD" "$plan_sha256" "docs/stale-only.md"
+  # Current dispatch — authorizes the actual target.
+  write_dispatch "test-specialist" "docs/new-doc.md"
+  make_input "Write" "docs/new-doc.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# ── Path normalization equivalence ───────────────────────────────────────────────────────────
+
+# RT-18 PASS: ./docs/foo.md (Write target) matches a files[] entry of docs/foo.md.
+@test "RT-18 PASS: path-normalization — ./docs/foo.md matches files[] entry docs/foo.md" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist" "docs/foo.md"
+  make_input "Write" "./docs/foo.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# RT-19 BLOCK: a lexically-different path is NOT conflated with an authorized file.
+@test "RT-19 BLOCK: path-normalization — lexically-different path is not conflated with an authorized file" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  write_dispatch "test-specialist" "docs/foo.md"
+  make_input "Write" "docs/foobar.md" "test-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ── D4: doc-updater is PREP-gated only — no dispatch requirement ────────────────────────────
+
+# RT-20 PASS: doc-updater allowed via current-PREP-only, no dispatch required.
+@test "RT-20 PASS: doc-updater allowed via current-PREP-only, no dispatch required (D4 exemption)" {
+  write_current_prep "$WAVE_DIR/arch-testing-verdict.md"
+  # Deliberately NOT writing any dispatch — doc-updater is PREP-gated only.
+  make_input "Write" "docs/new-doc.md" "doc-updater"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# RT-21 BLOCK: doc-updater blocked when no current PREP exists at all.
+@test "RT-21 BLOCK: doc-updater blocked when no current PREP exists" {
+  # No verdict file at all.
+  make_input "Write" "docs/new-doc.md" "doc-updater"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ── Cross-tool smoke: real write-verdict.sh + real write-specialist-dispatch.sh + real gate ──
+# Proves bash `shasum -a 256`/`sha256sum` agrees byte-for-byte with the gate's Node
+# `crypto.createHash('sha256').update(fs.readFileSync(...))` (F2) — no encoding-mismatch
+# false "stale PLAN" block.
+
+@test "RT-22 CROSS-TOOL SMOKE: real write-verdict.sh prep -> real write-specialist-dispatch.sh -> real gate exits 0" {
+  local wv_script="$BATS_TEST_DIRNAME/../sh/write-verdict.sh"
+  local wsd_script="$BATS_TEST_DIRNAME/../sh/write-specialist-dispatch.sh"
+
+  # write-verdict.sh / write-specialist-dispatch.sh hardcode .planning/wave-<slug>/ (no
+  # override) — use a slug distinct from setup()'s bl-w43 fixture (which lives under the
+  # bats-fixture-compat planning/, no dot) so the two do not collide.
+  local smoke_slug="rtdfb-smoke"
+  local smoke_wave_dir="$CLAUDE_PROJECT_DIR/.planning/wave-$smoke_slug"
+  mkdir -p "$smoke_wave_dir"
+  cat > "$smoke_wave_dir/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Spawn Table
+
+| Role | Count | Reason |
+|---|---|---|
+| arch-testing | 1 | smoke |
+| test-specialist | 1 | smoke |
+PLANEOF
+
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && CLAUDE_WAVE_SLUG='$smoke_slug' \
+    bash '$wv_script' --role arch-testing --phase prep --slug '$smoke_slug'"
+  [ "$status" -eq 0 ]
+
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && printf 'smoke task body\n' | CLAUDE_WAVE_SLUG='$smoke_slug' \
+    bash '$wsd_script' --architect arch-testing --specialist test-specialist \
+    --file docs/smoke-target.md --slug '$smoke_slug'"
+  [ "$status" -eq 0 ]
+
+  make_input "Write" "docs/smoke-target.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' CLAUDE_WAVE_SLUG='$smoke_slug' \
+    CLAUDE_PROJECT_DIR='$CLAUDE_PROJECT_DIR' node '$HOOK'"
+  [ "$status" -eq 0 ]
 }

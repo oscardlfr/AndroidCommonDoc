@@ -214,11 +214,45 @@ fi
 
 NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
+# ── Portable sha256 helper (WS-2 — mirrors write-specialist-dispatch.sh) ──────
+# Matches the Node crypto Buffer-based hash used by premature-execution-gate.js (F2):
+# raw file bytes, no encoding/newline normalization.
+
+_sha256_file() {
+  local f="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$f" | awk '{print $1}'
+  else
+    shasum -a 256 "$f" | awk '{print $1}'
+  fi
+}
+
 # ── Phase: prep ───────────────────────────────────────────────────────────────
 
 run_prep() {
   if [[ -f "$VERDICT_FILE" ]]; then
     echo "[write-verdict] ERROR: Verdict file already exists (duplicate prep guard): $VERDICT_FILE" >&2
+    exit 2
+  fi
+
+  # PREP-HEAD binding (WS-2): resolve HEAD fail-closed before writing any content.
+  local head_sha=""
+  head_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+  if [[ ! "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "[write-verdict] ERROR: git rev-parse HEAD failed or returned non-hex '$head_sha'. Aborting prep — resolve HEAD before writing the verdict." >&2
+    exit 2
+  fi
+
+  # PLAN_SHA256 binding (WS-2): PREP fails closed when the plan cannot be resolved.
+  local plan_path="$WAVE_DIR/PLAN.md"
+  if [[ ! -f "$plan_path" ]]; then
+    echo "[write-verdict] ERROR: Plan file not found: $plan_path. PREP fails closed when the plan cannot be resolved." >&2
+    exit 2
+  fi
+  local plan_sha256=""
+  plan_sha256="$(_sha256_file "$plan_path" 2>/dev/null || true)"
+  if [[ -z "$plan_sha256" ]]; then
+    echo "[write-verdict] ERROR: Failed to compute sha256 of $plan_path (sha256sum/shasum unavailable or read error)." >&2
     exit 2
   fi
 
@@ -230,6 +264,8 @@ run_prep() {
 **Phase**: PREP
 **Timestamp**: $NOW
 **Status**: APPROVED-PREP
+**PREP-HEAD**: $head_sha
+**PLAN_SHA256**: $plan_sha256
 
 EOF
 
