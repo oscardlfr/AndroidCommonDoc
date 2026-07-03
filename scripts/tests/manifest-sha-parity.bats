@@ -9,6 +9,8 @@
 #      FAIL (drift detected); live template on disk never modified
 #   3. Hygiene: dirtying the temp copy leaves the live git worktree unchanged
 #   4. After revert (in the temp copy) → PASS
+#   5. Safety guard: dirty_template() refuses to mutate any path outside
+#      WORK_DIR (defense-in-depth — refuses the live tracked template too)
 #
 # Hash algorithm mirrors mcp-server/src/registry/template-generator.ts:
 #   - Extract YAML block between first two `---` markers (BOM stripped, CRLF→LF)
@@ -100,6 +102,14 @@ get_manifest_sha() {
 # path is given — tests pass the WORK_DIR temp copy, never the live file.
 dirty_template() {
   local template_path="$1"
+  # Safety guard (defense-in-depth): only ever mutate the isolated WORK_DIR temp
+  # copy — never the live tracked template. Refuse any path outside WORK_DIR.
+  case "$template_path" in
+    "$WORK_DIR"/*) : ;;
+    *)
+      echo "dirty_template: refusing to mutate '$template_path' — only the WORK_DIR temp copy is permitted" >&2
+      return 1 ;;
+  esac
   python3 - "$template_path" <<'PYEOF'
 import sys
 with open(sys.argv[1], "r", encoding="utf-8") as f:
@@ -172,6 +182,20 @@ PYEOF
   local tree_after
   tree_after="$(git -C "$PROJECT_ROOT" status --porcelain)"
 
+  [ "$tree_before" = "$tree_after" ]
+}
+
+@test "safety: dirty_template refuses to mutate the live tracked template" {
+  [ -f "$LIVE_CANARY_TEMPLATE" ] || skip "toolkit-specialist template not found"
+
+  local tree_before
+  tree_before="$(git -C "$PROJECT_ROOT" status --porcelain)"
+
+  run dirty_template "$LIVE_CANARY_TEMPLATE"
+  [ "$status" -ne 0 ]
+
+  local tree_after
+  tree_after="$(git -C "$PROJECT_ROOT" status --porcelain)"
   [ "$tree_before" = "$tree_after" ]
 }
 
