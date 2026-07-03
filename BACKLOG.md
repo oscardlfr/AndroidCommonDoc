@@ -12,11 +12,10 @@ The in-repo root fix for unreliable quality-gater completion messages is already
 
 ### Live-tree-write bats hygiene (LOW/MED — pre-existing, recurring bug class; user-consented 2026-07-03)
 
-Two bats files inject content into LIVE tracked files and don't always clean up on interrupted runs → a dirty tree that can trip clean-tree / manifest-sha / template-sync gates at the next QG:
+One bats file injects content into a LIVE tracked file and doesn't always clean up on interrupted runs → a dirty tree that can trip clean-tree / manifest-sha / template-sync gates at the next QG:
 - `scripts/tests/manifest-sha-parity.bats:125` injects `# dirty-sentinel-bats-test` into `setup/agent-templates/toolkit-specialist.md` (found + reverted during the runtime-topology-disk-first-binding QG).
-- `scripts/tests/copilot-parity.bats` writes an orphan template into `setup/copilot-templates/` (already tracked as `project_bl_copilot_parity_live_tree_write`).
 
-Fix = route both through temp-project fixtures + `trap`-cleanup (same shape as the H1 copilot-parity fix). Deliberately NOT fixed in the disk-first wave (out of scope). Consolidate with `project_bl_copilot_parity_live_tree_write` when scheduled.
+Fix = route it through a temp-copy fixture + `teardown` cleanup, mirroring the already-shipped copilot-parity isolation. (The sibling `copilot-parity.bats` live-tree-write half is already resolved — PR #228; `project_bl_copilot_parity_live_tree_write`.)
 
 ### Wave 38 — Ingestion bundle (LOW urgency, ~2-4h)
 
