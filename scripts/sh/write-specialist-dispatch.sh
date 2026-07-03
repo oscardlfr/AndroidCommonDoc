@@ -268,24 +268,36 @@ if [[ "${#FILES[@]}" -eq 0 && "$BASH_ONLY" -ne 1 ]]; then
 fi
 
 # _file_in_repo <path> — return 0 if <path> resolves inside REPO_ROOT, 1 otherwise.
-# Lexical checks first (work without realpath); realpath -m confirms mid-path (a/../../b) escapes.
+# PORTABLE (macOS/BSD + bash 3.2 + set -euo pipefail safe): collapses '.' and '..' segments
+# PURELY LEXICALLY with NO realpath dependency. macOS/BSD realpath has no -m flag and errors on
+# non-existent paths, so the old `realpath -m` path failed OPEN on macOS — a mid-path escape like
+# `foo/../../bar` (not absolute, not starting with '..') slipped past the fast pre-checks and the
+# `|| echo "$REPO_ROOT/$f"` fallback left the LITERAL unresolved path, which lexically starts with
+# "$REPO_ROOT/" and so passed containment (status=0, dispatch written). This mirrors the gate's
+# Node path.resolve()+path.relative() so writer and gate agree on what "inside the repo" means.
 _file_in_repo() {
-  local f="$1" abs repo_canon
-  if [[ "$f" == /* && "$f" != "$REPO_ROOT" && "$f" != "$REPO_ROOT"/* ]]; then
-    return 1  # absolute path not under REPO_ROOT
-  fi
-  if [[ "$f" == ".." || "$f" == ../* ]]; then
-    return 1  # relative path escaping upward
-  fi
-  if command -v realpath >/dev/null 2>&1; then
-    repo_canon="$(realpath -m -- "$REPO_ROOT" 2>/dev/null || echo "$REPO_ROOT")"
-    case "$f" in
-      /*) abs="$(realpath -m -- "$f" 2>/dev/null || echo "$f")" ;;
-      *)  abs="$(realpath -m -- "$REPO_ROOT/$f" 2>/dev/null || echo "$REPO_ROOT/$f")" ;;
+  local f="$1" abs norm seg rest
+  # Anchor relative paths at REPO_ROOT; keep absolutes as-is.
+  case "$f" in
+    /*) abs="$f" ;;
+    *)  abs="$REPO_ROOT/$f" ;;
+  esac
+  # Collapse '.' and '..' via a string stack (no arrays -> bash-3.2 + set -u safe).
+  norm=""
+  rest="$abs"
+  while [[ -n "$rest" ]]; do
+    seg="${rest%%/*}"
+    if [[ "$rest" == */* ]]; then rest="${rest#*/}"; else rest=""; fi
+    case "$seg" in
+      ''|.) : ;;                 # skip empty (leading/double slash) and '.'
+      ..)   norm="${norm%/*}" ;; # pop the last kept segment (upward)
+      *)    norm="$norm/$seg" ;; # push
     esac
-    if [[ "$abs" != "$repo_canon" && "$abs" != "$repo_canon"/* ]]; then
-      return 1  # realpath-resolved target escapes the repo
-    fi
+  done
+  if [[ -z "$norm" ]]; then norm="/"; fi
+  # Containment: the normalized target must equal REPO_ROOT or sit under REPO_ROOT/.
+  if [[ "$norm" != "$REPO_ROOT" && "$norm" != "$REPO_ROOT"/* ]]; then
+    return 1
   fi
   return 0
 }

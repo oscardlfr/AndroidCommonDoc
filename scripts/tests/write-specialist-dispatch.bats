@@ -252,3 +252,17 @@ else:
   [ "$status" -eq 2 ]
   [[ "$output" == *"outside the repository root"* ]]
 }
+
+@test "WSD-15 FAIL: --file with mid-path escape (foo/../../bar) exits 2 and writes nothing (macOS/BSD portability, Codex)" {
+  # foo/../../bar is NOT absolute and does NOT start with '..', so the fast lexical pre-checks
+  # never fired — the old realpath -m path (absent on macOS/BSD) let it through with status=0.
+  # Portable lexical normalization must collapse the mid-path '..' and reject the escape.
+  _seed_plan "$WAVE_SLUG"
+  run bash -c "cd '$PROJ' && printf 'task\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --architect arch-testing --specialist test-specialist \
+    --file foo/../../bar --slug '$WAVE_SLUG'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"outside the repository root"* ]]
+  # No dispatch written for an out-of-repo target.
+  [ ! -d "$PROJ/.planning/wave-$WAVE_SLUG/specialist-dispatches/test-specialist" ]
+}
