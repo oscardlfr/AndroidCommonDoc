@@ -3,10 +3,12 @@
 # Tests for manifest SHA-256 parity between .claude/registry/agents.manifest.yaml
 # and setup/agent-templates/*.md frontmatter.
 #
-# Scenarios (from BL-W42 PR3 PLAN):
-#   1. Clean tree post-rehash → PASS
-#   2. Dirty template frontmatter (insert comment line) without rehash → FAIL (drift detected)
-#   3. After revert → PASS
+# Scenarios:
+#   1. Clean tree post-rehash → PASS (reads live templates read-only)
+#   2. Dirty template frontmatter (isolated temp copy) without rehash →
+#      FAIL (drift detected); live template on disk never modified
+#   3. Hygiene: dirtying the temp copy leaves the live git worktree unchanged
+#   4. After revert (in the temp copy) → PASS
 #
 # Hash algorithm mirrors mcp-server/src/registry/template-generator.ts:
 #   - Extract YAML block between first two `---` markers (BOM stripped, CRLF→LF)
@@ -18,7 +20,19 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 MANIFEST="$PROJECT_ROOT/.claude/registry/agents.manifest.yaml"
 TEMPLATES_DIR="$PROJECT_ROOT/setup/agent-templates"
-CANARY_TEMPLATE="$PROJECT_ROOT/setup/agent-templates/toolkit-specialist.md"
+LIVE_CANARY_TEMPLATE="$PROJECT_ROOT/setup/agent-templates/toolkit-specialist.md"
+
+setup() {
+  WORK_DIR="$(mktemp -d)"
+  CANARY_TEMPLATE="$WORK_DIR/toolkit-specialist.md"
+  if [ -f "$LIVE_CANARY_TEMPLATE" ]; then
+    cp "$LIVE_CANARY_TEMPLATE" "$CANARY_TEMPLATE"
+  fi
+}
+
+teardown() {
+  rm -rf "${WORK_DIR:-}"
+}
 
 # Compute frontmatter SHA-256 for a template file, mirroring the TS algorithm.
 # Strips \r from output to handle MSYS2/Windows subprocess capture.
@@ -81,6 +95,22 @@ get_manifest_sha() {
   list_agents_with_sha | awk -v a="$agent" '$1 == a { print $2; exit }'
 }
 
+# Insert a sentinel comment line after the opening `---` frontmatter fence,
+# simulating an unrehashed frontmatter edit. Operates in-place on whatever
+# path is given — tests pass the WORK_DIR temp copy, never the live file.
+dirty_template() {
+  local template_path="$1"
+  python3 - "$template_path" <<'PYEOF'
+import sys
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    content = f.read()
+lines = content.split("\n")
+lines.insert(1, "# dirty-sentinel-bats-test")
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    f.write("\n".join(lines))
+PYEOF
+}
+
 # ── Tests ────────────────────────────────────────────────────────────────────
 
 @test "clean tree: all manifest sha256 baselines match on-disk template frontmatter" {
@@ -116,24 +146,33 @@ get_manifest_sha() {
   expected_sha=$(get_manifest_sha "toolkit-specialist")
   [ -n "$expected_sha" ] || skip "toolkit-specialist has no sha baseline in manifest"
 
-  # Dirty the frontmatter by inserting a comment line after the opening `---`.
-  python3 - "$CANARY_TEMPLATE" <<'PYEOF'
-import sys
-with open(sys.argv[1], "r", encoding="utf-8") as f:
-    content = f.read()
-lines = content.split("\n")
-lines.insert(1, "# dirty-sentinel-bats-test")
-with open(sys.argv[1], "w", encoding="utf-8") as f:
-    f.write("\n".join(lines))
-PYEOF
+  local tree_before
+  tree_before="$(git -C "$PROJECT_ROOT" status --porcelain)"
+
+  dirty_template "$CANARY_TEMPLATE"
 
   local computed_sha
   computed_sha=$(compute_sha "$CANARY_TEMPLATE")
 
-  # Always revert before asserting
-  git -C "$PROJECT_ROOT" checkout -- "$CANARY_TEMPLATE"
+  local tree_after
+  tree_after="$(git -C "$PROJECT_ROOT" status --porcelain)"
 
   [ "$computed_sha" != "$expected_sha" ]
+  [ "$tree_before" = "$tree_after" ]
+}
+
+@test "hygiene: dirtying the temp copy leaves the live git worktree unchanged" {
+  [ -f "$CANARY_TEMPLATE" ] || skip "toolkit-specialist template not found"
+
+  local tree_before
+  tree_before="$(git -C "$PROJECT_ROOT" status --porcelain)"
+
+  dirty_template "$CANARY_TEMPLATE"
+
+  local tree_after
+  tree_after="$(git -C "$PROJECT_ROOT" status --porcelain)"
+
+  [ "$tree_before" = "$tree_after" ]
 }
 
 @test "reverted template: sha parity restored after revert" {
@@ -142,6 +181,11 @@ PYEOF
   local expected_sha
   expected_sha=$(get_manifest_sha "toolkit-specialist")
   [ -n "$expected_sha" ] || skip "toolkit-specialist has no sha baseline in manifest"
+
+  dirty_template "$CANARY_TEMPLATE"
+
+  # Revert-in-temp — CANARY_TEMPLATE lives in WORK_DIR, never the live tree.
+  cp "$LIVE_CANARY_TEMPLATE" "$CANARY_TEMPLATE"
 
   local computed_sha
   computed_sha=$(compute_sha "$CANARY_TEMPLATE")
