@@ -22,7 +22,7 @@ Recommended wave sequence from `.planning/harness-realignment-deep-audit-plan.md
 - **Wave 5 — Portable Ingestion + Wave 38 Content** (DOC for pure content; HARNESS if ingestion mechanics/templates change) — make the ingestion loop portable, then process the deferred Wave 38 content (below) through the corrected loop.
 - **Wave 6 (optional) — Topology Pilot** (DOC or HARNESS depending on outcome) — measure when Claude-rich background peers are worth using versus single-use/disk-only execution.
 
-**Sequencing**: next executable wave is Wave 0 (this one); recommended minimum Waves 0-5; Wave 6 is optional hardening after Wave 5. Do not start Wave 1 or Wave 38 work in this wave.
+**Sequencing**: Wave 0 is this ledger reconciliation; after it lands, **Wave 1 — Runtime/Topology Contract Realignment is the next active executable harness wave**. Recommended minimum Waves 0-5; Wave 6 is optional hardening after Wave 5.
 
 **Source**: `.planning/harness-realignment-deep-audit-plan.md` (local, gitignored).
 
