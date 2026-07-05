@@ -1,6 +1,6 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-07-03; live-tree-write-bats-hygiene QG PASS, pending review/merge (Phase-B closeout, no merge this wave); RTK template sweep remains deferred pending separate approval
+> **Last updated**: 2026-07-04; live-tree-write-bats-hygiene (#233, `4aac9ef`) and runtime-topology-disk-first-binding (#232, `f301486`) are both MERGED to develop; the Harness Realignment Sequence (Wave 0 = this reconciliation) is now the active track ahead of Wave 38; RTK template sweep remains deferred pending separate approval
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
@@ -10,7 +10,38 @@
 
 The in-repo root fix for unreliable quality-gater completion messages is already shipped: poll-able `qg-result.json` + heartbeat/session-health recovery. Remaining work is an upstream repro/report for the experimental agent-teams notification drop. This is **not** a blocker for the QG harness and should not drive another local harness wave unless a new in-repo failure appears.
 
-### Wave 38 — Ingestion bundle (LOW urgency, ~2-4h)
+### Harness Realignment Sequence (active track, ahead of Wave 38)
+
+Recommended wave sequence from `.planning/harness-realignment-deep-audit-plan.md` (local, gitignored) to reconcile the harness's Claude-first legacy with its shipped disk-first portable floor:
+
+- **Wave 0 — Harness State Ledger Reconciliation** (this wave; DOC unless implementation files end up touched) — make the ledger honest before new harness work starts. No SHIPPED stamp — this is the ledger update itself, not a shipped feature.
+- **Wave 1 — Runtime/Topology Contract Realignment** (DOC if docs-only; HARNESS if setup templates or `.claude/agents` mirrors change) — **NEXT ACTIVE WAVE**; make every orchestration doc describe one coherent model: portable disk floor plus optional Claude-rich accelerators.
+- **Wave 2 — Portable Coordination Artifact Layer** (HARNESS) — implement the ADR-001 disk-inbox fallback so non-Claude runtimes can coordinate without SendMessage.
+- **Wave 3 — Phase-Orchestration Restoration** (HARNESS) — restore "living system by phases" on top of the portable contract.
+- **Wave 4 — QG/macOS/Local-CI Parity Hardening** (HARNESS) — make local QG on this Mac honest and reproducible without ad hoc per-wave explanations.
+- **Wave 5 — Portable Ingestion + Wave 38 Content** (DOC for pure content; HARNESS if ingestion mechanics/templates change) — make the ingestion loop portable, then process the deferred Wave 38 content (below) through the corrected loop.
+- **Wave 6 (optional) — Topology Pilot** (DOC or HARNESS depending on outcome) — measure when Claude-rich background peers are worth using versus single-use/disk-only execution.
+
+**Sequencing**: Wave 0 is this ledger reconciliation; after it lands, **Wave 1 — Runtime/Topology Contract Realignment is the next active executable harness wave**. Recommended minimum Waves 0-5; Wave 6 is optional hardening after Wave 5.
+
+**Source**: `.planning/harness-realignment-deep-audit-plan.md` (local, gitignored).
+
+### Realignment follow-ups (Wave 4 — QG/macOS parity)
+
+Specific findings enumerated in `.planning/harness-realignment-deep-audit-plan.md` (Wave 0 scope block) to be addressed under Wave 4 — QG/macOS/Local-CI Parity Hardening, above:
+
+- **BL-W4-1** (OPEN, 2026-07-04) — qg-path-audit Class-parser anchoring: `qg-path-audit.sh` extracts the first bold `**Class**:` marker anywhere in `PLAN.md`, not the one under `### Wave Class`; can false-fail detailed plans.
+- **BL-W4-2** (OPEN, 2026-07-04) — qg-doc-validators `ANDROID_COMMON_DOC` propagation: `qg-doc-validators.sh` accepts `--toolkit-root` but does not export `ANDROID_COMMON_DOC` to the vitest subprocess; structure check fails without the env var exported even when `--toolkit-root` is passed.
+- **BL-W4-3** (OPEN, 2026-07-04) — validate-agent-templates Bash 3.2 policy: macOS ships Bash 3.2 by default; `validate-agent-templates.sh --check tool-body-xref` fails on `declare -A TOOL_PATTERNS` (`TeamCreate: unbound variable`) — needs an explicit compatibility policy (portable Bash 3.2 rewrite, or a fail-closed probe that routes to modern bash without silent skip).
+- **BL-W4-4** (OPEN, 2026-07-04) — qg-result delta-honest semantics: tighten what "0-new" / accepted-harness-gap means for `qg-result.json` `status:fail` outcomes so local pre-existing failures don't require a manual per-wave explanation.
+- **BL-W4-5** (AUDITED — NOT A BUG, 2026-07-04) — `.androidcommondoc/bats-result.*.env` collision: audited as a non-issue — producer names are unique per run, the consumer validates HEAD + started_at + max, and both rejection paths are tested. Originally flagged as a "multi-agent handoff collision risk" in `project_wave_live_tree_write_bats_hygiene_shipped.md`. Two optional LOW-severity hardening notes recorded as non-blocking.
+- **BL-W4-6** (OPEN, 2026-07-04) — validate-doc-update root-target confinement: for root-level markdown such as `BACKLOG.md`, docsRoot resolution can walk up to `/` and duplicate detection may traverse the whole filesystem / trigger permission prompts / hang. Fix by rejecting or fast-pathing non-docs targets, bounding the duplicate scan to the project `docs/` root, and adding a regression proving `BACKLOG.md` returns quickly without scanning `/`. (Concrete cause found this wave; refines D9.)
+
+**Source**: `.planning/harness-realignment-deep-audit-plan.md` (Wave 0 scope + Wave 4 scope), `project_wave_live_tree_write_bats_hygiene_shipped.md`.
+
+### Wave 38 — Ingestion bundle (LOW urgency, ~2-4h) — DEFERRED to Harness Realignment Wave 5
+
+Content deferred — not the next harness wave. Will be processed via **Wave 5 (Portable Ingestion + Wave 38 Content)** of the Harness Realignment Sequence above, once the ingestion loop is made portable, not executed standalone.
 
 | ID | Item |
 |----|------|
@@ -78,7 +109,7 @@ Core goal of all BL-W47-prep-X waves. Redesigns the wave harness for resilience,
 - **Ex-PR6 — HOLD ack-checkpoint**: blocked on OQ10 (checkpoint-density decision); own wave.
 - **Topology Pilot — subagent-first wave class**: deserves its own *measured* wave (peer-team vs subagent-first comparison); DO-ON-MAC preferred. NOT the same as bl-w47-tail's runtime-necessity subagent adaptation.
 - **Council design implementation**: explicitly next-iteration (user's sole deferral, Gate record item 4).
-- **D9** (LOW) — `validate-doc-update` perf: avg 160s/call; MCP perf issue, not harness-critical; owner: doc-updater domain.
+- **D9** (LOW) — `validate-doc-update` perf: avg 160s/call; MCP perf issue, not harness-critical; owner: doc-updater domain. **Root cause identified 2026-07-04 (Codex audit): target-confinement bug — root-level markdown resolves docsRoot toward `/` and scans the whole filesystem; refined/superseded by BL-W4-6 (Realignment follow-ups).**
 - **Dead-skill pruning** (LOW) — 46/61 skills at 0.94% traffic (Part E #17); owner needed.
 
 **Sub-findings from bl-w47-prepr-proof** (deferred, user-consented 2026-06-15):
@@ -154,29 +185,29 @@ against the manifest (warn-only).
 
 **Source**: BL-W47-prep-22 planning, 2026-05-31.
 
-## Platform Shift (MacBook Pro M5 Max migration) — STALE (date passed; home model UNDECIDED)
+## Platform Shift (MacBook Pro M5 Max migration) — RESOLVED — macOS migration shipped 2026-06-01
 
-> ⚠️ **STALE (flagged 2026-06-21)**: the ~2026-06-07 target passed — the harness still runs on **Windows/win32** today. macOS is *available* for ad-hoc tasks, **but the switch is NOT decided**: the real model — *Windows-primary + Mac-available* **vs** an *effective migration* — is open. Do NOT read items below as "abandoned" or "still planned".
+> **RESOLVED (2026-07-04)**: two-phase outcome — do not read this as a flat "target met" or "still undecided". **Environment/hardware readiness** was met on schedule: macOS migration shipped 2026-06-01 (`project_macos_migration_shipped.md`), inside the original ~2026-06-01–06-07 window. **Operational switch** to macOS-primary daily-driver harness use was still pending as of this section's own 2026-06-21 STALE flag, which correctly reported continued Windows/win32 harness operation at that date. The switch has *since* completed — confirmed by continuous macOS-native harness operation across PRs #227-#233 (2026-06-23 through 2026-07-03: Homebrew, zsh, JDK 21, trufflehog-via-Homebrew, macOS/BSD `realpath -m` fixes) with zero Windows-specific activity in that span. No single record pins the exact switchover date between 06-21 (last known Windows) and 06-23 (first confirmed macOS-native PR, #227) — none is fabricated here.
 >
-> **Follow-up (filed 2026-06-21, owner: user)**: decide the harness home model before acting on any item in this section. No mass re-home of Windows-specific items until that decision (deliberately out of scope for the `qg-reliability-root-fix` wave).
+> The harness now runs natively on macOS/darwin. The home-model decision (Windows-primary + Mac-available vs. effective migration) is resolved: effective migration, operationally macOS-primary as of ~2026-06-23. Windows-specific DIE items below are confirmed dead; RE-EVAL items below are reframed as concrete Mac-env follow-ups.
 
-**Target (original, NOT met)**: ~2026-06-01 to ~2026-06-07 (≤1 week from filing).
+**Target (environment ready on schedule 2026-06-01; operational switch to macOS-primary completed ~2026-06-23)**: ~2026-06-01 to ~2026-06-07 (≤1 week from filing).
 **Trigger**: Hardware migration off Windows + MSYS/Git-Bash environment to native macOS.
 
-### Items that DIE with migration (no follow-up needed)
+### Items that DIE with migration (no follow-up needed — confirmed dead, operational switch complete)
 
 - **SSL/PKIX Windows-ROOT trust store workaround** — JVM trust chain mismatch resolved by `-Djavax.net.ssl.trustStoreType=Windows-ROOT` flag. Irrelevant on Mac (default keychain trust).
 - **Backslash heredoc Windows path gap** (`SF-prep-19-A`) — MSYS Bash mangles `cat <<'EOF' > C:\Users\...\verdict.md`. Native macOS bash/zsh: no such issue.
 - **MSYS path quirks** — `/c/` prefixes, cygdrive translation, `/tmp` vs `C:\Users\...\Temp` divergence. All gone on Mac.
 - **.ps1 hooks** — never invoked outside PowerShell; prune from settings.json post-migration.
 
-### Items needing RE-EVAL on Mac (assess post-migration)
+### Mac-env follow-ups (post-migration status, reframed from "RE-EVAL on Mac")
 
-- Shell defaults — zsh is macOS default; verify all bats + shell hooks work under zsh quirks.
-- Gradle truststore — likely zero-config on Mac (keychain trust); confirm by attempting one full build without flags.
-- bats runner — confirm `scripts/tests/*.bats` execution under macOS bats-core (Homebrew install).
-- Xcode/iOS targets — newly available. L2 consumer projects can finally compile iOS/macOS targets. Schedule smoke-test wave once core toolchain verified.
-- `~/.gradle/gradle.properties` — re-create empty on Mac (don't copy Windows-specific flags).
+- Shell defaults — zsh is macOS default; verify all bats + shell hooks work under zsh quirks. **CONFIRMED**: current machine runs zsh as default shell; broader "all bats + shell hooks" zsh-quirk verification still open.
+- Gradle truststore — likely zero-config on Mac (keychain trust); confirm by attempting one full build without flags. Still open — not yet re-verified.
+- bats runner — confirm `scripts/tests/*.bats` execution under macOS bats-core (Homebrew install). **CONFIRMED** (`feedback_macos_build_toolchain.md`): L0 bats needs GNU userland on PATH (`~/.local/gnubin-l0`) — not zero-config out of the box.
+- Xcode/iOS targets — newly available. L2 consumer projects can finally compile iOS/macOS targets. Schedule smoke-test wave once core toolchain verified. Still open — no smoke-test run yet; do not treat as confirmed.
+- `~/.gradle/gradle.properties` — re-create empty on Mac (don't copy Windows-specific flags). Still open — not yet re-verified.
 
 ### Migration playbook reference
 
@@ -191,8 +222,8 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Shipped (recent)
 
-- **live-tree-write-bats-hygiene** (2026-07-03) — QG PASS (push-proof.json + verify-proof green @ b966499; Phase-B closeout re-minted at final HEAD; full Bats 1676 ok / 71 pre-existing local-env not-ok = 0 new; targeted manifest-sha-parity.bats 4/4; mcp-server node 2602/2602; secret-scan/registry-hash/doc-validators PASS). Pushed from `feature/live-tree-write-bats-hygiene`; pending review/merge. Isolates the manifest-sha-parity.bats "dirty template" test to a mktemp temp copy — live tracked template never mutated, git-checkout revert removed (load-bearing under set -e) — plus a whole-worktree hygiene regression; targeted 4/4 green. Copilot-parity live-tree-write half already resolved — PR #228. — `project_wave_live_tree_write_bats_hygiene_parked.md` (→ shipped-memory on merge)
-- **runtime-topology-disk-first-binding** (2026-07-03) — QG PASS (`push-proof.json` + `verify-proof` green; the `qg-result.json` mechanical fail on the 71 pre-existing **local-env** Bats failures is an accepted harness-gap — `emit-qg-result.sh` has no delta-honest mode — with **0 new** wave-caused failures, CI-green on parent `f6c78bd` PR #231). Pushed from `feature/runtime-topology-disk-first-binding`; pending review/merge. Closes the specialist↔architect binding failure class (`project_specialist_architect_binding_enforcement_queued`): new `scripts/sh/write-specialist-dispatch.sh` (dispatch-artifact writer — JSON, HEAD + PLAN-sha256 bound, out-of-repo `--file` rejected, `doc-updater` rejected, `--bash-only`); `write-verdict.sh` PREP now emits `**PREP-HEAD**`+`**PLAN_SHA256**` (fail-closed on missing PLAN); `premature-execution-gate.js` = ancestry-bound (`git merge-base --is-ancestor`) PREP+dispatch currency + `files[]`-union scope + out-of-repo block (up-front + ignore out-of-repo entries) + `doc-updater` PREP-only exemption; new `docs/agents/specialist-dispatch-protocol.md`. 3 architects VERIFY-FINAL. Review-driven fixes: F1 ancestry (architect PREP catch), Codex P1/P2 + the out-of-repo escape closure. Real trufflehog 3.95.8 secret-scan PASS. — `project_wave_runtime_topology_disk_first_binding_parked.md` (→ shipped-memory on merge)
+- **live-tree-write-bats-hygiene** (2026-07-03) — QG PASS (push-proof.json + verify-proof green @ cebd169; Phase-B closeout re-minted at final HEAD; full Bats 1676 ok / 71 pre-existing local-env not-ok = 0 new; targeted manifest-sha-parity.bats 5/5; mcp-server node 2602/2602; secret-scan/registry-hash/doc-validators PASS). Pushed from `feature/live-tree-write-bats-hygiene`; MERGED to develop `4aac9ef` (final branch HEAD `cebd169`). Isolates the manifest-sha-parity.bats "dirty template" test to a mktemp temp copy — live tracked template never mutated, git-checkout revert removed (load-bearing under set -e) — plus a whole-worktree hygiene regression; targeted 5/5 green. Copilot-parity live-tree-write half already resolved — PR #228. — `project_wave_live_tree_write_bats_hygiene_shipped.md`
+- **runtime-topology-disk-first-binding** (2026-07-03) — QG PASS (`push-proof.json` + `verify-proof` green; the `qg-result.json` mechanical fail on the 71 pre-existing **local-env** Bats failures is an accepted harness-gap — `emit-qg-result.sh` has no delta-honest mode — with **0 new** wave-caused failures, CI-green on parent `f6c78bd` PR #231). Pushed from `feature/runtime-topology-disk-first-binding`; MERGED to develop `f301486` (final branch HEAD `4818ed6`). Closes the specialist↔architect binding failure class (`project_specialist_architect_binding_enforcement_queued`): new `scripts/sh/write-specialist-dispatch.sh` (dispatch-artifact writer — JSON, HEAD + PLAN-sha256 bound, out-of-repo `--file` rejected, `doc-updater` rejected, `--bash-only`); `write-verdict.sh` PREP now emits `**PREP-HEAD**`+`**PLAN_SHA256**` (fail-closed on missing PLAN); `premature-execution-gate.js` = ancestry-bound (`git merge-base --is-ancestor`) PREP+dispatch currency + `files[]`-union scope + out-of-repo block (up-front + ignore out-of-repo entries) + `doc-updater` PREP-only exemption; new `docs/agents/specialist-dispatch-protocol.md`. 3 architects VERIFY-FINAL. Review-driven fixes: F1 ancestry (architect PREP catch), Codex P1/P2 + the out-of-repo escape closure. Real trufflehog 3.95.8 secret-scan PASS. — `project_wave_runtime_topology_disk_first_binding_shipped.md`
 - **hook-control-plane-hardening** (2026-06-24) — MERGED @ `0748285` (squash PR #230; branch final HEAD `4a3d10f`). Closed H2 control-plane residue: explicit architect verdict/cross-verify path contract (`arch-*-verdict.md` / `arch-*-cross-verify.md`), shared CommonJS hook helper for slug/YAML utilities, bash `wave-slug.sh` resolver sourcing in verdict/bundle writers, git-hook installer copying `.git/hooks/lib/wave-slug.sh`, retired `team-completeness-gate` tombstone pinned no-op/no grace-clock writes, hook manifest/docs drift updated, and stale suffixed persistent control-plane spawns blocked while legitimate specialist overflow remains allowed. Fix-forward: `agent-spawn-validator` block JSON now exits from the stdout write callback before exit 2. Regression: targeted hook suite 28/28, full Bats 1702/1702, qg-path-audit/doc validators/registry integrity/secret scan, 3 architects VERIFY-FINAL, formal QG + verify-proof. CI 24/24 + CodeRabbit SUCCESS + Codex clean. Deferred deliberately: RTK template/registry sweep requires separate STOP, manifest, template ceremony, and approval. — `project_wave_hook_control_plane_hardening_shipped.md`
 - **harness-test-runner-hygiene** (2026-06-24) — MERGED @ `2a852b2` (squash PR #228; branch final HEAD `e248874b`). Closed H1 test-runner hygiene bundle: `run-bats.sh` now defaults to the `scripts/tests` directory target while preserving `1..N` + `ok+not_ok==N` completeness and proving explicit glob == directory == CI count (`1688`); CI workflows/docs use the directory target with no second fragile glob path; `copilot-parity --project-root <temp> --fix` routes through `copilot-adapter.sh --project-root`, cleans temp, and leaves live `setup/copilot-templates/` untouched; adapter now validates missing/flag-valued `--project-root`; `wave-phase-gate.js` rejects explicit env slugs (`develop`/`master`/`main`/`HEAD`) without branch fallback. Regression: WPG env-reject 2/2, targeted wrapper 53/53, full Bats 1688/1688, MCP vitest/lint, secret scan, path audit. GitHub exposed 24/24 green check contexts + CodeRabbit clean + Codex clean. — `project_wave_harness_test_runner_hygiene_shipped.md`
 - **qg-local-ci-security-closure** (2026-06-23) — MERGED @ `2725eeb` (squash PR #227; QG-HEAD `3da7395`). Closed H1 local-CI/security parity bundle: local QG now blocks agent-template size drift via inline `emit-push-proof.sh`/`.ps1` template-size gate; `/pre-pr`/MCP `scan-secrets` now fail-closes present scanner errors, malformed JSONL, empty/non-JSON, and CRITICAL/HIGH findings (`SCANNER_ERROR` / `SECRETS_FOUND`); committed manifest parity proved composed by existing clean-tree + manifest-sha bats. Regression coverage: TSZ-1..9, SSS-1..4, `scan-secrets.test.ts` 16/16 with `vi.mock(runScript)`. CI 25/25 + CodeRabbit clean + Codex clean. Deferred deliberately: run-bats Windows default glob and copilot-parity live-tree-write isolation. — `project_wave_qg_local_ci_security_closure_shipped.md`
