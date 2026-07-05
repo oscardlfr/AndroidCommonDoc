@@ -32,8 +32,8 @@ The main agent (when orchestrating a session) orchestrates the project: plan sco
 > **⛔ HARD GATE — Session setup blocks ALL work.**
 > If you receive a user task before completing session setup: RESPOND ONLY with "Setting up session — dispatching core subagents first."
 > DO NOT plan. DO NOT spawn agents. DO NOT respond to the user task.
-> Dispatch all required subagents per the wave CLASS floor + run pre-flight checklist FIRST.
-> If ANY pre-flight checkbox (1-8) is NO → same response, same restriction, fix it before anything else.
+> Dispatch the subagents the wave CLASS floor requires — selectively, skipping roles with no work (see [tl-session-setup](tl-session-setup.md)) — + run the pre-flight checklist FIRST.
+> If a role the CLASS floor requires is missing → same response, same restriction, fix it before anything else.
 
 > ⛔ SESSION CLOSURE GATE — Acceptance criteria block session end.
 > NEVER close session or report "done" when acceptance criteria are failing.
@@ -45,7 +45,7 @@ The main agent (when orchestrating a session) orchestrates the project: plan sco
 
 ### Per-Session Gate
 
-**Per-session gate**: Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from context-provider in this session. The hook enforces this mechanically — your first search-type tool call will be blocked until CP has been consulted. Wave slug propagation + quality-gate sentinel location: see [tl-session-setup § Wave Slug Propagation](tl-session-setup.md#wave-slug-propagation-find-18-fix-bl-w42-pr1) (FIND-17/18 fix).
+**Per-session gate (Claude adapter)**: When running under the Claude adapter with a live context-provider peer, before your FIRST Grep, Glob, or Bash search call you must have received a SendMessage response from context-provider in this session; the hook enforces this mechanically. A portable/single-use runtime obtains the context-provider oracle differently (single-use dispatch or a disk pattern-index) — see [agent-core-rules §1](agent-core-rules.md). Wave slug propagation + quality-gate sentinel location: see [tl-session-setup § Wave Slug Propagation](tl-session-setup.md#wave-slug-propagation-find-18-fix-bl-w42-pr1) (FIND-17/18 fix).
 
 ### L0 Mechanical Floor Consultation Checklist (MANDATORY)
 
@@ -76,7 +76,7 @@ You are FORBIDDEN from doing these things directly:
 - **FORBIDDEN**: Writing or editing ANY file (code, tests, config)
 - **FORBIDDEN**: Running builds, tests, or compilation commands
 - **FORBIDDEN**: Spawning agents via Bash + `claude` CLI
-- **FORBIDDEN**: Using general-purpose Agent() to write docs — use `SendMessage(to="doc-updater")` ALWAYS
+- **FORBIDDEN**: Using a general-purpose agent to write docs — route doc writes to the doc-updater role (`SendMessage(to="doc-updater")` if it is a live peer, else dispatch it as a single-use `Agent(subagent_type="doc-updater")`)
 
 ### ALLOWED Actions (the ONLY things you can do)
 
@@ -132,11 +132,11 @@ Why: An L2 consumer session (2026-04-18) — the main agent dispatched grep work
 
 **Project slug**: derive from the project root directory name, lowercased with hyphens. Examples: `my-app`, `my-kmp-libs`, `androidcommondoc`. The slug determines the wave artifact directory (`.planning/wave-{slug}/`).
 
-### Session Start: Core Subagent Dispatch (mandatory)
+### Session Start: Core Subagent Dispatch
 
 **FIRST thing when session starts** — before ANY planning or unrelated Agent():
 
-Dispatch the 6 core roles as concurrent `Agent` subagents. These may run as foreground single-use subagents or, when the runtime supports it, as background peers — both models are supported. The **load-bearing contract** is disk artifacts: each role writes its result to `.planning/wave-{slug}/` and the orchestrator reads from there. Background peers additionally communicate via SendMessage; single-use subagents return their result directly.
+Dispatch the core roles the wave's CLASS floor requires (HARNESS: 3 architects + specialists + QG; DOC: declared architects + QG; FAST-PATH: QG only — see [main-agent-orchestration-guide](main-agent-orchestration-guide.md)). Spawn selectively — skip roles with no work (see [tl-session-setup](tl-session-setup.md)). In **Claude-rich mode** you MAY pre-spawn the standing core team upfront as an accelerator (the block below); in **portable/single-use mode** each role is dispatched per task. Either way the **load-bearing contract** is disk artifacts: each role writes its result to `.planning/wave-{slug}/` and the orchestrator reads from there. Background peers additionally communicate via SendMessage; single-use subagents return their result directly.
 
 ```
 # Foreground single-use dispatch (default — works in any runtime):
@@ -151,7 +151,7 @@ Agent(name="arch-integration", subagent_type="arch-integration", run_in_backgrou
 Agent(name="quality-gater", subagent_type="quality-gater", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/quality-gater.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. DORMANT until orchestrator activates for Phase 3.")
 ```
 
-These **six roles** are the session's core agents. When run as background peers they are always reachable via SendMessage; when run as single-use subagents the orchestrator dispatches a fresh instance per task and reads results from disk.
+These roles are the session's core agents (dispatch the ones the wave CLASS floor requires). When run as background peers they are reachable via SendMessage; when run as single-use subagents the orchestrator dispatches a fresh instance per task and reads results from disk.
 
 ### Phase 2 Core Specialists (dispatched when Phase 2 starts, NOT at session start)
 
@@ -188,12 +188,14 @@ See [tl-quality-doc-pipeline](tl-quality-doc-pipeline.md) for quality-gater retr
 See [tl-model-profiles](tl-model-profiles.md) for `.claude/model-profiles.json` structure, the four profiles (budget/balanced/advanced/quality), and the team-lead semantic gap (template `model: sonnet` but profile override to opus at runtime).
 
 ### Architect Dispatch Modes (MANDATORY — Bug #5 + Bug #6 fix)
-Every architect dispatch MUST include `scope_doc_path: .planning/PLAN-W{N}.md` and `mode: PREP` or `mode: EXECUTE`. Never hardcode `.planning/PLAN.md`. Full protocol: [arch-dispatch-modes](arch-dispatch-modes.md). Dispatch format: [tl-dispatch-topology § Architect Dispatch](tl-dispatch-topology.md#architect-dispatch--scope_doc_path--prepexecute-mode-wave-23).
+Every architect dispatch MUST include `scope_doc_path: .planning/wave-<slug>/PLAN.md` and `mode: PREP` or `mode: EXECUTE`. Never hardcode `.planning/PLAN.md`. Full protocol: [arch-dispatch-modes](arch-dispatch-modes.md). Dispatch format: [tl-dispatch-topology § Architect Dispatch](tl-dispatch-topology.md#architect-dispatch--scope_doc_path--prepexecute-mode-wave-23).
 
 ### Token Meter + Retrospective (MANDATORY at wave end)
-At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatched-message-count × avg-tokens-per-message` (order-of-magnitude; no precision needed), (2) write `.planning/wave{N}/retrospective.md` with wave number, steps completed, token estimate, and verdict outcomes (APPROVE/ESCALATE counts per architect). Threshold: if estimate >80% of model context window → flag to user and propose wave split. Full spec: [tl-verification-gates § Token Meter Gate](tl-verification-gates.md#token-meter-gate).
+At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatched-message-count × avg-tokens-per-message` (order-of-magnitude; no precision needed), (2) write `.planning/wave-<slug>/retrospective.md` with wave number, steps completed, token estimate, and verdict outcomes (APPROVE/ESCALATE counts per architect). Threshold: if estimate >80% of model context window → flag to user and propose wave split. Full spec: [tl-verification-gates § Token Meter Gate](tl-verification-gates.md#token-meter-gate).
 
 ### Pre-Flight Checklist (MUST verify before dispatching architects)
+
+> Verify the roles the wave's CLASS floor requires. HARNESS needs 3 architects + specialists + QG; DOC needs declared architects + QG; FAST-PATH needs QG only (see [main-agent-orchestration-guide](main-agent-orchestration-guide.md)). Roles with no work are **SKIP**, not STOP (selective spawning). Treat each checkbox below as "YES, or SKIP if the CLASS floor does not require it."
 
 ```
 □ 1. context-provider dispatched (subagent or background peer)?    → YES or STOP
@@ -211,7 +213,7 @@ At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatche
 □ 13. toolkit-specialist?                → YES or SKIP (Phase 2 not started)
 ```
 
-**If ANY checkbox 1-8 is NO → STOP. Do not respond to user tasks. Do not plan. Fix the failing checkbox first, then re-verify ALL from the top.**
+**If a role the CLASS floor requires — plus #1 (context-provider oracle), #6 (quality-gater), #7 (context-provider consult), and #8 (planner, for non-trivial tasks) — is NO → STOP. Do not respond to user tasks. Do not plan. Fix it first, then re-verify from the top. Roles marked SKIP for lack of work are fine.**
 
 ### Planning Phase (EnterPlanMode gate)
 For non-trivial tasks:
@@ -220,7 +222,7 @@ For non-trivial tasks:
 
 **Hook enforcement (BL-W31.7-12)**: The hook `.claude/hooks/plan-mode-spawn-planner.js` mechanically blocks `ExitPlanMode` if planner has not been spawned via `Agent(subagent_type="planner")` during the current plan-mode session. Sentinel: `.planning/.plan-mode-planner-required`. Escape hatch: `CLAUDE_SKIP_PLANNER=1` env var (set BEFORE `EnterPlanMode`) for genuinely trivial work.
 
-3. Planner writes `.planning/PLAN.md` + `.planning/PLAN-W{N}.md` (planner is a subagent — outside plan mode scope, can write files normally)
+3. Planner writes `.planning/wave-<slug>/PLAN.md` (planner is a subagent — outside plan mode scope, can write files normally)
 4. Present plan summary to user as text output (team-lead needs no file writes during planning)
 5. **On user approval**: call `ExitPlanMode()`
 6. **⛔ MANDATORY Phase 2 Topology Activation Gate (Bug #8 — Wave 26 regression fix)**: AFTER `ExitPlanMode()` and BEFORE any architect EXECUTE dispatch:

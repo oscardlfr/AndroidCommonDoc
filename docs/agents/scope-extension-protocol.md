@@ -7,7 +7,7 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "Mechanical scope-extension gate: when architects hit out-of-scope blockers, request authorization via team-lead before committing. Hook at .claude/hooks/architect-scope-gate.js blocks Write/Edit calls on non-scoped files."
+description: "Scope-extension discipline: touching files outside the wave's declared scope requires orchestrator authorization first. Architect writes to non-verdict files are blocked by architect-self-edit-gate.js + architect-bash-write-gate.js (the earlier per-file architect-scope-gate.js is retired/superseded)."
 version: 1
 last_updated: "2026-04"
 assumes_read: tl-dispatch-topology, tl-verification-gates
@@ -15,7 +15,7 @@ assumes_read: tl-dispatch-topology, tl-verification-gates
 
 # Scope Extension Protocol
 
-When an architect needs to edit a file outside the current wave's declared scope, they MUST obtain explicit authorization from the team-lead before proceeding. The mechanical gate at `.claude/hooks/architect-scope-gate.js` enforces this — but the protocol defines the human-side workflow the gate is backing up.
+Touching a file outside the current wave's declared scope requires explicit authorization from the orchestrator (team-lead role) before proceeding. This is a **discipline for whoever performs edits** — specialists (scoped by their dispatch artifact's authorized `files[]`) and the orchestrator. Architects are separately barred from writing any non-verdict file by `architect-self-edit-gate.js` (see Companion Hooks), so for an architect the rule is stronger still: raise the out-of-scope finding in your verdict; do not attempt the edit. The earlier per-file `architect-scope-gate.js` — a scope-LIST gate for architects — is **retired**: it became redundant once `architect-self-edit-gate.js` blocked architect writes wholesale.
 
 ## Why This Exists
 
@@ -24,11 +24,11 @@ Wave 20 produced two violations where architects edited out-of-scope files silen
 - Pre-emptive `.gitattributes` addition (scope: registry only)
 - Option B row reorder in an unrelated doc
 
-Both were authorized retroactively. The pattern of "I inferred it was OK" erodes the wave boundary discipline that keeps scope creep measurable. The hook mechanically blocks silent violations; this doc defines the authorization workflow.
+Both were authorized retroactively. The pattern of "I inferred it was OK" erodes the wave boundary discipline that keeps scope creep measurable. The architect write-boundary hooks (see Companion Hooks) block architect edits mechanically; this doc defines the authorization workflow for the agents that do write.
 
 ## When Scope Extension Is Required
 
-Any file not listed in the current wave's "Scope files (machine-readable)" subsection in `.planning/PLAN.md`.
+Any file not listed in the current wave's "Scope files (machine-readable)" subsection in `.planning/wave-<slug>/PLAN.md`.
 
 | Scenario | Requires authorization? |
 |----------|------------------------|
@@ -64,37 +64,18 @@ SendMessage(to="team-lead", summary="scope extension request: {filename}", messa
 
 **Step 3** — After `AUTHORIZED` arrives, proceed. The escape hatch (`SCOPE_GATE_DISABLE=1`) may be granted at this point for urgent cases.
 
-## The Mechanical Gate
+## The Mechanical Enforcement
 
-`.claude/hooks/architect-scope-gate.js` is a PreToolUse hook that:
+The architect write-boundary is enforced by two wired `PreToolUse` hooks (see Companion Hooks), not by a per-file scope list:
 
-1. Intercepts `Write` and `Edit` tool calls
-2. Checks if the calling agent's `agent_type` starts with `arch-`
-3. Reads `.planning/PLAN.md` and parses the "Scope files (machine-readable)" section
-4. Compares the target file path against the parsed scope list
-5. Blocks the call with an error if the file is not in scope
+1. `architect-self-edit-gate.js` blocks any `Write`/`Edit` by an `arch-*` agent to anything other than its own `.planning/wave*/arch-*-verdict.md` / `arch-*-cross-verify.md`. Architects therefore cannot edit source or docs at all — in-scope or out.
+2. `architect-bash-write-gate.js` blocks the Bash write-bypass paths (heredoc, `sed -i`, redirect, `tee`) that could otherwise route around the first gate.
 
-The hook runs silently when the file IS in scope — no overhead on the happy path.
+The retired `architect-scope-gate.js` used to compare an architect's edit target against the PLAN.md "Scope files" list. Once `architect-self-edit-gate.js` forbade architect writes wholesale, that per-file check was redundant and was removed. Scope discipline for the agents that *do* write — specialists and the orchestrator — is carried by the dispatch artifact's authorized `files[]` and the human authorization protocol above.
 
-## Escape Hatch: `SCOPE_GATE_DISABLE=1`
+## Escape Hatch (retired)
 
-Set the env var to bypass the gate for a single session:
-
-```bash
-SCOPE_GATE_DISABLE=1 claude --agent arch-platform
-```
-
-Use ONLY when:
-- Team-lead has explicitly authorized the bypass in a SendMessage
-- The fix cannot wait for the normal authorization flow (e.g., CI is failing and blocking a deploy)
-
-**The bypass always writes an audit entry:**
-
-```
-.planning/scope-gate-bypasses.log
-```
-
-Each entry includes: ISO timestamp, `agent_type`, target file path, and the agent's stated reason. This log is reviewed at each wave close. Unexplained bypasses → escalation to user.
+The old `SCOPE_GATE_DISABLE=1` env bypass belonged to the retired `architect-scope-gate.js` and no longer has any effect. Architects have no self-edit bypass by design: an architect that needs a file changed raises it in its verdict, and the orchestrator (or a scoped specialist) makes the edit. Urgent cross-scope repairs go through the authorization protocol above, not an env flag.
 
 ## Scope Source Format
 
@@ -105,7 +86,7 @@ The gate parses bullet-list entries matching this pattern in PLAN.md:
 
 - `path/to/file.md`
 - `scripts/sh/example.sh`
-- `.claude/hooks/architect-scope-gate.js`
+- `.claude/hooks/premature-execution-gate.js`
 ```
 
 Rules:
@@ -121,10 +102,10 @@ The planner template owns this format contract. When adding a wave to PLAN.md, t
 **Correct flow:**
 
 ```
-arch-platform hits gate on docs/agents/agents-hub.md (not in scope)
+arch-platform finds docs/agents/agents-hub.md needs a hub pointer (not in scope)
+  → it cannot edit any file itself (architect-self-edit-gate); it raises the finding
   → SendMessage(to="team-lead", "scope extension request: agents-hub.md ...")
-  → team-lead responds: "AUTHORIZED — add hub pointer for scope-extension-protocol.md"
-  → arch-platform proceeds
+  → team-lead responds "AUTHORIZED" and dispatches a scoped specialist (or edits) to add it
 ```
 
 **Wrong — silent inference:**
@@ -154,17 +135,16 @@ arch-testing commits out-of-scope changes with scope change buried in a large di
 
 ## Companion Hooks (Architect Tool Boundary)
 
-`architect-scope-gate.js` is one of three companion hooks that mechanically enforce the architect-tool-boundary policy. All three are wired into `.claude/settings.json` under `PreToolUse`. Together they prevent architects from authoring code or docs through ANY tool path — architects detect, plan, and verify; specialists implement.
+Two wired `PreToolUse` hooks in `.claude/settings.json` enforce the architect-tool-boundary policy. Together they prevent architects from authoring code or docs through ANY tool path — architects detect, plan, and verify; specialists implement. (A third, `architect-scope-gate.js`, a per-file scope-list gate, was retired once the self-edit gate made it redundant — see The Mechanical Enforcement.)
 
 | Hook | Trigger | Blocks |
 |------|---------|--------|
-| `architect-scope-gate.js` | `PreToolUse` on `Write`/`Edit` | Out-of-scope file edits (this doc) |
 | `architect-self-edit-gate.js` | `PreToolUse` on `Write`/`Edit` | Any source/template edit by `arch-*` agents — only `.planning/wave*/arch-*-verdict.md` and `.planning/wave*/arch-*-cross-verify.md` allowed |
 | `architect-bash-write-gate.js` | `PreToolUse` on `Bash` | Bash bypass patterns: heredoc redirect, `sed -i`, `awk -i inplace`, `python -c open(...,'w')`, `python <<EOF` heredoc with `open(...,'w')`, `tee` to file, plain `>`/`>>` shell redirect. Exempt targets: `/tmp/*`, `$TMPDIR/*`, `/dev/null`, `/dev/std*`, `.planning/wave*/arch-*-verdict.md`, `.planning/wave*/arch-*-cross-verify.md`, `.androidcommondoc/audit-log.jsonl` |
 
 When designing a new architect-class agent, audit it against all three hooks: any tool the agent uses must satisfy each gate's contract.
 
-Test coverage lives in `scripts/tests/architect-self-edit-gate.bats` (7 tests) and `scripts/tests/architect-bash-write-gate.bats` (37 tests). The scope-gate test surface is integration-tested via the `scope-extension-protocol` Vitest suite.
+Test coverage lives in `scripts/tests/architect-self-edit-gate.bats` and `scripts/tests/architect-bash-write-gate.bats`. (The retired `architect-scope-gate.js` test surface was removed with the hook.)
 
 ## Relationship to Other Patterns
 

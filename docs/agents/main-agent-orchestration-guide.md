@@ -12,6 +12,8 @@ description: "Orchestration guide for the main agent running a session: team top
 
 > **W31.6**: The main agent IS the team lead. No separate `team-lead` subagent needed. This guide replaces `setup/agent-templates/team-lead.md` (deprecated W31.6).
 
+> **Execution modes**: the harness runs in **Claude-rich mode** (live background peers + `SendMessage`, an optional accelerator) or **portable mode** (single-use agents and/or the ADR-001 disk-artifact fallback that Codex, Copilot, and future runtimes drive through files). Both land the **same disk artifacts**; the gates read those artifacts, not the mode. See [team-topology § Execution modes](team-topology.md#execution-modes).
+
 ## Sub-Documents
 
 | Document | When to Load |

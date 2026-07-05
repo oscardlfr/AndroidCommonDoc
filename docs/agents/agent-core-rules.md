@@ -14,13 +14,15 @@ last_updated: "2026-04"
 
 # Agent Core Rules
 
-Universal behavioral rules for ALL session agents (context-provider, doc-updater, arch-*, quality-gater, dev specialists).
+Behavioral rules for session agents (context-provider, doc-updater, arch-*, quality-gater, dev specialists). Most are **portable** — they hold under any runtime because the load-bearing contract is disk artifacts. A few describe **Claude-adapter capabilities** (live background peers and `SendMessage`): the §1 CP gate, §3 SendMessage hygiene, and §6 stay-alive-peer rules apply when running under the Claude adapter. A portable or single-use runtime satisfies the same intent through disk artifacts; the portable equivalents belong to the portable coordination layer, not to any one engine.
 
-## 1. Per-Session CP Gate
+## 1. Per-Session CP Gate (Claude adapter)
 
-Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from context-provider in this session. The hook enforces this mechanically.
+When running under the Claude adapter (live background peers), before your FIRST Grep, Glob, or Bash search call you MUST have received a `SendMessage` response from context-provider in this session; the `context-provider-gate` hook enforces this mechanically.
 
 **Dev first action**: `SendMessage(to="context-provider", summary="gate ack")` — satisfies the gate for the session.
+
+This gate presumes a live context-provider peer reachable by `SendMessage`, so it is a Claude-runtime capability. A portable or single-use runtime with no live messaging obtains the same context-provider oracle through a single-use dispatch or a disk pattern-index artifact; the portable equivalent of this gate belongs to the portable coordination layer, not to any single engine.
 
 ## 2. Read Docs by Pointer, Never Inline
 
@@ -28,23 +30,23 @@ When referencing rules or patterns, point to the doc — do NOT copy content int
 
 - Patterns → `docs/` sub-docs
 - Memory → `~/.claude/projects/.../memory/`
-- Wave scope → `.planning/PLAN.md`
+- Wave scope → `.planning/wave-<slug>/PLAN.md`
 
-## 3. SendMessage Body ≤200 Tokens
+## 3. SendMessage Body ≤200 Tokens (Claude adapter)
 
-Every SendMessage body must be ≤200 tokens. Long context = context compression = lost rules. If you need to convey more, write to a file and send the path.
+When you coordinate via the `SendMessage` accelerator, every SendMessage body must be ≤200 tokens. Long context = context compression = lost rules. If you need to convey more, write to a file and send the path.
 
 ## 4. Scope-Extension Protocol
 
-Before committing ANY out-of-scope change, read `~/.claude/projects/.../memory/feedback_scope_extension_protocol.md`. Out-of-scope findings require SendMessage to team-lead with authorization request BEFORE committing. Silent out-of-scope commits are a hard violation.
+Before committing ANY out-of-scope change, read `~/.claude/projects/.../memory/feedback_scope_extension_protocol.md`. Out-of-scope findings require an authorization request to the orchestrator (team-lead role) BEFORE committing — via `SendMessage` under the Claude adapter, or the portable-mode equivalent (a request/approval artifact in the wave dir; the portable coordination layer defines the exact contract). Silent out-of-scope commits are a hard violation.
 
 ## 5. Wave Context Awareness
 
-At session start, read `.planning/PLAN.md` to understand current wave scope. Never act on a prior wave's objectives. If PLAN.md and team-lead dispatch disagree, SendMessage to team-lead with summary="PLAN-DISPATCH DRIFT" before proceeding.
+At session start, read the active wave's `.planning/wave-<slug>/PLAN.md` to understand current wave scope. Never act on a prior wave's objectives. If PLAN.md and the orchestrator's dispatch disagree, raise `PLAN-DISPATCH DRIFT` before proceeding — via `SendMessage` to the team-lead role under the Claude adapter, or a drift note in the wave dir in portable mode.
 
-## 6. Stay Alive
+## 6. Stay Alive (Claude-rich mode)
 
-Session peers (architects, context-provider, doc-updater, quality-gater) persist for the entire session. Do NOT exit after completing a task. Wait for the next SendMessage.
+When the orchestrator runs you as a live background peer (Claude-rich mode), persist for the entire session: do NOT exit after completing a task — wait for the next `SendMessage`. When you are dispatched as a single-use agent (portable/default mode), the opposite holds: land your result as a disk artifact and exit; the orchestrator reads the artifact. Both modes are valid — the load-bearing contract is the disk artifact, not the peer's liveness.
 
 ## 7. MCP Tools Before Bash
 

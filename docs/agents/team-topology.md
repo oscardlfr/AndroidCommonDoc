@@ -35,6 +35,15 @@ The project slug is derived from the project directory name (lowercased, hyphens
 
 Rules: (a) any multi-agent path MUST land its load-bearing result as a disk artifact; (b) gates verify those artifacts, not who/how many agents were spawned; (c) `TeamCreate`/`team_name`/named-team dirs are not required — a runtime that offers them may use them, but the harness does not depend on them; (d) messaging is progressive enhancement, never a completion dependency.
 
+## Execution modes
+
+The same disk contract runs in either mode — a wave produces identical disk artifacts either way.
+
+- **Claude-rich mode** — live background peers coordinated with `SendMessage` for speed: live cross-verify, operator visibility, phase-based collaboration. An optional accelerator over the floor.
+- **Portable mode** — single-use `Agent` subagents and/or the disk-artifact coordination fallback that any runtime (Codex, Copilot, a future engine) can drive purely through files. That fallback's contract is defined by [ADR-001](../adr/ADR-001-runtime-adapter-contract.md); this doc only names it as a mode.
+
+Neither mode changes what the gates read — the disk artifacts. Pick by runtime capability.
+
 ---
 
 ## Agent Roles
@@ -90,9 +99,9 @@ When a core specialist is busy and the architect needs parallel work:
 3. Extra specialist executes, returns result to orchestrator, orchestrator relays to architect
 4. After architect verifies → extra specialist dismissed
 
-**Named extra specialists (MANDATORY):** All overflow specialists MUST be named (`{specialist}-2`, `{specialist}-3`). Anonymous Agent() calls are FORBIDDEN — unnamed specialists are unreachable via SendMessage and invisible to type-keyed gates.
+**Named extra specialists (Claude-rich mode):** When overflow specialists run as background peers, name them (`{specialist}-2`, `{specialist}-3`) so an architect can reach them via SendMessage and type-keyed gates can see them — an anonymous `Agent()` peer is unreachable. In portable/single-use mode this does not apply: an anonymous single-use specialist lands its disk artifact and needs no name.
 
-**Architect-name-honoring (MANDATORY):** When an architect requests a specific specialist by name via SendMessage, the orchestrator MUST spawn that specialist with the requested name. The orchestrator MUST NOT substitute an anonymous or differently-named agent.
+**Architect-name-honoring (Claude-rich mode):** When an architect requests a specialist by name via SendMessage, honor that name so routing resolves — do not substitute a differently-named peer. Named-peer routing reliability is an optional accelerator (pending-evidence); the load-bearing contract is the specialist's disk artifact, not the peer name.
 
 ## Overview
 
@@ -129,8 +138,8 @@ Phase 3 — Quality Gate (quality-gater subagent)
 2. Planner queries context-provider for current state (via SendMessage if context-provider is a live background peer, or by reading its context bundle from disk)
 3. Planner reads architecture docs, specs, MODULE_MAP.md
 4. Planner produces plan with: scope, steps, architect assignments, dependencies, risks
-5. Planner writes plan to `.planning/PLAN.md` (disk artifact — authoritative)
-6. Planner notifies orchestrator: `"Plan ready: .planning/PLAN.md"` (via SendMessage if supported, or orchestrator polls the file)
+5. Planner writes plan to `.planning/wave-<slug>/PLAN.md` (disk artifact — authoritative)
+6. Planner notifies orchestrator: `"Plan ready: .planning/wave-<slug>/PLAN.md"` (via SendMessage if supported, or orchestrator polls the file)
 7. Orchestrator reads plan from disk, planner dismissed
 
 **Cross-department check**: If planner flags product/marketing impact, orchestrator spawns product-strategist or content-creator as sub-agents for review before proceeding.

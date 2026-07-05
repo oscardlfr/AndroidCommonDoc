@@ -28,7 +28,7 @@ See [Team Topology](team-topology.md) for full details.
 **Plan mode gate**: orchestrator calls `EnterPlanMode()` before spawning the planner. This blocks file writes until user approval — the planner (as a subagent) writes PLAN.md normally. Orchestrator calls `ExitPlanMode()` on user approval, immediately before dispatching architects.
 Planner consults context-provider (via SendMessage if live background peer, or as a fresh single-use subagent) to get project state.
 
-**Plan delivery**: Planner writes the plan to `.planning/PLAN.md` (disk artifact — authoritative). After planner notifies, orchestrator reads the plan from disk with `Read(".planning/PLAN.md")`.
+**Plan delivery**: Planner writes the plan to `.planning/wave-<slug>/PLAN.md` (disk artifact — authoritative). After planner notifies, orchestrator reads the plan from disk with `Read(".planning/wave-<slug>/PLAN.md")`.
 
 **Wave PLAN.md flow** (mandatory before any architect dispatch):
 1. Create wave dir.
@@ -40,12 +40,12 @@ Shortcutting to spawn planner later while dispatching architects → **FORBIDDEN
 Dispatch architects as concurrent subagents (or SendMessage to background peers if already alive):
 ```
 // Single-use concurrent dispatch (default):
-Agent(subagent_type="arch-testing", prompt="scope_doc_path: .planning/PLAN.md\nmode: EXECUTE\n...")
-Agent(subagent_type="arch-platform", prompt="scope_doc_path: .planning/PLAN.md\nmode: EXECUTE\n...")
-Agent(subagent_type="arch-integration", prompt="scope_doc_path: .planning/PLAN.md\nmode: EXECUTE\n...")
+Agent(subagent_type="arch-testing", prompt="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: EXECUTE\n...")
+Agent(subagent_type="arch-platform", prompt="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: EXECUTE\n...")
+Agent(subagent_type="arch-integration", prompt="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: EXECUTE\n...")
 
 // Background peer dispatch (optional accelerator):
-SendMessage(to="arch-testing", summary="phase 2 start", message="scope_doc_path: .planning/PLAN.md\nmode: EXECUTE\n{plan + scope}")
+SendMessage(to="arch-testing", summary="phase 2 start", message="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: EXECUTE\n{plan + scope}")
 ```
 1. Architects use context-provider for patterns/rules (via SendMessage or as subagent)
 2. Architects investigate → request specialists from orchestrator via SendMessage or disk spec
@@ -67,15 +67,17 @@ quality-gater reads arch-*-verdict.md files from disk and optionally SendMessage
 |------------------------|---------------------|
 | **File ABSENT** | WAIT — do NOT attempt recovery; absence does not mean failure. Fresh-spawn false-trigger guard: quality-gater may not have initialized yet. |
 | **`status: running` + `updated_at` stale > ~20 min** | HUNG — quality-gater is stuck (a healthy long step does NOT false-trigger: the gater bumps `--phase` before each long step — /pre-pr, test-suite — so `updated_at` stays fresh throughout). TaskStop the peer, then lean re-dispatch: spawn fresh quality-gater with the same scope. |
-| **`status: pass` or `status: fail`, HEAD-matched** | Proceed: `pass` → commit; `fail` → back to Phase 2 (max 3 retries). |
+| **`status: pass` or `status: fail`, HEAD-matched** | QG phase is done: `pass` → proceed to the commit step; `fail` → back to Phase 2 (max 3 retries). |
 
 HEAD-match check: `qg-result.json ".head"` must equal `git rev-parse HEAD`. A result for a prior commit is stale; treat as ABSENT.
+
+**`qg-result.json` is a progression signal, not authority.** A HEAD-matched `pass` tells the orchestrator the QG phase finished and passed, so it may proceed to the commit/ship step — but the authority to commit and push is `push-proof.json` + a fresh `quality-gate.stamp` + `pre-pr.stamp` + `verify-proof`, all bound to HEAD. `qg-result.json` is never consulted by `verify-proof` or the pre-push hook and is never a substitute for `push-proof.json`. See [qg-proof-push-gate](qg-proof-push-gate.md).
 
 **PHASE TRANSITIONS ARE AUTOMATIC — never ask the user between phases:**
 ```
 Plan approved → IMMEDIATELY dispatch architects (Phase 2)
 All arch-*-verdict.md on disk + APPROVE → IMMEDIATELY spawn quality-gater (Phase 3)
-qg-result.json status:pass (HEAD-matched) on disk → IMMEDIATELY commit
+qg-result.json status:pass (HEAD-matched) → IMMEDIATELY proceed to commit (authorized by push-proof.json + stamps + verify-proof, not by qg-result itself)
 qg-result.json status:fail (HEAD-matched) → IMMEDIATELY back to architect dispatch (Phase 2 retry)
 ```
 
@@ -83,15 +85,17 @@ qg-result.json status:fail (HEAD-matched) → IMMEDIATELY back to architect disp
 - Orchestrator asks "shall I commit?" before running quality gate → BUG
 - Orchestrator asks "what next?" after architect approval → BUG
 - Orchestrator creates tasks/memories between phases instead of proceeding → BUG
-- Orchestrator spawns extra specialists without a name (anonymous Agent() calls) — ALL overflow specialists MUST be named (`{specialist}-2`) → BUG
-- Architect requests named specialist via SendMessage and orchestrator substitutes differently-named agent — orchestrator MUST honor the requested name → BUG
-- Orchestrator re-spawns a background peer architect instead of SendMessage to the original → BUG. **RULE: If a background peer architect seems unresponsive → SendMessage first. If no response after 1 retry → kill-then-respawn: dispatch context-provider `write_bundle(role, ...)` so the bundle is on disk pre-kill ([context-bundle-schema](context-bundle-schema.md)), gracefully terminate the old peer (shutdown_request), then re-spawn the CANONICAL name (`Agent(name="arch-platform", subagent_type="arch-platform", run_in_background=true, ...)`) with a prompt opening with the bundle-read mandate. NEVER use free-form names for agents holding Write/Bash/gh — non-canonical names are invisible to type-keyed gates (firing matrix §5).**
+
+**Background-peer hygiene (Claude-rich mode only — the accelerator, not the floor):** these apply *when* the orchestrator runs live background peers. In portable/single-use mode they do not apply — single-use agents land disk artifacts and need no names.
+- Spawning overflow specialists anonymously: a named overflow specialist (`{specialist}-2`) is reachable via SendMessage; an anonymous `Agent()` peer is not. (Portable/single-use mode: anonymous single-use specialists are fine — the disk artifact is the contract.)
+- Substituting a differently-named agent for an architect's requested peer name — honor the requested name so SendMessage routing resolves. (Portable mode: names are irrelevant.)
+- Re-spawning a background peer architect instead of SendMessage to the original. **RULE: If a background peer architect seems unresponsive → SendMessage first. If no response after 1 retry → kill-then-respawn: dispatch context-provider `write_bundle(role, ...)` so the bundle is on disk pre-kill ([context-bundle-schema](context-bundle-schema.md)), gracefully terminate the old peer (shutdown_request), then re-spawn the CANONICAL name (`Agent(name="arch-platform", subagent_type="arch-platform", run_in_background=true, ...)`) with a prompt opening with the bundle-read mandate. NEVER use free-form names for agents holding Write/Bash/gh — non-canonical names are invisible to type-keyed gates (firing matrix §5).**
 
 ## Execution Trigger Checklist
 ```
 □ Plan approved?                                    → SendMessage the architects NOW (or Agent-spawn if not live)
 □ All architects APPROVE?                           → SendMessage the quality-gater NOW (or Agent-spawn if not live)
-□ qg-result.json status:pass (HEAD-matched)?        → commit NOW
+□ qg-result.json status:pass (HEAD-matched)?        → proceed to commit NOW (commit/push gated by push-proof.json + stamps + verify-proof, not qg-result)
 □ qg-result.json status:fail (HEAD-matched)?        → SendMessage to architects NOW (with failure context)
 □ qg-result.json absent?                            → WAIT (do not recover)
 □ qg-result.json status:running + stale >~20 min?  → TaskStop + lean re-dispatch
@@ -100,18 +104,11 @@ qg-result.json status:fail (HEAD-matched) → IMMEDIATELY back to architect disp
 
 See also [Team Topology](team-topology.md), [Multi-Agent Patterns](multi-agent-patterns.md).
 
-## PLAN.md Modularization (Wave 22 pattern)
+## PLAN.md size discipline
 
-**Master PLAN.md** (≤80 lines) is the sprint index — navigation only. Per-wave detail lives in `.planning/PLAN-W{N}.md`.
+Keep the active wave's `.planning/wave-<slug>/PLAN.md` focused — a sprint index plus the wave's scope-files list, acceptance criteria, and risks. Per-task detail (blocked-by, sub-tasks, planner notes) belongs in later sections of the same file or a sibling note in the wave dir, loaded on demand rather than eagerly.
 
-| File | Max lines | Content |
-|------|-----------|---------|
-| `.planning/PLAN.md` | ≤80 | Sprint table, scope-files list, acceptance criteria, risks |
-| `.planning/PLAN-W{N}.md` | no limit | Per-sprint detail: blocked-by, sub-tasks, notes for planner |
-
-**Planner writes both files.** team-lead reads master PLAN.md at activation (stays ≤80 lines). Per-wave detail loaded on demand when sprinting.
-
-**Why**: Wave 21 PLAN.md grew to 326 lines. team-lead context loaded the full file eagerly — ~50K tokens per activation. Modular split keeps master under 80 lines without losing sprint detail.
+The planner writes it; team-lead reads it at activation. Keep it lean so activation does not eagerly load tens of thousands of tokens of context — the failure mode that motivated this discipline.
 
 ## Context Management
 
