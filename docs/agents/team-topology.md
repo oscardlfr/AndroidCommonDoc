@@ -68,9 +68,9 @@ Neither mode changes what the gates read — the disk artifacts. Pick by runtime
 
 ## Core Specialist Lifecycle
 
-Five core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist) are dispatched at Phase 2 start.
+Five core specialist roles (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist) are available for Phase 2; the orchestrator dispatches only the roles the wave's CLASS/scope requires, not all five by default.
 
-- **Dispatch**: orchestrator spawns all 5 when Phase 2 begins — as single-use subagents or background peers
+- **Dispatch**: the orchestrator dispatches the CLASS/scope-required subset when execution begins — as single-use subagents or background peers
 - **Work**: Architects assign tasks; specialists execute across waves and land results on disk
 - **Knowledge**: Specialists accumulate layer expertise across waves when run as background peers; single-use subagents receive per-task context
 - **Rotation**: Rotate (kill-then-respawn with context bundle) only when context fills (7+ waves for background peers)
