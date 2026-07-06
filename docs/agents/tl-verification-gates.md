@@ -18,11 +18,13 @@ token_budget: 1200
 
 Reference for team-lead's verification requirements after specialist work: architect verification gate, post-verdict broadcast protocol, post-wave team integrity check, and escalation paths.
 
+> **Floor vs accelerator**: the load-bearing contract is the `arch-*-verdict.md` files on disk (HEAD-bound, APPROVE/ESCALATE). The `SendMessage`-based verdict tally, broadcast, and cross-verify below are optional Claude-rich accelerators over that floor — in portable/single-use mode the orchestrator reads the verdict files directly and the same gates pass.
+
 ## Architect Verification Gate (non-negotiable)
 
 After EVERY wave of specialist work, architects verify and write their verdict files to disk:
 
-1. **All three write `arch-{role}-verdict.md`** (HEAD-bound) to `.planning/wave{N}/`
+1. **All three write `arch-{role}-verdict.md`** (HEAD-bound) to `.planning/wave-<slug>/`
 2. **Cross-verify via SendMessage** (if background peers) or by reading each other's verdict files
 3. **Architects request specialists from orchestrator** via SendMessage — orchestrator is the sole Agent() spawner (background peers cannot use Agent())
 4. **Collect verdicts**: ALL three `arch-*-verdict.md` files must exist on disk with APPROVE status before proceeding
@@ -52,14 +54,14 @@ TaskCreate(title="arch-integration verdict", status="in_progress")
 ```
 
 **On receiving `"APPROVE"` from arch-{role}** (via SendMessage or subagent return):
-1. **Verify verdict file on disk**: glob `.planning/wave{N}/arch-{role}-verdict.md`. If missing → DM architect "verdict file not found at expected path; please write it before APPROVE." Do NOT TaskUpdate. Re-await reply.
+1. **Verify verdict file on disk**: glob `.planning/wave-<slug>/arch-{role}-verdict.md`. If missing → DM architect "verdict file not found at expected path; please write it before APPROVE." Do NOT TaskUpdate. Re-await reply.
 2. `TaskUpdate(title="arch-{role} verdict", status="completed")` — TaskUpdate ONLY, no broadcast.
 3. `TaskList` → if all 3 verdict tasks = completed → proceed to Phase 3.
 
 > **Defense-in-depth**: `.claude/hooks/architect-verdict-presence-gate.js` (PreToolUse SendMessage) blocks APPROVE if no verdict file exists on the architect side. The glob check above is the orchestrator-side complement.
 
 **On receiving `"ESCALATE: <reason>"` from arch-{role}**:
-1. Read `.planning/wave{N}/arch-{role}-verdict.md` for full details.
+1. Read `.planning/wave-<slug>/arch-{role}-verdict.md` for full details.
 2. SendMessage to relevant peers with `[ESCALATION] arch-{role}: <reason>` marker.
 3. Decision: re-planifiable → delegate to researcher+advisor; blocked → report to user with clear error.
 
@@ -97,7 +99,7 @@ At the end of every wave, team-lead MUST produce a retrospective and flag high t
 - Verdict tally: count of APPROVE and ESCALATE from each architect
 
 **Retrospective file** (required):
-- Path: `.planning/wave{N}/retrospective.md`
+- Path: `.planning/wave-<slug>/retrospective.md`
 - Written by team-lead at wave end, before proceeding to Phase 3 or closing the session
 - Format:
 
@@ -136,7 +138,7 @@ Precision is not the point — the retrospective anchors wave-over-wave trends s
 ## Post-Wave Artifact Integrity Check (MANDATORY)
 
 After collecting verdicts from all architects at the end of each wave, verify disk artifacts:
-1. Glob `.planning/wave{N}/arch-*-verdict.md` — confirm all 3 verdict files exist and are HEAD-bound.
+1. Glob `.planning/wave-<slug>/arch-*-verdict.md` — confirm all 3 verdict files exist and are HEAD-bound.
    If Phase 3 ran: confirm `.planning/wave-<slug>/qg-result.json` has `status: pass|fail` and `head` matches current HEAD.
 2. If running with background peers: confirm context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater are reachable (SendMessage ACK or disk bundle present).
 3. Confirm any dispatched core specialists have completed their assigned tasks (output artifacts on disk or APPROVE relayed to architect).

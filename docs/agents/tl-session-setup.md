@@ -20,7 +20,7 @@ Reference for the orchestrator's session initialization: Phase 2 core specialist
 
 ## Phase 2 Core Specialists
 
-When Phase 2 execution begins, the orchestrator dispatches 5 core specialists. These may run as background peers (when the runtime supports them) or as single-use Agent subagents dispatched per task:
+When Phase 2 execution begins, the orchestrator dispatches the core specialists that have work in scope (see Selective spawning below — do not default to all 5). These may run as background peers (when the runtime supports them) or as single-use Agent subagents dispatched per task:
 ```
 Agent(name="test-specialist", subagent_type="test-specialist", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/test-specialist.md before any other action (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Your reporting architect is arch-testing. Ask arch-testing for patterns via SendMessage — NEVER send pattern queries to context-provider directly (the gate ack is the only direct contact).")
 Agent(name="ui-specialist", subagent_type="ui-specialist", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/ui-specialist.md before any other action (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Your reporting architect is arch-testing. Ask arch-testing for patterns via SendMessage — NEVER send pattern queries to context-provider directly (the gate ack is the only direct contact).")
@@ -86,9 +86,9 @@ The orchestrator fans out to concurrent `Agent` subagents. Background peers (wit
 
 ```
 // CORRECT — concurrent single-use subagents (works in any runtime):
-Agent(subagent_type="arch-testing", prompt="scope_doc_path: .planning/PLAN.md\nmode: EXECUTE\n...")
-Agent(subagent_type="arch-platform", prompt="scope_doc_path: .planning/PLAN.md\nmode: EXECUTE\n...")
-Agent(subagent_type="arch-integration", prompt="scope_doc_path: .planning/PLAN.md\nmode: EXECUTE\n...")
+Agent(subagent_type="arch-testing", prompt="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: EXECUTE\n...")
+Agent(subagent_type="arch-platform", prompt="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: EXECUTE\n...")
+Agent(subagent_type="arch-integration", prompt="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: EXECUTE\n...")
 // Each writes arch-{role}-verdict.md to disk; orchestrator reads them.
 
 // CORRECT — background peers (optional accelerator, when runtime supports them):

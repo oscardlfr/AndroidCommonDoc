@@ -43,9 +43,9 @@ If one agent can do the job in a single context window, one agent is better. Mul
 
 See [claude-code-workflow](claude-code-workflow.md) for the full team-lead model. Key points:
 
-- **team-lead NEVER codes** — all code is written by dev specialists, team-lead only orchestrates.
+- **team-lead NEVER codes** — all code is written by specialists, team-lead only orchestrates.
 - **Simple task** → team-lead assigns to a single specialist.
-- **Large task / long session** → team-lead orchestrates waves of devs + audits to specialists.
+- **Large task / long session** → team-lead orchestrates waves of specialists plus audits.
 - **CLAUDE.md Agent Roster** is the discovery mechanism. Without it, Claude uses generic agents.
 
 ---
@@ -129,13 +129,13 @@ The orchestrator fans out to concurrent `Agent` subagents. Each subagent receive
 
 ### Architect Gate Pattern
 
-Between waves, architects cross-verify via `SendMessage`. Core devs — when live as background peers — take work directly via `SendMessage`; otherwise the orchestrator dispatches them on the architect's behalf:
+Between waves, architects cross-verify via `SendMessage`. Core specialists — when live as background peers — take work directly via `SendMessage`; otherwise the orchestrator dispatches them on the architect's behalf:
 
 - **arch-testing**: TDD compliance, test quality — manages `test-specialist`, `ui-specialist` via SendMessage
 - **arch-platform**: KMP patterns, dependency direction — manages `domain-model-specialist`, `data-layer-specialist` via SendMessage
 - **arch-integration**: compilation, DI wiring — manages `ui-specialist`, `data-layer-specialist` via SendMessage
 
-**Pattern validation chain**: devs ask their architect for patterns; architects query context-provider. Devs NEVER contact context-provider directly.
+**Pattern validation chain**: specialists ask their architect for patterns; architects query context-provider. Specialists NEVER contact context-provider directly.
 
 **Dynamic scaling**: when a core specialist is busy, architects request extra specialists from the orchestrator. Extras are named subagents (`{specialist}-2`) — they are dismissed after architect verification.
 

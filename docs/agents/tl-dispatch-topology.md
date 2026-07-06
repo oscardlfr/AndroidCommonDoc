@@ -26,12 +26,12 @@ Every team-lead `SendMessage` to an architect MUST carry two fields: `scope_doc_
 SendMessage(
   to="arch-platform",
   summary="W{N} PREP — <specialty-focused 1-liner>",
-  message="scope_doc_path: .planning/PLAN-W{N}.md\nmode: PREP\nwave: {N}\n\n<optional context>"
+  message="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: PREP\nwave: <slug>\n\n<optional context>"
 )
 ```
 
 - **PREP dispatch** goes to all 3 architects in parallel **before** devs are spawned. Architects read the plan, identify domain risks, return `READY: <1-line summary>`. team-lead merges all 3 READY responses before spawning devs.
-- **EXECUTE dispatch** goes to all 3 architects in parallel **after** devs complete their wave work. Architects verify, delegate any fixes, write verdict to `.planning/wave{N}/arch-{role}-verdict.md`, respond `APPROVE` or `ESCALATE: <reason>`.
+- **EXECUTE dispatch** goes to all 3 architects in parallel **after** devs complete their wave work. Architects verify, delegate any fixes, write verdict to `.planning/wave-<slug>/arch-<role>-verdict.md`, respond `APPROVE` or `ESCALATE: <reason>`.
 
 Full protocol, team-lead workflow, and anti-patterns: `docs/agents/arch-dispatch-modes.md`. Fixes Wave 23 Bug #5 (hardcoded `.planning/PLAN.md`) and Bug #6 (no mode tagging).
 
@@ -81,7 +81,7 @@ Specialist NEVER contacts context-provider directly — the architect is the qua
 3. Extra specialist executes, returns result to orchestrator, orchestrator relays to architect
 4. After architect verifies → extra specialist dismissed
 
-**Named extra specialists:** All overflow specialists MUST be named (`{specialist}-2`, `{specialist}-3`). No anonymous Agent() calls — unnamed specialists are unreachable via SendMessage and invisible to type-keyed gates.
+**Named extra specialists (Claude-rich mode):** When overflow specialists run as background peers, name them (`{specialist}-2`, `{specialist}-3`) — an anonymous `Agent()` peer is unreachable via SendMessage, and free-form names for agents holding Write/Bash are invisible to name-keyed gates (use CANONICAL names). In portable/single-use mode an anonymous single-use specialist is fine; its disk artifact is the contract.
 
 **Background completion → IMMEDIATELY act**: When ANY background agent completes (task notification received), IMMEDIATELY: (a) read any output files, (b) relay results to relevant architects, (c) proceed to next plan step. Do NOT wait for user prompting.
 
