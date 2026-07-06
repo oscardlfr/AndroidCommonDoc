@@ -244,12 +244,12 @@ describe('tl-phase-execution sub-doc — extracted phase protocol', () => {
     expect(content).toMatch(/arch-platform-2|\{specialist\}-2/);
   });
 
-  it('references .planning/PLAN.md for plan file delivery', () => {
-    expect(content).toContain('.planning/PLAN.md');
+  it('references .planning/wave-<slug>/PLAN.md for plan file delivery', () => {
+    expect(content).toContain('.planning/wave-<slug>/PLAN.md');
   });
 
-  it('team-lead reads plan via Read(".planning/PLAN.md") after planner notifies', () => {
-    expect(content).toMatch(/Read\(["']\.planning\/PLAN\.md["']\)/);
+  it('team-lead reads plan via Read(".planning/wave-<slug>/PLAN.md") after planner notifies', () => {
+    expect(content).toMatch(/Read\(["']\.planning\/wave-<slug>\/PLAN\.md["']\)/);
   });
 });
 
