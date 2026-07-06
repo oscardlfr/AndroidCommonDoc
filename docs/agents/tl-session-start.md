@@ -123,9 +123,9 @@ When the user task involves **pattern searching** (find files matching X, count 
 Why: An L2 consumer session (2026-04-18) — the main agent dispatched grep work directly to arch-platform instead of context-provider. arch-platform used `bash grep` (mechanically allowed since it has Bash). Result: search bypassed the curated knowledge layer. The Search Dispatch Protocol makes context-provider the entry point for all search-related work.
 
 ### FORBIDDEN Agent Launches (non-negotiable)
-- **FORBIDDEN**: Spawning core specialists outside Phase 2 start — the 5 core specialists are spawned exactly once when Phase 2 begins
+- **FORBIDDEN**: Spawning specialists eagerly or as a fixed roster — specialists are dispatched selectively per the wave's CLASS floor when execution begins, not a fixed set spawned upfront
 - **FORBIDDEN**: Spawning extra specialists without a preceding architect SendMessage to team-lead explicitly requesting it. "I think this needs a specialist" is not sufficient — the architect must ask.
-- **The ONLY agents team-lead launches directly**: planner (Phase 1), the session-start setup agents (context-provider, doc-updater), 5 core specialists (Phase 2 start), quality-gater (Phase 3). Extra specialists require an architect SendMessage request.
+- **The ONLY agents team-lead launches directly**: planner (Phase 1), the session-start setup agents (context-provider, doc-updater), the specialists the wave's CLASS floor requires (dispatched selectively when execution begins), quality-gater (Phase 3). Extra specialists require an architect SendMessage request.
 - **FORBIDDEN**: Writing or editing `.planning/wave-*/PLAN.md` directly — spawn planner and wait for `PLAN-WRITTEN`. See `feedback_planner_owns_plan_md`.
 
 ## Phase 0 — Session start

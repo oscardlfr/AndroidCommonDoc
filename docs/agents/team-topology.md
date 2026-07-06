@@ -200,7 +200,7 @@ See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 - **Architects**: Read, Grep, Glob, Bash, SendMessage (NO Write/Edit/Agent)
 - **Disk artifacts are authoritative** — `arch-*-verdict.md` (HEAD-bound), `quality-gate-report.json`, `push-proof.json`. Gates verify these files, not who/how many agents were spawned.
 - **Phase 3 deliberation is mandatory** — quality-gater MUST read all 3 arch-*-verdict.md files (and optionally SendMessage live architects) before running automated checks. Skipping deliberation voids the gate.
-- **Core specialists dispatched at Phase 2 start** — orchestrator spawns the 5 core specialists when Phase 2 begins. For long sessions with background peers (5+ waves), rotate kill-then-respawn (canonical name; see [context-rotation-guide](context-rotation-guide.md) §3).
+- **Specialists dispatched selectively at execution start** — the orchestrator dispatches the specialists the wave's CLASS floor requires when execution begins (not a fixed set of five). For long sessions with background peers (5+ waves), rotate kill-then-respawn (canonical name; see [context-rotation-guide](context-rotation-guide.md) §3).
 - **Pattern validation chain** — specialists NEVER contact context-provider directly; architect is the quality gate.
 - **Project-specific agents MUST be in routing table** — guardians, validators, domain specialists. If the routing table doesn't list a domain, architects can't request specialists for it.
 

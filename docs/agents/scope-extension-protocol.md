@@ -62,7 +62,7 @@ SendMessage(to="team-lead", summary="scope extension request: {filename}", messa
 - Proceed because the fix looks trivial
 - Ask another architect to authorize (only team-lead can authorize)
 
-**Step 3** — After `AUTHORIZED` arrives, proceed. The escape hatch (`SCOPE_GATE_DISABLE=1`) may be granted at this point for urgent cases.
+**Step 3** — After `AUTHORIZED` arrives, proceed. There is no env-flag escape hatch — the old `SCOPE_GATE_DISABLE=1` is retired and has no effect (see Escape Hatch (retired)); the edit is made by the orchestrator or a scoped specialist, not by the architect.
 
 ## The Mechanical Enforcement
 
@@ -142,7 +142,7 @@ Two wired `PreToolUse` hooks in `.claude/settings.json` enforce the architect-to
 | `architect-self-edit-gate.js` | `PreToolUse` on `Write`/`Edit` | Any source/template edit by `arch-*` agents — only `.planning/wave*/arch-*-verdict.md` and `.planning/wave*/arch-*-cross-verify.md` allowed |
 | `architect-bash-write-gate.js` | `PreToolUse` on `Bash` | Bash bypass patterns: heredoc redirect, `sed -i`, `awk -i inplace`, `python -c open(...,'w')`, `python <<EOF` heredoc with `open(...,'w')`, `tee` to file, plain `>`/`>>` shell redirect. Exempt targets: `/tmp/*`, `$TMPDIR/*`, `/dev/null`, `/dev/std*`, `.planning/wave*/arch-*-verdict.md`, `.planning/wave*/arch-*-cross-verify.md`, `.androidcommondoc/audit-log.jsonl` |
 
-When designing a new architect-class agent, audit it against all three hooks: any tool the agent uses must satisfy each gate's contract.
+When designing a new architect-class agent, audit it against the two active hooks: any tool the agent uses must satisfy each gate's contract.
 
 Test coverage lives in `scripts/tests/architect-self-edit-gate.bats` and `scripts/tests/architect-bash-write-gate.bats`. (The retired `architect-scope-gate.js` test surface was removed with the hook.)
 
@@ -160,6 +160,5 @@ Test coverage lives in `scripts/tests/architect-self-edit-gate.bats` and `script
 
 - NEVER self-authorize a scope extension by re-reading plan text
 - NEVER use "it's just a one-liner" as justification
-- ALL `SCOPE_GATE_DISABLE=1` usages appear in the bypass log — no invisible bypasses
-- Bypass log is reviewed at every wave close without exception
+- The two active architect gates (`architect-self-edit-gate.js`, `architect-bash-write-gate.js`) are fail-closed with no env bypass — a needed cross-scope edit goes through the authorization protocol above, not a flag (retired `SCOPE_GATE_DISABLE=1` has no effect)
 - Authorization request must include `**Why not defer**` — if you can defer, defer
