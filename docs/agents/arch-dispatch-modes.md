@@ -54,7 +54,7 @@ summary: PREP — read the plan, identify platform risks, write APPROVED-PREP ve
 5. SendMessage team-lead with `READY: <1-line summary of risks and dev tasks>`
 6. Do NOT dispatch devs yet. Write your PREP verdict file (`APPROVED-PREP`, per PREP verdict dispatch hygiene below) — this authorizes specialists to execute. Then stay idle after READY until EXECUTE dispatch arrives.
 
-**team-lead collects all 3 READY responses before spawning specialists.** This lets team-lead merge cross-architect concerns into a single specialist dispatch plan — e.g., if platform flags a source-set move that testing needs to reconcile, team-lead surfaces both in the specialist brief.
+**team-lead collects all dispatched READY responses before spawning specialists.** This lets team-lead merge cross-architect concerns into a single specialist dispatch plan — e.g., if platform flags a source-set move that testing needs to reconcile, team-lead surfaces both in the specialist brief.
 
 ## EXECUTE mode — post-dev verification
 
@@ -126,10 +126,10 @@ Body MUST contain literal string: APPROVED-PREP
 
 - Hardcoding `.planning/PLAN.md` in arch templates — Bug #5 reopener. Use `scope_doc_path` field from dispatch.
 - Guessing scope path from cwd or wave number — Bug #5 reopener. Use the provided path or SCOPE-DOC-MISSING.
-- Starting dev dispatch in PREP mode — PREP is plan-review only. Dev dispatch happens after team-lead sees all 3 READY responses.
+- Starting dev dispatch in PREP mode — PREP is plan-review only. Dev dispatch happens after team-lead sees all dispatched READY responses.
 - Skipping the PREP verdict — the `APPROVED-PREP` verdict file is what the premature-execution-gate checks before any specialist may execute (see PREP verdict dispatch hygiene). PREP writes that file AND returns `READY` (or `BLOCKED`); EXECUTE later updates the same file to `APPROVED-VERIFY-FINAL`.
 - Treating one dispatch as both PREP and EXECUTE — the `mode` field is load-bearing. Separate dispatches, separate behaviors.
-- team-lead spawning devs before all 3 READY responses arrive — ignores cross-architect risk merging.
+- team-lead spawning devs before all dispatched READY responses arrive — ignores cross-architect risk merging.
 
 ## Example: PREP dispatch
 
