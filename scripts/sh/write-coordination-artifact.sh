@@ -25,8 +25,8 @@
 # FIELDS WRITTEN (JSON, schema "coordination/<kind>/v1")
 #   schema, wave_slug, from, to, created_at, + head + plan_sha256 for message/result/request/
 #   approval (NOT consult/stop — consult is pre-PLAN, stop is presence-only), + files[] (only
-#   when --file given), + request_id (request: filename stem <from>-<ts>; approval: --re value),
-#   + whatever else the stdin body supplied.
+#   when --file given), + request_id (request: filename stem <from>-<ts>-<uniq>; approval: --re
+#   value), + whatever else the stdin body supplied.
 #
 # --kind consult REQUIRES --to context-provider (the only valid recipient for this kind).
 # --kind approval REQUIRES --re <request_id> (there is no other way to name the linked request).
@@ -52,15 +52,26 @@
 #   4. single .planning/wave-*/PLAN.md alias
 #
 # CONFINEMENT
-#   Every kind's output directory is confined under .planning/wave-<slug>/ (realpath guard with a
-#   literal-path fallback — macOS/BSD realpath has no -m and errors on non-existent paths, so a
-#   missing intermediate directory must not fail OPEN; see write-specialist-dispatch.sh:340-349).
+#   Every kind's output directory is confined under .planning/wave-<slug>/ (realpath guard, with a
+#   python3 fallback when the `realpath` binary is absent/non-GNU — never a silent no-op; if
+#   NEITHER can resolve a canonical path the write fails closed. See write-specialist-dispatch.sh:
+#   340-349 for the original single-realpath-tool precedent this hardens).
+#
+# COLLISION SAFETY (message/consult/result/request — timestamp-keyed kinds only)
+#   A bare compact-UTC timestamp has 1s resolution, so two same-kind writes in the same second
+#   would otherwise silently overwrite each other. Each attempt appends a fresh <uniq> = hex(PID)
+#   + 4 hex digits of $RANDOM to the filename, and the file is created EXCLUSIVELY (never
+#   overwrites); on collision the write retries (bounded) with a freshly-generated <uniq>.
+#   approval (keyed by --re's request_id) and stop (keyed by --to's role) are intentionally
+#   NOT collision-guarded — both are fixed, single-canonical-path-per-key artifacts meant to be
+#   updatable/idempotent (re-approving the same request, re-signaling the same stop), so they
+#   still open in overwrite mode.
 #
 # OUTPUT PATHS (per kind)
-#   message   .planning/wave-<slug>/inbox/<to>/<from>-<ts>.json (+ outbox/<from>/ mirror, same content)
-#   consult   .planning/wave-<slug>/inbox/context-provider/consult-<ts>.json
-#   result    .planning/wave-<slug>/results/<from>/<from>-<ts>.json
-#   request   .planning/wave-<slug>/requests/<body.kind>/<from>-<ts>.json
+#   message   .planning/wave-<slug>/inbox/<to>/<from>-<ts>-<uniq>.json (+ outbox/<from>/ mirror, same content)
+#   consult   .planning/wave-<slug>/inbox/context-provider/consult-<ts>-<uniq>.json
+#   result    .planning/wave-<slug>/results/<from>/<from>-<ts>-<uniq>.json
+#   request   .planning/wave-<slug>/requests/<body.kind>/<from>-<ts>-<uniq>.json
 #   approval  .planning/wave-<slug>/approvals/<re-id>.json
 #   stop      .planning/wave-<slug>/stop-<to>.flag
 #   <ts> = compact UTC `date -u +%Y%m%dT%H%M%SZ` (never ISO with ':'). created_at body field is
@@ -365,55 +376,62 @@ sys.stdout.write(body["kind"])
   fi
 fi
 
-# ── Timestamp + output path routing ───────────────────────────────────────────
-
-NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-TS_COMPACT="$(date -u '+%Y%m%dT%H%M%SZ')"
+# ── Output directory routing (directory only — the filename is generated per-attempt below,
+#    since 4 of the 6 kinds embed a collision-avoidance token in it) ──────────────────────────
 
 OUT_DIR=""
-OUT_PATH=""
 MIRROR_DIR=""
 case "$KIND" in
   message)
     OUT_DIR="$WAVE_DIR/inbox/$TO"
-    OUT_PATH="$OUT_DIR/${FROM}-${TS_COMPACT}.json"
     MIRROR_DIR="$WAVE_DIR/outbox/$FROM"
     ;;
   consult)
     OUT_DIR="$WAVE_DIR/inbox/context-provider"
-    OUT_PATH="$OUT_DIR/consult-${TS_COMPACT}.json"
     ;;
   result)
     OUT_DIR="$WAVE_DIR/results/$FROM"
-    OUT_PATH="$OUT_DIR/${FROM}-${TS_COMPACT}.json"
     ;;
   request)
     OUT_DIR="$WAVE_DIR/requests/$REQUEST_SUBKIND"
-    OUT_PATH="$OUT_DIR/${FROM}-${TS_COMPACT}.json"
     ;;
   approval)
     OUT_DIR="$WAVE_DIR/approvals"
-    OUT_PATH="$OUT_DIR/${RE_ID}.json"
     ;;
   stop)
     OUT_DIR="$WAVE_DIR"
-    OUT_PATH="$OUT_DIR/stop-${TO}.flag"
     ;;
 esac
 
-# ── Confine output dir under .planning/ (realpath guard, literal-path fallback — Codex-hardened;
-#    mirrors write-specialist-dispatch.sh:340-349). Applied uniformly to every kind's target dir. ──
+# ── Confine output dir under .planning/ (realpath guard with a python3 fallback — Codex-hardened;
+#    the ORIGINAL single-tool-or-skip form silently ran NO check when `realpath` was absent. Now:
+#    try realpath first, fall back to python3 (already a hard dependency of this script) if it's
+#    missing OR fails to resolve either side, and FAIL CLOSED if neither can resolve — never a
+#    silent no-op). Applied uniformly to every kind's target dir. ──
+
+_realpath_resolve() {
+  local p="$1" r=""
+  if command -v realpath >/dev/null 2>&1; then
+    r="$(realpath -m "$p" 2>/dev/null || true)"
+  fi
+  if [[ -z "$r" ]]; then
+    r="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$p" 2>/dev/null || true)"
+  fi
+  printf '%s' "$r"
+}
 
 _confine_under_planning() {
   local target="$1"
-  if command -v realpath >/dev/null 2>&1; then
-    local canon_planning canon_target
-    canon_planning="$(realpath -m "$PLANNING_DIR" 2>/dev/null || echo "$PLANNING_DIR")"
-    canon_target="$(realpath -m "$target" 2>/dev/null || echo "$target")"
-    if [[ "$canon_target" != "$canon_planning"* ]]; then
-      echo "[write-coordination-artifact] ERROR: Traversal guard: output path escapes .planning/ confinement" >&2
-      exit 2
-    fi
+  local canon_planning canon_target
+  canon_planning="$(_realpath_resolve "$PLANNING_DIR")"
+  canon_target="$(_realpath_resolve "$target")"
+  if [[ -z "$canon_planning" || -z "$canon_target" ]]; then
+    echo "[write-coordination-artifact] ERROR: Traversal guard: unable to resolve a canonical path for the confinement check (neither realpath nor the python3 fallback succeeded) — failing closed." >&2
+    exit 2
+  fi
+  if [[ "$canon_target" != "$canon_planning"* ]]; then
+    echo "[write-coordination-artifact] ERROR: Traversal guard: output path escapes .planning/ confinement" >&2
+    exit 2
   fi
 }
 
@@ -424,34 +442,67 @@ if [[ -n "$MIRROR_DIR" ]]; then
   mkdir -p "$MIRROR_DIR"
 fi
 
-# ── stop with no body: bare zero-byte presence flag, no python3/envelope involved ───────────
+# ── stop with no body: bare zero-byte presence flag, no python3/envelope/collision-guard involved
+#    (fixed canonical path, intentionally overwriteable — see COLLISION SAFETY in the header). ──
 
 if [[ "$KIND" == "stop" && -z "$BODY_RAW" ]]; then
+  OUT_PATH="$OUT_DIR/stop-${TO}.flag"
   : > "$OUT_PATH"
   echo "[write-coordination-artifact] Artifact written: $OUT_PATH (kind=stop presence-only, no body)" >&2
   exit 0
 fi
 
-# ── Author JSON via python3 (safe escaping — never string-interpolated) ──────────────────────
+# ── Author JSON via python3 (safe escaping — never string-interpolated), collision-safe ──────
+#
+# message/consult/result/request open EXCLUSIVELY ('x' mode — never overwrites) and embed a fresh
+# <uniq> = hex(PID) + 4 hex digits of $RANDOM in the filename; on a same-path collision python3
+# exits 3 (a distinct signal from exit-2 genuine failures) and this loop retries with a freshly
+# regenerated <uniq>, bounded so it can never spin forever. approval/stop open in overwrite ('w')
+# mode and so never signal a collision — for them this loop always resolves on the first pass.
 
 DISPATCH_FILES_ENV=""
 if [[ "${#NORMALIZED_FILES[@]}" -gt 0 ]]; then
   DISPATCH_FILES_ENV="$(printf '%s\n' "${NORMALIZED_FILES[@]}")"
 fi
 
-WD_KIND="$KIND" \
-WD_SCHEMA="coordination/$KIND/v1" \
-WD_WAVE_SLUG="$WAVE_SLUG" \
-WD_FROM="$FROM" \
-WD_TO="$TO" \
-WD_HEAD="$HEAD_SHA" \
-WD_PLAN_SHA256="$PLAN_SHA256" \
-WD_FILES="$DISPATCH_FILES_ENV" \
-WD_REQUEST_ID="$([[ "$KIND" == "request" ]] && echo "${FROM}-${TS_COMPACT}" || echo "$RE_ID")" \
-WD_BODY="$BODY_RAW" \
-WD_CREATED_AT="$NOW" \
-WD_OUT_PATH="$OUT_PATH" \
-python3 - <<'PYEOF'
+MAX_COLLISION_ATTEMPTS=5
+attempt=0
+while :; do
+  attempt=$((attempt + 1))
+  NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  TS_COMPACT="$(date -u '+%Y%m%dT%H%M%SZ')"
+  UNIQ="$(printf '%x' "$$")$(printf '%04x' "$RANDOM")"
+
+  case "$KIND" in
+    message)  OUT_PATH="$OUT_DIR/${FROM}-${TS_COMPACT}-${UNIQ}.json" ;;
+    consult)  OUT_PATH="$OUT_DIR/consult-${TS_COMPACT}-${UNIQ}.json" ;;
+    result)   OUT_PATH="$OUT_DIR/${FROM}-${TS_COMPACT}-${UNIQ}.json" ;;
+    request)  OUT_PATH="$OUT_DIR/${FROM}-${TS_COMPACT}-${UNIQ}.json" ;;
+    approval) OUT_PATH="$OUT_DIR/${RE_ID}.json" ;;
+    stop)     OUT_PATH="$OUT_DIR/stop-${TO}.flag" ;;
+  esac
+
+  REQUEST_ID_VALUE=""
+  if [[ "$KIND" == "request" ]]; then
+    REQUEST_ID_VALUE="$(basename "$OUT_PATH" .json)"
+  elif [[ "$KIND" == "approval" ]]; then
+    REQUEST_ID_VALUE="$RE_ID"
+  fi
+
+  set +e
+  WD_KIND="$KIND" \
+  WD_SCHEMA="coordination/$KIND/v1" \
+  WD_WAVE_SLUG="$WAVE_SLUG" \
+  WD_FROM="$FROM" \
+  WD_TO="$TO" \
+  WD_HEAD="$HEAD_SHA" \
+  WD_PLAN_SHA256="$PLAN_SHA256" \
+  WD_FILES="$DISPATCH_FILES_ENV" \
+  WD_REQUEST_ID="$REQUEST_ID_VALUE" \
+  WD_BODY="$BODY_RAW" \
+  WD_CREATED_AT="$NOW" \
+  WD_OUT_PATH="$OUT_PATH" \
+  python3 - <<'PYEOF'
 import json
 import os
 import sys
@@ -507,10 +558,36 @@ elif kind == "approval":
     if not payload.get("approver"):
         payload["approver"] = payload["from"]
 
-with open(os.environ["WD_OUT_PATH"], "w", encoding="utf-8") as fh:
+# Collision-safe kinds open EXCLUSIVELY ('x' — raises FileExistsError if the path already
+# exists); approval/stop open in overwrite ('w') mode (fixed canonical path, idempotent by design).
+EXCLUSIVE_KINDS = ("message", "consult", "result", "request")
+mode = "x" if kind in EXCLUSIVE_KINDS else "w"
+
+try:
+    fh = open(os.environ["WD_OUT_PATH"], mode, encoding="utf-8")
+except FileExistsError:
+    sys.stderr.write("[write-coordination-artifact] COLLISION: output path already exists; caller should retry with a new filename.\n")
+    sys.exit(3)
+
+with fh:
     json.dump(payload, fh, indent=2, ensure_ascii=False)
     fh.write("\n")
 PYEOF
+  py_status=$?
+  set -e
+
+  if [[ "$py_status" -eq 0 ]]; then
+    break
+  elif [[ "$py_status" -eq 3 ]]; then
+    if [[ "$attempt" -ge "$MAX_COLLISION_ATTEMPTS" ]]; then
+      echo "[write-coordination-artifact] ERROR: could not allocate a unique output filename after $MAX_COLLISION_ATTEMPTS attempts (persistent collision at $OUT_PATH)." >&2
+      exit 2
+    fi
+    continue
+  else
+    exit 2
+  fi
+done
 
 if [[ "$KIND" == "message" ]]; then
   cp "$OUT_PATH" "$MIRROR_DIR/$(basename "$OUT_PATH")"
