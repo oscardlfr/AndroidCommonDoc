@@ -210,6 +210,9 @@ function isApprovalValid(obj, waveDir, ctx) {
 // kind ∈ {consult, result, request, approval, stop, message}. ctx = {slug, projectRoot, now?}.
 function validate(kind, filePath, ctx) {
   if (!ctx || !ctx.slug || !ctx.projectRoot) return false;
+  // Codex hardening: a crafted slug (e.g. 'x/../../evil') would otherwise redirect every
+  // .planning/wave-<slug>/ path built below BEFORE any realpath confinement check runs.
+  if (!isSafeSegment(ctx.slug)) return false;
   const { slug, projectRoot } = ctx;
   const waveDir = path.join(projectRoot, '.planning', 'wave-' + slug);
 
@@ -252,6 +255,9 @@ function hasValidConsult(dir, ctx) {
   // NULL-SLUG INVARIANT (arch-platform PREP finding): centralize the guard here so every caller
   // gets it for free — no slug means no wave to scope a consult to, so never even touch disk.
   if (!ctx || !ctx.slug) return false;
+  // Codex hardening: same guard as validate() — a crafted slug must not redirect the confinement
+  // root before any path.join happens.
+  if (!isSafeSegment(ctx.slug)) return false;
 
   let dirHandle;
   try {
