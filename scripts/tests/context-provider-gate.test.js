@@ -424,41 +424,52 @@ function runHookInProject(projDir, extraEnv) {
 }
 
 // DC1: valid fresh consult-*.json, correct wave + correct `to` -> ALLOW (NEW disk unblock)
+// Codex/PR#236 hardening: temp project cleanup wrapped in try/finally so a leftover
+// mkdtemp dir isn't leaked if an assertion above throws mid-block.
 {
   const proj = makeTempProject();
-  writeConsult(consultDir(proj, DC_WAVE_SLUG), `consult-${nowCompact()}.json`, DC_WAVE_SLUG, 'context-provider', nowIso());
-  const dc1 = runHookInProject(proj, { CLAUDE_WAVE_SLUG: DC_WAVE_SLUG });
-  assert.strictEqual(dc1.exit, 0, 'DC1: valid fresh disk consult must unblock (exit 0)');
-  assert.ok(dc1.stderr.includes('[CP-GATE]'), 'DC1: stderr must contain [CP-GATE]');
-  assert.ok(dc1.stderr.includes('flag_writer=disk-consult'), 'DC1: stderr must attribute the unblock to disk-consult (distinct sentinel from flag-based flag_writer=<meta.written_by>)');
-  assert.ok(dc1.stderr.includes(`wave_slug=${DC_WAVE_SLUG}`), 'DC1: stderr must log the wave_slug that unblocked');
-  fs.rmSync(proj, { recursive: true, force: true });
-  console.log('DC1 disk-consult unblock (valid fresh consult -> allow, [CP-GATE] audit confirmed): PASS');
+  try {
+    writeConsult(consultDir(proj, DC_WAVE_SLUG), `consult-${nowCompact()}.json`, DC_WAVE_SLUG, 'context-provider', nowIso());
+    const dc1 = runHookInProject(proj, { CLAUDE_WAVE_SLUG: DC_WAVE_SLUG });
+    assert.strictEqual(dc1.exit, 0, 'DC1: valid fresh disk consult must unblock (exit 0)');
+    assert.ok(dc1.stderr.includes('[CP-GATE]'), 'DC1: stderr must contain [CP-GATE]');
+    assert.ok(dc1.stderr.includes('flag_writer=disk-consult'), 'DC1: stderr must attribute the unblock to disk-consult (distinct sentinel from flag-based flag_writer=<meta.written_by>)');
+    assert.ok(dc1.stderr.includes(`wave_slug=${DC_WAVE_SLUG}`), 'DC1: stderr must log the wave_slug that unblocked');
+    console.log('DC1 disk-consult unblock (valid fresh consult -> allow, [CP-GATE] audit confirmed): PASS');
+  } finally {
+    fs.rmSync(proj, { recursive: true, force: true });
+  }
 }
 
 // DC2: stale consult (created_at beyond CONSULT_TTL_SECONDS) -> BLOCK (fail-closed)
 {
   const proj = makeTempProject();
-  writeConsult(consultDir(proj, DC_WAVE_SLUG), `consult-${nowCompact()}.json`, DC_WAVE_SLUG, 'context-provider', hoursAgoIso(13));
-  const dc2 = runHookInProject(proj, { CLAUDE_WAVE_SLUG: DC_WAVE_SLUG });
-  assert.strictEqual(dc2.exit, 2, 'DC2: stale disk consult must block (exit 2, fail-closed)');
-  const dc2Body = JSON.parse(dc2.stdout);
-  assert.strictEqual(dc2Body.decision, 'block', 'DC2: decision must be block');
-  assert.ok(typeof dc2Body.reason === 'string' && dc2Body.reason.length > 0, 'DC2: reason must be a non-empty string');
-  fs.rmSync(proj, { recursive: true, force: true });
-  console.log('DC2 disk-consult fail-closed (stale created_at -> block): PASS');
+  try {
+    writeConsult(consultDir(proj, DC_WAVE_SLUG), `consult-${nowCompact()}.json`, DC_WAVE_SLUG, 'context-provider', hoursAgoIso(13));
+    const dc2 = runHookInProject(proj, { CLAUDE_WAVE_SLUG: DC_WAVE_SLUG });
+    assert.strictEqual(dc2.exit, 2, 'DC2: stale disk consult must block (exit 2, fail-closed)');
+    const dc2Body = JSON.parse(dc2.stdout);
+    assert.strictEqual(dc2Body.decision, 'block', 'DC2: decision must be block');
+    assert.ok(typeof dc2Body.reason === 'string' && dc2Body.reason.length > 0, 'DC2: reason must be a non-empty string');
+    console.log('DC2 disk-consult fail-closed (stale created_at -> block): PASS');
+  } finally {
+    fs.rmSync(proj, { recursive: true, force: true });
+  }
 }
 
 // DC3: wrong wave_slug -> BLOCK (fail-closed)
 {
   const proj = makeTempProject();
-  writeConsult(consultDir(proj, DC_WAVE_SLUG), `consult-${nowCompact()}.json`, 'some-other-wave', 'context-provider', nowIso());
-  const dc3 = runHookInProject(proj, { CLAUDE_WAVE_SLUG: DC_WAVE_SLUG });
-  assert.strictEqual(dc3.exit, 2, 'DC3: wrong-wave disk consult must block (exit 2, fail-closed)');
-  const dc3Body = JSON.parse(dc3.stdout);
-  assert.strictEqual(dc3Body.decision, 'block', 'DC3: decision must be block');
-  fs.rmSync(proj, { recursive: true, force: true });
-  console.log('DC3 disk-consult fail-closed (wrong wave_slug -> block): PASS');
+  try {
+    writeConsult(consultDir(proj, DC_WAVE_SLUG), `consult-${nowCompact()}.json`, 'some-other-wave', 'context-provider', nowIso());
+    const dc3 = runHookInProject(proj, { CLAUDE_WAVE_SLUG: DC_WAVE_SLUG });
+    assert.strictEqual(dc3.exit, 2, 'DC3: wrong-wave disk consult must block (exit 2, fail-closed)');
+    const dc3Body = JSON.parse(dc3.stdout);
+    assert.strictEqual(dc3Body.decision, 'block', 'DC3: decision must be block');
+    console.log('DC3 disk-consult fail-closed (wrong wave_slug -> block): PASS');
+  } finally {
+    fs.rmSync(proj, { recursive: true, force: true });
+  }
 }
 
 // DC4: unresolvable/null wave slug (no env override, protected branch, no wave dir) -> BLOCK, not fail-open
@@ -466,12 +477,15 @@ function runHookInProject(projDir, extraEnv) {
 // "slug does not resolve at all" (getWaveSlug returns null).
 {
   const proj = makeTempProject();
-  const dc4 = runHookInProject(proj, { CLAUDE_WAVE_SLUG: '' });
-  assert.strictEqual(dc4.exit, 2, 'DC4: null/unresolvable wave slug must block (exit 2), never fail open');
-  const dc4Body = JSON.parse(dc4.stdout);
-  assert.strictEqual(dc4Body.decision, 'block', 'DC4: decision must be block');
-  fs.rmSync(proj, { recursive: true, force: true });
-  console.log('DC4 null-slug fail-closed (unresolvable wave -> block, distinct from DC3): PASS');
+  try {
+    const dc4 = runHookInProject(proj, { CLAUDE_WAVE_SLUG: '' });
+    assert.strictEqual(dc4.exit, 2, 'DC4: null/unresolvable wave slug must block (exit 2), never fail open');
+    const dc4Body = JSON.parse(dc4.stdout);
+    assert.strictEqual(dc4Body.decision, 'block', 'DC4: decision must be block');
+    console.log('DC4 null-slug fail-closed (unresolvable wave -> block, distinct from DC3): PASS');
+  } finally {
+    fs.rmSync(proj, { recursive: true, force: true });
+  }
 }
 
 console.log('\nAll context-provider-gate tests passed.');

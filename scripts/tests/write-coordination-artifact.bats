@@ -22,13 +22,18 @@ bats_require_minimum_version 1.5.0
 # head/plan_sha256 for message/result/request/approval (NOT consult/stop), + files[] (only
 # when --file given), + request_id (request: filename stem <from>-<ts>; approval: --re value).
 #
-# OUTPUT PATHS (per kind, from the script's own header comment):
-#   message   inbox/<to>/<from>-<ts>.json          (+ outbox/<from>/<from>-<ts>.json mirror)
-#   consult   inbox/context-provider/consult-<ts>.json   (--to MUST be context-provider)
-#   result    results/<from>/<from>-<ts>.json
-#   request   requests/<body.kind>/<from>-<ts>.json
-#   approval  approvals/<--re value>.json            (--re REQUIRED for this kind)
-#   stop      stop-<to>.flag  (flat; empty stdin -> bare zero-byte presence file, no JSON at all)
+# OUTPUT PATHS (per kind, from the script's own header comment). message/consult/result/
+# request embed a collision-avoidance <uniq> = hex(pid) + 4 hex digits of $RANDOM (Codex/
+# PR#236 hardening: same-second writes previously collided/overwrote on 1s-granularity
+# timestamps alone) and open EXCLUSIVELY ('x' mode, retried up to 5x on collision, never
+# silently overwriting); approval/stop use a FIXED, intentionally-overwriteable path (no
+# <uniq>) since exactly one artifact should ever exist at those specific identities:
+#   message   inbox/<to>/<from>-<ts>-<uniq>.json     (+ outbox/<from>/ mirror, same name)
+#   consult   inbox/context-provider/consult-<ts>-<uniq>.json (--to MUST be context-provider)
+#   result    results/<from>/<from>-<ts>-<uniq>.json
+#   request   requests/<body.kind>/<from>-<ts>-<uniq>.json
+#   approval  approvals/<--re value>.json            (--re REQUIRED for this kind; overwriteable)
+#   stop      stop-<to>.flag  (flat, overwriteable; empty stdin -> bare zero-byte presence file)
 #
 # EXIT CODES: 0 success; 1 usage/argument error; 2 integrity violation (fail-closed, no bypass).
 #
@@ -379,18 +384,29 @@ _path_without_python3() {
 # Filename compact-UTC (no ':')
 # ══════════════════════════════════════════════════════════════════════════
 
-@test "WCA-fname-1 PASS: consult filename uses compact UTC timestamp with no colon" {
+# NOTE (Codex/PR#236 self-audit finding): a bare `[[ ]]` that is NOT the final
+# statement of a bats test body does not abort the test on non-match — a
+# documented bash/bats gotcha, verified empirically (a failing `[[ =~ ]]`
+# followed by a later PASSING statement silently reports "ok", masking the
+# mismatch; `[ ]` does not have this problem and aborts correctly). Both
+# regexes below were originally written before the writer's collision-safe
+# `-<uniq>` filename suffix landed and had silently stopped verifying the real
+# shape as a result — caught while investigating an unrelated Codex ask, fixed
+# here, and every `[[ ]]` is now `|| return 1`-guarded so this class of bug
+# can't recur silently regardless of statement order.
+
+@test "WCA-fname-1 PASS: consult filename uses compact UTC timestamp (no colon) plus the collision-avoidance uniq suffix" {
   run bash -c "cd '$PROJ' && printf '' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' \
     --kind consult --from test-specialist --to context-provider --slug '$WAVE_SLUG'"
   [ "$status" -eq 0 ]
   local dir="$PROJ/.planning/wave-$WAVE_SLUG/inbox/context-provider"
   local matches=("$dir"/consult-*.json)
   local fname; fname="$(basename "${matches[0]}")"
-  [[ "$fname" =~ ^consult-[0-9]{8}T[0-9]{6}Z\.json$ ]]
-  [[ "$fname" != *":"* ]]
+  [[ "$fname" =~ ^consult-[0-9]{8}T[0-9]{6}Z-[0-9a-f]+\.json$ ]] || return 1
+  [[ "$fname" != *":"* ]] || return 1
 }
 
-@test "WCA-fname-2 PASS: request filename uses compact UTC timestamp with no colon" {
+@test "WCA-fname-2 PASS: request filename uses compact UTC timestamp (no colon) plus the collision-avoidance uniq suffix" {
   _seed_plan
   run bash -c "cd '$PROJ' && printf '{\"kind\":\"scope-extension\"}' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' \
     --kind request --from test-specialist --to arch-testing --file docs/foo.md --slug '$WAVE_SLUG'"
@@ -398,8 +414,8 @@ _path_without_python3() {
   local dir="$PROJ/.planning/wave-$WAVE_SLUG/requests/scope-extension"
   local matches=("$dir"/test-specialist-*.json)
   local fname; fname="$(basename "${matches[0]}")"
-  [[ "$fname" =~ ^test-specialist-[0-9]{8}T[0-9]{6}Z\.json$ ]]
-  [[ "$fname" != *":"* ]]
+  [[ "$fname" =~ ^test-specialist-[0-9]{8}T[0-9]{6}Z-[0-9a-f]+\.json$ ]] || return 1
+  [[ "$fname" != *":"* ]] || return 1
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -417,4 +433,99 @@ _path_without_python3() {
   run bash -c "cd '$PROJ' && printf '' | PATH='$bin_dir' CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' \
     --kind consult --from test-specialist --to context-provider --slug '$WAVE_SLUG'"
   [ "$status" -eq 2 ]
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# Same-second collision (Codex/PR#236 regression, NO-GO finding #2) -- with only
+# a 1-second-granularity timestamp in the filename, two writes landing in the
+# SAME second previously collided and one silently overwrote the other. The fix
+# (toolkit-specialist) adds a <uniq> = hex(pid) + 4 hex digits of $RANDOM to
+# message/consult/result/request filenames and opens them EXCLUSIVELY ('x'
+# mode, retried up to 5x on collision) so same-second writes can never overwrite.
+#
+# Forced via CONCURRENT (backgrounded) invocations rather than back-to-back
+# sequential ones: sequential calls might happen to straddle a second boundary
+# and get different timestamps anyway (a pass that wouldn't prove anything).
+# Concurrent invocations start within microseconds of each other, deterministically
+# landing in the same wall-clock second on every run, and each spawns its OWN
+# `bash "$SCRIPT"` child process (a fresh, distinct PID per invocation) -- so this
+# also exercises the real collision-avoidance path (distinct PIDs alone would
+# already avoid an overwrite; this proves the mechanism holds under real
+# concurrent contention, not just "got lucky with $RANDOM").
+# ══════════════════════════════════════════════════════════════════════════
+
+_run_concurrent_writes() {
+  local n="$1"
+  shift
+  local pids=() i
+  for i in $(seq 1 "$n"); do
+    (cd "$PROJ" && printf '{"status":"done"}' | CLAUDE_WAVE_SLUG="$WAVE_SLUG" bash "$SCRIPT" "$@" >/dev/null 2>&1) &
+    pids+=("$!")
+  done
+  local pid rc=0
+  for pid in "${pids[@]}"; do
+    wait "$pid" || rc=1
+  done
+  return "$rc"
+}
+
+@test "WCA-collision-1 PASS (Codex/PR#236 regression): N concurrent same-kind (result) writes produce N distinct files, never an overwrite" {
+  _seed_plan
+  local n=8
+  _run_concurrent_writes "$n" --kind result --from test-specialist --to arch-testing --slug "$WAVE_SLUG" || return 1
+  local dir="$PROJ/.planning/wave-$WAVE_SLUG/results/test-specialist"
+  local matches=("$dir"/test-specialist-*.json)
+  [ "${#matches[@]}" -eq "$n" ] || return 1
+  # Format-specific check too, not just distinctness by luck: every produced
+  # file must carry the new <uniq> suffix.
+  local f
+  for f in "${matches[@]}"; do
+    [[ "$(basename "$f")" =~ ^test-specialist-[0-9]{8}T[0-9]{6}Z-[0-9a-f]+\.json$ ]] || return 1
+  done
+}
+
+@test "WCA-collision-2 PASS (Codex/PR#236 regression): N concurrent consult writes produce N distinct files (uniq suffix applies to consult too, not just <from>-<ts> kinds)" {
+  local n=8
+  _run_concurrent_writes "$n" --kind consult --from test-specialist --to context-provider --slug "$WAVE_SLUG" || return 1
+  local dir="$PROJ/.planning/wave-$WAVE_SLUG/inbox/context-provider"
+  local matches=("$dir"/consult-*.json)
+  [ "${#matches[@]}" -eq "$n" ] || return 1
+  local f
+  for f in "${matches[@]}"; do
+    [[ "$(basename "$f")" =~ ^consult-[0-9]{8}T[0-9]{6}Z-[0-9a-f]+\.json$ ]] || return 1
+  done
+}
+
+# Scope-verification companion (toolkit-specialist's own suggestion): approval and stop are
+# DELIBERATELY excluded from the uniq-suffix fix -- they keep their fixed, overwriteable
+# paths (approvals/<request_id>.json, stop-<role>.flag) since exactly one artifact should
+# ever exist per request_id / per role. Two writes to the SAME key must still collapse to
+# exactly one file with the latest content winning, not silently gain a uniq suffix too.
+
+@test "WCA-collision-3 PASS: two approval writes to the SAME request_id overwrite in place (still exactly 1 file, latest content wins -- approval is NOT part of the uniq-suffix fix)" {
+  _seed_plan
+  local req_id="test-specialist-20260101T000000Z"
+  run bash -c "cd '$PROJ' && printf '{\"decision\":\"authorized\",\"request_kind\":\"scope-extension\"}' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' \
+    --kind approval --from arch-testing --to test-specialist --re '$req_id' --slug '$WAVE_SLUG'"
+  [ "$status" -eq 0 ]
+  run bash -c "cd '$PROJ' && printf '{\"decision\":\"denied\",\"request_kind\":\"scope-extension\"}' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' \
+    --kind approval --from arch-testing --to test-specialist --re '$req_id' --slug '$WAVE_SLUG'"
+  [ "$status" -eq 0 ]
+  local dir="$PROJ/.planning/wave-$WAVE_SLUG/approvals"
+  local matches=("$dir"/"${req_id}"*.json)
+  [ "${#matches[@]}" -eq 1 ]
+  [ "$(_json_get "${matches[0]}" decision)" = "denied" ]
+}
+
+@test "WCA-collision-4 PASS: two stop writes to the SAME role overwrite in place (still exactly 1 file -- stop is NOT part of the uniq-suffix fix)" {
+  run bash -c "cd '$PROJ' && printf '' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' \
+    --kind stop --from arch-testing --to test-specialist --slug '$WAVE_SLUG'"
+  [ "$status" -eq 0 ]
+  run bash -c "cd '$PROJ' && printf '{\"reason\":\"second stop\"}' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' \
+    --kind stop --from arch-testing --to test-specialist --slug '$WAVE_SLUG'"
+  [ "$status" -eq 0 ]
+  local dir="$PROJ/.planning/wave-$WAVE_SLUG"
+  local matches=("$dir"/stop-test-specialist*.flag)
+  [ "${#matches[@]}" -eq 1 ]
+  [ "$(_json_get "${matches[0]}" reason)" = "second stop" ]
 }

@@ -590,3 +590,50 @@ _stop_path()     { local role="$1"; printf '%s' "$PROJ/.planning/wave-$WAVE_SLUG
   _run_validate consult "$f" "$WAVE_SLUG"
   [ "$status" -eq 2 ]
 }
+
+# ══════════════════════════════════════════════════════════════════════════
+# Crafted-slug escape (Codex PR #236 regression, NO-GO finding #1) -- an
+# unsanitized ctx.slug fed straight into `path.join(projectRoot, '.planning',
+# 'wave-'+slug, ...)` lets a slug containing '../' segments collapse the wave
+# dir OUTSIDE .planning/ entirely via path.join's own normalization -- no
+# symlink needed. E.g. slug "x/../../evil" -> waveDir resolves to
+# "<projectRoot>/evil". The fix (toolkit-specialist) rejects an unsafe raw
+# slug via isSafeSegment()-equivalent logic before any path.join happens.
+# These prove the escape is closed, not just that a mismatched wave_slug
+# field gets rejected for an unrelated reason.
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "CAV-slug-escape-1 FAIL (Codex/PR#236 regression): CLI validate with a crafted traversal slug never crashes/allows -> exit 2" {
+  # Basic CLI-path robustness: even with nothing planted at the resolved (escaped)
+  # location, a crafted slug argument must fail closed by construction, not merely
+  # by accident of a missing file.
+  local f="$PROJ/.planning/wave-x/inbox/context-provider/consult-$(_now_compact).json"
+  _run_validate consult "$f" "x/../../evil"
+  [ "$status" -eq 2 ]
+}
+
+@test "CAV-slug-escape-2 FAIL (Codex/PR#236 regression): crafted slug CANNOT reach a fully-valid consult planted in the sibling dir it would resolve to" {
+  # The concrete exploit: '.planning/wave-' + 'x/../../evil' path.join-normalizes to
+  # '<projectRoot>/evil' -- entirely outside .planning/. Plant a fully-valid consult
+  # at exactly that sibling location, with wave_slug deliberately set to the SAME
+  # crafted string (so a naive wave_slug-match check ALONE would have accepted it),
+  # and confirm the crafted slug is rejected before any such match is even attempted.
+  local evil_dir="$PROJ/evil/inbox/context-provider"
+  mkdir -p "$evil_dir"
+  local f="$evil_dir/consult-$(_now_compact).json"
+  _consult_json "x/../../evil" "context-provider" "$(_now_iso)" > "$f"
+  _run_validate consult "$f" "x/../../evil"
+  [ "$status" -eq 2 ]
+}
+
+@test "CAV-slug-escape-3 FAIL (Codex/PR#236 regression): crafted slug escape is blocked for OTHER kinds too (stop), not just consult" {
+  # waveDir is computed ONCE at the top of validate() and shared by every kind --
+  # this proves the fix sits at that shared entry point, not only inside
+  # isConsultFileValid (which would leave result/request/approval/message/stop exposed).
+  local evil_dir="$PROJ/evil"
+  mkdir -p "$evil_dir"
+  local f="$evil_dir/stop-test-specialist.flag"
+  : > "$f"
+  _run_validate stop "$f" "x/../../evil"
+  [ "$status" -eq 2 ]
+}

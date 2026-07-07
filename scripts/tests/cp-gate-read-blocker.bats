@@ -205,6 +205,7 @@ VALIDATOR="$BATS_TEST_DIRNAME/../../.claude/hooks/coordination-artifact.js"
 # that could drift from the validator's own values.
 CONSULT_TTL_SECONDS="$(node "$VALIDATOR" const CONSULT_TTL_SECONDS)"
 MAX_CONSULT_HARD_CAP="$(node "$VALIDATOR" const MAX_CONSULT_HARD_CAP)"
+MAX_CONSULT_ENTRIES="$(node "$VALIDATOR" const MAX_CONSULT_ENTRIES)"
 MAX_CONSULT_BYTES="$(node "$VALIDATOR" const MAX_CONSULT_BYTES)"
 
 _setup_wave_proj() {
@@ -502,18 +503,26 @@ _run_hook_env() {
 }
 
 # ── Row J: many-file consult dir (300 valid+invalid) -> exit 0, deterministic newest-valid selection ──
-# The lexicographically-NEWEST file (seq 299) is deliberately INVALID (wrong wave),
-# forcing the scan to fall through past it; the ONE true positive sits at seq 150
-# (150th-from-newest of 300 — safely within any reasonable MAX_CONSULT_ENTRIES=256
-# collection window), proving the selection isn't "just grab whatever opendir
-# returns first" and doesn't depend on directory iteration order.
+# The lexicographically-NEWEST file (highest seq) is deliberately INVALID (wrong wave),
+# forcing the scan to fall through past it. The ONE true positive's position is DERIVED
+# (Codex/PR#236 hardening — was a hardcoded "150" magic number) from MAX_CONSULT_ENTRIES
+# rather than an arbitrary constant: it sits at half of MAX_CONSULT_ENTRIES ranks back
+# from the newest file, which is comfortably inside the retained top-N collection window
+# (with margin on both sides) for any sane MAX_CONSULT_ENTRIES value, and proves the
+# selection isn't "just grab whatever opendir returns first" / doesn't depend on
+# directory iteration order.
 
 _populate_many_consult_files() {
-  local dir="$1" valid_seq="$2"
+  local dir="$1" total="$2"
   mkdir -p "$dir"
+  local max_val=$((total - 1))
+  local width=${#max_val}
+  local rank_from_newest=$((MAX_CONSULT_ENTRIES / 2))
+  local valid_seq
+  printf -v valid_seq "%0${width}d" "$((max_val - rank_from_newest))"
   local n fresh
   fresh="$(_now_iso)"
-  for n in $(seq -w 0 299); do
+  for n in $(seq -w 0 "$max_val"); do
     if [ "$n" = "$valid_seq" ]; then
       _write_consult "$dir" "consult-20260101T000${n}Z.json" "$CONSULT_WAVE_SLUG" "context-provider" "$fresh"
     else
@@ -524,7 +533,7 @@ _populate_many_consult_files() {
 
 @test "CP-J-read: 300-file consult dir, newest file deliberately invalid -> exit 0 (deterministic fallback, in-budget)" {
   _setup_wave_proj
-  _populate_many_consult_files "$(_consult_dir)" "150"
+  _populate_many_consult_files "$(_consult_dir)" 300
   make_input Read '/project/docs/di/di-patterns-modules.md'
   SECONDS=0
   _run_hook_env "CLAUDE_WAVE_SLUG=$CONSULT_WAVE_SLUG"
@@ -534,7 +543,7 @@ _populate_many_consult_files() {
 
 @test "CP-J-grep: 300-file consult dir, newest file deliberately invalid -> exit 0 (deterministic fallback, in-budget)" {
   _setup_wave_proj
-  _populate_many_consult_files "$(_consult_dir)" "150"
+  _populate_many_consult_files "$(_consult_dir)" 300
   make_grep_input '/project/docs/di/di-patterns-modules.md'
   SECONDS=0
   _run_hook_env "CLAUDE_WAVE_SLUG=$CONSULT_WAVE_SLUG"
