@@ -22,7 +22,7 @@ When running under the Claude adapter (live background peers), before your FIRST
 
 **Dev first action**: `SendMessage(to="context-provider", summary="gate ack")` — satisfies the gate for the session.
 
-This gate presumes a live context-provider peer reachable by `SendMessage`, so it is a Claude-runtime capability. A portable or single-use runtime with no live messaging obtains the same context-provider oracle through a single-use dispatch or a disk pattern-index artifact; the portable equivalent of this gate belongs to the portable coordination layer, not to any single engine.
+This gate presumes a live context-provider peer reachable by `SendMessage`, so it is a Claude-runtime capability. A portable or single-use runtime with no live messaging obtains the same context-provider oracle through a single-use dispatch or a `coordination/consult/v1` disk artifact validated by the gate's disk-read branch (wave_slug match + `CONSULT_TTL_SECONDS` freshness, no `session_id`) — see [coordination-artifact-schema](coordination-artifact-schema.md) for the full contract.
 
 ## 2. Read Docs by Pointer, Never Inline
 
@@ -38,11 +38,11 @@ When you coordinate via the `SendMessage` accelerator, every SendMessage body mu
 
 ## 4. Scope-Extension Protocol
 
-Before committing ANY out-of-scope change, read `~/.claude/projects/.../memory/feedback_scope_extension_protocol.md`. Out-of-scope findings require an authorization request to the orchestrator (team-lead role) BEFORE committing — via `SendMessage` under the Claude adapter, or the portable-mode equivalent (a request/approval artifact in the wave dir; the portable coordination layer defines the exact contract). Silent out-of-scope commits are a hard violation.
+Before committing ANY out-of-scope change, read `~/.claude/projects/.../memory/feedback_scope_extension_protocol.md`. Out-of-scope findings require an authorization request to the orchestrator (team-lead role) BEFORE committing — via `SendMessage` under the Claude adapter, or the portable-mode equivalent (a `request/v1` artifact answered by an `approval/v1` artifact — see [coordination-artifact-schema](coordination-artifact-schema.md)). Silent out-of-scope commits are a hard violation.
 
 ## 5. Wave Context Awareness
 
-At session start, read the active wave's `.planning/wave-<slug>/PLAN.md` to understand current wave scope. Never act on a prior wave's objectives. If PLAN.md and the orchestrator's dispatch disagree, raise `PLAN-DISPATCH DRIFT` before proceeding — via `SendMessage` to the team-lead role under the Claude adapter, or a drift note in the wave dir in portable mode.
+At session start, read the active wave's `.planning/wave-<slug>/PLAN.md` to understand current wave scope. Never act on a prior wave's objectives. If PLAN.md and the orchestrator's dispatch disagree, raise `PLAN-DISPATCH DRIFT` before proceeding — via `SendMessage` to the team-lead role under the Claude adapter, or a `message/v1` artifact in portable mode (see [coordination-artifact-schema](coordination-artifact-schema.md)).
 
 ## 6. Stay Alive (Claude-rich mode)
 

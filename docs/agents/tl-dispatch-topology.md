@@ -41,6 +41,8 @@ Full protocol, team-lead workflow, and anti-patterns: `docs/agents/arch-dispatch
 
 Dispatch is **disk-first**: the orchestrator materializes a dispatch artifact (`.planning/wave-<slug>/specialist-dispatches/<specialist>/`) bound to current HEAD + PLAN content before a specialist executes `Write`/`Edit`/`Bash`. `TaskList` is tracking-only — it never authorizes execution. `SendMessage` is an optional adapter — never harness authority. Full protocol: [specialist-dispatch-protocol.md](specialist-dispatch-protocol.md).
 
+The same disk-first floor covers the rest of the coordination loop: a specialist's completion lands at `results/<role>/` (`result/v1`), instruction delivery falls back to `inbox/<role>/` (`message/v1`) when `SendMessage` is absent or unreliable, and a graceful-shutdown request falls back to `stop-<role>.flag` (`stop/v1`) — full schema: [coordination-artifact-schema](coordination-artifact-schema.md).
+
 ## Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() dispatch)
 
 BEFORE calling Agent() to spawn a specialist, verify ALL:

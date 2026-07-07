@@ -64,6 +64,10 @@ SendMessage(to="team-lead", summary="scope extension request: {filename}", messa
 
 **Step 3** — After `AUTHORIZED` arrives, proceed. There is no env-flag escape hatch — the old `SCOPE_GATE_DISABLE=1` is retired and has no effect (see Escape Hatch (retired)); the edit is made by the orchestrator or a scoped specialist, not by the architect.
 
+### Portable Mode
+
+When no live `SendMessage` channel exists (portable/single-use runtime), Step 1 becomes: the requester writes a `request/v1` artifact to `requests/<kind>/<request_id>.json` (`kind` e.g. `scope-extension`) instead of the SendMessage call, carrying the same Blocker/Root cause/Proposed fix/Scope delta/Why-not-defer fields. Step 2's wait becomes: poll for the matching `approval/v1` artifact at `approvals/<request_id>.json` — the orchestrator resolves that exact `request_id`, never a glob over `approvals/`. Step 3 is unchanged: proceed only once the `approval/v1` artifact exists. Full schema: [coordination-artifact-schema](coordination-artifact-schema.md).
+
 ## The Mechanical Enforcement
 
 The architect write-boundary is enforced by two wired `PreToolUse` hooks (see Companion Hooks), not by a per-file scope list:

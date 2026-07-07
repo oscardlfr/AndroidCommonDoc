@@ -355,4 +355,137 @@ clearSessionFlag(sid_cr2g);
 assert.strictEqual(fcr2g.exit, 0, 'CR2-G: Read docs path with session flag must be allowed');
 console.log('CR2-G Read docs path with session flag allows (positive control): PASS');
 
+// ════════════════════════════════════════════════════════════════════════
+// Wave 2 (portable-coordination-artifacts): disk-consult unblock mirror.
+// Primary A-N adversarial-matrix home is cp-gate-read-blocker.bats (native
+// stdin->exit-status idiom); these DC* cases exist because this file asserts
+// stdout JSON + stderr [CP-GATE] CONTENT and would otherwise silently miss
+// the new branch (see PLAN.md Planner Verification Note #2). Isolation
+// mirrors the bats fixture: mktemp + throwaway git init, CLAUDE_PROJECT_DIR
+// + CLAUDE_WAVE_SLUG always explicit — never touches the live repo tree.
+//
+// CONFIRMED against the landed context-provider-gate.js diff: the disk-consult
+// branch (diskConsultUnblocks()) emits its OWN [CP-GATE] audit line on success
+// only — `flag_writer=disk-consult wave_slug=<slug>` (distinct sentinel from
+// the flag-based path's `flag_writer=<meta.written_by>`) — asserted in DC1
+// below. On the BLOCK side there is no new/distinct reason string: a failed
+// diskConsultUnblocks() falls through to the SAME pre-existing generic block
+// message ("No agent in this session has consulted context-provider yet...").
+// DC2-DC4 therefore assert decision:"block" + a non-empty reason structurally
+// (there is nothing more specific to mirror) rather than hardcoding that
+// unchanged generic string, which would just duplicate F1/F9's own assertions.
+// ════════════════════════════════════════════════════════════════════════
+
+const DC_WAVE_SLUG = 'cp-gate-consult-wave';
+
+function makeTempProject() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-gate-dc-proj-'));
+  const opts = { cwd: dir, encoding: 'utf8' };
+  spawnSync('git', ['init', '-q'], opts);
+  spawnSync('git', ['config', 'user.email', 'bats@test.local'], opts);
+  spawnSync('git', ['config', 'user.name', 'Bats Test'], opts);
+  spawnSync('git', ['commit', '-q', '--allow-empty', '-m', 'init'], opts);
+  // Deterministic protected default branch, regardless of the host's
+  // init.defaultBranch config — DC4's "no wave" control needs this fixed.
+  spawnSync('git', ['branch', '-m', 'main'], opts);
+  return dir;
+}
+
+function consultDir(projDir, slug) {
+  return path.join(projDir, '.planning', `wave-${slug}`, 'inbox', 'context-provider');
+}
+
+function nowIso() { return new Date().toISOString(); }
+function nowCompact() { return nowIso().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z'); }
+function hoursAgoIso(n) { return new Date(Date.now() - n * 3600 * 1000).toISOString(); }
+
+function writeConsult(dir, fname, waveSlug, to, createdAt) {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, fname), JSON.stringify({
+    schema: 'coordination/consult/v1',
+    wave_slug: waveSlug,
+    from: 'test-specialist',
+    to,
+    created_at: createdAt,
+  }));
+}
+
+function runHookInProject(projDir, extraEnv) {
+  return runHook(
+    {
+      tool_name: 'Grep',
+      tool_input: { pattern: 'test', path: '/project/docs/di/di-patterns-modules.md' },
+      session_id: 'dc-' + Math.random().toString(36).slice(2),
+      agent_type: 'arch-platform',
+      agent_id: 'arch-platform',
+    },
+    { CLAUDE_PROJECT_DIR: projDir, CLAUDE_WAVE_SLUG: '', ...extraEnv }
+  );
+}
+
+// DC1: valid fresh consult-*.json, correct wave + correct `to` -> ALLOW (NEW disk unblock)
+// Codex/PR#236 hardening: temp project cleanup wrapped in try/finally so a leftover
+// mkdtemp dir isn't leaked if an assertion above throws mid-block.
+{
+  const proj = makeTempProject();
+  try {
+    writeConsult(consultDir(proj, DC_WAVE_SLUG), `consult-${nowCompact()}.json`, DC_WAVE_SLUG, 'context-provider', nowIso());
+    const dc1 = runHookInProject(proj, { CLAUDE_WAVE_SLUG: DC_WAVE_SLUG });
+    assert.strictEqual(dc1.exit, 0, 'DC1: valid fresh disk consult must unblock (exit 0)');
+    assert.ok(dc1.stderr.includes('[CP-GATE]'), 'DC1: stderr must contain [CP-GATE]');
+    assert.ok(dc1.stderr.includes('flag_writer=disk-consult'), 'DC1: stderr must attribute the unblock to disk-consult (distinct sentinel from flag-based flag_writer=<meta.written_by>)');
+    assert.ok(dc1.stderr.includes(`wave_slug=${DC_WAVE_SLUG}`), 'DC1: stderr must log the wave_slug that unblocked');
+    console.log('DC1 disk-consult unblock (valid fresh consult -> allow, [CP-GATE] audit confirmed): PASS');
+  } finally {
+    fs.rmSync(proj, { recursive: true, force: true });
+  }
+}
+
+// DC2: stale consult (created_at beyond CONSULT_TTL_SECONDS) -> BLOCK (fail-closed)
+{
+  const proj = makeTempProject();
+  try {
+    writeConsult(consultDir(proj, DC_WAVE_SLUG), `consult-${nowCompact()}.json`, DC_WAVE_SLUG, 'context-provider', hoursAgoIso(13));
+    const dc2 = runHookInProject(proj, { CLAUDE_WAVE_SLUG: DC_WAVE_SLUG });
+    assert.strictEqual(dc2.exit, 2, 'DC2: stale disk consult must block (exit 2, fail-closed)');
+    const dc2Body = JSON.parse(dc2.stdout);
+    assert.strictEqual(dc2Body.decision, 'block', 'DC2: decision must be block');
+    assert.ok(typeof dc2Body.reason === 'string' && dc2Body.reason.length > 0, 'DC2: reason must be a non-empty string');
+    console.log('DC2 disk-consult fail-closed (stale created_at -> block): PASS');
+  } finally {
+    fs.rmSync(proj, { recursive: true, force: true });
+  }
+}
+
+// DC3: wrong wave_slug -> BLOCK (fail-closed)
+{
+  const proj = makeTempProject();
+  try {
+    writeConsult(consultDir(proj, DC_WAVE_SLUG), `consult-${nowCompact()}.json`, 'some-other-wave', 'context-provider', nowIso());
+    const dc3 = runHookInProject(proj, { CLAUDE_WAVE_SLUG: DC_WAVE_SLUG });
+    assert.strictEqual(dc3.exit, 2, 'DC3: wrong-wave disk consult must block (exit 2, fail-closed)');
+    const dc3Body = JSON.parse(dc3.stdout);
+    assert.strictEqual(dc3Body.decision, 'block', 'DC3: decision must be block');
+    console.log('DC3 disk-consult fail-closed (wrong wave_slug -> block): PASS');
+  } finally {
+    fs.rmSync(proj, { recursive: true, force: true });
+  }
+}
+
+// DC4: unresolvable/null wave slug (no env override, protected branch, no wave dir) -> BLOCK, not fail-open
+// Distinct code path from DC3: DC3 is "slug resolves but mismatches"; DC4 is
+// "slug does not resolve at all" (getWaveSlug returns null).
+{
+  const proj = makeTempProject();
+  try {
+    const dc4 = runHookInProject(proj, { CLAUDE_WAVE_SLUG: '' });
+    assert.strictEqual(dc4.exit, 2, 'DC4: null/unresolvable wave slug must block (exit 2), never fail open');
+    const dc4Body = JSON.parse(dc4.stdout);
+    assert.strictEqual(dc4Body.decision, 'block', 'DC4: decision must be block');
+    console.log('DC4 null-slug fail-closed (unresolvable wave -> block, distinct from DC3): PASS');
+  } finally {
+    fs.rmSync(proj, { recursive: true, force: true });
+  }
+}
+
 console.log('\nAll context-provider-gate tests passed.');
