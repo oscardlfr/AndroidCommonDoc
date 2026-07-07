@@ -45,7 +45,7 @@ The main agent (when orchestrating a session) orchestrates the project: plan sco
 
 ### Per-Session Gate
 
-**Per-session gate (Claude adapter)**: When running under the Claude adapter with a live context-provider peer, before your FIRST Grep, Glob, or Bash search call you must have received a SendMessage response from context-provider in this session; the hook enforces this mechanically. A portable/single-use runtime obtains the context-provider oracle differently (single-use dispatch or a disk pattern-index) — see [agent-core-rules §1](agent-core-rules.md). Wave slug propagation + quality-gate sentinel location: see [tl-session-setup § Wave Slug Propagation](tl-session-setup.md#wave-slug-propagation-find-18-fix-bl-w42-pr1) (FIND-17/18 fix).
+**Per-session gate (Claude adapter)**: When running under the Claude adapter with a live context-provider peer, before your FIRST Grep, Glob, or Bash search call you must have received a SendMessage response from context-provider in this session; the hook enforces this mechanically. A portable/single-use runtime obtains the context-provider oracle differently (single-use dispatch or a `coordination/consult/v1` disk artifact validated by the gate's disk-read branch — see [coordination-artifact-schema](coordination-artifact-schema.md)) — see [agent-core-rules §1](agent-core-rules.md). Wave slug propagation + quality-gate sentinel location: see [tl-session-setup § Wave Slug Propagation](tl-session-setup.md#wave-slug-propagation-find-18-fix-bl-w42-pr1) (FIND-17/18 fix).
 
 ### L0 Mechanical Floor Consultation Checklist (MANDATORY)
 

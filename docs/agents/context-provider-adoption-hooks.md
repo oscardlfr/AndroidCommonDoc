@@ -28,13 +28,15 @@ Wave 17-lite installs three hooks: one blocking gate (PreToolUse), one tracker (
 
 **File**: `.claude/hooks/context-provider-gate.js`
 **Trigger**: PreToolUse on `Bash`, `Grep`, `Glob`
-**Behavior**: Blocks the tool call and returns a human-readable rejection unless a session flag exists in `os.tmpdir()`, indicating the calling peer has already consulted context-provider this session.
+**Behavior**: Blocks the tool call and returns a human-readable rejection unless a session flag exists in `os.tmpdir()` OR a valid `coordination/consult/v1` disk artifact exists, indicating the calling peer has already consulted context-provider this session.
 
 **Flag paths** (both stored in `os.tmpdir()`):
 - Non-specialist agents: `claude-cp-consulted-{session_id}.flag`
 - Specialists (per-agent): `claude-arch-responded-{session_id}-{agent_type}.flag` (written when an arch-* agent SendMessages the specialist)
 
-**Exempt agent types** (never blocked): `doc-updater`, `context-provider`, `quality-gater`, `release-guardian-agent`. Exemptions are matched against `agent_type` from the hook env, not agent name — so `-2`/`-3` overflow variants are also exempt.
+**Disk-consult branch (portable mode)**: When no live SendMessage flag exists for the session, the gate additionally checks for a `coordination/consult/v1` artifact at `inbox/context-provider/consult-<ts>.json` — fresh if `wave_slug` matches the active wave AND `created_at` is within `CONSULT_TTL_SECONDS` (12h / 43200s) of now. No `session_id` binding (a portable shell has none to source). This lets a single-use/portable dispatch satisfy the gate the same way a live SendMessage does. `context-provider-consulted.js` (the SendMessage-side flag writer) is unchanged by this — see [ADR-001](../adr/ADR-001-runtime-adapter-contract.md) §5.2. Full schema: [coordination-artifact-schema](coordination-artifact-schema.md).
+
+**Exempt agent types** (never blocked): `context-provider` and `project-manager` (`EXEMPT_TYPES`, `context-provider-gate.js:52` — matched by exact `agent_type` or prefix, so `-2`/`-3` overflow variants are also exempt), plus the main orchestrator via a separate empty-`agent_type` check (`context-provider-gate.js:43-44` — the main agent has no `agent_type`). `doc-updater`, `quality-gater`, and `release-guardian-agent` are **not** exempt — they satisfy the gate the same way any other non-specialist, non-exempt agent does: one `SendMessage` to context-provider (or the disk-consult branch above) sets/matches the session-scoped flag this gate checks.
 
 **Fail-open semantics**: if the hook cannot read the flag directory (permissions, missing dir), it allows the tool call and logs a warning to stderr. A broken gate must not block real work.
 

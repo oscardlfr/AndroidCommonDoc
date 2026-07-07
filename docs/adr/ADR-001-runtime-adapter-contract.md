@@ -153,7 +153,7 @@ handle.
 **Artifact-based fallback**: If `send` is absent or unreliable (name-routing failure
 per finding 1 in `project_peer_control_plane_findings.md`): the orchestrator writes
 the instruction to a well-known disk path (e.g.,
-`.planning/wave-<slug>/inbox-<role>.md`) and the agent reads it on next activation
+`.planning/wave-<slug>/inbox/<role>.json`) and the agent reads it on next activation
 or via a fresh-instance spawn.
 
 #### Op 3: `status(handle) → AgentStatus`
@@ -260,6 +260,20 @@ content). `runtime_id` is adapter-internal and opaque. The hook field `data.agen
 is a SEPARATE, ROTATING value — MUST NOT be used as a SendMessage target, gate key, or
 identity contract anywhere in the harness.
 
+### 3.3 Coordination Artifact Schemas
+
+Beyond the `inbox`/`stop`-flag fallbacks named in the per-op semantics above, the
+portable coordination layer defines 5 further typed artifact schemas (full field-level
+contract: [coordination-artifact-schema](../agents/coordination-artifact-schema.md)):
+
+| Schema | Path | Used by |
+|--------|------|---------|
+| `message/v1` | `inbox/<role>/<ts>.json` | Op 2 `send` disk-inbox fallback |
+| `request/v1` | `requests/<kind>/<request_id>.json` | Scope-extension / authorization requests |
+| `approval/v1` | `approvals/<request_id>.json` | Orchestrator's resolution of exactly one `request/v1`, matched by `request_id` |
+| `result/v1` | `results/<role>/<ts>.json` | Op 4 `result` disk-artifact fallback |
+| `stop/v1` | `stop-<role>.flag` | Op 5 `stop` disk-artifact fallback |
+
 ---
 
 ## 4. Per-Engine Adapter Matrix (constraint 4)
@@ -322,7 +336,7 @@ floor. All 9 ops except `artifact` and `status`/`result` (disk floor) are **pend
 ### 4.4 Future Engine Adapter (graceful degradation baseline)
 
 Any unimplemented engine uses the artifact floor: `spawn` = any mechanism that writes the
-artifact; `send` = write to `.planning/wave-<slug>/inbox-<role>.md`; `status`/`result` = read
+artifact; `send` = write to `.planning/wave-<slug>/inbox/<role>.json`; `status`/`result` = read
 + validate artifact (marker + HEAD-binding/freshness per op 3); `stop` = write
 `.planning/wave-<slug>/stop-<role>.flag`; `operator_visibility` = null (infer from artifact
 mtime + unanswered count); `reuse` = null (always fresh-instance-replacement);
@@ -381,7 +395,16 @@ adapter doesn't change this.
 **Context-provider role**: oracle/cache (read-only). Dispatched via:
 - `spawn('context-provider', query)` (single-use) OR
 - `reuse('context-provider')` (pending-evidence on routing reliability) OR
-- Disk-artifact fallback: context-provider writes pattern index to disk; architects read.
+- Disk-artifact fallback: a `coordination/consult/v1` artifact (see
+  [coordination-artifact-schema](../agents/coordination-artifact-schema.md)) written to
+  `inbox/context-provider/consult-<ts>.json`; architects/specialists read it directly,
+  and `context-provider-gate.js` validates it on a **disk branch** (wave_slug match +
+  `CONSULT_TTL_SECONDS` freshness, no `session_id`) when no live SendMessage flag
+  exists — the portable-mode equivalent of the SendMessage gate-ack.
+  `context-provider-consulted.js` (the flag writer) is unchanged: a
+  PostToolUse-on-Write writer for CP would be non-portable (CP stays read-only); the
+  gate-side disk read is engine-agnostic and needs no new writer hook.
+
 The `context-provider-gate.js` session-scoped flag remains valid — one CP consultation
 unblocks all peers regardless of which op was used.
 
