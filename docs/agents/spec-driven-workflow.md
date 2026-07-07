@@ -40,21 +40,25 @@ All delegation uses the `Agent` tool. Never Bash + `claude` CLI.
 2. Human asks Claude: "/work implement feature X" or "@team-lead ..."
 3. Orchestrator (main agent / team-lead) runs 3 sequential phases per task:
 
-   Session start: orchestrator dispatches 6 core roles as concurrent Agent subagents
-     (or background peers when runtime supports them):
-     context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
+   Session start: orchestrator dispatches the core roles the wave's CLASS floor
+     requires — selectively, skipping roles with no work (Claude-rich mode MAY
+     pre-warm them as background peers when runtime supports them; portable mode
+     dispatches per phase). Available roster: context-provider, doc-updater,
+     arch-testing, arch-platform, arch-integration, quality-gater
      Load-bearing contract: disk artifacts in .planning/wave-{slug}/
 
    Phase 1 — Planning (planner subagent):
-     planner consults context-provider, writes plan to .planning/PLAN.md (disk artifact)
+     planner consults context-provider, writes plan to .planning/wave-{slug}/PLAN.md (disk artifact)
      orchestrator reads plan from disk, planner dismissed
 
    Phase 2 — Execution (concurrent Agent subagents, optional background peers):
      Architects detect → orchestrator dispatches specialists → architects cross-verify
      Each architect writes arch-{role}-verdict.md (HEAD-bound) to disk
-     5 core specialists dispatched at Phase 2 start: test-specialist, ui-specialist,
-       domain-model-specialist, data-layer-specialist, toolkit-specialist
-     All 3 verdicts on disk + APPROVE → proceed to Phase 3
+     Core specialists dispatched selectively when Phase 2 starts, per the wave's
+       CLASS/scope (available: test-specialist, ui-specialist, domain-model-specialist,
+       data-layer-specialist, toolkit-specialist)
+     The required architects' verdicts on disk + APPROVE → proceed to Phase 3
+       (HARNESS: all 3; DOC: the declared architects; FAST-PATH: none)
 
    Phase 3 — Quality Gate (quality-gater subagent):
      quality-gater reads verdicts from disk, optionally SendMessages live architect peers

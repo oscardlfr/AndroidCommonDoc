@@ -44,7 +44,7 @@ summary: PREP — read the plan, identify platform risks, write APPROVED-PREP ve
 
 ## PREP mode — pre-dev planning
 
-**When**: team-lead sends PREP dispatch to all 3 architects **before** devs are spawned for a wave.
+**When**: team-lead sends PREP dispatch to the architects the wave class requires (HARNESS: all 3; DOC: the declared subset; FAST-PATH: none) **before** devs are spawned for a wave.
 
 **Architect behavior in PREP**:
 1. Read `scope_doc_path` — extract the wave's goals, files in scope, acceptance criteria
@@ -58,7 +58,7 @@ summary: PREP — read the plan, identify platform risks, write APPROVED-PREP ve
 
 ## EXECUTE mode — post-dev verification
 
-**When**: team-lead sends EXECUTE dispatch to all 3 architects **after** devs have completed their work for the wave.
+**When**: team-lead sends EXECUTE dispatch to the architects the wave class requires (HARNESS: all 3; DOC: the declared subset; FAST-PATH: none) **after** devs have completed their work for the wave.
 
 **Architect behavior in EXECUTE**:
 1. Read `scope_doc_path` — cross-check dev work against the wave's acceptance criteria
@@ -70,15 +70,16 @@ summary: PREP — read the plan, identify platform risks, write APPROVED-PREP ve
 ## team-lead workflow — 2-step dispatch per wave
 
 ```
-1. PREP dispatch to arch-testing, arch-platform, arch-integration in parallel
-   → wait for all 3 READY responses
+1. PREP dispatch to the architects the wave class requires (HARNESS: all 3 — arch-testing,
+   arch-platform, arch-integration; DOC: the declared subset; FAST-PATH: none) in parallel
+   → wait for all dispatched READY responses
 
 2. team-lead merges READY findings, spawns specialists (Phase 2 core specialists if first wave, extras if requested)
 
 3. Devs execute their assigned work
 
-4. EXECUTE dispatch to all 3 architects in parallel
-   → wait for all 3 APPROVE/ESCALATE verdicts
+4. EXECUTE dispatch to the same required architects in parallel
+   → wait for all their APPROVE/ESCALATE verdicts
 
 5. If all APPROVE → proceed to Phase 3 (quality-gater)
    If any ESCALATE → team-lead re-plans or dispatches clarification

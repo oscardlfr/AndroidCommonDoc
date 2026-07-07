@@ -22,6 +22,8 @@ After completing review for wave `{N}`:
 
 1. **Write verdict to** `.planning/wave-{slug}/arch-{role}-verdict.md` using `write-verdict.sh` — this is the canonical mechanism. Write/Edit are denied by `architect-self-edit-gate.js`; Bash is the only path, and `write-verdict.sh` is the required tool.
 
+   **Unavailable-peer handling.** If an architect peer is unavailable, read its validated on-disk verdict (`APPROVED-PREP`/`APPROVED-VERIFY-FINAL` marker + HEAD-binding + freshness) or dispatch a fresh single-use instance to re-verify. The orchestrator NEVER authors or forges a verdict on an architect's behalf — `write-verdict.sh` is the sole sanctioned write channel for verdict files. Note: this is currently a **doctrinal** constraint, not a mechanically-enforced one for the orchestrator — `architect-self-edit-gate.js` and `architect-verdict-presence-gate.js` scope to `arch-*` agent types only and never fire for the orchestrator's empty `agent_type` (unlike `plan-md-write-gate.js`, which does block orchestrator writes to `PLAN.md`); mechanizing an equivalent orchestrator-scoped verdict-write gate is open follow-on work (BL-W4-12).
+
    **PREP phase** (after completing analysis, before EXECUTE):
    ```bash
    bash scripts/sh/write-verdict.sh --role arch-{role} --phase prep

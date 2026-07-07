@@ -73,11 +73,11 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 
 ## Key Concepts
 
-- **3-Phase Model** = Planning → Execution → Quality Gate. Load-bearing context lives in disk artifacts (PLAN, verdicts, QG proof); the orchestrator dispatches single-use subagents that may optionally persist as background peers (reachable via `SendMessage`) when the runtime supports them — 5 core roles at session start + 5 core specialists at Phase 2 carry context across phases. Planner is temporary.
-- **Core roles** = context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater (session start) + test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist (Phase 2 start). Dispatched as single-use subagents; optionally live as background peers for the session when the runtime supports them.
+- **3-Phase Model** = Planning → Execution → Quality Gate. Load-bearing context lives in disk artifacts (PLAN, verdicts, QG proof); the orchestrator dispatches single-use subagents that may optionally persist as background peers (reachable via `SendMessage`) when the runtime supports them — selected per the wave's CLASS floor at session start and Phase 2. Planner is temporary.
+- **Core roles** = available roster, dispatched selectively per CLASS floor: context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater (session start) + test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist (Phase 2). Dispatched as single-use subagents; optionally live as background peers for the session when the runtime supports them.
 - **CLAUDE.md** = workflow instructions (< 80 lines). Contains Agent Roster → triggers agent delegation.
 - **`.claude/agents/`** = canonical agent definitions. Synced via `/sync-l0`.
-- **team-lead** = orchestrator. NEVER codes — orchestrates 3-phase teams, spawns 5 core specialists at Phase 2 start, spawns extras on architect request. Pattern validation chain: specialist → architect → context-provider.
+- **team-lead** = orchestrator. NEVER codes — orchestrates 3-phase teams, spawns core specialists selectively at Phase 2 start per CLASS/scope, spawns extras on architect request. Pattern validation chain: specialist → architect → context-provider.
 - **quality-gater** = dynamic rule discovery. Reads CLAUDE.md for project rules, runs `/pre-pr`, cross-checks every rule.
 - **planner** = temporary planner `Agent`/subagent; consults context-provider via `SendMessage` when available; writes `PLAN.md`.
 - **Doc Integrity** = `/doc-integrity` pipeline: kdoc-coverage → check-doc-patterns → docs/api freshness → audit-docs. State in `kdoc-state.json`.

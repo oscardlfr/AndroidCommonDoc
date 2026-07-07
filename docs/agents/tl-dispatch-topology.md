@@ -30,8 +30,8 @@ SendMessage(
 )
 ```
 
-- **PREP dispatch** goes to all 3 architects in parallel **before** devs are spawned. Architects read the plan, identify domain risks, return `READY: <1-line summary>`. team-lead merges all 3 READY responses before spawning devs.
-- **EXECUTE dispatch** goes to all 3 architects in parallel **after** devs complete their wave work. Architects verify, delegate any fixes, write verdict to `.planning/wave-<slug>/arch-<role>-verdict.md`, respond `APPROVE` or `ESCALATE: <reason>`.
+- **PREP dispatch** goes to the architects the wave class requires (HARNESS: all 3; DOC: the declared subset; FAST-PATH: none) in parallel **before** devs are spawned. Architects read the plan, identify domain risks, return `READY: <1-line summary>`. team-lead merges all dispatched READY responses before spawning devs.
+- **EXECUTE dispatch** goes to the same required architects in parallel **after** devs complete their wave work. Architects verify, delegate any fixes, write verdict to `.planning/wave-<slug>/arch-<role>-verdict.md`, respond `APPROVE` or `ESCALATE: <reason>`.
 
 Full protocol, team-lead workflow, and anti-patterns: `docs/agents/arch-dispatch-modes.md`. Fixes Wave 23 Bug #5 (hardcoded `.planning/PLAN.md`) and Bug #6 (no mode tagging).
 
