@@ -262,17 +262,7 @@ identity contract anywhere in the harness.
 
 ### 3.3 Coordination Artifact Schemas
 
-Beyond the `inbox`/`stop`-flag fallbacks named in the per-op semantics above, the
-portable coordination layer defines 5 further typed artifact schemas (full field-level
-contract: [coordination-artifact-schema](../agents/coordination-artifact-schema.md)):
-
-| Schema | Path | Used by |
-|--------|------|---------|
-| `message/v1` | `inbox/<role>/<ts>.json` | Op 2 `send` disk-inbox fallback |
-| `request/v1` | `requests/<kind>/<request_id>.json` | Scope-extension / authorization requests |
-| `approval/v1` | `approvals/<request_id>.json` | Orchestrator's resolution of exactly one `request/v1`, matched by `request_id` |
-| `result/v1` | `results/<role>/<ts>.json` | Op 4 `result` disk-artifact fallback |
-| `stop/v1` | `stop-<role>.flag` | Op 5 `stop` disk-artifact fallback |
+Beyond the `inbox`/`stop`-flag fallbacks named in the per-op semantics above, the portable layer defines 5 further typed schemas — `message/v1`, `request/v1`, `approval/v1`, `result/v1`, `stop/v1` — full field-level contract, paths, and validation rules in [coordination-artifact-schema](../agents/coordination-artifact-schema.md).
 
 ---
 
@@ -393,20 +383,9 @@ verify. All via `Agent()` + `SendMessage` + verdict files.
 adapter doesn't change this.
 
 **Context-provider role**: oracle/cache (read-only). Dispatched via:
-- `spawn('context-provider', query)` (single-use) OR
-- `reuse('context-provider')` (pending-evidence on routing reliability) OR
-- Disk-artifact fallback: a `coordination/consult/v1` artifact (see
-  [coordination-artifact-schema](../agents/coordination-artifact-schema.md)) written to
-  `inbox/context-provider/consult-<ts>.json`; architects/specialists read it directly,
-  and `context-provider-gate.js` validates it on a **disk branch** (wave_slug match +
-  `CONSULT_TTL_SECONDS` freshness, no `session_id`) when no live SendMessage flag
-  exists — the portable-mode equivalent of the SendMessage gate-ack.
-  `context-provider-consulted.js` (the flag writer) is unchanged: a
-  PostToolUse-on-Write writer for CP would be non-portable (CP stays read-only); the
-  gate-side disk read is engine-agnostic and needs no new writer hook.
+- `spawn('context-provider', query)` (single-use) OR `reuse('context-provider')` (pending-evidence on routing reliability); OR, as a disk-artifact fallback: a `coordination/consult/v1` artifact (see [coordination-artifact-schema](../agents/coordination-artifact-schema.md)) at `inbox/context-provider/consult-<ts>.json` — `context-provider-gate.js` validates it on a disk branch (wave_slug match + `CONSULT_TTL_SECONDS` freshness, no `session_id`) when no live SendMessage flag exists. `context-provider-consulted.js` is unchanged: CP stays read-only, so the gate reads the artifact itself rather than gaining a new writer hook.
 
-The `context-provider-gate.js` session-scoped flag remains valid — one CP consultation
-unblocks all peers regardless of which op was used.
+The `context-provider-gate.js` session-scoped flag remains valid — one CP consultation unblocks all peers regardless of which op was used.
 
 **Topology preserved**: architect→specialist hierarchy; CP oracle; gate enforcement. ✓
 
