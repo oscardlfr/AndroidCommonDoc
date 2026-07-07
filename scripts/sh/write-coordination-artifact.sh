@@ -429,7 +429,11 @@ _confine_under_planning() {
     echo "[write-coordination-artifact] ERROR: Traversal guard: unable to resolve a canonical path for the confinement check (neither realpath nor the python3 fallback succeeded) — failing closed." >&2
     exit 2
   fi
-  if [[ "$canon_target" != "$canon_planning"* ]]; then
+  # Exact-or-strictly-under check (Codex hardening): the old bare "$canon_planning"* glob has
+  # no trailing separator, so a resolved SIBLING like ".planning-evil" (reachable via a symlink
+  # planted inside .planning/ that OUT_DIR traverses) satisfies ".planning*" and would wrongly
+  # pass. Require canon_target to equal canon_planning exactly OR sit under "canon_planning/".
+  if [[ "$canon_target" != "$canon_planning" && "$canon_target" != "$canon_planning"/* ]]; then
     echo "[write-coordination-artifact] ERROR: Traversal guard: output path escapes .planning/ confinement" >&2
     exit 2
   fi
