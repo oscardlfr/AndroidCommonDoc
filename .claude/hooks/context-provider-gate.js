@@ -22,9 +22,40 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const coordinationArtifact = require('./coordination-artifact.js');
+const { getWaveSlug } = require('./hook-control-plane-utils.js');
 
 function sanitizeId(id) {
   return String(id).replace(/[^a-zA-Z0-9_-]/g, '-');
+}
+
+// ADDITIVE (Wave 2 / ADR-001 portable disk-consult fallback) — non-specialist ONLY. OR'd in
+// alongside the existing SendMessage session-flag at both non-specialist enforcement sites
+// (never at the specialist arch-responded branches). slug null -> false immediately, no disk
+// attempt (never fail open on a missing/unresolvable wave). Fail-closed: hasValidConsult already
+// returns false on malformed/stale/wrong-wave/wrong-role/out-of-confinement — this helper adds no
+// additional leniency, it only decides WHETHER to ask.
+function diskConsultUnblocks(sessionId, toolName) {
+  const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const slug = getWaveSlug(projectRoot);
+  let diskAllowed = false;
+  if (slug) {
+    // Local try/catch (defense-in-depth, on top of hasValidConsult's own null-slug/invalid
+    // fail-closed returns): an unexpected throw here must degrade to session-flag-only
+    // behavior, NEVER bubble to the outer handler and fail the WHOLE gate open.
+    try {
+      diskAllowed = coordinationArtifact.hasValidConsult(
+        path.join(projectRoot, '.planning', 'wave-' + slug, 'inbox', 'context-provider'),
+        { slug, projectRoot }
+      );
+    } catch {
+      diskAllowed = false;
+    }
+  }
+  if (diskAllowed) {
+    process.stderr.write(`[CP-GATE] session=${sessionId} flag_writer=disk-consult wave_slug=${slug} tool=${toolName}\n`);
+  }
+  return diskAllowed;
 }
 
 let input = '';
@@ -120,6 +151,9 @@ process.stdin.on('end', () => {
                   );
                 } catch { /* legacy ISO string — ignore */ }
               }
+              // ADDITIVE (Wave 2): SendMessage session-flag checked FIRST, unchanged above —
+              // OR in the fail-closed disk-consult fallback (ADR-001 portable path) only if it didn't unblock.
+              if (!allowed) allowed = diskConsultUnblocks(sessionId, toolName);
             }
             if (!allowed) {
               process.stdout.write(JSON.stringify({
@@ -181,6 +215,9 @@ process.stdin.on('end', () => {
         } catch { /* legacy ISO string — ignore */ }
         process.exit(0);
       }
+      // ADDITIVE (Wave 2): SendMessage session-flag checked FIRST, unchanged above — OR in the
+      // fail-closed disk-consult fallback (ADR-001 portable path) only if the flag didn't unblock.
+      if (diskConsultUnblocks(sessionId, toolName)) process.exit(0);
     }
 
     // 4. Block — write per-agent block marker for logger and emit decision

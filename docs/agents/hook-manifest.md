@@ -4,7 +4,7 @@ sources: [androidcommondoc]
 targets: [all]
 version: 2
 last_updated: "2026-06"
-description: "Consumer hook manifest: classifies all 33 L0 hook files as consumer-required / consumer-optional / l0-internal"
+description: "Consumer hook manifest: classifies all 34 L0 hook files as consumer-required / consumer-optional / l0-internal"
 slug: hook-manifest
 status: active
 layer: L0
@@ -14,7 +14,7 @@ category: agents
 
 # L0 Hook Manifest
 
-Reference classification for all 33 hook files in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
+Reference classification for all 34 hook files in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
 
 > **CI-enforced** — the `hook-manifest-coverage` job in `.github/workflows/drift-audit.yml` fails the build if the hook table below drifts from `.claude/hooks/` (a missing, phantom, or duplicated hook). The table is the source of truth for coverage.
 
@@ -45,7 +45,7 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 
 ## Hook Table
 
-### JavaScript Hooks (29)
+### JavaScript Hooks (30)
 
 | Hook | Status | Rationale |
 |------|--------|-----------|
@@ -54,6 +54,7 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 | `context-provider-gate.js` | consumer-required | Gating: CP consult required before search ops — see [context-provider-adoption-hooks](context-provider-adoption-hooks.md) |
 | `context-provider-consulted.js` | consumer-required | Gating: sets the session flag the gate checks (pair with context-provider-gate) — see [context-provider-adoption-hooks](context-provider-adoption-hooks.md) |
 | `hook-control-plane-utils.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks; copy with importing hooks, never register in `settings.json` |
+| `coordination-artifact.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks (read/validate/write coordination artifacts — consult/result/request/approval/stop/message); copy with importing hooks, never register in `settings.json` — see [coordination-artifact-schema](coordination-artifact-schema.md) |
 | `premature-execution-gate.js` | consumer-required | Gating: blocks specialist Write/Edit/Bash before APPROVED-PREP verdict |
 | `branch-guard.js` | consumer-required | Branch protection: blocks write-git ops on develop/master — see [branch-guard](branch-guard.md) |
 | `git-amend-gate.js` | consumer-required | Amend discipline: blocks `git commit --amend` without explicit authorization |
