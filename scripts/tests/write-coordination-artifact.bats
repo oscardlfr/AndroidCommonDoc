@@ -161,6 +161,25 @@ _path_without_python3() {
   rm -rf "$empty_proj"
 }
 
+@test "WCA-conf-6 FAIL (Codex/PR#236 regression): symlinked wave dir resolving to a SIBLING .planning-evil is rejected, not silently accepted" {
+  # Confinement bug: the old bare-glob-prefix check `"$canon_target" != "$canon_planning"*`
+  # let a resolved SIBLING whose name merely STARTS WITH ".planning" (e.g. ".planning-evil")
+  # pass, since the glob enforces no separator boundary after the prefix. Reachable shape:
+  # a symlink planted INSIDE .planning/ (here, .planning/wave-evil) pointing at a sibling
+  # dir OUTSIDE .planning/ entirely -- OUT_DIR's realpath resolution follows the symlink
+  # and lands in the sibling. The fix requires exact-match OR a "/"-separated child of
+  # .planning/, so this must now fail closed instead of silently writing into the sibling.
+  mkdir -p "$PROJ/.planning-evil"
+  mkdir -p "$PROJ/.planning"
+  ln -s "../.planning-evil" "$PROJ/.planning/wave-evil"
+  run bash -c "cd '$PROJ' && printf '' | CLAUDE_WAVE_SLUG=evil bash '$SCRIPT' \
+    --kind consult --from test-specialist --to context-provider --slug evil"
+  [ "$status" -eq 2 ]
+  # Nothing must have been written into the sibling escape target.
+  local matches=("$PROJ/.planning-evil"/inbox/context-provider/consult-*.json)
+  [ ! -e "${matches[0]}" ]
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # Usage errors (exit 1, distinct from integrity violations at exit 2)
 # ══════════════════════════════════════════════════════════════════════════
