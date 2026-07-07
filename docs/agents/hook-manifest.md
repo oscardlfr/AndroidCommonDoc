@@ -54,7 +54,7 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 | `context-provider-gate.js` | consumer-required | Gating: CP consult required before search ops — see [context-provider-adoption-hooks](context-provider-adoption-hooks.md) |
 | `context-provider-consulted.js` | consumer-required | Gating: sets the session flag the gate checks (pair with context-provider-gate) — see [context-provider-adoption-hooks](context-provider-adoption-hooks.md) |
 | `hook-control-plane-utils.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks; copy with importing hooks, never register in `settings.json` |
-| `coordination-artifact.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks (read/validate/write coordination artifacts — consult/result/request/approval/stop/message); copy with importing hooks, never register in `settings.json` — see [coordination-artifact-schema](coordination-artifact-schema.md) |
+| `coordination-artifact.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks (read/validate coordination artifacts — consult/result/request/approval/stop/message; writes are owned by `write-coordination-artifact.sh`, not this module); copy with importing hooks, never register in `settings.json` — see [coordination-artifact-schema](coordination-artifact-schema.md) |
 | `premature-execution-gate.js` | consumer-required | Gating: blocks specialist Write/Edit/Bash before APPROVED-PREP verdict |
 | `branch-guard.js` | consumer-required | Branch protection: blocks write-git ops on develop/master — see [branch-guard](branch-guard.md) |
 | `git-amend-gate.js` | consumer-required | Amend discipline: blocks `git commit --amend` without explicit authorization |
