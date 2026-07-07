@@ -51,7 +51,7 @@ Every kind is read through the same 4-field contract from [ADR-001 §3.2](../adr
 | `exists` | file present at the exact path | file present at the exact path | file present, basename matches `stop-<safe-segment>.flag`, direct child of the wave dir |
 | `validMarker` | `schema === "coordination/consult/v1"` AND `to === "context-provider"` | `schema === "coordination/<kind>/v1"` exact string, plus the kind-specific rule (see per-schema tables below) | **optional** — empty file or non-JSON body is valid (presence IS the signal); if a JSON body is present, `schema`/`wave_slug` are checked only when those keys exist at all |
 | `headBound` | not applicable — no `head` field | `head` is a 40-hex string AND an ancestor of (or equal to) current HEAD (`git merge-base --is-ancestor`) | not applicable — no `head` field, even when a full envelope is optionally written |
-| `fresh` | `wave_slug` matches AND `created_at` within `CONSULT_TTL_SECONDS` (43200s / 12h) of now | `wave_slug` matches AND `plan_sha256` exactly equals the current `PLAN.md` sha256 | no freshness check — `wave_slug`, if present in an optional JSON body, is checked for equality but absence is not a failure |
+| `fresh` | `wave_slug` matches AND `created_at` ∈ `[now - CONSULT_TTL_SECONDS, now + MAX_CONSULT_FUTURE_SKEW_SECONDS]` (12h past / 5min future-skew — directional, not symmetric) | `wave_slug` matches AND `plan_sha256` exactly equals the current `PLAN.md` sha256 | no freshness check — `wave_slug`, if present in an optional JSON body, is checked for equality but absence is not a failure |
 
 **Why consult is TTL-only, not HEAD/PLAN-bound**: a CP consult answers a pattern/precedent question — it isn't authorizing a write against specific PLAN content the way a dispatch or verdict is. Binding it to HEAD ancestry would force a fresh consult on every commit, defeating the portable gate's purpose. **No `session_id` field on any schema** — a portable shell has none to source; the table above is the entire currency check per kind.
 
@@ -67,7 +67,7 @@ The disk-fallback branch of the CP-consult gate — see [context-provider-adopti
 | `wave_slug` | string | yes — must equal active wave | active wave directory slug |
 | `to` | string | yes — must equal `"context-provider"` | fixed recipient |
 | `from` | string | written, not validated | canonical name of the consulting agent |
-| `created_at` | string | yes — TTL-checked | UTC ISO-8601, `date -u +%Y-%m-%dT%H:%M:%SZ` |
+| `created_at` | string | yes — directional TTL (12h past / 5min future-skew, not symmetric) | UTC ISO-8601, `date -u +%Y-%m-%dT%H:%M:%SZ` |
 
 No `head` / `plan_sha256` — consult is pre-PLAN by design.
 
