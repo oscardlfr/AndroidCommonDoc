@@ -88,6 +88,8 @@ Standard patterns for testing Kotlin Multiplatform projects.
 | [kotlin-native-throws-suspend-pattern](kotlin-native-throws-suspend-pattern.md) | K/N compiler constraint: @Throws on suspend fun must include CancellationException; backtick name restrictions |
 | [testing-compose-ui-test-v2](testing-compose-ui-test-v2.md) | **L2 consumer projects: migrate `runComposeUiTest` to `.v2` package (L1 NO-OP).** CMP 1.11 package change, StandardTestDispatcher default, advanceUntilIdle() |
 | [testing-patterns-benchmarks-rebaseline](testing-patterns-benchmarks-rebaseline.md) | Benchmark re-baseline checklist after Kotlin/Native CMS GC or R8 upgrade — silent perf shift alert |
+| [testing-vitest-cjs-esm-mock-boundary](testing-vitest-cjs-esm-mock-boundary.md) | vi.mock only intercepts import-based loads, not require(); async-factory mocks throw on require() load; vi.mock hoisted, vi.doMock is not |
+| [testing-vitest-esm-coverage-instrumentation](testing-vitest-esm-coverage-instrumentation.md) | Vitest 4 defaults: forks pool (not threads), V8 coverage provider; coverage.all/extensions removed → use coverage.include/exclude |
 
 ## Key Rules
 
