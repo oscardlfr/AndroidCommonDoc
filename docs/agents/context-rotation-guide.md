@@ -153,11 +153,11 @@ When relaying findings between agents (architect → team-lead → architect), u
 
 ## Conditional Dispatch Composition
 
-Default dispatch (6 core roles at session start, 5 core specialists at Phase 2):
+Dispatch is selective per the wave's CLASS floor — skip roles/specialists with no work in scope. The roster below is the available set, not a mandatory count:
 ```
-Session start dispatch:
+Session start roster (dispatch what the CLASS floor requires):
   context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
-Phase 2 dispatch:
+Phase 2 roster (dispatch selectively per class/scope):
   test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist
 ```
 

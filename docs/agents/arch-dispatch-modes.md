@@ -44,7 +44,7 @@ summary: PREP — read the plan, identify platform risks, write APPROVED-PREP ve
 
 ## PREP mode — pre-dev planning
 
-**When**: team-lead sends PREP dispatch to all 3 architects **before** devs are spawned for a wave.
+**When**: team-lead sends PREP dispatch to the architects the wave class requires (HARNESS: all 3; DOC: the declared subset; FAST-PATH: none) **before** devs are spawned for a wave.
 
 **Architect behavior in PREP**:
 1. Read `scope_doc_path` — extract the wave's goals, files in scope, acceptance criteria
@@ -54,11 +54,11 @@ summary: PREP — read the plan, identify platform risks, write APPROVED-PREP ve
 5. SendMessage team-lead with `READY: <1-line summary of risks and dev tasks>`
 6. Do NOT dispatch devs yet. Write your PREP verdict file (`APPROVED-PREP`, per PREP verdict dispatch hygiene below) — this authorizes specialists to execute. Then stay idle after READY until EXECUTE dispatch arrives.
 
-**team-lead collects all 3 READY responses before spawning specialists.** This lets team-lead merge cross-architect concerns into a single specialist dispatch plan — e.g., if platform flags a source-set move that testing needs to reconcile, team-lead surfaces both in the specialist brief.
+**team-lead collects all dispatched READY responses before spawning specialists.** This lets team-lead merge cross-architect concerns into a single specialist dispatch plan — e.g., if platform flags a source-set move that testing needs to reconcile, team-lead surfaces both in the specialist brief.
 
 ## EXECUTE mode — post-dev verification
 
-**When**: team-lead sends EXECUTE dispatch to all 3 architects **after** devs have completed their work for the wave.
+**When**: team-lead sends EXECUTE dispatch to the architects the wave class requires (HARNESS: all 3; DOC: the declared subset; FAST-PATH: none) **after** devs have completed their work for the wave.
 
 **Architect behavior in EXECUTE**:
 1. Read `scope_doc_path` — cross-check dev work against the wave's acceptance criteria
@@ -70,15 +70,16 @@ summary: PREP — read the plan, identify platform risks, write APPROVED-PREP ve
 ## team-lead workflow — 2-step dispatch per wave
 
 ```
-1. PREP dispatch to arch-testing, arch-platform, arch-integration in parallel
-   → wait for all 3 READY responses
+1. PREP dispatch to the architects the wave class requires (HARNESS: all 3 — arch-testing,
+   arch-platform, arch-integration; DOC: the declared subset; FAST-PATH: none) in parallel
+   → wait for all dispatched READY responses
 
 2. team-lead merges READY findings, spawns specialists (Phase 2 core specialists if first wave, extras if requested)
 
 3. Devs execute their assigned work
 
-4. EXECUTE dispatch to all 3 architects in parallel
-   → wait for all 3 APPROVE/ESCALATE verdicts
+4. EXECUTE dispatch to the same required architects in parallel
+   → wait for all their APPROVE/ESCALATE verdicts
 
 5. If all APPROVE → proceed to Phase 3 (quality-gater)
    If any ESCALATE → team-lead re-plans or dispatches clarification
@@ -125,10 +126,10 @@ Body MUST contain literal string: APPROVED-PREP
 
 - Hardcoding `.planning/PLAN.md` in arch templates — Bug #5 reopener. Use `scope_doc_path` field from dispatch.
 - Guessing scope path from cwd or wave number — Bug #5 reopener. Use the provided path or SCOPE-DOC-MISSING.
-- Starting dev dispatch in PREP mode — PREP is plan-review only. Dev dispatch happens after team-lead sees all 3 READY responses.
+- Starting dev dispatch in PREP mode — PREP is plan-review only. Dev dispatch happens after team-lead sees all dispatched READY responses.
 - Skipping the PREP verdict — the `APPROVED-PREP` verdict file is what the premature-execution-gate checks before any specialist may execute (see PREP verdict dispatch hygiene). PREP writes that file AND returns `READY` (or `BLOCKED`); EXECUTE later updates the same file to `APPROVED-VERIFY-FINAL`.
 - Treating one dispatch as both PREP and EXECUTE — the `mode` field is load-bearing. Separate dispatches, separate behaviors.
-- team-lead spawning devs before all 3 READY responses arrive — ignores cross-architect risk merging.
+- team-lead spawning devs before all dispatched READY responses arrive — ignores cross-architect risk merging.
 
 ## Example: PREP dispatch
 
