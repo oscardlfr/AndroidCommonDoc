@@ -266,3 +266,81 @@ else:
   # No dispatch written for an out-of-repo target.
   [ ! -d "$PROJ/.planning/wave-$WAVE_SLUG/specialist-dispatches/test-specialist" ]
 }
+
+# ── BL-W4-9: Check-2 confinement — macOS/BSD-parity, sibling collision rejected ──
+#
+# CORRECTED mid-wave (arch-platform + arch-integration, relayed by team-lead and
+# toolkit-specialist): the shipped fix does NOT adopt _file_in_repo()'s pure-lexical
+# idiom as PLAN.md originally sketched — it PORTS write-coordination-artifact.sh's
+# Codex-hardened _realpath_resolve()/_confine_under_planning() helper pair (that
+# file's own header names THIS block, write-specialist-dispatch.sh:340-349, as the bug
+# it hardens — Wave 2 fixed the sibling but never backported here). `_realpath_resolve`
+# legitimately STILL calls `realpath -m` as a harmless first attempt (it fails cleanly
+# on macOS/BSD — "illegal option -- m", confirmed empirically — and falls through to a
+# python3 os.path.realpath() fallback, failing closed if BOTH resolution paths come up
+# empty). The bug was never "the script calls realpath -m"; it was the OLD silent
+# `|| echo "$PLANNING_DIR")"` fallback (uses the literal, uncanonicalized path on
+# failure/absence — no symlink resolution, no fail-closed check) combined with a bare
+# "$canon_planning"* glob with no "/" separator boundary (a sibling like
+# .planning-evil/... lexically matches it even though it is NOT a true child).
+#
+# NOTE ON TEST SHAPE: DISPATCH_DIR is programmatically derived from an
+# already-validated WAVE_SLUG (_validate_slug() allowlists ^[A-Za-z0-9._-]+$, plus a
+# separate ".."/"/"/"\\" substring reject applied unconditionally at L204-207) and an
+# enum-locked --specialist — a bare CLI argument can never make DISPATCH_DIR's STRING
+# representation escape .planning/ (by construction it is always a literal
+# ".planning/wave-.../..." child). The only way to reach a GENUINE escape through the
+# public CLI is a symlink planted on disk ahead of the run — which is also exactly the
+# scenario `_realpath_resolve()`'s python3 fallback (os.path.realpath(), which DOES
+# resolve symlinks — verified empirically: it correctly follows a symlinked
+# intermediate directory and appends a non-existent trailing segment literally) exists
+# to defend against. REJECTED-sibling behavior is verified two ways:
+#   (a) a BEHAVIORAL end-to-end test driving the real script against a symlink planted
+#       inside .planning/ pointing at a sibling ".planning-evil" — strong proof the
+#       fix's canonicalization (not just its comparison operator) actually works;
+#   (b) an ISOLATED test of the boundary-check comparison operator itself (below) —
+#       proving the old bare-glob wrongly accepts / the new boundary idiom correctly
+#       rejects the .planning-evil sibling collision, independent of canonicalization.
+
+@test "BL-W4-9 Check-2 BEHAVIORAL: symlink planted inside .planning/ escaping to a '.planning-evil' sibling is rejected end-to-end" {
+  _seed_plan "$WAVE_SLUG"
+  local evil_dir="$PROJ/.planning-evil"
+  mkdir -p "$evil_dir"
+  # Plant the symlink AFTER _seed_plan (which creates the real wave dir + PLAN.md) —
+  # replace just the specialist-dispatches parent with a symlink to the sibling, so
+  # DISPATCH_DIR's literal string still reads ".planning/wave-.../specialist-dispatches/
+  # test-specialist" but its REAL resolved location is ".planning-evil/test-specialist".
+  ln -s "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG/specialist-dispatches"
+
+  run bash -c "cd '$PROJ' && printf 'task\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --architect arch-testing --specialist test-specialist \
+    --file docs/foo.md --slug '$WAVE_SLUG'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"confinement"* ]] || return 1
+
+  # Nothing written through the symlink to the sibling location — mkdir -p
+  # "$DISPATCH_DIR" is only reached AFTER _confine_under_planning passes.
+  [ -z "$(ls -A "$evil_dir" 2>/dev/null)" ] || return 1
+}
+
+@test "BL-W4-9 Check-2 CONFINEMENT IDIOM: old bare-glob wrongly accepts a '.planning-evil' sibling collision" {
+  local root="/tmp/bl-w4-9-fixture/.planning"
+  local sibling="/tmp/bl-w4-9-fixture/.planning-evil/wave-x/specialist-dispatches/test-specialist"
+  # Pre-fix idiom reproduction ("$root"* has no separator boundary) — must match (bug).
+  # `|| return 1`: defensive against the non-final-[[ ]] bats/bash abort quirk
+  # (currently the sole/last statement, but future-proofed against later edits).
+  [[ "$sibling" == "$root"* ]] || return 1
+}
+
+@test "BL-W4-9 Check-2 CONFINEMENT IDIOM: boundary-safe idiom (_file_in_repo()-style) rejects the same '.planning-evil' sibling collision" {
+  local root="/tmp/bl-w4-9-fixture/.planning"
+  local sibling="/tmp/bl-w4-9-fixture/.planning-evil/wave-x/specialist-dispatches/test-specialist"
+  # Post-fix idiom: exact-match OR slash-bounded child — mirrors _file_in_repo() L298-301.
+  ! [[ "$sibling" == "$root" || "$sibling" == "$root"/* ]] || return 1
+}
+
+@test "BL-W4-9 Check-2 CONFINEMENT IDIOM: boundary-safe idiom still accepts a genuine nested child" {
+  local root="/tmp/bl-w4-9-fixture/.planning"
+  local nested="/tmp/bl-w4-9-fixture/.planning/wave-x/specialist-dispatches/test-specialist"
+  [[ "$nested" == "$root" || "$nested" == "$root"/* ]] || return 1
+}

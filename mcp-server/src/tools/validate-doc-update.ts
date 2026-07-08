@@ -114,6 +114,51 @@ async function collectDocs(dir: string): Promise<Array<{ path: string; content: 
   return docs;
 }
 
+/**
+ * Resolve the nearest docs/ ancestor of targetFile, bounded by the file's own
+ * repository root (a directory containing .git) so the walk can never escape the
+ * repo. Checks the "/docs" suffix at EACH level, including the file's own immediate
+ * parent directory (fixes the latent bug where a direct docs/foo.md, no
+ * subdirectory, was missed by the old 2-hop pre-skip).
+ *
+ * Bounded two ways so a repo-root file (e.g. BACKLOG.md) can never walk to the
+ * filesystem root and trigger a whole-disk collectDocs() scan:
+ *   (a) stops as soon as the current directory contains a .git entry — no
+ *       legitimate docs/ ancestor sits above a file's own repo root;
+ *   (b) a hard iteration cap, independent of (a), as a belt-and-suspenders bound
+ *       against ever reaching "/" (handles submodules / no-.git environments).
+ *
+ * Deliberately local to target_file's own ancestry — NOT a swap to the L0 toolkit's
+ * getDocsDir(). Cross-project (L1/L2 consumer) targets resolve to THEIR OWN docs/
+ * root this way; an unconditional getDocsDir() would incorrectly compare every
+ * consumer-project doc against the L0 toolkit's corpus instead, and would silently
+ * disable the size gate for every real L1/L2 docs file (not just repo-root ones).
+ *
+ * Resolved ONCE by the caller and shared between Check 2 (duplicate scan) and
+ * Check 5 (size gate) — single source of truth, not recomputed per check.
+ *
+ * @returns the resolved docs/ directory, or null if target_file has no docs/
+ *   ancestor within its own repo (e.g. a repo-root operational file like BACKLOG.md)
+ *   — callers treat null as "not a docs-corpus member" and skip accordingly.
+ */
+async function findDocsRoot(targetFile: string): Promise<string | null> {
+  let dir = path.dirname(path.resolve(targetFile));
+  const MAX_HOPS = 15;
+  for (let i = 0; i < MAX_HOPS; i++) {
+    if (dir.replace(/\\/g, "/").endsWith("/docs")) return dir;
+    try {
+      await stat(path.join(dir, ".git"));
+      return null; // reached this file's own repo root without finding docs/
+    } catch {
+      // no .git here — keep climbing
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null; // reached filesystem root — hard stop
+    dir = parent;
+  }
+  return null; // hit the iteration cap — bail out rather than keep climbing
+}
+
 /** Extract slug from frontmatter or filename. */
 function extractSlug(filepath: string, content: string): string {
   const fm = parseFrontmatter(content);
@@ -226,33 +271,41 @@ function checkSize(
   targetFile: string,
   proposedContent: string,
   updateType: string,
+  docsRoot: string | null,
   existingContent?: string,
 ): { issues: ValidationIssue[]; splitSuggestion?: { recommended_sections: string[] } } {
   const merged = updateType === "append" && existingContent
     ? existingContent + "\n" + proposedContent
     : proposedContent;
 
-  const result = checkSizeLimits(targetFile, merged, false);
-
   const issues: ValidationIssue[] = [];
   let splitSuggestion: { recommended_sections: string[] } | undefined;
 
-  for (const err of result.errors) {
-    issues.push({
-      type: "oversized",
-      severity: "HIGH",
-      message: err,
-      auto_fixable: false,
-    });
-  }
+  // The docs/ 500-line gate only applies to files that resolve to a real docs/
+  // ancestor (see findDocsRoot, resolved once by the caller and shared here) —
+  // repo-root operational markdown (e.g. BACKLOG.md) has none and is skipped here;
+  // every real docs/**/*.md at any depth (including cross-project L1/L2 targets)
+  // still gets the full gate below.
+  if (docsRoot !== null) {
+    const result = checkSizeLimits(targetFile, merged, false);
 
-  if (issues.length > 0) {
-    // Suggest splitting by H2 sections
-    const sections = merged.match(/^## .+$/gm) ?? [];
-    if (sections.length >= 2) {
-      splitSuggestion = {
-        recommended_sections: sections.map((s) => s.replace(/^## /, "")),
-      };
+    for (const err of result.errors) {
+      issues.push({
+        type: "oversized",
+        severity: "HIGH",
+        message: err,
+        auto_fixable: false,
+      });
+    }
+
+    if (issues.length > 0) {
+      // Suggest splitting by H2 sections
+      const sections = merged.match(/^## .+$/gm) ?? [];
+      if (sections.length >= 2) {
+        splitSuggestion = {
+          recommended_sections: sections.map((s) => s.replace(/^## /, "")),
+        };
+      }
     }
   }
 
@@ -310,31 +363,36 @@ export function registerValidateDocUpdateTool(
           };
         }
 
-        // Check 2: Duplicate detection against existing docs
-        const docsDir = path.resolve(target_file, "..", "..");
-        // Try to find the docs/ root
-        let docsRoot = docsDir;
-        while (!docsRoot.replace(/\\/g, "/").endsWith("/docs") && docsRoot.length > 3) {
-          docsRoot = path.dirname(docsRoot);
-        }
+        // Check 2: Duplicate detection against existing docs.
+        // docsRoot is resolved ONCE here via a bounded ancestry walk (see
+        // findDocsRoot) and shared with Check 5 below — NOT an unconditional
+        // getDocsDir() swap, which would break cross-project (L1/L2)
+        // duplicate-detection (a target under a consumer project's own docs/ must be
+        // compared against THAT project's corpus, not the L0 toolkit's) and would
+        // silently disable the size gate for every real L1/L2 docs file. A repo-root
+        // file with no docs/ ancestor (e.g. BACKLOG.md) resolves to null — Check 2 is
+        // skipped entirely for it (not a meaningful docs-corpus member).
+        const docsRoot = await findDocsRoot(target_file);
 
         const proposedTokens = normalizeForComparison(proposed_content);
         const existingDocs: Array<{ slug: string; tokens: string[]; generated: boolean }> = [];
 
-        try {
-          const allDocs = await collectDocs(docsRoot);
-          for (const doc of allDocs) {
-            // Skip the target file itself
-            if (path.resolve(doc.path) === path.resolve(target_file)) continue;
+        if (docsRoot !== null) {
+          try {
+            const allDocs = await collectDocs(docsRoot);
+            for (const doc of allDocs) {
+              // Skip the target file itself
+              if (path.resolve(doc.path) === path.resolve(target_file)) continue;
 
-            existingDocs.push({
-              slug: extractSlug(doc.path, doc.content),
-              tokens: normalizeForComparison(doc.content),
-              generated: isGenerated(doc.content),
-            });
+              existingDocs.push({
+                slug: extractSlug(doc.path, doc.content),
+                tokens: normalizeForComparison(doc.content),
+                generated: isGenerated(doc.content),
+              });
+            }
+          } catch {
+            logger.warn("validate-doc-update: could not scan docs directory for duplicate check");
           }
-        } catch {
-          logger.warn("validate-doc-update: could not scan docs directory for duplicate check");
         }
 
         const dupResult = checkDuplicates(proposedTokens, existingDocs);
@@ -348,8 +406,8 @@ export function registerValidateDocUpdateTool(
         // Check 4: Anti-patterns
         issues.push(...checkAntiPatterns(proposed_content));
 
-        // Check 5: Size limits
-        const sizeResult = checkSize(target_file, proposed_content, update_type, existingContent);
+        // Check 5: Size limits (shares the docsRoot resolved for Check 2 above)
+        const sizeResult = checkSize(target_file, proposed_content, update_type, docsRoot, existingContent);
         issues.push(...sizeResult.issues);
         if (sizeResult.splitSuggestion) splitSuggestion = sizeResult.splitSuggestion;
 

@@ -83,3 +83,33 @@ teardown() {
   run node "$RESOLVER"
   [ "$status" -eq 3 ]
 }
+
+@test "decoy **Class**: marker in prose before ### Wave Class heading does not fool resolveClass() (BL-W4-1 JS surface)" {
+  # No CLASS sentinel file — forces resolveClass() to fall through to PLAN.md parsing
+  # (the 8 cases above via make_wave() always seed a CLASS sentinel or omit PLAN.md
+  # entirely, so none of them exercise this regex fallback path at all).
+  #
+  # CORRECTED per arch-testing (Finding 4) + arch-platform: the decoy must be a REAL,
+  # DIFFERENT class whose failure mode is the actual security-relevant one — NOT a
+  # nonsense string (resolve-required-roles.js:70 self-heals an UNKNOWN class name back
+  # to the HARNESS default via `classArtifacts[cls] || classArtifacts[default_class]`,
+  # which would make a bogus decoy tautological — old and fixed code would both resolve
+  # to the same 3-architect array). FAST-PATH is a REAL class whose architects spec is
+  # the literal empty array `[]` (no required architects) — the worst-case fail-open
+  # outcome PLAN.md's own Risks section warns about ("a wrong anchor could... drop the
+  # required-architects floor, fail-open, not fail-closed").
+  #
+  # A decoy **Class**: FAST-PATH marker sits in prose BEFORE the real ### Wave Class
+  # heading, whose own **Class**: HARNESS is the value that must win. The old unanchored
+  # regex (plan.match(/\*\*Class\*\*:\s*.../)) matches the FIRST occurrence anywhere in
+  # the file — the decoy — resolving to FAST-PATH's `[]` (architect floor silently
+  # dropped). The fixed section-anchored resolver must instead find HARNESS inside the
+  # heading and return its fixed 3-architect array.
+  local dir="$PROJECT_ROOT/.planning/wave-rrtest-decoy"
+  mkdir -p "$dir"
+  printf '# fixture\n\nSome prose mentioning a **Class**: FAST-PATH label as an example,\nwritten before the real heading below — this is a decoy.\n\n### Wave Class\n\n**Class**: HARNESS\n' \
+    > "$dir/PLAN.md"
+  run node "$RESOLVER" "$PROJECT_ROOT" "rrtest-decoy"
+  [ "$status" -eq 0 ]
+  [ "$output" = '["arch-platform","arch-testing","arch-integration"]' ]
+}

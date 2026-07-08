@@ -9,7 +9,7 @@ parent: agents-hub
 category: agents
 description: "QG-proof push gate: emit-push-proof.sh (run-qg/verify-proof), quality-gate-manifest.json policy, push-proof.json schema, verdict→HEAD binding, bypass audit trail."
 version: 1
-last_updated: "2026-06"
+last_updated: "2026-07-08"
 assumes_read: quality-gate-protocol, agent-verdict-protocol
 ---
 
@@ -129,6 +129,7 @@ Written by `emit-qg-result.sh` to `.planning/wave-<slug>/qg-result.json` (gitign
 - NOT a `quality-gate-manifest.json` step
 - NOT referenced in `quality-gate-report.json`
 - Lives in a gitignored path (`.planning/wave-*/` is gitignored); not a committed artifact
+- MAY still read `fail` in a degraded local/macOS environment (pre-existing bash-3.2 / GNU-userland-gap failure class) even after this wave's fix removes the conditional-SKIP-flips-fail false negative — `push-proof.json` + `verify-proof` + the two-stamp pre-push gate remain the SOLE push authority regardless
 
 ---
 
@@ -145,9 +146,9 @@ Committed to repo root. Versioned (`manifest_version`) so `verify-proof` detects
 }
 ```
 
-**Required steps** (6): `architect-deliberation`, `pre-pr`, `test-suite`, `rule-cross-check`, `registry-hash`, `secret-scan`. A `FAIL` result blocks proof emission.
+**Required steps** (7): `architect-deliberation`, `pre-pr`, `test-suite`, `rule-cross-check`, `registry-hash`, `secret-scan`, `doc-validator-parity`. A `FAIL` result blocks proof emission.
 
-**Conditional steps** (8) carry a `predicate` field evaluated at mint time. Named predicates (closed enum — unknown predicates are a hard exit-2 error):
+**Conditional steps** (9) carry a `predicate` field evaluated at mint time. Named predicates (closed enum — unknown predicates are a hard exit-2 error):
 
 | Predicate | True when | env_attested |
 |-----------|-----------|--------------|
@@ -159,6 +160,7 @@ Committed to repo root. Versioned (`manifest_version`) so `verify-proof` detects
 | `kt_and_docs_api_and_gradle` | `kt_files_changed` AND `docs/api/` exists AND Gradle | — |
 | `compose_ui_files_changed` | `ui/` or `compose/` `.kt` files in diff | — |
 | `runtime_ui_available` | `.androidcommondoc/ui-baseline/` exists | yes |
+| `wave_plan_present` | `.planning/wave-<slug>/PLAN.md` exists (D-7 declared-vs-touched, via `qg-path-audit.sh`) | — |
 
 If predicate is `true` and the report shows `SKIP` → `inconsistent-skip` (exit 2), **except** for steps with `env_attested: true` (currently only `runtime-ui-validation`): predicate-true + SKIP + non-empty `reason` is allowed — the runtime environment check is delegated to the quality-gater's attested reason. If predicate is `true` and result is `FAIL` → `mandatory-step-not-pass` (exit 2).
 

@@ -303,22 +303,23 @@ if should_run "tool-body-xref"; then
     echo -e "${CYAN}Check 4: Tool-body cross-reference${RESET}"
     xref_warnings=0
 
-    # Tool call patterns to detect in body (outside code fences)
-    declare -A TOOL_PATTERNS=(
-        ["TeamCreate"]="TeamCreate("
-        ["Agent"]="Agent([A-Za-z]"
-        ["SendMessage"]="SendMessage("
-        ["Write"]="Write("
-        ["Edit"]="Edit("
-    )
+    # Tool call patterns to detect in body (outside code fences).
+    # Parallel INDEXED arrays (bash-3.2-safe) — an associative array (declare with the
+    # capital-A flag) plus its `${!arr[@]}` key expansion require bash 4+ and abort
+    # under set -euo pipefail on this Mac's bash 3.2.57. `${!TOOL_NAMES[@]}` below is
+    # fine on 3.2: that's an indexed-array index expansion, not an associative-array
+    # key expansion.
+    TOOL_NAMES=("TeamCreate" "Agent" "SendMessage" "Write" "Edit")
+    TOOL_REGEXES=("TeamCreate(" "Agent([A-Za-z]" "SendMessage(" "Write(" "Edit(")
 
     for f in "${ALL_FILES[@]}"; do
         fname="$(basename "$f")"
         tools_field=$(get_frontmatter_field "$f" "tools")
         body_no_fences=$(get_body_no_fences "$f")
 
-        for tool in "${!TOOL_PATTERNS[@]}"; do
-            pattern="${TOOL_PATTERNS[$tool]}"
+        for tool_idx in "${!TOOL_NAMES[@]}"; do
+            tool="${TOOL_NAMES[$tool_idx]}"
+            pattern="${TOOL_REGEXES[$tool_idx]}"
             # Check if body references the tool (outside fences)
             if echo "$body_no_fences" | grep -q "$pattern" 2>/dev/null; then
                 # Check if tool is in frontmatter

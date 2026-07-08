@@ -55,11 +55,26 @@ function resolveClass() {
     const raw = fs.readFileSync(path.join(waveDir, 'CLASS'), 'utf8').split(/\r?\n/).find(l => l.trim());
     if (raw && raw.trim()) return raw.trim();
   } catch { /* fall through */ }
-  // 2. PLAN.md **Class**: token (same token qg-path-audit.sh greps)
+  // 2. PLAN.md **Class**: token (same token qg-path-audit.sh greps) — SECURITY-SENSITIVE:
+  // section-anchored line-by-line scan, NOT a lazy cross-heading regex. A stray bold
+  // **Class**: marker in prose elsewhere in PLAN.md must never resolve here; only a
+  // **Class**: line inside the ### Wave Class section counts (mirrors qg-path-audit.sh's
+  // own Step-2 anchoring shape).
   try {
     const plan = fs.readFileSync(path.join(waveDir, 'PLAN.md'), 'utf8');
-    const m = plan.match(/\*\*Class\*\*:\s*([A-Za-z0-9._-]+)/);
-    if (m) return m[1];
+    const lines = plan.split(/\r?\n/);
+    let inClassSection = false;
+    for (const line of lines) {
+      if (/^###\s+Wave\s+Class\s*$/.test(line)) {
+        inClassSection = true;
+        continue;
+      }
+      if (inClassSection) {
+        if (/^#{1,6}\s/.test(line)) break; // next heading ends the section
+        const m = line.match(/\*\*Class\*\*:\s*([A-Za-z0-9._-]+)/);
+        if (m) return m[1];
+      }
+    }
   } catch { /* fall through */ }
   // 3. default_class -> HARNESS fail-safe
   return topo.default_class || 'HARNESS';

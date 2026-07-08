@@ -905,3 +905,120 @@ _real_sha256() {
 
   rm -rf "$empty_proj"
 }
+
+# ── BL-W4-9 sibling: confinement — macOS/BSD-parity, sibling collision rejected ──
+# CORRECTED mid-wave — mirrors write-specialist-dispatch.bats' identical, also-corrected
+# BL-W4-9 block: the shipped fix PORTS write-coordination-artifact.sh's Codex-hardened
+# _realpath_resolve()/_confine_under_planning() (realpath-first, python3
+# os.path.realpath() fallback, fail-closed if both come up empty) rather than adopting
+# _file_in_repo()'s pure-lexical idiom as PLAN.md originally sketched. `realpath -m`
+# legitimately remains as a harmless first attempt. See write-specialist-dispatch.bats'
+# identical BL-W4-9 header for the full rationale.
+#
+# NOTE ON TEST SHAPE: VERDICT_FILE is programmatically derived from an
+# already-validated WAVE_SLUG (same _validate_slug() allowlist + substring reject as
+# write-specialist-dispatch.sh) and an enum-locked --role — a bare CLI argument can
+# never make VERDICT_FILE's STRING representation escape .planning/. The only way to
+# reach a genuine escape through the public CLI is a symlink planted on disk ahead of
+# the run. Unlike write-specialist-dispatch.sh, `_confine_under_planning "$VERDICT_FILE"`
+# runs UNCONDITIONALLY at top level (L244), ahead of the --phase prep/verify-final
+# dispatch and ahead of run_prep()'s own `mkdir -p "$WAVE_DIR"` — so the escape attempt
+# must be caught before any wave-dir content is ever written, regardless of --phase.
+
+@test "BL-W4-9 sibling Confinement BEHAVIORAL: symlink planted inside .planning/ escaping to a '.planning-evil' sibling is rejected end-to-end" {
+  # WAVE_DIR itself (not a sub-directory, unlike DISPATCH_DIR's specialist-dispatches
+  # parent) is the symlink target here, since VERDICT_FILE = "$WAVE_DIR/arch-...-verdict.md"
+  # sits directly inside it — mkdir -p "$WAVE_DIR" only happens later, inside run_prep(),
+  # so the fixture must pre-create the escape itself (no _seed_plan() helper reuse: that
+  # helper mkdir -p's a REAL wave dir, which would conflict with planting a symlink there).
+  local evil_dir="$PROJ/.planning-evil"
+  mkdir -p "$evil_dir"
+  mkdir -p "$PROJ/.planning"
+  ln -s "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG"
+
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"confinement"* ]] || return 1
+
+  # Nothing written through the symlink to the sibling location.
+  [ -z "$(ls -A "$evil_dir" 2>/dev/null)" ] || return 1
+}
+
+@test "BL-W4-9 sibling CONFINEMENT IDIOM: old bare-glob wrongly accepts a '.planning-evil' sibling collision" {
+  local root="/tmp/bl-w4-9-fixture/.planning"
+  local sibling="/tmp/bl-w4-9-fixture/.planning-evil/arch-testing-verdict.md"
+  # `|| return 1`: defensive against the non-final-[[ ]] bats/bash abort quirk.
+  [[ "$sibling" == "$root"* ]] || return 1
+}
+
+@test "BL-W4-9 sibling CONFINEMENT IDIOM: boundary-safe idiom (_file_in_repo()-style) rejects the same '.planning-evil' sibling collision" {
+  local root="/tmp/bl-w4-9-fixture/.planning"
+  local sibling="/tmp/bl-w4-9-fixture/.planning-evil/arch-testing-verdict.md"
+  ! [[ "$sibling" == "$root" || "$sibling" == "$root"/* ]] || return 1
+}
+
+@test "BL-W4-9 sibling CONFINEMENT IDIOM: boundary-safe idiom still accepts a genuine nested child" {
+  local root="/tmp/bl-w4-9-fixture/.planning"
+  local nested="/tmp/bl-w4-9-fixture/.planning/arch-testing-verdict.md"
+  [[ "$nested" == "$root" || "$nested" == "$root"/* ]] || return 1
+}
+
+# ── Codex #2 fix-round: _shell_physical_resolve() fallback tier is NOT hard-dependent
+#    on python3 ────────────────────────────────────────────────────────────────
+#
+# CodeRabbit/Codex flagged the prior two-step _realpath_resolve() (realpath -> python3
+# only) as making python3 a DE FACTO hard dependency on macOS/BSD: realpath -m always
+# fails there (no -m flag), so python3 was the ONLY thing standing between a legitimate
+# write and a fail-closed exit 2 — a box with no python3 could never write ANY verdict,
+# even a perfectly legitimate one. Fix: a new pure-shell _shell_physical_resolve() tier
+# sits BETWEEN realpath and python3 (peels a target's non-existent trailing components
+# one at a time down to the deepest EXISTING ancestor, `cd`s into it + `pwd -P` to
+# resolve physically — following symlinks — then re-appends the peeled tail). python3
+# is now gated behind `command -v python3` and only reached as a genuine last resort.
+#
+# These tests force BOTH earlier tiers to fail (a `realpath` shell function that always
+# fails, standing in for BSD's missing -m; a `python3` shell function that always
+# returns 127, standing in for "absent") via `export -f`, verified beforehand to
+# correctly shadow the real binaries even for a real script-file invocation
+# (`bash "$SCRIPT" ...`, not just `bash -c`). This proves _shell_physical_resolve()
+# alone carries the confinement check end-to-end — not merely that some fallback exists.
+
+@test "Codex #2 FALLBACK-CHAIN PASS: legitimate nested verdict path is accepted with BOTH realpath -m and python3 unavailable" {
+  _seed_plan "$WAVE_SLUG"
+
+  run bash -c "
+    realpath() { return 1; }
+    python3() { return 127; }
+    export -f realpath
+    export -f python3
+    cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG'
+  "
+  [ "$status" -eq 0 ]
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  [ -f "$verdict" ] || return 1
+  grep -q "APPROVED-PREP" "$verdict" || return 1
+}
+
+@test "Codex #2 FALLBACK-CHAIN FAIL: symlink-planted '.planning-evil' escape is rejected with BOTH realpath -m and python3 unavailable" {
+  # Mirrors the earlier BL-W4-9 behavioral symlink test, but under the tool-degraded
+  # PATH — proves the pure-shell fallback's `pwd -P` (not python3's os.path.realpath())
+  # is what resolves the symlink physically and catches the escape.
+  local evil_dir="$PROJ/.planning-evil"
+  mkdir -p "$evil_dir"
+  mkdir -p "$PROJ/.planning"
+  ln -s "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG"
+
+  run bash -c "
+    realpath() { return 1; }
+    python3() { return 127; }
+    export -f realpath
+    export -f python3
+    cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG'
+  "
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"confinement"* ]] || return 1
+
+  # Nothing written through the symlink to the sibling location.
+  [ -z "$(ls -A "$evil_dir" 2>/dev/null)" ] || return 1
+}

@@ -64,6 +64,16 @@ function makeFrontmatter(fields: Record<string, unknown>): string {
 let client: Client;
 let server: McpServer;
 
+// BL-W4-6: no env-pin needed. The shipped fix does NOT swap to getDocsDir() as
+// PLAN.md originally sketched — it uses a bounded, target-file-relative ancestry walk
+// (findDocsRoot() in validate-doc-update.ts: climbs from target_file looking for a
+// "/docs" ancestor, stopping at the file's own repo root via a .git check, plus a
+// hard 15-hop cap) specifically so cross-project (L1/L2 consumer) targets resolve to
+// THEIR OWN docs/ root rather than being silently compared against the L0 toolkit's
+// corpus. That path never reads ANDROID_COMMON_DOC — pinning it would be inert at best
+// and would mask a real regression at worst (arch-integration), so it is deliberately
+// absent here.
+
 beforeAll(async () => {
   server = new McpServer({ name: "test", version: "1.0.0" });
   const limiter = new RateLimiter(100, 60000);
@@ -285,6 +295,87 @@ describe("size limit check", () => {
     const result = await validate(target, content, "create");
 
     expect(result.issues.filter((i) => i.type === "oversized")).toHaveLength(0);
+  });
+});
+
+describe("repo-root operational files (BL-W4-6)", () => {
+  it("BACKLOG.md-shaped repo-root file is exempt from the docs/ 500-line size gate even when long", async () => {
+    // A repo-root file (sibling of docs/, not nested under it) — mirrors the real
+    // repo's <repo_root>/BACKLOG.md. Deliberately long (>500 lines) so this proves the
+    // repo-root exemption itself, not merely that short content happens to pass.
+    const target = path.join(TEST_ROOT, "BACKLOG.md");
+    const longContent = Array(510).fill("- [ ] Backlog item").join("\n");
+
+    const result = await validate(target, longContent, "create");
+
+    expect(result.issues.some((i) => i.type === "oversized")).toBe(false);
+  }, 8000);
+
+  it("BACKLOG.md-shaped repo-root file returns quickly (does not trigger a whole-filesystem walk)", async () => {
+    // Pre-fix: the ancestry walk-up from target_file's directory (TEST_ROOT, which has
+    // no "/docs" suffix) walks all the way to filesystem root, then collectDocs("/")
+    // recurses the ENTIRE filesystem. An explicit elapsed-time bound catches that
+    // regression as a fast, clear failure instead of a multi-second-to-indefinite hang.
+    const target = path.join(TEST_ROOT, "BACKLOG.md");
+    const content = "# Backlog\n\nSome operational tracking content.\n";
+
+    const start = Date.now();
+    await validate(target, content, "create");
+    const elapsedMs = Date.now() - start;
+
+    expect(elapsedMs).toBeLessThan(5000);
+  }, 8000);
+});
+
+describe("cross-project docs/ resolution (BL-W4-6)", () => {
+  it("resolves a nested docs file against its OWN project's docs/, not the toolkit's or TEST_ROOT's", async () => {
+    // Simulates an L1/L2 consumer project: its own repo root (.git marker) with its
+    // own docs/ tree, structurally separate from TEST_ROOT/DOCS_ROOT above. This is the
+    // direct regression guard for findDocsRoot()'s cross-project property — the two
+    // BACKLOG.md-shaped tests above use TEST_ROOT, which has no .git marker, so they
+    // pass via the iteration-cap/filesystem-root fallback, not via this property.
+    const otherRoot = path.join(os.tmpdir(), "validate-doc-update-other-project-" + process.pid);
+    const otherDocsRoot = path.join(otherRoot, "docs");
+    try {
+      mkdirSync(path.join(otherRoot, ".git"), { recursive: true });
+      const existingPath = path.join(otherDocsRoot, "testing", "own-patterns.md");
+      mkdirSync(path.dirname(existingPath), { recursive: true });
+      writeFileSync(existingPath, makeFrontmatter({
+        slug: "own-patterns",
+        category: "testing",
+        scope: ["testing"],
+        targets: ["android"],
+      }) + [
+        "# Own Project Patterns",
+        "Use runTest for all coroutine tests.",
+        "Sequential execution with maxParallelForks equals one.",
+        "StateFlow subscribe in backgroundScope with UnconfinedTestDispatcher.",
+        "Inject testDispatcher into UseCases not Dispatchers Default.",
+        "Pure Kotlin fakes over mocks FakeRepository FakeClock.",
+      ].join("\n"), "utf-8");
+
+      const target = path.join(otherDocsRoot, "testing", "new-doc.md");
+      const result = await validate(target, makeFrontmatter({
+        slug: "new-doc",
+        category: "testing",
+      }) + [
+        "# Own Project Patterns Guide",
+        "Use runTest for all coroutine tests.",
+        "Sequential execution with maxParallelForks equals one.",
+        "StateFlow subscribe in backgroundScope with UnconfinedTestDispatcher.",
+        "Inject testDispatcher into UseCases not Dispatchers Default.",
+        "Pure Kotlin fakes over mocks FakeRepository FakeClock.",
+      ].join("\n"), "create");
+
+      // Overlap with own-patterns.md (same project's docs/) must be detected — proves
+      // duplicate-detection scanned otherDocsRoot, not the real toolkit's docs/
+      // (unrelated content, would never trigger >70% overlap) and not TEST_ROOT/
+      // DOCS_ROOT (empty of this content).
+      expect(result.status).toBe("REJECTED");
+      expect(result.issues.some((i) => i.type === "duplicate")).toBe(true);
+    } finally {
+      rmSync(otherRoot, { recursive: true, force: true });
+    }
   });
 });
 
