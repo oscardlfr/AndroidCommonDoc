@@ -198,18 +198,54 @@ PLANNING_DIR="$REPO_ROOT/.planning"
 WAVE_DIR="$PLANNING_DIR/wave-$WAVE_SLUG"
 VERDICT_FILE="$WAVE_DIR/arch-${ROLE#arch-}-verdict.md"
 
-# ── Confine verdict path under .planning/ (realpath guard with a python3 fallback — ports
+# ── Confine verdict path under .planning/ (realpath guard with a pure-shell fallback — ports
 #    write-coordination-artifact.sh's Codex-hardened _realpath_resolve()/_confine_under_planning(),
 #    the same helper pair now also ported into write-specialist-dispatch.sh's sibling Check-2 block
 #    (identical bug, identical fix, applied independently in each file's own confinement block).
 #    The original single-tool-or-skip form silently ran NO check when `realpath` was absent
-#    (BSD/macOS realpath also lacks -m and no-ops). Now: try realpath first, fall back to python3
-#    if it's missing or fails to resolve either side, and FAIL CLOSED if neither can resolve —
-#    never a silent no-op.
-#    NOTE (new soft dependency): unlike write-specialist-dispatch.sh, this script has no existing
-#    python3 requirement — the fallback branch below is the ONLY place python3 is invoked, and only
-#    when `realpath` is absent or fails. On any system with a working `realpath` (virtually all
-#    macOS/Linux boxes) this fallback never runs. ──
+#    (BSD/macOS realpath also lacks -m and no-ops). Resolution order: (1) `realpath -m` (GNU), (2) a
+#    pure-shell physical-pwd fallback (peel to the deepest EXISTING ancestor, `cd` + `pwd -P` to
+#    resolve symlinks physically, re-append the non-existent tail — no external tool needed, works
+#    on macOS/BSD), (3) python3 `os.path.realpath` as a final, now-optional fallback. FAIL CLOSED
+#    if none resolve — never a silent no-op.
+#    NOTE (dependency, corrected): on macOS/BSD, step (1) `realpath -m` always fails (no -m flag),
+#    so step (2) — pure bash, no external tool — is what actually resolves paths here in practice;
+#    step (3) is a genuine last-resort that normal operation never reaches. CodeRabbit flagged the
+#    prior two-step form (realpath -> python3 only) as making python3 a DE FACTO hard dependency on
+#    macOS, since realpath -m never succeeds there and this script previously had zero python3
+#    usage. That's fixed now: python3 is truly optional. ──
+
+# _shell_physical_resolve <path> — pure-bash (no realpath/python3) canonicalization. Finds the
+# deepest EXISTING ancestor of <path>, resolves IT physically via `cd` + `pwd -P` (follows
+# symlinks), then re-appends the non-existent tail components peeled off along the way. Mirrors
+# `realpath -m`'s semantics (a path that may not fully exist yet still resolves) without requiring
+# GNU realpath or python3. Prints the resolved path and returns 0 on success; returns 1 (prints
+# nothing) if even the nearest existing ancestor can't be entered (e.g. permission denied).
+_shell_physical_resolve() {
+  local p="$1"
+  case "$p" in
+    /*) : ;;
+    *)  p="$PWD/$p" ;;
+  esac
+  local tail="" cur="$p" base parent
+  while [[ ! -e "$cur" ]]; do
+    base="$(basename "$cur")"
+    if [[ -z "$tail" ]]; then tail="$base"; else tail="$base/$tail"; fi
+    parent="$(dirname "$cur")"
+    if [[ "$parent" == "$cur" ]]; then
+      cur="$parent"
+      break
+    fi
+    cur="$parent"
+  done
+  local physical
+  physical="$(cd "$cur" 2>/dev/null && pwd -P)" || return 1
+  if [[ -n "$tail" ]]; then
+    printf '%s/%s' "$physical" "$tail"
+  else
+    printf '%s' "$physical"
+  fi
+}
 
 _realpath_resolve() {
   local p="$1" r=""
@@ -217,6 +253,9 @@ _realpath_resolve() {
     r="$(realpath -m "$p" 2>/dev/null || true)"
   fi
   if [[ -z "$r" ]]; then
+    r="$(_shell_physical_resolve "$p" 2>/dev/null || true)"
+  fi
+  if [[ -z "$r" ]] && command -v python3 >/dev/null 2>&1; then
     r="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$p" 2>/dev/null || true)"
   fi
   printf '%s' "$r"

@@ -963,3 +963,62 @@ _real_sha256() {
   local nested="/tmp/bl-w4-9-fixture/.planning/arch-testing-verdict.md"
   [[ "$nested" == "$root" || "$nested" == "$root"/* ]] || return 1
 }
+
+# ── Codex #2 fix-round: _shell_physical_resolve() fallback tier is NOT hard-dependent
+#    on python3 ────────────────────────────────────────────────────────────────
+#
+# CodeRabbit/Codex flagged the prior two-step _realpath_resolve() (realpath -> python3
+# only) as making python3 a DE FACTO hard dependency on macOS/BSD: realpath -m always
+# fails there (no -m flag), so python3 was the ONLY thing standing between a legitimate
+# write and a fail-closed exit 2 — a box with no python3 could never write ANY verdict,
+# even a perfectly legitimate one. Fix: a new pure-shell _shell_physical_resolve() tier
+# sits BETWEEN realpath and python3 (peels a target's non-existent trailing components
+# one at a time down to the deepest EXISTING ancestor, `cd`s into it + `pwd -P` to
+# resolve physically — following symlinks — then re-appends the peeled tail). python3
+# is now gated behind `command -v python3` and only reached as a genuine last resort.
+#
+# These tests force BOTH earlier tiers to fail (a `realpath` shell function that always
+# fails, standing in for BSD's missing -m; a `python3` shell function that always
+# returns 127, standing in for "absent") via `export -f`, verified beforehand to
+# correctly shadow the real binaries even for a real script-file invocation
+# (`bash "$SCRIPT" ...`, not just `bash -c`). This proves _shell_physical_resolve()
+# alone carries the confinement check end-to-end — not merely that some fallback exists.
+
+@test "Codex #2 FALLBACK-CHAIN PASS: legitimate nested verdict path is accepted with BOTH realpath -m and python3 unavailable" {
+  _seed_plan "$WAVE_SLUG"
+
+  run bash -c "
+    realpath() { return 1; }
+    python3() { return 127; }
+    export -f realpath
+    export -f python3
+    cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG'
+  "
+  [ "$status" -eq 0 ]
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  [ -f "$verdict" ] || return 1
+  grep -q "APPROVED-PREP" "$verdict" || return 1
+}
+
+@test "Codex #2 FALLBACK-CHAIN FAIL: symlink-planted '.planning-evil' escape is rejected with BOTH realpath -m and python3 unavailable" {
+  # Mirrors the earlier BL-W4-9 behavioral symlink test, but under the tool-degraded
+  # PATH — proves the pure-shell fallback's `pwd -P` (not python3's os.path.realpath())
+  # is what resolves the symlink physically and catches the escape.
+  local evil_dir="$PROJ/.planning-evil"
+  mkdir -p "$evil_dir"
+  mkdir -p "$PROJ/.planning"
+  ln -s "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG"
+
+  run bash -c "
+    realpath() { return 1; }
+    python3() { return 127; }
+    export -f realpath
+    export -f python3
+    cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG'
+  "
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"confinement"* ]] || return 1
+
+  # Nothing written through the symlink to the sibling location.
+  [ -z "$(ls -A "$evil_dir" 2>/dev/null)" ] || return 1
+}

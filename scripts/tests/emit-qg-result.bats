@@ -3,7 +3,7 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/emit-qg-result.sh
 #
-# Coverage map (22 tests):
+# Coverage map (23 tests):
 #   #QR1  status:pass when report all-PASS + clean bats log
 #   #QR2  status:fail when bats log has ^not ok (even if bats exited 0)
 #   #QR3  empty bats log → status:fail (no evidence = not pass)
@@ -33,6 +33,9 @@ bats_require_minimum_version 1.5.0
 #   #QR21 false-positive guard B: non-bats-context integers → exits 0
 #   #QR22 BL-W4-4 REGRESSION: 7 required PASS + 1 conditional SKIP (no 'required' key)
 #         → status:pass (manifest-membership lookup, not blind per-step default)
+#   #QR23 BL-W4-4 sibling REGRESSION (Codex #3): 7 required PASS + 1 conditional FAIL
+#         (no 'required' key) → status:fail (a conditional step that RAN and FAILED is
+#         NOT exempt — only a legitimately-SKIPped one is; complements QR22)
 #
 # Isolation: every test uses mktemp -d + git init + teardown rm -rf.
 # Fixtures written via --report / --bats-log / --out; NEVER touch live state.
@@ -140,6 +143,55 @@ first_conditional = conditional_steps[0]['id']
 # blind per-step default (s.get('required', True)).
 steps.append({'step': first_conditional, 'ran': False, 'result': 'SKIP',
               'reason': 'predicate false in isolated test repo'})
+report = {
+    'deliberation': {
+        'architects_consulted': ['arch-platform', 'arch-testing', 'arch-integration'],
+        'incorporated_at': '2026-06-21T00:00:00Z',
+    },
+    'pre_pr_coverage': {'status': 'PASS', 'modules': 1},
+    'discovered_rules': [
+        {'rule': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
+    ],
+    'steps': steps,
+}
+with open(report_path, 'w', encoding='utf-8') as f:
+    json.dump(report, f, indent=2)
+    f.write('\n')
+PYEOF
+}
+
+# write_report_pass_with_conditional_fail <path> — #QR23 regression fixture
+# (BL-W4-4 sibling, Codex #3). All 7 required_steps[] at PASS; exactly ONE
+# conditional_steps[] entry at FAIL (the step genuinely RAN and failed — not a
+# legitimate predicate-false SKIP) with NO 'required' key, same non-vacuous shape as
+# #QR22's helper. Complements QR22: a conditional step that RAN and FAILED must NOT be
+# exempt the way a legitimately-SKIPped one is — only 'result': 'SKIP' is exempt.
+# Regression: the current manifest-membership lookup filters required_steps[] purely by
+# step-id membership in quality-gate-manifest.json's required_steps[].id, so a
+# conditional step's 'result' value (SKIP or FAIL) is never inspected at all — a
+# conditional FAIL is silently excluded from the required-set exactly like a
+# conditional SKIP is, producing a false status:pass. The fix must additionally check:
+# any step whose id is in conditional_steps[].id AND whose result == 'FAIL' also fails
+# the report.
+write_report_pass_with_conditional_fail() {
+    local path="$1"
+    python3 - "$path" "$MANIFEST_SRC" << 'PYEOF'
+import json, sys
+report_path   = sys.argv[1]
+manifest_path = sys.argv[2]
+manifest = json.load(open(manifest_path, encoding='utf-8'))
+steps = []
+for rs in manifest.get('required_steps', []):
+    steps.append({'step': rs['id'], 'ran': True, 'result': 'PASS'})
+conditional_steps = manifest.get('conditional_steps', [])
+assert conditional_steps, 'manifest must declare at least one conditional step'
+first_conditional = conditional_steps[0]['id']
+# Deliberately NO 'required' key (mirrors #QR22's helper) — the manifest-membership
+# lookup, not a hand-set field, must be what determines the outcome. 'ran': True
+# distinguishes this from a legitimate SKIP (predicate evaluated true; the check
+# actually executed and failed).
+steps.append({'step': first_conditional, 'ran': True, 'result': 'FAIL',
+              'reason': 'predicate true in isolated test repo; check genuinely failed'})
 report = {
     'deliberation': {
         'architects_consulted': ['arch-platform', 'arch-testing', 'arch-integration'],
@@ -1109,4 +1161,39 @@ print('ok')
     [ -f "$out" ]
     status_field="$(parse_json_field "$out" "status")"
     [ "$status_field" = "pass" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR23  BL-W4-4 sibling REGRESSION (Codex #3): 7 required_steps PASS + 1
+#         conditional FAIL (no 'required' key) → status:fail
+#
+# Complements #QR22 (conditional SKIP is exempt) — a conditional step whose predicate
+# was TRUE and which genuinely RAN and FAILED must NOT be exempt the same way. Current
+# evaluator (post-BL-W4-4): required_steps = [s for s in steps if s.get('step') in
+# required_ids] — this filters PURELY by step-id membership in
+# quality-gate-manifest.json's required_steps[].id; a conditional step's own 'result'
+# value is never inspected at all, so a conditional FAIL is silently excluded from the
+# required-set exactly like a conditional SKIP is, producing a false status:pass.
+#
+# Empirically reproduced against the unfixed script before authoring this test (7
+# required PASS + 1 conditional FAIL, manifest present in the isolated repo): status
+# came back "pass", exit 0 — confirming the regression is real, not theoretical.
+#
+# ANTI-VACUOUS-TEST NOTE: mirrors #QR22's helper shape — no manual 'required' key (real
+# append_step_json output never carries one), so the manifest-membership lookup is what
+# determines the outcome, not a hand-set field.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR23 BL-W4-4 sibling REGRESSION (Codex #3): 7 required PASS + 1 conditional FAIL (no 'required' key) → status:fail" {
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    write_clean_bats_log "$log"
+    write_report_pass_with_conditional_fail "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    [ "$status" -eq 1 ]
+    [ -f "$out" ]
+    status_field="$(parse_json_field "$out" "status")"
+    [ "$status_field" = "fail" ]
 }

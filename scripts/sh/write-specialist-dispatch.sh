@@ -337,14 +337,50 @@ if [[ -z "$TASK_BODY" ]]; then
   exit 2
 fi
 
-# ── Confine output dir under .planning/ (realpath guard with a python3 fallback — ports
+# ── Confine output dir under .planning/ (realpath guard with a pure-shell fallback — ports
 #    write-coordination-artifact.sh's Codex-hardened _realpath_resolve()/_confine_under_planning()
 #    (that file's own header names THIS block, write-specialist-dispatch.sh:340-349, as the bug it
 #    hardens — Wave 2 fixed the sibling but never backported here). The original single-tool-or-skip
 #    form silently ran NO check when `realpath` was absent (BSD/macOS realpath also lacks -m and
-#    no-ops). Now: try realpath first, fall back to python3 (already a hard dependency of this
-#    script — see the top-of-file python3 check) if it's missing or fails to resolve either side,
-#    and FAIL CLOSED if neither can resolve — never a silent no-op. ──
+#    no-ops). Resolution order: (1) `realpath -m` (GNU), (2) a pure-shell physical-pwd fallback
+#    (peel to the deepest EXISTING ancestor, `cd` + `pwd -P` to resolve symlinks physically,
+#    re-append the non-existent tail — no external tool needed, works on macOS/BSD), (3) python3
+#    `os.path.realpath` as a final, now-optional fallback (this script already hard-requires python3
+#    for its own JSON authoring — see the top-of-file check — but step (2) is kept identical to
+#    write-verdict.sh's copy of this helper pair for consistency between the two). FAIL CLOSED if
+#    none resolve — never a silent no-op. ──
+
+# _shell_physical_resolve <path> — pure-bash (no realpath/python3) canonicalization. Finds the
+# deepest EXISTING ancestor of <path>, resolves IT physically via `cd` + `pwd -P` (follows
+# symlinks), then re-appends the non-existent tail components peeled off along the way. Mirrors
+# `realpath -m`'s semantics (a path that may not fully exist yet still resolves) without requiring
+# GNU realpath or python3. Prints the resolved path and returns 0 on success; returns 1 (prints
+# nothing) if even the nearest existing ancestor can't be entered (e.g. permission denied).
+_shell_physical_resolve() {
+  local p="$1"
+  case "$p" in
+    /*) : ;;
+    *)  p="$PWD/$p" ;;
+  esac
+  local tail="" cur="$p" base parent
+  while [[ ! -e "$cur" ]]; do
+    base="$(basename "$cur")"
+    if [[ -z "$tail" ]]; then tail="$base"; else tail="$base/$tail"; fi
+    parent="$(dirname "$cur")"
+    if [[ "$parent" == "$cur" ]]; then
+      cur="$parent"
+      break
+    fi
+    cur="$parent"
+  done
+  local physical
+  physical="$(cd "$cur" 2>/dev/null && pwd -P)" || return 1
+  if [[ -n "$tail" ]]; then
+    printf '%s/%s' "$physical" "$tail"
+  else
+    printf '%s' "$physical"
+  fi
+}
 
 _realpath_resolve() {
   local p="$1" r=""
@@ -352,6 +388,9 @@ _realpath_resolve() {
     r="$(realpath -m "$p" 2>/dev/null || true)"
   fi
   if [[ -z "$r" ]]; then
+    r="$(_shell_physical_resolve "$p" 2>/dev/null || true)"
+  fi
+  if [[ -z "$r" ]] && command -v python3 >/dev/null 2>&1; then
     r="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$p" 2>/dev/null || true)"
   fi
   printf '%s' "$r"

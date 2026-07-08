@@ -402,10 +402,20 @@ try:
     # step (incl. legitimately-SKIPped conditional ones) as required. Report step entries key
     # their id under 'step' (NOT 'id' — that key belongs to the manifest side only).
     required_ids = {rs.get('id') for rs in manifest.get('required_steps', [])}
+    conditional_ids = {cs.get('id') for cs in manifest.get('conditional_steps', [])}
     required_steps = [s for s in steps if s.get('step') in required_ids]
-    all_pass = bool(required_steps) and all(
-        s.get('result', '') == 'PASS'
-        for s in required_steps
+    # Codex #3 fix: a conditional step that legitimately SKIPped must not flip the verdict
+    # (that's the BL-W4-4 fix above), but a conditional step that RAN and FAILED must still
+    # fail it — the manifest-membership filter alone would otherwise silently ignore a real
+    # conditional failure just because it isn't in required_ids.
+    failed_conditional_steps = [
+        s for s in steps
+        if s.get('step') in conditional_ids and s.get('result') == 'FAIL'
+    ]
+    all_pass = (
+        bool(required_steps)
+        and all(s.get('result', '') == 'PASS' for s in required_steps)
+        and not failed_conditional_steps
     )
     print(steps_json)
     print('all_required_pass=' + str(all_pass).lower())
