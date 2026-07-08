@@ -9,7 +9,7 @@ parent: agents-hub
 category: agents
 description: "QG-proof push gate: emit-push-proof.sh (run-qg/verify-proof), quality-gate-manifest.json policy, push-proof.json schema, verdict→HEAD binding, bypass audit trail."
 version: 1
-last_updated: "2026-06"
+last_updated: "2026-07-08"
 assumes_read: quality-gate-protocol, agent-verdict-protocol
 ---
 
