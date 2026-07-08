@@ -84,8 +84,30 @@ fi
 CLASS_SENTINEL="$(grep -m1 '[^[:space:]]' "$CLASS_SENTINEL_FILE" | tr -d '[:space:]\r' || true)"
 
 # ── Step 2: Read PLAN.md Wave Class ──────────────────────────────────────────
+# Anchor: section starts on the FIRST line matching exactly:
+#   ^###[[:space:]]+Wave[[:space:]]+Class[[:space:]]*$
+# Boundary: any markdown heading (H1-H6) ends the section (mirrors Step 4's
+# Path-Manifest anchoring below). Take the first **Class**: line found INSIDE
+# that window — NOT the first **Class**: anywhere in PLAN.md (a decoy bold
+# marker in prose elsewhere must never resolve this).
 
-PLAN_CLASS="$(grep -m1 '\*\*Class\*\*:' "$PLAN_FILE" | sed 's/.*\*\*Class\*\*:[[:space:]]*//' | tr -d '[:space:]\r')" || true
+PLAN_CLASS=""
+IN_CLASS_SECTION=0
+while IFS= read -r line; do
+  if [[ "$line" =~ ^###[[:space:]]+Wave[[:space:]]+Class[[:space:]]*$ ]]; then
+    IN_CLASS_SECTION=1
+    continue
+  fi
+  if [[ $IN_CLASS_SECTION -eq 1 ]]; then
+    if [[ "$line" =~ ^#{1,6}[[:space:]] ]]; then
+      break
+    fi
+    if [[ "$line" =~ \*\*Class\*\*: ]]; then
+      PLAN_CLASS="$(echo "$line" | sed 's/.*\*\*Class\*\*:[[:space:]]*//' | tr -d '[:space:]\r')"
+      break
+    fi
+  fi
+done < "$PLAN_FILE"
 
 if [[ -z "$PLAN_CLASS" ]]; then
   echo "[qg-path-audit] ERROR: could not extract **Class**: from PLAN.md" >&2
@@ -182,9 +204,20 @@ done < <(git -C "$PROJ_ROOT" diff --name-only "${BASE_REF}..HEAD" 2>/dev/null ||
 echo "[qg-path-audit] Touched files: ${#TOUCHED_FILES[@]}" >&2
 
 # ── Step 6: Out-of-manifest check ────────────────────────────────────────────
+# Exact single-file exemption: a wave's own tracked QG sentinel is deliberately
+# committed but excluded from the Path-Manifest (see PLAN.md's Tracked-sentinel
+# rationale) — exempt ONLY that one exact path, not the whole
+# .claude/wave-quality-gates/ directory (emit-push-proof.sh's broader dir-prefix
+# exemption is for clean-tree checks, not this audit).
+
+WAVE_SLUG_FOR_SENTINEL="${WAVE_DIR##*/wave-}"
+SENTINEL_EXEMPT=".claude/wave-quality-gates/${WAVE_SLUG_FOR_SENTINEL}.md"
 
 FAIL=0
 for touched in "${TOUCHED_FILES[@]+"${TOUCHED_FILES[@]}"}"; do
+  if [[ "$touched" == "$SENTINEL_EXEMPT" ]]; then
+    continue
+  fi
   IN_MAN=0
   for manifest_entry in "${MANIFEST_FILES[@]+"${MANIFEST_FILES[@]}"}"; do
     if [[ "$touched" == "$manifest_entry" ]]; then

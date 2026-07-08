@@ -151,3 +151,62 @@ EOF
   # Must NOT contain FAIL for the version check
   [[ "$output" != *"[FAIL]"* ]]
 }
+
+# ── BL-W4-3: Check 4 bash-3.2-safe rewrite (declare -A -> indexed-array lookup) ──
+#
+# validate-agent-templates.sh L307/L320-321 used `declare -A TOOL_PATTERNS=(...)` +
+# `${!TOOL_PATTERNS[@]}` — Bash-4+-only constructs. This Mac's only /bin/bash is
+# 3.2.57, so under `set -euo pipefail` Check 4 aborted outright (the existing "Check 4:
+# backtick-wrapped Agent() in body does NOT trigger xref WARN" test above is part of
+# that abort and is expected to flip green with this fix — see delta-honest
+# reconciliation in the wave report, not re-tested here).
+
+@test "Check 4: tool referenced in body but absent from frontmatter tools triggers xref WARN (positive detection, BL-W4-3)" {
+  local tdir="${BATS_TEST_TMPDIR:-/tmp}/vat-xref-warn-$$"
+  local tfile="$tdir/agent-templates/agent-a.md"
+  mkdir -p "$tdir/agent-templates"
+
+  # Template declares tools: Read (no Write) but body genuinely calls Write(...) in
+  # plain prose — not backticked, not inside a WRONG/NEVER/FORBIDDEN/example guard.
+  # This MUST still trigger the xref WARN under the rewritten bash-3.2-safe lookup,
+  # proving the rewrite still DETECTS mismatches (not merely that it no longer aborts).
+  cat > "$tfile" <<'EOF'
+---
+name: agent-a
+description: Test agent
+tools: Read
+model: claude-opus-4-5
+token_budget: 10000
+template_version: 1.0.0
+---
+
+## Role
+
+Call Write(file_path, content) directly to persist results to disk.
+EOF
+
+  run bash "$SCRIPT" \
+    --templates-dir "$tdir/agent-templates" \
+    --check "tool-body-xref" \
+    --show-details
+
+  [ "$status" -eq 0 ]
+  # Non-final [[ ]] does not abort a bats test body on failure (bash/bats quirk,
+  # verified empirically in this repo) — `|| return 1` restores correct abort-on-fail.
+  [[ "$output" == *"[WARN]"* ]] || return 1
+  [[ "$output" == *"references 'Write' but not in frontmatter tools"* ]] || return 1
+}
+
+@test "STATIC GUARD: validate-agent-templates.sh contains no 'declare -A' (bash 3.2 safety, BL-W4-3 — sole CI backstop)" {
+  # CI (reusable-shell-tests.yml, ubuntu-latest) runs Bash 5.x, which supports
+  # associative arrays natively — a reintroduced `declare -A` would pass CI silently.
+  # This static guard is the ONLY check that would catch that regression; it is
+  # load-bearing, not redundant with the functional WARN test above. Targets
+  # `declare -A` specifically — indexed-array `${!arr[@]}` usage elsewhere in the file
+  # is fine on bash 3.2 and must not be blanket-banned.
+  #
+  # Comment-only lines are excluded: the fix's own explanatory comment legitimately
+  # names "declare -A" in prose to document what was removed/avoided, which would
+  # otherwise false-positive a bare substring grep.
+  ! grep -vE '^[[:space:]]*#' "$SCRIPT" | grep -q 'declare -A'
+}

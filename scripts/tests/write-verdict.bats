@@ -905,3 +905,61 @@ _real_sha256() {
 
   rm -rf "$empty_proj"
 }
+
+# ── BL-W4-9 sibling: confinement — macOS/BSD-parity, sibling collision rejected ──
+# CORRECTED mid-wave — mirrors write-specialist-dispatch.bats' identical, also-corrected
+# BL-W4-9 block: the shipped fix PORTS write-coordination-artifact.sh's Codex-hardened
+# _realpath_resolve()/_confine_under_planning() (realpath-first, python3
+# os.path.realpath() fallback, fail-closed if both come up empty) rather than adopting
+# _file_in_repo()'s pure-lexical idiom as PLAN.md originally sketched. `realpath -m`
+# legitimately remains as a harmless first attempt. See write-specialist-dispatch.bats'
+# identical BL-W4-9 header for the full rationale.
+#
+# NOTE ON TEST SHAPE: VERDICT_FILE is programmatically derived from an
+# already-validated WAVE_SLUG (same _validate_slug() allowlist + substring reject as
+# write-specialist-dispatch.sh) and an enum-locked --role — a bare CLI argument can
+# never make VERDICT_FILE's STRING representation escape .planning/. The only way to
+# reach a genuine escape through the public CLI is a symlink planted on disk ahead of
+# the run. Unlike write-specialist-dispatch.sh, `_confine_under_planning "$VERDICT_FILE"`
+# runs UNCONDITIONALLY at top level (L244), ahead of the --phase prep/verify-final
+# dispatch and ahead of run_prep()'s own `mkdir -p "$WAVE_DIR"` — so the escape attempt
+# must be caught before any wave-dir content is ever written, regardless of --phase.
+
+@test "BL-W4-9 sibling Confinement BEHAVIORAL: symlink planted inside .planning/ escaping to a '.planning-evil' sibling is rejected end-to-end" {
+  # WAVE_DIR itself (not a sub-directory, unlike DISPATCH_DIR's specialist-dispatches
+  # parent) is the symlink target here, since VERDICT_FILE = "$WAVE_DIR/arch-...-verdict.md"
+  # sits directly inside it — mkdir -p "$WAVE_DIR" only happens later, inside run_prep(),
+  # so the fixture must pre-create the escape itself (no _seed_plan() helper reuse: that
+  # helper mkdir -p's a REAL wave dir, which would conflict with planting a symlink there).
+  local evil_dir="$PROJ/.planning-evil"
+  mkdir -p "$evil_dir"
+  mkdir -p "$PROJ/.planning"
+  ln -s "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG"
+
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"confinement"* ]] || return 1
+
+  # Nothing written through the symlink to the sibling location.
+  [ -z "$(ls -A "$evil_dir" 2>/dev/null)" ] || return 1
+}
+
+@test "BL-W4-9 sibling CONFINEMENT IDIOM: old bare-glob wrongly accepts a '.planning-evil' sibling collision" {
+  local root="/tmp/bl-w4-9-fixture/.planning"
+  local sibling="/tmp/bl-w4-9-fixture/.planning-evil/arch-testing-verdict.md"
+  # `|| return 1`: defensive against the non-final-[[ ]] bats/bash abort quirk.
+  [[ "$sibling" == "$root"* ]] || return 1
+}
+
+@test "BL-W4-9 sibling CONFINEMENT IDIOM: boundary-safe idiom (_file_in_repo()-style) rejects the same '.planning-evil' sibling collision" {
+  local root="/tmp/bl-w4-9-fixture/.planning"
+  local sibling="/tmp/bl-w4-9-fixture/.planning-evil/arch-testing-verdict.md"
+  ! [[ "$sibling" == "$root" || "$sibling" == "$root"/* ]] || return 1
+}
+
+@test "BL-W4-9 sibling CONFINEMENT IDIOM: boundary-safe idiom still accepts a genuine nested child" {
+  local root="/tmp/bl-w4-9-fixture/.planning"
+  local nested="/tmp/bl-w4-9-fixture/.planning/arch-testing-verdict.md"
+  [[ "$nested" == "$root" || "$nested" == "$root"/* ]] || return 1
+}

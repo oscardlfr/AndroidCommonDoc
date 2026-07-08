@@ -198,17 +198,50 @@ PLANNING_DIR="$REPO_ROOT/.planning"
 WAVE_DIR="$PLANNING_DIR/wave-$WAVE_SLUG"
 VERDICT_FILE="$WAVE_DIR/arch-${ROLE#arch-}-verdict.md"
 
-# Re-derive via realpath to prevent symlink traversal (if available)
-if command -v realpath >/dev/null 2>&1; then
-  # Only resolve the parent (wave dir may not exist yet for prep)
-  canon_planning="$(realpath -m "$PLANNING_DIR" 2>/dev/null || echo "$PLANNING_DIR")"
-  canon_verdict="$(realpath -m "$VERDICT_FILE" 2>/dev/null || echo "$VERDICT_FILE")"
-  # Verify the verdict path stays inside .planning/
-  if [[ "$canon_verdict" != "$canon_planning"* ]]; then
+# ── Confine verdict path under .planning/ (realpath guard with a python3 fallback — ports
+#    write-coordination-artifact.sh's Codex-hardened _realpath_resolve()/_confine_under_planning(),
+#    the same helper pair now also ported into write-specialist-dispatch.sh's sibling Check-2 block
+#    (identical bug, identical fix, applied independently in each file's own confinement block).
+#    The original single-tool-or-skip form silently ran NO check when `realpath` was absent
+#    (BSD/macOS realpath also lacks -m and no-ops). Now: try realpath first, fall back to python3
+#    if it's missing or fails to resolve either side, and FAIL CLOSED if neither can resolve —
+#    never a silent no-op.
+#    NOTE (new soft dependency): unlike write-specialist-dispatch.sh, this script has no existing
+#    python3 requirement — the fallback branch below is the ONLY place python3 is invoked, and only
+#    when `realpath` is absent or fails. On any system with a working `realpath` (virtually all
+#    macOS/Linux boxes) this fallback never runs. ──
+
+_realpath_resolve() {
+  local p="$1" r=""
+  if command -v realpath >/dev/null 2>&1; then
+    r="$(realpath -m "$p" 2>/dev/null || true)"
+  fi
+  if [[ -z "$r" ]]; then
+    r="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$p" 2>/dev/null || true)"
+  fi
+  printf '%s' "$r"
+}
+
+_confine_under_planning() {
+  local target="$1"
+  local canon_planning canon_target
+  canon_planning="$(_realpath_resolve "$PLANNING_DIR")"
+  canon_target="$(_realpath_resolve "$target")"
+  if [[ -z "$canon_planning" || -z "$canon_target" ]]; then
+    echo "[write-verdict] ERROR: Traversal guard: unable to resolve a canonical path for the confinement check (neither realpath nor the python3 fallback succeeded) — failing closed." >&2
+    exit 2
+  fi
+  # Exact-or-strictly-under check: the old bare "$canon_planning"* glob has no trailing
+  # separator, so a resolved SIBLING like ".planning-evil" satisfies ".planning*" and would
+  # wrongly pass. Require canon_target to equal canon_planning exactly OR sit under
+  # "canon_planning/".
+  if [[ "$canon_target" != "$canon_planning" && "$canon_target" != "$canon_planning"/* ]]; then
     echo "[write-verdict] ERROR: Traversal guard: verdict path escapes .planning/ confinement" >&2
     exit 2
   fi
-fi
+}
+
+_confine_under_planning "$VERDICT_FILE"
 
 # ── Timestamp ─────────────────────────────────────────────────────────────────
 

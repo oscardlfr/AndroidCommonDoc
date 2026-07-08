@@ -4,6 +4,8 @@
 # Orchestrator-facing QG verdict signal. NOT a substitute for push-proof.json.
 # NOT consumed by verify-proof, pre-push, or quality-gate-manifest.json.
 # Never touches emit-push-proof.sh, verify-proof, or push-proof.json.
+# Doc-contract for degraded-env fail semantics: docs/agents/qg-proof-push-gate.md
+# ("qg-result.json Schema" section, Boundary list).
 #
 # Modes:
 #   --init               Write status:running, started_at, head
@@ -128,13 +130,17 @@ else
     fi
 fi
 
-# ── Resolve defaults for report / bats log ────────────────────────────────────
+# ── Resolve defaults for report / bats log / manifest ─────────────────────────
 if [[ -z "$REPORT_PATH" ]]; then
     REPORT_PATH="$PROJECT_ROOT/.androidcommondoc/quality-gate-report.json"
 fi
 if [[ -z "$BATS_LOG_PATH" ]]; then
     BATS_LOG_PATH="$PROJECT_ROOT/.androidcommondoc/suite-bats.log"
 fi
+# MANIFEST_PATH mirrors emit-push-proof.sh's derivation: the root-level
+# quality-gate-manifest.json is the sole source of required/conditional step ids
+# (READ-only — no schema change, no protocol_digest involvement here).
+MANIFEST_PATH="$PROJECT_ROOT/quality-gate-manifest.json"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 get_head() {
@@ -387,9 +393,16 @@ import json, sys
 
 try:
     report = json.load(open(sys.argv[1], encoding='utf-8'))
+    manifest = json.load(open(sys.argv[2], encoding='utf-8'))
     steps = report.get('steps', [])
     steps_json = json.dumps(steps)
-    required_steps = [s for s in steps if s.get('required', True)]
+    # Manifest-membership lookup (BL-W4-4): quality-gate-manifest.json's required_steps[].id
+    # is the SOLE source of required-ness — report.steps[] entries never carry a 'required'
+    # key (per append_step_json), so the old s.get('required', True) default treated every
+    # step (incl. legitimately-SKIPped conditional ones) as required. Report step entries key
+    # their id under 'step' (NOT 'id' — that key belongs to the manifest side only).
+    required_ids = {rs.get('id') for rs in manifest.get('required_steps', [])}
+    required_steps = [s for s in steps if s.get('step') in required_ids]
     all_pass = bool(required_steps) and all(
         s.get('result', '') == 'PASS'
         for s in required_steps
@@ -399,7 +412,7 @@ try:
 except Exception as e:
     print('[]')
     print('all_required_pass=false')
-" "$REPORT_PATH" 2>/dev/null || printf '[]\nall_required_pass=false')"
+" "$REPORT_PATH" "$MANIFEST_PATH" 2>/dev/null || printf '[]\nall_required_pass=false')"
 
     STEPS_JSON="$(printf '%s' "$EVAL_RESULT" | head -1)"
     ALL_REQ_LINE="$(printf '%s' "$EVAL_RESULT" | tail -1)"

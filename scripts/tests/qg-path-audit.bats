@@ -217,3 +217,76 @@ PLANEOF
   [ "$status" -eq 2 ]
   [[ "$output" == *"Path-Manifest header not found"* ]] || [[ "$output" == *"Path-Manifest"* ]]
 }
+
+# ── PA-10+ Wave 4 regressions: BL-W4-1 (decoy Class marker) + BL-W4-7 (sentinel exemption) ──
+
+# write_decoy_class_plan <real_class> <decoy_class> — PLAN.md with a **Class**: marker
+# in prose BEFORE the ### Wave Class heading (decoy), plus the real Class label under
+# the heading itself. BL-W4-1: PLAN_CLASS extraction (Step 2) must anchor to the
+# ### Wave Class section — mirroring Step 4's own Path-Manifest anchoring shape — not
+# grab the first **Class**: match anywhere in the file via an unanchored `grep -m1`.
+write_decoy_class_plan() {
+  local real_class="$1" decoy_class="$2"
+  cat > "$WAVE_DIR/PLAN.md" <<PLANEOF
+### Context
+
+Some prose mentioning a **Class**: ${decoy_class} label as an example, written
+before the real ### Wave Class heading below — this is a decoy that an
+unanchored \`grep -m1 '\*\*Class\*\*:'\` would match first.
+
+### Wave Class
+
+- **Class**: ${real_class}
+
+### Path-Manifest
+
+- scripts/sh/pre-commit-hook.sh
+
+### Spawn Table
+
+| Role | Count | Reason |
+|---|---|---|
+| arch-platform | 1 | owns hooks |
+PLANEOF
+}
+
+@test "PA-10 PASS: decoy **Class**: marker in prose before ### Wave Class heading still resolves the real class (BL-W4-1)" {
+  write_class "HARNESS"
+  write_decoy_class_plan "HARNESS" "DOC"
+  touch_file "scripts/sh/pre-commit-hook.sh"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 0 ]
+  # Line-anchored proof the extracted PLAN_CLASS is the real (anchored) value, not the
+  # decoy — an unanchored grep -m1 would have extracted "DOC" here and mismatched.
+  # `|| return 1`: non-final [[ ]] does not abort a bats body on failure (bash/bats
+  # quirk) — defensive even though currently the last statement (future-proofing).
+  [[ "$output" == *"CLASS check: HARNESS == HARNESS OK"* ]] || return 1
+}
+
+@test "PA-11 PASS: committed sentinel .claude/wave-quality-gates/<slug>.md absent from manifest is exempted, not FAILed (BL-W4-7)" {
+  write_class "HARNESS"
+  write_plan "HARNESS" "- scripts/sh/pre-commit-hook.sh"
+  touch_file "scripts/sh/pre-commit-hook.sh"
+  # Sentinel matching THIS wave's own slug (WAVE_DIR basename minus "wave-" prefix is
+  # "bl-w47-expr4") — deliberately NOT listed in the Path-Manifest above.
+  touch_file ".claude/wave-quality-gates/bl-w47-expr4.md"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 0 ]
+}
+
+@test "PA-12 FAIL: .claude/wave-quality-gates/ file for a DIFFERENT slug is still out-of-manifest (BL-W4-7 exact-match, not dir-prefix)" {
+  # The exemption is an exact single-file match against THIS wave's own slug — NOT a
+  # directory-prefix allowlist over .claude/wave-quality-gates/. A sibling wave's
+  # sentinel living in the same directory must not be silently exempted.
+  write_class "HARNESS"
+  write_plan "HARNESS" "- scripts/sh/pre-commit-hook.sh"
+  touch_file "scripts/sh/pre-commit-hook.sh"
+  touch_file ".claude/wave-quality-gates/some-other-wave.md"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 1 ]
+  # `|| return 1`: defensive against the non-final-[[ ]] bats/bash abort quirk.
+  [[ "$output" == *"out-of-manifest"* ]] || return 1
+}

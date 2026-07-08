@@ -337,16 +337,46 @@ if [[ -z "$TASK_BODY" ]]; then
   exit 2
 fi
 
-# ── Confine output dir under .planning/ (realpath guard, symlink-traversal safe) ──
+# ── Confine output dir under .planning/ (realpath guard with a python3 fallback — ports
+#    write-coordination-artifact.sh's Codex-hardened _realpath_resolve()/_confine_under_planning()
+#    (that file's own header names THIS block, write-specialist-dispatch.sh:340-349, as the bug it
+#    hardens — Wave 2 fixed the sibling but never backported here). The original single-tool-or-skip
+#    form silently ran NO check when `realpath` was absent (BSD/macOS realpath also lacks -m and
+#    no-ops). Now: try realpath first, fall back to python3 (already a hard dependency of this
+#    script — see the top-of-file python3 check) if it's missing or fails to resolve either side,
+#    and FAIL CLOSED if neither can resolve — never a silent no-op. ──
 
-if command -v realpath >/dev/null 2>&1; then
-  canon_planning="$(realpath -m "$PLANNING_DIR" 2>/dev/null || echo "$PLANNING_DIR")"
-  canon_dispatch_dir="$(realpath -m "$DISPATCH_DIR" 2>/dev/null || echo "$DISPATCH_DIR")"
-  if [[ "$canon_dispatch_dir" != "$canon_planning"* ]]; then
+_realpath_resolve() {
+  local p="$1" r=""
+  if command -v realpath >/dev/null 2>&1; then
+    r="$(realpath -m "$p" 2>/dev/null || true)"
+  fi
+  if [[ -z "$r" ]]; then
+    r="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$p" 2>/dev/null || true)"
+  fi
+  printf '%s' "$r"
+}
+
+_confine_under_planning() {
+  local target="$1"
+  local canon_planning canon_target
+  canon_planning="$(_realpath_resolve "$PLANNING_DIR")"
+  canon_target="$(_realpath_resolve "$target")"
+  if [[ -z "$canon_planning" || -z "$canon_target" ]]; then
+    echo "[write-specialist-dispatch] ERROR: Traversal guard: unable to resolve a canonical path for the confinement check (neither realpath nor the python3 fallback succeeded) — failing closed." >&2
+    exit 2
+  fi
+  # Exact-or-strictly-under check: the old bare "$canon_planning"* glob has no trailing
+  # separator, so a resolved SIBLING like ".planning-evil" satisfies ".planning*" and would
+  # wrongly pass. Require canon_target to equal canon_planning exactly OR sit under
+  # "canon_planning/".
+  if [[ "$canon_target" != "$canon_planning" && "$canon_target" != "$canon_planning"/* ]]; then
     echo "[write-specialist-dispatch] ERROR: Traversal guard: dispatch path escapes .planning/ confinement" >&2
     exit 2
   fi
-fi
+}
+
+_confine_under_planning "$DISPATCH_DIR"
 
 mkdir -p "$DISPATCH_DIR"
 

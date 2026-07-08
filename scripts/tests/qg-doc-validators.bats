@@ -3,7 +3,7 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/qg-doc-validators.sh (wave qg-doc-coverage).
 #
-# Coverage map (11 tests):
+# Coverage map (12 tests):
 #   #DV1  PASS: valid relative link in docs/agents/ → exit 0, cross_refs PASS
 #   #DV2  FAIL: broken link in docs/agents/ → exit 2, cross_refs FAIL
 #   #DV3  PASS: https:// link skipped (+ at least one valid .md link) → exit 0
@@ -15,6 +15,7 @@ bats_require_minimum_version 1.5.0
 #   #DV9  JSON top-level result == FAIL when cross_refs fails
 #   #DV10 JSON step field == "doc-validator-parity"
 #   #DV11 PASS: zero-.md-link docs/agents file → exit 0, cross_refs PASS (|| true guard regression)
+#   #DV12 PASS: ANDROID_COMMON_DOC is exported to the vitest child, matching --toolkit-root (BL-W4-2)
 #
 # Isolation rule: every test uses mktemp -d + teardown rm -rf.
 # Never reads live docs/ tree or live .androidcommondoc/.
@@ -321,5 +322,45 @@ PYEOF
   run_cross_refs
   [ "$status" -eq 0 ]
   run read_report_field 'subchecks.cross_refs.status'
+  [ "$output" = "PASS" ]
+}
+
+# ── #DV12: ANDROID_COMMON_DOC reaches the vitest child (BL-W4-2) ─────────────
+# TOOLKIT_ROOT is derived from --toolkit-root (or $ANDROID_COMMON_DOC) but was never
+# re-exported before the vitest child spawn (run_doc_structure_vitest, L183), so the
+# child re-resolved the toolkit root independently via paths.ts's getToolkitRoot() and
+# never saw the parent's intended root. This stubs `npx` on PATH to capture the
+# ANDROID_COMMON_DOC value visible INSIDE the "vitest" child's own environment,
+# proving the fix's export reaches the child end-to-end (not merely a parent-shell
+# variable). Pre-fix: the child sees "UNSET" (no ambient ANDROID_COMMON_DOC is set for
+# this test). Post-fix: the child sees the exact --toolkit-root value.
+
+@test "#DV12 PASS: ANDROID_COMMON_DOC is exported to the vitest child, matching --toolkit-root" {
+  local toolkit_root="$FIXTURE/toolkit-alt-root"
+  mkdir -p "$toolkit_root/mcp-server"
+  printf '{}' > "$toolkit_root/mcp-server/package.json"
+
+  # Stub npx: when invoked as `npx vitest ...`, capture the ANDROID_COMMON_DOC visible
+  # in ITS OWN environment and simulate a passing vitest run.
+  local stub_bin="$FIXTURE/stub-bin"
+  mkdir -p "$stub_bin"
+  local capture_file="$FIXTURE/npx-env-capture.txt"
+  cat > "$stub_bin/npx" <<STUBEOF
+#!/usr/bin/env bash
+if [ "\$1" = "vitest" ]; then
+  printf '%s' "\${ANDROID_COMMON_DOC:-UNSET}" > "$capture_file"
+  echo "1 passed (stub)"
+  exit 0
+fi
+exit 127
+STUBEOF
+  chmod +x "$stub_bin/npx"
+
+  run env PATH="$stub_bin:$PATH" bash "$SCRIPT" --project-root "$FIXTURE" --toolkit-root "$toolkit_root" --only structure
+  [ "$status" -eq 0 ]
+  [ -f "$capture_file" ]
+  [ "$(cat "$capture_file")" = "$toolkit_root" ]
+
+  run read_report_field 'subchecks.doc_structure_vitest.status'
   [ "$output" = "PASS" ]
 }

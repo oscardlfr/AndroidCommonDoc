@@ -3,7 +3,7 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/emit-qg-result.sh
 #
-# Coverage map (21 tests):
+# Coverage map (22 tests):
 #   #QR1  status:pass when report all-PASS + clean bats log
 #   #QR2  status:fail when bats log has ^not ok (even if bats exited 0)
 #   #QR3  empty bats log → status:fail (no evidence = not pass)
@@ -31,6 +31,8 @@ bats_require_minimum_version 1.5.0
 #   #QR19 non-byte-identical carry → freshness lib exits 1 (not byte-identical)
 #   #QR20 false-positive guard A: merge-base SHA not in HEAD context → exits 0
 #   #QR21 false-positive guard B: non-bats-context integers → exits 0
+#   #QR22 BL-W4-4 REGRESSION: 7 required PASS + 1 conditional SKIP (no 'required' key)
+#         → status:pass (manifest-membership lookup, not blind per-step default)
 #
 # Isolation: every test uses mktemp -d + git init + teardown rm -rf.
 # Fixtures written via --report / --bats-log / --out; NEVER touch live state.
@@ -96,6 +98,48 @@ for cs in manifest.get('conditional_steps', []):
     steps.append({'step': cs['id'], 'ran': False, 'result': 'SKIP',
                   'required': False,
                   'reason': 'predicate false in isolated test repo'})
+report = {
+    'deliberation': {
+        'architects_consulted': ['arch-platform', 'arch-testing', 'arch-integration'],
+        'incorporated_at': '2026-06-21T00:00:00Z',
+    },
+    'pre_pr_coverage': {'status': 'PASS', 'modules': 1},
+    'discovered_rules': [
+        {'rule': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
+    ],
+    'steps': steps,
+}
+with open(report_path, 'w', encoding='utf-8') as f:
+    json.dump(report, f, indent=2)
+    f.write('\n')
+PYEOF
+}
+
+# write_report_pass_with_conditional_skip <path> — #QR22 regression fixture (BL-W4-4).
+# All 7 required_steps[] at PASS; exactly ONE conditional_steps[] entry at SKIP with NO
+# 'required' key — real append_step_json output NEVER carries a 'required' field (unlike
+# write_report_all_pass() above, which manually sets 'required': False on its SKIP
+# entries). The old evaluator's blind per-step default (s.get('required', True)) treats
+# a 'required'-less step as required, so this exact SKIP step would flip status:fail;
+# the fix's quality-gate-manifest.json required_steps[].id / conditional_steps[].id
+# membership lookup must not.
+write_report_pass_with_conditional_skip() {
+    local path="$1"
+    python3 - "$path" "$MANIFEST_SRC" << 'PYEOF'
+import json, sys
+report_path   = sys.argv[1]
+manifest_path = sys.argv[2]
+manifest = json.load(open(manifest_path, encoding='utf-8'))
+steps = []
+for rs in manifest.get('required_steps', []):
+    steps.append({'step': rs['id'], 'ran': True, 'result': 'PASS'})
+conditional_steps = manifest.get('conditional_steps', [])
+assert conditional_steps, 'manifest must declare at least one conditional step'
+first_conditional = conditional_steps[0]['id']
+# Deliberately NO 'required' key — this is the exact shape that trips the old
+# blind per-step default (s.get('required', True)).
+steps.append({'step': first_conditional, 'ran': False, 'result': 'SKIP',
+              'reason': 'predicate false in isolated test repo'})
 report = {
     'deliberation': {
         'architects_consulted': ['arch-platform', 'arch-testing', 'arch-integration'],
@@ -230,6 +274,11 @@ PYEOF
     git -C "$REPO" add dummy.txt
     git -C "$REPO" commit --quiet -m "test: fixture commit for QR4"
     HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
+
+    # BL-W4-4: the required_steps evaluator now reads quality-gate-manifest.json from
+    # --project-root (manifest-membership lookup, not a per-step 'required' default) —
+    # mirrors the #QR6/#QR7 GUARDRAIL fixtures below, which already copy it in.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
 
     local out="$REPO/qg-result.json"
     local log="$REPO/bats.log"
@@ -569,6 +618,10 @@ write_handoff() {
     local current_head
     current_head="$(git -C "$REPO" rev-parse HEAD)"
 
+    # BL-W4-4: required_steps evaluator now reads quality-gate-manifest.json from
+    # --project-root (mirrors #QR6/#QR7 GUARDRAIL fixtures, which already copy it in).
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     local out="$REPO/qg-result.json"
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
@@ -751,6 +804,10 @@ print(d.get('suite_summary', {}).get('bats_complete', 'MISSING'))
     git -C "$REPO" commit --quiet -m "test: fixture commit for QR12"
     local current_head
     current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    # BL-W4-4: required_steps evaluator now reads quality-gate-manifest.json from
+    # --project-root (mirrors #QR6/#QR7 GUARDRAIL fixtures, which already copy it in).
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
 
     local out="$REPO/qg-result.json"
     local log="$REPO/bats.log"
@@ -1020,4 +1077,36 @@ print('ok')
 
     run bash "$FRESHNESS_LIB" --report "$rpt" --head "$current_head" --bats-count "$FIXTURE_COUNT" --repo-root "$REPO"
     [ "$status" -eq 0 ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR22  BL-W4-4 REGRESSION: 7 required_steps PASS + 1 conditional SKIP
+#         (no 'required' key) → status:pass
+#
+# Old evaluator (L392-396): required_steps = [s for s in steps if s.get('required',
+# True)] — every step (including a legitimately-SKIPped conditional one) defaults to
+# required when the 'required' key is absent, which is how real append_step_json output
+# always looks. A single conditional SKIP therefore flips status:fail. Fix reads
+# quality-gate-manifest.json's own required_steps[].id / conditional_steps[].id
+# membership instead of the blind per-step default.
+#
+# ANTI-VACUOUS-TEST NOTE: this fixture deliberately omits the 'required' key from the
+# SKIP step (via write_report_pass_with_conditional_skip(), NOT write_report_all_pass()
+# above, which hand-sets 'required': False — a field real output never carries and
+# would make this test pass identically before AND after the fix). Here, the
+# manifest-membership lookup — not a hand-set field — is what's under test.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR22 BL-W4-4 REGRESSION: 7 required PASS + 1 conditional SKIP (no 'required' key) → status:pass" {
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    write_clean_bats_log "$log"
+    write_report_pass_with_conditional_skip "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    [ "$status" -eq 0 ]
+    [ -f "$out" ]
+    status_field="$(parse_json_field "$out" "status")"
+    [ "$status_field" = "pass" ]
 }

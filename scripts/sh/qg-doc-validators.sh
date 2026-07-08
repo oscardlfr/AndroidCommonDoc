@@ -179,6 +179,11 @@ run_doc_structure_vitest() {
         return 0
     fi
 
+    # Re-export TOOLKIT_ROOT so the vitest child (which re-resolves the toolkit root
+    # independently via paths.ts's getToolkitRoot()) sees the same root this script
+    # resolved — otherwise an explicit --toolkit-root override is silently lost.
+    export ANDROID_COMMON_DOC="$TOOLKIT_ROOT"
+
     local vitest_out
     vitest_out=$(cd "$mcp_dir" && npx vitest run tests/integration/doc-structure.test.ts 2>&1) || {
         echo "FAIL|doc-structure vitest exited non-zero: $(echo "$vitest_out" | tail -5 | tr '\n' ' ')"
