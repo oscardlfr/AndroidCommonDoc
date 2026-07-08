@@ -8,10 +8,10 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "External-source → L0 docs ingestion loop: context-provider flags gap → team-lead gates with user approval → doc-updater runs ingest-content. Closes T-BUG-005 (half-landed prior to Wave 25)."
-version: 1
-last_updated: "2026-04-21"
+version: 2
+last_updated: "2026-07-09"
 assumes_read: team-topology, context-rotation-guide
-token_budget: 1200
+token_budget: 1400
 ---
 
 # Ingestion Loop (External → L0)
@@ -23,6 +23,8 @@ How patterns that context-provider fetches from Context7 or WebFetch become perm
 Context-provider's Answer Pipeline (see `context-provider.md` template) can source patterns from Context7 or WebFetch when internal MCP + local files don't cover a query. Before Wave 25, the template only flagged those sources and told team-lead to notify doc-updater "somehow" — the actual ingestion path was prose. `mcp__androidcommondoc__ingest-content` existed as a tool but no agent declared it in its frontmatter. Wave 25 makes the flow mechanical and user-gated.
 
 ## Protocol (end-to-end)
+
+This is an optional Claude-rich accelerator over the load-bearing disk-artifact floor detailed in [Portable disk-artifact path](#portable-disk-artifact-path) below (per [ADR-001 §2.1](../adr/ADR-001-runtime-adapter-contract.md)'s adapter-specific-capability classification).
 
 ```
 context-provider                team-lead                        doc-updater
@@ -90,6 +92,17 @@ The user-approval step is **load-bearing**. It is the single consent point for a
 
 The **orchestrator** — the portable `team-lead` logical ROLE (the main agent, in-process per W31.6; **not** the retired `team-lead.md` runtime/template) — owns and enforces this gate. Every `team-lead` reference in this doc denotes that orchestrator role, not a separate runtime agent. The approval topology is unchanged: context-provider flags the gap → orchestrator approval (user consent) → doc-updater materializes. See [main-agent-orchestration-guide](main-agent-orchestration-guide.md) for the concrete SendMessage + user-prompt patterns (originally Wave 25).
 
+## Portable disk-artifact path
+
+**Floor vs accelerator**: the load-bearing contract for this loop is the 4 disk artifacts below, mapped onto the already-shipped [coordination-artifact-schema](coordination-artifact-schema.md) `request/v1`/`approval/v1`/`result/v1` schemas — the SendMessage flow in the Protocol section above is an optional accelerator over that floor; in portable/single-use mode, context-provider/orchestrator/doc-updater read and write these artifacts directly and the same gate holds.
+
+| Ingestion artifact | Schema | On-disk path | Key body fields |
+|---|---|---|---|
+| request payload | `request/v1`, `kind:"ingestion"` | `requests/ingestion/<from>-<ts>-<uniq>.json` | `source_type`, `library`/`url`, `date`, `topic`, `proposed_slug`, `proposed_category`, `content` (full raw text, recommended) OR `content_ref`+`content_sha256` (documented alternative) — self-contained, never a truncated snippet |
+| user approval | `approval/v1`, `decision:"authorized"`, `request_kind:"ingestion"` | `approvals/<request_id>.json` | `approver: "user"` (informational consent — discipline-enforced) |
+| doc-updater result | `result/v1`, `status:"done"` | `results/doc-updater/<from>-<ts>-<uniq>.json` | `written_file`, `files_touched[]`, `audit_status`, `follow_ups` |
+| rejection | `approval/v1 decision:"denied"` or `result/v1 status:"blocked"` | same as above | `reason` |
+
 ## Rejection cases (all surface back to team-lead)
 
 | Case | Trigger | Action |
@@ -123,3 +136,4 @@ See the canonical templates in `setup/agent-templates/` for the full `tools:` li
 - `mcp-server/src/tools/ingest-content.ts` — the underlying MCP tool
 - [Context Rotation Guide](context-rotation-guide.md) — why the loop is stateless per-query (Context7 is stateless)
 - [team-lead Quality Doc Pipeline](tl-quality-doc-pipeline.md) — doc-updater mandate (non-ingestion path)
+- [coordination-artifact-schema](coordination-artifact-schema.md) — the request/v1, approval/v1, result/v1 schemas the load-bearing Portable disk-artifact path above maps onto

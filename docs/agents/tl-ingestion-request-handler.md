@@ -45,3 +45,14 @@ When context-provider sends a `summary="ingestion-request: {topic}"` SendMessage
 5. Wait for doc-updater's report. On success, track in TaskCreate: "Ingested {topic} → docs/{category}/{slug}.md". On rejection, relay the reason back to the user.
 
 **Never** forward an ingestion-request to doc-updater without the `approved_by: user` stamp. This is the single user-consent gate for modifying L0 docs from external sources.
+
+## Portable disk-artifact equivalent
+
+The load-bearing contract underneath the SendMessage protocol above is the disk artifacts themselves, not a message received — see [coordination-artifact-schema](coordination-artifact-schema.md) and [ingestion-loop § Portable disk-artifact path](ingestion-loop.md#portable-disk-artifact-path). In portable/single-use mode (no persistent peer to `SendMessage`), the same 5 steps read/write disk directly:
+
+1. Read the newest-valid `request/v1` (`kind:"ingestion"`) from `requests/ingestion/` — same parse + present-to-user as steps 1-2 above.
+2. On decline → write `approval/v1` (`decision:"denied"`, `request_kind:"ingestion"`) to `approvals/<request_id>.json`; halt (step 3).
+3. On approval → write `approval/v1` (`decision:"authorized"`, `request_kind:"ingestion"`, `approver: "user"`) to `approvals/<request_id>.json` (step 4).
+4. Read doc-updater's `result/v1` from `results/doc-updater/` for the completion report (step 5).
+
+`SendMessage` is an optional accelerator over this floor — the invariant holds regardless of channel: no ingestion proceeds without an `approver: "user"` artifact (disk) or the `approved_by: user` stamp (`SendMessage`) on record.

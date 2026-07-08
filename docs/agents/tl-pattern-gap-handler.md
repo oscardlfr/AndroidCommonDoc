@@ -8,10 +8,10 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "team-lead handler for PATTERN-GAP signals from context-provider: ask user approval or proceed without; dispatch ingestion on approval."
-version: 1
-last_updated: "2026-05"
+version: 2
+last_updated: "2026-07"
 assumes_read: tl-ingestion-request-handler
-token_budget: 600
+token_budget: 700
 ---
 
 # tl-pattern-gap-handler
@@ -40,6 +40,8 @@ No results in: docs/, skills/, pattern index
 3. **If user declines or proceeds without**:
    - Log decision: `PATTERN-GAP-SKIPPED: <topic>` in wave notes
    - Continue wave with no pattern guidance for the topic
+
+**Portable fallback**: the load-bearing contract here too is the disk artifact, not the AskUserQuestion prompt — the approval above can equally be an `approval/v1` (`decision:"authorized"`, `request_kind:"ingestion"`, `approver: "user"`) written to `approvals/<request_id>.json`, per [coordination-artifact-schema](coordination-artifact-schema.md); AskUserQuestion/SendMessage is the optional accelerator. Both this handler and [tl-ingestion-request-handler](tl-ingestion-request-handler.md) converge into the same doc-updater artifact triple (`request/v1` → `approval/v1` → `result/v1`) — one resolution shape underneath, regardless of which signal (`PATTERN-GAP` or `ingestion-request`) triggered it.
 
 ## Origin
 

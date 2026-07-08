@@ -7,11 +7,11 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "Portable coordination artifact contract: 6 disk-artifact schemas (consult/result/request/approval/stop/message v1) letting any file-capable engine satisfy CP-gate consult, specialist result, scope-extension request/approval, and graceful-shutdown coordination without a live SendMessage channel"
-version: 1
+description: "Portable coordination artifact contract: 6 disk-artifact schemas (consult/result/request/approval/stop/message v1) letting any file-capable engine satisfy CP-gate consult, specialist result, scope-extension/ingestion request/approval, and graceful-shutdown coordination without a live SendMessage channel"
+version: 2
 last_updated: "2026-07"
 assumes_read: context-bundle-schema
-token_budget: 1800
+token_budget: 2000
 ---
 
 # Coordination Artifact Schema
@@ -25,7 +25,7 @@ Ground truth for this doc is the shipped validator (`.claude/hooks/coordination-
 | `coordination/consult/v1` | `inbox/context-provider/consult-<ts>-<uniq>.json` | directory (bounded scan for newest valid) |
 | `coordination/message/v1` | `inbox/<to>/<from>-<ts>-<uniq>.json` (+ `outbox/<from>/` mirror, identical content, not independently validated) | directory |
 | `coordination/result/v1` | `results/<from>/<from>-<ts>-<uniq>.json` | directory |
-| `coordination/request/v1` | `requests/<kind>/<from>-<ts>-<uniq>.json` (`<kind>` = the request's own top-level `kind` field, e.g. `scope-extension`; filename stem = `request_id`) | directory |
+| `coordination/request/v1` | `requests/<kind>/<from>-<ts>-<uniq>.json` (`<kind>` = the request's own top-level `kind` field, e.g. `scope-extension`, `ingestion`; filename stem = `request_id`) | directory |
 | `coordination/approval/v1` | `approvals/<request_id>.json` (`<request_id>` = the request being resolved, supplied via `--re`) | flat (no role/kind subdir) |
 | `coordination/stop/v1` | `stop-<to>.flag` (`<to>` = the role being told to stop) | flat sentinel file |
 
@@ -98,15 +98,17 @@ Op 4 (`result`) disk-artifact fallback.
 
 ### `coordination/request/v1`
 
-Scope-extension / authorization requests — the portable-mode equivalent of the `SendMessage` template in [scope-extension-protocol § How to Request Authorization](scope-extension-protocol.md#how-to-request-authorization).
+Authorization requests routed by `kind` — currently populated with two kinds, `scope-extension` (the portable-mode equivalent of the `SendMessage` template in [scope-extension-protocol § How to Request Authorization](scope-extension-protocol.md#how-to-request-authorization)) and `ingestion` (the portable-mode equivalent of the `SendMessage` flow in [ingestion-loop § Portable disk-artifact path](ingestion-loop.md#portable-disk-artifact-path)) — nothing in this schema restricts `kind` to one value; each routes to its own `requests/<kind>/` subdirectory.
 
 | Field | Type | Validated? | Description |
 |-------|------|------------|--------------|
 | `schema`, `wave_slug`, `from`, `to`, `created_at`, `plan_sha256`, `head` | — | yes (base envelope) | same rules as `message/v1` |
 | `request_id` | string | yes, non-empty | auto-set by the writer to the full filename stem `<from>-<ts>-<uniq>`; names the resolving `approval/v1` |
-| `kind` | string | required by the writer (e.g. `scope-extension`); read by the validator to branch the `files[]` rule | routes the `requests/<kind>/` subdirectory |
+| `kind` | string | required by the writer (e.g. `scope-extension`, `ingestion`); read by the validator to branch the `files[]` rule | routes the `requests/<kind>/` subdirectory |
 | `files` | array (top-level, NOT nested in a body block) | yes when `kind === "scope-extension"` — must be non-empty | repo-relative paths this request concerns |
 | `blocker`, `root_cause`, `proposed_fix`, `why_not_defer` | — | **not gate-validated** | informational body block mirroring the SendMessage template — the validator only checks `request_id`/`kind`/`files` |
+
+`kind:"ingestion"` is the first populated non-`scope-extension` request kind — the first practical use of the generic `kind`-based routing (routable to any `requests/<kind>/` subdirectory), not the fulfillment of a prior formal reservation. Its body carries `source_type`, `library`/`url`, `date`, `topic`, `proposed_slug`, `proposed_category`, and a self-contained `content` (or `content_ref`+`content_sha256`) field; none of these are gate-validated (same as `blocker`/`root_cause`/etc. above), and `files[]` is correctly NOT required for this kind.
 
 ### `coordination/approval/v1`
 
@@ -119,6 +121,8 @@ The orchestrator's resolution of exactly one `request/v1`, matched by `request_k
 | `request_id` | string | yes — safe path segment | must reference the linked request's own `request_id` |
 | `request_kind` | string | yes — safe path segment, required | the linked request's `kind` — resolves `requests/<request_kind>/<request_id>.json`, which must exist AND itself validate |
 | `approver` | string | written (defaults to `from` if the body omits it), not independently checked | who authorized/denied |
+
+For a `request_kind:"ingestion"` approval, `approver: "user"` is the discipline-enforced consent field — the disk-artifact floor's equivalent of the SendMessage flow's `approved_by: user` stamp ([ingestion-loop § User-approval gate](ingestion-loop.md#user-approval-gate)); like `approver` generally, it is written but not independently gate-checked, so enforcement here is procedural (orchestrator/doc-updater discipline), not mechanical.
 
 ### `coordination/stop/v1`
 
@@ -150,3 +154,4 @@ Two sanctioned write paths, mirroring [context-bundle-schema](context-bundle-sch
 - [context-provider-adoption-hooks](context-provider-adoption-hooks.md) — the CP-gate disk branch these schemas unblock
 - [specialist-dispatch-protocol](specialist-dispatch-protocol.md) — the HEAD/PLAN_SHA256 currency model `result`/`request`/`approval` reuse
 - [scope-extension-protocol](scope-extension-protocol.md) — the SendMessage authorization flow `request`/`approval` falls back from
+- [ingestion-loop](ingestion-loop.md) — the external-source → L0 docs loop whose `request/v1 kind:"ingestion"` / `approval/v1` / `result/v1` artifacts map onto this schema
