@@ -271,10 +271,14 @@ PYEOF
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: the required_steps evaluator reads quality-gate-manifest.json
+    # from --project-root, which now correctly resolves inside the isolated $REPO.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     write_clean_bats_log "$log"
     write_report_all_pass "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 0 ]
     [ -f "$out" ]
     status_field="$(parse_json_field "$out" "status")"
@@ -290,10 +294,14 @@ PYEOF
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: keeps this test's report side genuinely all-PASS, so the
+    # fail it asserts is provably caused by the ^not ok log, not a missing manifest.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     write_not_ok_bats_log "$log"
     write_report_all_pass "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 1 ]
     [ -f "$out" ]
     status_field="$(parse_json_field "$out" "status")"
@@ -309,10 +317,14 @@ PYEOF
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: keeps this test's report side genuinely all-PASS, so the
+    # fail it asserts is provably caused by the empty log, not a missing manifest.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     printf '' > "$log"
     write_report_all_pass "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 1 ]
     [ -f "$out" ]
     status_field="$(parse_json_field "$out" "status")"
@@ -626,11 +638,15 @@ PYEOF
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: keeps this test's report side genuinely all-PASS, so the
+    # fail it asserts is provably caused by the zero-ok log, not a missing manifest.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     # Only a TAP plan line — no ok or not ok lines (simulates 1..0 zero-test suite)
     printf '1..0\n' > "$log"
     write_report_all_pass "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 1 ]
     [ -f "$out" ]
 
@@ -1200,10 +1216,15 @@ print('ok')
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: without this, the manifest-membership lookup fails closed
+    # on a missing manifest (all_required_pass=false) regardless of the SKIP-exemption
+    # logic under test — silently masking the very regression this test guards.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     write_clean_bats_log "$log"
     write_report_pass_with_conditional_skip "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 0 ]
     [ -f "$out" ]
     status_field="$(parse_json_field "$out" "status")"
@@ -1235,10 +1256,16 @@ print('ok')
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: without this, the manifest-membership lookup fails closed
+    # on a missing manifest (all_required_pass=false) regardless of whether the
+    # conditional-FAIL-is-not-exempt logic under test is reached at all — this test
+    # would report status:fail even if that regression were reintroduced, silently.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     write_clean_bats_log "$log"
     write_report_pass_with_conditional_fail "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 1 ]
     [ -f "$out" ]
     status_field="$(parse_json_field "$out" "status")"
@@ -1284,10 +1311,15 @@ print((datetime.now(timezone.utc) + timedelta(seconds=1)).strftime('%Y-%m-%dT%H:
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: without this, status flips to fail (missing-manifest
+    # fail-closed) even though fail_class correctly reads "clean" — the exit-0
+    # assertion below would fail for a reason unrelated to fail_class taxonomy.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     write_clean_bats_log "$log"
     write_report_all_pass "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 0 ]
     fail_class_field="$(parse_json_field "$out" "fail_class")"
     [ "$fail_class_field" = "clean" ]
@@ -1334,10 +1366,15 @@ print((datetime.now(timezone.utc) + timedelta(seconds=1)).strftime('%Y-%m-%dT%H:
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: keeps this test's report side genuinely all-PASS, so the
+    # no-evidence fail_class it asserts is provably from the empty log, not the
+    # separate (and here irrelevant) missing-manifest fail-closed path.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     printf '' > "$log"
     write_report_all_pass "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     fail_class_field="$(parse_json_field "$out" "fail_class")"
     [ "$fail_class_field" = "no-evidence" ]
 }
