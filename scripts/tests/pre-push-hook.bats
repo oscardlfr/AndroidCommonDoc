@@ -187,6 +187,13 @@ proof = {
         {"step": "doc-validator-parity",   "result": "PASS", "ran": True},
     ],
     "report_digest": rd,
+    # Wave A: verify-proof's 8th check requires bats_evidence present + .head == pushed
+    # SHA. This test invokes pre-push-hook.sh (which delegates to verify-proof), never
+    # run-qg, so no started_at/handoff is needed here — only this proof field.
+    "bats_evidence": {
+        "run_id": "canonical-run", "head": head, "ok": 10, "not_ok": 0,
+        "expected": 10, "scope": "full", "generated_at": ts,
+    },
 }
 with open(proof_path, "w", encoding="utf-8") as f:
     json.dump(proof, f, indent=2); f.write('\n')

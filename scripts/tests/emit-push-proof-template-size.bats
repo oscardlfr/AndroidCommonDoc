@@ -13,15 +13,24 @@ bats_require_minimum_version 1.5.0
 # so the check is anchored on --repo-root, not the caller's working directory.
 #
 # Coverage:
-#   TSZ-1: bash — 436-line over-cap fixture → exit non-zero + no stamp written
-#   TSZ-2: bash — 435-line (real) quality-gater.md → exit 0 + stamp written
+#   TSZ-1: bash — 436-line over-cap fixture → exit non-zero + no stamp written (pins
+#          the specific "agent template size cap exceeded" reason, Wave A tightening)
+#   TSZ-2: bash — 435-line (real) quality-gater.md → exit 0 + stamp written (canary
+#          for BOTH the size cap AND the new report.started_at requirement, Wave A)
 #   TSZ-3: ps1 runtime — if powershell.exe/pwsh available, 436-line over-cap → exit!=0 + no stamp
-#   TSZ-4: static guard — BOTH sh+ps1 contain explicit --templates-dir + --agents-dir near size-limits
-#   TSZ-5: CWD-independence proof — non-repo CWD + over-cap → gate fires (exit!=0 + no stamp)
+#   TSZ-4: static guard — sh contains explicit --templates-dir + --agents-dir near
+#          size-limits (ps1 half DROPPED, Wave A — see #EP-PS1-DISABLED/#EP-PS1-VERIFY)
+#   TSZ-5: CWD-independence proof — non-repo CWD + over-cap → gate fires (exit!=0 + no
+#          stamp; pins the specific size-gate reason, Wave A tightening)
 #   TSZ-6: absent-dir guard — no setup/agent-templates/ → gate is a no-op → exit 0 + stamp written
-#   TSZ-7: ps1 static — no-bash branch for (D) size-gate must Die, not warn-skip
-#   TSZ-8: ps1 static — no-bash branch for (B) registry-integrity must Die, not warn-skip
 #   TSZ-9: ps1 static — no 3-arg Join-Path (PowerShell 5.1 compat; 3-arg form requires PS 6+)
+#
+# Wave A (Section A5a/A5b) — PS1 mint-disable + verify's 8th check:
+#   #EP-PS1-DISABLED: ps1 static — Invoke-RunQg is a hard refuse-to-mint (REPLACES
+#          TSZ-7/TSZ-8, superseded not repaired: the old no-bash Die/warn-skip branches
+#          those tests asserted no longer exist — the whole size/registry-gate body
+#          they lived in was deleted along with the rest of the old Invoke-RunQg)
+#   #EP-PS1-VERIFY: ps1 static — verify-push-proof.ps1 contains the bats_evidence check
 #
 # Isolation: every test uses mktemp -d + git init + teardown rm -rf.
 # Setup mirrors emit-push-proof.bats exactly (same harness).
@@ -121,13 +130,49 @@ EOF
   done
 }
 
+# write_valid_bats_handoff -- writes a well-formed, full-scope, HEAD-bound bats
+# handoff into $ACDOC (Wave A: run-qg's test-suite-evidence-* check requires real
+# evidence behind any claimed "test-suite": PASS step). HEAD is re-derived from git at
+# call time. generated_at is captured strictly after the caller's own started_at
+# timestamp, satisfying select_bats_handoff's --since floor (real wall-clock ordering
+# only moves forward within one test).
+write_valid_bats_handoff() {
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  local generated_at
+  generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  local run_id="wave-a-fixture-$$-${RANDOM}"
+  mkdir -p "$ACDOC"
+  {
+    printf 'BATS_OK=%s\n'           "42"
+    printf 'BATS_NOT_OK=%s\n'       "0"
+    printf 'BATS_EXPECTED=%s\n'     "42"
+    printf 'BATS_TOTAL=%s\n'        "42"
+    printf 'BATS_COMPLETE=%s\n'     "true"
+    printf 'BATS_VERDICT=%s\n'      "pass"
+    printf 'BATS_LOG=%s\n'          "/dev/null"
+    printf 'BATS_HEAD=%s\n'         "$head"
+    printf 'BATS_RUN_ID=%s\n'       "$run_id"
+    printf 'BATS_GENERATED_AT=%s\n' "$generated_at"
+    printf 'BATS_SCOPE=%s\n'        "full"
+  } > "$ACDOC/bats-result.${run_id}.env"
+}
+
 # write_quality_gate_report -- writes a valid quality-gate-report.json with all required
 # steps PASS and all conditional steps SKIP (same template as emit-push-proof.bats)
+#
+# Wave A: also stamps report.started_at and writes a matching valid bats handoff (via
+# write_valid_bats_handoff) BY DEFAULT -- test-suite defaults to PASS here, so run-qg's
+# report-started-at-* and test-suite-evidence-* checks now fire unconditionally, before
+# TSZ-1/TSZ-2/TSZ-5/TSZ-6's own intended (D) size-gate outcome is ever reached.
 write_quality_gate_report() {
-  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" <<'PYEOF'
+  local started_at
+  started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$started_at" <<'PYEOF'
 import json, sys
 
 manifest = json.load(open(sys.argv[2], encoding='utf-8'))
+started_at = sys.argv[3]
 
 steps = []
 for rs in manifest.get('required_steps', []):
@@ -140,6 +185,7 @@ for cs in manifest.get('conditional_steps', []):
                       "reason": "predicate false in isolated test repo"})
 
 report = {
+    "started_at": started_at,
     "deliberation": {
         "architects_consulted": ["arch-platform", "arch-testing", "arch-integration"],
         "incorporated_at": "2026-06-14T00:00:00Z",
@@ -154,6 +200,7 @@ with open(sys.argv[1], "w", encoding="utf-8") as f:
     json.dump(report, f, indent=2)
     f.write('\n')
 PYEOF
+  write_valid_bats_handoff
 }
 
 # write_overcap_template -- writes an agent template padded to 436 lines (one over the 435 cap).
@@ -220,6 +267,11 @@ PYEOF
 
   # The stamp MUST NOT have been written -- this is the load-bearing invariant
   [ ! -f "$ACDOC/quality-gate.stamp" ]
+
+  # Wave A tightening: a bare exit-nonzero + stamp-absent check would ALSO pass on
+  # report-started-at-absent (an earlier, unrelated die) without ever reaching the (D)
+  # size gate this test exists to protect -- pin the actual size-gate failure reason.
+  [[ "$output" == *"agent template size cap exceeded"* ]]
 }
 
 # TSZ-2  bash -- real quality-gater.md (435 lines) -> exit 0 AND stamp written
@@ -307,10 +359,10 @@ PYEOF
   [ ! -f "$ACDOC/quality-gate.stamp" ]
 }
 
-# TSZ-4  static guard -- BOTH sh+ps1 contain explicit --templates-dir + --agents-dir
+# TSZ-4  static guard -- sh contains explicit --templates-dir + --agents-dir
 #
 # This test ALWAYS runs (even on CI ubuntu where powershell is absent).
-# Asserts that BOTH the sh and ps1 emitters contain the CWD-independence wiring:
+# Asserts that the sh emitter contains the CWD-independence wiring:
 #   - validate-agent-templates.sh is called
 #   - --check size-limits is passed
 #   - --templates-dir is passed (anchors on REPO_ROOT, not CWD)
@@ -319,14 +371,18 @@ PYEOF
 #
 # This catches a regression back to CWD-dependent behavior: if either --templates-dir
 # or --agents-dir is removed, the gate silently fails from a non-repo CWD.
-@test "TSZ-4 STATIC: both sh+ps1 contain --templates-dir + --agents-dir near size-limits call" {
+#
+# Wave A: the ps1 HALF of this test is dropped, not repaired. emit-push-proof.ps1's
+# Invoke-RunQg is now a hard refuse-to-mint (515 -> 182 lines, Section A5a) with no
+# size-gate call at all -- asserting these strings there would mean re-adding dead
+# parity text to a script that refuses to mint. That refusal satisfies this test's own
+# underlying purpose ("the PS1 mint must not bypass the size/registry gates") more
+# strongly than parity ever did. See #EP-PS1-DISABLED / #EP-PS1-VERIFY for the PS1-side
+# coverage this wave replaces TSZ-7/TSZ-8 with.
+@test "TSZ-4 STATIC: sh contains --templates-dir + --agents-dir near size-limits call" {
   local sh_file="$EMITTER"
-  local ps1_file="$EMITTER_PS1"
 
   [ -f "$sh_file" ]  || { echo "MISSING: $sh_file"  >&2; return 1; }
-  [ -f "$ps1_file" ] || { echo "MISSING: $ps1_file" >&2; return 1; }
-
-  # ---- sh assertions ----
 
   # validate-agent-templates.sh must be referenced
   grep -q "validate-agent-templates.sh" "$sh_file" \
@@ -351,32 +407,6 @@ PYEOF
   # Fail-closed branch: non-zero exits emit-push-proof.sh with exit 2
   grep -q "exit 2" "$sh_file" \
     || { echo "sh MISSING: 'exit 2' fail-closed branch" >&2; return 1; }
-
-  # ---- ps1 assertions ----
-
-  # validate-agent-templates.sh must be referenced
-  grep -q "validate-agent-templates.sh" "$ps1_file" \
-    || { echo "ps1 MISSING: 'validate-agent-templates.sh'" >&2; return 1; }
-
-  # --check flag must be present
-  grep -q -- "--check" "$ps1_file" \
-    || { echo "ps1 MISSING: '--check' flag" >&2; return 1; }
-
-  # size-limits selector must be present
-  grep -q "size-limits" "$ps1_file" \
-    || { echo "ps1 MISSING: 'size-limits'" >&2; return 1; }
-
-  # --templates-dir must be passed (CWD-independence)
-  grep -q -- "--templates-dir" "$ps1_file" \
-    || { echo "ps1 MISSING: '--templates-dir' flag — gate is CWD-dependent without it" >&2; return 1; }
-
-  # --agents-dir must be passed (CWD-independence)
-  grep -q -- "--agents-dir" "$ps1_file" \
-    || { echo "ps1 MISSING: '--agents-dir' flag — gate is CWD-dependent without it" >&2; return 1; }
-
-  # Fail-closed branch: Die (ps1 helper) or LASTEXITCODE check
-  grep -q "Die\|LASTEXITCODE" "$ps1_file" \
-    || { echo "ps1 MISSING: no Die/LASTEXITCODE branch" >&2; return 1; }
 }
 
 # TSZ-5  CWD-independence proof -- non-repo CWD + over-cap -> gate fires
@@ -418,6 +448,11 @@ PYEOF
 
   # The stamp MUST NOT have been written
   [ ! -f "$ACDOC/quality-gate.stamp" ]
+
+  # Wave A tightening: a bare exit-nonzero + stamp-absent check would ALSO pass on
+  # report-started-at-absent (an earlier, unrelated die) without ever reaching the (D)
+  # size gate this test exists to protect -- pin the actual size-gate failure reason.
+  [[ "$output" == *"agent template size cap exceeded"* ]]
 }
 
 # TSZ-6  absent-dir guard -- no setup/agent-templates/ -> gate is a no-op -> run_qg succeeds
@@ -458,30 +493,38 @@ PYEOF
   [ -f "$ACDOC/quality-gate.stamp" ]
 }
 
-# TSZ-7  ps1 static — no-bash branch for (D) size-gate must Die, not warn-skip
+# #EP-PS1-DISABLED  ps1 static — Invoke-RunQg is a hard refuse-to-mint, not a silent
+# no-op or a partial/untested proof-writing path.
 #
-# When bash is absent the ps1 (D) size-gate must call Die (fail-closed), NOT emit a
-# "WARNING: bash not found; skipping..." message and continue.  A warn-skip would
-# silently bypass the size check on environments without bash.
-# Static grep asserts the correct strings are/are-not present.
-@test "TSZ-7 ps1 (D) size-gate no-bash branch must Die not warn-skip" {
+# REPLACES TSZ-7/TSZ-8 (superseded, not repaired — Wave A, Section A5a). Those two
+# tests asserted no-bash "Die ... cannot run template/registry size check" strings
+# from the OLD Invoke-RunQg body, which contained the full size-gate/registry-gate/
+# bash-detection logic. That logic is gone entirely: Invoke-RunQg (515 -> 182 total
+# ps1 lines) now unconditionally prints the refuse-to-mint message and exits 2 before
+# any bash-detection branch is ever reached — re-adding those dead strings to a
+# script that refuses to mint would test nothing real. The underlying purpose those
+# tests protected ("the PS1 mint must not bypass the size/registry gates") is now
+# satisfied more strongly: there is no mint path left to bypass at all.
+@test "#EP-PS1-DISABLED static: emit-push-proof.ps1 Invoke-RunQg refuses to mint, writes no proof" {
   local ps1="$BATS_TEST_DIRNAME/../ps1/emit-push-proof.ps1"
-  run grep -c 'WARNING: bash not found; skipping template size check' "$ps1"
-  [ "$output" = "0" ]
-  run grep -c 'Die "bash not found; cannot run template size check' "$ps1"
+  run grep -c "run-qg is disabled in the PowerShell path pending evidence binding" "$ps1"
   [ "$output" != "0" ]
+  # No proof-writing call anywhere in the file -- a push-proof.json path write would
+  # indicate a bypass of the refuse-to-mint contract.
+  run grep -c "push-proof.json" "$ps1"
+  [ "$output" = "0" ]
 }
 
-# TSZ-8  ps1 static — no-bash branch for (B) registry-integrity must Die, not warn-skip
-#
-# Same fail-closed contract for the (B) registry integrity gate: when bash is absent
-# AND a skills/ directory is present, the ps1 must Die rather than silently skip.
-# A warn-skip would bypass the registry integrity check on environments without bash.
-@test "TSZ-8 ps1 registry-integrity no-bash+skills branch must Die not warn-skip" {
-  local ps1="$BATS_TEST_DIRNAME/../ps1/emit-push-proof.ps1"
-  run grep -c 'WARNING: bash not found; skipping registry integrity check' "$ps1"
-  [ "$output" = "0" ]
-  run grep -c 'Die "bash not found; cannot run registry integrity check' "$ps1"
+# #EP-PS1-VERIFY  ps1 static — verify-push-proof.ps1 carries the same bats_evidence
+# 8th check as bash's verify_proof and push-authorization-gate.js's in-JS fallback
+# (Wave A, Section A5b). No pwsh needed for a static assertion.
+@test "#EP-PS1-VERIFY static: verify-push-proof.ps1 contains the bats_evidence check" {
+  local ps1="$BATS_TEST_DIRNAME/../ps1/verify-push-proof.ps1"
+  run grep -c "bats_evidence" "$ps1"
+  [ "$output" != "0" ]
+  run grep -c "bats_evidence missing from push-proof.json" "$ps1"
+  [ "$output" != "0" ]
+  run grep -c "bats_evidence.head -ne" "$ps1"
   [ "$output" != "0" ]
 }
 

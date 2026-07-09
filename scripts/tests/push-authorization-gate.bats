@@ -70,20 +70,29 @@ with open(path, "w") as f:
 PYEOF
 }
 
-# Write a canonical-valid push-proof.json + quality-gate-report.json (for in-JS 7-check).
+# Write a canonical-valid push-proof.json + quality-gate-report.json (for in-JS 8-check).
 # a7e855e: in-JS fallback recomputes sha256(report, CRLF→LF) — bogus "0"*64 digest blocks
 # at check 7. This helper writes a minimal report and computes the real digest.
-# Args: <head_sha> <project_root> <stamp_dir>
+# f9f0610: check 8 requires proof.bats_evidence present + .head == pushed_sha. Args:
+#   <head_sha> <project_root> <stamp_dir> [<bats_evidence_head>]
+# bats_evidence_head defaults to <head_sha> (matching — the canonical/positive-control
+# shape used by PA-4c/PA-5/#PAG-EV3). Pass "__OMIT__" to omit bats_evidence entirely
+# (#PAG-EV1), or a different 40-hex value to force a head mismatch (#PAG-EV2).
 write_canonical_proof() {
-  local head="$1" root="$2" stamp_dir="$3"
+  local head="$1" root="$2" stamp_dir="$3" bats_evidence_head="${4:-$1}"
   # The in-JS check 5 reads quality-gate-manifest.json from project root.
   # Copy the live manifest into the isolated PROJECT_ROOT so the gate can load it.
   cp "$BATS_TEST_DIRNAME/../../quality-gate-manifest.json" "$root/quality-gate-manifest.json"
-  python3 - "$head" "$root" "$stamp_dir" <<'PYEOF'
+  python3 - "$head" "$root" "$stamp_dir" "$bats_evidence_head" <<'PYEOF'
 import hashlib, json, sys, datetime
 
-head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+head, root, stamp_dir, bats_evidence_head = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+# Dynamic read (never hardcoded) — mirrors the sibling pattern already used correctly by
+# test-push-proof-gate.bats (:198/:363/:398) and pre-push-hook.bats (:174). A literal here
+# rots at the next manifest_version bump; that is exactly how the Wave A hardcoding defect
+# was planted.
+manifest_version = json.load(open(root + '/quality-gate-manifest.json', encoding='utf-8'))['manifest_version']
 
 # Minimal quality-gate-report.json with all 6 required steps (ids match manifest required_steps).
 report = {
@@ -113,7 +122,7 @@ proof = {
     "head": head,
     "generated_at": ts,
     "worktree_id": root,
-    "manifest_version": 1,
+    "manifest_version": manifest_version,
     "steps_executed": [
         {"step": "architect-deliberation", "result": "PASS", "ran": True},
         {"step": "pre-pr",                 "result": "PASS", "ran": True},
@@ -125,6 +134,20 @@ proof = {
     ],
     "report_digest": digest
 }
+# check 8 (f9f0610): bats_evidence present + .head == pushed_sha. "__OMIT__" leaves it
+# off the proof entirely (#PAG-EV1's absent-evidence scenario); otherwise it's populated
+# with bats_evidence_head, which is the pushed head by default (matching/canonical) or a
+# deliberately different value (#PAG-EV2's mismatch scenario).
+if bats_evidence_head != "__OMIT__":
+    proof["bats_evidence"] = {
+        "run_id": "canonical-run",
+        "head": bats_evidence_head,
+        "ok": 10,
+        "not_ok": 0,
+        "expected": 10,
+        "scope": "full",
+        "generated_at": ts,
+    }
 proof_path = stamp_dir + '/push-proof.json'
 with open(proof_path, 'w') as f:
     json.dump(proof, f)
@@ -184,10 +207,12 @@ PYEOF
 
 @test "PA-4c ALLOW: main + bare stub hook (no ACDOC marker) + canonical-valid proof → allowed via stamp path" {
   # Bare stub without marker → gate falls through to stamp check. With valid fresh stamps
-  # and a canonical-valid proof (all 7 checks pass), the stamp path should allow.
+  # and a canonical-valid proof (all 8 checks pass), the stamp path should allow.
   # No emit-push-proof.sh in isolated PROJECT_ROOT → in-JS fallback taken.
   # a7e855e: in-JS now does full 7-check including report_digest recompute — bogus "0"*64
   # would block at check 7. Write real quality-gate-report.json, compute sha256, embed digest.
+  # f9f0610: an 8th check (bats_evidence present + .head == pushed_sha) now also gates —
+  # write_canonical_proof's default bats_evidence_head (= the pushed head) satisfies it.
   mkdir -p "$PROJECT_ROOT/.git/hooks"
   printf '#!/bin/sh\nexit 0\n' > "$PROJECT_ROOT/.git/hooks/pre-push"
   chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
@@ -206,6 +231,8 @@ PYEOF
   # setup() now git-inits PROJECT_ROOT and sets HEAD_SHA so binding works in isolation.
   # a7e855e: in-JS fallback does full 7-check including report_digest recompute — bogus
   # "0"*64 digest now blocks at check 7. Use canonical proof with real digest.
+  # f9f0610: an 8th check (bats_evidence present + .head == pushed_sha) now also gates —
+  # write_canonical_proof's default bats_evidence_head (= the pushed head) satisfies it.
   write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
   write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
   write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
@@ -583,9 +610,11 @@ report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
 normalized = bytes(b for i, b in enumerate(report_raw)
     if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
 digest = hashlib.sha256(normalized).hexdigest()
+# Dynamic read (never hardcoded) — see write_canonical_proof's own comment for why.
+manifest_version = json.load(open(root + '/quality-gate-manifest.json', encoding='utf-8'))['manifest_version']
 proof = {
     "schema_version": 1, "head": head, "generated_at": ts,
-    "worktree_id": root, "manifest_version": 1,
+    "worktree_id": root, "manifest_version": manifest_version,
     "steps_executed": [],
     "report_digest": digest
 }
@@ -610,9 +639,11 @@ report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
 normalized = bytes(b for i, b in enumerate(report_raw)
     if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
 digest = hashlib.sha256(normalized).hexdigest()
+# Dynamic read (never hardcoded) — see write_canonical_proof's own comment for why.
+manifest_version = json.load(open(root + '/quality-gate-manifest.json', encoding='utf-8'))['manifest_version']
 proof = {
     "schema_version": 1, "head": head, "generated_at": ts,
-    "worktree_id": root, "manifest_version": 1,
+    "worktree_id": root, "manifest_version": manifest_version,
     "steps_executed": [
         {"step": "architect-deliberation", "result": "PASS", "ran": True},
         {"step": "pre-pr",                 "result": "PASS", "ran": True},
@@ -647,7 +678,7 @@ PYEOF
 
 @test "PA-JS4 BLOCK: in-JS fallback — manifest_version mismatch → BLOCK" {
   # Check 5: proof.manifest_version != live manifest.manifest_version → BLOCK.
-  # Canonical manifest has manifest_version=1; write proof with manifest_version=99.
+  # Canonical manifest has manifest_version=2 (Wave A bump); write proof with manifest_version=99.
   write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
   write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
   write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
@@ -665,7 +696,7 @@ digest = hashlib.sha256(normalized).hexdigest()
 proof = {
     "schema_version": 1, "head": head, "generated_at": ts,
     "worktree_id": root,
-    "manifest_version": 99,   # mutated — live manifest is 1
+    "manifest_version": 99,   # mutated — live manifest is 2 (Wave A bump); 99 is intentional mismatch test data
     "steps_executed": [
         {"step": "architect-deliberation", "result": "PASS", "ran": True},
         {"step": "pre-pr",                 "result": "PASS", "ran": True},
@@ -683,4 +714,47 @@ PYEOF
   run_hook
   [ "$status" -eq 2 ]
   [[ "$output" == *"manifest_version"* ]]
+}
+
+# ── f9f0610: in-JS fallback check 8 — bats_evidence binding ──────────────────
+# Gate 0b (Codex pre-exec review of .claude/hooks/push-authorization-gate.js) has
+# cleared; toolkit-specialist landed the 8th check in f9f0610. #PAG-EV3 is a POSITIVE
+# CONTROL and is load-bearing: without it, #PAG-EV1/#PAG-EV2 could pass against a gate
+# that blocks every proof unconditionally, proving nothing.
+
+@test "#PAG-EV1 BLOCK: in-JS fallback — push-proof.json missing bats_evidence → BLOCK" {
+  # Check 8: proof.bats_evidence absent → BLOCK. absent-means-skip is a bypass, not a
+  # default — same rule as every earlier check.
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" "__OMIT__"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bats_evidence"* ]]
+}
+
+@test "#PAG-EV2 BLOCK: in-JS fallback — bats_evidence.head mismatched pushed SHA → BLOCK" {
+  # Check 8: proof.bats_evidence.head != headShaForProof → BLOCK. The evidence binding
+  # exists but does not correspond to the commit actually being pushed.
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  local mismatched_head="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" "$mismatched_head"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bats_evidence"* ]] || [[ "$output" == *"head"* ]]
+}
+
+@test "#PAG-EV3 ALLOW (positive control): in-JS fallback — bats_evidence.head matches pushed SHA → still passes" {
+  # Proves #PAG-EV1/#PAG-EV2 are exercising a real check, not passing against a gate
+  # that blocks every proof unconditionally — a correctly-bound bats_evidence must
+  # still allow the push, exactly like PA-5's canonical scenario.
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 0 ]
 }
