@@ -759,21 +759,37 @@ PYEOF
   [ "$status" -eq 0 ]
 }
 
-# ── Real fail-open regression guard (9336e5e) ────────────────────────────────
-# Before 9336e5e, the peer/subagent block() call (the FIRST block() in the file, :200)
-# had no `return` after it. block() only calls process.exit(2) synchronously when
-# stdout.write() returns true; under backpressure it defers to the 'drain' event. Without
-# `return`, execution fell through past the decision already made, all the way to
-# `if (hookIsACDoc) process.exit(0)` (:219) — a silent ALLOW for a peer's git push. No
-# crash, no trace, just an allow. This is the highest-value regression test in this file.
+# ── Peer-block CONTRACT test — NOT a fail-open regression pin; see #PAG-GUARD ────
+#
+# Asserts the peer-block contract: agent_type != '' + git push => exit 2 +
+# decision:block, with PA-4 (the identical marker-bearing fixture) as its positive
+# control for the main orchestrator. Would catch a future refactor that drops or
+# weakens the agent_type check entirely.
+#
+# THIS TEST PASSES AGAINST THE PRE-9336e5e CODE TOO, BY DESIGN — that is a fact about
+# block()'s own mechanics, not a flaw in the test. block() calls process.exit(2)
+# SYNCHRONOUSLY whenever stdout.write() returns true, which it always does for this
+# hook's ~200-byte JSON payload (nowhere near a pipe's high-water mark). So even
+# without the `return` that follows the peer-block call, block() still exits 2 before
+# the later `if (hookIsACDoc) process.exit(0)` fall-through — reached via NO `else`,
+# the line labelled "Main orchestrator" a few lines down is a comment, not a branch —
+# can ever execute.
+#
+# That fall-through is REACHABLE (there is no else) but UNOBSERVABLE at this payload
+# size (block() never defers to 'drain' here). Those are different facts, and only
+# the second is why this test can't catch a missing `return`: do not read "reachable"
+# as "belt-and-braces" — that single `return` is the SOLE guard. Delete it and put
+# stdout under genuine backpressure and the FIXED code would deadlock instead (the
+# 5s escape-hatch timer is already cleared by the time block() would defer to
+# 'drain'), so a runtime test for this fail-open hangs on CORRECT code — only a
+# static check fits. #PAG-GUARD (below) is the ONLY test in this suite that can
+# detect the missing `return`; see its own red-then-green verification.
 
-@test "#PAG-PEER-BLOCK BLOCK: peer + git push + ACDoc pre-push hook installed → still blocked (exit 2, decision:block), never falls through to the hook's exit 0" {
+@test "#PAG-PEER-BLOCK BLOCK: peer + git push + ACDoc pre-push hook installed → exit 2 + decision:block (peer-block contract)" {
   # The marker-bearing real pre-push-hook.sh must be installed (hookIsACDoc=true) so
-  # :219's fall-through path is the one actually reachable — without the marker, :219
-  # never fires at all and this test would be vacuous (PA-4b/PA-4c already cover the
-  # no-marker path). PA-4 is this test's own positive control: the SAME fixture (marker
-  # installed) correctly ALLOWS the main orchestrator, proving this block is specifically
-  # about agent_type, not an unconditional block on every push through this hook.
+  # the fixture matches PA-4's, its positive control — proving this block is
+  # specifically about agent_type, not an unconditional block on every push through
+  # this hook.
   mkdir -p "$PROJECT_ROOT/.git/hooks"
   cp "$BATS_TEST_DIRNAME/../sh/pre-push-hook.sh" "$PROJECT_ROOT/.git/hooks/pre-push"
   chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
