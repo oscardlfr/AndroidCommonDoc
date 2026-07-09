@@ -18,7 +18,11 @@ bats_require_minimum_version 1.5.0
 HOOK="$BATS_TEST_DIRNAME/../sh/pre-push-hook.sh"
 
 setup() {
-  REPO="$(mktemp -d)"
+  # Canonical (symlink-resolved) path: the inline push-proof fixture stores $REPO as
+  # worktree_id, and verify-proof recomputes it from `git rev-parse --show-toplevel`.
+  # On macOS `mktemp -d` yields /var/... while git yields /private/var/... for the
+  # same directory, so an unresolved $REPO makes every proof look forged.
+  REPO="$(cd "$(mktemp -d)" && pwd -P)"
   git init "$REPO" --quiet
   git -C "$REPO" config user.email "test@test.com"
   git -C "$REPO" config user.name "Test"

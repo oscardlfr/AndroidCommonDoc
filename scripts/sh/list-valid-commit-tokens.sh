@@ -125,11 +125,13 @@ else
 
     echo ""
     echo -e "${CYAN}=== Valid commit TYPES (from ${TYPES_SOURCE}:${TYPES_LINE}) ===${RESET}"
-    # Format as comma-separated, wrapping at ~80 chars
-    echo "$TYPES_RAW" | tr ',' '\n' | sed 's/^[[:space:]]*//' | paste -sd ',' | sed 's/,/, /g'
+    # Format as comma-separated, wrapping at ~80 chars.
+    # The trailing `-` names stdin explicitly: GNU paste defaults to it, BSD paste
+    # prints usage and exits non-zero without it (aborting under `set -o pipefail`).
+    echo "$TYPES_RAW" | tr ',' '\n' | sed 's/^[[:space:]]*//' | paste -sd ',' - | sed 's/,/, /g'
     echo ""
     echo -e "${CYAN}=== Valid commit SCOPES (from ${SCOPES_SOURCE}:${SCOPES_LINE}) ===${RESET}"
-    echo "$SCOPES_RAW" | tr ',' '\n' | sed 's/^[[:space:]]*//' | paste -sd ',' | sed 's/,/, /g'
+    echo "$SCOPES_RAW" | tr ',' '\n' | sed 's/^[[:space:]]*//' | paste -sd ',' - | sed 's/,/, /g'
     echo ""
     echo -e "${YELLOW}NOTE: TYPEs and SCOPEs are validated separately.${RESET}"
     echo -e "${YELLOW}'security' is a valid SCOPE but NOT a valid TYPE.${RESET}"

@@ -48,12 +48,15 @@ teardown() {
 # ── Error: missing kmp-test-runner ───────────────────────────────────────────
 
 @test "gradle-run: missing kmp-test-runner prints helpful error" {
-  local fake_dir="${BATS_TEST_TMPDIR:-/tmp}/fake-empty-$$"
-  mkdir -p "$fake_dir"
-  # Provide a PATH that has bash/env/sh but NOT kmp-test or npx.
-  local bash_dir
-  bash_dir="$(dirname "$(command -v bash)")"
-  run env PATH="$bash_dir" bash "$SCRIPT"
+  # An isolated bindir holding ONLY bash. Never use dirname "$(command -v bash)":
+  # with a Homebrew bash that directory is /opt/homebrew/bin, which also holds
+  # npx/node/kmp-test, so the detection cascade succeeds and this test silently
+  # stops testing the missing-runner path.
+  local isolated_bin="${BATS_TEST_TMPDIR:-/tmp}/isolated-bin-$$"
+  mkdir -p "$isolated_bin"
+  ln -s "$(command -v bash)" "$isolated_bin/bash"
+
+  run env PATH="$isolated_bin" bash "$SCRIPT"
   [ "$status" -eq 1 ]
   [[ "$output" == *"npm install -g kmp-test-runner"* ]]
 }

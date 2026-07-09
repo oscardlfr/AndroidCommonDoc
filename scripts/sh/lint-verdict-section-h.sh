@@ -25,10 +25,12 @@ fi
 content="$(cat "$verdict_file")"
 
 # Extract section G and section H content
+# `sed '$d'` drops the trailing delimiter line. `head -n -1` is a GNU extension —
+# BSD head rejects negative counts, which aborts this script under `set -o pipefail`.
 # Section G is between "## G." and "## H."
-section_g="$(echo "$content" | sed -n '/^## G\./,/^## H\./p' | head -n -1)"
+section_g="$(echo "$content" | sed -n '/^## G\./,/^## H\./p' | sed '$d')"
 # Section H is between "## H." and "## I." (or end of file)
-section_h="$(echo "$content" | sed -n '/^## H\./,/^## I\./p' | head -n -1)"
+section_h="$(echo "$content" | sed -n '/^## H\./,/^## I\./p' | sed '$d')"
 
 violations=0
 
