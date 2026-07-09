@@ -134,6 +134,16 @@ function getHeadSha(projectRoot) {
   return null;
 }
 
+// INVARIANT: every block() call in this file is immediately followed by `return`.
+// block() only calls process.exit(2) synchronously when stdout.write() returns true;
+// under backpressure it defers exit to the 'drain' event. Without `return`, execution
+// continues past a decision that has already been made — best case it re-evaluates an
+// unrelated condition pointlessly; worst case (checks that immediately dereference the
+// value they just proved absent) it throws, or (falling all the way through) it reaches
+// a later unconditional process.exit(0) and allows a push that was already blocked. The
+// 5s allow-timer (`t` below) is cleared at the top of the 'end' handler, so it specifically
+// cannot be the source of a false allow — the risk is exclusively fall-through, not that
+// timer.
 function block(reason) {
   // Write decision JSON to stdout, then flush stdout before exit (CR #2).
   // process.stdout.write callback ensures the write is flushed before termination.
@@ -190,6 +200,7 @@ process.stdin.on('end', () => {
         `SendMessage to team-lead requesting it. Bypass: PUSH_AUTHORIZATION_BYPASS=1 ` +
         `(explicit user authorization only).`
       );
+      return;
     }
 
     // Main orchestrator (empty agent_type): check if pre-push hook is installed
@@ -215,6 +226,7 @@ process.stdin.on('end', () => {
         `[push-authorization-gate] BLOCKED: quality-gate.stamp invalid — ${qgResult.reason}. ` +
         `Run /quality-gate then re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
+      return;
     }
 
     const ppResult = validateStamp(ppStamp);
@@ -223,6 +235,7 @@ process.stdin.on('end', () => {
         `[push-authorization-gate] BLOCKED: pre-pr.stamp invalid — ${ppResult.reason}. ` +
         `Run /pre-pr then re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
+      return;
     }
 
     // pre-pr.stamp head must match HEAD.
@@ -235,6 +248,7 @@ process.stdin.on('end', () => {
         `("${ppResult.head ?? ''}"). Re-run /pre-pr on the final commit then re-push. ` +
         `Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
+      return;
     }
     const headSha = getHeadSha(projectRoot);
     if (headSha && ppResult.head !== headSha) {
@@ -243,6 +257,7 @@ process.stdin.on('end', () => {
         `current HEAD (${headSha}). Re-run /pre-pr on the final commit then re-push. ` +
         `Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
+      return;
     }
 
     // Secondary proof check (fallback: no pre-push hook installed).
@@ -265,6 +280,7 @@ process.stdin.on('end', () => {
             `[push-authorization-gate] BLOCKED: canonical verify-proof failed. ` +
             `Run /quality-gate to re-mint proof. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
           );
+          return;
         }
         usedCanonical = true;
       }
@@ -279,21 +295,24 @@ process.stdin.on('end', () => {
       const proofPath = path.join(stampDir, 'push-proof.json');
       let proof;
       try { proof = JSON.parse(fs.readFileSync(proofPath, 'utf8')); }
-      catch { block('[push-authorization-gate] BLOCKED: push-proof.json missing or malformed. Run /quality-gate to mint proof. Bypass: PUSH_AUTHORIZATION_BYPASS=1.'); }
+      catch { block('[push-authorization-gate] BLOCKED: push-proof.json missing or malformed. Run /quality-gate to mint proof. Bypass: PUSH_AUTHORIZATION_BYPASS=1.'); return; }
 
       // 1. schema_version
       if (proof.schema_version !== 1) {
         block(`[push-authorization-gate] BLOCKED: push-proof.json schema_version unknown (${proof.schema_version}).`);
+        return;
       }
 
       // 2. head binding
       if (headShaForProof && proof.head !== headShaForProof) {
         block(`[push-authorization-gate] BLOCKED: proof head (${proof.head}) != HEAD (${headShaForProof}).`);
+        return;
       }
 
       // 3. worktree_id
       if (proof.worktree_id && proof.worktree_id !== projectRoot) {
         block(`[push-authorization-gate] BLOCKED: proof worktree_id (${proof.worktree_id}) != project root (${projectRoot}).`);
+        return;
       }
 
       // 4. freshness
@@ -301,18 +320,21 @@ process.stdin.on('end', () => {
       const proofEpoch = Math.floor(new Date(proof.generated_at || '').getTime() / 1000);
       if (isNaN(proofEpoch) || (now2 - proofEpoch) > MAX_AGE_SECS || (proofEpoch - now2) > SKEW_TOLERANCE) {
         block('[push-authorization-gate] BLOCKED: push-proof.json stale or invalid timestamp.');
+        return;
       }
 
       // 5. manifest_version matches live manifest
       const manifestPath = path.join(projectRoot, 'quality-gate-manifest.json');
       let manifest;
       try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); }
-      catch { block('[push-authorization-gate] BLOCKED: quality-gate-manifest.json missing or malformed.'); }
+      catch { block('[push-authorization-gate] BLOCKED: quality-gate-manifest.json missing or malformed.'); return; }
       if (typeof proof.manifest_version !== 'number') {
         block('[push-authorization-gate] BLOCKED: push-proof.json missing manifest_version.');
+        return;
       }
       if (proof.manifest_version !== manifest.manifest_version) {
         block(`[push-authorization-gate] BLOCKED: proof manifest_version (${proof.manifest_version}) != live manifest (${manifest.manifest_version}). Re-run /quality-gate.`);
+        return;
       }
 
       // 6. required-step COVERAGE: every required step must be present in steps_executed with result=PASS
@@ -323,9 +345,11 @@ process.stdin.on('end', () => {
         const entry = executedMap[sid];
         if (!entry) {
           block(`[push-authorization-gate] BLOCKED: required step '${sid}' missing from proof.steps_executed. Re-run /quality-gate.`);
+          return;
         }
         if (entry.result !== 'PASS') {
           block(`[push-authorization-gate] BLOCKED: required step '${sid}' result='${entry.result}' (not PASS) in proof. Re-run /quality-gate.`);
+          return;
         }
       }
 
@@ -333,7 +357,7 @@ process.stdin.on('end', () => {
       const reportPath = path.join(stampDir, 'quality-gate-report.json');
       let reportRaw;
       try { reportRaw = fs.readFileSync(reportPath); }
-      catch { block('[push-authorization-gate] BLOCKED: quality-gate-report.json missing — cannot verify report_digest.'); }
+      catch { block('[push-authorization-gate] BLOCKED: quality-gate-report.json missing — cannot verify report_digest.'); return; }
       // Normalize CRLF -> LF byte-by-byte (same as bash/python hashlib.sha256 + replace)
       const normalized = [];
       for (let i = 0; i < reportRaw.length; i++) {
@@ -345,6 +369,7 @@ process.stdin.on('end', () => {
       const computedDigest = crypto.createHash('sha256').update(Buffer.from(normalized)).digest('hex');
       if (computedDigest !== proof.report_digest) {
         block(`[push-authorization-gate] BLOCKED: report_digest mismatch — proof may be forged or report tampered. Re-run /quality-gate.`);
+        return;
       }
 
       // 8. bats_evidence binding: present + head matches pushed_sha
@@ -364,6 +389,7 @@ process.stdin.on('end', () => {
       }
       if (proof.bats_evidence.head !== headShaForProof) {
         block(`[push-authorization-gate] BLOCKED: bats_evidence.head (${proof.bats_evidence.head}) != HEAD (${headShaForProof}).`);
+        return;
       }
     }
 
