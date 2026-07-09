@@ -21,6 +21,14 @@
 #     merely mentions the idiom, and — critically — inspects EVERY segment. An
 #     earlier draft used `${seg#*paste}`, which only ever saw the first `paste`
 #     on a line, so `paste -sd ',' - | paste -sd ','` slipped through.
+#   - A segment may be prefixed by redirections or env assignments, which are
+#     not the command: `>out paste -sd ','` and `FOO=bar paste -sd ','` are both
+#     violations. Those prefixes are skipped. A QUOTED leading word is never
+#     skipped, or `msg="the paste ..."` would expose `paste` as the command and
+#     flag prose.
+#   - The `-` operand is looked for AFTER stripping a trailing inline comment,
+#     or a coincidental `" - "` in `paste -sd ',' # TODO - verify` would mask a
+#     real violation.
 #   - `paste -sd ',' -` (correct) contains `paste -sd ','` (incorrect) as a
 #     substring, so a naive substring ban would reject the fix itself.
 #   - Each guard asserts a sanity floor first. A detector that scans an empty
@@ -68,7 +76,7 @@ find_head_negative() {
 
 # Offending `paste` invocations lacking an explicit `-` stdin operand.
 find_bare_paste() {
-    local dir="$1" entry rest code remainder seg first cmd out=""
+    local dir="$1" entry rest code remainder seg body first cmd out=""
     while IFS= read -r entry; do
         [ -n "$entry" ] || continue
         rest="${entry#*:}"          # strip "path:"
@@ -78,12 +86,31 @@ find_bare_paste() {
             seg="${remainder%%|*}"
             if [ "$seg" = "$remainder" ]; then remainder=""; else remainder="${remainder#*|}"; fi
 
-            first="${seg#"${seg%%[![:space:]]*}"}"   # ltrim
-            first="${first%%[[:space:]]*}"           # leading token
+            # Resolve the command actually invoked. A segment may be prefixed by
+            # redirections (`>out`, `2>err`, `<in`) or env assignments (`FOO=bar`),
+            # which are not the command. A QUOTED leading word is never a prefix —
+            # `msg="the paste ..."` must not expose `paste` as the command.
+            body="$seg"
+            while : ; do
+                body="${body#"${body%%[![:space:]]*}"}"   # ltrim
+                first="${body%%[[:space:]]*}"             # leading token
+                [ -n "$first" ] || break
+                case "$first" in
+                    *'"'*|*"'"*)     break ;;                    # quoted word: prose, not a prefix
+                    [A-Za-z_]*=*)    body="${body#"$first"}" ;;  # FOO=bar
+                    '<'*|'>'*|'&>'*) body="${body#"$first"}" ;;  # <in >out &>out
+                    [0-9]'>'*)       body="${body#"$first"}" ;;  # 2>err
+                    *)               break ;;
+                esac
+            done
             cmd="${first##*/}"                       # basename: catches /usr/bin/paste
             [ "$cmd" = "paste" ] || continue
 
-            case "$seg" in
+            # Drop a trailing inline comment before looking for the `-` operand:
+            # a standalone `" - "` inside `# TODO - verify` must not satisfy it.
+            body="${body%% #*}"
+
+            case "$body" in
                 *" - "*) continue ;;                 # stdin operand mid-segment
                 *" -")   continue ;;                 # stdin operand at end of segment
             esac
@@ -163,6 +190,35 @@ EOF
 
     rm -f "$FIXTURES/bad.sh"
     printf '%s\n' "echo a | /usr/bin/paste -sd ',' -" > "$FIXTURES/good.sh"
+    [ -z "$(find_bare_paste "$FIXTURES")" ]
+}
+
+@test "SELF-TEST: paste guard resolves the command past leading redirects and assignments" {
+    # Regression pin: an earlier draft took the segment's first whitespace token
+    # as the command, so a redirection or env-assignment prefix hid the paste.
+    printf '%s\n' "echo a | >out.txt paste -sd ','" > "$FIXTURES/bad1.sh"
+    [ -n "$(find_bare_paste "$FIXTURES")" ]
+
+    find "$FIXTURES" -type f -name '*.sh' -delete
+    printf '%s\n' "echo a | FOO=bar paste -sd ','" > "$FIXTURES/bad2.sh"
+    [ -n "$(find_bare_paste "$FIXTURES")" ]
+
+    find "$FIXTURES" -type f -name '*.sh' -delete
+    printf '%s\n' "echo a | FOO=bar paste -sd ',' -" > "$FIXTURES/good.sh"
+    printf '%s\n' "echo a | 2>err paste -sd ',' -"  >> "$FIXTURES/good.sh"
+    # A quoted leading word is prose, never a command prefix.
+    printf '%s\n' "msg=\"the paste -sd ',' idiom is banned\"" >> "$FIXTURES/good.sh"
+    [ -z "$(find_bare_paste "$FIXTURES")" ]
+}
+
+@test "SELF-TEST: a trailing inline comment cannot mask a missing '-' operand" {
+    # Regression pin: the operand check used to scan the raw segment, so a
+    # standalone " - " inside the comment satisfied it.
+    printf '%s\n' "echo a | paste -sd ',' # TODO - verify on BSD" > "$FIXTURES/bad.sh"
+    [ -n "$(find_bare_paste "$FIXTURES")" ]
+
+    find "$FIXTURES" -type f -name '*.sh' -delete
+    printf '%s\n' "echo a | paste -sd ',' - # verified on BSD" > "$FIXTURES/good.sh"
     [ -z "$(find_bare_paste "$FIXTURES")" ]
 }
 
