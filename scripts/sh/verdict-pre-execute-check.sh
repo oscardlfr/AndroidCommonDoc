@@ -24,8 +24,10 @@ fi
 content="$(cat "$verdict_file")"
 
 # Extract sections G and H — match both ## and ### header depths
-section_g="$(echo "$content" | sed -n '/^#\{2,3\} G\./,/^#\{2,3\} H\./p' | head -n -1)"
-section_h="$(echo "$content" | sed -n '/^#\{2,3\} H\./,/^#\{2,3\} I\./p' | head -n -1)"
+# `sed '$d'` drops the trailing delimiter line. `head -n -1` is a GNU extension —
+# BSD head rejects negative counts, which aborts this script under `set -o pipefail`.
+section_g="$(echo "$content" | sed -n '/^#\{2,3\} G\./,/^#\{2,3\} H\./p' | sed '$d')"
+section_h="$(echo "$content" | sed -n '/^#\{2,3\} H\./,/^#\{2,3\} I\./p' | sed '$d')"
 
 violations=0
 

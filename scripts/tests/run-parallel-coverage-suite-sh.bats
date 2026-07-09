@@ -139,14 +139,20 @@ teardown() {
 # ── Case 4: missing kmp-test binary — non-zero exit + error message ──────────
 
 @test "run-parallel-coverage-suite.sh: missing kmp-test exits non-zero with error" {
-  local empty_dir="${BATS_TEST_TMPDIR}/empty-path-$$"
-  mkdir -p "$empty_dir"
-  local bash_dir
-  bash_dir="$(dirname "$(command -v bash)")"
-  run env PATH="$bash_dir:$empty_dir" bash "$SCRIPT" --project-root "$FAKE_PROJECT"
-  [ "$status" -ne 0 ]
-  # Must print error message about missing kmp-test
-  [[ "$output" == *"kmp-test"* ]]
+  # An isolated bindir holding ONLY bash. Never use dirname "$(command -v bash)":
+  # with a Homebrew bash that directory is /opt/homebrew/bin, which also holds
+  # npx/node/kmp-test, so the detection cascade succeeds and this test silently
+  # stops testing the missing-binary path.
+  local isolated_bin="${BATS_TEST_TMPDIR}/isolated-bin-$$"
+  mkdir -p "$isolated_bin"
+  ln -s "$(command -v bash)" "$isolated_bin/bash"
+
+  run env PATH="$isolated_bin" bash "$SCRIPT" --project-root "$FAKE_PROJECT"
+  # Assert the exact exit code and the install hint, not merely "non-zero and the
+  # tool name appears somewhere" — those loose assertions are what let the sibling
+  # test in run-changed-modules-tests-sh.bats pass vacuously.
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"npm install -g kmp-test-runner"* ]]
   # Must NOT write coverage-full-report.md
   ! [ -f "$FAKE_PROJECT/coverage-full-report.md" ]
 }

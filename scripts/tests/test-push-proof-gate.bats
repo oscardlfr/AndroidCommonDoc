@@ -34,7 +34,11 @@ MANIFEST_SRC="$BATS_TEST_DIRNAME/../../quality-gate-manifest.json"
 SCRIPTS_SRC="$BATS_TEST_DIRNAME/.."
 
 setup() {
-  REPO="$(mktemp -d)"
+  # Canonical (symlink-resolved) path: fixtures store $REPO as the proof's
+  # worktree_id, and verify-proof recomputes it from `git rev-parse --show-toplevel`.
+  # On macOS `mktemp -d` yields /var/... while git yields /private/var/... for the
+  # same directory, so an unresolved $REPO makes every proof look forged.
+  REPO="$(cd "$(mktemp -d)" && pwd -P)"
   git init "$REPO" --quiet
   git -C "$REPO" config user.email "test@test.com"
   git -C "$REPO" config user.name "Test"

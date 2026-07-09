@@ -116,6 +116,19 @@ PROOF_LOG="$ACDOC_DIR/push-proof.log"
 QG_STAMP_PATH="$ACDOC_DIR/quality-gate.stamp"
 PP_STAMP_PATH="$ACDOC_DIR/pre-pr.stamp"
 
+# ── Canonical worktree identifier ─────────────────────────────────────────────
+# Single source of truth for mint-time and verify-time: the two MUST agree or
+# every proof is rejected as a forgery. Symlinks are resolved because macOS
+# `mktemp -d` yields /var/... while `git rev-parse --show-toplevel` yields
+# /private/var/... for the same directory. `pwd -P` is POSIX; GNU `realpath`
+# does not exist on a BSD userland.
+resolve_worktree_id() {
+  local root
+  root="$(git -C "${1:-.}" rev-parse --show-toplevel 2>/dev/null)" || { echo "UNKNOWN"; return 0; }
+  [[ -n "$root" ]] || { echo "UNKNOWN"; return 0; }
+  ( cd "$root" 2>/dev/null && pwd -P ) || echo "$root"
+}
+
 # ── Slug resolution (mirrors write-verdict.sh) ────────────────────────────────
 resolve_slug() {
   if [[ -n "$SLUG_OVERRIDE" ]]; then
@@ -531,7 +544,7 @@ PYEOF
   # -- 7. Timestamps + identifiers -----------------------------------------------
   local now_ts worktree_id manifest_version
   now_ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  worktree_id="$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>/dev/null || echo "UNKNOWN")"
+  worktree_id="$(resolve_worktree_id "$REPO_ROOT")"
   manifest_version="$(python3 - "$MANIFEST_PATH" << 'PYEOF'
 import json, sys
 print(json.load(open(sys.argv[1], encoding='utf-8'))['manifest_version'])
@@ -617,7 +630,7 @@ verify_proof() {
   fi
 
   local worktree_id
-  worktree_id="$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>/dev/null || echo "UNKNOWN")"
+  worktree_id="$(resolve_worktree_id "$REPO_ROOT")"
 
   python3 - "$PROOF_PATH" "$MANIFEST_PATH" "$REPORT_PATH" \
       "$PUSHED_SHA" "$worktree_id" "$MAX_AGE_SECS" "$SKEW_TOLERANCE" << 'PYEOF'
