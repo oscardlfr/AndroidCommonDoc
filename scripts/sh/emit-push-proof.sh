@@ -440,8 +440,21 @@ if _test_suite_entry is not None and _test_suite_entry.get('result') == 'PASS':
     except Exception:
         die("test-suite-evidence-absent: bats evidence JSON unparseable")
 
-    if _evidence.get('status') != 'ok':
-        die(f"test-suite-evidence-absent: bats evidence status={_evidence.get('status')!r} (expected 'ok')")
+    # Dispatch on the SPECIFIC status value (arch-platform ruling, Section A4 follow-up) --
+    # bats-handoff.sh's Pass 3 split (stale vs scope-mismatch) is only useful if this dispatch
+    # names each one correctly, rather than collapsing every non-'ok' status into -absent.
+    _evidence_status = _evidence.get('status')
+    if _evidence_status == 'stale':
+        die(f"test-suite-evidence-stale: bats evidence status=stale (expected 'ok') -- evidence exists for this HEAD but predates this QG session (report.started_at)")
+    elif _evidence_status == 'scope-mismatch':
+        die(f"test-suite-evidence-partial: bats evidence status=scope-mismatch (expected 'ok') -- fresh evidence exists for this HEAD but never at the required full scope")
+    elif _evidence_status != 'ok':
+        die(f"test-suite-evidence-absent: bats evidence status={_evidence_status!r} (expected 'ok')")
+
+    # The checks below are intentional defense-in-depth against a hypothetical FUTURE
+    # regression in bats-handoff.sh's own filtering -- currently unreachable via normal I/O
+    # given Pass 1/Pass 3b's own guarantees (status=='ok' already implies head/scope/complete
+    # correctness), but kept, not dead code (arch-platform ruling).
     if _evidence.get('head') != head_sha_arg:
         die(f"test-suite-evidence-stale: bats evidence head={_evidence.get('head')!r} != current HEAD={head_sha_arg!r}")
     if _evidence.get('scope') != 'full':

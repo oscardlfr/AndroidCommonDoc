@@ -6,7 +6,7 @@
 #   select_bats_handoff --repo-root <path> --head <sha> [--since <ts>] [--require-scope full]
 #     Always returns 0. Result communicated via globals (never a filesystem-path leak
 #     restriction here — this is the trusted in-process interface, not the CLI payload):
-#       BH_STATUS  ok|stale|absent|malformed
+#       BH_STATUS  ok|stale|scope-mismatch|absent|malformed
 #       BH_HEAD BH_RUN_ID BH_OK BH_NOT_OK BH_EXPECTED BH_TOTAL BH_COMPLETE BH_SCOPE
 #       BH_GENERATED_AT BH_PATH   (all set only when BH_STATUS=ok; "" otherwise)
 #   handoff_get <file> <key>
@@ -27,18 +27,29 @@
 #   only (informational; never parsed by a caller).
 #
 # SELECTION ALGORITHM (ported verbatim from the pre-Wave-A emit-qg-result.sh:269-308 loop,
-# generalized to a shared library; each stage strictly narrows the previous one's survivors):
-#   1. absent    — zero allowlisted candidate files exist, or zero have BATS_HEAD == --head.
-#   2. malformed — >=1 HEAD-matching candidate, but none has ALL completeness fields
-#                  (BATS_RUN_ID/BATS_GENERATED_AT/BATS_OK/BATS_NOT_OK/BATS_EXPECTED/BATS_TOTAL/
-#                  BATS_COMPLETE/BATS_VERDICT) present AND regex-valid.
-#   3. stale     — >=1 well-formed HEAD-matching candidate, but none satisfies BOTH
-#                  BATS_GENERATED_AT >= --since (lexicographic, same %Y-%m-%dT%H:%M:%SZ format
-#                  as report.started_at — no `date -d`) AND, when --require-scope full is given,
-#                  BATS_SCOPE == "full" (absent scope is REJECTED, NEVER defaulted to full —
-#                  all 78 pre-Wave-A handoffs lack this field).
-#   4. ok        — >=1 qualifying candidate; the one with MAX BATS_GENERATED_AT is selected
-#                  (deterministic tie-break, mirrors the original loop).
+# generalized to a shared library; each stage strictly narrows the previous one's survivors).
+# Pass 3 is split into two SEQUENTIAL sub-passes (3a: freshness, 3b: scope) rather than one
+# combined loop, so "genuinely stale" and "fresh but wrong scope" are two distinct, correctly
+# named outcomes — collapsing them (the pre-split behavior) misreported a targeted-scope
+# handoff as "stale" even when it was the freshest thing on disk (arch-platform ruling,
+# Section A4 follow-up: a reporting-accuracy defect, not an exploitable one — every affected
+# case already blocked the mint, it just named the wrong reason):
+#   1. absent         — zero allowlisted candidate files exist, or zero have BATS_HEAD == --head.
+#   2. malformed      — >=1 HEAD-matching candidate, but none has ALL completeness fields
+#                        (BATS_RUN_ID/BATS_GENERATED_AT/BATS_OK/BATS_NOT_OK/BATS_EXPECTED/
+#                        BATS_TOTAL/BATS_COMPLETE/BATS_VERDICT) present AND regex-valid.
+#   3. stale          — >=1 well-formed HEAD-matching candidate (Pass 3a), but NONE satisfies
+#                        BATS_GENERATED_AT >= --since (lexicographic, same %Y-%m-%dT%H:%M:%SZ
+#                        format as report.started_at — no `date -d`). Scope is not consulted
+#                        at this stage — genuinely nothing fresh enough exists, full stop.
+#   4. scope-mismatch — >=1 freshness-qualifying candidate from Pass 3a (Pass 3b), but none
+#                        satisfies scope: when --require-scope full is given, BATS_SCOPE=="full"
+#                        (absent scope is REJECTED, NEVER defaulted to full — all 78 pre-Wave-A
+#                        handoffs lack this field). Fresh evidence exists, just never at the
+#                        required scope.
+#   5. ok             — >=1 candidate qualifying on BOTH freshness and scope; the one with MAX
+#                        BATS_GENERATED_AT is selected (deterministic tie-break, mirrors the
+#                        original loop).
 #
 # SECURITY (three independent layers; see arch-platform's PREP verdict Q1 for the threat model
 # this closes — injection + path-disclosure, NOT forgery of a well-formed, correct-HEAD file):
@@ -182,11 +193,27 @@ select_bats_handoff() {
         return 0
     fi
 
-    # Pass 3: qualifying subset (since + scope), tracking MAX generated_at deterministically.
-    local best="" best_gen="" scope
+    # Pass 3a: freshness-qualifying subset of well_formed — since ONLY, scope not consulted.
+    # A candidate failing only the since bound is genuinely "stale"; a candidate failing only
+    # scope is a DIFFERENT reality ("scope-mismatch", Pass 3b below) — checking both in one
+    # pass would misreport which one actually happened.
+    local fresh=()
     for f in "${well_formed[@]}"; do
         generated_at="$(handoff_get "$f" "BATS_GENERATED_AT")"
         [[ -z "$since" || "$generated_at" > "$since" || "$generated_at" == "$since" ]] || continue
+        fresh+=("$f")
+    done
+    if [[ "${#fresh[@]}" -eq 0 ]]; then
+        BH_STATUS="stale"
+        return 0
+    fi
+
+    # Pass 3b: from the freshness-qualifying subset only, apply scope and track MAX
+    # generated_at deterministically (same logic as before the split, just now over `fresh`
+    # instead of `well_formed`).
+    local best="" best_gen="" scope
+    for f in "${fresh[@]}"; do
+        generated_at="$(handoff_get "$f" "BATS_GENERATED_AT")"
 
         scope="$(handoff_get "$f" "BATS_SCOPE")"
         if [[ "$require_scope" == "full" ]]; then
@@ -203,7 +230,7 @@ select_bats_handoff() {
     done
 
     if [[ -z "$best" ]]; then
-        BH_STATUS="stale"
+        BH_STATUS="scope-mismatch"
         return 0
     fi
 
