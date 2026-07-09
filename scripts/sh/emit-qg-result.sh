@@ -29,8 +29,17 @@
 #
 # Schema:
 #   {schema_version, status(running|pass|fail), head, wave_slug, phase?,
-#    started_at, updated_at, steps[],
-#    suite_summary{bats_total,bats_not_ok,bats_ok,bats_expected,bats_complete}}
+#    started_at, updated_at, steps[], fail_class?,
+#    suite_summary{bats_total,bats_not_ok,bats_ok,bats_expected,bats_complete,bats_verdict}}
+#   started_at/head are now also stamped into quality-gate-report.json at --init time
+#   (fixes D6) — this is the session anchor emit-push-proof.sh's report-started-at-*
+#   check and select_bats_handoff's --since both validate against.
+#   fail_class (clean|suite-failed|incomplete|stale-evidence|no-evidence) classifies the
+#   bats evidence itself. It is qg-result.json-only and additive — NEVER read by
+#   emit-push-proof.sh, verify-proof, or push-authorization-gate.js.
+#   bats_verdict (pass|fail, from not_ok alone) is intentionally independent of
+#   bats_complete (D3 fix) — a complete run that failed some tests is bats_complete=true,
+#   bats_verdict=fail, distinguishable from a truncated run (bats_complete=false).
 #
 # Fail-safe rules (final mode):
 #   - Missing report file          => status:fail
@@ -40,17 +49,21 @@
 #   - Any required step !PASS      => status:fail
 #   - All above OK                 => status:pass, exit 0
 #
-# Handoff discovery (final mode, LD2):
+# Handoff discovery (final mode, LD2, D2 fix):
 #   run-bats.sh (full-run) writes .androidcommondoc/bats-result.<RUN_ID>.env.
-#   emit discovers the best valid candidate: HEAD-match + run-id non-empty +
-#   BATS_GENERATED_AT >= started_at + completeness fields well-formed.
-#   If none valid, falls back to re-grepping the TAP log with the same 4-part check.
-#   SECURITY: handoff files are parsed key-by-key — NOT blindly sourced.
+#   Selection is delegated to lib/bats-handoff.sh's select_bats_handoff (sole parser —
+#   the enumeration/candidacy loop that used to live inline here now has one shared,
+#   bats-tested implementation): HEAD-match + run-id non-empty + BATS_GENERATED_AT >=
+#   started_at + completeness fields well-formed + full scope required.
+#   If BH_STATUS != ok, falls back to re-grepping the TAP log with the same 4-part check.
+#   SECURITY: handoff files are parsed key-by-key — NOT blindly sourced (see lib/bats-handoff.sh).
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/wave-slug.sh"
+# select_bats_handoff / handoff_get / count_head_candidates — sole parser for bats evidence.
+source "$SCRIPT_DIR/lib/bats-handoff.sh"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 PROJECT_ROOT="${ANDROID_COMMON_DOC:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
@@ -161,21 +174,26 @@ atomic_write() {
     mv "$tmpfile" "$target"
 }
 
-# parse_handoff_key FILE KEY
-# Extracts a single value from a handoff .env file by parsing the known KEY=value
-# line explicitly — NOT via `source`. A tampered file cannot execute code this way.
-parse_handoff_key() {
-    local file="$1"
-    local key="$2"
-    grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2-
-}
-
 # ── Mode: --init ──────────────────────────────────────────────────────────────
 if [[ "$MODE" == "init" ]]; then
     HEAD="$(get_head)"
     NOW="$(now_utc)"
-    # Reset report scratch so prior-run prose cannot survive into this QG run.
-    printf '{"steps":[]}\n' > "$REPORT_PATH"
+    # Stamp quality-gate-report.json with started_at + head (fixes D6). This file was
+    # ALREADY being reset here on every --init; what was missing was the stamp itself —
+    # the bare printf below used to leave started_at/head absent, which is what let a
+    # replayed handoff hours old at the same HEAD pass unnoticed. Reusing the SAME NOW
+    # written into qg-result.json below means the two agree by construction — this is
+    # the anchor emit-push-proof.sh's report-started-at-* check and select_bats_handoff's
+    # --since both validate against. Prior-run prose still cannot survive into this QG run
+    # (steps:[] is still a full reset, not a merge).
+    REPORT_PAYLOAD="$(python3 -c "
+import json, sys
+head = sys.argv[1]
+now = sys.argv[2]
+obj = {'schema_version': 1, 'started_at': now, 'head': head, 'steps': []}
+print(json.dumps(obj, indent=2))
+" "$HEAD" "$NOW" 2>/dev/null || echo '{"schema_version":1,"steps":[]}')"
+    atomic_write "$REPORT_PATH" "$REPORT_PAYLOAD"
     PAYLOAD="$(python3 -c "
 import json, sys
 
@@ -256,56 +274,13 @@ except Exception:
 " "$EXISTING_JSON" 2>/dev/null || true)
 STARTED_AT=${STARTED_AT:-}
 
-# ── Handoff discovery (LD2) ───────────────────────────────────────────────────
-# Enumerate .androidcommondoc/bats-result.*.env scratch files.
-# A candidate is VALID iff ALL of:
-#   (i)   BATS_HEAD == current HEAD
-#   (ii)  BATS_RUN_ID non-empty
-#   (iii) BATS_GENERATED_AT >= started_at (lexicographic; same UTC format — no date -d)
-#   (iv)  completeness fields present and well-formed
-# Among valid candidates, pick MAX BATS_GENERATED_AT (deterministic).
-# SECURITY: parse known keys individually — never `source` the scratch file.
-
-HANDOFF_DIR="$PROJECT_ROOT/.androidcommondoc"
-BEST_HANDOFF=""
-BEST_GENERATED_AT=""
-
-if [[ -n "$STARTED_AT" ]]; then
-    for env_file in "$HANDOFF_DIR"/bats-result.*.env; do
-        [[ -f "$env_file" ]] || continue
-
-        h_head=$(parse_handoff_key "$env_file" "BATS_HEAD")
-        h_run_id=$(parse_handoff_key "$env_file" "BATS_RUN_ID")
-        h_generated_at=$(parse_handoff_key "$env_file" "BATS_GENERATED_AT")
-        h_expected=$(parse_handoff_key "$env_file" "BATS_EXPECTED")
-        h_total=$(parse_handoff_key "$env_file" "BATS_TOTAL")
-        h_ok=$(parse_handoff_key "$env_file" "BATS_OK")
-        h_not_ok=$(parse_handoff_key "$env_file" "BATS_NOT_OK")
-        h_complete=$(parse_handoff_key "$env_file" "BATS_COMPLETE")
-        h_verdict=$(parse_handoff_key "$env_file" "BATS_VERDICT")
-
-        # (i) HEAD must match
-        [[ "$h_head" == "$HEAD" ]] || continue
-
-        # (ii) RUN_ID must be non-empty
-        [[ -n "$h_run_id" ]] || continue
-
-        # (iii) BATS_GENERATED_AT >= started_at (lexicographic — both are %Y-%m-%dT%H:%M:%SZ)
-        [[ -n "$h_generated_at" ]] || continue
-        [[ "$h_generated_at" > "$STARTED_AT" || "$h_generated_at" == "$STARTED_AT" ]] || continue
-
-        # (iv) completeness fields must be present and well-formed (non-empty)
-        [[ -n "$h_expected" && -n "$h_total" && -n "$h_ok" && -n "$h_not_ok" && -n "$h_complete" && -n "$h_verdict" ]] || continue
-
-        # Candidate is valid — track MAX by BATS_GENERATED_AT
-        if [[ -z "$BEST_GENERATED_AT" || "$h_generated_at" > "$BEST_GENERATED_AT" ]]; then
-            BEST_GENERATED_AT="$h_generated_at"
-            BEST_HANDOFF="$env_file"
-        fi
-    done
-else
-    echo "[emit-qg-result] INFO: no started_at in qg-result.json — skipping handoff discovery, using fallback" >&2
-fi
+# ── Handoff discovery (LD2, D2 fix) ───────────────────────────────────────────
+# Selection is delegated entirely to lib/bats-handoff.sh (Step 1) — the enumeration +
+# candidacy loop that used to live here now has a single, shared, bats-tested
+# implementation. BH_STATUS is one of ok|stale|absent|malformed; BH_* fields are
+# populated only when BH_STATUS==ok. full-scope required: quality-gater always invokes
+# run-bats.sh with no positional targets (see run-bats.sh's BATS_SCOPE derivation).
+select_bats_handoff --repo-root "$PROJECT_ROOT" --head "$HEAD" --since "$STARTED_AT" --require-scope full
 
 # ── Source suite_summary from best valid handoff (or fallback) ────────────────
 BATS_EVIDENCE=false
@@ -314,36 +289,38 @@ BATS_OK=0
 BATS_TOTAL=0
 BATS_EXPECTED=0
 BATS_COMPLETE=false
+BATS_SUITE_VERDICT="fail"
 
-if [[ -n "$BEST_HANDOFF" ]]; then
-    echo "[emit-qg-result] INFO: using handoff: $BEST_HANDOFF (generated_at=$BEST_GENERATED_AT)" >&2
+if [[ "$BH_STATUS" == "ok" ]]; then
+    echo "[emit-qg-result] INFO: using handoff: $BH_PATH (generated_at=$BH_GENERATED_AT)" >&2
 
-    BATS_OK=$(parse_handoff_key "$BEST_HANDOFF" "BATS_OK")
-    BATS_OK=${BATS_OK:-0}
-    BATS_NOT_OK=$(parse_handoff_key "$BEST_HANDOFF" "BATS_NOT_OK")
-    BATS_NOT_OK=${BATS_NOT_OK:-0}
-    BATS_EXPECTED=$(parse_handoff_key "$BEST_HANDOFF" "BATS_EXPECTED")
-    BATS_EXPECTED=${BATS_EXPECTED:-0}
-    BATS_TOTAL=$(parse_handoff_key "$BEST_HANDOFF" "BATS_TOTAL")
-    BATS_TOTAL=${BATS_TOTAL:-0}
-    h_complete_raw=$(parse_handoff_key "$BEST_HANDOFF" "BATS_COMPLETE")
-    h_verdict_raw=$(parse_handoff_key "$BEST_HANDOFF" "BATS_VERDICT")
+    BATS_OK="${BH_OK:-0}"
+    BATS_NOT_OK="${BH_NOT_OK:-0}"
+    BATS_EXPECTED="${BH_EXPECTED:-0}"
+    BATS_TOTAL="${BH_TOTAL:-0}"
 
-    # Bats verdict from handoff: COMPLETE==true AND VERDICT==pass AND NOT_OK==0
-    if [[ "$h_complete_raw" == "true" && "$h_verdict_raw" == "pass" && "$BATS_NOT_OK" -eq 0 ]]; then
+    # D3 fix: completeness reflects ONLY the handoff's own completeness flag (did the run
+    # structurally finish, all N tests accounted for) — it is NEVER conflated with whether
+    # tests passed. A complete-but-failing run must stay distinguishable from a truncated
+    # one; suite_summary.bats_verdict (below) carries the pass/fail signal instead.
+    # `if/fi`, not a bare `[[ ]] && var=...` — the latter's exit status is the test's own
+    # when it's false, which would abort this whole script under `set -e` (e.g. every
+    # failing-suite run, since BH_COMPLETE=="true" is false whenever not_ok>0 truncated it,
+    # or simply whenever BATS_OK==0).
+    BATS_COMPLETE=false
+    if [[ "$BH_COMPLETE" == "true" ]]; then
         BATS_COMPLETE=true
+    fi
+
+    BATS_EVIDENCE=false
+    if [[ "$BATS_OK" -gt 0 ]]; then
         BATS_EVIDENCE=true
-    else
-        BATS_COMPLETE=false
-        # Treat as evidence if ok > 0 (for accurate count reporting), but verdict is fail
-        if [[ "$BATS_OK" -gt 0 ]]; then
-            BATS_EVIDENCE=true
-        fi
     fi
 
 else
     # ── Fallback: re-grep the TAP log + same 4-part completeness assertion ────────
-    echo "[emit-qg-result] INFO: no valid handoff found — falling back to TAP log: $BATS_LOG_PATH" >&2
+    _head_candidates="$(count_head_candidates --repo-root "$PROJECT_ROOT" --head "$HEAD")"
+    echo "[emit-qg-result] INFO: no qualifying handoff (status=$BH_STATUS, ${_head_candidates} candidate(s) for this HEAD) — falling back to TAP log: $BATS_LOG_PATH" >&2
 
     if [[ -f "$BATS_LOG_PATH" ]]; then
         # Strip \r before all greps (CRLF safety — mirrors run-bats.sh)
@@ -372,13 +349,37 @@ else
                     has_exec_warning=true
                 fi
 
-                if [[ "$BATS_TOTAL" -eq "$BATS_EXPECTED" && "$has_exec_warning" == "false" && "$BATS_NOT_OK" -eq 0 ]]; then
+                # D3 fix: completeness is independent of not_ok — a complete run with
+                # real failures is NOT the same as a truncated one (see fix above).
+                if [[ "$BATS_TOTAL" -eq "$BATS_EXPECTED" && "$has_exec_warning" == "false" ]]; then
                     BATS_COMPLETE=true
                 fi
             fi
             # plan_count != 1 → BATS_COMPLETE stays false (incomplete/malformed)
         fi
     fi
+fi
+
+# suite_summary.bats_verdict (D3 fix): pass|fail from not_ok alone, independent of
+# bats_complete. A complete run with not_ok>0 is bats_complete=true, bats_verdict=fail —
+# previously indistinguishable from an incomplete run (both read bats_complete=false).
+# `if/fi`, not a bare `[[ ]] && var=...` (this one is top-level and CRITICAL — the latter
+# would abort this whole script under `set -e` on every run with any test failure at all).
+if [[ "$BATS_NOT_OK" -eq 0 ]]; then
+    BATS_SUITE_VERDICT="pass"
+fi
+
+# fail_class (qg-result.json only; additive; NEVER read by the mint) — classifies the
+# bats evidence itself, independent of whatever else might make the overall verdict fail.
+FAIL_CLASS="clean"
+if [[ "$BH_STATUS" == "stale" ]]; then
+    FAIL_CLASS="stale-evidence"
+elif [[ "$BATS_EVIDENCE" == "false" ]]; then
+    FAIL_CLASS="no-evidence"
+elif [[ "$BATS_NOT_OK" -gt 0 ]]; then
+    FAIL_CLASS="suite-failed"
+elif [[ "$BATS_COMPLETE" == "false" ]]; then
+    FAIL_CLASS="incomplete"
 fi
 
 # Evaluate report (steps) ──────────────────────────────────────────────────────
@@ -464,7 +465,9 @@ if [[ -f "$REPORT_PATH" ]]; then
 fi
 
 # Build final JSON ─────────────────────────────────────────────────────────────
-# suite_summary is extended with bats_expected + bats_complete (additive, backward-compatible)
+# suite_summary is extended with bats_expected + bats_complete + bats_verdict (D3 fix,
+# additive, backward-compatible). fail_class is additive at the top level, qg-result.json
+# only — NEVER read by emit-push-proof.sh / verify-proof / push-authorization-gate.js.
 PAYLOAD="$(python3 -c "
 import json, sys
 
@@ -480,6 +483,8 @@ bats_ok = int(sys.argv[9])
 fail_reason = sys.argv[10]
 bats_expected = int(sys.argv[11])
 bats_complete_str = sys.argv[12]
+bats_verdict = sys.argv[13]
+fail_class = sys.argv[14]
 
 try:
     existing = json.loads(existing_raw)
@@ -503,7 +508,9 @@ obj = {
         'bats_ok': bats_ok,
         'bats_expected': bats_expected,
         'bats_complete': bats_complete_str == 'true',
+        'bats_verdict': bats_verdict,
     },
+    'fail_class': fail_class,
 }
 if fail_reason:
     obj['fail_reason'] = fail_reason
@@ -511,7 +518,7 @@ if fail_reason:
 print(json.dumps(obj, indent=2))
 " "$EXISTING_JSON" "$HEAD" "$WAVE_SLUG" "$VERDICT" "$NOW" \
   "$STEPS_JSON" "$BATS_TOTAL" "$BATS_NOT_OK" "$BATS_OK" "$FAIL_REASON" \
-  "$BATS_EXPECTED" "$BATS_COMPLETE" \
+  "$BATS_EXPECTED" "$BATS_COMPLETE" "$BATS_SUITE_VERDICT" "$FAIL_CLASS" \
   2>/dev/null || echo '{"schema_version":1,"status":"fail","error":"serialization-failed"}')"
 
 atomic_write "$OUT_PATH" "$PAYLOAD"

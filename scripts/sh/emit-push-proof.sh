@@ -12,9 +12,23 @@
 #                         push-proof.json, push-proof.log (JSONL append).
 #                 Does NOT fabricate report content — attests what the quality-gater produced.
 #
+#                 EVIDENCE BINDING (Wave A): a claimed report.steps[] entry of
+#                 {"step":"test-suite","result":"PASS"} is no longer taken on faith. Five
+#                 named checks, all die(...) -> exit 2: invalid-step-result, duplicate-
+#                 step-id, unknown-step-id, test-suite-evidence-* (backed by a real,
+#                 fresh, full-scope, complete, clean bats handoff via
+#                 lib/bats-handoff.sh — see test-suite-evidence-{absent,stale,partial,
+#                 dirty}), and report-started-at-* (report.started_at must be present
+#                 and plausible — the QG-session anchor used as the evidence lookup's
+#                 --since floor). push-proof.json additively gains a bats_evidence
+#                 object {run_id, head, ok, not_ok, expected, scope, generated_at} (no
+#                 filesystem paths); schema_version stays 1.
+#
 #   verify-proof  Cheap verifier for the git-layer hook. Reads push-proof.json and checks:
 #                 schema_version, head, worktree_id, generated_at freshness, manifest_version,
-#                 steps_executed coverage, report_digest.
+#                 steps_executed coverage, report_digest, bats_evidence binding (present +
+#                 .head == pushed_sha — mirrors verify-push-proof.ps1 and
+#                 push-authorization-gate.js, all three now at equivalent rigor).
 #
 #                 IMPORTANT: verify-proof does NOT re-evaluate predicates. Predicate
 #                 consistency was enforced at mint (run-qg) and is bound cryptographically
@@ -22,7 +36,9 @@
 #                 report_digest mismatch and this verifier blocks. This is the "conscious +
 #                 detectable" bar: a forged report with correct SKIPs requires bypassing the
 #                 real emitter, which is detectable through audit logs and session records.
-#                 It is NOT a cryptographic non-bypass guarantee.
+#                 It is NOT a cryptographic non-bypass guarantee — the same bar applies to
+#                 bats_evidence: a hand-authored, well-formed, correct-HEAD handoff file is
+#                 not distinguishable from a genuine one by this mechanism alone.
 #
 # OUTPUT CONFINEMENT
 #   All output files are confined to $REPO_ROOT/.androidcommondoc/ via git rev-parse
@@ -209,17 +225,44 @@ PYEOF
   local diff_files=""
   diff_files="$(git -C "$REPO_ROOT" diff --name-only "${base_sha}...${head_sha}" 2>/dev/null || echo "")"
 
+  # -- 3a. Resolve report.started_at (Section A4's report-started-at-* anchor) -----
+  # Mirrors emit-qg-result.sh's own started_at extraction pattern. This becomes the
+  # --since floor passed to the bats-evidence lookup below, AND is independently
+  # validated for presence/plausibility inside the Python pass (report-started-at-*).
+  local report_started_at
+  report_started_at="$(python3 -c "
+import json, sys
+try:
+    obj = json.load(open(sys.argv[1], encoding='utf-8'))
+    print(obj.get('started_at', ''))
+except Exception:
+    print('')
+" "$REPORT_PATH" 2>/dev/null || true)"
+
+  # -- 3b. Resolve bats evidence via the sole CLI parser (Step 1, lib/bats-handoff.sh) --
+  # Always exits 0 — meaning lives in evidence.status (ok|stale|absent|malformed),
+  # checked by name below (test-suite-evidence-*), never by this call's exit code.
+  local bats_evidence_json
+  bats_evidence_json="$(bash "$SCRIPT_DIR/lib/bats-handoff.sh" select \
+      --repo-root "$REPO_ROOT" --head "$head_sha" --since "$report_started_at" \
+      --require-scope full --format json)"
+
   # All validation + predicate enforcement in one Python pass.
   # Predicate evaluation is mirrored from the bash eval_predicate design
   # (PLAN.md L38-51): one explicit check per named predicate, case-equivalent logic.
-  python3 - "$REPORT_PATH" "$MANIFEST_PATH" "$REPO_ROOT" "$diff_files" "$wave_slug" << 'PYEOF'
-import json, sys, os, re
+  python3 - "$REPORT_PATH" "$MANIFEST_PATH" "$REPO_ROOT" "$diff_files" "$wave_slug" \
+      "$report_started_at" "$bats_evidence_json" "$head_sha" "$SKEW_TOLERANCE" << 'PYEOF'
+import json, sys, os, re, datetime
 
-report_path   = sys.argv[1]
-manifest_path = sys.argv[2]
-repo_root     = sys.argv[3]
-diff_files    = sys.argv[4]   # newline-separated list from git diff
-wave_slug     = sys.argv[5]   # current wave slug (empty string if no active wave)
+report_path        = sys.argv[1]
+manifest_path      = sys.argv[2]
+repo_root          = sys.argv[3]
+diff_files         = sys.argv[4]   # newline-separated list from git diff
+wave_slug          = sys.argv[5]   # current wave slug (empty string if no active wave)
+report_started_at  = sys.argv[6]   # report.started_at, or '' if absent/unreadable
+bats_evidence_raw  = sys.argv[7]   # JSON from lib/bats-handoff.sh select --format json
+head_sha_arg       = sys.argv[8]   # current HEAD sha (already computed in bash)
+skew_tolerance     = int(sys.argv[9])
 
 def die(msg):
     print(f"[emit-push-proof] ERROR: {msg}", file=sys.stderr)
@@ -329,8 +372,98 @@ for entry in discovered:
     if not entry.get('verified_by'):
         die(f"runtime-report-incomplete: discovered_rules entry missing verified_by: {entry}")
 
+# ── Section A4: five named hard checks, all die(...) -> exit 2 ────────────────
+# Checked BEFORE the step index is built below, so a duplicate/unknown id is caught
+# here rather than silently last-write-wins-collapsed by the dict comprehension.
+steps_list = report.get('steps') or []
+
+# invalid-step-result: every steps[].result in {PASS, FAIL, SKIP}. Scoped to
+# steps[].result only -- discovered_rules[].result free text is untouched.
+_VALID_RESULTS = {'PASS', 'FAIL', 'SKIP'}
+for _s in steps_list:
+    _r = _s.get('result')
+    if _r not in _VALID_RESULTS:
+        die(f"invalid-step-result: step '{_s.get('step', '<unknown>')}' has result={_r!r}, must be one of {sorted(_VALID_RESULTS)}")
+
+# duplicate-step-id: reject two entries sharing a step id (closes the last-wins
+# overwrite the dict comprehension below would otherwise silently perform).
+_seen_ids = set()
+for _s in steps_list:
+    _sid = _s.get('step')
+    if _sid is None:
+        continue
+    if _sid in _seen_ids:
+        die(f"duplicate-step-id: step id '{_sid}' appears more than once in report.steps[]")
+    _seen_ids.add(_sid)
+
+# unknown-step-id: every steps[].step in required_steps | conditional_steps |
+# informational_steps. informational_steps is declared exactly ["report-freshness"]
+# (Step 9) -- #EP-UNK+ is the positive control proving it is accepted, not rejected.
+_required_ids      = {rs['id'] for rs in manifest.get('required_steps', [])}
+_conditional_ids    = {cs['id'] for cs in manifest.get('conditional_steps', [])}
+_informational_ids  = set(manifest.get('informational_steps', []))
+_known_ids = _required_ids | _conditional_ids | _informational_ids
+for _s in steps_list:
+    _sid = _s.get('step')
+    if _sid is not None and _sid not in _known_ids:
+        die(f"unknown-step-id: step id '{_sid}' is not in required_steps, conditional_steps, or informational_steps")
+
 # ── Step index ────────────────────────────────────────────────────────────────
-steps = {s['step']: s for s in (report.get('steps') or []) if 'step' in s}
+# Duplicates already rejected above, so last-write-wins here is now unreachable, not a bug.
+steps = {s['step']: s for s in steps_list if 'step' in s}
+
+# report-started-at-*: report.started_at must be present and parse as UTC
+# %Y-%m-%dT%H:%M:%SZ; plausibility bound now-86400 <= started_at <= now+skew_tolerance.
+# This is the D6 / in-scope check -- distinct from the pre-existing, untouched
+# scripts/sh/lib/qg-report-freshness.sh (step-reason staleness).
+if not report_started_at:
+    die("report-started-at-absent: report.started_at is missing (was --init run before the bats run?)")
+try:
+    _started_dt = datetime.datetime.strptime(report_started_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+except ValueError:
+    die(f"report-started-at-absent: report.started_at is not parseable as UTC %Y-%m-%dT%H:%M:%SZ: {report_started_at!r}")
+_now_dt = datetime.datetime.now(datetime.timezone.utc)
+_age_secs = (_now_dt - _started_dt).total_seconds()
+if _age_secs > 86400:
+    die(f"report-started-at-implausible: report.started_at is {_age_secs:.0f}s in the past (max 86400s -- intentional max-staleness bound, not unlimited replay protection)")
+if _age_secs < -skew_tolerance:
+    die(f"report-started-at-implausible: report.started_at is {-_age_secs:.0f}s in the future (max {skew_tolerance}s skew)")
+
+# test-suite-evidence-*: a claimed test-suite: PASS is accepted only when backed by
+# real, fresh, full-scope, complete, clean evidence -- plus a sanity floor that closes
+# BOTH ok==0 (tautological alone) AND total==expected (Amendment A, required -- without
+# it, ok=5,not_ok=0,total=5,expected=999,complete=true would pass every other check).
+_test_suite_entry = steps.get('test-suite')
+if _test_suite_entry is not None and _test_suite_entry.get('result') == 'PASS':
+    try:
+        _evidence = json.loads(bats_evidence_raw)
+    except Exception:
+        die("test-suite-evidence-absent: bats evidence JSON unparseable")
+
+    if _evidence.get('status') != 'ok':
+        die(f"test-suite-evidence-absent: bats evidence status={_evidence.get('status')!r} (expected 'ok')")
+    if _evidence.get('head') != head_sha_arg:
+        die(f"test-suite-evidence-stale: bats evidence head={_evidence.get('head')!r} != current HEAD={head_sha_arg!r}")
+    if _evidence.get('scope') != 'full':
+        die(f"test-suite-evidence-partial: bats evidence scope={_evidence.get('scope')!r} (expected 'full')")
+    if _evidence.get('complete') is not True:
+        die(f"test-suite-evidence-partial: bats evidence complete={_evidence.get('complete')!r} (expected true)")
+    if _evidence.get('not_ok', 1) != 0:
+        die(f"test-suite-evidence-dirty: bats evidence not_ok={_evidence.get('not_ok')!r} (expected 0)")
+
+    # Sanity floor (Amendment A, REQUIRED) -- "a guard that cannot fail is worse than none".
+    _ok_n, _expected_n, _total_n, _not_ok_n = (
+        _evidence.get('ok', 0), _evidence.get('expected', 0),
+        _evidence.get('total', 0), _evidence.get('not_ok', 0),
+    )
+    if not (isinstance(_ok_n, int) and _ok_n > 0):
+        die(f"test-suite-evidence-absent: bats evidence ok={_ok_n!r} fails sanity floor (must be > 0)")
+    if not (isinstance(_expected_n, int) and _expected_n > 0):
+        die(f"test-suite-evidence-absent: bats evidence expected={_expected_n!r} fails sanity floor (must be > 0)")
+    if _total_n != _ok_n + _not_ok_n:
+        die(f"test-suite-evidence-absent: bats evidence total={_total_n!r} != ok+not_ok={_ok_n + _not_ok_n} (sanity floor)")
+    if _total_n != _expected_n:
+        die(f"test-suite-evidence-absent: bats evidence total={_total_n!r} != expected={_expected_n!r} (sanity floor, Amendment A -- closes the ok=5,not_ok=0,total=5,expected=999,complete=true bypass)")
 
 # ── Required steps coverage ───────────────────────────────────────────────────
 # Required steps must be ran=true AND result=PASS. SKIP / not-ran / absent all fail.
@@ -563,10 +696,11 @@ PYEOF
   printf '{"verdict":"PASS","timestamp":"%s","head":"%s","branch":"%s","source":"emit-push-proof.sh run-qg"}\n' \
     "$now_ts" "$head_sha" "$branch_name" > "$PP_STAMP_PATH"
 
-  # -- 9. Write push-proof.json (includes artifact_digests from step 4) ---------
+  # -- 9. Write push-proof.json (includes artifact_digests from step 4, and
+  #       bats_evidence from step 3b -- additive; schema_version stays 1) ---------
   python3 - "$PROOF_PATH" "$now_ts" "$head_sha" "$worktree_id" \
       "$manifest_version" "$report_digest" "$wave_slug" "$steps_executed_json" \
-      "$artifact_digests_json" << 'PYEOF'
+      "$artifact_digests_json" "$bats_evidence_json" << 'PYEOF'
 import json, sys
 
 proof_path        = sys.argv[1]
@@ -579,6 +713,23 @@ wave_slug         = sys.argv[7]
 steps_executed    = json.loads(sys.argv[8])
 artifact_digests  = json.loads(sys.argv[9])
 
+try:
+    _ev = json.loads(sys.argv[10])
+except Exception:
+    _ev = {}
+# Exactly {run_id, head, ok, not_ok, expected, scope, generated_at} -- no filesystem
+# paths (bats-handoff.sh's CLI never emits one). status/complete/total are the CLI's
+# own selection metadata and are intentionally NOT persisted into the proof.
+bats_evidence = {
+    "run_id":       _ev.get("run_id", ""),
+    "head":         _ev.get("head", ""),
+    "ok":           _ev.get("ok", 0),
+    "not_ok":       _ev.get("not_ok", 0),
+    "expected":     _ev.get("expected", 0),
+    "scope":        _ev.get("scope", ""),
+    "generated_at": _ev.get("generated_at", ""),
+}
+
 proof = {
     "schema_version":    1,
     "head":              head_sha,
@@ -589,6 +740,7 @@ proof = {
     "steps_executed":    steps_executed,
     "report_digest":     report_digest,
     "artifact_digests":  artifact_digests,
+    "bats_evidence":     bats_evidence,
 }
 
 with open(proof_path, 'w', encoding='utf-8') as f:
@@ -704,6 +856,19 @@ content    = open(report_path, 'rb').read().replace(b'\r\n', b'\n')
 recomputed = hashlib.sha256(content).hexdigest()
 if recomputed != proof.get('report_digest'):
     die(f"report_digest mismatch: stored={proof.get('report_digest')} recomputed={recomputed} — quality-gate-report.json may have been tampered with post-mint")
+
+# -- 9. bats_evidence binding: present + head matches pushed_sha ------------------
+# A half-done Section A4 would mint correctly (run_qg's five named checks) but verify
+# permissively -- this closes that gap. This is the design doc's "8th check" (counting
+# schema_version..report_digest as checks 1-7; this file's own comment numbering above
+# additionally counts "Load proof" as step 1, so this lands as "-- 9." here). Mirrors
+# the rigor of the other two verifiers (verify-push-proof.ps1, push-authorization-
+# gate.js) -- all three now carry equivalent 8-check rigor.
+bats_evidence = proof.get('bats_evidence')
+if not bats_evidence:
+    die("bats_evidence missing from push-proof.json — proof was minted before this wave's evidence binding, or evidence was stripped. Re-run /quality-gate.")
+if bats_evidence.get('head') != pushed_sha:
+    die(f"bats_evidence.head ({bats_evidence.get('head')}) != pushed SHA ({pushed_sha}) — proof's test-suite evidence does not correspond to the pushed commit")
 
 print("[emit-push-proof] verify-proof: PASS", file=sys.stderr)
 PYEOF
