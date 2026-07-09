@@ -354,6 +354,13 @@ process.stdin.on('end', () => {
       // default, same rule as every check above.
       if (!proof.bats_evidence) {
         block('[push-authorization-gate] BLOCKED: push-proof.json missing bats_evidence. Re-run /quality-gate.');
+        return; // block() may defer exit(2) until stdout drains (backpressure); unlike
+                // checks 1-7, which move on to an UNRELATED condition after blocking,
+                // the very next line here dereferences .head on the object this branch
+                // just proved absent -- falling through would throw TypeError on
+                // undefined in that deferred window instead of emitting the clean
+                // decision:block JSON. Fail-closed must mean "blocked with a message",
+                // not "blocked by crashing".
       }
       if (proof.bats_evidence.head !== headShaForProof) {
         block(`[push-authorization-gate] BLOCKED: bats_evidence.head (${proof.bats_evidence.head}) != HEAD (${headShaForProof}).`);
