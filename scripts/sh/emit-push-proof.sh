@@ -452,6 +452,11 @@ if _test_suite_entry is not None and _test_suite_entry.get('result') == 'PASS':
         die(f"test-suite-evidence-dirty: bats evidence not_ok={_evidence.get('not_ok')!r} (expected 0)")
 
     # Sanity floor (Amendment A, REQUIRED) -- "a guard that cannot fail is worse than none".
+    # Die-code choice matters, not just die-vs-pass: ok<=0/expected<=0 means nothing ran
+    # (-absent is correct); total!=ok+not_ok and total!=expected are both an internally
+    # INCONSISTENT count on a run that otherwise claims to have happened -- that is a
+    # partial run, not an absent one, so both use -partial (matches #EP-EV10's pin and
+    # the plan's die-code enum: {...-absent, ...-stale, ...-dirty, ...-partial}).
     _ok_n, _expected_n, _total_n, _not_ok_n = (
         _evidence.get('ok', 0), _evidence.get('expected', 0),
         _evidence.get('total', 0), _evidence.get('not_ok', 0),
@@ -461,9 +466,9 @@ if _test_suite_entry is not None and _test_suite_entry.get('result') == 'PASS':
     if not (isinstance(_expected_n, int) and _expected_n > 0):
         die(f"test-suite-evidence-absent: bats evidence expected={_expected_n!r} fails sanity floor (must be > 0)")
     if _total_n != _ok_n + _not_ok_n:
-        die(f"test-suite-evidence-absent: bats evidence total={_total_n!r} != ok+not_ok={_ok_n + _not_ok_n} (sanity floor)")
+        die(f"test-suite-evidence-partial: bats evidence total={_total_n!r} != ok+not_ok={_ok_n + _not_ok_n} (sanity floor -- internally inconsistent count)")
     if _total_n != _expected_n:
-        die(f"test-suite-evidence-absent: bats evidence total={_total_n!r} != expected={_expected_n!r} (sanity floor, Amendment A -- closes the ok=5,not_ok=0,total=5,expected=999,complete=true bypass)")
+        die(f"test-suite-evidence-partial: bats evidence total={_total_n!r} != expected={_expected_n!r} (sanity floor, Amendment A -- closes the ok=5,not_ok=0,total=5,expected=999,complete=true bypass)")
 
 # ── Required steps coverage ───────────────────────────────────────────────────
 # Required steps must be ran=true AND result=PASS. SKIP / not-ran / absent all fail.
