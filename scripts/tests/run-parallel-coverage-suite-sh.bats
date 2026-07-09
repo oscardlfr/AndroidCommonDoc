@@ -148,9 +148,11 @@ teardown() {
   ln -s "$(command -v bash)" "$isolated_bin/bash"
 
   run env PATH="$isolated_bin" bash "$SCRIPT" --project-root "$FAKE_PROJECT"
-  [ "$status" -ne 0 ]
-  # Must print error message about missing kmp-test
-  [[ "$output" == *"kmp-test"* ]]
+  # Assert the exact exit code and the install hint, not merely "non-zero and the
+  # tool name appears somewhere" — those loose assertions are what let the sibling
+  # test in run-changed-modules-tests-sh.bats pass vacuously.
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"npm install -g kmp-test-runner"* ]]
   # Must NOT write coverage-full-report.md
   ! [ -f "$FAKE_PROJECT/coverage-full-report.md" ]
 }
