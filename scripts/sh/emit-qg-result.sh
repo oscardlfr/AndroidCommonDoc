@@ -36,7 +36,13 @@
 #   check and select_bats_handoff's --since both validate against.
 #   fail_class (clean|suite-failed|incomplete|stale-evidence|no-evidence) classifies the
 #   bats evidence itself. It is qg-result.json-only and additive — NEVER read by
-#   emit-push-proof.sh, verify-proof, or push-authorization-gate.js.
+#   emit-push-proof.sh, verify-proof, or push-authorization-gate.js. Precedence (first
+#   match wins, since more than one could technically apply at once): stale-evidence >
+#   no-evidence > suite-failed > incomplete > clean. stale-evidence is checked first
+#   because "we found real evidence for this HEAD, just not fresh/full-scope enough" is
+#   more actionable than the generic no-evidence bucket; the rest mirrors the priority
+#   order the actual verdict/FAIL_REASON logic below already uses (evidence presence,
+#   then not_ok, then completeness).
 #   bats_verdict (pass|fail, from not_ok alone) is intentionally independent of
 #   bats_complete (D3 fix) — a complete run that failed some tests is bats_complete=true,
 #   bats_verdict=fail, distinguishable from a truncated run (bats_complete=false).
