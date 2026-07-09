@@ -134,16 +134,13 @@ function getHeadSha(projectRoot) {
   return null;
 }
 
-// INVARIANT: every block() call in this file is immediately followed by `return`.
-// block() only calls process.exit(2) synchronously when stdout.write() returns true;
-// under backpressure it defers exit to the 'drain' event. Without `return`, execution
-// continues past a decision that has already been made — best case it re-evaluates an
-// unrelated condition pointlessly; worst case (checks that immediately dereference the
-// value they just proved absent) it throws, or (falling all the way through) it reaches
-// a later unconditional process.exit(0) and allows a push that was already blocked. The
-// 5s allow-timer (`t` below) is cleared at the top of the 'end' handler, so it specifically
-// cannot be the source of a false allow — the risk is exclusively fall-through, not that
-// timer.
+// INVARIANT: every block() call is IMMEDIATELY followed by `return`.
+// block() only calls process.exit(2) synchronously when stdout.write() returns true; under
+// backpressure it defers exit to 'drain'. Without `return`, execution continues past a decision
+// already made — and if the next statement dereferences what the branch just proved absent, the
+// TypeError is swallowed by this handler's outer `catch { process.exit(0) }` (a deliberate
+// fail-open on script error). Result: a push that should be BLOCKED is ALLOWED.
+// This is not tidiness. It is the difference between fail-closed and fail-open.
 function block(reason) {
   // Write decision JSON to stdout, then flush stdout before exit (CR #2).
   // process.stdout.write callback ensures the write is flushed before termination.
