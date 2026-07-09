@@ -103,7 +103,7 @@ All three verifiers implement this same 8-check contract at equivalent rigor: th
   "worktree_id":      "<absolute path from git rev-parse --show-toplevel>",
   "generated_at":     "<ISO-8601 UTC>",
   "wave_slug":        "<branch last-segment>",
-  "manifest_version": 1,
+  "manifest_version": 2,
   "steps_executed":   [{"step": "<id>", "result": "PASS|SKIP", "ran": true|false}],
   "report_digest":    "<sha256 hex>",
   "artifact_digests": {
@@ -167,7 +167,8 @@ Committed to repo root. Versioned (`manifest_version`) so `verify-proof` detects
   "manifest_version": <N>,
   "protocol_digest":  "<sha256 of manifest content, CRLF->LF>",
   "required_steps":   [...],
-  "conditional_steps": [...]
+  "conditional_steps": [...],
+  "informational_steps": [...]
 }
 ```
 
@@ -188,6 +189,8 @@ Committed to repo root. Versioned (`manifest_version`) so `verify-proof` detects
 | `wave_plan_present` | `.planning/wave-<slug>/PLAN.md` exists (D-7 declared-vs-touched, via `qg-path-audit.sh`) | — |
 
 If predicate is `true` and the report shows `SKIP` → `inconsistent-skip` (exit 2), **except** for steps with `env_attested: true` (currently only `runtime-ui-validation`): predicate-true + SKIP + non-empty `reason` is allowed — the runtime environment check is delegated to the quality-gater's attested reason. If predicate is `true` and result is `FAIL` → `mandatory-step-not-pass` (exit 2).
+
+**Informational steps** (Wave A) — a third, minimal array: currently exactly `["report-freshness"]`. Entries here carry NO step-coverage weight and are NOT inputs to `protocol_digest` (which hashes only `required_steps` + `conditional_steps`) — the array exists solely so `emit-push-proof.sh`'s `unknown-step-id` check (see "Evidence Binding" above) accepts a `report-freshness` entry in `quality-gate-report.json`'s `steps[]` instead of rejecting it as unrecognized.
 
 ---
 
