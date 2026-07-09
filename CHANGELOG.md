@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Fixed (qg-evidence-integrity — push-proof evidence binding + parity correction)
+
+- **`emit-push-proof.sh` / `emit-push-proof.ps1` parity corrected**: the original description of these two scripts as a `run-qg`/`verify-proof` parity pair (bl-w47-pr-0c2, below) is no longer accurate for `run-qg` — `emit-push-proof.ps1`'s `run-qg` now hard-refuses to mint (exit 2) pending PS1 evidence binding (filed to BACKLOG), while `verify-proof`/`verify-push-proof.ps1` remain full parity, both gaining an 8th integrity check (`bats_evidence` presence + HEAD match) alongside the in-JS fallback in `push-authorization-gate.js`. `emit-push-proof.sh run-qg` additively gains a `bats_evidence` object in `push-proof.json` (`schema_version` stays 1), backing a claimed `test-suite: PASS` with a real, fresh, full-scope, complete, clean bats handoff via new `scripts/sh/lib/bats-handoff.sh`. See `docs/agents/qg-proof-push-gate.md`.
+- **`quality-gater` `template_version` 2.22.0 → 2.23.0** (full 5-pata ceremony: manifest hash, template hash, vitest repin, bats coverage, MIGRATIONS.json entry): corrects two stale template lines — the bats-verdict interpretation comment (now: any non-zero `run-bats.sh` exit is a STOP regardless of `not_ok`, since exit 2 now covers incomplete/no-evidence runs) and the claim that `report-freshness` is untouched by `quality-gate-manifest.json` (it is now declared in the manifest's `informational_steps` array).
+
 ### Added (qg-doc-coverage — shared doc-validator wrapper + QG parity step) (PR pending)
 
 - **`scripts/sh/qg-doc-validators.sh`** (NEW) + **`scripts/ps1/qg-doc-validators.ps1`** (NEW): toolkit-root-aware wrapper that runs BOTH CI doc-validators in one invocation — `cross_refs` (drift-audit `doc-cross-refs` parity: relative links in `docs/agents/*.md` + frontmatter `scope/sources/targets/slug` in `docs/*/*.md`) and `doc_structure_vitest` (the real `validate-doc-structure` test via `npx vitest run tests/integration/doc-structure.test.ts`) — emitting a combined `.androidcommondoc/doc-validator-report.json`.

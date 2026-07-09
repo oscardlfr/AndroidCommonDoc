@@ -7,9 +7,9 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "QG-proof push gate: emit-push-proof.sh (run-qg/verify-proof), quality-gate-manifest.json policy, push-proof.json schema, verdict→HEAD binding, bypass audit trail."
-version: 1
-last_updated: "2026-07-08"
+description: "QG-proof push gate: emit-push-proof.sh (run-qg/verify-proof), quality-gate-manifest.json policy, push-proof.json schema, verdict→HEAD binding, bats-evidence binding (Wave A), bypass audit trail."
+version: 2
+last_updated: "2026-07-09"
 assumes_read: quality-gate-protocol, agent-verdict-protocol
 ---
 
@@ -17,7 +17,7 @@ assumes_read: quality-gate-protocol, agent-verdict-protocol
 
 The QG-proof push gate closes the loop between the quality-gater (Phase 3) and the git layer (pre-push hook). The quality-gater mints a cryptographically-bound proof after completing Steps 0-9; the pre-push hook verifies that proof before allowing any push.
 
-**Honest contract**: no push without proof the canonical QG ran for real over HEAD. This is NOT peer-identity enforcement — identity-aware provenance enforcement is deferred to a future harness gate.
+**Honest contract**: no push without proof the canonical QG ran for real over HEAD, backed by a real bats evidence handoff for that same HEAD (Wave A) — not just an asserted `test-suite: PASS`. This is NOT peer-identity enforcement — identity-aware provenance enforcement is deferred to a future harness gate.
 
 ---
 
@@ -33,9 +33,10 @@ The QG-proof push gate closes the loop between the quality-gater (Phase 3) and t
 | `.androidcommondoc/pre-pr.stamp` | Backward-compat stamp (written by `run-qg`) |
 | `.planning/wave-<slug>/qg-result.json` | Orchestrator signal; written by `emit-qg-result.sh`; NOT consumed by `verify-proof`/pre-push; NOT a manifest step |
 | `scripts/sh/emit-push-proof.sh` | Canonical emitter + verifier (Bash) |
-| `scripts/ps1/emit-push-proof.ps1` | PS1 parity for `run-qg` subcommand |
-| `scripts/ps1/verify-push-proof.ps1` | PS1 parity for `verify-proof` subcommand |
+| `scripts/ps1/emit-push-proof.ps1` | PS1 `run-qg` **DISABLED** (Wave A) — hard-refuses to mint (exit 2) pending PS1 evidence binding; see BACKLOG |
+| `scripts/ps1/verify-push-proof.ps1` | PS1 parity for `verify-proof` subcommand — unaffected by the `run-qg` disable; gained the same `bats_evidence` 8th check as bash |
 | `scripts/sh/lib/manifest-digest.sh` | Shared `canonical_digest()` helper |
+| `scripts/sh/lib/bats-handoff.sh` | Sole parser/selector for bats evidence handoffs (Wave A) — `select_bats_handoff` (sourced) + `select` (standalone CLI) |
 
 ---
 
@@ -50,15 +51,25 @@ bash scripts/sh/emit-push-proof.sh --subcommand run-qg [--slug <wave-slug>]
 Runs in sequence, failing CLOSED on any integrity violation:
 
 1. **Manifest-drift check**: recomputes `canonical_digest(quality-gate-manifest.json)` and compares to the stored `protocol_digest`. Drift → exit 2.
-2. **Load + validate report**: reads `quality-gate-report.json`. Validates required steps, conditional step structure + named-predicate enforcement, deliberation evidence, pre-PR coverage, discovered rules with `verified_by`.
+2. **Load + validate report**: reads `quality-gate-report.json`. Validates required steps, conditional step structure + named-predicate enforcement, deliberation evidence, pre-PR coverage, discovered rules with `verified_by`. **Evidence binding (Wave A)** — five additional named checks, all fail-closed (exit 2), identified by name not number (never call any of these "check 5" — see the naming discipline in [quality-gate-protocol](quality-gate-protocol.md)): `invalid-step-result` (every `steps[].result` ∈ `{PASS,FAIL,SKIP}`); `duplicate-step-id` (no two entries share a step id — closes a last-write-wins overwrite); `unknown-step-id` (every step id ∈ `required_steps` ∪ `conditional_steps` ∪ `informational_steps`); `report-started-at-*` (see "QG-Session Freshness" below); `test-suite-evidence-*` (see "Evidence Binding" below).
 3. **Verdict→HEAD binding**: reads every `arch-*-verdict.md` in `.planning/wave-<slug>/`. Each file must contain `APPROVED-VERIFY-FINAL` and a `**HEAD**:` field matching `git rev-parse HEAD`. Missing field or HEAD mismatch → exit 2. Digests each file (sha256, CRLF→LF) into `artifact_digests`. See [agent-verdict-protocol](agent-verdict-protocol.md).
 4. **Committed-tree integrity** (fail-CLOSED — both parts run after verdict→HEAD binding):
    - **Part 1 — Clean-tree assertion**: `git status --porcelain` must be empty except paths matching `^\.claude/wave-quality-gates/`. Any other modified/untracked tracked path → exit 2: `[emit-push-proof] ERROR: tracked artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG.` Note: `.planning/wave*/` and `.androidcommondoc/` are gitignored → invisible to `git status` → naturally excluded. The allowlist is exactly ONE narrow entry.
    - **Part 2 — Registry integrity**: calls `qg-registry-integrity.sh --project-root .` (plus `--require-registry` when `skills/` exists). Recomputes registry hashes against the committed tree and compares to stored hashes, replicating CI's `skill-registry` job. Drift → exit 2: `[emit-push-proof] ERROR: derived artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG.` Writes `.androidcommondoc/registry-hash-report.json` with `result`: `clean` / `drift` / `n/a`. The `n/a` escape (no `registry.json`) is only valid when `--require-registry` is NOT passed — i.e., genuinely-minimal repos without `skills/`. See [quality-gater-registry-integrity](quality-gater-registry-integrity.md).
+
+   **Sequencing note (Wave A):** this check runs against the COMMITTED tree — `git status --porcelain` flags staged-but-uncommitted changes too. Any wave that regenerates a derived artifact (e.g. `skills/registry.json` during a template-version ceremony) must commit it before dispatching the formal QG; `git add` alone is not enough and will still trip this check.
 5. **Compute `report_digest`**: sha256 of `quality-gate-report.json` (CRLF→LF).
 6. **Write backward-compat stamps**: `quality-gate.stamp`, `pre-pr.stamp`.
-7. **Write `push-proof.json`**: see schema below.
+7. **Write `push-proof.json`**: see schema below (now additionally carries `bats_evidence`, Wave A).
 8. **Append to `push-proof.log`** (fail-OPEN — log I/O failure does not block a valid proof).
+
+#### QG-Session Freshness (`report.started_at`, Wave A)
+
+`report-started-at-*` enforces that `quality-gate-report.json`'s `started_at` field (stamped by `emit-qg-result.sh --init` at the start of the QG session, fixing D6) is present, parses as UTC `%Y-%m-%dT%H:%M:%SZ`, and is plausible: `now-86400s <= started_at <= now+120s`. Absent or unparseable → `report-started-at-absent`; out of bounds → `report-started-at-implausible`. This is the D6 / in-scope check — **distinct from, and not to be confused with**, the pre-existing, unrelated `scripts/sh/lib/qg-report-freshness.sh` (Step Z's step-reason-coherence gate; see [quality-gater-freshness-gate](quality-gater-freshness-gate.md) for the explicit disambiguation). `started_at` also serves as the `--since` floor passed to the evidence lookup below — it is a floor, not a ceiling: a long QG session that runs bats early and mints late is fine.
+
+#### Evidence Binding (`test-suite-evidence-*`, Wave A)
+
+A claimed `report.steps[]` entry of `{"step":"test-suite","result":"PASS"}` is no longer accepted on faith. `run-qg` calls `lib/bats-handoff.sh select --since <report.started_at> --require-scope full` and requires the returned evidence to satisfy ALL of: `status == "ok"`, `head == <current HEAD>`, `scope == "full"`, `complete == true`, `not_ok == 0`, plus a sanity floor (`ok > 0`, `expected > 0`, `total == ok + not_ok`, `total == expected` — closing the bypass where an internally-inconsistent count would otherwise pass every other check). Failure die-codes: `test-suite-evidence-absent` (no qualifying handoff, or the sanity floor's `ok`/`expected` checks fail), `test-suite-evidence-stale` (`head` mismatch), `test-suite-evidence-partial` (`scope`/`complete` mismatch, or the sanity floor's count-consistency checks fail), `test-suite-evidence-dirty` (`not_ok > 0`). The selected evidence — `{run_id, head, ok, not_ok, expected, scope, generated_at}`, no filesystem paths — is carried into `push-proof.json` as `bats_evidence` (see schema below).
 
 ### `verify-proof` — Cheap Git-Layer Verifier (pre-push hook)
 
@@ -66,7 +77,7 @@ Runs in sequence, failing CLOSED on any integrity violation:
 bash scripts/sh/emit-push-proof.sh --subcommand verify-proof --pushed-sha <sha>
 ```
 
-Seven integrity checks, all fail-CLOSED (exit 2 on failure):
+Eight integrity checks, all fail-CLOSED (exit 2 on failure):
 
 1. `schema_version == 1`
 2. `proof.head == pushed_sha`
@@ -75,8 +86,11 @@ Seven integrity checks, all fail-CLOSED (exit 2 on failure):
 5. `proof.manifest_version == manifest.manifest_version`
 6. All required steps present in `steps_executed` with `result == PASS`
 7. `report_digest` matches recomputed sha256 of current `quality-gate-report.json`
+8. **(Wave A)** `bats_evidence` present, and `bats_evidence.head == pushed_sha` — a proof minted at one commit cannot authorize a push at a different one, even when checks 1-7 all still pass.
 
-`verify-proof` does NOT re-evaluate predicates. Predicate consistency was enforced at mint (run-qg) and is bound cryptographically via `report_digest`. Post-mint tampering with `quality-gate-report.json` causes a digest mismatch and blocks.
+`verify-proof` does NOT re-evaluate predicates. Predicate consistency was enforced at mint (run-qg) and is bound cryptographically via `report_digest`. Post-mint tampering with `quality-gate-report.json` causes a digest mismatch and blocks. Check 8 is a narrower, independent binding: even a byte-identical, untampered proof carried over from an earlier commit fails it, since `report_digest` alone does not encode which commit the bats evidence was gathered for.
+
+All three verifiers implement this same 8-check contract at equivalent rigor: this bash `verify_proof` subcommand, `scripts/ps1/verify-push-proof.ps1` (Windows git-layer parity), and the in-JS fallback inside `.claude/hooks/push-authorization-gate.js` (used only when it cannot delegate to bash).
 
 ---
 
@@ -95,6 +109,15 @@ Seven integrity checks, all fail-CLOSED (exit 2 on failure):
   "artifact_digests": {
     "arch-<role>-verdict.md": "<sha256 hex>",
     "skills/registry.json":   "<sha256 hex, CRLF→LF, record-only>"
+  },
+  "bats_evidence": {
+    "run_id":       "<the selected handoff's BATS_RUN_ID>",
+    "head":         "<40-char sha; re-checked against the pushed SHA at verify time>",
+    "ok":           0,
+    "not_ok":       0,
+    "expected":     0,
+    "scope":        "full",
+    "generated_at": "<ISO-8601 UTC, the handoff's own timestamp>"
   }
 }
 ```
@@ -102,6 +125,8 @@ Seven integrity checks, all fail-CLOSED (exit 2 on failure):
 `artifact_digests` carries two kinds of entries (additive, `schema_version` stays 1):
 - **`arch-*-verdict.md`**: VERIFY-FINAL verdict files; bound at step 3 (verdict→HEAD binding). Digest mismatch after post-mint tampering → `report_digest` cascade blocks push.
 - **`skills/registry.json`**: sha256 (CRLF→LF) of the committed registry file, recorded for audit. `verify-proof` does NOT re-evaluate this digest — the committed-tree integrity check (step 4) already ran at mint time; the digest is a post-hoc record. `schema_version` stays 1.
+
+`bats_evidence` (additive, Wave A; `schema_version` stays 1): the bats handoff selected by `lib/bats-handoff.sh select --since report.started_at --require-scope full` at mint time (see "Evidence Binding" above), carried into the proof for re-binding at verify time. No filesystem paths — the selector never emits one in its JSON payload. Unlike `artifact_digests`, **`verify-proof` DOES re-check one field of this at verify time**: `bats_evidence.head` must equal the pushed SHA, so a proof minted at commit A cannot authorize a push at commit B even if every other check still passes (see check 8 below). Mirrored identically by `verify-push-proof.ps1` and the in-JS fallback in `push-authorization-gate.js`.
 
 ---
 
@@ -185,6 +210,7 @@ VERIFY-FINAL verdicts written by `write-verdict.sh --phase verify-final` carry a
 ## Related Docs
 
 - [Quality Gate Protocol](quality-gate-protocol.md) — Steps 0-9 that produce `quality-gate-report.json`; Step 10 calls `run-qg`
+- [quality-gater-freshness-gate](quality-gater-freshness-gate.md) — Step Z, the pre-mint gate that runs just before this one; uses a DIFFERENT freshness mechanism than this doc's `report.started_at` evidence anchor (see the disambiguation there)
 - [Agent Verdict Protocol](agent-verdict-protocol.md) — VERIFY-FINAL `**HEAD**:` field requirement and re-run rule
 - [Pre-Commit Hooks](../guides/pre-commit-hooks.md) — fail-CLOSED pre-push gate overview (two-stamp + QG-proof; missing proof → BLOCK)
 - [Hook Manifest](hook-manifest.md) — `push-authorization-gate.js` + git-layer hook classifications
