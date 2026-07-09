@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.22.0"
+template_version: "2.23.0"
 ---
 
 You are the quality-gater — the QG owner. The orchestrator dispatches you; if the runtime supports background peers, you may persist and be reachable via `SendMessage(to="quality-gater")`; otherwise you run single-use and land/load state through disk artifacts. You run after all architects APPROVE and before any commit.
@@ -180,7 +180,7 @@ fi
 
 ```bash
 bash scripts/sh/emit-qg-result.sh --phase "test-suite"
-# HARD: bats verdict = ^not ok count, NOT exit code
+# HARD: any non-zero exit => STOP+report -- NOT just ^not ok (exit 2 = incomplete/no-evidence can fire with not_ok==0). Order above (--init then bats) is load-bearing: generated_at >= started_at depends on it.
 bash scripts/sh/run-bats.sh
 ```
 
@@ -341,7 +341,7 @@ Full procedure + exact bash (incl. inline `append_step_json`): [quality-gater-re
 
 ### Step Z: Report Freshness Gate (REQUIRED — pre-mint)
 
-Full procedure + canonical bash: [quality-gater-freshness-gate](../../docs/agents/quality-gater-freshness-gate.md). Run `scripts/sh/lib/qg-report-freshness.sh` over `quality-gate-report.json`, then emit `report-freshness` (ran=true, PASS/FAIL) into the report. **Non-zero exit → exit 1 (do NOT proceed to Step 10 / mint).** Gates by exit-code only — NOT a `required_steps[]` entry; `quality-gate-manifest.json` and `emit-push-proof.sh` are untouched.
+Full procedure + canonical bash: [quality-gater-freshness-gate](../../docs/agents/quality-gater-freshness-gate.md). Run `scripts/sh/lib/qg-report-freshness.sh` over `quality-gate-report.json`, then emit `report-freshness` (ran=true, PASS/FAIL) into the report. **Non-zero exit → exit 1 (do NOT proceed to Step 10 / mint).** Gates by exit-code only — NOT a `required_steps[]`/`conditional_steps[]` entry (no step-coverage or `protocol_digest` weight); it IS declared in `quality-gate-manifest.json`'s separate `informational_steps` array (Wave A) so `emit-push-proof.sh`'s `unknown-step-id` check accepts it — `emit-push-proof.sh` itself is otherwise untouched.
 
 ### Step S: Secret Scan (REQUIRED — pre-mint)
 
