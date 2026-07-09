@@ -271,9 +271,11 @@ process.stdin.on('end', () => {
     } catch { /* bash not available; fall through to in-JS checks */ }
 
     if (!usedCanonical) {
-      // In-JS fallback: fully canonical verify-proof equivalent (7 checks).
+      // In-JS fallback: fully canonical verify-proof equivalent (8 checks).
       // Byte-for-byte equivalent in rigor to verify-push-proof.ps1 and the
-      // canonical emit-push-proof.sh verify-proof subcommand.
+      // canonical emit-push-proof.sh verify-proof subcommand -- all three
+      // verifiers now carry equivalent 8-check rigor, including the
+      // bats_evidence.head == pushed_sha binding (check 8, below).
       const proofPath = path.join(stampDir, 'push-proof.json');
       let proof;
       try { proof = JSON.parse(fs.readFileSync(proofPath, 'utf8')); }
@@ -343,6 +345,18 @@ process.stdin.on('end', () => {
       const computedDigest = crypto.createHash('sha256').update(Buffer.from(normalized)).digest('hex');
       if (computedDigest !== proof.report_digest) {
         block(`[push-authorization-gate] BLOCKED: report_digest mismatch — proof may be forged or report tampered. Re-run /quality-gate.`);
+      }
+
+      // 8. bats_evidence binding: present + head matches pushed_sha
+      // Mirrors verify-push-proof.ps1 and the canonical emit-push-proof.sh verify-proof
+      // subcommand -- a half-done evidence binding would mint correctly but verify
+      // permissively; this closes that gap. absent-means-skip is a bypass, not a
+      // default, same rule as every check above.
+      if (!proof.bats_evidence) {
+        block('[push-authorization-gate] BLOCKED: push-proof.json missing bats_evidence. Re-run /quality-gate.');
+      }
+      if (proof.bats_evidence.head !== headShaForProof) {
+        block(`[push-authorization-gate] BLOCKED: bats_evidence.head (${proof.bats_evidence.head}) != HEAD (${headShaForProof}).`);
       }
     }
 
