@@ -134,13 +134,20 @@ function getHeadSha(projectRoot) {
   return null;
 }
 
-// INVARIANT: every block() call is IMMEDIATELY followed by `return`.
+// INVARIANT: every block() call in this file is IMMEDIATELY followed by `return`.
 // block() only calls process.exit(2) synchronously when stdout.write() returns true; under
-// backpressure it defers exit to 'drain'. Without `return`, execution continues past a decision
-// already made — and if the next statement dereferences what the branch just proved absent, the
-// TypeError is swallowed by this handler's outer `catch { process.exit(0) }` (a deliberate
-// fail-open on script error). Result: a push that should be BLOCKED is ALLOWED.
-// This is not tidiness. It is the difference between fail-closed and fail-open.
+// backpressure it defers exit to the 'drain' event. Without `return`, execution continues past a
+// decision that has already been made, and BOTH continuations end in an accidental ALLOW:
+//   (a) deref-throw — a check that dereferences the value it just proved absent throws a
+//       TypeError, which this handler's outer `catch { process.exit(0) }` (a deliberate
+//       fail-open on script error) swallows into exit 0.
+//   (b) fall-through — execution simply reaches a later unconditional process.exit(0). The
+//       peer/subagent block is the live example: without `return` it fell into
+//       `if (hookIsACDoc) process.exit(0)` (:219), silently allowing a peer's git push.
+// (b) is the more severe: no exception, no trace, just an allow.
+// The 5s allow-timer (`t`) is cleared at the top of the 'end' handler and is specifically NOT a
+// source of false allows. This is not tidiness — it is the difference between fail-closed and
+// fail-open.
 function block(reason) {
   // Write decision JSON to stdout, then flush stdout before exit (CR #2).
   // process.stdout.write callback ensures the write is flushed before termination.
