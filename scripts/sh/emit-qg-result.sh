@@ -34,15 +34,19 @@
 #   started_at/head are now also stamped into quality-gate-report.json at --init time
 #   (fixes D6) — this is the session anchor emit-push-proof.sh's report-started-at-*
 #   check and select_bats_handoff's --since both validate against.
-#   fail_class (clean|suite-failed|incomplete|stale-evidence|no-evidence) classifies the
-#   bats evidence itself. It is qg-result.json-only and additive — NEVER read by
-#   emit-push-proof.sh, verify-proof, or push-authorization-gate.js. Precedence (first
-#   match wins, since more than one could technically apply at once): stale-evidence >
-#   no-evidence > suite-failed > incomplete > clean. stale-evidence is checked first
-#   because "we found real evidence for this HEAD, just not fresh/full-scope enough" is
-#   more actionable than the generic no-evidence bucket; the rest mirrors the priority
-#   order the actual verdict/FAIL_REASON logic below already uses (evidence presence,
-#   then not_ok, then completeness).
+#   fail_class (clean|suite-failed|incomplete|stale-evidence|scope-mismatch|no-evidence)
+#   classifies the bats evidence itself. It is qg-result.json-only and additive — NEVER
+#   read by emit-push-proof.sh, verify-proof, or push-authorization-gate.js. Precedence
+#   (first match wins, since more than one could technically apply at once):
+#   stale-evidence > scope-mismatch > no-evidence > suite-failed > incomplete > clean.
+#   stale-evidence and scope-mismatch are deliberately DISTINCT, mirroring
+#   lib/bats-handoff.sh's Pass 3a/3b split: stale-evidence means generated_at < the QG
+#   session's started_at (nothing fresh enough exists at all); scope-mismatch means fresh,
+#   HEAD-matching evidence exists but never at the required full scope (BH_STATUS ==
+#   "scope-mismatch"). Both are checked ahead of no-evidence because "we found real
+#   evidence for this HEAD, it just can't be used" is more actionable than the generic
+#   no-evidence bucket; the rest mirrors the priority order the actual verdict/FAIL_REASON
+#   logic below already uses (evidence presence, then not_ok, then completeness).
 #   bats_verdict (pass|fail, from not_ok alone) is intentionally independent of
 #   bats_complete (D3 fix) — a complete run that failed some tests is bats_complete=true,
 #   bats_verdict=fail, distinguishable from a truncated run (bats_complete=false).
@@ -283,9 +287,10 @@ STARTED_AT=${STARTED_AT:-}
 # ── Handoff discovery (LD2, D2 fix) ───────────────────────────────────────────
 # Selection is delegated entirely to lib/bats-handoff.sh (Step 1) — the enumeration +
 # candidacy loop that used to live here now has a single, shared, bats-tested
-# implementation. BH_STATUS is one of ok|stale|absent|malformed; BH_* fields are
-# populated only when BH_STATUS==ok. full-scope required: quality-gater always invokes
-# run-bats.sh with no positional targets (see run-bats.sh's BATS_SCOPE derivation).
+# implementation. BH_STATUS is one of ok|stale|scope-mismatch|absent|malformed; BH_*
+# fields are populated only when BH_STATUS==ok. full-scope required: quality-gater
+# always invokes run-bats.sh with no positional targets (see run-bats.sh's BATS_SCOPE
+# derivation).
 select_bats_handoff --repo-root "$PROJECT_ROOT" --head "$HEAD" --since "$STARTED_AT" --require-scope full
 
 # ── Source suite_summary from best valid handoff (or fallback) ────────────────
@@ -380,6 +385,8 @@ fi
 FAIL_CLASS="clean"
 if [[ "$BH_STATUS" == "stale" ]]; then
     FAIL_CLASS="stale-evidence"
+elif [[ "$BH_STATUS" == "scope-mismatch" ]]; then
+    FAIL_CLASS="scope-mismatch"
 elif [[ "$BATS_EVIDENCE" == "false" ]]; then
     FAIL_CLASS="no-evidence"
 elif [[ "$BATS_NOT_OK" -gt 0 ]]; then
