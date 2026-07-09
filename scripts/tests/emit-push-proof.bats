@@ -20,10 +20,13 @@ bats_require_minimum_version 1.5.0
 # Mirrors fixture pattern from test-push-proof-gate.bats.
 #
 # Wave A additions (Section A4 evidence binding): #EP-ENUM, #EP-DUP, #EP-UNK, #EP-UNK+,
-# #EP-EV1-9 + #EP-EV3b (added mid-wave — see its own comment: commit 16ae614 split
-# bats-handoff.sh's Pass 3 into freshness-then-scope, making test-suite-evidence-stale
-# reachable and changing #EP-EV4's expected die-code from -absent to -partial) +
-# #EP-EV10a/b, #EP-BESPOKE. See each test's own header comment for details.
+# #EP-EV3-6/EV7/EV8/EV9a-b/EV10a-b, #EP-BESPOKE. Die-code-to-test mapping renumbered
+# mid-wave (canonical, per team-lead's post-16ae614 confirmation): #EP-EV3=targeted-scope
+# (test-suite-evidence-partial), #EP-EV4=foreign-HEAD (test-suite-evidence-absent),
+# #EP-EV7=generated_at<started_at (test-suite-evidence-stale) — commit 16ae614 split
+# bats-handoff.sh's Pass 3 into freshness-then-scope sub-passes mid-wave, making
+# test-suite-evidence-stale reachable and changing #EP-EV3's expected die-code from
+# -absent to -partial. See each test's own header comment for details.
 
 EMITTER="$BATS_TEST_DIRNAME/../sh/emit-push-proof.sh"
 MANIFEST_SRC="$BATS_TEST_DIRNAME/../../quality-gate-manifest.json"
@@ -600,67 +603,16 @@ PYEOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #EP-EV3  test-suite-evidence-absent — a handoff bound to a DIFFERENT commit.
-# select_bats_handoff's Pass 1 filters candidates by exact --head match before ANY
-# later pass runs, so a foreign-head handoff is excluded at the library level
-# (bats-handoff.sh reports its own status="absent" for this case) — distinct from
-# #EP-EV3b's genuinely-stale scenario (matching head, too old), which now maps to
-# its own dedicated die-code (commit 16ae614's Pass 3a/3b split, landed mid-wave).
-# ─────────────────────────────────────────────────────────────────────────────
-@test "#EP-EV3 BLOCK: test-suite-evidence-absent — handoff bound to a foreign HEAD" {
-  write_plan "test-slug"
-  write_arch_verdicts "test-slug"
-  write_quality_gate_report
-  clear_handoffs
-  write_custom_bats_handoff "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" 5 0 5 true pass full
-  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"test-suite-evidence-absent"* ]]
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# #EP-EV3b  test-suite-evidence-stale — a well-formed, HEAD-MATCHING, full-scope
-# handoff whose BATS_GENERATED_AT predates report.started_at (genuinely stale
-# evidence for the RIGHT commit, unlike #EP-EV3's wrong-commit case).
-#
-# Landed mid-wave (commit 16ae614, arch-platform ruling): bats-handoff.sh's Pass 3
-# used to fail one combined check (since AND scope together), so ANY non-"ok" result
-# collapsed into a single library status and this die-code was unreachable via the
-# CLI boundary. It is now split into Pass 3a (freshness only) then Pass 3b (scope,
-# only over the freshness-qualifying subset), so "genuinely too old" (Pass 3a) and
-# "fresh but wrong scope" (Pass 3b, see #EP-EV4) are reported as two different
-# library statuses ("stale" vs "scope-mismatch"), and emit-push-proof.sh's python
-# now dispatches on each SPECIFIC status value rather than collapsing every
-# non-"ok" status into "-absent". This test would have been impossible to write
-# honestly against the pre-16ae614 shape; it is added here because the production
-# code changed underneath this wave while it was in progress.
-# ─────────────────────────────────────────────────────────────────────────────
-@test "#EP-EV3b BLOCK: test-suite-evidence-stale — handoff matches HEAD but predates report.started_at" {
-  write_plan "test-slug"
-  write_arch_verdicts "test-slug"
-  write_quality_gate_report
-  clear_handoffs
-  local head
-  head="$(git -C "$REPO" rev-parse HEAD)"
-  # started_at was just stamped (now); a handoff generated well before that is
-  # genuinely stale evidence for the right commit.
-  write_custom_bats_handoff "$head" "2020-01-01T00:00:00Z" 5 0 5 true pass full
-  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"test-suite-evidence-stale"* ]]
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# #EP-EV4  test-suite-evidence-partial — a well-formed, HEAD-matching handoff that IS
+# #EP-EV3  test-suite-evidence-partial — a well-formed, HEAD-matching handoff that IS
 # fresh enough (BATS_GENERATED_AT >= report.started_at) but scoped "targeted", not
-# "full". Since commit 16ae614's Pass 3a/3b split, bats-handoff.sh reports this
-# specific case as its own status="scope-mismatch" (distinct from genuine staleness,
-# #EP-EV3b) — emit-push-proof.sh's python dispatches that status directly to
-# "test-suite-evidence-partial", making this check reachable (previously believed
-# unreachable, before 16ae614 landed mid-wave; see #EP-EV3b's comment for the fuller
-# history).
+# "full". Since commit 16ae614's Pass 3a/3b split (landed mid-wave), bats-handoff.sh
+# reports this specific case as its own status="scope-mismatch" (distinct from
+# genuine staleness, #EP-EV7) — emit-push-proof.sh's python dispatches that status
+# directly to "test-suite-evidence-partial", making this check reachable (previously
+# believed unreachable before 16ae614 landed; see #EP-EV7's comment for the fuller
+# history). Canonical die-code pinned per team-lead's post-16ae614 confirmation.
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#EP-EV4 BLOCK: test-suite-evidence-partial — fresh but targeted-scope handoff (scope-mismatch)" {
+@test "#EP-EV3 BLOCK: test-suite-evidence-partial — fresh but targeted-scope handoff (scope-mismatch)" {
   write_plan "test-slug"
   write_arch_verdicts "test-slug"
   write_quality_gate_report
@@ -671,6 +623,26 @@ PYEOF
   run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
   [ "$status" -eq 2 ]
   [[ "$output" == *"test-suite-evidence-partial"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV4  test-suite-evidence-absent — a handoff bound to a DIFFERENT commit.
+# select_bats_handoff's Pass 1 filters candidates by exact --head match before ANY
+# later pass runs, so a foreign-head handoff is excluded at the library level
+# (bats-handoff.sh reports its own status="absent" for this case) — distinct from
+# #EP-EV7's genuinely-stale scenario (matching head, too old), which maps to its own
+# dedicated die-code. This one is stable/unaffected by the 16ae614 Pass 3a/3b split
+# (that split only concerns Pass 3, which never runs on a candidate Pass 1 rejected).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV4 BLOCK: test-suite-evidence-absent — handoff bound to a foreign HEAD" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  clear_handoffs
+  write_custom_bats_handoff "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" 5 0 5 true pass full
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-absent"* ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -712,9 +684,42 @@ PYEOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #EP-EV7  report-started-at-absent — report.started_at field is missing entirely.
+# #EP-EV7  test-suite-evidence-stale — a well-formed, HEAD-MATCHING, full-scope
+# handoff whose BATS_GENERATED_AT predates report.started_at (genuinely stale
+# evidence for the RIGHT commit, unlike #EP-EV4's wrong-commit case).
+#
+# Landed mid-wave (commit 16ae614, arch-platform ruling): bats-handoff.sh's Pass 3
+# used to fail one combined check (since AND scope together), so ANY non-"ok" result
+# collapsed into a single library status and this die-code was unreachable via the
+# CLI boundary. It is now split into Pass 3a (freshness only) then Pass 3b (scope,
+# only over the freshness-qualifying subset), so "genuinely too old" (Pass 3a) and
+# "fresh but wrong scope" (Pass 3b, see #EP-EV3) are reported as two different
+# library statuses ("stale" vs "scope-mismatch"), and emit-push-proof.sh's python
+# now dispatches on each SPECIFIC status value rather than collapsing every
+# non-"ok" status into "-absent". This test would have been impossible to write
+# honestly against the pre-16ae614 shape; it is added here because the production
+# code changed underneath this wave while it was in progress. Canonical die-code
+# pinned per team-lead's post-16ae614 confirmation.
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#EP-EV7 BLOCK: report-started-at-absent — report.started_at field is missing" {
+@test "#EP-EV7 BLOCK: test-suite-evidence-stale — handoff matches HEAD but predates report.started_at" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  clear_handoffs
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  # started_at was just stamped (now); a handoff generated well before that is
+  # genuinely stale evidence for the right commit.
+  write_custom_bats_handoff "$head" "2020-01-01T00:00:00Z" 5 0 5 true pass full
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-stale"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV8  report-started-at-absent — report.started_at field is missing entirely.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV8 BLOCK: report-started-at-absent — report.started_at field is missing" {
   write_plan "test-slug"
   write_arch_verdicts "test-slug"
   write_quality_gate_report
@@ -725,10 +730,10 @@ PYEOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #EP-EV8  report-started-at-implausible — started_at more than 86400s in the past
+# #EP-EV9a  report-started-at-implausible — started_at more than 86400s in the past
 # (the intentional max-staleness bound, not unlimited replay protection).
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#EP-EV8 BLOCK: report-started-at-implausible — started_at is far in the past" {
+@test "#EP-EV9a BLOCK: report-started-at-implausible — started_at is far in the past" {
   write_plan "test-slug"
   write_arch_verdicts "test-slug"
   write_quality_gate_report
@@ -739,10 +744,10 @@ PYEOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #EP-EV9  report-started-at-implausible — started_at more than SKEW_TOLERANCE (120s)
+# #EP-EV9b  report-started-at-implausible — started_at more than SKEW_TOLERANCE (120s)
 # in the future.
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#EP-EV9 BLOCK: report-started-at-implausible — started_at is in the future beyond skew tolerance" {
+@test "#EP-EV9b BLOCK: report-started-at-implausible — started_at is in the future beyond skew tolerance" {
   write_plan "test-slug"
   write_arch_verdicts "test-slug"
   write_quality_gate_report

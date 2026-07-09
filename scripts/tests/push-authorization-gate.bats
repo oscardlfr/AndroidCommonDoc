@@ -758,3 +758,151 @@ PYEOF
   run_hook
   [ "$status" -eq 0 ]
 }
+
+# ── Real fail-open regression guard (9336e5e) ────────────────────────────────
+# Before 9336e5e, the peer/subagent block() call (the FIRST block() in the file, :200)
+# had no `return` after it. block() only calls process.exit(2) synchronously when
+# stdout.write() returns true; under backpressure it defers to the 'drain' event. Without
+# `return`, execution fell through past the decision already made, all the way to
+# `if (hookIsACDoc) process.exit(0)` (:219) — a silent ALLOW for a peer's git push. No
+# crash, no trace, just an allow. This is the highest-value regression test in this file.
+
+@test "#PAG-PEER-BLOCK BLOCK: peer + git push + ACDoc pre-push hook installed → still blocked (exit 2, decision:block), never falls through to the hook's exit 0" {
+  # The marker-bearing real pre-push-hook.sh must be installed (hookIsACDoc=true) so
+  # :219's fall-through path is the one actually reachable — without the marker, :219
+  # never fires at all and this test would be vacuous (PA-4b/PA-4c already cover the
+  # no-marker path). PA-4 is this test's own positive control: the SAME fixture (marker
+  # installed) correctly ALLOWS the main orchestrator, proving this block is specifically
+  # about agent_type, not an unconditional block on every push through this hook.
+  mkdir -p "$PROJECT_ROOT/.git/hooks"
+  cp "$BATS_TEST_DIRNAME/../sh/pre-push-hook.sh" "$PROJECT_ROOT/.git/hooks/pre-push"
+  chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
+  make_input "git push origin feature/test" "toolkit-specialist"
+  run_hook
+  # Assert BOTH exit code and the actual decision JSON — a crash also exits non-zero
+  # (e.g. Node's default uncaught-exception exit code), so exit-code alone cannot
+  # distinguish "blocked with a message" from "died". The outer catch{} fail-open would
+  # make a crash exit 0, not nonzero — but a corrupted intermediate state could still
+  # exit nonzero for the wrong reason, so pin the real payload too.
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+# ── #PAG-GUARD — static invariant: every block( call site is immediately followed by
+# return ────────────────────────────────────────────────────────────────────────────
+#
+# WHY this invariant exists (for the next person tempted to delete a `return`): block()
+# only calls process.exit(2) synchronously when stdout.write() succeeds; under
+# backpressure it defers exit to the 'drain' event. Without `return` immediately after,
+# execution continues past a decision that has already been made, ending in an
+# accidental ALLOW — either a deref-throw swallowed by the outer catch{}'s fail-open, or
+# (the real, historical case — #PAG-PEER-BLOCK above) a silent fall-through to a later
+# unconditional process.exit(0). Neither failure mode crashes loudly; both look like a
+# normal allow.
+#
+# Model/precedent: scripts/tests/portable-shell-guards.bats (Wave B, same problem shape).
+#
+# SANITY FLOOR IS THE WHOLE POINT (repo memory: "a guard that cannot fail is worse than
+# no guard" — a detector that scans and finds zero block( call sites reports "0
+# violations", indistinguishable from "0 call sites", and would pass against an empty
+# file, a moved file, or a broken regex). The floor is >=15, not >=8 and not ==20:
+# >=8 is loose enough that a half-broken regex finding 9 would still pass; ==20 is
+# brittle and would fail spuriously the moment anyone adds or removes a legitimate
+# block() call as part of ordinary maintenance. >=15 fails loudly if the parser breaks
+# and survives ordinary maintenance. The file has exactly 20 call sites as of this wave.
+#
+# Four shapes the parser must survive (all verified against the real file AND against a
+# deliberately-broken copy with one return removed, to confirm this is non-vacuous):
+#   1. Multi-line call: `block(\n  '...'\n);` then `return;` on the NEXT physical line.
+#   2. catch-oneliner:  `catch { block('...'); return; }` — return on the SAME line,
+#      immediately after `);` with no line break.
+#   3. Leading comment: a line starting with `//` that merely mentions `block()` in
+#      prose (the INVARIANT comment block above `function block` does this twice) — must
+#      be excluded, not counted as a call site.
+#   4. TRAILING comment: `return; // ... mentions block() in a later comment ...` — the
+#      trailing `//` must be stripped BEFORE searching for `block(`, or this line is
+#      miscounted as an extra call site whose "next line" is a comment continuation, not
+#      `return` — a false violation on the very line that documents the invariant. This
+#      is the shape that produced 1 false positive while developing this detector (a
+#      naive "does this line end in );" check breaks on shape 2, since `);` there is
+#      followed by more code on the same line, not end-of-line — fixed by searching for
+#      the ");" substring at any position, not requiring it at end-of-line).
+@test "#PAG-GUARD static: every block( call site in the hook is immediately followed by return" {
+  local hook="$BATS_TEST_DIRNAME/../../.claude/hooks/push-authorization-gate.js"
+  [ -f "$hook" ]
+
+  run python3 - "$hook" << 'PYEOF'
+import re, sys
+
+path = sys.argv[1]
+with open(path, encoding='utf-8') as f:
+    lines = f.readlines()
+
+def strip_comment(line):
+    # Strip from the first // onward. Safe for THIS file specifically: verified no
+    # line's genuine (non-comment) content contains a literal "//" (e.g. no URLs).
+    idx = line.find('//')
+    return line if idx == -1 else line[:idx]
+
+cleaned = [strip_comment(l) for l in lines]
+
+# Call sites: lines containing `block(` as a token, excluding the `function block(`
+# definition and excluding lines that are pure comments (already blanked above).
+call_sites = []
+for i, line in enumerate(cleaned):
+    if re.search(r'function\s+block\s*\(', line):
+        continue
+    m = re.search(r'\bblock\s*\(', line)
+    if m:
+        call_sites.append((i, m.start()))
+
+violations = []
+for (i, col) in call_sites:
+    # Find the first ");" substring from (i, col) onward, scanning forward up to 15
+    # lines (covers multi-line calls). Searching for the substring anywhere on the
+    # line (not requiring end-of-line) is what survives shape 2 (catch-oneliner).
+    close_pos = None
+    search_from = col
+    for j in range(i, min(i + 15, len(cleaned))):
+        idx = cleaned[j].find(');', search_from if j == i else 0)
+        if idx != -1:
+            close_pos = (j, idx + 2)
+            break
+    if close_pos is None:
+        violations.append((i + 1, 'no closing ); found within 15 lines'))
+        continue
+
+    close_line_idx, after_idx = close_pos
+    remainder = cleaned[close_line_idx][after_idx:]
+    if re.search(r'\breturn\s*;', remainder):
+        continue  # shape 2: return on the same line as the close
+
+    if remainder.strip() != '':
+        violations.append((i + 1, f'trailing code after close, no return: {remainder!r}'))
+        continue
+
+    # shape 1: return on the next non-blank line
+    k = close_line_idx + 1
+    while k < len(cleaned) and cleaned[k].strip() == '':
+        k += 1
+    if k < len(cleaned) and re.match(r'^\s*return\s*;', cleaned[k]):
+        continue
+
+    violations.append((i + 1, f'no return immediately after close at line {close_line_idx + 1}'))
+
+print(f'call_sites={len(call_sites)}')
+print(f'violations={len(violations)}')
+for ln, reason in violations:
+    print(f'VIOLATION at line {ln}: {reason}')
+PYEOF
+  [ "$status" -eq 0 ]
+
+  local call_sites violations
+  call_sites="$(printf '%s\n' "$output" | python3 -c "import sys; print(next(l.split('=')[1] for l in sys.stdin if l.startswith('call_sites=')))")"
+  violations="$(printf '%s\n' "$output" | python3 -c "import sys; print(next(l.split('=')[1] for l in sys.stdin if l.startswith('violations=')))")"
+
+  # Sanity floor FIRST: fails loudly if the parser is broken, not if the code is.
+  [ "$call_sites" -ge 15 ]
+  [ "$violations" -eq 0 ]
+}
