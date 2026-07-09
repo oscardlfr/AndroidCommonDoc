@@ -3,9 +3,10 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/emit-qg-result.sh
 #
-# Coverage map (34 tests). #QR24-33 are Wave A additions (fail_class taxonomy,
+# Coverage map (35 tests). #QR24-33 are Wave A additions (fail_class taxonomy,
 # bats_complete/bats_verdict un-conflation, fail_class-never-a-mint-input, --init
-# dual-stamp) — see the "Wave A" section further down for their own header comments.
+# dual-stamp); #QR34 was added after ab6b0c8 taught fail_class about scope-mismatch
+# mid-wave — see the "Wave A" section further down for their own header comments.
 # #QR6/#QR7/#QR10/#QR13 also carry Wave A fixture repairs — see their own comments.
 #   #QR1  status:pass when report all-PASS + clean bats log
 #   #QR2  status:fail when bats log has ^not ok (even if bats exited 0)
@@ -1622,4 +1623,43 @@ assert qg.get('head') == rpt.get('head'), f'head mismatch: qg={qg.get(\"head\")!
 print('ok')
 " "$out" "$report_path")"
     [ "$match" = "ok" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR34  fail_class=scope-mismatch — a well-formed, HEAD-matching handoff that IS
+# fresh enough (generated_at >= started_at) but scoped "targeted", not "full".
+#
+# Added after commit ab6b0c8 (landed mid-wave): emit-qg-result.sh's fail_class
+# classifier originally had no scope-mismatch branch at all — bats-handoff.sh's Pass
+# 3a/3b split (16ae614) had already taught the SELECTOR to distinguish "stale" from
+# "scope-mismatch", but the CLASSIFIER here fell through straight to no-evidence,
+# misreporting real, HEAD-matching, on-disk evidence as if there were none. Must be
+# distinguishable from BOTH #QR25 (stale-evidence: nothing fresh enough exists at
+# all) and #QR26 (no-evidence: no handoff, no ok lines) — this scenario has real,
+# fresh, matching evidence that simply cannot be used because of its scope.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR34 fail_class=scope-mismatch when a fresh HEAD-matching handoff is scoped targeted, not full" {
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR34"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    write_started_at_qg_result "$out" "$current_head" > /dev/null
+    local generated_at
+    generated_at="$(now_plus_1s)"
+    write_handoff "$ACDOC" "run-qr34-targeted" "$current_head" "$generated_at" \
+                  5 0 5 true pass "targeted"
+
+    printf '1..3\nok 1 a\nok 2 b\nok 3 c\n' > "$log"
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+             --project-root "$REPO" --slug "test-slug"
+    fail_class_field="$(parse_json_field "$out" "fail_class")"
+    [ "$fail_class_field" = "scope-mismatch" ]
 }
