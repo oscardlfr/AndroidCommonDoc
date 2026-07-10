@@ -161,8 +161,17 @@ write_quality_gate_report() {
   local override_deliberation="${2:-}"
   local started_at
   started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  # 51b0d63: run-qg's report-head-* check requires report.head present and equal to
+  # the current HEAD. Re-derived fresh from git at call time (never the cached
+  # $HEAD_SHA shell variable) — mirrors write_valid_bats_handoff's own comment on why:
+  # several tests (#21/#23) commit further fixture files after setup(), moving HEAD
+  # past whatever setup() captured. Callers needing a deliberately WRONG report.head
+  # (a report-head-mismatch scenario) mutate the file after calling this helper,
+  # matching the pattern used elsewhere in this suite for single-field overrides.
+  local report_head
+  report_head="$(git -C "$REPO" rev-parse HEAD)"
   python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" \
-      "${extra_steps}" "${override_deliberation}" "$started_at" <<'PYEOF'
+      "${extra_steps}" "${override_deliberation}" "$started_at" "$report_head" <<'PYEOF'
 import json, sys
 
 report_path         = sys.argv[1]
@@ -170,6 +179,7 @@ manifest_path       = sys.argv[2]
 extra_steps_raw     = sys.argv[3]
 override_delib_raw  = sys.argv[4]
 started_at          = sys.argv[5]
+report_head         = sys.argv[6]
 
 manifest = json.load(open(manifest_path, encoding='utf-8'))
 
@@ -209,6 +219,7 @@ if override_delib_raw.strip():
 
 report = {
     "started_at": started_at,
+    "head": report_head,
     "deliberation": deliberation,
     "pre_pr_coverage": {"status": "PASS", "modules": 3},
     "discovered_rules": [
