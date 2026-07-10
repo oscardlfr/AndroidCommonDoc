@@ -35,44 +35,141 @@ const MAX_AGE_SECS = 1800;   // 30 minutes
 const SKEW_TOLERANCE = 120;   // 2 minutes future tolerance
 
 // Detect git push in a bash command string (P2a deep detector: segment-aware + exec-aware).
-// Best-effort: ANSI-C $'...' quoting is now covered (optional \$? before quote in Pass 1).
-// Escape sequences inside $'...' (e.g. $'\x67it push') and variable indirection remain
+// Variable indirection and arbitrary language interpreters (python -c, perl -e) remain
 // uncatchable by string parsing; the git-layer pre-push two-stamp is the authoritative backstop.
-// Language interpreters (python -c, perl -e) and arbitrary obfuscation are also uncatchable.
-// Pass 1: recurse into executed sub-strings (shell -c '...', $'...', eval '...', $(...), `...`)
-//   so that `sh -c 'git push'` / `sh -c $'git push'` are caught.
-// Pass 2: strip heredoc bodies + quoted spans (prose false-positive prevention),
-//   split on shell control operators (NOT newline), test ^git push per segment
-//   after stripping env-var assignments and common wrapper prefixes (incl. unquoted eval).
-// Guards: `sh -c "echo 'git push'"`, `printf 'git push'`, `echo $'git push'` (prose) all ALLOW.
+//
+// KNOWN LIMITATION: this detector parses a command STRING and cannot fully model the shell.
+// A known-open class remains: backslash-escaping an ORDINARY (non-special) character -- the
+// shell strips an unrecognized `\x` down to plain `x` (e.g. git \push, git p\ush, \git push),
+// but this detector does not perform that stripping, so those forms reach a real push
+// undetected. This detector is best-effort identity defense, not the authoritative push gate;
+// the git-layer .git/hooks/pre-push two-stamp hook is authoritative, since it reads real git
+// refs rather than re-deriving intent from a command string. Do not add another special-case
+// regex for this -- see the CRITICAL redesign item filed to BACKLOG.
+// Pass 1: recurse into executed sub-strings (shell -c '...', $'...', eval '...', $(...), `...`).
+//   $'...' payloads (genuinely dollar-prefixed AND single-quoted -- captured explicitly, not
+//   just optionally matched-and-discarded) are ANSI-C-escape-decoded before recursing, so a
+//   LITERAL backslash-n inside $'...' becomes a real newline before Pass 2 ever sees it --
+//   otherwise `bash -c $'cd /x\ngit push'` recurses on a payload whose "newline" is just the
+//   two printable characters backslash+n, which nothing splits on. $"..." (locale translation)
+//   and plain '...'/"..." are NEVER decoded -- decoding them would over-block prose like
+//   `bash -c 'echo a\ngit push'`, which bash treats as one literal argument (no push runs) and
+//   which must still ALLOW. That distinction is the negative control this fix is checked against.
+// Pass 2: strip heredoc bodies + quoted spans FIRST (prose/heredoc false-positive
+//   prevention -- this order is load-bearing: heredoc-stripping collapses a heredoc's
+//   internal newlines into one placeholder, and quote-stripping neutralizes quoted
+//   prose, so splitting BEFORE either would treat their raw, unstripped contents as
+//   independent segments). THEN collapse shell line-continuation (a backslash
+//   immediately before a newline, which the shell itself removes to JOIN two lines
+//   into one logical command) BEFORE splitting on shell control operators INCLUDING
+//   (bare, non-continuation) newline and `&` (background) -- a continuation and a
+//   separator are opposite operations on the same character, disambiguated only by
+//   the preceding backslash: `git -C /tmp \<newline>push` really executes as one
+//   `git -C /tmp push` command and must be JOINED, while a genuine multi-line
+//   `bash -c $'cmd1\ncmd2'` body or a `sleep 1 & git push` line must still be SPLIT,
+//   since both of those sequence commands exactly like `;` does. Per segment: strip
+//   env-var assignments, common wrapper prefixes (incl. unquoted eval), and -- once
+//   the segment starts with a bare `git` -- git's OWN global options (-C, -c,
+//   --git-dir, --work-tree, --namespace, --super-prefix, --config-env, --attr-source,
+//   --exec-path, and the valueless flags), so `git -C /tmp push`, `git --git-dir=/x
+//   push`, `git -c a=b push` etc. all still reduce to a bare `git push` before the
+//   anchor test. Test ^git push per segment last.
+// Guards: `sh -c "echo 'git push'"`, `printf 'git push'`, `echo $'git push'`,
+//   `bash -c 'echo a\ngit push'` (prose/literal, no push ever runs) all ALLOW.
+// decodeAnsiCEscapes: decode the escapes bash itself decodes inside GENUINE $'...' quoting.
+// Only ever called when the caller has already confirmed the payload came from a real $'...'
+// span (dollar-sign present AND single-quoted) -- never for $"..." (locale translation, a
+// different feature) or plain '...'/"..." (no escape processing at all in real bash). A
+// single left-to-right pass over /\\(.)/g is enough: an escaped backslash (`\\`) consumes
+// both characters as one match, so a literal `\\n` (escaped backslash + bare n) correctly
+// decodes to a literal backslash followed by an untouched, un-decoded `n` -- not a newline.
+// Unrecognized escapes are left exactly as-is (backslash + char), not guessed at.
+function decodeAnsiCEscapes(s) {
+  return s.replace(/\\(.)/g, (whole, c) => {
+    switch (c) {
+      case 'n': return '\n';
+      case 'r': return '\r';
+      case 't': return '\t';
+      case '\\': return '\\';
+      case "'": return "'";
+      case '"': return '"';
+      default: return whole;
+    }
+  });
+}
+
 function isGitPushCommand(cmd) {
   // Pass 1: recurse into executed sub-shells / eval bodies (QUOTED and ANSI-C $'...' forms).
   // Applied to the ORIGINAL cmd (before quote-strip) so payloads stay intact.
-  // \$? before the quote capture handles $'...' and $"..." (ANSI-C quoting).
+  // Group 1 captures the OPTIONAL `$` itself (not just matched-and-discarded) and group 2
+  // captures the quote character, so the two can be checked TOGETHER below: only a captured
+  // `$` next to a captured `'` is genuine ANSI-C quoting eligible for escape decoding.
   const EXEC = [
-    /\b(?:sh|bash|zsh|dash|ksh|ash)\b(?:\s+-\S+)*\s+-[a-z]*c\b\s*\$?(['"])([\s\S]*?)\1/g, // shell -c '...' / $'...'
-    /\beval\b\s*\$?(['"])([\s\S]*?)\1/g,                                                     // eval '...' / $'...'
+    /\b(?:sh|bash|zsh|dash|ksh|ash)\b(?:\s+-\S+)*\s+-[a-z]*c\b\s*(\$?)(['"])([\s\S]*?)\2/g, // shell -c '...' / $'...'
+    /\beval\b\s*(\$?)(['"])([\s\S]*?)\2/g,                                                     // eval '...' / $'...'
     /\$\(([\s\S]*?)\)/g,                                                                     // $(...)
     /`([^`]*)`/g,                                                                            // `...`
   ];
   for (const re of EXEC) {
     let m;
     while ((m = re.exec(cmd)) !== null) {
-      if (isGitPushCommand(m[m.length - 1])) return true;
+      let payload = m[m.length - 1];
+      // Decode ANSI-C escapes ONLY for the two EXEC forms with a captured ($, quote) pair
+      // (m.length===4: whole match + 3 groups), and only when that pair is genuinely ($, ').
+      // $(...) and `...` have no quote concept at all and are never eligible.
+      if (m.length === 4 && m[1] === '$' && m[2] === "'") {
+        payload = decodeAnsiCEscapes(payload);
+      }
+      if (isGitPushCommand(payload)) return true;
     }
   }
-  // Pass 2: strip heredoc bodies + quoted spans, then split and prefix-strip per segment.
-  // `eval` in the prefix-strip catches unquoted `eval git push` (quoted form handled in Pass 1).
+  // Pass 2: strip heredoc bodies + quoted spans FIRST -- this order is load-bearing now
+  // that the split includes newline (see header): heredoc-stripping collapses a heredoc's
+  // internal newlines into one placeholder, and quote-stripping neutralizes quoted prose,
+  // BEFORE either could be misread as independent segments by the split below. THEN, once
+  // heredocs/quotes are already neutralized (so a continuation can no longer merge into a
+  // heredoc's own closing-tag line or into an already-discarded quoted span), collapse shell
+  // LINE-CONTINUATION (backslash immediately before a newline): the shell itself removes this
+  // pair and JOINS the two lines into one logical command, so `git -C /tmp \<newline>push`
+  // executes as a real `git -C /tmp push` -- but a bare `\r?\n` SEPARATOR split (below) would
+  // otherwise cut exactly at that join point, producing two harmless-looking segments where
+  // the shell sees one. This must NOT be confused with the separator split itself: a
+  // continuation is REMOVED (it never becomes a boundary), a bare newline is SPLIT (it always
+  // is one) -- the two are opposite operations on the same character, disambiguated only by
+  // the immediately-preceding backslash. Then split and prefix-strip per segment. `eval` in
+  // the prefix-strip catches unquoted `eval git push` (quoted form handled in Pass 1).
   const cleaned = cmd
     .replace(/<<-?\s*['"]?(\w+)['"]?[\s\S]*?\n\s*\1\b/g, ' <<HEREDOC ')
-    .replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
-  return cleaned.split(/\s*(?:&&|\|\||;|\|)\s*/).some(seg => {
+    .replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""')
+    .replace(/\\\r?\n/g, '');
+  // `&&` MUST stay listed before the bare `&` alternative -- alternation tries left-to-
+  // right and stops at the first match, so if `&` were tried first it would consume only
+  // one character of `&&`, leaving a dangling second `&` unsplit. `\r?\n` closes the
+  // newline gap (a multi-line command body was previously one un-splittable segment);
+  // bare `&` closes the same class of gap for backgrounding (`cmd1 & cmd2` sequences
+  // exactly like `cmd1 ; cmd2` from the shell's point of view). By this point any
+  // backslash-newline PAIR has already been removed above, so every remaining `\r?\n` here
+  // really is a separator, never a continuation.
+  // Git's own global options, consumed between a bare `git` and its subcommand. Two shapes:
+  //   - value-taking (-C, -c, --git-dir, --work-tree, --namespace, --super-prefix,
+  //     --config-env, --attr-source): value is EITHER glued via `=` OR a separate next token
+  //     -- `\s+\S+` deliberately consumes ANY next token as the value (including one that
+  //     happens to read "push", per the `git -C push push` sanity case: the FIRST push is -C's
+  //     value, only the SECOND is the real subcommand, and this still reduces to `git push`).
+  //   - --exec-path takes an OPTIONAL value via `=` ONLY (GNU convention for optional-argument
+  //     long options) -- never a separate-arg value, so it must NOT consume a following token.
+  //   - the rest are valueless flags, consumed alone.
+  // Anchored to `^git\s+`, so this is a no-op until a wrapper/VAR=val strip (below) has
+  // already exposed a bare `git` at the front of the segment.
+  const GIT_GLOBAL_OPT_RE = /^(git\s+)(?:(?:(?:-C|-c|--git-dir|--work-tree|--namespace|--super-prefix|--config-env|--attr-source)(?:=\S+|\s+\S+)|--exec-path(?:=\S+)?|-p|-P|--paginate|--no-pager|--bare|--no-replace-objects|--literal-pathspecs|--no-optional-locks|--no-lazy-fetch|-v|--version|-h|--help|--html-path|--man-path|--info-path)\s+)+/;
+  return cleaned.split(/\s*(?:&&|\|\||;|\||\r?\n|&)\s*/).some(seg => {
     let s = seg.trim(), prev;
     do {
       prev = s;
       s = s
         .replace(/^(?:[A-Z_][A-Z0-9_]*=[^\s]+\s+)+/, '')  // strip leading VAR=val env
-        .replace(/^(?:rtk|sudo|command|env|xargs|time|nice|nohup|stdbuf|setsid|doas|builtin|exec|eval)\s+(?:-\S+\s+)*/, '');
+        .replace(/^(?:rtk|sudo|command|env|xargs|time|nice|nohup|stdbuf|setsid|doas|builtin|exec|eval)\s+(?:-\S+\s+)*/, '')
+        .replace(GIT_GLOBAL_OPT_RE, '$1');  // strip git's own global options -> bare `git <subcommand>`
     } while (s !== prev);
     return /^git\s+push\b/.test(s);
   });
@@ -134,6 +231,20 @@ function getHeadSha(projectRoot) {
   return null;
 }
 
+// INVARIANT: every block() call in this file is IMMEDIATELY followed by `return`.
+// block() only calls process.exit(2) synchronously when stdout.write() returns true; under
+// backpressure it defers exit to the 'drain' event. Without `return`, execution continues past a
+// decision that has already been made, and BOTH continuations end in an accidental ALLOW:
+//   (a) deref-throw — a check that dereferences the value it just proved absent throws a
+//       TypeError, which this handler's outer `catch { process.exit(0) }` (a deliberate
+//       fail-open on script error) swallows into exit 0.
+//   (b) fall-through — execution simply reaches a later unconditional process.exit(0). The
+//       peer/subagent block is the live example: without `return` it fell into
+//       `if (hookIsACDoc) process.exit(0)` (:219), silently allowing a peer's git push.
+// (b) is the more severe: no exception, no trace, just an allow.
+// The 5s allow-timer (`t`) is cleared at the top of the 'end' handler and is specifically NOT a
+// source of false allows. This is not tidiness — it is the difference between fail-closed and
+// fail-open.
 function block(reason) {
   // Write decision JSON to stdout, then flush stdout before exit (CR #2).
   // process.stdout.write callback ensures the write is flushed before termination.
@@ -190,6 +301,7 @@ process.stdin.on('end', () => {
         `SendMessage to team-lead requesting it. Bypass: PUSH_AUTHORIZATION_BYPASS=1 ` +
         `(explicit user authorization only).`
       );
+      return;
     }
 
     // Main orchestrator (empty agent_type): check if pre-push hook is installed
@@ -215,6 +327,7 @@ process.stdin.on('end', () => {
         `[push-authorization-gate] BLOCKED: quality-gate.stamp invalid — ${qgResult.reason}. ` +
         `Run /quality-gate then re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
+      return;
     }
 
     const ppResult = validateStamp(ppStamp);
@@ -223,6 +336,7 @@ process.stdin.on('end', () => {
         `[push-authorization-gate] BLOCKED: pre-pr.stamp invalid — ${ppResult.reason}. ` +
         `Run /pre-pr then re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
+      return;
     }
 
     // pre-pr.stamp head must match HEAD.
@@ -235,6 +349,7 @@ process.stdin.on('end', () => {
         `("${ppResult.head ?? ''}"). Re-run /pre-pr on the final commit then re-push. ` +
         `Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
+      return;
     }
     const headSha = getHeadSha(projectRoot);
     if (headSha && ppResult.head !== headSha) {
@@ -243,6 +358,7 @@ process.stdin.on('end', () => {
         `current HEAD (${headSha}). Re-run /pre-pr on the final commit then re-push. ` +
         `Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
+      return;
     }
 
     // Secondary proof check (fallback: no pre-push hook installed).
@@ -265,33 +381,39 @@ process.stdin.on('end', () => {
             `[push-authorization-gate] BLOCKED: canonical verify-proof failed. ` +
             `Run /quality-gate to re-mint proof. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
           );
+          return;
         }
         usedCanonical = true;
       }
     } catch { /* bash not available; fall through to in-JS checks */ }
 
     if (!usedCanonical) {
-      // In-JS fallback: fully canonical verify-proof equivalent (7 checks).
+      // In-JS fallback: fully canonical verify-proof equivalent (8 checks).
       // Byte-for-byte equivalent in rigor to verify-push-proof.ps1 and the
-      // canonical emit-push-proof.sh verify-proof subcommand.
+      // canonical emit-push-proof.sh verify-proof subcommand -- all three
+      // verifiers now carry equivalent 8-check rigor, including the
+      // bats_evidence.head == pushed_sha binding (check 8, below).
       const proofPath = path.join(stampDir, 'push-proof.json');
       let proof;
       try { proof = JSON.parse(fs.readFileSync(proofPath, 'utf8')); }
-      catch { block('[push-authorization-gate] BLOCKED: push-proof.json missing or malformed. Run /quality-gate to mint proof. Bypass: PUSH_AUTHORIZATION_BYPASS=1.'); }
+      catch { block('[push-authorization-gate] BLOCKED: push-proof.json missing or malformed. Run /quality-gate to mint proof. Bypass: PUSH_AUTHORIZATION_BYPASS=1.'); return; }
 
       // 1. schema_version
       if (proof.schema_version !== 1) {
         block(`[push-authorization-gate] BLOCKED: push-proof.json schema_version unknown (${proof.schema_version}).`);
+        return;
       }
 
       // 2. head binding
       if (headShaForProof && proof.head !== headShaForProof) {
         block(`[push-authorization-gate] BLOCKED: proof head (${proof.head}) != HEAD (${headShaForProof}).`);
+        return;
       }
 
       // 3. worktree_id
       if (proof.worktree_id && proof.worktree_id !== projectRoot) {
         block(`[push-authorization-gate] BLOCKED: proof worktree_id (${proof.worktree_id}) != project root (${projectRoot}).`);
+        return;
       }
 
       // 4. freshness
@@ -299,18 +421,21 @@ process.stdin.on('end', () => {
       const proofEpoch = Math.floor(new Date(proof.generated_at || '').getTime() / 1000);
       if (isNaN(proofEpoch) || (now2 - proofEpoch) > MAX_AGE_SECS || (proofEpoch - now2) > SKEW_TOLERANCE) {
         block('[push-authorization-gate] BLOCKED: push-proof.json stale or invalid timestamp.');
+        return;
       }
 
       // 5. manifest_version matches live manifest
       const manifestPath = path.join(projectRoot, 'quality-gate-manifest.json');
       let manifest;
       try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); }
-      catch { block('[push-authorization-gate] BLOCKED: quality-gate-manifest.json missing or malformed.'); }
+      catch { block('[push-authorization-gate] BLOCKED: quality-gate-manifest.json missing or malformed.'); return; }
       if (typeof proof.manifest_version !== 'number') {
         block('[push-authorization-gate] BLOCKED: push-proof.json missing manifest_version.');
+        return;
       }
       if (proof.manifest_version !== manifest.manifest_version) {
         block(`[push-authorization-gate] BLOCKED: proof manifest_version (${proof.manifest_version}) != live manifest (${manifest.manifest_version}). Re-run /quality-gate.`);
+        return;
       }
 
       // 6. required-step COVERAGE: every required step must be present in steps_executed with result=PASS
@@ -321,9 +446,11 @@ process.stdin.on('end', () => {
         const entry = executedMap[sid];
         if (!entry) {
           block(`[push-authorization-gate] BLOCKED: required step '${sid}' missing from proof.steps_executed. Re-run /quality-gate.`);
+          return;
         }
         if (entry.result !== 'PASS') {
           block(`[push-authorization-gate] BLOCKED: required step '${sid}' result='${entry.result}' (not PASS) in proof. Re-run /quality-gate.`);
+          return;
         }
       }
 
@@ -331,7 +458,7 @@ process.stdin.on('end', () => {
       const reportPath = path.join(stampDir, 'quality-gate-report.json');
       let reportRaw;
       try { reportRaw = fs.readFileSync(reportPath); }
-      catch { block('[push-authorization-gate] BLOCKED: quality-gate-report.json missing — cannot verify report_digest.'); }
+      catch { block('[push-authorization-gate] BLOCKED: quality-gate-report.json missing — cannot verify report_digest.'); return; }
       // Normalize CRLF -> LF byte-by-byte (same as bash/python hashlib.sha256 + replace)
       const normalized = [];
       for (let i = 0; i < reportRaw.length; i++) {
@@ -343,6 +470,27 @@ process.stdin.on('end', () => {
       const computedDigest = crypto.createHash('sha256').update(Buffer.from(normalized)).digest('hex');
       if (computedDigest !== proof.report_digest) {
         block(`[push-authorization-gate] BLOCKED: report_digest mismatch — proof may be forged or report tampered. Re-run /quality-gate.`);
+        return;
+      }
+
+      // 8. bats_evidence binding: present + head matches pushed_sha
+      // Mirrors verify-push-proof.ps1 and the canonical emit-push-proof.sh verify-proof
+      // subcommand -- a half-done evidence binding would mint correctly but verify
+      // permissively; this closes that gap. absent-means-skip is a bypass, not a
+      // default, same rule as every check above.
+      if (!proof.bats_evidence) {
+        block('[push-authorization-gate] BLOCKED: push-proof.json missing bats_evidence. Re-run /quality-gate.');
+        return; // block() may defer exit(2) until stdout drains (backpressure); unlike
+                // checks 1-7, which move on to an UNRELATED condition after blocking,
+                // the very next line here dereferences .head on the object this branch
+                // just proved absent -- falling through would throw TypeError on
+                // undefined in that deferred window instead of emitting the clean
+                // decision:block JSON. Fail-closed must mean "blocked with a message",
+                // not "blocked by crashing".
+      }
+      if (proof.bats_evidence.head !== headShaForProof) {
+        block(`[push-authorization-gate] BLOCKED: bats_evidence.head (${proof.bats_evidence.head}) != HEAD (${headShaForProof}).`);
+        return;
       }
     }
 

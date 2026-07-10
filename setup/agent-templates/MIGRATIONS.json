@@ -338,6 +338,11 @@
         "date": "2026-06-22",
         "breaking": false,
         "summary": "qg-proof-honesty-hardening: Step S — Secret Scan REQUIRED pre-mint step (sub-doc quality-gater-secret-scan.md); invokes secret-scan-report.sh (exit 0=PASS, non-zero=FAIL); absent/erroring scanner = FAIL never PASS/SKIPPED; fail-closed producer closes /pre-pr SKIP loophole."
+      },
+      "2.23.0": {
+        "date": "2026-07-09",
+        "breaking": false,
+        "summary": "qg-evidence-integrity: bats evidence binding for test-suite:PASS via new lib/bats-handoff.sh (five named checks in emit-push-proof.sh, informational_steps in quality-gate-manifest.json); corrects two stale template lines -- exit-code taxonomy (STOP on any non-zero run-bats.sh exit, not just not_ok>0) and the report-freshness manifest-untouched claim."
       }
     },
     "doc-migrator": {

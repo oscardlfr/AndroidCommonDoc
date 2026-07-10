@@ -3,7 +3,11 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/emit-qg-result.sh
 #
-# Coverage map (23 tests):
+# Coverage map (35 tests). #QR24-33 are Wave A additions (fail_class taxonomy,
+# bats_complete/bats_verdict un-conflation, fail_class-never-a-mint-input, --init
+# dual-stamp); #QR34 was added after ab6b0c8 taught fail_class about scope-mismatch
+# mid-wave — see the "Wave A" section further down for their own header comments.
+# #QR6/#QR7/#QR10/#QR13 also carry Wave A fixture repairs — see their own comments.
 #   #QR1  status:pass when report all-PASS + clean bats log
 #   #QR2  status:fail when bats log has ^not ok (even if bats exited 0)
 #   #QR3  empty bats log → status:fail (no evidence = not pass)
@@ -267,10 +271,14 @@ PYEOF
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: the required_steps evaluator reads quality-gate-manifest.json
+    # from --project-root, which now correctly resolves inside the isolated $REPO.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     write_clean_bats_log "$log"
     write_report_all_pass "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 0 ]
     [ -f "$out" ]
     status_field="$(parse_json_field "$out" "status")"
@@ -286,10 +294,14 @@ PYEOF
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: keeps this test's report side genuinely all-PASS, so the
+    # fail it asserts is provably caused by the ^not ok log, not a missing manifest.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     write_not_ok_bats_log "$log"
     write_report_all_pass "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 1 ]
     [ -f "$out" ]
     status_field="$(parse_json_field "$out" "status")"
@@ -305,10 +317,14 @@ PYEOF
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: keeps this test's report side genuinely all-PASS, so the
+    # fail it asserts is provably caused by the empty log, not a missing manifest.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     printf '' > "$log"
     write_report_all_pass "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 1 ]
     [ -f "$out" ]
     status_field="$(parse_json_field "$out" "status")"
@@ -381,6 +397,7 @@ PYEOF
     cp "$SCRIPTS_SRC/sh/lib/manifest-digest.sh"         "$REPO/scripts/sh/lib/"
     cp "$SCRIPTS_SRC/sh/lib/audit-append.sh"            "$REPO/scripts/sh/lib/"
     cp "$SCRIPTS_SRC/sh/lib/resolve-required-roles.js"  "$REPO/scripts/sh/lib/"
+    cp "$SCRIPTS_SRC/sh/lib/bats-handoff.sh"            "$REPO/scripts/sh/lib/"
     cp "$SCRIPTS_SRC/sh/qg-registry-integrity.sh"       "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/rehash-registry.sh"             "$REPO/scripts/sh/"
 
@@ -425,10 +442,24 @@ EOF
 
     # Build report AFTER --init (--init reset the file; now populate it fresh)
     write_report_all_pass "$ACDOC/quality-gate-report.json"
-    python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" << 'PYEOF'
-import json, sys
+    # Wave A: --init already stamped started_at into this same file (D6 fix), but
+    # write_report_all_pass above just overwrote the whole file without it — re-add it
+    # here inline (scoped to #QR6/#QR7 only, per arch-testing's amendment: NOT a shared
+    # write_report_all_pass() patch, which would contaminate #QR10/11a/11b/12's own
+    # specific handoff scenarios). A valid full-scope HEAD-bound handoff is also needed
+    # now that run-qg's test-suite-evidence-* check requires real evidence behind the
+    # test-suite:PASS step write_report_all_pass builds by default.
+    local qr6_head
+    qr6_head="$(git -C "$REPO" rev-parse HEAD)"
+    # 51b0d63: report-head-* requires report.head present and equal to current HEAD.
+    # write_report_all_pass's dict has neither started_at nor head; re-add both here
+    # inline (scoped to #QR6/#QR7 only — see the comment above for why this is
+    # deliberately not a shared helper patch).
+    python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$qr6_head" << 'PYEOF'
+import json, sys, datetime
 rpt_path = sys.argv[1]
 mfst_path = sys.argv[2]
+report_head = sys.argv[3]
 rpt = json.load(open(rpt_path, encoding='utf-8'))
 mfst = json.load(open(mfst_path, encoding='utf-8'))
 by_id = {s['step']: s for s in rpt['steps']}
@@ -436,9 +467,15 @@ by_id['path-manifest-audit'] = {'step': 'path-manifest-audit', 'ran': True, 'res
                                  'reason': 'All touched files in manifest.'}
 by_id['production-file-verify'] = {'step': 'production-file-verify', 'ran': True, 'result': 'PASS'}
 rpt['steps'] = list(by_id.values())
+rpt['started_at'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+rpt['head'] = report_head
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
+    local qr6_run_id="qr6-fixture-$$-${RANDOM}"
+    printf 'BATS_OK=%s\nBATS_NOT_OK=%s\nBATS_EXPECTED=%s\nBATS_TOTAL=%s\nBATS_COMPLETE=%s\nBATS_VERDICT=%s\nBATS_LOG=%s\nBATS_HEAD=%s\nBATS_RUN_ID=%s\nBATS_GENERATED_AT=%s\nBATS_SCOPE=%s\n' \
+        42 0 42 42 true pass /dev/null "$qr6_head" "$qr6_run_id" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" full \
+        > "$ACDOC/bats-result.${qr6_run_id}.env"
 
     # Confirm qg-result.json is gitignored (git status must NOT list it)
     local dirty_lines
@@ -470,6 +507,7 @@ PYEOF
     cp "$SCRIPTS_SRC/sh/lib/manifest-digest.sh"         "$REPO/scripts/sh/lib/"
     cp "$SCRIPTS_SRC/sh/lib/audit-append.sh"            "$REPO/scripts/sh/lib/"
     cp "$SCRIPTS_SRC/sh/lib/resolve-required-roles.js"  "$REPO/scripts/sh/lib/"
+    cp "$SCRIPTS_SRC/sh/lib/bats-handoff.sh"            "$REPO/scripts/sh/lib/"
     cp "$SCRIPTS_SRC/sh/qg-registry-integrity.sh"       "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/rehash-registry.sh"             "$REPO/scripts/sh/"
 
@@ -508,19 +546,32 @@ EOF
 
     # Build the report AFTER --init — the report that run-qg will hash into push-proof.json.
     write_report_all_pass "$ACDOC/quality-gate-report.json"
-    python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" << 'PYEOF'
-import json, sys
+    # Wave A: --init already stamped started_at into this file (D6 fix), but
+    # write_report_all_pass above just overwrote it without one — re-add it here inline
+    # (scoped to #QR6/#QR7 only, mirroring #QR6's own comment). A valid full-scope
+    # HEAD-bound handoff is also needed for run-qg's test-suite-evidence-* check.
+    # 51b0d63: report-head-* requires report.head too — re-add it the same way, using
+    # $HEAD_SHA (already in scope, no further commits happen before this block).
+    python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$HEAD_SHA" << 'PYEOF'
+import json, sys, datetime
 rpt_path = sys.argv[1]
 mfst_path = sys.argv[2]
+report_head = sys.argv[3]
 rpt = json.load(open(rpt_path, encoding='utf-8'))
 by_id = {s['step']: s for s in rpt['steps']}
 by_id['path-manifest-audit'] = {'step': 'path-manifest-audit', 'ran': True, 'result': 'PASS',
                                  'reason': 'All touched files in manifest.'}
 by_id['production-file-verify'] = {'step': 'production-file-verify', 'ran': True, 'result': 'PASS'}
 rpt['steps'] = list(by_id.values())
+rpt['started_at'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+rpt['head'] = report_head
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
+    local qr7_run_id="qr7-fixture-$$-${RANDOM}"
+    printf 'BATS_OK=%s\nBATS_NOT_OK=%s\nBATS_EXPECTED=%s\nBATS_TOTAL=%s\nBATS_COMPLETE=%s\nBATS_VERDICT=%s\nBATS_LOG=%s\nBATS_HEAD=%s\nBATS_RUN_ID=%s\nBATS_GENERATED_AT=%s\nBATS_SCOPE=%s\n' \
+        42 0 42 42 true pass /dev/null "$HEAD_SHA" "$qr7_run_id" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" full \
+        > "$ACDOC/bats-result.${qr7_run_id}.env"
 
     # Step 1: run-qg WITHOUT additional qg-result.json content — record the outcome.
     # qg-result.json exists (--init wrote it above) but is gitignored so clean-tree passes.
@@ -597,11 +648,15 @@ PYEOF
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: keeps this test's report side genuinely all-PASS, so the
+    # fail it asserts is provably caused by the zero-ok log, not a missing manifest.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     # Only a TAP plan line — no ok or not ok lines (simulates 1..0 zero-test suite)
     printf '1..0\n' > "$log"
     write_report_all_pass "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 1 ]
     [ -f "$out" ]
 
@@ -620,9 +675,18 @@ print(d.get('suite_summary', {}).get('bats_ok', -1))
 
 # ── Helpers for handoff tests ─────────────────────────────────────────────────
 
-# write_handoff <dir> <run_id> <head> <generated_at> <ok> <not_ok> <expected> <complete> <verdict>
+# write_handoff <dir> <run_id> <head> <generated_at> <ok> <not_ok> <expected> <complete> <verdict> [<scope>]
 # Writes a synthetic .androidcommondoc/bats-result.<run_id>.env handoff file
 # mirroring the format emitted by run-bats.sh (one KEY=VALUE per line, no eval).
+#
+# Wave A fix: this helper never wrote BATS_SCOPE at all. emit-qg-result.sh's
+# select_bats_handoff call unconditionally passes --require-scope full, so a
+# scope-less handoff is now rejected in Pass 3b (status=scope-mismatch, not "ok") —
+# breaking #QR10's premise (the handoff must be genuinely CONSUMED, not the fallback
+# TAP log). scope defaults to "full" (quality-gater always invokes run-bats.sh with
+# no explicit targets) so existing callers (#QR11a/#QR11b, which test rejection for
+# an UNRELATED reason — stale generated_at / foreign head respectively — and are
+# unaffected by scope either way) keep working without modification.
 write_handoff() {
     local dir="$1"
     local run_id="$2"
@@ -633,6 +697,7 @@ write_handoff() {
     local expected="$7"
     local complete="$8"
     local verdict="$9"
+    local scope="${10:-full}"
     local total=$(( ok + not_ok ))
 
     mkdir -p "$dir"
@@ -647,6 +712,7 @@ write_handoff() {
     printf 'BATS_HEAD=%s\n'         "$head"          >> "$path"
     printf 'BATS_RUN_ID=%s\n'       "$run_id"        >> "$path"
     printf 'BATS_GENERATED_AT=%s\n' "$generated_at"  >> "$path"
+    printf 'BATS_SCOPE=%s\n'        "$scope"         >> "$path"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -901,16 +967,21 @@ print(d.get('suite_summary', {}).get('bats_complete', 'MISSING'))
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #QR13  --init clears report scratch (REPORT_PATH reset)
+# #QR13  --init clears report scratch AND stamps it (REPORT_PATH reset + D6 fix)
 #
-# --init must overwrite $ACDOC/quality-gate-report.json with {"steps":[]}
-# regardless of prior content. Seeding that file with a stale step and
-# verifying the reset confirms that prior-run prose cannot survive into the
-# new QG run.
+# --init must overwrite $ACDOC/quality-gate-report.json's steps to [] regardless
+# of prior content — prior-run prose cannot survive into the new QG run. Seeding
+# that file with a stale step and verifying the reset confirms this.
+#
+# Wave A (D6 fix): --init no longer resets to a bare {"steps":[]} — it now ALSO
+# stamps schema_version/started_at/head (the QG-session anchor run-qg's
+# report-started-at-* check and select_bats_handoff's --since floor both validate
+# against). This test's assertion is widened accordingly: steps==[] (the original
+# reset guarantee) AND the three new stamped fields are present.
 #
 # CRITICAL: assert $ACDOC/quality-gate-report.json (REPORT_PATH), NOT qg-result.json.
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#QR13 PASS: --init resets quality-gate-report.json to {\"steps\":[]}" {
+@test "#QR13 PASS: --init resets quality-gate-report.json steps to [] and stamps schema_version/started_at/head" {
     local out="$REPO/qg-result.json"
     local report_path="$ACDOC/quality-gate-report.json"
 
@@ -929,12 +1000,14 @@ with open(sys.argv[1],'w',encoding='utf-8') as f: json.dump(stale,f,indent=2); f
     run bash "$SCRIPT" --init --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 0 ]
 
-    # Assert REPORT_PATH is now {"steps":[]}
+    # Assert REPORT_PATH's steps are reset to [] AND the D6 stamp fields are present.
     report_content="$(python3 -c "
 import json, sys
 d = json.load(open(sys.argv[1], encoding='utf-8'))
-# Compare structurally
-assert d == {'steps': []}, f'Expected {{\"steps\":[]}}, got {d!r}'
+assert d.get('steps') == [], f'Expected steps==[], got {d.get(\"steps\")!r}'
+assert d.get('schema_version') == 1, f'Expected schema_version==1, got {d.get(\"schema_version\")!r}'
+assert d.get('started_at'), f'Expected non-empty started_at (D6 fix), got {d.get(\"started_at\")!r}'
+assert 'head' in d, 'Expected head field present (D6 fix)'
 print('ok')
 " "$report_path")"
     [ "$report_content" = "ok" ]
@@ -1153,10 +1226,15 @@ print('ok')
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: without this, the manifest-membership lookup fails closed
+    # on a missing manifest (all_required_pass=false) regardless of the SKIP-exemption
+    # logic under test — silently masking the very regression this test guards.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     write_clean_bats_log "$log"
     write_report_pass_with_conditional_skip "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 0 ]
     [ -f "$out" ]
     status_field="$(parse_json_field "$out" "status")"
@@ -1188,12 +1266,450 @@ print('ok')
     local log="$REPO/bats.log"
     local rpt="$REPO/report.json"
 
+    # See #QR4's comment: without this, the manifest-membership lookup fails closed
+    # on a missing manifest (all_required_pass=false) regardless of whether the
+    # conditional-FAIL-is-not-exempt logic under test is reached at all — this test
+    # would report status:fail even if that regression were reintroduced, silently.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
     write_clean_bats_log "$log"
     write_report_pass_with_conditional_fail "$rpt"
 
-    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --slug "test-slug"
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
     [ "$status" -eq 1 ]
     [ -f "$out" ]
     status_field="$(parse_json_field "$out" "status")"
     [ "$status_field" = "fail" ]
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Wave A — fail_class taxonomy, bats_complete/bats_verdict un-conflation,
+# fail_class-never-a-mint-input, --init dual-stamp (#QR24-33)
+# ═════════════════════════════════════════════════════════════════════════════
+
+# write_started_at_qg_result <out_path> <head> — seeds a minimal --init-shaped
+# qg-result.json so handoff discovery has a --since floor to validate against.
+# Returns the started_at value on stdout.
+write_started_at_qg_result() {
+    local out_path="$1" head="$2"
+    local started_at
+    started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    python3 -c "
+import json, sys
+obj = {'schema_version': 1, 'status': 'running', 'started_at': sys.argv[1],
+       'head': sys.argv[2], 'wave_slug': 'test-slug', 'updated_at': sys.argv[1],
+       'steps': [], 'suite_summary': {}}
+with open(sys.argv[3], 'w') as f: json.dump(obj, f, indent=2); f.write('\n')
+" "$started_at" "$head" "$out_path"
+    printf '%s' "$started_at"
+}
+
+# now_plus_1s — a timestamp 1 second after "now", for a handoff's generated_at to
+# satisfy select_bats_handoff's --since floor (generated_at >= started_at).
+now_plus_1s() {
+    python3 -c "
+from datetime import datetime, timedelta, timezone
+print((datetime.now(timezone.utc) + timedelta(seconds=1)).strftime('%Y-%m-%dT%H:%M:%SZ'))
+"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR24  fail_class=clean when evidence is real, complete, and not_ok==0.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR24 fail_class=clean when evidence is real, complete, and not_ok==0" {
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    # See #QR4's comment: without this, status flips to fail (missing-manifest
+    # fail-closed) even though fail_class correctly reads "clean" — the exit-0
+    # assertion below would fail for a reason unrelated to fail_class taxonomy.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
+    write_clean_bats_log "$log"
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
+    [ "$status" -eq 0 ]
+    fail_class_field="$(parse_json_field "$out" "fail_class")"
+    [ "$fail_class_field" = "clean" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR25  fail_class=stale-evidence when a well-formed, HEAD-matching, full-scope
+# handoff exists but its generated_at predates started_at (genuinely stale, not
+# merely absent/malformed).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR25 fail_class=stale-evidence when a well-formed HEAD-matching handoff predates started_at" {
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR25"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    write_started_at_qg_result "$out" "$current_head" > /dev/null
+
+    # Well-formed, matching head, full scope (default) — but generated_at predates
+    # started_at (2020, well before "now") -> genuinely stale.
+    write_handoff "$ACDOC" "run-qr25-stale" "$current_head" "2020-01-01T00:00:00Z" \
+                  1631 0 1631 true pass
+
+    printf '1..3\nok 1 a\nok 2 b\nok 3 c\n' > "$log"
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+             --project-root "$REPO" --slug "test-slug"
+    fail_class_field="$(parse_json_field "$out" "fail_class")"
+    [ "$fail_class_field" = "stale-evidence" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR26  fail_class=no-evidence when no handoff exists and the fallback TAP log has
+# zero ok lines.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR26 fail_class=no-evidence when no handoff exists and the fallback log has zero ok lines" {
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    # See #QR4's comment: keeps this test's report side genuinely all-PASS, so the
+    # no-evidence fail_class it asserts is provably from the empty log, not the
+    # separate (and here irrelevant) missing-manifest fail-closed path.
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+
+    printf '' > "$log"
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" --project-root "$REPO" --slug "test-slug"
+    fail_class_field="$(parse_json_field "$out" "fail_class")"
+    [ "$fail_class_field" = "no-evidence" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR27  fail_class=suite-failed when the selected (valid, ok-status) handoff has
+# not_ok>0 — bats-handoff.sh's own selection does not exclude a dirty run.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR27 fail_class=suite-failed when the selected handoff has not_ok>0" {
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR27"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    write_started_at_qg_result "$out" "$current_head" > /dev/null
+    local generated_at
+    generated_at="$(now_plus_1s)"
+    write_handoff "$ACDOC" "run-qr27-dirty" "$current_head" "$generated_at" \
+                  5 2 7 true fail
+
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+             --project-root "$REPO" --slug "test-slug"
+    fail_class_field="$(parse_json_field "$out" "fail_class")"
+    [ "$fail_class_field" = "suite-failed" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR28  fail_class=incomplete when the selected handoff has BATS_COMPLETE=false
+# but not_ok==0 — a truncated run, not a failing one.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR28 fail_class=incomplete when the selected handoff has BATS_COMPLETE=false" {
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR28"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    write_started_at_qg_result "$out" "$current_head" > /dev/null
+    local generated_at
+    generated_at="$(now_plus_1s)"
+    write_handoff "$ACDOC" "run-qr28-incomplete" "$current_head" "$generated_at" \
+                  2 0 5 false fail
+
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+             --project-root "$REPO" --slug "test-slug"
+    fail_class_field="$(parse_json_field "$out" "fail_class")"
+    [ "$fail_class_field" = "incomplete" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR29  D3 un-conflation A: a COMPLETE run with real failures (complete=true,
+# not_ok>0) must be bats_complete=true, bats_verdict=fail — distinguishable from
+# a truncated run, which is bats_complete=false regardless of bats_verdict.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR29 D3 un-conflation A: complete=true + not_ok>0 → bats_complete=true, bats_verdict=fail" {
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR29"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    write_started_at_qg_result "$out" "$current_head" > /dev/null
+    local generated_at
+    generated_at="$(now_plus_1s)"
+    # complete=true (all 7 tests accounted for), but 2 of them failed.
+    write_handoff "$ACDOC" "run-qr29-complete-fail" "$current_head" "$generated_at" \
+                  5 2 7 true fail
+
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+             --project-root "$REPO" --slug "test-slug"
+    local bats_complete_field bats_verdict_field
+    bats_complete_field="$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+print(d.get('suite_summary', {}).get('bats_complete', 'MISSING'))
+" "$out")"
+    bats_verdict_field="$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+print(d.get('suite_summary', {}).get('bats_verdict', 'MISSING'))
+" "$out")"
+    [ "$bats_complete_field" = "True" ]
+    [ "$bats_verdict_field" = "fail" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR30  D3 un-conflation B: a TRUNCATED run where every test that DID run passed
+# (complete=false, not_ok=0) must be bats_complete=false, bats_verdict=pass —
+# proving the two fields are genuinely independent, not merely two names for the
+# same computation.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR30 D3 un-conflation B: complete=false + not_ok=0 → bats_complete=false, bats_verdict=pass" {
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR30"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    write_started_at_qg_result "$out" "$current_head" > /dev/null
+    local generated_at
+    generated_at="$(now_plus_1s)"
+    # complete=false (truncated: 3 of an expected 10), but the 3 that ran all passed.
+    write_handoff "$ACDOC" "run-qr30-incomplete-pass" "$current_head" "$generated_at" \
+                  3 0 10 false pass
+
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+             --project-root "$REPO" --slug "test-slug"
+    local bats_complete_field bats_verdict_field
+    bats_complete_field="$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+print(d.get('suite_summary', {}).get('bats_complete', 'MISSING'))
+" "$out")"
+    bats_verdict_field="$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+print(d.get('suite_summary', {}).get('bats_verdict', 'MISSING'))
+" "$out")"
+    [ "$bats_complete_field" = "False" ]
+    [ "$bats_verdict_field" = "pass" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR31  fail_class is qg-result.json-only and is NEVER read by the mint. Injects
+# an obviously-wrong fail_class ("stale-evidence") into an otherwise fully-passing
+# qg-result.json and confirms run-qg still mints successfully — proving fail_class
+# has zero influence on the actual push-proof.json emitter, mirroring #QR6/#QR7's
+# own GUARDRAIL pattern (a real run-qg mint via the copied emitter + its lib deps).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR31 GUARDRAIL: fail_class is never a mint input — run-qg succeeds regardless of its value" {
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+    mkdir -p "$REPO/scripts/sh/lib"
+    cp "$SCRIPTS_SRC/sh/emit-push-proof.sh"            "$REPO/scripts/sh/"
+    cp "$SCRIPTS_SRC/sh/lib/manifest-digest.sh"         "$REPO/scripts/sh/lib/"
+    cp "$SCRIPTS_SRC/sh/lib/audit-append.sh"            "$REPO/scripts/sh/lib/"
+    cp "$SCRIPTS_SRC/sh/lib/resolve-required-roles.js"  "$REPO/scripts/sh/lib/"
+    cp "$SCRIPTS_SRC/sh/lib/bats-handoff.sh"            "$REPO/scripts/sh/lib/"
+    cp "$SCRIPTS_SRC/sh/qg-registry-integrity.sh"       "$REPO/scripts/sh/"
+    cp "$SCRIPTS_SRC/sh/rehash-registry.sh"             "$REPO/scripts/sh/"
+
+    git -C "$REPO" add -A
+    git -C "$REPO" commit --quiet -m "test(fixtures): QR31 fixture commit"
+    HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
+
+    local slug="test-slug"
+    local wave_dir="$REPO/.planning/wave-$slug"
+    mkdir -p "$wave_dir"
+    for role in arch-testing arch-platform arch-integration; do
+        cat > "$wave_dir/$role-verdict.md" << EOF
+# $role verdict
+
+**Phase**: PREP
+**Timestamp**: 2026-06-21T00:00:00Z
+**Status**: APPROVED-PREP
+
+---
+
+**HEAD**: $HEAD_SHA
+**Phase**: VERIFY-FINAL
+**Timestamp**: 2026-06-21T00:00:00Z
+**Status**: APPROVED-VERIFY-FINAL
+EOF
+    done
+    printf '### Wave Class\n- **Class**: HARNESS\n### Spawn Table\n| Role | Count | Reason |\n|---|---|---|\n| arch-testing | 1 | test |\n' \
+        > "$wave_dir/PLAN.md"
+
+    local qg_out="$wave_dir/qg-result.json"
+    run bash "$SCRIPT" --init --out "$qg_out" --project-root "$REPO" --slug "$slug"
+    [ "$status" -eq 0 ]
+
+    write_report_all_pass "$ACDOC/quality-gate-report.json"
+    # 51b0d63: report-head-* requires report.head present and equal to current HEAD.
+    python3 - "$ACDOC/quality-gate-report.json" "$HEAD_SHA" << 'PYEOF'
+import json, sys, datetime
+rpt_path = sys.argv[1]
+report_head = sys.argv[2]
+rpt = json.load(open(rpt_path, encoding='utf-8'))
+by_id = {s['step']: s for s in rpt['steps']}
+by_id['path-manifest-audit'] = {'step': 'path-manifest-audit', 'ran': True, 'result': 'PASS',
+                                 'reason': 'All touched files in manifest.'}
+by_id['production-file-verify'] = {'step': 'production-file-verify', 'ran': True, 'result': 'PASS'}
+rpt['steps'] = list(by_id.values())
+rpt['started_at'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+rpt['head'] = report_head
+with open(rpt_path, 'w', encoding='utf-8') as f:
+    json.dump(rpt, f, indent=2); f.write('\n')
+PYEOF
+    local qr31_run_id="qr31-fixture-$$-${RANDOM}"
+    printf 'BATS_OK=%s\nBATS_NOT_OK=%s\nBATS_EXPECTED=%s\nBATS_TOTAL=%s\nBATS_COMPLETE=%s\nBATS_VERDICT=%s\nBATS_LOG=%s\nBATS_HEAD=%s\nBATS_RUN_ID=%s\nBATS_GENERATED_AT=%s\nBATS_SCOPE=%s\n' \
+        42 0 42 42 true pass /dev/null "$HEAD_SHA" "$qr31_run_id" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" full \
+        > "$ACDOC/bats-result.${qr31_run_id}.env"
+
+    # Deliberately inject a WRONG fail_class into qg-result.json — run-qg never reads it.
+    python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+d['fail_class'] = 'stale-evidence'
+json.dump(d, open(sys.argv[1], 'w'), indent=2)
+" "$qg_out"
+
+    run bash -c "CLAUDE_WAVE_SLUG='$slug' bash '$REPO/scripts/sh/emit-push-proof.sh' --subcommand run-qg --repo-root '$REPO'"
+    [ "$status" -eq 0 ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR32  fail_class precedence: stale-evidence > suite-failed. A genuinely-stale
+# handoff exists (matching head, well-formed, full scope, too old) AND the
+# fallback TAP log (which the stale handoff's rejection forces a fall-back to)
+# itself contains a real failure. If precedence were wrong (e.g. suite-failed
+# checked first), this would misreport as suite-failed instead.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR32 fail_class precedence: stale-evidence wins over suite-failed when both conditions could apply" {
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR32"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    write_started_at_qg_result "$out" "$current_head" > /dev/null
+
+    write_handoff "$ACDOC" "run-qr32-stale" "$current_head" "2020-01-01T00:00:00Z" \
+                  1631 0 1631 true pass
+
+    # Fallback TAP log has a real failure — would classify as suite-failed on its own.
+    printf '1..3\nok 1 a\nnot ok 2 b\nok 3 c\n' > "$log"
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+             --project-root "$REPO" --slug "test-slug"
+    fail_class_field="$(parse_json_field "$out" "fail_class")"
+    [ "$fail_class_field" = "stale-evidence" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR33  --init stamps quality-gate-report.json AND qg-result.json with IDENTICAL
+# started_at/head values (they "agree by construction" — the same NOW is reused
+# for both writes), which is the anchor run-qg's report-started-at-* check and
+# select_bats_handoff's --since floor both validate against.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR33 --init stamps quality-gate-report.json and qg-result.json with identical started_at/head" {
+    local out="$REPO/qg-result.json"
+    local report_path="$ACDOC/quality-gate-report.json"
+
+    run bash "$SCRIPT" --init --out "$out" --project-root "$REPO" --slug "test-slug"
+    [ "$status" -eq 0 ]
+    [ -f "$out" ]
+    [ -f "$report_path" ]
+
+    local match
+    match="$(python3 -c "
+import json, sys
+qg = json.load(open(sys.argv[1], encoding='utf-8'))
+rpt = json.load(open(sys.argv[2], encoding='utf-8'))
+assert qg.get('started_at'), 'started_at must be non-empty'
+assert qg.get('started_at') == rpt.get('started_at'), f'started_at mismatch: qg={qg.get(\"started_at\")!r} rpt={rpt.get(\"started_at\")!r}'
+assert qg.get('head') == rpt.get('head'), f'head mismatch: qg={qg.get(\"head\")!r} rpt={rpt.get(\"head\")!r}'
+print('ok')
+" "$out" "$report_path")"
+    [ "$match" = "ok" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #QR34  fail_class=scope-mismatch — a well-formed, HEAD-matching handoff that IS
+# fresh enough (generated_at >= started_at) but scoped "targeted", not "full".
+#
+# Added after commit ab6b0c8 (landed mid-wave): emit-qg-result.sh's fail_class
+# classifier originally had no scope-mismatch branch at all — bats-handoff.sh's Pass
+# 3a/3b split (16ae614) had already taught the SELECTOR to distinguish "stale" from
+# "scope-mismatch", but the CLASSIFIER here fell through straight to no-evidence,
+# misreporting real, HEAD-matching, on-disk evidence as if there were none. Must be
+# distinguishable from BOTH #QR25 (stale-evidence: nothing fresh enough exists at
+# all) and #QR26 (no-evidence: no handoff, no ok lines) — this scenario has real,
+# fresh, matching evidence that simply cannot be used because of its scope.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#QR34 fail_class=scope-mismatch when a fresh HEAD-matching handoff is scoped targeted, not full" {
+    printf 'dummy\n' > "$REPO/dummy.txt"
+    git -C "$REPO" add dummy.txt
+    git -C "$REPO" commit --quiet -m "test: fixture commit for QR34"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+
+    local out="$REPO/qg-result.json"
+    local log="$REPO/bats.log"
+    local rpt="$REPO/report.json"
+
+    write_started_at_qg_result "$out" "$current_head" > /dev/null
+    local generated_at
+    generated_at="$(now_plus_1s)"
+    write_handoff "$ACDOC" "run-qr34-targeted" "$current_head" "$generated_at" \
+                  5 0 5 true pass "targeted"
+
+    printf '1..3\nok 1 a\nok 2 b\nok 3 c\n' > "$log"
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+             --project-root "$REPO" --slug "test-slug"
+    fail_class_field="$(parse_json_field "$out" "fail_class")"
+    [ "$fail_class_field" = "scope-mismatch" ]
 }

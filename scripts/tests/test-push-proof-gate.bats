@@ -93,7 +93,7 @@ write_qg_stamp() {
   python3 - "$ACDOC/quality-gate.stamp" "$age_secs" "$head" <<'PYEOF'
 import json, sys, time, datetime
 path, age_secs, head = sys.argv[1], int(sys.argv[2]), sys.argv[3]
-ts = datetime.datetime.utcfromtimestamp(time.time() - age_secs).strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.fromtimestamp(time.time() - age_secs, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 stamp = {"verdict": "PASS", "timestamp": ts, "head": head, "branch": "feature/test-push-proof",
          "source": "emit-push-proof.sh run-qg"}
 with open(path, "w", encoding="utf-8") as f:
@@ -109,7 +109,7 @@ write_pp_stamp() {
   python3 - "$ACDOC/pre-pr.stamp" "$age_secs" "$head" <<'PYEOF'
 import json, sys, time, datetime
 path, age_secs, head = sys.argv[1], int(sys.argv[2]), sys.argv[3]
-ts = datetime.datetime.utcfromtimestamp(time.time() - age_secs).strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.fromtimestamp(time.time() - age_secs, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 stamp = {"verdict": "PASS", "timestamp": ts, "head": head, "branch": "feature/test-push-proof",
          "source": "emit-push-proof.sh run-qg"}
 with open(path, "w", encoding="utf-8") as f:
@@ -117,21 +117,69 @@ with open(path, "w", encoding="utf-8") as f:
 PYEOF
 }
 
+# write_valid_bats_handoff — writes a well-formed, full-scope, HEAD-bound bats handoff
+# into $ACDOC (Wave A: run-qg's test-suite-evidence-* check requires real evidence
+# behind any claimed "test-suite": PASS step). HEAD is re-derived from git at call time
+# (never a cached shell variable) so this stays correct even for tests that commit
+# further after setup() (e.g. #21/#23, which commit a .kt file). generated_at is
+# captured after the caller's own started_at timestamp, satisfying select_bats_handoff's
+# --since floor (real wall-clock ordering only moves forward within one test).
+write_valid_bats_handoff() {
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  local generated_at
+  generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  local run_id="wave-a-fixture-$$-${RANDOM}"
+  mkdir -p "$ACDOC"
+  {
+    printf 'BATS_OK=%s\n'           "42"
+    printf 'BATS_NOT_OK=%s\n'       "0"
+    printf 'BATS_EXPECTED=%s\n'     "42"
+    printf 'BATS_TOTAL=%s\n'        "42"
+    printf 'BATS_COMPLETE=%s\n'     "true"
+    printf 'BATS_VERDICT=%s\n'      "pass"
+    printf 'BATS_LOG=%s\n'          "/dev/null"
+    printf 'BATS_HEAD=%s\n'         "$head"
+    printf 'BATS_RUN_ID=%s\n'       "$run_id"
+    printf 'BATS_GENERATED_AT=%s\n' "$generated_at"
+    printf 'BATS_SCOPE=%s\n'        "full"
+  } > "$ACDOC/bats-result.${run_id}.env"
+}
+
 # write_quality_gate_report — writes a valid .androidcommondoc/quality-gate-report.json
 # $1=extra_steps_json (default "") — JSON list of step objects to merge/replace
 # $2=override_deliberation_json (default "") — JSON object to override deliberation block
 #    e.g. '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
+#
+# Wave A: also stamps report.started_at and writes a matching valid bats handoff (via
+# write_valid_bats_handoff) BY DEFAULT — ~25 of this file's tests call run-qg with
+# test-suite defaulting to PASS, so run-qg's report-started-at-* and
+# test-suite-evidence-* checks now fire unconditionally, before any of this helper's
+# callers' own intended die-code is ever reached.
 write_quality_gate_report() {
   local extra_steps="${1:-}"
   local override_deliberation="${2:-}"
+  local started_at
+  started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  # 51b0d63: run-qg's report-head-* check requires report.head present and equal to
+  # the current HEAD. Re-derived fresh from git at call time (never the cached
+  # $HEAD_SHA shell variable) — mirrors write_valid_bats_handoff's own comment on why:
+  # several tests (#21/#23) commit further fixture files after setup(), moving HEAD
+  # past whatever setup() captured. Callers needing a deliberately WRONG report.head
+  # (a report-head-mismatch scenario) mutate the file after calling this helper,
+  # matching the pattern used elsewhere in this suite for single-field overrides.
+  local report_head
+  report_head="$(git -C "$REPO" rev-parse HEAD)"
   python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" \
-      "${extra_steps}" "${override_deliberation}" <<'PYEOF'
+      "${extra_steps}" "${override_deliberation}" "$started_at" "$report_head" <<'PYEOF'
 import json, sys
 
 report_path         = sys.argv[1]
 manifest_path       = sys.argv[2]
 extra_steps_raw     = sys.argv[3]
 override_delib_raw  = sys.argv[4]
+started_at          = sys.argv[5]
+report_head         = sys.argv[6]
 
 manifest = json.load(open(manifest_path, encoding='utf-8'))
 
@@ -170,6 +218,8 @@ if override_delib_raw.strip():
     deliberation.update(override)
 
 report = {
+    "started_at": started_at,
+    "head": report_head,
     "deliberation": deliberation,
     "pre_pr_coverage": {"status": "PASS", "modules": 3},
     "discovered_rules": [
@@ -181,6 +231,7 @@ with open(report_path, "w", encoding="utf-8") as f:
     json.dump(report, f, indent=2)
     f.write('\n')
 PYEOF
+  write_valid_bats_handoff
 }
 
 # write_push_proof — writes a valid .androidcommondoc/push-proof.json
@@ -218,7 +269,7 @@ manifest_version = int(sys.argv[4])
 report_digest    = sys.argv[5]
 age_secs         = int(sys.argv[6])
 
-ts = datetime.datetime.utcfromtimestamp(time.time() - age_secs).strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.fromtimestamp(time.time() - age_secs, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 proof = {
     "schema_version":   1,
@@ -237,6 +288,14 @@ proof = {
         {"step": "doc-validator-parity",   "result": "PASS", "ran": True},
     ],
     "report_digest": report_digest,
+    # Wave A: verify-proof's 8th check requires bats_evidence present + .head ==
+    # pushed SHA. Bound to head_sha (the SAME value this proof's own "head" field
+    # uses) by default — #14/#15/#17 mutate head/worktree_id/age and die at an
+    # EARLIER check (2/3/4) regardless; #20 needs the full 8-check pass to reach exit 0.
+    "bats_evidence": {
+        "run_id": "canonical-run", "head": head_sha, "ok": 10, "not_ok": 0,
+        "expected": 10, "scope": "full", "generated_at": ts,
+    },
 }
 with open(proof_path, "w", encoding="utf-8") as f:
     json.dump(proof, f, indent=2)
@@ -356,7 +415,7 @@ run_verifier() {
   python3 - "$ACDOC/push-proof.json" "$HEAD_SHA" "$REPO" <<'PYEOF'
 import json, sys, time, datetime, hashlib
 proof_path, head, worktree = sys.argv[1], sys.argv[2], sys.argv[3]
-ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 content = open('/dev/stdin').read() if False else \
     open(worktree + '/.androidcommondoc/quality-gate-report.json', 'rb').read().replace(b'\r\n', b'\n')
 rd = hashlib.sha256(content).hexdigest()
@@ -392,7 +451,7 @@ PYEOF
   python3 - "$ACDOC/push-proof.json" "$HEAD_SHA" "$REPO" <<'PYEOF'
 import json, sys, time, datetime, hashlib
 proof_path, head, worktree = sys.argv[1], sys.argv[2], sys.argv[3]
-ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 content = open(worktree + '/.androidcommondoc/quality-gate-report.json', 'rb').read().replace(b'\r\n', b'\n')
 rd = hashlib.sha256(content).hexdigest()
 mv = json.load(open(worktree + '/quality-gate-manifest.json'))['manifest_version']

@@ -4,7 +4,7 @@ sources: [androidcommondoc]
 targets: [all]
 slug: quality-gater-freshness-gate
 category: agents
-description: "quality-gater Step Z — Report Freshness Gate (REQUIRED pre-mint). Runs scripts/sh/lib/qg-report-freshness.sh to verify all step reasons are fresh for the current HEAD and authoritative bats count; blocks the mint (exit 1) on stale reasons. Supports structured carry metadata (carried/source_head/current_head/files) for legitimate byte-identical re-mints."
+description: "quality-gater Step Z — Report Freshness Gate (REQUIRED pre-mint). Runs scripts/sh/lib/qg-report-freshness.sh to verify all step reasons are fresh for the current HEAD and authoritative bats count; blocks the mint (exit 1) on stale reasons. Authoritative bats count is discovered via the shared lib/bats-handoff.sh selector (Wave A), not raw filename-sort. Supports structured carry metadata (carried/source_head/current_head/files) for legitimate byte-identical re-mints."
 ---
 
 # quality-gater: Report Freshness Gate (Step Z)
@@ -12,6 +12,10 @@ description: "quality-gater Step Z — Report Freshness Gate (REQUIRED pre-mint)
 Referenced from [quality-gater](../../setup/agent-templates/quality-gater.md) Step Z. **REQUIRED — runs after Step Y (registry integrity), before Step 10 (mint).**
 
 Calls `scripts/sh/lib/qg-report-freshness.sh` to verify that every step reason in `quality-gate-report.json` is coherent with the current git HEAD and the authoritative bats count. If the lib exits non-zero, the template records a FAIL entry and exits 1 — the mint (`emit-push-proof.sh --subcommand run-qg`) is never reached.
+
+**Two different "freshness" mechanisms — do not conflate them:**
+- **Step Z's own freshness (this doc; unchanged by Wave A):** `qg-report-freshness.sh`'s Invariants A/B/C (below) check whether the TEXT of each step's `reason` field is still coherent with the current HEAD and bats count.
+- **Evidence-selection freshness (NEW, Wave A):** before Step Z's invariants even run, something has to decide WHICH bats handoff file counts as authoritative ground truth in the first place. That selection is now `lib/bats-handoff.sh`'s `select_bats_handoff --since <report.started_at> --require-scope full` call (see "Canonical Step Z Bash Block" below) — a different mechanism, unrelated to `qg-report-freshness.sh`. `emit-push-proof.sh`'s own `report-started-at-*` mint-time check uses the same `--since` anchor independently; see [qg-proof-push-gate](qg-proof-push-gate.md).
 
 ---
 
@@ -42,14 +46,14 @@ The lib outputs no content on success (exit 0). On failure it writes one line pe
 [qg-freshness] FAIL: step=<id> reason=<invariant>
 ```
 
-**Non-zero exit → the template must NOT proceed to Step 10.** The `report-freshness` record appended to `quality-gate-report.json` is **informational only** — `emit-push-proof.sh`/`quality-gate-manifest.json` are **untouched**. The manifest-based step-coverage check in `emit-push-proof.sh` only enforces steps that ARE in `required_steps[]`; it does not block on additional report steps.
+**Non-zero exit → the template must NOT proceed to Step 10.** The `report-freshness` record appended to `quality-gate-report.json` is **informational only** — it carries no weight in `emit-push-proof.sh`'s manifest-based step-coverage check, which only enforces `required_steps[]`/`conditional_steps[]` membership (see "What is NOT changed" below for the precise manifest boundary, corrected as of Wave A).
 
 This is the same enforcement model used by Step X (path-manifest-audit): exit 1 from the gate, do not proceed.
 
 ### What is NOT changed
 
-- `quality-gate-manifest.json` — NOT touched. Adding a manifest entry is unnecessary and would require regenerating `protocol_digest`.
-- `emit-push-proof.sh` — NOT edited. The gate sits ahead of it in the template flow.
+- `quality-gate-manifest.json`'s `required_steps[]`, `conditional_steps[]`, and `protocol_digest` — NOT touched by this gate. Wave A does add `"report-freshness"` to the manifest's separate `informational_steps` array (see [qg-proof-push-gate](qg-proof-push-gate.md)) solely so `emit-push-proof.sh`'s `unknown-step-id` check recognizes the id when it appears in `quality-gate-report.json`'s `steps[]` — that array is not a `protocol_digest` input and carries no step-coverage weight of its own.
+- `emit-push-proof.sh` — NOT edited by this gate. Step Z sits ahead of it in the template flow; `emit-push-proof.sh` never invokes `qg-report-freshness.sh`.
 
 ---
 
@@ -90,26 +94,39 @@ PYEOF
 
 # --- Step Z: Report Freshness Gate ---
 
-# 1. Discover authoritative bats count from run-id handoff.
-HANDOFF_FILE="$(ls .androidcommondoc/bats-result.*.env 2>/dev/null | sort | tail -1)"
-if [[ -z "$HANDOFF_FILE" ]]; then
-  echo "[Step Z] report-freshness: FAIL — no bats-result.*.env handoff found." >&2
-  append_step_json "report-freshness" "true" "FAIL" \
-    "Step Z aborted: no bats-result.*.env handoff file; cannot determine authoritative bats count."
-  exit 1
-fi
-BATS_OK="$(grep '^BATS_OK=' "$HANDOFF_FILE" | cut -d= -f2 | tr -d '[:space:]')"
-if [[ -z "$BATS_OK" ]]; then
-  echo "[Step Z] report-freshness: FAIL — BATS_OK missing from handoff $HANDOFF_FILE." >&2
-  append_step_json "report-freshness" "true" "FAIL" \
-    "Step Z aborted: BATS_OK key absent in $HANDOFF_FILE."
-  exit 1
-fi
-
-# 2. Capture current HEAD.
+# 1. Capture current HEAD (needed by both the evidence lookup below and the freshness lib).
 CURRENT_HEAD="$(git rev-parse HEAD)"
 
-# 3. Run the freshness lib.
+# 2. Resolve report.started_at — the QG-session anchor stamped by emit-qg-result.sh --init
+#    (Wave A, D6 fix). This is the --since floor for the evidence lookup in step 3; it is
+#    a DIFFERENT mechanism than this Step's own freshness invariants in step 4 — see the
+#    disambiguation note above.
+STARTED_AT="$(python3 -c "
+import json, sys
+try:
+    obj = json.load(open(sys.argv[1], encoding='utf-8'))
+    print(obj.get('started_at', ''))
+except Exception:
+    print('')
+" "$REPORT_FILE" 2>/dev/null || true)"
+
+# 3. Discover authoritative bats evidence via the shared selector (Wave A — replaces the
+#    old `ls .androidcommondoc/bats-result.*.env | sort | tail -1` filename-sort pick,
+#    which took the lexicographically-last file with NO HEAD check and NO scope check,
+#    silently accepting a foreign-HEAD or targeted-run handoff as authoritative).
+source "${ANDROID_COMMON_DOC:-$PWD}/scripts/sh/lib/bats-handoff.sh"
+select_bats_handoff --repo-root "${ANDROID_COMMON_DOC:-$PWD}" --head "$CURRENT_HEAD" \
+    --since "$STARTED_AT" --require-scope full
+
+if [[ "$BH_STATUS" != "ok" ]]; then
+  echo "[Step Z] report-freshness: FAIL — select_bats_handoff status=$BH_STATUS (need ok; HEAD=$CURRENT_HEAD since=$STARTED_AT scope=full)." >&2
+  append_step_json "report-freshness" "true" "FAIL" \
+    "Step Z aborted: select_bats_handoff returned status=$BH_STATUS (expected ok) for HEAD=$CURRENT_HEAD since=$STARTED_AT require-scope=full — cannot determine authoritative bats count."
+  exit 1
+fi
+BATS_OK="$BH_OK"
+
+# 4. Run the freshness lib.
 freshness_exit=0
 freshness_stderr="$(bash "${ANDROID_COMMON_DOC:-$PWD}/scripts/sh/lib/qg-report-freshness.sh" \
     --report  "$REPORT_FILE" \
@@ -117,7 +134,7 @@ freshness_stderr="$(bash "${ANDROID_COMMON_DOC:-$PWD}/scripts/sh/lib/qg-report-f
     --bats-count "$BATS_OK" \
     --repo-root  "$PWD" 2>&1)" || freshness_exit=$?
 
-# 4. Record result and gate.
+# 5. Record result and gate.
 if [[ "$freshness_exit" -ne 0 ]]; then
   reason="$(printf '%s' "$freshness_stderr" | tr '\n' ' ' | sed 's/"/\\"/g')"
   append_step_json "report-freshness" "true" "FAIL" \

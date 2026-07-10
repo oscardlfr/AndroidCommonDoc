@@ -108,6 +108,34 @@ teardown() {
 
 # ── Fixture writers ───────────────────────────────────────────────────────────
 
+# write_valid_bats_handoff — writes a well-formed, full-scope, HEAD-bound bats handoff
+# into $ACDOC (Wave A: run-qg's test-suite-evidence-* check requires real evidence
+# behind any claimed "test-suite": PASS step). HEAD is re-derived from git at call time.
+# generated_at is captured strictly after the caller's own started_at timestamp,
+# satisfying select_bats_handoff's --since floor (real wall-clock ordering only moves
+# forward within one test).
+write_valid_bats_handoff() {
+    local head
+    head="$(git -C "$REPO" rev-parse HEAD)"
+    local generated_at
+    generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    local run_id="wave-a-fixture-$$-${RANDOM}"
+    mkdir -p "$ACDOC"
+    {
+        printf 'BATS_OK=%s\n'           "42"
+        printf 'BATS_NOT_OK=%s\n'       "0"
+        printf 'BATS_EXPECTED=%s\n'     "42"
+        printf 'BATS_TOTAL=%s\n'        "42"
+        printf 'BATS_COMPLETE=%s\n'     "true"
+        printf 'BATS_VERDICT=%s\n'      "pass"
+        printf 'BATS_LOG=%s\n'          "/dev/null"
+        printf 'BATS_HEAD=%s\n'         "$head"
+        printf 'BATS_RUN_ID=%s\n'       "$run_id"
+        printf 'BATS_GENERATED_AT=%s\n' "$generated_at"
+        printf 'BATS_SCOPE=%s\n'        "full"
+    } > "$ACDOC/bats-result.${run_id}.env"
+}
+
 # write_quality_gate_report — writes a valid quality-gate-report.json
 # $1=extra_steps_json (default ""), $2=override_deliberation_json (default "")
 #
@@ -115,17 +143,31 @@ teardown() {
 # so the `task_is_code_changes` predicate evaluates TRUE. The `production-file-verify`
 # conditional step must therefore be PASS (not SKIP) — this is enforced by emit-push-proof.sh.
 # We override it to PASS here to satisfy the predicate consistency check.
+#
+# Wave A: also stamps report.started_at and writes a matching valid bats handoff (via
+# write_valid_bats_handoff) BY DEFAULT — this helper's report always defaults
+# test-suite to PASS, so run-qg's report-started-at-* and test-suite-evidence-* checks
+# now fire unconditionally, before #CI1/#CI3's own intended die-code is ever reached.
 write_quality_gate_report() {
     local extra_steps="${1:-}"
     local override_deliberation="${2:-}"
+    local started_at
+    started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    # 51b0d63: run-qg's report-head-* check requires report.head present and equal to
+    # the current HEAD. Re-derived fresh from git at call time (never a cached shell
+    # variable), mirroring write_valid_bats_handoff's own established pattern.
+    local report_head
+    report_head="$(git -C "$REPO" rev-parse HEAD)"
     python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" \
-        "${extra_steps}" "${override_deliberation}" << 'PYEOF'
+        "${extra_steps}" "${override_deliberation}" "$started_at" "$report_head" << 'PYEOF'
 import json, sys
 
 report_path         = sys.argv[1]
 manifest_path       = sys.argv[2]
 extra_steps_raw     = sys.argv[3]
 override_delib_raw  = sys.argv[4]
+started_at          = sys.argv[5]
+report_head         = sys.argv[6]
 
 manifest = json.load(open(manifest_path, encoding='utf-8'))
 
@@ -160,6 +202,8 @@ if override_delib_raw.strip():
     deliberation.update(override)
 
 report = {
+    "started_at": started_at,
+    "head": report_head,
     "deliberation": deliberation,
     "pre_pr_coverage": {"status": "PASS", "modules": 1},
     "discovered_rules": [
@@ -171,6 +215,7 @@ with open(report_path, "w", encoding="utf-8") as f:
     json.dump(report, f, indent=2)
     f.write('\n')
 PYEOF
+    write_valid_bats_handoff
 }
 
 # run_emitter — always passes --repo-root so the emitter uses the isolated repo

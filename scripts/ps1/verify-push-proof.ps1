@@ -1,7 +1,8 @@
 # verify-push-proof.ps1 -- PowerShell parity for emit-push-proof.sh verify-proof subcommand.
 #
 # Cheap verifier for push-proof.json. Checks schema_version, head, worktree_id,
-# generated_at freshness, manifest_version, steps_executed coverage, report_digest.
+# generated_at freshness, manifest_version, steps_executed coverage, report_digest,
+# bats_evidence binding (present + .head == pushed_sha -- Wave A Section A5b).
 # Used by the git-layer hook on Windows.
 #
 # USAGE
@@ -166,6 +167,18 @@ foreach ($rs in @($manifest.required_steps)) {
 $recomputed = Get-FileSha256 $reportPath
 if ($recomputed -ne $proof.report_digest) {
     Die "report_digest mismatch: stored=$($proof.report_digest) recomputed=$recomputed; quality-gate-report.json may have been tampered with post-mint"
+}
+
+# -- 10. bats_evidence binding: present + head matches pushed_sha -----------
+# Mirrors the bash verify_proof's 9th check (its own comment-numbering counts "Load
+# proof" as step 1) and push-authorization-gate.js's in-JS fallback -- all three
+# verifiers now carry equivalent rigor. A half-done evidence binding would mint
+# correctly but verify permissively; this closes that gap.
+if (-not $proof.bats_evidence) {
+    Die "bats_evidence missing from push-proof.json -- proof was minted before this wave's evidence binding, or evidence was stripped. Re-run /quality-gate."
+}
+if ($proof.bats_evidence.head -ne $PushedSha) {
+    Die "bats_evidence.head ($($proof.bats_evidence.head)) != pushed SHA ($PushedSha) -- proof's test-suite evidence does not correspond to the pushed commit"
 }
 
 Write-Host "[emit-push-proof] verify-proof: PASS" -ForegroundColor Green

@@ -70,20 +70,29 @@ with open(path, "w") as f:
 PYEOF
 }
 
-# Write a canonical-valid push-proof.json + quality-gate-report.json (for in-JS 7-check).
+# Write a canonical-valid push-proof.json + quality-gate-report.json (for in-JS 8-check).
 # a7e855e: in-JS fallback recomputes sha256(report, CRLF→LF) — bogus "0"*64 digest blocks
 # at check 7. This helper writes a minimal report and computes the real digest.
-# Args: <head_sha> <project_root> <stamp_dir>
+# f9f0610: check 8 requires proof.bats_evidence present + .head == pushed_sha. Args:
+#   <head_sha> <project_root> <stamp_dir> [<bats_evidence_head>]
+# bats_evidence_head defaults to <head_sha> (matching — the canonical/positive-control
+# shape used by PA-4c/PA-5/#PAG-EV3). Pass "__OMIT__" to omit bats_evidence entirely
+# (#PAG-EV1), or a different 40-hex value to force a head mismatch (#PAG-EV2).
 write_canonical_proof() {
-  local head="$1" root="$2" stamp_dir="$3"
+  local head="$1" root="$2" stamp_dir="$3" bats_evidence_head="${4:-$1}"
   # The in-JS check 5 reads quality-gate-manifest.json from project root.
   # Copy the live manifest into the isolated PROJECT_ROOT so the gate can load it.
   cp "$BATS_TEST_DIRNAME/../../quality-gate-manifest.json" "$root/quality-gate-manifest.json"
-  python3 - "$head" "$root" "$stamp_dir" <<'PYEOF'
+  python3 - "$head" "$root" "$stamp_dir" "$bats_evidence_head" <<'PYEOF'
 import hashlib, json, sys, datetime
 
-head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+head, root, stamp_dir, bats_evidence_head = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+# Dynamic read (never hardcoded) — mirrors the sibling pattern already used correctly by
+# test-push-proof-gate.bats (:198/:363/:398) and pre-push-hook.bats (:174). A literal here
+# rots at the next manifest_version bump; that is exactly how the Wave A hardcoding defect
+# was planted.
+manifest_version = json.load(open(root + '/quality-gate-manifest.json', encoding='utf-8'))['manifest_version']
 
 # Minimal quality-gate-report.json with all 6 required steps (ids match manifest required_steps).
 report = {
@@ -113,7 +122,7 @@ proof = {
     "head": head,
     "generated_at": ts,
     "worktree_id": root,
-    "manifest_version": 1,
+    "manifest_version": manifest_version,
     "steps_executed": [
         {"step": "architect-deliberation", "result": "PASS", "ran": True},
         {"step": "pre-pr",                 "result": "PASS", "ran": True},
@@ -125,6 +134,20 @@ proof = {
     ],
     "report_digest": digest
 }
+# check 8 (f9f0610): bats_evidence present + .head == pushed_sha. "__OMIT__" leaves it
+# off the proof entirely (#PAG-EV1's absent-evidence scenario); otherwise it's populated
+# with bats_evidence_head, which is the pushed head by default (matching/canonical) or a
+# deliberately different value (#PAG-EV2's mismatch scenario).
+if bats_evidence_head != "__OMIT__":
+    proof["bats_evidence"] = {
+        "run_id": "canonical-run",
+        "head": bats_evidence_head,
+        "ok": 10,
+        "not_ok": 0,
+        "expected": 10,
+        "scope": "full",
+        "generated_at": ts,
+    }
 proof_path = stamp_dir + '/push-proof.json'
 with open(proof_path, 'w') as f:
     json.dump(proof, f)
@@ -184,10 +207,12 @@ PYEOF
 
 @test "PA-4c ALLOW: main + bare stub hook (no ACDOC marker) + canonical-valid proof → allowed via stamp path" {
   # Bare stub without marker → gate falls through to stamp check. With valid fresh stamps
-  # and a canonical-valid proof (all 7 checks pass), the stamp path should allow.
+  # and a canonical-valid proof (all 8 checks pass), the stamp path should allow.
   # No emit-push-proof.sh in isolated PROJECT_ROOT → in-JS fallback taken.
   # a7e855e: in-JS now does full 7-check including report_digest recompute — bogus "0"*64
   # would block at check 7. Write real quality-gate-report.json, compute sha256, embed digest.
+  # f9f0610: an 8th check (bats_evidence present + .head == pushed_sha) now also gates —
+  # write_canonical_proof's default bats_evidence_head (= the pushed head) satisfies it.
   mkdir -p "$PROJECT_ROOT/.git/hooks"
   printf '#!/bin/sh\nexit 0\n' > "$PROJECT_ROOT/.git/hooks/pre-push"
   chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
@@ -206,6 +231,8 @@ PYEOF
   # setup() now git-inits PROJECT_ROOT and sets HEAD_SHA so binding works in isolation.
   # a7e855e: in-JS fallback does full 7-check including report_digest recompute — bogus
   # "0"*64 digest now blocks at check 7. Use canonical proof with real digest.
+  # f9f0610: an 8th check (bats_evidence present + .head == pushed_sha) now also gates —
+  # write_canonical_proof's default bats_evidence_head (= the pushed head) satisfies it.
   write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
   write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
   write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
@@ -583,9 +610,11 @@ report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
 normalized = bytes(b for i, b in enumerate(report_raw)
     if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
 digest = hashlib.sha256(normalized).hexdigest()
+# Dynamic read (never hardcoded) — see write_canonical_proof's own comment for why.
+manifest_version = json.load(open(root + '/quality-gate-manifest.json', encoding='utf-8'))['manifest_version']
 proof = {
     "schema_version": 1, "head": head, "generated_at": ts,
-    "worktree_id": root, "manifest_version": 1,
+    "worktree_id": root, "manifest_version": manifest_version,
     "steps_executed": [],
     "report_digest": digest
 }
@@ -610,9 +639,11 @@ report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
 normalized = bytes(b for i, b in enumerate(report_raw)
     if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
 digest = hashlib.sha256(normalized).hexdigest()
+# Dynamic read (never hardcoded) — see write_canonical_proof's own comment for why.
+manifest_version = json.load(open(root + '/quality-gate-manifest.json', encoding='utf-8'))['manifest_version']
 proof = {
     "schema_version": 1, "head": head, "generated_at": ts,
-    "worktree_id": root, "manifest_version": 1,
+    "worktree_id": root, "manifest_version": manifest_version,
     "steps_executed": [
         {"step": "architect-deliberation", "result": "PASS", "ran": True},
         {"step": "pre-pr",                 "result": "PASS", "ran": True},
@@ -647,7 +678,7 @@ PYEOF
 
 @test "PA-JS4 BLOCK: in-JS fallback — manifest_version mismatch → BLOCK" {
   # Check 5: proof.manifest_version != live manifest.manifest_version → BLOCK.
-  # Canonical manifest has manifest_version=1; write proof with manifest_version=99.
+  # Canonical manifest has manifest_version=2 (Wave A bump); write proof with manifest_version=99.
   write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
   write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
   write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
@@ -665,7 +696,7 @@ digest = hashlib.sha256(normalized).hexdigest()
 proof = {
     "schema_version": 1, "head": head, "generated_at": ts,
     "worktree_id": root,
-    "manifest_version": 99,   # mutated — live manifest is 1
+    "manifest_version": 99,   # mutated — live manifest is 2 (Wave A bump); 99 is intentional mismatch test data
     "steps_executed": [
         {"step": "architect-deliberation", "result": "PASS", "ran": True},
         {"step": "pre-pr",                 "result": "PASS", "ran": True},
@@ -683,4 +714,464 @@ PYEOF
   run_hook
   [ "$status" -eq 2 ]
   [[ "$output" == *"manifest_version"* ]]
+}
+
+# ── f9f0610: in-JS fallback check 8 — bats_evidence binding ──────────────────
+# Gate 0b (Codex pre-exec review of .claude/hooks/push-authorization-gate.js) has
+# cleared; toolkit-specialist landed the 8th check in f9f0610. #PAG-EV3 is a POSITIVE
+# CONTROL and is load-bearing: without it, #PAG-EV1/#PAG-EV2 could pass against a gate
+# that blocks every proof unconditionally, proving nothing.
+
+@test "#PAG-EV1 BLOCK: in-JS fallback — push-proof.json missing bats_evidence → BLOCK" {
+  # Check 8: proof.bats_evidence absent → BLOCK. absent-means-skip is a bypass, not a
+  # default — same rule as every earlier check.
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" "__OMIT__"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bats_evidence"* ]]
+}
+
+@test "#PAG-EV2 BLOCK: in-JS fallback — bats_evidence.head mismatched pushed SHA → BLOCK" {
+  # Check 8: proof.bats_evidence.head != headShaForProof → BLOCK. The evidence binding
+  # exists but does not correspond to the commit actually being pushed.
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  local mismatched_head="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" "$mismatched_head"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bats_evidence"* ]] || [[ "$output" == *"head"* ]]
+}
+
+@test "#PAG-EV3 ALLOW (positive control): in-JS fallback — bats_evidence.head matches pushed SHA → still passes" {
+  # Proves #PAG-EV1/#PAG-EV2 are exercising a real check, not passing against a gate
+  # that blocks every proof unconditionally — a correctly-bound bats_evidence must
+  # still allow the push, exactly like PA-5's canonical scenario.
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# ── Peer-block CONTRACT test — NOT a fail-open regression pin; see #PAG-GUARD ────
+#
+# Asserts the peer-block contract: agent_type != '' + git push => exit 2 +
+# decision:block, with PA-4 (the identical marker-bearing fixture) as its positive
+# control for the main orchestrator. Would catch a future refactor that drops or
+# weakens the agent_type check entirely.
+#
+# THIS TEST PASSES AGAINST THE PRE-9336e5e CODE TOO, BY DESIGN — that is a fact about
+# block()'s own mechanics, not a flaw in the test. block() calls process.exit(2)
+# SYNCHRONOUSLY whenever stdout.write() returns true, which it always does for this
+# hook's ~200-byte JSON payload (nowhere near a pipe's high-water mark). So even
+# without the `return` that follows the peer-block call, block() still exits 2 before
+# the later `if (hookIsACDoc) process.exit(0)` fall-through — reached via NO `else`,
+# the line labelled "Main orchestrator" a few lines down is a comment, not a branch —
+# can ever execute.
+#
+# That fall-through is REACHABLE (there is no else) but UNOBSERVABLE at this payload
+# size (block() never defers to 'drain' here). Those are different facts, and only
+# the second is why this test can't catch a missing `return`: do not read "reachable"
+# as "belt-and-braces" — that single `return` is the SOLE guard. Delete it and put
+# stdout under genuine backpressure and the FIXED code would deadlock instead (the
+# 5s escape-hatch timer is already cleared by the time block() would defer to
+# 'drain'), so a runtime test for this fail-open hangs on CORRECT code — only a
+# static check fits. #PAG-GUARD (below) is the ONLY test in this suite that can
+# detect the missing `return`; see its own red-then-green verification.
+#
+# ADDENDUM — found vacuous by an actual `git push`, not a test: this fixture uses the
+# BARE command shape ("git push origin feature/test"), no shell wrapper. That is NOT
+# the shape this repo's agents actually issue — the mandated invocation wraps through
+# `env PATH="$HOME/.local/gnubin-l0:..." bash -c 'cd <repo>\n<command>'` for GNU-userland
+# reasons. isGitPushCommand splits on &&/||/;/| but never on a literal newline, so a
+# bash -c payload whose FIRST LINE is `cd ...` is one segment starting with `cd` —
+# never recognized as a push at all, for ANY agent_type, peer or main. This test was
+# GREEN, unbroken, for the entire period that bypass existed, because it never once
+# exercised the wrapped shape. See #PAG-PEER-WRAPPED / #PAG-MAIN-STALE-WRAPPED below,
+# which cover the shape this repo actually uses and were RED against the unfixed hook
+# before being written. Keep this test — it is still a real contract pin for the bare
+# shape — but its green never was, and is not now, evidence that the peer-block holds
+# for every invocation shape a peer might actually use.
+
+@test "#PAG-PEER-BLOCK BLOCK: peer + git push + ACDoc pre-push hook installed → exit 2 + decision:block (peer-block contract)" {
+  # The marker-bearing real pre-push-hook.sh must be installed (hookIsACDoc=true) so
+  # the fixture matches PA-4's, its positive control — proving this block is
+  # specifically about agent_type, not an unconditional block on every push through
+  # this hook.
+  mkdir -p "$PROJECT_ROOT/.git/hooks"
+  cp "$BATS_TEST_DIRNAME/../sh/pre-push-hook.sh" "$PROJECT_ROOT/.git/hooks/pre-push"
+  chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
+  make_input "git push origin feature/test" "toolkit-specialist"
+  run_hook
+  # Assert BOTH exit code and the actual decision JSON — a crash also exits non-zero
+  # (e.g. Node's default uncaught-exception exit code), so exit-code alone cannot
+  # distinguish "blocked with a message" from "died". The outer catch{} fail-open would
+  # make a crash exit 0, not nonzero — but a corrupted intermediate state could still
+  # exit nonzero for the wrong reason, so pin the real payload too.
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+# ── #PAG-PEER-WRAPPED / #PAG-MAIN-STALE-WRAPPED — the real bypass shape ─────────
+#
+# Found by an actual `git push`, not a test: team-lead's own push went through with
+# 58-minute-stale stamps and no pre-push hook installed. Root cause: isGitPushCommand
+# splits a command on &&, ||, ;, | — never on a literal newline — then anchors
+# ^git push per segment. This repo's mandated invocation shape is
+# `env PATH="$HOME/.local/gnubin-l0:..." bash -c 'cd <repo>\n<real command>'` (the GNU
+# userland requires the env-prefix; the newline separates cd from the payload). A
+# bash -c body whose FIRST LINE is `cd ...` is one segment beginning with `cd`, so
+# isGitPushCommand returns false for the WHOLE string — and :174's
+# `if (!isGitPushCommand(cmd)) process.exit(0)` runs before the peer-block (:200) and
+# before the stamp/staleness check either one is ever reached. Nobody issues the bare
+# shape #PAG-PEER-BLOCK tests; everybody issues this one.
+#
+# RED confirmed against the last-committed pre-fix hook (1653eb5, via a scratch copy —
+# .claude/hooks/ was never touched to get this evidence) before writing these
+# assertions: both #PAG-PEER-WRAPPED and #PAG-MAIN-STALE-WRAPPED exit=0 with NO output
+# at all — a silent ALLOW, not even a decision JSON, because the early exit at :174
+# fires before the hook ever forms an opinion. toolkit-specialist is fixing
+# isGitPushCommand in parallel; these two assert the CORRECT (post-fix) behavior, so
+# they are RED until that fix lands and GREEN after — do not weaken them to match
+# today's behavior.
+
+@test "#PAG-PEER-WRAPPED BLOCK: peer + newline-wrapped bash -c 'cd <repo>\ngit push' → exit 2 + decision:block (the real bypass shape)" {
+  local wrapped_cmd
+  wrapped_cmd="env PATH=\"\$HOME/.local/gnubin-l0:/opt/homebrew/bin:\$PATH\" bash -c 'cd $PROJECT_ROOT"$'\n'"git push -u origin br'"
+  make_input "$wrapped_cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "#PAG-MAIN-STALE-WRAPPED BLOCK: main + same wrapped command + stale stamps (35 min) → exit 2, stale-stamp reason" {
+  # This is literally the shape of team-lead's real push tonight: main orchestrator,
+  # stamps well past the 30-minute freshness window, wrapped invocation.
+  write_stamp "quality-gate.stamp" "PASS" $((35 * 60)) "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" $((35 * 60)) "$HEAD_SHA"
+  local wrapped_cmd
+  wrapped_cmd="env PATH=\"\$HOME/.local/gnubin-l0:/opt/homebrew/bin:\$PATH\" bash -c 'cd $PROJECT_ROOT"$'\n'"git push -u origin br'"
+  make_input "$wrapped_cmd"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"stamp"* || "$output" == *"pre-pr"* || "$output" == *"quality-gate"* ]]
+}
+
+# ── Positive controls — pin what must NOT change alongside what must ───────────
+# Verified against the same pre-fix hook snapshot: all six already behave as asserted
+# today. They exist so a fix aimed at #PAG-PEER-WRAPPED/#PAG-MAIN-STALE-WRAPPED cannot
+# silently overcorrect into blocking real non-push commands, blocking prose that merely
+# mentions "git push", or — the sharpest risk — regressing the &&/;-separated and
+# leading-newline shapes that already work today for the wrong reason to still work.
+
+@test "#PAG-WRAPPED-NONPUSH ALLOW: peer + wrapped non-push bash -c 'cd /tmp\necho hi' → exit 0 (not a push at all)" {
+  local wrapped_cmd
+  wrapped_cmd="bash -c 'cd /tmp"$'\n'"echo hi'"
+  make_input "$wrapped_cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "#PAG-PROSE-SH ALLOW: main + sh -c \"echo 'git push'\" (prose, no real push) → exit 0" {
+  make_input "sh -c \"echo 'git push'\""
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "#PAG-PROSE-PRINTF ALLOW: main + printf 'git push' (prose, no real push) → exit 0" {
+  make_input "printf 'git push'"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "#PAG-PROSE-ANSI ALLOW: main + echo \$'git push' (ANSI-C prose, no real push) → exit 0" {
+  make_input "echo \$'git push'"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "#PAG-PEER-AND-BLOCK BLOCK: peer + 'cd /tmp && git push origin x' (already-working && path) → exit 2, regression pin" {
+  # Already blocks today via the &&-splitting path (segment-aware detector already
+  # inspects each &&-separated segment). Pinned so a fix for the newline case cannot
+  # silently regress the already-working && case.
+  make_input "cd /tmp && git push origin x" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "#PAG-PEER-LEADING-NEWLINE BLOCK: peer + bash -c '\ngit push origin x' (leading newline only, no cd) → exit 2, regression pin" {
+  # Already blocks today: with no 'cd' prefix, the one newline-containing segment
+  # trims down to a leading blank line + 'git push origin x' — trimming leading
+  # whitespace before the ^git push anchor check means this shape is caught even
+  # though the fix for #PAG-PEER-WRAPPED (which has a non-whitespace 'cd' prefix
+  # before the same anchor) has not landed yet. Pinned so a newline-splitting fix
+  # doesn't accidentally special-case "payload starts with a newline" into an allow.
+  local wrapped_cmd
+  wrapped_cmd="bash -c '"$'\n'"git push origin x'"
+  make_input "$wrapped_cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+# ── #PAG-PEER-AMP / #PAG-AMP-CONTROL — the bare-& half of 3c64643's bypass fix ─────
+#
+# 3c64643 added TWO separators to isGitPushCommand's split: `\r?\n` (covered above by
+# #PAG-PEER-WRAPPED/#PAG-MAIN-STALE-WRAPPED/#PAG-PEER-LEADING-NEWLINE) and bare `&`
+# (background), covered by neither — every existing PA-P2A-* case uses the COMPOUND
+# `&&` operator, which already split before 3c64643 (it has always had its own literal
+# alternative). Not one fed a bare `&`. `sleep 1 & git push origin main` sequences two
+# commands exactly like `sleep 1 ; git push origin main` from the shell's point of
+# view, so without the bare-`&` alternative the whole string is one segment starting
+# with `sleep`, never reaching the `^git push` anchor.
+#
+# RED confirmed against a scratch copy of the REAL, CURRENT hook with ONLY the bare
+# `&` alternative removed from the split regex (`&&` left intact, listed first, exactly
+# as shipped) — not against pre-3c64643, which would conflate this half with the
+# newline half and let the newline separator do the work instead. .claude/hooks/ was
+# never touched to get this evidence:
+#   peer + "sleep 1 & git push origin main"  → exit=0, no output (silent ALLOW — the bug)
+#   peer + "sleep 1 & echo hi"                → exit=0 (correct either way, not a push)
+#   peer + "echo ok && git push origin x"     → exit=2, BLOCK (confirms && does NOT
+#                                                depend on & being present at all — it
+#                                                matches its own separate, earlier-listed
+#                                                alternative, so PA-P2A-5's green is not
+#                                                an accident of ordering)
+# Then GREEN against the real, current hook for the same three.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#PAG-PEER-AMP BLOCK: peer + 'sleep 1 & git push origin main' (bare background operator) → exit 2 + decision:block" {
+  make_input "sleep 1 & git push origin main" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "#PAG-AMP-CONTROL ALLOW: peer + 'sleep 1 & echo hi' (bare & but no push) → exit 0" {
+  # Without this, #PAG-PEER-AMP would pass against a hook that blocks every
+  # ampersand-containing command unconditionally, proving nothing.
+  make_input "sleep 1 & echo hi" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# ── #PAG-GLOBALOPT-* / #PAG-ANSIC-* / #PAG-PEER-LINECONT — 3f23add + 737c1b9 ────────
+#
+# Three more evasions of isGitPushCommand's ^git\s+push\b anchor, each closed by its
+# own commit, each needing its own isolated regression (same N-behaviours-need-N-
+# regressions shape as #PAG-PEER-AMP before it):
+#
+# 1. GLOBAL GIT OPTIONS (3f23add): git's own -C/-c/--git-dir/etc. consumed between
+#    `git` and the subcommand defeat the anchor — `git -C /tmp push` never reduces to
+#    `git push` without stripping the global option first.
+# 2. ANSI-C ESCAPE DECODE (3f23add): Pass 1 recurses into `$'...'` payloads, but a
+#    LITERAL backslash-n inside genuine $'...' quoting is two printable characters
+#    until bash decodes it — nothing splits on two printable characters, so
+#    `bash -c $'cd /tmp\ngit push'` (literal backslash-n) reaches one un-splittable
+#    segment.
+# 3. LINE CONTINUATION (737c1b9): a backslash immediately before a newline is a shell
+#    JOINER (removed; the two lines become one command) — but the separator split
+#    treats every bare newline as a boundary, so without collapsing the continuation
+#    first, `git -C /tmp \<newline>push` gets cut exactly at the join point into two
+#    non-matching segments (`git -C /tmp \` and `push origin x`), neither reducing to
+#    `git push`.
+#
+# RED confirmed for all three against scratch copies of the 737c1b9 baseline (the
+# last-committed state at authoring time), each with EXACTLY ONE element reverted —
+# never more than one at once, which would conflate which fix a given regression pins:
+#   no global-opt stripping:   "git -C /tmp push origin x"          → exit=0 (bug)
+#                              "git -c credential.helper= push..."  → exit=0 (bug)
+#   decodeAnsiCEscapes no-op:  "bash -c $'cd /tmp\ngit push...'"    → exit=0 (bug)
+#   no line-cont collapse:     "git -C /tmp \<newline>push..."      → exit=0 (bug)
+# .claude/hooks/ never touched to get this evidence. Then GREEN against the real,
+# current hook for all seven cases (three bugs + four controls) below.
+#
+# Real-newline fixtures (#PAG-PEER-LINECONT / #PAG-LINECONT-COMMIT) are built via
+# $'\n' concatenation, NEVER $(printf '\n') — command substitution strips trailing
+# newlines and would silently test `git -C /tmp \push` instead of the intended
+# `git -C /tmp \<newline>push`. Verified via a python round-trip during authoring that
+# the JSON-encoded command field genuinely contains a 0x0a byte before trusting it.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#PAG-GLOBALOPT-C BLOCK: peer + 'git -C /tmp push origin x' (global option before subcommand) → exit 2 + decision:block" {
+  make_input "git -C /tmp push origin x" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "#PAG-GLOBALOPT-CONFIG BLOCK: peer + 'git -c credential.helper= push origin x' (second global-option form) → exit 2 + decision:block" {
+  make_input "git -c credential.helper= push origin x" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "#PAG-GLOBALOPT-COMMIT ALLOW (positive control): peer + 'git -C /tmp commit -m x' (global option before a non-push) → exit 0" {
+  # Without this, a hook that blocks every command containing a git global option
+  # would pass #PAG-GLOBALOPT-C/-CONFIG for the wrong reason.
+  make_input "git -C /tmp commit -m x" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "#PAG-ANSIC-NL BLOCK: peer + bash -c \$'cd /tmp\\ngit push origin x' (genuine \$'...' quoting, literal backslash-n) → exit 2 + decision:block" {
+  local cmd
+  cmd='bash -c $'\''cd /tmp\ngit push origin x'\'''
+  make_input "$cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "#PAG-ANSIC-PLAINQUOTE ALLOW (negative control): peer + bash -c 'echo a\\ngit push' (plain quotes, bash does NOT decode) → exit 0" {
+  # The discriminating control: plain '...' quoting is never eligible for ANSI-C
+  # decoding, so bash treats the whole thing as one literal argument and no push ever
+  # runs. Unconditional decoding (not gated on genuine $'...') would over-block this.
+  local cmd
+  cmd='bash -c '\''echo a\ngit push'\'''
+  make_input "$cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "#PAG-PEER-LINECONT BLOCK: peer + 'git -C /tmp \\<newline>push origin x' (shell line continuation) → exit 2 + decision:block" {
+  # Real newline via \$'\n' concatenation — NEVER \$(printf '\n'), which strips a
+  # trailing newline and would silently test 'git -C /tmp \push' instead.
+  local cmd
+  cmd="git -C /tmp \\"$'\n'"push origin x"
+  make_input "$cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "#PAG-LINECONT-COMMIT ALLOW (positive control): peer + 'git -C /tmp \\<newline>commit -m x' (continuation into a non-push) → exit 0" {
+  local cmd
+  cmd="git -C /tmp \\"$'\n'"commit -m x"
+  make_input "$cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+# ── #PAG-GUARD — static invariant: every block( call site is immediately followed by
+# return ────────────────────────────────────────────────────────────────────────────
+#
+# WHY this invariant exists (for the next person tempted to delete a `return`): block()
+# only calls process.exit(2) synchronously when stdout.write() succeeds; under
+# backpressure it defers exit to the 'drain' event. Without `return` immediately after,
+# execution continues past a decision that has already been made, ending in an
+# accidental ALLOW — either a deref-throw swallowed by the outer catch{}'s fail-open, or
+# (the real, historical case — #PAG-PEER-BLOCK above) a silent fall-through to a later
+# unconditional process.exit(0). Neither failure mode crashes loudly; both look like a
+# normal allow.
+#
+# Model/precedent: scripts/tests/portable-shell-guards.bats (Wave B, same problem shape).
+#
+# SANITY FLOOR IS THE WHOLE POINT (repo memory: "a guard that cannot fail is worse than
+# no guard" — a detector that scans and finds zero block( call sites reports "0
+# violations", indistinguishable from "0 call sites", and would pass against an empty
+# file, a moved file, or a broken regex). The floor is >=15, not >=8 and not ==20:
+# >=8 is loose enough that a half-broken regex finding 9 would still pass; ==20 is
+# brittle and would fail spuriously the moment anyone adds or removes a legitimate
+# block() call as part of ordinary maintenance. >=15 fails loudly if the parser breaks
+# and survives ordinary maintenance. The file has exactly 20 call sites as of this wave.
+#
+# Four shapes the parser must survive (all verified against the real file AND against a
+# deliberately-broken copy with one return removed, to confirm this is non-vacuous):
+#   1. Multi-line call: `block(\n  '...'\n);` then `return;` on the NEXT physical line.
+#   2. catch-oneliner:  `catch { block('...'); return; }` — return on the SAME line,
+#      immediately after `);` with no line break.
+#   3. Leading comment: a line starting with `//` that merely mentions `block()` in
+#      prose (the INVARIANT comment block above `function block` does this twice) — must
+#      be excluded, not counted as a call site.
+#   4. TRAILING comment: `return; // ... mentions block() in a later comment ...` — the
+#      trailing `//` must be stripped BEFORE searching for `block(`, or this line is
+#      miscounted as an extra call site whose "next line" is a comment continuation, not
+#      `return` — a false violation on the very line that documents the invariant. This
+#      is the shape that produced 1 false positive while developing this detector (a
+#      naive "does this line end in );" check breaks on shape 2, since `);` there is
+#      followed by more code on the same line, not end-of-line — fixed by searching for
+#      the ");" substring at any position, not requiring it at end-of-line).
+@test "#PAG-GUARD static: every block( call site in the hook is immediately followed by return" {
+  local hook="$BATS_TEST_DIRNAME/../../.claude/hooks/push-authorization-gate.js"
+  [ -f "$hook" ]
+
+  run python3 - "$hook" << 'PYEOF'
+import re, sys
+
+path = sys.argv[1]
+with open(path, encoding='utf-8') as f:
+    lines = f.readlines()
+
+def strip_comment(line):
+    # Strip from the first // onward. Safe for THIS file specifically: verified no
+    # line's genuine (non-comment) content contains a literal "//" (e.g. no URLs).
+    idx = line.find('//')
+    return line if idx == -1 else line[:idx]
+
+cleaned = [strip_comment(l) for l in lines]
+
+# Call sites: lines containing `block(` as a token, excluding the `function block(`
+# definition and excluding lines that are pure comments (already blanked above).
+call_sites = []
+for i, line in enumerate(cleaned):
+    if re.search(r'function\s+block\s*\(', line):
+        continue
+    m = re.search(r'\bblock\s*\(', line)
+    if m:
+        call_sites.append((i, m.start()))
+
+violations = []
+for (i, col) in call_sites:
+    # Find the first ");" substring from (i, col) onward, scanning forward up to 15
+    # lines (covers multi-line calls). Searching for the substring anywhere on the
+    # line (not requiring end-of-line) is what survives shape 2 (catch-oneliner).
+    close_pos = None
+    search_from = col
+    for j in range(i, min(i + 15, len(cleaned))):
+        idx = cleaned[j].find(');', search_from if j == i else 0)
+        if idx != -1:
+            close_pos = (j, idx + 2)
+            break
+    if close_pos is None:
+        violations.append((i + 1, 'no closing ); found within 15 lines'))
+        continue
+
+    close_line_idx, after_idx = close_pos
+    remainder = cleaned[close_line_idx][after_idx:]
+    if re.search(r'\breturn\s*;', remainder):
+        continue  # shape 2: return on the same line as the close
+
+    if remainder.strip() != '':
+        violations.append((i + 1, f'trailing code after close, no return: {remainder!r}'))
+        continue
+
+    # shape 1: return on the next non-blank line
+    k = close_line_idx + 1
+    while k < len(cleaned) and cleaned[k].strip() == '':
+        k += 1
+    if k < len(cleaned) and re.match(r'^\s*return\s*;', cleaned[k]):
+        continue
+
+    violations.append((i + 1, f'no return immediately after close at line {close_line_idx + 1}'))
+
+print(f'call_sites={len(call_sites)}')
+print(f'violations={len(violations)}')
+for ln, reason in violations:
+    print(f'VIOLATION at line {ln}: {reason}')
+PYEOF
+  [ "$status" -eq 0 ]
+
+  local call_sites violations
+  call_sites="$(printf '%s\n' "$output" | python3 -c "import sys; print(next(l.split('=')[1] for l in sys.stdin if l.startswith('call_sites=')))")"
+  violations="$(printf '%s\n' "$output" | python3 -c "import sys; print(next(l.split('=')[1] for l in sys.stdin if l.startswith('violations=')))")"
+
+  # Sanity floor FIRST: fails loudly if the parser is broken, not if the code is.
+  [ "$call_sites" -ge 15 ]
+  [ "$violations" -eq 0 ]
 }

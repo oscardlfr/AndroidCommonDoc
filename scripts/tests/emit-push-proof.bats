@@ -18,6 +18,15 @@ bats_require_minimum_version 1.5.0
 #
 # Isolation: every test uses mktemp -d + git init + teardown rm -rf.
 # Mirrors fixture pattern from test-push-proof-gate.bats.
+#
+# Wave A additions (Section A4 evidence binding): #EP-ENUM, #EP-DUP, #EP-UNK, #EP-UNK+,
+# #EP-EV3-6/EV7/EV8/EV9a-b/EV10a-b, #EP-BESPOKE. Die-code-to-test mapping renumbered
+# mid-wave (canonical, per team-lead's post-16ae614 confirmation): #EP-EV3=targeted-scope
+# (test-suite-evidence-partial), #EP-EV4=foreign-HEAD (test-suite-evidence-absent),
+# #EP-EV7=generated_at<started_at (test-suite-evidence-stale) — commit 16ae614 split
+# bats-handoff.sh's Pass 3 into freshness-then-scope sub-passes mid-wave, making
+# test-suite-evidence-stale reachable and changing #EP-EV3's expected die-code from
+# -absent to -partial. See each test's own header comment for details.
 
 EMITTER="$BATS_TEST_DIRNAME/../sh/emit-push-proof.sh"
 MANIFEST_SRC="$BATS_TEST_DIRNAME/../../quality-gate-manifest.json"
@@ -71,20 +80,126 @@ teardown() {
 
 # ── Fixture writers ───────────────────────────────────────────────────────────
 
+# write_valid_bats_handoff — writes a well-formed, full-scope, HEAD-bound bats handoff
+# into $ACDOC (Wave A: run-qg's test-suite-evidence-* check requires real evidence
+# behind any claimed "test-suite": PASS step). HEAD is re-derived from git at call time
+# (never a cached shell variable) so this stays correct even for tests that commit
+# further after setup(). generated_at is captured after the caller's own started_at
+# timestamp, satisfying select_bats_handoff's --since floor (real wall-clock ordering
+# only moves forward within one test).
+write_valid_bats_handoff() {
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  local generated_at
+  generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  local run_id="wave-a-fixture-$$-${RANDOM}"
+  mkdir -p "$ACDOC"
+  {
+    printf 'BATS_OK=%s\n'           "42"
+    printf 'BATS_NOT_OK=%s\n'       "0"
+    printf 'BATS_EXPECTED=%s\n'     "42"
+    printf 'BATS_TOTAL=%s\n'        "42"
+    printf 'BATS_COMPLETE=%s\n'     "true"
+    printf 'BATS_VERDICT=%s\n'      "pass"
+    printf 'BATS_LOG=%s\n'          "/dev/null"
+    printf 'BATS_HEAD=%s\n'         "$head"
+    printf 'BATS_RUN_ID=%s\n'       "$run_id"
+    printf 'BATS_GENERATED_AT=%s\n' "$generated_at"
+    printf 'BATS_SCOPE=%s\n'        "full"
+  } > "$ACDOC/bats-result.${run_id}.env"
+}
+
+# write_custom_bats_handoff <head> <generated_at> <ok> <not_ok> <expected> <complete>
+#                           <verdict> <scope> [<run_id>]
+# Full control for evidence-check tests (#EP-EV*) — unlike write_valid_bats_handoff
+# (always golden), lets a caller construct a specific invalid/edge-case handoff.
+write_custom_bats_handoff() {
+  local head="$1" generated_at="$2" ok="$3" not_ok="$4" expected="$5"
+  local complete="$6" verdict="$7" scope="$8" run_id="${9:-custom-$$-${RANDOM}}"
+  local total=$(( ok + not_ok ))
+  mkdir -p "$ACDOC"
+  {
+    printf 'BATS_OK=%s\n'           "$ok"
+    printf 'BATS_NOT_OK=%s\n'       "$not_ok"
+    printf 'BATS_EXPECTED=%s\n'     "$expected"
+    printf 'BATS_TOTAL=%s\n'        "$total"
+    printf 'BATS_COMPLETE=%s\n'     "$complete"
+    printf 'BATS_VERDICT=%s\n'      "$verdict"
+    printf 'BATS_LOG=%s\n'          "/dev/null"
+    printf 'BATS_HEAD=%s\n'         "$head"
+    printf 'BATS_RUN_ID=%s\n'       "$run_id"
+    printf 'BATS_GENERATED_AT=%s\n' "$generated_at"
+    printf 'BATS_SCOPE=%s\n'        "$scope"
+  } > "$ACDOC/bats-result.${run_id}.env"
+}
+
+# clear_handoffs — removes every handoff written so far (including the default golden
+# one write_quality_gate_report's own write_valid_bats_handoff call leaves behind), so
+# an evidence test starts from a clean slate before writing its own specific fixture.
+clear_handoffs() {
+  rm -f "$ACDOC"/bats-result.*.env 2>/dev/null || true
+}
+
+# override_report_started_at <new_value_or_empty>
+# Patches quality-gate-report.json's started_at field directly — removes it entirely
+# when new_value is the empty string. Used by #EP-EV7/8/9.
+override_report_started_at() {
+  local new_val="$1"
+  python3 - "$ACDOC/quality-gate-report.json" "$new_val" <<'PYEOF'
+import json, sys
+path, new_val = sys.argv[1], sys.argv[2]
+r = json.load(open(path, encoding='utf-8'))
+if new_val == "":
+    r.pop('started_at', None)
+else:
+    r['started_at'] = new_val
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(r, f, indent=2); f.write('\n')
+PYEOF
+}
+
 # write_quality_gate_report — writes a valid .androidcommondoc/quality-gate-report.json
 # $1=extra_steps_json (default "") — JSON list of step objects to merge/replace
 # $2=override_deliberation_json (default "") — JSON object to override deliberation block
+# $3=head_override (default "") — see below
+#
+# Wave A: also stamps report.started_at and writes a matching valid bats handoff (via
+# write_valid_bats_handoff) BY DEFAULT — every caller of this helper builds a report
+# whose test-suite step defaults to PASS, so run-qg's report-started-at-* and
+# test-suite-evidence-* checks now fire unconditionally, before any of this helper's
+# callers' own intended die-code is ever reached.
+#
+# report.head ($3): defaults to a freshly-derived current HEAD (never a cached shell
+# variable, mirroring write_valid_bats_handoff's own established pattern) — but
+# #EP-HEADMISMATCH/#EP-HEADABSENT exist SPECIFICALLY to exercise report.head itself, and
+# auto-binding it correctly here would make them vacuous (same lesson as #QR10/11a/11b/12:
+# a shared helper must never silently overwrite the field a test's own name says it tests).
+# Pass a specific 40-hex value to force report-head-mismatch, or "__OMIT__" to delete the
+# key entirely (report-head-absent) — never patch this default away from tests that own it.
 write_quality_gate_report() {
   local extra_steps="${1:-}"
   local override_deliberation="${2:-}"
+  local head_override="${3:-}"
+  local started_at
+  started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  local report_head
+  if [[ "$head_override" == "__OMIT__" ]]; then
+    report_head=""
+  elif [[ -n "$head_override" ]]; then
+    report_head="$head_override"
+  else
+    report_head="$(git -C "$REPO" rev-parse HEAD)"
+  fi
   python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" \
-      "${extra_steps}" "${override_deliberation}" <<'PYEOF'
+      "${extra_steps}" "${override_deliberation}" "$started_at" "$report_head" <<'PYEOF'
 import json, sys
 
 report_path         = sys.argv[1]
 manifest_path       = sys.argv[2]
 extra_steps_raw     = sys.argv[3]
 override_delib_raw  = sys.argv[4]
+started_at          = sys.argv[5]
+report_head         = sys.argv[6]
 
 manifest = json.load(open(manifest_path, encoding='utf-8'))
 
@@ -122,6 +237,7 @@ if override_delib_raw.strip():
     deliberation.update(override)
 
 report = {
+    "started_at": started_at,
     "deliberation": deliberation,
     "pre_pr_coverage": {"status": "PASS", "modules": 3},
     "discovered_rules": [
@@ -129,10 +245,16 @@ report = {
     ],
     "steps": steps,
 }
+# Only add "head" when report_head is non-empty — "__OMIT__" resolves to an empty
+# string in bash, so the key is genuinely ABSENT here, not present-with-empty-value
+# (report-head-absent's fixture must delete the key, not merely blank it).
+if report_head:
+    report["head"] = report_head
 with open(report_path, "w", encoding="utf-8") as f:
     json.dump(report, f, indent=2)
     f.write('\n')
 PYEOF
+  write_valid_bats_handoff
 }
 
 # write_arch_verdicts — writes APPROVED-VERIFY-FINAL + HEAD-bound verdicts for all 3
@@ -212,10 +334,22 @@ write_plan() {
 @test "#WP3 BLOCK: wave_plan_present TRUE + path-manifest-audit absent from report → step-coverage-gap (exit 2)" {
   write_plan "test-slug"
   write_arch_verdicts "test-slug"
-  # Write report with path-manifest-audit explicitly removed from steps[]
-  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" <<'PYEOF'
+  # Write report with path-manifest-audit explicitly removed from steps[]. This test
+  # builds its own report inline (bypassing write_quality_gate_report), so Wave A's
+  # started_at + handoff are added here explicitly — report-started-at-* and
+  # test-suite-evidence-* (test-suite defaults to PASS below) would otherwise fire
+  # before ever reaching the step-coverage-gap check this test exists to exercise.
+  local started_at
+  started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  # 51b0d63: report-head-* requires report.head present and equal to current HEAD;
+  # re-derived fresh from git, never a cached variable.
+  local report_head
+  report_head="$(git -C "$REPO" rev-parse HEAD)"
+  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$started_at" "$report_head" <<'PYEOF'
 import json, sys
 manifest = json.load(open(sys.argv[2], encoding='utf-8'))
+started_at = sys.argv[3]
+report_head = sys.argv[4]
 steps = []
 for rs in manifest.get('required_steps', []):
     steps.append({"step": rs['id'], "ran": True, "result": "PASS"})
@@ -229,6 +363,8 @@ for cs in manifest.get('conditional_steps', []):
         steps.append({"step": cs['id'], "ran": False, "result": "SKIP",
                       "reason": "predicate false in isolated test repo"})
 report = {
+    "started_at": started_at,
+    "head": report_head,
     "deliberation": {
         "architects_consulted": ["arch-platform", "arch-testing", "arch-integration"],
         "incorporated_at": "2026-06-14T00:00:00Z",
@@ -240,6 +376,7 @@ report = {
 with open(sys.argv[1], "w", encoding="utf-8") as f:
     json.dump(report, f, indent=2); f.write('\n')
 PYEOF
+  write_valid_bats_handoff
   run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
   [ "$status" -eq 2 ]
   [[ "$output" == *"step-coverage-gap"* ]] || [[ "$output" == *"path-manifest-audit"* ]]
@@ -260,30 +397,29 @@ PYEOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #WP5  invalid slug → predicate FALSE → SKIP+reason → PASS
-# ../evil rejected by inline slug-validation in eval_predicate → wave_plan_present=FALSE.
-# SKIP+reason is legitimate because predicate is FALSE (no valid wave dir resolved).
-# Expect: exit 0 (even if a PLAN.md exists at some path — invalid slug → no resolution).
-# TDD: RED until Part A confirms the inline allowlist in eval_predicate('wave_plan_present').
+# #WP5  invalid slug → predicate FALSE → SKIP+reason valid → later fails elsewhere
+# resolve_slug() does NOT validate CLAUDE_WAVE_SLUG's content (only its bash-level
+# emptiness) — it returns "../evil" verbatim. The inline allowlist lives ONLY in
+# eval_predicate('wave_plan_present'): re.match(r'^[A-Za-z0-9._-]+$') rejects "../evil"
+# (contains "/") → predicate evaluates FALSE → path-manifest-audit's SKIP+reason is
+# legitimate (pred_false + SKIP+reason -> valid) → the conditional-steps pass completes
+# without misclassifying this as inconsistent-skip. That IS this test's load-bearing
+# assertion. The run still fails LATER: wave_slug="../evil" flows unresolved into the
+# verdict-file check's wave dir (.planning/wave-../evil/), which was deliberately never
+# created (only wave-test-slug/ was) — exit 2, verdict-head-binding. Tightened per Wave
+# A finding: the prior negative-only assertion (`output != *"inconsistent-skip"*`) would
+# have kept passing even if this predicate path silently broke, since ANY other die
+# reason (e.g. the report-started-at-absent this wave introduces) also lacks that
+# substring — it would prove nothing without also pinning the real, specific reason.
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#WP5 PASS: invalid slug ../evil → wave_plan_present FALSE → path-manifest-audit SKIP+reason valid (exit 0)" {
+@test "#WP5 PASS (predicate layer): invalid slug ../evil → wave_plan_present FALSE → path-manifest-audit SKIP+reason valid; run fails later at verdict-head-binding, never inconsistent-skip" {
   # Create a wave dir that would match if slug were valid — proves slug check, not dir absence
   write_plan "test-slug"
   write_arch_verdicts "test-slug"
   write_quality_gate_report '[{"step":"path-manifest-audit","ran":false,"result":"SKIP","reason":"No active wave PLAN.md found"}]'
-  # CLAUDE_WAVE_SLUG=../evil → inline re.match(r'^[A-Za-z0-9._-]+$') rejects → FALSE
-  # wave_dir resolution never reaches .planning/wave-../evil/PLAN.md
-  # Must also provide a valid wave dir for verdict binding — use test-slug but with ../evil slug
-  # which means run-qg will fail at verdict step before predicate. Use a separate nonexistent-evil slug
-  # with no verdict files so we can isolate just the predicate. But run-qg checks verdicts after
-  # predicate validation — put verdict under the slug that would resolve if ../evil were valid.
-  # Since ../evil contains / the slug-validation in resolve_slug ALSO rejects it → exit 2 at slug step.
-  # Test asserts exit 0 OR that it fails only on slug resolution (not predicate enforcement gap).
-  # Adjust: the test proves the predicate path does not ALLOW inconsistent-skip for ../evil.
   run bash -c "CLAUDE_WAVE_SLUG='../evil' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
-  # ../evil is rejected by resolve_slug (contains /) → emitter exits 2 at slug step, not predicate.
-  # This is acceptable security behavior: invalid slugs are rejected before reaching predicate check.
-  # Test assertion: output must NOT contain "inconsistent-skip" for path-manifest-audit.
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"verdict-head-binding"* ]]
   [[ "$output" != *"inconsistent-skip"* ]]
 }
 
@@ -326,10 +462,20 @@ PYEOF
 # ─────────────────────────────────────────────────────────────────────────────
 @test "#SS-WP-3 BLOCK: secret-scan step absent from steps[] → run-qg exits 2 (step-coverage-gap)" {
   write_arch_verdicts "test-slug"
-  # Write report with secret-scan explicitly removed from steps[]
-  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" <<'PYEOF'
+  # Write report with secret-scan explicitly removed from steps[]. This test builds its
+  # own report inline (bypassing write_quality_gate_report), so Wave A's started_at +
+  # handoff are added here explicitly — see #WP3's comment for why.
+  local started_at
+  started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  # 51b0d63: report-head-* requires report.head present and equal to current HEAD;
+  # re-derived fresh from git, never a cached variable.
+  local report_head
+  report_head="$(git -C "$REPO" rev-parse HEAD)"
+  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$started_at" "$report_head" <<'PYEOF'
 import json, sys
 manifest = json.load(open(sys.argv[2], encoding='utf-8'))
+started_at = sys.argv[3]
+report_head = sys.argv[4]
 steps = []
 for rs in manifest.get('required_steps', []):
     if rs['id'] == 'secret-scan':
@@ -344,6 +490,8 @@ for cs in manifest.get('conditional_steps', []):
         steps.append({"step": cs['id'], "ran": False, "result": "SKIP",
                       "reason": "predicate false in isolated test repo"})
 report = {
+    "started_at": started_at,
+    "head": report_head,
     "deliberation": {
         "architects_consulted": ["arch-platform", "arch-testing", "arch-integration"],
         "incorporated_at": "2026-06-14T00:00:00Z",
@@ -355,6 +503,7 @@ report = {
 with open(sys.argv[1], "w", encoding="utf-8") as f:
     json.dump(report, f, indent=2); f.write('\n')
 PYEOF
+  write_valid_bats_handoff
   run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
   [ "$status" -eq 2 ]
   [[ "$output" == *"secret-scan"* ]] || [[ "$output" == *"step-coverage-gap"* ]]
@@ -384,4 +533,410 @@ PYEOF
 )"
   # Canonicalization mirrors scripts/sh/lib/manifest-digest.sh exactly.
   [ "$stored_digest" = "$canonical_digest" ]
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Wave A — Section A4 evidence binding (new tests)
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-ENUM  invalid-step-result — a step result outside {PASS,FAIL,SKIP} is rejected.
+# Regression guard for the historical Wave 5 "PASS-DELTA-HONEST" shape.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-ENUM BLOCK: invalid-step-result — test-suite result='PASS-DELTA-HONEST' rejected" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report '[{"step":"test-suite","ran":true,"result":"PASS-DELTA-HONEST"}]'
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid-step-result"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-DUP  duplicate-step-id — two entries sharing a step id are rejected (closes the
+# last-wins overwrite the step-index dict comprehension would otherwise silently do).
+# write_quality_gate_report's own extra_steps merge already de-dupes by id, so the
+# duplicate must be injected post-hoc to prove the CHECK, not just the fixture builder.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-DUP BLOCK: duplicate-step-id — two steps[] entries share the same id" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  python3 - "$ACDOC/quality-gate-report.json" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+r = json.load(open(path, encoding='utf-8'))
+dup = next(s for s in r['steps'] if s.get('step') == 'test-suite')
+r['steps'].append(dict(dup))
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(r, f, indent=2); f.write('\n')
+PYEOF
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"duplicate-step-id"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-UNK  unknown-step-id — a step id outside required ∪ conditional ∪ informational
+# is rejected.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-UNK BLOCK: unknown-step-id — a step id absent from all three manifest sets is rejected" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report '[{"step":"totally-made-up-step","ran":true,"result":"PASS"}]'
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown-step-id"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-UNK+  POSITIVE CONTROL — the sole informational_steps entry ("report-freshness")
+# is ACCEPTED, not rejected as unknown-step-id. Load-bearing: without this, #EP-UNK
+# could pass against a gate that rejects EVERY step id unconditionally, proving nothing.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-UNK+ POSITIVE CONTROL: informational step 'report-freshness' is accepted (exit 0), never unknown-step-id" {
+  # Deliberately NO write_plan — this test needs a fully PASSING run (unlike
+  # #EP-ENUM/#EP-DUP/#EP-UNK, which die earlier in Section A4 regardless), so
+  # wave_plan_present must stay FALSE, matching #WP2's pattern: path-manifest-audit's
+  # default SKIP+reason (from write_quality_gate_report) is then legitimate rather than
+  # an unrelated inconsistent-skip.
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report '[{"step":"report-freshness","ran":true,"result":"PASS"}]'
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"unknown-step-id"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV1  test-suite-evidence-absent — no bats handoff exists at all.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV1 BLOCK: test-suite-evidence-absent — no bats handoff exists at all" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  clear_handoffs
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-absent"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV2  test-suite-evidence-absent — the only candidate handoff is malformed
+# (empty run-id fails bats-handoff.sh's own well-formedness regex).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV2 BLOCK: test-suite-evidence-absent — the only handoff is malformed (empty run-id)" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  clear_handoffs
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  printf 'BATS_OK=5\nBATS_NOT_OK=0\nBATS_EXPECTED=5\nBATS_TOTAL=5\nBATS_COMPLETE=true\nBATS_VERDICT=pass\nBATS_LOG=/dev/null\nBATS_HEAD=%s\nBATS_RUN_ID=\nBATS_GENERATED_AT=%s\nBATS_SCOPE=full\n' \
+    "$head" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$ACDOC/bats-result.malformed-ev2.env"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-absent"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV3  test-suite-evidence-partial — a well-formed, HEAD-matching handoff that IS
+# fresh enough (BATS_GENERATED_AT >= report.started_at) but scoped "targeted", not
+# "full". Since commit 16ae614's Pass 3a/3b split (landed mid-wave), bats-handoff.sh
+# reports this specific case as its own status="scope-mismatch" (distinct from
+# genuine staleness, #EP-EV7) — emit-push-proof.sh's python dispatches that status
+# directly to "test-suite-evidence-partial", making this check reachable (previously
+# believed unreachable before 16ae614 landed; see #EP-EV7's comment for the fuller
+# history). Canonical die-code pinned per team-lead's post-16ae614 confirmation.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV3 BLOCK: test-suite-evidence-partial — fresh but targeted-scope handoff (scope-mismatch)" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  clear_handoffs
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  write_custom_bats_handoff "$head" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" 5 0 5 true pass targeted
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-partial"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV4  test-suite-evidence-absent — a handoff bound to a DIFFERENT commit.
+# select_bats_handoff's Pass 1 filters candidates by exact --head match before ANY
+# later pass runs, so a foreign-head handoff is excluded at the library level
+# (bats-handoff.sh reports its own status="absent" for this case) — distinct from
+# #EP-EV7's genuinely-stale scenario (matching head, too old), which maps to its own
+# dedicated die-code. This one is stable/unaffected by the 16ae614 Pass 3a/3b split
+# (that split only concerns Pass 3, which never runs on a candidate Pass 1 rejected).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV4 BLOCK: test-suite-evidence-absent — handoff bound to a foreign HEAD" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  clear_handoffs
+  write_custom_bats_handoff "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" 5 0 5 true pass full
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-absent"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV5  test-suite-evidence-partial — a well-formed, HEAD-matching, full-scope
+# handoff with BATS_COMPLETE=false. Unlike scope, bats-handoff.sh's own
+# well-formedness check does NOT require complete=="true" (only that the value
+# matches ^(true|false)$), so this candidate IS selected as status="ok" — reaching,
+# and legitimately exercising, emit-push-proof.sh's own complete-check.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV5 BLOCK: test-suite-evidence-partial — handoff has BATS_COMPLETE=false" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  clear_handoffs
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  write_custom_bats_handoff "$head" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" 5 0 5 false fail full
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-partial"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV6  test-suite-evidence-dirty — a well-formed, HEAD-matching, full-scope,
+# complete handoff with not_ok>0. bats-handoff.sh's own selection does not exclude a
+# dirty run (only emit-push-proof.sh's own dirty-check does).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV6 BLOCK: test-suite-evidence-dirty — handoff has not_ok>0" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  clear_handoffs
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  write_custom_bats_handoff "$head" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" 5 2 7 true fail full
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-dirty"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV7  test-suite-evidence-stale — a well-formed, HEAD-MATCHING, full-scope
+# handoff whose BATS_GENERATED_AT predates report.started_at (genuinely stale
+# evidence for the RIGHT commit, unlike #EP-EV4's wrong-commit case).
+#
+# Landed mid-wave (commit 16ae614, arch-platform ruling): bats-handoff.sh's Pass 3
+# used to fail one combined check (since AND scope together), so ANY non-"ok" result
+# collapsed into a single library status and this die-code was unreachable via the
+# CLI boundary. It is now split into Pass 3a (freshness only) then Pass 3b (scope,
+# only over the freshness-qualifying subset), so "genuinely too old" (Pass 3a) and
+# "fresh but wrong scope" (Pass 3b, see #EP-EV3) are reported as two different
+# library statuses ("stale" vs "scope-mismatch"), and emit-push-proof.sh's python
+# now dispatches on each SPECIFIC status value rather than collapsing every
+# non-"ok" status into "-absent". This test would have been impossible to write
+# honestly against the pre-16ae614 shape; it is added here because the production
+# code changed underneath this wave while it was in progress. Canonical die-code
+# pinned per team-lead's post-16ae614 confirmation.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV7 BLOCK: test-suite-evidence-stale — handoff matches HEAD but predates report.started_at" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  clear_handoffs
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  # started_at was just stamped (now); a handoff generated well before that is
+  # genuinely stale evidence for the right commit.
+  write_custom_bats_handoff "$head" "2020-01-01T00:00:00Z" 5 0 5 true pass full
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-stale"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV8  report-started-at-absent — report.started_at field is missing entirely.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV8 BLOCK: report-started-at-absent — report.started_at field is missing" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  override_report_started_at ""
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"report-started-at-absent"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV9a  report-started-at-implausible — started_at more than 86400s in the past
+# (the intentional max-staleness bound, not unlimited replay protection).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV9a BLOCK: report-started-at-implausible — started_at is far in the past" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  override_report_started_at "2020-01-01T00:00:00Z"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"report-started-at-implausible"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV9b  report-started-at-implausible — started_at more than SKEW_TOLERANCE (120s)
+# in the future.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV9b BLOCK: report-started-at-implausible — started_at is in the future beyond skew tolerance" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  local future_ts
+  future_ts="$(python3 -c "
+from datetime import datetime, timedelta, timezone
+print((datetime.now(timezone.utc) + timedelta(seconds=600)).strftime('%Y-%m-%dT%H:%M:%SZ'))
+")"
+  override_report_started_at "$future_ts"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"report-started-at-implausible"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV10a  sanity floor, zero-case — ok=0 and expected=0 (nothing ran at all) maps
+# to test-suite-evidence-absent, NOT -partial. A different bug class from #EP-EV10b:
+# "nothing happened" vs. "something internally inconsistent happened".
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV10a BLOCK: sanity floor zero-case — ok=0,expected=0 → test-suite-evidence-absent" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  clear_handoffs
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  write_custom_bats_handoff "$head" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" 0 0 0 true pass full
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-absent"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-EV10b  sanity floor, Amendment-A bypass — ok=5,not_ok=0,total=5,expected=999,
+# complete=true passes every OTHER check (status=ok, head matches, scope=full,
+# complete=true, not_ok=0) but total != expected → test-suite-evidence-partial.
+# Without this floor, a handoff claiming to have run only 5 of an expected 999 tests
+# would still be accepted as "clean" evidence — this is the exact bypass Amendment A
+# closes (a guard that cannot fail is worse than no guard).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-EV10b BLOCK: sanity floor Amendment-A bypass — ok=5,not_ok=0,total=5,expected=999,complete=true → test-suite-evidence-partial" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  clear_handoffs
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  write_custom_bats_handoff "$head" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" 5 0 999 true pass full
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-partial"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-HEADMISMATCH / #EP-HEADABSENT / #EP-HEADMATCH / #EP-HEADORDER — 51b0d63's
+# report-head-* check. emit-push-proof.sh previously had ZERO reads of report.head:
+# --init wrote it, nothing ever compared it to git rev-parse HEAD. A report opened at
+# commit A could be re-sealed and re-evidenced at a later commit B without a re-`--init`
+# — started_at stays plausible (it's a floor, not a ceiling), the evidence lookup selects
+# B's own fresh handoff, verdicts get re-supersede'd to B, the tree is clean, all steps
+# pass — and the mint succeeds, binding report_digest to a report that still literally
+# asserts commit A as its head. Observed live on this repo at the moment the gap was
+# found: report.head pointed at an ancestor while HEAD had already moved past it via
+# routine, unrelated work.
+#
+# RED confirmed against the pre-51b0d63 script (via `git show 16ae614:...` to scratch —
+# scripts/sh/ never touched) before writing these assertions: both #EP-HEADMISMATCH and
+# #EP-HEADABSENT minted a proof successfully (exit 0, push-proof.json written), because
+# report.head was never read at all.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-HEADMISMATCH BLOCK: otherwise-valid report with report.head set to a DIFFERENT commit → report-head-mismatch, no proof minted" {
+  # No write_plan here deliberately: wave_plan_present would default TRUE, but the
+  # default report's path-manifest-audit is SKIP — an unrelated inconsistent-skip that
+  # would fire first and mask the very check this test exists to exercise. write_plan's
+  # own inconsistency is #WP1's subject, not this one's.
+  write_arch_verdicts "test-slug"
+  local wrong_head="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  write_quality_gate_report '' '' "$wrong_head"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"report-head-mismatch"* ]]
+  [ ! -f "$ACDOC/push-proof.json" ]
+  [ ! -f "$ACDOC/quality-gate.stamp" ]
+  [ ! -f "$ACDOC/pre-pr.stamp" ]
+}
+
+@test "#EP-HEADABSENT BLOCK: otherwise-valid report with head key entirely absent (started_at present) → report-head-absent" {
+  # __OMIT__ deletes the key entirely — report-head-absent must not rely on a sibling
+  # check (report-started-at-absent) to catch this; started_at stays present and valid.
+  # No write_plan (see #EP-HEADMISMATCH's comment) — avoids an unrelated inconsistent-skip.
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report '' '' "__OMIT__"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"report-head-absent"* ]]
+  [ ! -f "$ACDOC/push-proof.json" ]
+  [ ! -f "$ACDOC/quality-gate.stamp" ]
+  [ ! -f "$ACDOC/pre-pr.stamp" ]
+}
+
+@test "#EP-HEADMATCH ALLOW (positive control): report.head == current HEAD → run-qg mints proof" {
+  # Proves #EP-HEADMISMATCH/#EP-HEADABSENT exercise a real check, not a mint that
+  # refuses every report unconditionally — write_quality_gate_report's own default
+  # (no override) binds head to the actual current HEAD, exactly like every other
+  # passing #EP-* test already relies on.
+  # No write_plan (see #EP-HEADMISMATCH's comment) — avoids an unrelated inconsistent-skip.
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 0 ]
+  [ -f "$ACDOC/push-proof.json" ]
+}
+
+@test "#EP-HEADORDER BLOCK: report-started-at-absent fires before report-head-mismatch when both are wrong (precedence pin)" {
+  # Textual order in the script is report-started-at-* then report-head-* (the operator
+  # sees the more specific cause first) — pinned here empirically, not assumed from
+  # reading the source, since precedence is a runtime property of die()'s control flow.
+  # No write_plan (see #EP-HEADMISMATCH's comment) — avoids an unrelated inconsistent-skip.
+  write_arch_verdicts "test-slug"
+  local wrong_head="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  write_quality_gate_report '' '' "$wrong_head"
+  override_report_started_at ""
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"report-started-at-absent"* ]]
+  [[ "$output" != *"report-head-mismatch"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-BESPOKE  reconstruction of the historical Wave 5 in-the-wild bad report — the
+# original is gone from disk (.androidcommondoc/ is gitignored; Wave B's own QG run
+# overwrote it). Rebuilt from its description only: null pre_pr_coverage, null
+# discovered_rules, no started_at, and a "bats-suite": "PASS-DELTA-HONEST" field. The
+# exact first die-code is not pinned (deliberation-evidence-absent fires first in this
+# reconstruction, ahead of the pre_pr_coverage/discovered_rules checks, since no
+# "deliberation" block is present either) — any of them is sufficient to prove this
+# historical shape is rejected, not minted.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-BESPOKE BLOCK: reconstructed Wave 5 report (null pre_pr_coverage/discovered_rules, no started_at, PASS-DELTA-HONEST) is rejected, no proof minted" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  python3 - "$ACDOC/quality-gate-report.json" <<'PYEOF'
+import json, sys
+report = {
+    "pre_pr_coverage": None,
+    "discovered_rules": None,
+    "bats-suite": "PASS-DELTA-HONEST",
+    "steps": [],
+}
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump(report, f, indent=2); f.write('\n')
+PYEOF
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [ ! -f "$ACDOC/push-proof.json" ]
 }
