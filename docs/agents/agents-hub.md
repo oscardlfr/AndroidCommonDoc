@@ -36,7 +36,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [capability-detection](capability-detection.md) | Graceful degradation for optional tools in agent definitions |
 | [script-vs-agent-decision](script-vs-agent-decision.md) | Decision framework: when a script is better than an agent |
 | [spec-driven-workflow](spec-driven-workflow.md) | Spec-driven agent workflow with 3-phase teams and multi-session departments |
-| [quality-gater-hub](quality-gater-hub.md) | quality-gater extended-protocol hub: Step 7.5 Doc-Validator Parity + Step 9.5 Runtime UI Validation + quality-gate-protocol + qg-proof-push-gate (4 sub-docs) |
+| [quality-gater-hub](quality-gater-hub.md) | quality-gater extended-protocol hub: 6 step-detail sub-docs (Doc-Validator Parity, Runtime UI Validation, Registry Integrity, Freshness Gate, Secret Scan, Artifact Binding) + quality-gate-protocol + qg-proof-push-gate (8 sub-docs) |
 | [context-rotation-guide](context-rotation-guide.md) | Context management: rotation strategies, team-lead-as-relay, team dissolution |
 | [cross-layer-protocol](cross-layer-protocol.md) | Cross-layer team coordination: separate teams per layer, filesystem handoff via `.planning/HANDOFF.md`, phase sync |
 | [scope-extension-protocol](scope-extension-protocol.md) | Mechanical scope-extension gate: authorization workflow when architects hit out-of-scope blockers, escape hatch, bypass audit log |

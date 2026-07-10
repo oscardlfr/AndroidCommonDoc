@@ -109,6 +109,7 @@ After Steps 0-9 pass, the quality-gater calls `emit-push-proof.sh --subcommand r
 - Re-validating `quality-gate-manifest.json` protocol_digest (manifest-drift check)
 - Verifying verdict→HEAD binding: each `arch-*-verdict.md` must carry `APPROVED-VERIFY-FINAL` and a `**HEAD**:` field matching the current HEAD
 - Recording `steps_executed`, `report_digest` (sha256 of `quality-gate-report.json`), and `artifact_digests`
+- Persisting `bats_evidence` (9 keys as of wave `qg-artifact-binding`, W7 — adds `complete`/`total` to the original 7) so the three equal-rigor push-time verifiers re-derive the same bats completeness predicate, not just presence + HEAD match
 
 The pre-push hook (`pre-push-hook.sh`) verifies this proof before allowing any push. See [qg-proof-push-gate](qg-proof-push-gate.md) for the full subsystem reference.
 
