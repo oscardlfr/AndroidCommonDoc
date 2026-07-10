@@ -3,7 +3,7 @@ set -euo pipefail
 
 # qg-doc-validators.sh — QG doc-coverage validator (wave qg-doc-coverage).
 #
-# Runs two subchecks and writes a combined JSON report under
+# Runs three subchecks and writes a combined JSON report under
 # <project-root>/.androidcommondoc/doc-validator-report.json:
 #
 #   cross_refs      — replicates the CI doc-cross-refs job exactly:
@@ -14,15 +14,25 @@ set -euo pipefail
 #                          tests/integration/doc-structure.test.ts; gracefully
 #                          degrades (SKIP) when mcp-server is absent (L1/L2 use).
 #
+#   hub_reachability — every docs/agents/*.md must be reachable from the agents
+#                      hub (agents-hub.md) by following relative markdown links
+#                      transitively. Scoped to docs/agents/ only (wave
+#                      qg-artifact-binding, W10) -- repo-wide reachability is out
+#                      of scope.
+#
+# The combined report additively carries "status" (mirrors "result") and
+# "generated_at" (UTC ISO-8601) at the top level, so the QG mint's generic
+# artifact-binding loop can HEAD/freshness/status-bind this receipt.
+#
 # Usage:
 #   qg-doc-validators.sh [--project-root <path>] [--toolkit-root <path>]
-#                        [--only cross-refs|structure|all]
+#                        [--only cross-refs|structure|hub-reachability|all]
 #                        [--output-format json|human]
 #
 # Options:
 #   --project-root    Root of the project to validate (default: $PWD)
 #   --toolkit-root    Root of the L0 toolkit with mcp-server/ (default: ${ANDROID_COMMON_DOC:-$PWD})
-#   --only            Which subcheck(s) to run: cross-refs | structure | all (default: all)
+#   --only            Which subcheck(s) to run: cross-refs | structure | hub-reachability | all (default: all)
 #   --output-format   Output format: json | human (default: human)
 #   --help, -h        Show this help and exit 0
 #
@@ -38,7 +48,7 @@ Usage: qg-doc-validators.sh [OPTIONS]
 Options:
   --project-root <path>      Project root to validate (default: $PWD)
   --toolkit-root <path>      L0 toolkit root with mcp-server/ (default: ${ANDROID_COMMON_DOC:-$PWD})
-  --only cross-refs|structure|all  Subchecks to run (default: all)
+  --only cross-refs|structure|hub-reachability|all  Subchecks to run (default: all)
   --output-format json|human       Output format (default: human)
   --help, -h                 Show this help
 
@@ -78,9 +88,9 @@ done
 
 # Validate --only value
 case "$ONLY" in
-    cross-refs|structure|all) ;;
+    cross-refs|structure|hub-reachability|all) ;;
     *)
-        echo "[qg-doc-validators] ERROR: --only must be cross-refs, structure, or all" >&2
+        echo "[qg-doc-validators] ERROR: --only must be cross-refs, structure, hub-reachability, or all" >&2
         exit 1 ;;
 esac
 
@@ -95,6 +105,7 @@ esac
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 HEAD_SHA="$(git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null || echo "unknown")"
+GENERATED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 SELF="$(basename "$0")"
 
 # Ensure report dir exists
@@ -192,12 +203,80 @@ run_doc_structure_vitest() {
     echo "PASS|doc-structure vitest passed"
 }
 
+# ── Subcheck C: hub_reachability (W10) ────────────────────────────────────────
+# Every docs/agents/*.md must be reachable from the agents hub (agents-hub.md) by
+# following relative markdown links transitively -- the "hub chain": agents-hub.md
+# -> a per-domain hub (e.g. quality-gater-hub.md) -> step-detail sub-docs. Scoped
+# to docs/agents/ only (repo-wide reachability is explicitly out of scope -- see
+# docs/agents/quality-gater-artifact-binding.md's Non-Goals). An orphan here is a
+# doc no gate would otherwise catch as unlinked.
+
+run_hub_reachability() {
+    local agents_dir="${PROJECT_ROOT}/docs/agents"
+    local root="${agents_dir}/agents-hub.md"
+
+    if [ ! -d "$agents_dir" ]; then
+        echo "SKIP|docs/agents/ not found — skipping hub_reachability (L1/L2 consumer)"
+        return 0
+    fi
+    if [ ! -f "$root" ]; then
+        echo "FAIL|agents-hub.md not found at ${root} — cannot establish hub root"
+        return 0
+    fi
+
+    python3 - "$agents_dir" "$root" << 'PYEOF'
+import os, re, sys
+
+agents_dir = os.path.abspath(sys.argv[1])
+root       = os.path.abspath(sys.argv[2])
+
+LINK_RE = re.compile(r'\[[^\]]+\]\(([^)]+\.md)[^)]*\)')
+
+def links_in(path):
+    try:
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+    except OSError:
+        return []
+    out = []
+    for m in LINK_RE.finditer(text):
+        target = m.group(1).split('#', 1)[0].strip()
+        if not target or target.startswith(('http://', 'https://')):
+            continue
+        out.append(os.path.normpath(os.path.join(os.path.dirname(path), target)))
+    return out
+
+visited = set()
+queue = [root]
+while queue:
+    cur = queue.pop()
+    if cur in visited or not os.path.isfile(cur):
+        continue
+    visited.add(cur)
+    queue.extend(t for t in links_in(cur) if t not in visited)
+
+all_docs = {
+    os.path.normpath(os.path.join(agents_dir, name))
+    for name in os.listdir(agents_dir)
+    if name.endswith('.md')
+}
+orphans = sorted(os.path.basename(p) for p in (all_docs - visited))
+
+if not orphans:
+    print("PASS|all docs/agents/*.md reachable from agents-hub.md")
+else:
+    print(f"FAIL|orphaned docs (unreachable from agents-hub.md): {', '.join(orphans)}")
+PYEOF
+}
+
 # ── Run subchecks ─────────────────────────────────────────────────────────────
 
 CROSS_STATUS="SKIP"
 CROSS_SUMMARY="not-run"
 STRUCT_STATUS="SKIP"
 STRUCT_SUMMARY="not-run"
+HUB_STATUS="SKIP"
+HUB_SUMMARY="not-run"
 
 if [[ "$ONLY" == "cross-refs" || "$ONLY" == "all" ]]; then
     result="$(run_cross_refs)"
@@ -211,13 +290,19 @@ if [[ "$ONLY" == "structure" || "$ONLY" == "all" ]]; then
     STRUCT_SUMMARY="${result#*|}"
 fi
 
-# Top-level result: FAIL if either subcheck FAILs (SKIP is not FAIL)
+if [[ "$ONLY" == "hub-reachability" || "$ONLY" == "all" ]]; then
+    result="$(run_hub_reachability)"
+    HUB_STATUS="${result%%|*}"
+    HUB_SUMMARY="${result#*|}"
+fi
+
+# Top-level result: FAIL if any subcheck FAILs (SKIP is not FAIL)
 TOP_RESULT="PASS"
-if [[ "$CROSS_STATUS" == "FAIL" || "$STRUCT_STATUS" == "FAIL" ]]; then
+if [[ "$CROSS_STATUS" == "FAIL" || "$STRUCT_STATUS" == "FAIL" || "$HUB_STATUS" == "FAIL" ]]; then
     TOP_RESULT="FAIL"
 fi
 
-TOP_SUMMARY="cross_refs=${CROSS_STATUS} doc_structure_vitest=${STRUCT_STATUS}"
+TOP_SUMMARY="cross_refs=${CROSS_STATUS} doc_structure_vitest=${STRUCT_STATUS} hub_reachability=${HUB_STATUS}"
 
 # ── Write combined JSON report ────────────────────────────────────────────────
 
@@ -226,7 +311,9 @@ cat > "$REPORT_FILE" <<EOF
   "step": "doc-validator-parity",
   "ran": true,
   "result": "${TOP_RESULT}",
+  "status": "${TOP_RESULT}",
   "head": "${HEAD_SHA}",
+  "generated_at": "${GENERATED_AT}",
   "command": "${SELF}",
   "summary": "${TOP_SUMMARY}",
   "subchecks": {
@@ -241,6 +328,12 @@ cat > "$REPORT_FILE" <<EOF
       "head": "${HEAD_SHA}",
       "command": "${SELF} --only structure",
       "summary": "${STRUCT_SUMMARY}"
+    },
+    "hub_reachability": {
+      "status": "${HUB_STATUS}",
+      "head": "${HEAD_SHA}",
+      "command": "${SELF} --only hub-reachability",
+      "summary": "${HUB_SUMMARY}"
     }
   }
 }
@@ -253,6 +346,7 @@ if [[ "$OUTPUT_FORMAT" == "human" ]]; then
     echo "doc-validator-parity result: ${TOP_RESULT}"
     echo "  cross_refs:            ${CROSS_STATUS} — ${CROSS_SUMMARY}"
     echo "  doc_structure_vitest:  ${STRUCT_STATUS} — ${STRUCT_SUMMARY}"
+    echo "  hub_reachability:      ${HUB_STATUS} — ${HUB_SUMMARY}"
     echo "Report written: ${REPORT_FILE}"
 fi
 

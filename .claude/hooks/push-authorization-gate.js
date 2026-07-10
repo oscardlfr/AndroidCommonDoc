@@ -388,11 +388,13 @@ process.stdin.on('end', () => {
     } catch { /* bash not available; fall through to in-JS checks */ }
 
     if (!usedCanonical) {
-      // In-JS fallback: fully canonical verify-proof equivalent (8 checks).
+      // In-JS fallback: fully canonical verify-proof equivalent (13 checks).
       // Byte-for-byte equivalent in rigor to verify-push-proof.ps1 and the
       // canonical emit-push-proof.sh verify-proof subcommand -- all three
-      // verifiers now carry equivalent 8-check rigor, including the
-      // bats_evidence.head == pushed_sha binding (check 8, below).
+      // verifiers now carry equivalent rigor, including the bats_evidence
+      // binding (check 8, below) AND (wave qg-artifact-binding, W7) the same
+      // completeness predicate run-qg persists: not_ok==0 && scope=='full' &&
+      // complete==true && total==expected && ok>0 (checks 9-13).
       const proofPath = path.join(stampDir, 'push-proof.json');
       let proof;
       try { proof = JSON.parse(fs.readFileSync(proofPath, 'utf8')); }
@@ -490,6 +492,32 @@ process.stdin.on('end', () => {
       }
       if (proof.bats_evidence.head !== headShaForProof) {
         block(`[push-authorization-gate] BLOCKED: bats_evidence.head (${proof.bats_evidence.head}) != HEAD (${headShaForProof}).`);
+        return;
+      }
+
+      // 9-13. bats_evidence completeness (wave qg-artifact-binding, W7): the SAME
+      // predicate run-qg's verify_proof() (bash) and verify-push-proof.ps1 re-derive
+      // -- not_ok==0 && scope=='full' && complete==true && total==expected && ok>0.
+      // A half-done completeness binding would mint correctly but verify
+      // permissively for these five fields too, same rationale as check 8 above.
+      if (proof.bats_evidence.not_ok !== 0) {
+        block(`[push-authorization-gate] BLOCKED: bats-evidence-dirty: bats_evidence.not_ok (${proof.bats_evidence.not_ok}) != 0.`);
+        return;
+      }
+      if (proof.bats_evidence.scope !== 'full') {
+        block(`[push-authorization-gate] BLOCKED: bats-evidence-scope: bats_evidence.scope (${proof.bats_evidence.scope}) != 'full'.`);
+        return;
+      }
+      if (proof.bats_evidence.complete !== true) {
+        block(`[push-authorization-gate] BLOCKED: bats-evidence-incomplete: bats_evidence.complete (${proof.bats_evidence.complete}) is not true.`);
+        return;
+      }
+      if (proof.bats_evidence.total !== proof.bats_evidence.expected) {
+        block(`[push-authorization-gate] BLOCKED: bats-evidence-count-mismatch: bats_evidence.total (${proof.bats_evidence.total}) != bats_evidence.expected (${proof.bats_evidence.expected}).`);
+        return;
+      }
+      if (!(Number.isInteger(proof.bats_evidence.ok) && proof.bats_evidence.ok > 0)) {
+        block(`[push-authorization-gate] BLOCKED: bats-evidence-floor: bats_evidence.ok (${proof.bats_evidence.ok}) fails sanity floor (must be > 0).`);
         return;
       }
     }
