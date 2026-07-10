@@ -825,7 +825,18 @@ inventory_ids = {r['id'] for r in inventory.get('rules', [])}
 
 with open(report_path, encoding='utf-8') as f:
     report = json.load(f)
-discovered_ids = {d.get('rule_id') for d in (report.get('discovered_rules') or []) if d.get('rule_id')}
+
+# Fail-closed rule_id enforcement (mirrors the per-entry verified_by check in
+# run_qg's main validation pass, above): every discovered_rules[] entry MUST
+# carry a non-empty rule_id BEFORE the coverage diff below. Without this, an
+# entry missing rule_id silently drops out of discovered_ids (via the old
+# `if d.get('rule_id')` filter) and is never checked against the inventory --
+# an extra, unidentified rule would pass undetected.
+discovered_rules = report.get('discovered_rules') or []
+for _entry in discovered_rules:
+    if not _entry.get('rule_id'):
+        die(f"discovered-rule-missing-id: discovered_rules entry missing rule_id: {_entry}")
+discovered_ids = {d['rule_id'] for d in discovered_rules}
 
 missing = sorted(inventory_ids - discovered_ids)
 if missing:

@@ -130,8 +130,23 @@ if rh is not None:
 _rh_result = (rh or {}).get('result')
 checks['registry_hash_freshness'] = 'PASS' if _rh_result in ('clean', 'n/a') else 'FAIL'
 
-# ── commit_lint: scope (if any) of every commit subject in base..head must be
-#    one of .commitlintrc.json's valid_scopes. No scope / no commits -> PASS.
+# ── commit_lint: replicates scripts/sh/commit-msg-hook.sh's canonical
+#    semantics (the authoritative local validator) instead of scope-only
+#    matching. For each commit subject in base..head, a violation is:
+#      (a) the subject does NOT match Conventional Commits format --
+#          type(scope)?!?: description, type restricted to the fixed enum
+#          below (mirrors commit-msg-hook.sh's CC_PATTERN). This catches an
+#          invalid type (e.g. "wip(core): ..."), a non-conventional subject,
+#          or a malformed "type(scope)!:"; OR
+#      (b) a scope IS present and neither the full scope nor its first
+#          segment (compound scopes like "core-error-sdk" -> "core",
+#          mirroring commit-msg-hook.sh + commit-scope-validation-gate.js)
+#          is in valid_scopes -- only enforced when valid_scopes is
+#          non-empty; empty/absent valid_scopes accepts any scope (matches
+#          reusable-commit-lint.yml's "empty = any scope accepted"), but
+#          format is STILL enforced in that case.
+#    Merge commit first lines are exempt (mirrors commit-msg-hook.sh's
+#    fast-pass). No commits in range -> PASS (nothing to check).
 cl_path = os.path.join(project_root, '.commitlintrc.json')
 valid_scopes = []
 cl = read_json(cl_path)
@@ -143,17 +158,25 @@ if cl is not None:
         except Exception:
             valid_scopes = []
 
-SUBJECT_RE = re.compile(r'^[a-zA-Z]+\(([^)]+)\):')
+CC_PATTERN = re.compile(
+    r'^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(([^)]+)\))?!?: .+'
+)
 violations = []
 for subject in commit_subjects.splitlines():
     subject = subject.strip()
     if not subject:
         continue
-    m = SUBJECT_RE.match(subject)
+    if subject.startswith('Merge '):
+        continue  # merge commit fast-pass -- mirrors commit-msg-hook.sh
+    m = CC_PATTERN.match(subject)
     if not m:
-        continue  # no scope present -- nothing to validate
-    scope = m.group(1)
-    if valid_scopes and scope not in valid_scopes:
+        violations.append(subject)  # invalid type / non-conventional format
+        continue
+    scope = m.group(3)
+    if not scope:
+        continue  # no scope present -- nothing further to validate
+    first_segment = scope.split('-', 1)[0]
+    if valid_scopes and scope not in valid_scopes and first_segment not in valid_scopes:
         violations.append(subject)
 checks['commit_lint'] = 'FAIL' if violations else 'PASS'
 
