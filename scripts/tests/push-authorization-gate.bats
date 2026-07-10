@@ -784,6 +784,20 @@ PYEOF
 # 'drain'), so a runtime test for this fail-open hangs on CORRECT code — only a
 # static check fits. #PAG-GUARD (below) is the ONLY test in this suite that can
 # detect the missing `return`; see its own red-then-green verification.
+#
+# ADDENDUM — found vacuous by an actual `git push`, not a test: this fixture uses the
+# BARE command shape ("git push origin feature/test"), no shell wrapper. That is NOT
+# the shape this repo's agents actually issue — the mandated invocation wraps through
+# `env PATH="$HOME/.local/gnubin-l0:..." bash -c 'cd <repo>\n<command>'` for GNU-userland
+# reasons. isGitPushCommand splits on &&/||/;/| but never on a literal newline, so a
+# bash -c payload whose FIRST LINE is `cd ...` is one segment starting with `cd` —
+# never recognized as a push at all, for ANY agent_type, peer or main. This test was
+# GREEN, unbroken, for the entire period that bypass existed, because it never once
+# exercised the wrapped shape. See #PAG-PEER-WRAPPED / #PAG-MAIN-STALE-WRAPPED below,
+# which cover the shape this repo actually uses and were RED against the unfixed hook
+# before being written. Keep this test — it is still a real contract pin for the bare
+# shape — but its green never was, and is not now, evidence that the peer-block holds
+# for every invocation shape a peer might actually use.
 
 @test "#PAG-PEER-BLOCK BLOCK: peer + git push + ACDoc pre-push hook installed → exit 2 + decision:block (peer-block contract)" {
   # The marker-bearing real pre-push-hook.sh must be installed (hookIsACDoc=true) so
@@ -803,6 +817,107 @@ PYEOF
   [ "$status" -eq 2 ]
   [[ "$output" == *'"decision":"block"'* ]]
   [[ "$output" == *"push-authorization-gate"* ]]
+}
+
+# ── #PAG-PEER-WRAPPED / #PAG-MAIN-STALE-WRAPPED — the real bypass shape ─────────
+#
+# Found by an actual `git push`, not a test: team-lead's own push went through with
+# 58-minute-stale stamps and no pre-push hook installed. Root cause: isGitPushCommand
+# splits a command on &&, ||, ;, | — never on a literal newline — then anchors
+# ^git push per segment. This repo's mandated invocation shape is
+# `env PATH="$HOME/.local/gnubin-l0:..." bash -c 'cd <repo>\n<real command>'` (the GNU
+# userland requires the env-prefix; the newline separates cd from the payload). A
+# bash -c body whose FIRST LINE is `cd ...` is one segment beginning with `cd`, so
+# isGitPushCommand returns false for the WHOLE string — and :174's
+# `if (!isGitPushCommand(cmd)) process.exit(0)` runs before the peer-block (:200) and
+# before the stamp/staleness check either one is ever reached. Nobody issues the bare
+# shape #PAG-PEER-BLOCK tests; everybody issues this one.
+#
+# RED confirmed against the last-committed pre-fix hook (1653eb5, via a scratch copy —
+# .claude/hooks/ was never touched to get this evidence) before writing these
+# assertions: both #PAG-PEER-WRAPPED and #PAG-MAIN-STALE-WRAPPED exit=0 with NO output
+# at all — a silent ALLOW, not even a decision JSON, because the early exit at :174
+# fires before the hook ever forms an opinion. toolkit-specialist is fixing
+# isGitPushCommand in parallel; these two assert the CORRECT (post-fix) behavior, so
+# they are RED until that fix lands and GREEN after — do not weaken them to match
+# today's behavior.
+
+@test "#PAG-PEER-WRAPPED BLOCK: peer + newline-wrapped bash -c 'cd <repo>\ngit push' → exit 2 + decision:block (the real bypass shape)" {
+  local wrapped_cmd
+  wrapped_cmd="env PATH=\"\$HOME/.local/gnubin-l0:/opt/homebrew/bin:\$PATH\" bash -c 'cd $PROJECT_ROOT"$'\n'"git push -u origin br'"
+  make_input "$wrapped_cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "#PAG-MAIN-STALE-WRAPPED BLOCK: main + same wrapped command + stale stamps (35 min) → exit 2, stale-stamp reason" {
+  # This is literally the shape of team-lead's real push tonight: main orchestrator,
+  # stamps well past the 30-minute freshness window, wrapped invocation.
+  write_stamp "quality-gate.stamp" "PASS" $((35 * 60)) "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" $((35 * 60)) "$HEAD_SHA"
+  local wrapped_cmd
+  wrapped_cmd="env PATH=\"\$HOME/.local/gnubin-l0:/opt/homebrew/bin:\$PATH\" bash -c 'cd $PROJECT_ROOT"$'\n'"git push -u origin br'"
+  make_input "$wrapped_cmd"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"stamp"* || "$output" == *"pre-pr"* || "$output" == *"quality-gate"* ]]
+}
+
+# ── Positive controls — pin what must NOT change alongside what must ───────────
+# Verified against the same pre-fix hook snapshot: all six already behave as asserted
+# today. They exist so a fix aimed at #PAG-PEER-WRAPPED/#PAG-MAIN-STALE-WRAPPED cannot
+# silently overcorrect into blocking real non-push commands, blocking prose that merely
+# mentions "git push", or — the sharpest risk — regressing the &&/;-separated and
+# leading-newline shapes that already work today for the wrong reason to still work.
+
+@test "#PAG-WRAPPED-NONPUSH ALLOW: peer + wrapped non-push bash -c 'cd /tmp\necho hi' → exit 0 (not a push at all)" {
+  local wrapped_cmd
+  wrapped_cmd="bash -c 'cd /tmp"$'\n'"echo hi'"
+  make_input "$wrapped_cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "#PAG-PROSE-SH ALLOW: main + sh -c \"echo 'git push'\" (prose, no real push) → exit 0" {
+  make_input "sh -c \"echo 'git push'\""
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "#PAG-PROSE-PRINTF ALLOW: main + printf 'git push' (prose, no real push) → exit 0" {
+  make_input "printf 'git push'"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "#PAG-PROSE-ANSI ALLOW: main + echo \$'git push' (ANSI-C prose, no real push) → exit 0" {
+  make_input "echo \$'git push'"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "#PAG-PEER-AND-BLOCK BLOCK: peer + 'cd /tmp && git push origin x' (already-working && path) → exit 2, regression pin" {
+  # Already blocks today via the &&-splitting path (segment-aware detector already
+  # inspects each &&-separated segment). Pinned so a fix for the newline case cannot
+  # silently regress the already-working && case.
+  make_input "cd /tmp && git push origin x" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "#PAG-PEER-LEADING-NEWLINE BLOCK: peer + bash -c '\ngit push origin x' (leading newline only, no cd) → exit 2, regression pin" {
+  # Already blocks today: with no 'cd' prefix, the one newline-containing segment
+  # trims down to a leading blank line + 'git push origin x' — trimming leading
+  # whitespace before the ^git push anchor check means this shape is caught even
+  # though the fix for #PAG-PEER-WRAPPED (which has a non-whitespace 'cd' prefix
+  # before the same anchor) has not landed yet. Pinned so a newline-splitting fix
+  # doesn't accidentally special-case "payload starts with a newline" into an allow.
+  local wrapped_cmd
+  wrapped_cmd="bash -c '"$'\n'"git push origin x'"
+  make_input "$wrapped_cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
 }
 
 # ── #PAG-GUARD — static invariant: every block( call site is immediately followed by
