@@ -172,8 +172,13 @@ write_quality_gate_report() {
   local override_deliberation="${2:-}"
   local started_at
   started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  # 51b0d63: run-qg's report-head-* check requires report.head present and equal to
+  # the current HEAD. Re-derived fresh from git at call time (never a cached shell
+  # variable), mirroring write_valid_bats_handoff's own established pattern.
+  local report_head
+  report_head="$(git -C "$REPO" rev-parse HEAD)"
   python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" \
-      "${extra_steps}" "${override_deliberation}" "$started_at" <<'PYEOF'
+      "${extra_steps}" "${override_deliberation}" "$started_at" "$report_head" <<'PYEOF'
 import json, sys
 
 report_path         = sys.argv[1]
@@ -181,6 +186,7 @@ manifest_path       = sys.argv[2]
 extra_steps_raw     = sys.argv[3]
 override_delib_raw  = sys.argv[4]
 started_at          = sys.argv[5]
+report_head         = sys.argv[6]
 
 manifest = json.load(open(manifest_path, encoding='utf-8'))
 
@@ -219,6 +225,7 @@ if override_delib_raw.strip():
 
 report = {
     "started_at": started_at,
+    "head": report_head,
     "deliberation": deliberation,
     "pre_pr_coverage": {"status": "PASS", "modules": 3},
     "discovered_rules": [
@@ -317,10 +324,15 @@ write_plan() {
   # before ever reaching the step-coverage-gap check this test exists to exercise.
   local started_at
   started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$started_at" <<'PYEOF'
+  # 51b0d63: report-head-* requires report.head present and equal to current HEAD;
+  # re-derived fresh from git, never a cached variable.
+  local report_head
+  report_head="$(git -C "$REPO" rev-parse HEAD)"
+  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$started_at" "$report_head" <<'PYEOF'
 import json, sys
 manifest = json.load(open(sys.argv[2], encoding='utf-8'))
 started_at = sys.argv[3]
+report_head = sys.argv[4]
 steps = []
 for rs in manifest.get('required_steps', []):
     steps.append({"step": rs['id'], "ran": True, "result": "PASS"})
@@ -335,6 +347,7 @@ for cs in manifest.get('conditional_steps', []):
                       "reason": "predicate false in isolated test repo"})
 report = {
     "started_at": started_at,
+    "head": report_head,
     "deliberation": {
         "architects_consulted": ["arch-platform", "arch-testing", "arch-integration"],
         "incorporated_at": "2026-06-14T00:00:00Z",
@@ -437,10 +450,15 @@ PYEOF
   # handoff are added here explicitly — see #WP3's comment for why.
   local started_at
   started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$started_at" <<'PYEOF'
+  # 51b0d63: report-head-* requires report.head present and equal to current HEAD;
+  # re-derived fresh from git, never a cached variable.
+  local report_head
+  report_head="$(git -C "$REPO" rev-parse HEAD)"
+  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$started_at" "$report_head" <<'PYEOF'
 import json, sys
 manifest = json.load(open(sys.argv[2], encoding='utf-8'))
 started_at = sys.argv[3]
+report_head = sys.argv[4]
 steps = []
 for rs in manifest.get('required_steps', []):
     if rs['id'] == 'secret-scan':
@@ -456,6 +474,7 @@ for cs in manifest.get('conditional_steps', []):
                       "reason": "predicate false in isolated test repo"})
 report = {
     "started_at": started_at,
+    "head": report_head,
     "deliberation": {
         "architects_consulted": ["arch-platform", "arch-testing", "arch-integration"],
         "incorporated_at": "2026-06-14T00:00:00Z",
