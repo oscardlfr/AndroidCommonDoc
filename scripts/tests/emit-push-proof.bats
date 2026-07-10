@@ -487,7 +487,7 @@ report = {
         "incorporated_at": "2026-06-14T00:00:00Z",
     },
     "pre_pr_coverage": {"status": "PASS", "modules": 3},
-    "discovered_rules": [{"rule": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}],
+    "discovered_rules": [{"rule": "two-stamp-gate", "rule_id": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}],
     "steps": steps,
 }
 with open(sys.argv[1], "w", encoding="utf-8") as f:
@@ -614,7 +614,7 @@ report = {
         "incorporated_at": "2026-06-14T00:00:00Z",
     },
     "pre_pr_coverage": {"status": "PASS", "modules": 3},
-    "discovered_rules": [{"rule": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}],
+    "discovered_rules": [{"rule": "two-stamp-gate", "rule_id": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}],
     "steps": steps,
 }
 with open(sys.argv[1], "w", encoding="utf-8") as f:
@@ -1186,6 +1186,38 @@ PYEOF
   run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
   [ "$status" -eq 2 ]
   [[ "$output" == *"rule-coverage-gap"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #RIM-NEG  discovered-rule-missing-id (P2a fix-round addition, abfe58a) — a
+# discovered_rules[] entry missing rule_id (or carrying an empty string) must die
+# BEFORE the rule-coverage-gap diff above (#RCG-*) ever runs. Without this
+# fail-closed check, entry.get('rule_id') is falsy, the bad entry silently drops
+# out of discovered_ids (the old `if d.get('rule_id')` filter), and an extra,
+# unidentified rule slips through the coverage diff undetected — the exact class
+# of bug this check closes. #RCG-POS (above) already doubles as this same
+# contract's positive control: every entry there already carries a non-empty
+# rule_id, and that fixture is unchanged/still green.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#RIM-NEG BLOCK: discovered_rules entry missing rule_id (one key absent, one empty string) → discovered-rule-missing-id" {
+  write_rule_sources
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  python3 - "$ACDOC/quality-gate-report.json" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+r = json.load(open(path, encoding='utf-8'))
+r['discovered_rules'] = [
+    {"rule": "Rule One", "rule_id": "pc:rule-one", "verified_by": "test"},
+    {"rule": "Rule Two — rule_id key absent entirely", "verified_by": "test"},
+    {"rule": "commitlint scopes — rule_id is empty string", "rule_id": "", "verified_by": "test"},
+]
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(r, f, indent=2); f.write('\n')
+PYEOF
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"discovered-rule-missing-id"* ]]
 }
 
 # ═════════════════════════════════════════════════════════════════════════════

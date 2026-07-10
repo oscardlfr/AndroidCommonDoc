@@ -5,7 +5,7 @@ bats_require_minimum_version 1.5.0
 # mint-internal derived-artifact producer that composes pre-pr-report.json from
 # already-bound/authoritative inputs (never re-runs anything heavy).
 #
-# Coverage map (15 tests):
+# Coverage map (21 tests):
 #   #EPR1  PASS: all 3 inputs coherent (secret-scan PASS, registry-hash clean, no
 #          violating commits) → status=PASS, all 3 checks PASS, head/generated_at
 #          present, exit 0
@@ -19,9 +19,16 @@ bats_require_minimum_version 1.5.0
 #   #EPR8  commit with an invalid scope → commit_lint=FAIL + commit_lint_violations
 #          names the offending subject
 #   #EPR9  commit with a valid scope → commit_lint=PASS
-#   #EPR10 commit with no scope prefix at all → commit_lint=PASS (nothing to validate)
+#   #EPR10 commit with no scope prefix at all, but still conventionally formatted
+#          → commit_lint=PASS (nothing to validate). Fixture subject repaired in
+#          the P1 fix-round (abfe58a, real commit-lint): the old fixture text was
+#          itself non-conventional prose, which the new format check now correctly
+#          rejects — proving "no scope" requires a well-formed type+colon subject,
+#          not just any text lacking parens.
 #   #EPR11 no .commitlintrc.json at all → commit_lint=PASS regardless of any commit's
-#          scope (empty valid_scopes short-circuits the check)
+#          scope (empty valid_scopes short-circuits the scope check; the fixture
+#          subject is still conventionally formatted, so format enforcement — which
+#          stays active even with zero valid_scopes — does not itself fail this one)
 #   #EPR12 any single managed check FAIL → overall status=FAIL (cross-check all())
 #   #EPR13 evidence_digests carries sha256 for BOTH secret-scan-report.json and
 #          doc-validator-report.json; doc-validator-report.json is digested-only,
@@ -30,6 +37,22 @@ bats_require_minimum_version 1.5.0
 #          REPORTS, it does not gate
 #   #EPR15 explicit --base-sha/--head-sha override honored verbatim (mirrors how
 #          the mint invokes it, passing both already-computed values)
+#
+# Real commit-lint semantics (P1 fix-round, abfe58a — mirrors commit-msg-hook.sh's
+# CC_PATTERN/type-enum instead of the old scope-only match):
+#   #EPR16 invalid TYPE, otherwise-valid scope ("wip(core): x") → commit_lint=FAIL
+#          (format check catches what scope-only matching would have missed —
+#          "core" alone would have passed the OLD check)
+#   #EPR17 non-conventional subject, no type/scope structure at all
+#          ("just some text") → commit_lint=FAIL
+#   #EPR18 well-formed subject, invalid SCOPE ("feat(bogus): x") → commit_lint=FAIL
+#   #EPR19 POSITIVE CONTROL: well-formed subject, valid scope ("feat(scripts): x")
+#          → commit_lint=PASS
+#   #EPR20 POSITIVE CONTROL: a Merge commit subject is exempt from format/scope
+#          checking entirely (fast-pass, mirrors commit-msg-hook.sh)
+#   #EPR21 POSITIVE CONTROL: compound scope ("core-error-sdk") matches valid_scopes
+#          via its first segment ("core") — mirrors commit-msg-hook.sh +
+#          commit-scope-validation-gate.js's compound-scope handling
 #
 # Isolation: every test uses mktemp -d + git init + teardown rm -rf.
 # Never reads live .androidcommondoc/ or live .commitlintrc.json.
@@ -238,7 +261,13 @@ PYEOF
   write_doc_validator_receipt
   write_registry_hash_receipt "clean"
   write_commitlintrc "core" "tests"
-  git -C "$REPO" commit --allow-empty --quiet -m "a plain subject with no conventional-commit scope"
+  # Repaired (P1 fix-round, abfe58a): the old fixture subject ("a plain subject
+  # with no conventional-commit scope") was itself non-conventional prose — under
+  # real commit-lint's format check it is now correctly a VIOLATION (invalid type),
+  # not "nothing to validate". A subject that legitimately has no scope must still
+  # be conventionally formatted (type + ": " + description) to exercise the
+  # no-scope-present branch this test is named for.
+  git -C "$REPO" commit --allow-empty --quiet -m "chore: a plain subject with no conventional-commit scope"
 
   run bash "$SCRIPT" --project-root "$REPO"
   run report_field 'checks.commit_lint'
@@ -330,4 +359,119 @@ print('OK')
   run report_field 'head'
   [ "$output" = "$foreign_head" ]
   [ "$output" != "$real_head" ]
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# P1 fix-round (abfe58a) — real commit-lint semantics. Mirrors commit-msg-hook.sh's
+# CC_PATTERN (type restricted to a fixed enum, conventional "type(scope)?!?: desc"
+# format) instead of the pre-fix scope-only match. #EPR16-18 are negatives that
+# revert-one-element → red (each would have PASSED under the old scope-only check,
+# proving they exercise the NEW format-validation behavior specifically, not just
+# re-proving #EPR8's existing scope check). #EPR19-21 are their positive controls.
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EPR16 BLOCK-signal: invalid commit type (wip) with an otherwise-valid scope → commit_lint=FAIL (format enforced, not just scope)" {
+  write_secret_scan_receipt "PASS"
+  write_doc_validator_receipt
+  write_registry_hash_receipt "clean"
+  write_commitlintrc "core" "tests"
+  # "core" alone IS in valid_scopes — the old scope-only check would have passed
+  # this. Only the new type-enum/format check (CC_PATTERN) rejects "wip".
+  git -C "$REPO" commit --allow-empty --quiet -m "wip(core): x"
+
+  run bash "$SCRIPT" --project-root "$REPO"
+  [ "$status" -eq 0 ]
+  run report_field 'checks.commit_lint'
+  [ "$output" = "FAIL" ]
+  run report_field 'status'
+  [ "$output" = "FAIL" ]
+  run report_field 'commit_lint_violations.0'
+  [[ "$output" == *"wip(core): x"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EPR17 BLOCK-signal: non-conventional subject with no type/scope structure at all → commit_lint=FAIL" {
+  write_secret_scan_receipt "PASS"
+  write_doc_validator_receipt
+  write_registry_hash_receipt "clean"
+  write_commitlintrc "core" "tests"
+  git -C "$REPO" commit --allow-empty --quiet -m "just some text"
+
+  run bash "$SCRIPT" --project-root "$REPO"
+  [ "$status" -eq 0 ]
+  run report_field 'checks.commit_lint'
+  [ "$output" = "FAIL" ]
+  run report_field 'status'
+  [ "$output" = "FAIL" ]
+  run report_field 'commit_lint_violations.0'
+  [[ "$output" == *"just some text"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EPR18 BLOCK-signal: well-formed conventional subject with an invalid scope → commit_lint=FAIL" {
+  write_secret_scan_receipt "PASS"
+  write_doc_validator_receipt
+  write_registry_hash_receipt "clean"
+  write_commitlintrc "core" "tests"
+  git -C "$REPO" commit --allow-empty --quiet -m "feat(bogus): x"
+
+  run bash "$SCRIPT" --project-root "$REPO"
+  [ "$status" -eq 0 ]
+  run report_field 'checks.commit_lint'
+  [ "$output" = "FAIL" ]
+  run report_field 'status'
+  [ "$output" = "FAIL" ]
+  run report_field 'commit_lint_violations.0'
+  [[ "$output" == *"feat(bogus): x"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EPR19 PASS-signal (positive control for #EPR16/18): well-formed conventional subject with a valid scope → commit_lint=PASS" {
+  write_secret_scan_receipt "PASS"
+  write_doc_validator_receipt
+  write_registry_hash_receipt "clean"
+  write_commitlintrc "core" "tests" "scripts"
+  git -C "$REPO" commit --allow-empty --quiet -m "feat(scripts): x"
+
+  run bash "$SCRIPT" --project-root "$REPO"
+  [ "$status" -eq 0 ]
+  run report_field 'checks.commit_lint'
+  [ "$output" = "PASS" ]
+  run report_field 'status'
+  [ "$output" = "PASS" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EPR20 PASS-signal (positive control for #EPR17): a Merge commit subject is exempt from format/scope checking (fast-pass)" {
+  write_secret_scan_receipt "PASS"
+  write_doc_validator_receipt
+  write_registry_hash_receipt "clean"
+  write_commitlintrc "core" "tests"
+  # Subject-text-only fast-pass (mirrors commit-msg-hook.sh) — does not require an
+  # actual git-merge commit structurally, only a first line starting with "Merge ".
+  git -C "$REPO" commit --allow-empty --quiet -m "Merge branch 'feature/foo' into develop"
+
+  run bash "$SCRIPT" --project-root "$REPO"
+  [ "$status" -eq 0 ]
+  run report_field 'checks.commit_lint'
+  [ "$output" = "PASS" ]
+  run report_field 'status'
+  [ "$output" = "PASS" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EPR21 PASS-signal (positive control): compound scope (core-error-sdk) matches valid_scopes via its first segment (core)" {
+  write_secret_scan_receipt "PASS"
+  write_doc_validator_receipt
+  write_registry_hash_receipt "clean"
+  write_commitlintrc "core"
+  git -C "$REPO" commit --allow-empty --quiet -m "fix(core-error-sdk): patch a subtle bug"
+
+  run bash "$SCRIPT" --project-root "$REPO"
+  [ "$status" -eq 0 ]
+  run report_field 'checks.commit_lint'
+  [ "$output" = "PASS" ]
+  run report_field 'status'
+  [ "$output" = "PASS" ]
 }

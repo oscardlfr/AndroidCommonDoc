@@ -111,8 +111,12 @@ report = {
         'incorporated_at': '2026-06-21T00:00:00Z',
     },
     'pre_pr_coverage': {'status': 'PASS', 'modules': 1},
+    # wave qg-artifact-binding (P2a fix-round, abfe58a): every discovered_rules[]
+    # entry MUST carry a non-empty rule_id — the mint now dies fail-closed
+    # (discovered-rule-missing-id) otherwise. Mirrors write_quality_gate_report's
+    # own convention in emit-push-proof.bats for this identical rule name.
     'discovered_rules': [
-        {'rule': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
+        {'rule': 'two-stamp-gate', 'rule_id': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
     ],
     'steps': steps,
 }
@@ -153,8 +157,12 @@ report = {
         'incorporated_at': '2026-06-21T00:00:00Z',
     },
     'pre_pr_coverage': {'status': 'PASS', 'modules': 1},
+    # wave qg-artifact-binding (P2a fix-round, abfe58a): every discovered_rules[]
+    # entry MUST carry a non-empty rule_id — the mint now dies fail-closed
+    # (discovered-rule-missing-id) otherwise. Mirrors write_quality_gate_report's
+    # own convention in emit-push-proof.bats for this identical rule name.
     'discovered_rules': [
-        {'rule': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
+        {'rule': 'two-stamp-gate', 'rule_id': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
     ],
     'steps': steps,
 }
@@ -202,8 +210,12 @@ report = {
         'incorporated_at': '2026-06-21T00:00:00Z',
     },
     'pre_pr_coverage': {'status': 'PASS', 'modules': 1},
+    # wave qg-artifact-binding (P2a fix-round, abfe58a): every discovered_rules[]
+    # entry MUST carry a non-empty rule_id — the mint now dies fail-closed
+    # (discovered-rule-missing-id) otherwise. Mirrors write_quality_gate_report's
+    # own convention in emit-push-proof.bats for this identical rule name.
     'discovered_rules': [
-        {'rule': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
+        {'rule': 'two-stamp-gate', 'rule_id': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
     ],
     'steps': steps,
 }
