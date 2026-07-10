@@ -3,7 +3,7 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/qg-doc-validators.sh (wave qg-doc-coverage).
 #
-# Coverage map (12 tests):
+# Coverage map (14 tests):
 #   #DV1  PASS: valid relative link in docs/agents/ → exit 0, cross_refs PASS
 #   #DV2  FAIL: broken link in docs/agents/ → exit 2, cross_refs FAIL
 #   #DV3  PASS: https:// link skipped (+ at least one valid .md link) → exit 0
@@ -16,6 +16,10 @@ bats_require_minimum_version 1.5.0
 #   #DV10 JSON step field == "doc-validator-parity"
 #   #DV11 PASS: zero-.md-link docs/agents file → exit 0, cross_refs PASS (|| true guard regression)
 #   #DV12 PASS: ANDROID_COMMON_DOC is exported to the vitest child, matching --toolkit-root (BL-W4-2)
+#   #DV13 PASS: every docs/agents/*.md reachable from agents-hub.md → exit 0, hub_reachability PASS
+#         (wave qg-artifact-binding, W10)
+#   #DV14 FAIL: an unlinked docs/agents/*.md (orphan) → exit 2, hub_reachability FAIL, names the
+#         orphan (wave qg-artifact-binding, W10 — Regression Matrix `hub_reachability` row)
 #
 # Isolation rule: every test uses mktemp -d + teardown rm -rf.
 # Never reads live docs/ tree or live .androidcommondoc/.
@@ -42,6 +46,11 @@ teardown() {
 
 run_cross_refs() {
   run bash "$SCRIPT" --only cross-refs --project-root "$FIXTURE"
+}
+
+# wave qg-artifact-binding (W10): hub_reachability is scoped to docs/agents/ only.
+run_hub_reachability() {
+  run bash "$SCRIPT" --only hub-reachability --project-root "$FIXTURE"
 }
 
 read_report_field() {
@@ -363,4 +372,53 @@ STUBEOF
 
   run read_report_field 'subchecks.doc_structure_vitest.status'
   [ "$output" = "PASS" ]
+}
+
+# ── #DV13/#DV14: hub_reachability (wave qg-artifact-binding, W10) ────────────
+# Every docs/agents/*.md must be reachable from agents-hub.md by following relative
+# markdown links transitively. Scoped to docs/agents/ only (repo-wide reachability
+# is out of scope — see docs/agents/quality-gater-artifact-binding.md's Non-Goals).
+
+@test "#DV13 PASS: every docs/agents/*.md reachable from agents-hub.md → exit 0, hub_reachability PASS" {
+  printf '%s\n' \
+    '# Agents Hub' \
+    '' \
+    'See [Child](child.md) for details.' \
+    > "$FIXTURE/docs/agents/agents-hub.md"
+  printf '%s\n' \
+    '# Child' \
+    '' \
+    'Back to [Hub](agents-hub.md).' \
+    > "$FIXTURE/docs/agents/child.md"
+
+  run_hub_reachability
+  [ "$status" -eq 0 ]
+  run read_report_field 'subchecks.hub_reachability.status'
+  [ "$output" = "PASS" ]
+}
+
+@test "#DV14 FAIL: an unlinked docs/agents/*.md (orphan) → exit 2, hub_reachability FAIL, names the orphan" {
+  printf '%s\n' \
+    '# Agents Hub' \
+    '' \
+    'See [Child](child.md) for details.' \
+    > "$FIXTURE/docs/agents/agents-hub.md"
+  printf '%s\n' \
+    '# Child' \
+    '' \
+    'Back to [Hub](agents-hub.md).' \
+    > "$FIXTURE/docs/agents/child.md"
+  # orphan.md is never linked from agents-hub.md (directly or transitively).
+  printf '%s\n' \
+    '# Orphan' \
+    '' \
+    'Nothing links to this file.' \
+    > "$FIXTURE/docs/agents/orphan.md"
+
+  run_hub_reachability
+  [ "$status" -eq 2 ]
+  run read_report_field 'subchecks.hub_reachability.status'
+  [ "$output" = "FAIL" ]
+  run read_report_field 'subchecks.hub_reachability.summary'
+  [[ "$output" == *"orphan.md"* ]]
 }

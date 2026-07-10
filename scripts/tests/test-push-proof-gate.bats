@@ -62,12 +62,18 @@ setup() {
   # and its lib/ dependencies at $REPO_ROOT/scripts/sh/ (mirrors real deployment).
   # Also copy qg-registry-integrity.sh + rehash-registry.sh (called by the new
   # committed-tree integrity block in run-qg).
+  # wave qg-artifact-binding: run-qg now ALSO invokes emit-rule-inventory.sh (E) and
+  # emit-pre-pr-report.sh (F), mint-internal, strictly after the registry re-run —
+  # copy both so any test reaching that far in run_qg finds them (else "no such file"
+  # masks the real die-code under test).
   mkdir -p "$REPO/scripts/sh/lib"
   cp "$SCRIPTS_SRC/sh/emit-push-proof.sh"           "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/lib/manifest-digest.sh"        "$REPO/scripts/sh/lib/"
   cp "$SCRIPTS_SRC/sh/lib/audit-append.sh"           "$REPO/scripts/sh/lib/"
   cp "$SCRIPTS_SRC/sh/qg-registry-integrity.sh"      "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/rehash-registry.sh"            "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"        "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"         "$REPO/scripts/sh/"
 
   # Commit ALL fixtures so the tree is CLEAN before run-qg.
   # Temp repos have NO skills/ directory → run-qg does NOT pass --require-registry
@@ -146,6 +152,27 @@ write_valid_bats_handoff() {
   } > "$ACDOC/bats-result.${run_id}.env"
 }
 
+# write_valid_artifact_receipts — writes HEAD-bound, fresh, status:PASS
+# secret-scan-report.json + doc-validator-report.json into $ACDOC (wave
+# qg-artifact-binding, W1). These are the ONLY two required_steps[] loop members
+# (registry-hash and pre-pr are both mint_rederived, excluded structurally) — every
+# run-qg-to-PASS fixture in this file must stage both, else run-qg dies
+# artifact-binding-absent before ever reaching the die-code/exit-0 outcome the test
+# actually intends. HEAD is re-derived fresh from git at call time (never a cached
+# shell variable); generated_at is captured after started_at so it always satisfies
+# the loop's freshness window.
+write_valid_artifact_receipts() {
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  local generated_at
+  generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  mkdir -p "$ACDOC"
+  printf '{"status":"PASS","reason_code":"OK","tool":"trufflehog","version":"test","count":0,"head":"%s","generated_at":"%s"}\n' \
+    "$head" "$generated_at" > "$ACDOC/secret-scan-report.json"
+  printf '{"step":"doc-validator-parity","ran":true,"result":"PASS","status":"PASS","head":"%s","generated_at":"%s","summary":"test fixture"}\n' \
+    "$head" "$generated_at" > "$ACDOC/doc-validator-report.json"
+}
+
 # write_quality_gate_report — writes a valid .androidcommondoc/quality-gate-report.json
 # $1=extra_steps_json (default "") — JSON list of step objects to merge/replace
 # $2=override_deliberation_json (default "") — JSON object to override deliberation block
@@ -221,9 +248,18 @@ report = {
     "started_at": started_at,
     "head": report_head,
     "deliberation": deliberation,
-    "pre_pr_coverage": {"status": "PASS", "modules": 3},
+    # wave qg-artifact-binding (W4): the managed-key-subset contract requires
+    # secret_scan/registry_hash_freshness/commit_lint to be present here and to agree
+    # (after status-token normalization) with the mint's own derived status for each —
+    # write_valid_artifact_receipts (called below) stages a matching status:PASS
+    # secret-scan-report.json; the isolated repo has no skills/ dir (registry-hash is
+    # n/a -> PASS) and no .commitlintrc.json (commit_lint has nothing to check -> PASS).
+    "pre_pr_coverage": {
+        "status": "PASS", "modules": 3,
+        "secret_scan": "PASS", "registry_hash_freshness": "PASS", "commit_lint": "PASS",
+    },
     "discovered_rules": [
-        {"rule": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}
+        {"rule": "two-stamp-gate", "rule_id": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}
     ],
     "steps": steps,
 }
@@ -232,6 +268,7 @@ with open(report_path, "w", encoding="utf-8") as f:
     f.write('\n')
 PYEOF
   write_valid_bats_handoff
+  write_valid_artifact_receipts
 }
 
 # write_push_proof — writes a valid .androidcommondoc/push-proof.json
@@ -292,12 +329,36 @@ proof = {
     # pushed SHA. Bound to head_sha (the SAME value this proof's own "head" field
     # uses) by default — #14/#15/#17 mutate head/worktree_id/age and die at an
     # EARLIER check (2/3/4) regardless; #20 needs the full 8-check pass to reach exit 0.
+    # wave qg-artifact-binding (W7): verify-proof ALSO re-derives the completeness
+    # predicate run-qg persists (not_ok==0 && scope=='full' && complete==True &&
+    # total==expected && ok>0) — complete/total additive; #20 and #BE1-5 (below) need
+    # this full shape to reach (resp. pass, or individually fail) that predicate.
     "bats_evidence": {
         "run_id": "canonical-run", "head": head_sha, "ok": 10, "not_ok": 0,
         "expected": 10, "scope": "full", "generated_at": ts,
+        "complete": True, "total": 10,
     },
 }
 with open(proof_path, "w", encoding="utf-8") as f:
+    json.dump(proof, f, indent=2)
+    f.write('\n')
+PYEOF
+}
+
+# patch_bats_evidence_field <field> <json_value>
+# Mutates a single field inside push-proof.json's bats_evidence dict in place.
+# <json_value> is parsed as JSON (so `false`, `true`, `0`, `"foo"` all work) — used
+# by #BE1-5 to exercise each of the 5 new completeness die-codes (W7) independently,
+# on top of a write_push_proof-produced (otherwise-valid) base fixture.
+patch_bats_evidence_field() {
+  local field="$1" value_json="$2"
+  python3 - "$ACDOC/push-proof.json" "$field" "$value_json" <<'PYEOF'
+import json, sys
+path, field, value_json = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path, encoding='utf-8') as f:
+    proof = json.load(f)
+proof.setdefault('bats_evidence', {})[field] = json.loads(value_json)
+with open(path, 'w', encoding='utf-8') as f:
     json.dump(proof, f, indent=2)
     f.write('\n')
 PYEOF
@@ -796,6 +857,57 @@ PYEOF
   run_verifier "$HEAD_SHA"
   [ "$status" -eq 0 ]
   [[ "$output" =~ "PASS" ]]
+}
+
+# ── wave qg-artifact-binding (W7): bash verify_proof()'s completeness predicate ──
+# Same predicate push-authorization-gate.js's in-JS fallback and verify-push-proof.ps1
+# re-derive: not_ok==0 && scope=='full' && complete==true && total==expected && ok>0.
+# #20 above (an otherwise-valid write_push_proof fixture) is this row's positive
+# control; each #BE test reverts exactly one element from it.
+
+@test "#BE1 BLOCK: bats_evidence.not_ok!=0 → bats-evidence-dirty" {
+  write_quality_gate_report
+  write_push_proof "$HEAD_SHA" 0 "$REPO"
+  patch_bats_evidence_field "not_ok" "1"
+  run_verifier "$HEAD_SHA"
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "bats-evidence-dirty" ]]
+}
+
+@test "#BE2 BLOCK: bats_evidence.scope!='full' → bats-evidence-scope" {
+  write_quality_gate_report
+  write_push_proof "$HEAD_SHA" 0 "$REPO"
+  patch_bats_evidence_field "scope" '"targeted"'
+  run_verifier "$HEAD_SHA"
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "bats-evidence-scope" ]]
+}
+
+@test "#BE3 BLOCK: bats_evidence.complete!=true → bats-evidence-incomplete" {
+  write_quality_gate_report
+  write_push_proof "$HEAD_SHA" 0 "$REPO"
+  patch_bats_evidence_field "complete" "false"
+  run_verifier "$HEAD_SHA"
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "bats-evidence-incomplete" ]]
+}
+
+@test "#BE4 BLOCK: bats_evidence.total!=expected → bats-evidence-count-mismatch" {
+  write_quality_gate_report
+  write_push_proof "$HEAD_SHA" 0 "$REPO"
+  patch_bats_evidence_field "total" "999"
+  run_verifier "$HEAD_SHA"
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "bats-evidence-count-mismatch" ]]
+}
+
+@test "#BE5 BLOCK: bats_evidence.ok<=0 → bats-evidence-floor" {
+  write_quality_gate_report
+  write_push_proof "$HEAD_SHA" 0 "$REPO"
+  patch_bats_evidence_field "ok" "0"
+  run_verifier "$HEAD_SHA"
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "bats-evidence-floor" ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -21,6 +21,16 @@ setup() {
   WORK="$(mktemp -d)"
   # Isolated output dir: secret-scan-report.sh writes .androidcommondoc/ relative to cwd
   SCAN_DIR="$(mktemp -d)"
+  # wave qg-artifact-binding (W2): secret-scan-report.sh now stamps head/generated_at
+  # into every payload site (envelope normalization, so the QG mint's generic
+  # artifact-binding loop can HEAD/freshness-bind this receipt). git-init SCAN_DIR so
+  # `head` resolves to a REAL sha (not the script's "unknown" fallback) — proves the
+  # field is genuinely HEAD-bound, not a static placeholder.
+  git -C "$SCAN_DIR" init --quiet
+  git -C "$SCAN_DIR" config user.email "test@test.com"
+  git -C "$SCAN_DIR" config user.name "Test"
+  git -C "$SCAN_DIR" commit --allow-empty --quiet -m "init"
+  SCAN_HEAD="$(git -C "$SCAN_DIR" rev-parse HEAD)"
 }
 
 teardown() {
@@ -86,6 +96,16 @@ MOCKEOF
   local tool_val
   tool_val="$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print(r['tool'])" "$report")"
   [ "$tool_val" = "trufflehog" ]
+
+  # wave qg-artifact-binding (W2): the PASS payload site (:112 as of this wave) must
+  # carry head (bound to SCAN_DIR's real commit, not "unknown") and a parseable
+  # generated_at — these are what the QG mint's generic artifact-binding loop reads.
+  local head_val
+  head_val="$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print(r.get('head',''))" "$report")"
+  [ "$head_val" = "$SCAN_HEAD" ]
+  local generated_at_val
+  generated_at_val="$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print(r.get('generated_at',''))" "$report")"
+  [[ "$generated_at_val" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
 }
 
 # ── #SS-2: absent everywhere → SCANNER_UNAVAILABLE ───────────────────────────
@@ -121,6 +141,16 @@ MOCKEOF
   local rc_val
   rc_val="$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print(r['reason_code'])" "$report")"
   [ "$rc_val" = "SCANNER_UNAVAILABLE" ]
+
+  # wave qg-artifact-binding (W2): the SCANNER_UNAVAILABLE payload site (:68 as of this
+  # wave) must ALSO carry head/generated_at — envelope normalization is additive on
+  # every write-site, not just the PASS path.
+  local head_val
+  head_val="$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print(r.get('head',''))" "$report")"
+  [ "$head_val" = "$SCAN_HEAD" ]
+  local generated_at_val
+  generated_at_val="$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print(r.get('generated_at',''))" "$report")"
+  [[ "$generated_at_val" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
 }
 
 # ── #SS-3: present + non-zero exit → SCANNER_ERROR ───────────────────────────
@@ -145,6 +175,15 @@ MOCKEOF
   local rc_val
   rc_val="$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print(r['reason_code'])" "$report")"
   [ "$rc_val" = "SCANNER_ERROR" ]
+
+  # wave qg-artifact-binding (W2): the SCANNER_ERROR payload site (:101 as of this wave)
+  # must ALSO carry head/generated_at.
+  local head_val
+  head_val="$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print(r.get('head',''))" "$report")"
+  [ "$head_val" = "$SCAN_HEAD" ]
+  local generated_at_val
+  generated_at_val="$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print(r.get('generated_at',''))" "$report")"
+  [[ "$generated_at_val" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
 }
 
 # ── #SS-4: present + ≥1 JSONL finding → SECRETS_FOUND ───────────────────────
@@ -175,6 +214,15 @@ MOCKEOF
   local count_val
   count_val="$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print(r['count'])" "$report")"
   [ "$count_val" -ge 1 ]
+
+  # wave qg-artifact-binding (W2): the SECRETS_FOUND payload site (:117 as of this
+  # wave) must ALSO carry head/generated_at.
+  local head_val
+  head_val="$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print(r.get('head',''))" "$report")"
+  [ "$head_val" = "$SCAN_HEAD" ]
+  local generated_at_val
+  generated_at_val="$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print(r.get('generated_at',''))" "$report")"
+  [[ "$generated_at_val" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
 }
 
 # ── #SS-5: local-bin fallback ─────────────────────────────────────────────────
