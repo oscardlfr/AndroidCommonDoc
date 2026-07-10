@@ -35,12 +35,17 @@ const MAX_AGE_SECS = 1800;   // 30 minutes
 const SKEW_TOLERANCE = 120;   // 2 minutes future tolerance
 
 // Detect git push in a bash command string (P2a deep detector: segment-aware + exec-aware).
-// Best-effort: ANSI-C $'...' quoting is now covered (optional \$? before quote in Pass 1).
-// Escape sequences inside $'...' (e.g. $'\x67it push') and variable indirection remain
+// Variable indirection and arbitrary language interpreters (python -c, perl -e) remain
 // uncatchable by string parsing; the git-layer pre-push two-stamp is the authoritative backstop.
-// Language interpreters (python -c, perl -e) and arbitrary obfuscation are also uncatchable.
-// Pass 1: recurse into executed sub-strings (shell -c '...', $'...', eval '...', $(...), `...`)
-//   so that `sh -c 'git push'` / `sh -c $'git push'` are caught.
+// Pass 1: recurse into executed sub-strings (shell -c '...', $'...', eval '...', $(...), `...`).
+//   $'...' payloads (genuinely dollar-prefixed AND single-quoted -- captured explicitly, not
+//   just optionally matched-and-discarded) are ANSI-C-escape-decoded before recursing, so a
+//   LITERAL backslash-n inside $'...' becomes a real newline before Pass 2 ever sees it --
+//   otherwise `bash -c $'cd /x\ngit push'` recurses on a payload whose "newline" is just the
+//   two printable characters backslash+n, which nothing splits on. $"..." (locale translation)
+//   and plain '...'/"..." are NEVER decoded -- decoding them would over-block prose like
+//   `bash -c 'echo a\ngit push'`, which bash treats as one literal argument (no push runs) and
+//   which must still ALLOW. That distinction is the negative control this fix is checked against.
 // Pass 2: strip heredoc bodies + quoted spans FIRST (prose/heredoc false-positive
 //   prevention -- this order is load-bearing: heredoc-stripping collapses a heredoc's
 //   internal newlines into one placeholder, and quote-stripping neutralizes quoted
@@ -48,24 +53,59 @@ const SKEW_TOLERANCE = 120;   // 2 minutes future tolerance
 //   independent segments), then split on shell control operators INCLUDING newline and
 //   `&` (background) -- both sequence commands exactly like `;` does, so a multi-line
 //   `bash -c $'cmd1\ncmd2'` body or a `sleep 1 & git push` line no longer hides a git
-//   push behind a segment the ^git push anchor never reaches. Test ^git push per
-//   segment after stripping env-var assignments and common wrapper prefixes (incl.
-//   unquoted eval).
-// Guards: `sh -c "echo 'git push'"`, `printf 'git push'`, `echo $'git push'` (prose) all ALLOW.
+//   push behind a segment the ^git push anchor never reaches. Per segment: strip env-var
+//   assignments, common wrapper prefixes (incl. unquoted eval), and -- once the segment
+//   starts with a bare `git` -- git's OWN global options (-C, -c, --git-dir, --work-tree,
+//   --namespace, --super-prefix, --config-env, --attr-source, --exec-path, and the valueless
+//   flags), so `git -C /tmp push`, `git --git-dir=/x push`, `git -c a=b push` etc. all still
+//   reduce to a bare `git push` before the anchor test. Test ^git push per segment last.
+// Guards: `sh -c "echo 'git push'"`, `printf 'git push'`, `echo $'git push'`,
+//   `bash -c 'echo a\ngit push'` (prose/literal, no push ever runs) all ALLOW.
+// decodeAnsiCEscapes: decode the escapes bash itself decodes inside GENUINE $'...' quoting.
+// Only ever called when the caller has already confirmed the payload came from a real $'...'
+// span (dollar-sign present AND single-quoted) -- never for $"..." (locale translation, a
+// different feature) or plain '...'/"..." (no escape processing at all in real bash). A
+// single left-to-right pass over /\\(.)/g is enough: an escaped backslash (`\\`) consumes
+// both characters as one match, so a literal `\\n` (escaped backslash + bare n) correctly
+// decodes to a literal backslash followed by an untouched, un-decoded `n` -- not a newline.
+// Unrecognized escapes are left exactly as-is (backslash + char), not guessed at.
+function decodeAnsiCEscapes(s) {
+  return s.replace(/\\(.)/g, (whole, c) => {
+    switch (c) {
+      case 'n': return '\n';
+      case 'r': return '\r';
+      case 't': return '\t';
+      case '\\': return '\\';
+      case "'": return "'";
+      case '"': return '"';
+      default: return whole;
+    }
+  });
+}
+
 function isGitPushCommand(cmd) {
   // Pass 1: recurse into executed sub-shells / eval bodies (QUOTED and ANSI-C $'...' forms).
   // Applied to the ORIGINAL cmd (before quote-strip) so payloads stay intact.
-  // \$? before the quote capture handles $'...' and $"..." (ANSI-C quoting).
+  // Group 1 captures the OPTIONAL `$` itself (not just matched-and-discarded) and group 2
+  // captures the quote character, so the two can be checked TOGETHER below: only a captured
+  // `$` next to a captured `'` is genuine ANSI-C quoting eligible for escape decoding.
   const EXEC = [
-    /\b(?:sh|bash|zsh|dash|ksh|ash)\b(?:\s+-\S+)*\s+-[a-z]*c\b\s*\$?(['"])([\s\S]*?)\1/g, // shell -c '...' / $'...'
-    /\beval\b\s*\$?(['"])([\s\S]*?)\1/g,                                                     // eval '...' / $'...'
+    /\b(?:sh|bash|zsh|dash|ksh|ash)\b(?:\s+-\S+)*\s+-[a-z]*c\b\s*(\$?)(['"])([\s\S]*?)\2/g, // shell -c '...' / $'...'
+    /\beval\b\s*(\$?)(['"])([\s\S]*?)\2/g,                                                     // eval '...' / $'...'
     /\$\(([\s\S]*?)\)/g,                                                                     // $(...)
     /`([^`]*)`/g,                                                                            // `...`
   ];
   for (const re of EXEC) {
     let m;
     while ((m = re.exec(cmd)) !== null) {
-      if (isGitPushCommand(m[m.length - 1])) return true;
+      let payload = m[m.length - 1];
+      // Decode ANSI-C escapes ONLY for the two EXEC forms with a captured ($, quote) pair
+      // (m.length===4: whole match + 3 groups), and only when that pair is genuinely ($, ').
+      // $(...) and `...` have no quote concept at all and are never eligible.
+      if (m.length === 4 && m[1] === '$' && m[2] === "'") {
+        payload = decodeAnsiCEscapes(payload);
+      }
+      if (isGitPushCommand(payload)) return true;
     }
   }
   // Pass 2: strip heredoc bodies + quoted spans FIRST -- this order is load-bearing now
@@ -83,13 +123,26 @@ function isGitPushCommand(cmd) {
   // newline gap (a multi-line command body was previously one un-splittable segment);
   // bare `&` closes the same class of gap for backgrounding (`cmd1 & cmd2` sequences
   // exactly like `cmd1 ; cmd2` from the shell's point of view).
+  // Git's own global options, consumed between a bare `git` and its subcommand. Two shapes:
+  //   - value-taking (-C, -c, --git-dir, --work-tree, --namespace, --super-prefix,
+  //     --config-env, --attr-source): value is EITHER glued via `=` OR a separate next token
+  //     -- `\s+\S+` deliberately consumes ANY next token as the value (including one that
+  //     happens to read "push", per the `git -C push push` sanity case: the FIRST push is -C's
+  //     value, only the SECOND is the real subcommand, and this still reduces to `git push`).
+  //   - --exec-path takes an OPTIONAL value via `=` ONLY (GNU convention for optional-argument
+  //     long options) -- never a separate-arg value, so it must NOT consume a following token.
+  //   - the rest are valueless flags, consumed alone.
+  // Anchored to `^git\s+`, so this is a no-op until a wrapper/VAR=val strip (below) has
+  // already exposed a bare `git` at the front of the segment.
+  const GIT_GLOBAL_OPT_RE = /^(git\s+)(?:(?:(?:-C|-c|--git-dir|--work-tree|--namespace|--super-prefix|--config-env|--attr-source)(?:=\S+|\s+\S+)|--exec-path(?:=\S+)?|-p|-P|--paginate|--no-pager|--bare|--no-replace-objects|--literal-pathspecs|--no-optional-locks|--no-lazy-fetch|-v|--version|-h|--help|--html-path|--man-path|--info-path)\s+)+/;
   return cleaned.split(/\s*(?:&&|\|\||;|\||\r?\n|&)\s*/).some(seg => {
     let s = seg.trim(), prev;
     do {
       prev = s;
       s = s
         .replace(/^(?:[A-Z_][A-Z0-9_]*=[^\s]+\s+)+/, '')  // strip leading VAR=val env
-        .replace(/^(?:rtk|sudo|command|env|xargs|time|nice|nohup|stdbuf|setsid|doas|builtin|exec|eval)\s+(?:-\S+\s+)*/, '');
+        .replace(/^(?:rtk|sudo|command|env|xargs|time|nice|nohup|stdbuf|setsid|doas|builtin|exec|eval)\s+(?:-\S+\s+)*/, '')
+        .replace(GIT_GLOBAL_OPT_RE, '$1');  // strip git's own global options -> bare `git <subcommand>`
     } while (s !== prev);
     return /^git\s+push\b/.test(s);
   });
