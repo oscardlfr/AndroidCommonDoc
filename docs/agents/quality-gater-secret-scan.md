@@ -53,7 +53,7 @@ This is the same enforcement model used by Step X (path-manifest-audit) and Step
 ### What is NOT changed
 
 - `quality-gate-manifest.json` — Step S's OWN implementation required no NEW manifest entry (the `secret-scan` `required_steps[]` entry already existed). The manifest as a whole is not static: it has since gained `informational_steps` (Wave A) and, as of wave `qg-artifact-binding`, `manifest_version: 3` plus the generic binding loop that now actively reads this report's `head`/`generated_at`/`status` fields — see [quality-gater-artifact-binding](quality-gater-artifact-binding.md).
-- `emit-push-proof.sh` — NOT edited. The gate sits ahead of it in the template flow.
+- `emit-push-proof.sh` — Step S's OWN implementation required no edit to this script (the gate sits ahead of it in the template flow: on FAIL, Step S exits 1 before Step 10 / the mint is ever reached). `emit-push-proof.sh` as a whole is not static: as of wave `qg-artifact-binding`, its generic binding loop actively opens and validates this step's own `secret-scan-report.json` (HEAD/freshness/status) as one of the two loop members (the other: doc-validator-parity) — see [quality-gater-artifact-binding](quality-gater-artifact-binding.md).
 
 ### Explicit boundary: `/pre-pr` SKIP is NOT a QG secret-scan PASS
 
