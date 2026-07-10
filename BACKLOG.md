@@ -110,6 +110,14 @@ Desired fix — do not rely on discipline; make the default impossible under tes
 
 `#PAG-PEER-BLOCK` — the regression written specifically to guard this property — was green throughout, because it feeds the hook a bare `git push`, an input nobody issues. Fixed in `3c64643` (newline and background-operator separators) with `#PAG-PEER-WRAPPED`/`#PAG-MAIN-STALE-WRAPPED` covering the real shape. `install-git-hooks.sh` was run as immediate mitigation.
 
+**LOW — `push-authorization-gate.js` Pass 1 recurses into any backtick span, producing false positives on prose.** `isGitPushCommand`'s `EXEC` list treats `` `…` `` as command substitution and recurses into its contents regardless of whether they resemble a command. A `git commit` whose message contains a backtick-quoted shell example is therefore blocked as if it were a push. Pre-existing for `` `git push` `` and `` `cd /x; git push` ``; the newline/`&` fix in `3c64643` created a new instance, `` `sleep 1 & git push` ``, and `&` is far commoner in casual prose than `;` or `&&`.
+
+**This is over-blocking, not under-blocking** — fail-closed, and strictly safer than the bypass it replaced. Reported by `toolkit-specialist` against its own change, after its own commit was refused; it rephrased the message rather than widen the detector, and escalated rather than work around it.
+
+**Desired fix (design question, not a one-liner, `toolkit-specialist`'s suggestion):** Pass 1 should require backtick content to look like a command before recursing, rather than merely be non-empty. Any change here must preserve the existing prose guards (`sh -c "echo 'git push'"`, `printf 'git push'`, `echo $'git push'`) and must not reopen the newline/`&` bypass.
+
+**Practical note until fixed:** avoid backtick-quoted shell examples containing `git push` in commit messages — our own hook will refuse the commit.
+
 **Source**: `.planning/wave-qg-evidence-integrity/PLAN.md`, `.planning/wave-qg-evidence-integrity/arch-integration-verdict.md`.
 
 ### Wave 38 — Ingestion bundle (LOW urgency, ~2-4h) — DEFERRED to Harness Realignment Wave 5
