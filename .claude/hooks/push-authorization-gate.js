@@ -50,15 +50,21 @@ const SKEW_TOLERANCE = 120;   // 2 minutes future tolerance
 //   prevention -- this order is load-bearing: heredoc-stripping collapses a heredoc's
 //   internal newlines into one placeholder, and quote-stripping neutralizes quoted
 //   prose, so splitting BEFORE either would treat their raw, unstripped contents as
-//   independent segments), then split on shell control operators INCLUDING newline and
-//   `&` (background) -- both sequence commands exactly like `;` does, so a multi-line
-//   `bash -c $'cmd1\ncmd2'` body or a `sleep 1 & git push` line no longer hides a git
-//   push behind a segment the ^git push anchor never reaches. Per segment: strip env-var
-//   assignments, common wrapper prefixes (incl. unquoted eval), and -- once the segment
-//   starts with a bare `git` -- git's OWN global options (-C, -c, --git-dir, --work-tree,
-//   --namespace, --super-prefix, --config-env, --attr-source, --exec-path, and the valueless
-//   flags), so `git -C /tmp push`, `git --git-dir=/x push`, `git -c a=b push` etc. all still
-//   reduce to a bare `git push` before the anchor test. Test ^git push per segment last.
+//   independent segments). THEN collapse shell line-continuation (a backslash
+//   immediately before a newline, which the shell itself removes to JOIN two lines
+//   into one logical command) BEFORE splitting on shell control operators INCLUDING
+//   (bare, non-continuation) newline and `&` (background) -- a continuation and a
+//   separator are opposite operations on the same character, disambiguated only by
+//   the preceding backslash: `git -C /tmp \<newline>push` really executes as one
+//   `git -C /tmp push` command and must be JOINED, while a genuine multi-line
+//   `bash -c $'cmd1\ncmd2'` body or a `sleep 1 & git push` line must still be SPLIT,
+//   since both of those sequence commands exactly like `;` does. Per segment: strip
+//   env-var assignments, common wrapper prefixes (incl. unquoted eval), and -- once
+//   the segment starts with a bare `git` -- git's OWN global options (-C, -c,
+//   --git-dir, --work-tree, --namespace, --super-prefix, --config-env, --attr-source,
+//   --exec-path, and the valueless flags), so `git -C /tmp push`, `git --git-dir=/x
+//   push`, `git -c a=b push` etc. all still reduce to a bare `git push` before the
+//   anchor test. Test ^git push per segment last.
 // Guards: `sh -c "echo 'git push'"`, `printf 'git push'`, `echo $'git push'`,
 //   `bash -c 'echo a\ngit push'` (prose/literal, no push ever runs) all ALLOW.
 // decodeAnsiCEscapes: decode the escapes bash itself decodes inside GENUINE $'...' quoting.
@@ -111,18 +117,30 @@ function isGitPushCommand(cmd) {
   // Pass 2: strip heredoc bodies + quoted spans FIRST -- this order is load-bearing now
   // that the split includes newline (see header): heredoc-stripping collapses a heredoc's
   // internal newlines into one placeholder, and quote-stripping neutralizes quoted prose,
-  // BEFORE either could be misread as independent segments by the split below. Then split
-  // and prefix-strip per segment. `eval` in the prefix-strip catches unquoted `eval git
-  // push` (quoted form handled in Pass 1).
+  // BEFORE either could be misread as independent segments by the split below. THEN, once
+  // heredocs/quotes are already neutralized (so a continuation can no longer merge into a
+  // heredoc's own closing-tag line or into an already-discarded quoted span), collapse shell
+  // LINE-CONTINUATION (backslash immediately before a newline): the shell itself removes this
+  // pair and JOINS the two lines into one logical command, so `git -C /tmp \<newline>push`
+  // executes as a real `git -C /tmp push` -- but a bare `\r?\n` SEPARATOR split (below) would
+  // otherwise cut exactly at that join point, producing two harmless-looking segments where
+  // the shell sees one. This must NOT be confused with the separator split itself: a
+  // continuation is REMOVED (it never becomes a boundary), a bare newline is SPLIT (it always
+  // is one) -- the two are opposite operations on the same character, disambiguated only by
+  // the immediately-preceding backslash. Then split and prefix-strip per segment. `eval` in
+  // the prefix-strip catches unquoted `eval git push` (quoted form handled in Pass 1).
   const cleaned = cmd
     .replace(/<<-?\s*['"]?(\w+)['"]?[\s\S]*?\n\s*\1\b/g, ' <<HEREDOC ')
-    .replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
+    .replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""')
+    .replace(/\\\r?\n/g, '');
   // `&&` MUST stay listed before the bare `&` alternative -- alternation tries left-to-
   // right and stops at the first match, so if `&` were tried first it would consume only
   // one character of `&&`, leaving a dangling second `&` unsplit. `\r?\n` closes the
   // newline gap (a multi-line command body was previously one un-splittable segment);
   // bare `&` closes the same class of gap for backgrounding (`cmd1 & cmd2` sequences
-  // exactly like `cmd1 ; cmd2` from the shell's point of view).
+  // exactly like `cmd1 ; cmd2` from the shell's point of view). By this point any
+  // backslash-newline PAIR has already been removed above, so every remaining `\r?\n` here
+  // really is a separator, never a continuation.
   // Git's own global options, consumed between a bare `git` and its subcommand. Two shapes:
   //   - value-taking (-C, -c, --git-dir, --work-tree, --namespace, --super-prefix,
   //     --config-env, --attr-source): value is EITHER glued via `=` OR a separate next token
