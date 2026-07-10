@@ -920,6 +920,46 @@ PYEOF
   [ "$status" -eq 2 ]
 }
 
+# ── #PAG-PEER-AMP / #PAG-AMP-CONTROL — the bare-& half of 3c64643's bypass fix ─────
+#
+# 3c64643 added TWO separators to isGitPushCommand's split: `\r?\n` (covered above by
+# #PAG-PEER-WRAPPED/#PAG-MAIN-STALE-WRAPPED/#PAG-PEER-LEADING-NEWLINE) and bare `&`
+# (background), covered by neither — every existing PA-P2A-* case uses the COMPOUND
+# `&&` operator, which already split before 3c64643 (it has always had its own literal
+# alternative). Not one fed a bare `&`. `sleep 1 & git push origin main` sequences two
+# commands exactly like `sleep 1 ; git push origin main` from the shell's point of
+# view, so without the bare-`&` alternative the whole string is one segment starting
+# with `sleep`, never reaching the `^git push` anchor.
+#
+# RED confirmed against a scratch copy of the REAL, CURRENT hook with ONLY the bare
+# `&` alternative removed from the split regex (`&&` left intact, listed first, exactly
+# as shipped) — not against pre-3c64643, which would conflate this half with the
+# newline half and let the newline separator do the work instead. .claude/hooks/ was
+# never touched to get this evidence:
+#   peer + "sleep 1 & git push origin main"  → exit=0, no output (silent ALLOW — the bug)
+#   peer + "sleep 1 & echo hi"                → exit=0 (correct either way, not a push)
+#   peer + "echo ok && git push origin x"     → exit=2, BLOCK (confirms && does NOT
+#                                                depend on & being present at all — it
+#                                                matches its own separate, earlier-listed
+#                                                alternative, so PA-P2A-5's green is not
+#                                                an accident of ordering)
+# Then GREEN against the real, current hook for the same three.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#PAG-PEER-AMP BLOCK: peer + 'sleep 1 & git push origin main' (bare background operator) → exit 2 + decision:block" {
+  make_input "sleep 1 & git push origin main" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "#PAG-AMP-CONTROL ALLOW: peer + 'sleep 1 & echo hi' (bare & but no push) → exit 0" {
+  # Without this, #PAG-PEER-AMP would pass against a hook that blocks every
+  # ampersand-containing command unconditionally, proving nothing.
+  make_input "sleep 1 & echo hi" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
 # ── #PAG-GUARD — static invariant: every block( call site is immediately followed by
 # return ────────────────────────────────────────────────────────────────────────────
 #
