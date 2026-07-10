@@ -168,11 +168,17 @@ write_valid_bats_handoff() {
 write_quality_gate_report() {
   local started_at
   started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$started_at" <<'PYEOF'
+  # 51b0d63: run-qg's report-head-* check requires report.head present and equal to
+  # the current HEAD. Re-derived fresh from git at call time (never a cached shell
+  # variable), mirroring write_valid_bats_handoff's own established pattern.
+  local report_head
+  report_head="$(git -C "$REPO" rev-parse HEAD)"
+  python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$started_at" "$report_head" <<'PYEOF'
 import json, sys
 
 manifest = json.load(open(sys.argv[2], encoding='utf-8'))
 started_at = sys.argv[3]
+report_head = sys.argv[4]
 
 steps = []
 for rs in manifest.get('required_steps', []):
@@ -186,6 +192,7 @@ for cs in manifest.get('conditional_steps', []):
 
 report = {
     "started_at": started_at,
+    "head": report_head,
     "deliberation": {
         "architects_consulted": ["arch-platform", "arch-testing", "arch-integration"],
         "incorporated_at": "2026-06-14T00:00:00Z",
