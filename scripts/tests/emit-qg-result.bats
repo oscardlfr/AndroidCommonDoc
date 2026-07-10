@@ -449,10 +449,17 @@ EOF
     # specific handoff scenarios). A valid full-scope HEAD-bound handoff is also needed
     # now that run-qg's test-suite-evidence-* check requires real evidence behind the
     # test-suite:PASS step write_report_all_pass builds by default.
-    python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" << 'PYEOF'
+    local qr6_head
+    qr6_head="$(git -C "$REPO" rev-parse HEAD)"
+    # 51b0d63: report-head-* requires report.head present and equal to current HEAD.
+    # write_report_all_pass's dict has neither started_at nor head; re-add both here
+    # inline (scoped to #QR6/#QR7 only — see the comment above for why this is
+    # deliberately not a shared helper patch).
+    python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$qr6_head" << 'PYEOF'
 import json, sys, datetime
 rpt_path = sys.argv[1]
 mfst_path = sys.argv[2]
+report_head = sys.argv[3]
 rpt = json.load(open(rpt_path, encoding='utf-8'))
 mfst = json.load(open(mfst_path, encoding='utf-8'))
 by_id = {s['step']: s for s in rpt['steps']}
@@ -461,11 +468,10 @@ by_id['path-manifest-audit'] = {'step': 'path-manifest-audit', 'ran': True, 'res
 by_id['production-file-verify'] = {'step': 'production-file-verify', 'ran': True, 'result': 'PASS'}
 rpt['steps'] = list(by_id.values())
 rpt['started_at'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+rpt['head'] = report_head
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
-    local qr6_head
-    qr6_head="$(git -C "$REPO" rev-parse HEAD)"
     local qr6_run_id="qr6-fixture-$$-${RANDOM}"
     printf 'BATS_OK=%s\nBATS_NOT_OK=%s\nBATS_EXPECTED=%s\nBATS_TOTAL=%s\nBATS_COMPLETE=%s\nBATS_VERDICT=%s\nBATS_LOG=%s\nBATS_HEAD=%s\nBATS_RUN_ID=%s\nBATS_GENERATED_AT=%s\nBATS_SCOPE=%s\n' \
         42 0 42 42 true pass /dev/null "$qr6_head" "$qr6_run_id" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" full \
@@ -544,10 +550,13 @@ EOF
     # write_report_all_pass above just overwrote it without one — re-add it here inline
     # (scoped to #QR6/#QR7 only, mirroring #QR6's own comment). A valid full-scope
     # HEAD-bound handoff is also needed for run-qg's test-suite-evidence-* check.
-    python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" << 'PYEOF'
+    # 51b0d63: report-head-* requires report.head too — re-add it the same way, using
+    # $HEAD_SHA (already in scope, no further commits happen before this block).
+    python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" "$HEAD_SHA" << 'PYEOF'
 import json, sys, datetime
 rpt_path = sys.argv[1]
 mfst_path = sys.argv[2]
+report_head = sys.argv[3]
 rpt = json.load(open(rpt_path, encoding='utf-8'))
 by_id = {s['step']: s for s in rpt['steps']}
 by_id['path-manifest-audit'] = {'step': 'path-manifest-audit', 'ran': True, 'result': 'PASS',
@@ -555,6 +564,7 @@ by_id['path-manifest-audit'] = {'step': 'path-manifest-audit', 'ran': True, 'res
 by_id['production-file-verify'] = {'step': 'production-file-verify', 'ran': True, 'result': 'PASS'}
 rpt['steps'] = list(by_id.values())
 rpt['started_at'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+rpt['head'] = report_head
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
@@ -1571,9 +1581,11 @@ EOF
     [ "$status" -eq 0 ]
 
     write_report_all_pass "$ACDOC/quality-gate-report.json"
-    python3 - "$ACDOC/quality-gate-report.json" << 'PYEOF'
+    # 51b0d63: report-head-* requires report.head present and equal to current HEAD.
+    python3 - "$ACDOC/quality-gate-report.json" "$HEAD_SHA" << 'PYEOF'
 import json, sys, datetime
 rpt_path = sys.argv[1]
+report_head = sys.argv[2]
 rpt = json.load(open(rpt_path, encoding='utf-8'))
 by_id = {s['step']: s for s in rpt['steps']}
 by_id['path-manifest-audit'] = {'step': 'path-manifest-audit', 'ran': True, 'result': 'PASS',
@@ -1581,6 +1593,7 @@ by_id['path-manifest-audit'] = {'step': 'path-manifest-audit', 'ran': True, 'res
 by_id['production-file-verify'] = {'step': 'production-file-verify', 'ran': True, 'result': 'PASS'}
 rpt['steps'] = list(by_id.values())
 rpt['started_at'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+rpt['head'] = report_head
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
