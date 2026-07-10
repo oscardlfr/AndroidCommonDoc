@@ -94,6 +94,8 @@ Eight integrity checks, all fail-CLOSED (exit 2 on failure):
 
 All three verifiers implement this same 8-check contract at equivalent rigor: this bash `verify_proof` subcommand, `scripts/ps1/verify-push-proof.ps1` (Windows git-layer parity), and the in-JS fallback inside `.claude/hooks/push-authorization-gate.js` (used only when it cannot delegate to bash).
 
+**Narrowed claim (2026-07-10):** the 8-check contract above governs the *proof verification* logic once a command has been identified as a push attempt. The separate *push-detection* logic inside `push-authorization-gate.js` (`isGitPushCommand`, PreToolUse) is best-effort command-string parsing with a known, unbounded shell-evasion surface (see `BACKLOG.md`'s CRITICAL entry) — it is **not** authoritative. The authoritative, escape-proof push gate is the git-layer `.git/hooks/pre-push` hook, which validates real git refs and stamps rather than parsing a command string, and so cannot be evaded by any command spelling.
+
 ---
 
 ## `push-proof.json` Schema (schema_version: 1)
