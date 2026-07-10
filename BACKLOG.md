@@ -112,13 +112,17 @@ Desired fix — do not rely on discipline; make the default impossible under tes
 
 `#PAG-PEER-BLOCK` — the regression written specifically to guard this property — was green throughout, because it feeds the hook a bare `git push`, an input nobody issues. Fixed in `3c64643` (newline and background-operator separators) with `#PAG-PEER-WRAPPED`/`#PAG-MAIN-STALE-WRAPPED` covering the real shape. `install-git-hooks.sh` was run as immediate mitigation.
 
-**LOW — `push-authorization-gate.js` Pass 1 recurses into any backtick span, producing false positives on prose.** `isGitPushCommand`'s `EXEC` list treats `` `…` `` as command substitution and recurses into its contents regardless of whether they resemble a command. A `git commit` whose message contains a backtick-quoted shell example is therefore blocked as if it were a push. Pre-existing for `` `git push` `` and `` `cd /x; git push` ``; the newline/`&` fix in `3c64643` created a new instance, `` `sleep 1 & git push` ``, and `&` is far commoner in casual prose than `;` or `&&`.
+**LOW — `push-authorization-gate.js` Pass 1 recurses into any backtick span, so ANY Bash call whose text contains backtick-quoted push-like content is blocked as a push.** `isGitPushCommand`'s `EXEC` list treats `` `…` `` as command substitution and recurses into it regardless of whether the content resembles a command. **Pass 1 runs on the ORIGINAL command, before Pass 2 strips heredoc bodies and quoted spans** (`:57`) — so a heredoc offers no protection.
 
-**This is over-blocking, not under-blocking** — fail-closed, and strictly safer than the bypass it replaced. Reported by `toolkit-specialist` against its own change, after its own commit was refused; it rephrased the message rather than widen the detector, and escalated rather than work around it.
+**The blast radius is Bash calls generally, not commit messages.** Observed live in Wave A: `arch-platform`'s `write-verdict.sh --phase verify-final --supersede` invocation — a command touching no git — was blocked as *"arch-platform attempted git push"*, because its heredoc body described the bypass using backtick-quoted syntax. A plain `echo` with backticked push text blocks identically.
 
-**Desired fix (design question, not a one-liner, `toolkit-specialist`'s suggestion):** Pass 1 should require backtick content to look like a command before recursing, rather than merely be non-empty. Any change here must preserve the existing prose guards (`sh -c "echo 'git push'"`, `printf 'git push'`, `echo $'git push'`) and must not reopen the newline/`&` bypass.
+Pre-existing for a backtick span whose content is bare `git push`. The newline and `&` separators added in `3c64643` each created a new instance: a backtick span containing `cd /x` on one line and `git push` on the next (the newline case), and `` `sleep 1 & git push` `` (the `&` case) — both were allowed before and block now.
 
-**Practical note until fixed:** avoid backtick-quoted shell examples containing `git push` in commit messages — our own hook will refuse the commit.
+**Over-blocking, not under-blocking** — fail-closed, and strictly safer than the bypass it replaced. Reported by `toolkit-specialist` against its own change after its own commit was refused; scope corrected by `arch-platform` after its own verdict-write was refused. Both rephrased rather than widening the detector or bypassing it.
+
+**Desired fix (design question, `toolkit-specialist`'s suggestion):** Pass 1 should require backtick content to look like a command before recursing, rather than merely be non-empty. Must preserve the existing prose guards and must not reopen the newline/`&` bypass.
+
+**Practical note until fixed:** avoid backtick-quoted push syntax in any Bash argument — commit messages, heredocs, `echo`, verdict bodies. Plain prose is fine.
 
 **Source**: `.planning/wave-qg-evidence-integrity/PLAN.md`, `.planning/wave-qg-evidence-integrity/arch-integration-verdict.md`.
 
