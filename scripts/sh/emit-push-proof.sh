@@ -13,16 +13,20 @@
 #                 Does NOT fabricate report content — attests what the quality-gater produced.
 #
 #                 EVIDENCE BINDING (Wave A): a claimed report.steps[] entry of
-#                 {"step":"test-suite","result":"PASS"} is no longer taken on faith. Five
+#                 {"step":"test-suite","result":"PASS"} is no longer taken on faith. Six
 #                 named checks, all die(...) -> exit 2: invalid-step-result, duplicate-
 #                 step-id, unknown-step-id, test-suite-evidence-* (backed by a real,
 #                 fresh, full-scope, complete, clean bats handoff via
 #                 lib/bats-handoff.sh — see test-suite-evidence-{absent,stale,partial,
-#                 dirty}), and report-started-at-* (report.started_at must be present
-#                 and plausible — the QG-session anchor used as the evidence lookup's
-#                 --since floor). push-proof.json additively gains a bats_evidence
-#                 object {run_id, head, ok, not_ok, expected, scope, generated_at} (no
-#                 filesystem paths); schema_version stays 1.
+#                 dirty}), report-started-at-* (report.started_at must be present and
+#                 plausible — the QG-session anchor used as the evidence lookup's
+#                 --since floor), and report-head-* (report.head, written by --init,
+#                 must be present and equal the current HEAD — closes the gap where a
+#                 report opened at an older commit is re-sealed/re-evidenced at a newer
+#                 one without a re-`--init`, minting report_digest over a report that
+#                 still asserts the wrong commit). push-proof.json additively gains a
+#                 bats_evidence object {run_id, head, ok, not_ok, expected, scope,
+#                 generated_at} (no filesystem paths); schema_version stays 1.
 #
 #   verify-proof  Cheap verifier for the git-layer hook. Reads push-proof.json and checks:
 #                 schema_version, head, worktree_id, generated_at freshness, manifest_version,
@@ -428,6 +432,20 @@ if _age_secs > 86400:
     die(f"report-started-at-implausible: report.started_at is {_age_secs:.0f}s in the past (max 86400s -- intentional max-staleness bound, not unlimited replay protection)")
 if _age_secs < -skew_tolerance:
     die(f"report-started-at-implausible: report.started_at is {-_age_secs:.0f}s in the future (max {skew_tolerance}s skew)")
+
+# report-head-*: report.head (written by --init) must be present and match the current
+# HEAD -- otherwise a report opened at an OLDER commit can be re-sealed and re-evidenced
+# at a NEWER one without ever re-running --init, binding a mint's report_digest to a
+# report that still asserts the wrong commit. Placed AFTER report-started-at-* so the
+# operator sees the more specific cause first when both are wrong. Absence must die too
+# -- a pre-D6 report (no head, no started_at) must not slip through on a missing key;
+# report-started-at-absent above already catches that case, but this field gets its OWN
+# check, never relying on a sibling's.
+_report_head = report.get('head')
+if not _report_head:
+    die("report-head-absent: quality-gate-report.json has no 'head' field -- run emit-qg-result.sh --init at the current HEAD before the bats run")
+if _report_head != head_sha_arg:
+    die(f"report-head-mismatch: report.head={_report_head!r} != current HEAD={head_sha_arg!r} (was --init run at this HEAD?)")
 
 # test-suite-evidence-*: a claimed test-suite: PASS is accepted only when backed by
 # real, fresh, full-scope, complete, clean evidence -- plus a sanity floor that closes
