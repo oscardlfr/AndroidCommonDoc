@@ -41,9 +41,16 @@ const SKEW_TOLERANCE = 120;   // 2 minutes future tolerance
 // Language interpreters (python -c, perl -e) and arbitrary obfuscation are also uncatchable.
 // Pass 1: recurse into executed sub-strings (shell -c '...', $'...', eval '...', $(...), `...`)
 //   so that `sh -c 'git push'` / `sh -c $'git push'` are caught.
-// Pass 2: strip heredoc bodies + quoted spans (prose false-positive prevention),
-//   split on shell control operators (NOT newline), test ^git push per segment
-//   after stripping env-var assignments and common wrapper prefixes (incl. unquoted eval).
+// Pass 2: strip heredoc bodies + quoted spans FIRST (prose/heredoc false-positive
+//   prevention -- this order is load-bearing: heredoc-stripping collapses a heredoc's
+//   internal newlines into one placeholder, and quote-stripping neutralizes quoted
+//   prose, so splitting BEFORE either would treat their raw, unstripped contents as
+//   independent segments), then split on shell control operators INCLUDING newline and
+//   `&` (background) -- both sequence commands exactly like `;` does, so a multi-line
+//   `bash -c $'cmd1\ncmd2'` body or a `sleep 1 & git push` line no longer hides a git
+//   push behind a segment the ^git push anchor never reaches. Test ^git push per
+//   segment after stripping env-var assignments and common wrapper prefixes (incl.
+//   unquoted eval).
 // Guards: `sh -c "echo 'git push'"`, `printf 'git push'`, `echo $'git push'` (prose) all ALLOW.
 function isGitPushCommand(cmd) {
   // Pass 1: recurse into executed sub-shells / eval bodies (QUOTED and ANSI-C $'...' forms).
@@ -61,12 +68,22 @@ function isGitPushCommand(cmd) {
       if (isGitPushCommand(m[m.length - 1])) return true;
     }
   }
-  // Pass 2: strip heredoc bodies + quoted spans, then split and prefix-strip per segment.
-  // `eval` in the prefix-strip catches unquoted `eval git push` (quoted form handled in Pass 1).
+  // Pass 2: strip heredoc bodies + quoted spans FIRST -- this order is load-bearing now
+  // that the split includes newline (see header): heredoc-stripping collapses a heredoc's
+  // internal newlines into one placeholder, and quote-stripping neutralizes quoted prose,
+  // BEFORE either could be misread as independent segments by the split below. Then split
+  // and prefix-strip per segment. `eval` in the prefix-strip catches unquoted `eval git
+  // push` (quoted form handled in Pass 1).
   const cleaned = cmd
     .replace(/<<-?\s*['"]?(\w+)['"]?[\s\S]*?\n\s*\1\b/g, ' <<HEREDOC ')
     .replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
-  return cleaned.split(/\s*(?:&&|\|\||;|\|)\s*/).some(seg => {
+  // `&&` MUST stay listed before the bare `&` alternative -- alternation tries left-to-
+  // right and stops at the first match, so if `&` were tried first it would consume only
+  // one character of `&&`, leaving a dangling second `&` unsplit. `\r?\n` closes the
+  // newline gap (a multi-line command body was previously one un-splittable segment);
+  // bare `&` closes the same class of gap for backgrounding (`cmd1 & cmd2` sequences
+  // exactly like `cmd1 ; cmd2` from the shell's point of view).
+  return cleaned.split(/\s*(?:&&|\|\||;|\||\r?\n|&)\s*/).some(seg => {
     let s = seg.trim(), prev;
     do {
       prev = s;
