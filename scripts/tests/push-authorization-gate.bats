@@ -960,6 +960,104 @@ PYEOF
   [ "$status" -eq 0 ]
 }
 
+# ── #PAG-GLOBALOPT-* / #PAG-ANSIC-* / #PAG-PEER-LINECONT — 3f23add + 737c1b9 ────────
+#
+# Three more evasions of isGitPushCommand's ^git\s+push\b anchor, each closed by its
+# own commit, each needing its own isolated regression (same N-behaviours-need-N-
+# regressions shape as #PAG-PEER-AMP before it):
+#
+# 1. GLOBAL GIT OPTIONS (3f23add): git's own -C/-c/--git-dir/etc. consumed between
+#    `git` and the subcommand defeat the anchor — `git -C /tmp push` never reduces to
+#    `git push` without stripping the global option first.
+# 2. ANSI-C ESCAPE DECODE (3f23add): Pass 1 recurses into `$'...'` payloads, but a
+#    LITERAL backslash-n inside genuine $'...' quoting is two printable characters
+#    until bash decodes it — nothing splits on two printable characters, so
+#    `bash -c $'cd /tmp\ngit push'` (literal backslash-n) reaches one un-splittable
+#    segment.
+# 3. LINE CONTINUATION (737c1b9): a backslash immediately before a newline is a shell
+#    JOINER (removed; the two lines become one command) — but the separator split
+#    treats every bare newline as a boundary, so without collapsing the continuation
+#    first, `git -C /tmp \<newline>push` gets cut exactly at the join point into two
+#    non-matching segments (`git -C /tmp \` and `push origin x`), neither reducing to
+#    `git push`.
+#
+# RED confirmed for all three against scratch copies of the 737c1b9 baseline (the
+# last-committed state at authoring time), each with EXACTLY ONE element reverted —
+# never more than one at once, which would conflate which fix a given regression pins:
+#   no global-opt stripping:   "git -C /tmp push origin x"          → exit=0 (bug)
+#                              "git -c credential.helper= push..."  → exit=0 (bug)
+#   decodeAnsiCEscapes no-op:  "bash -c $'cd /tmp\ngit push...'"    → exit=0 (bug)
+#   no line-cont collapse:     "git -C /tmp \<newline>push..."      → exit=0 (bug)
+# .claude/hooks/ never touched to get this evidence. Then GREEN against the real,
+# current hook for all seven cases (three bugs + four controls) below.
+#
+# Real-newline fixtures (#PAG-PEER-LINECONT / #PAG-LINECONT-COMMIT) are built via
+# $'\n' concatenation, NEVER $(printf '\n') — command substitution strips trailing
+# newlines and would silently test `git -C /tmp \push` instead of the intended
+# `git -C /tmp \<newline>push`. Verified via a python round-trip during authoring that
+# the JSON-encoded command field genuinely contains a 0x0a byte before trusting it.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#PAG-GLOBALOPT-C BLOCK: peer + 'git -C /tmp push origin x' (global option before subcommand) → exit 2 + decision:block" {
+  make_input "git -C /tmp push origin x" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "#PAG-GLOBALOPT-CONFIG BLOCK: peer + 'git -c credential.helper= push origin x' (second global-option form) → exit 2 + decision:block" {
+  make_input "git -c credential.helper= push origin x" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "#PAG-GLOBALOPT-COMMIT ALLOW (positive control): peer + 'git -C /tmp commit -m x' (global option before a non-push) → exit 0" {
+  # Without this, a hook that blocks every command containing a git global option
+  # would pass #PAG-GLOBALOPT-C/-CONFIG for the wrong reason.
+  make_input "git -C /tmp commit -m x" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "#PAG-ANSIC-NL BLOCK: peer + bash -c \$'cd /tmp\\ngit push origin x' (genuine \$'...' quoting, literal backslash-n) → exit 2 + decision:block" {
+  local cmd
+  cmd='bash -c $'\''cd /tmp\ngit push origin x'\'''
+  make_input "$cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "#PAG-ANSIC-PLAINQUOTE ALLOW (negative control): peer + bash -c 'echo a\\ngit push' (plain quotes, bash does NOT decode) → exit 0" {
+  # The discriminating control: plain '...' quoting is never eligible for ANSI-C
+  # decoding, so bash treats the whole thing as one literal argument and no push ever
+  # runs. Unconditional decoding (not gated on genuine $'...') would over-block this.
+  local cmd
+  cmd='bash -c '\''echo a\ngit push'\'''
+  make_input "$cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "#PAG-PEER-LINECONT BLOCK: peer + 'git -C /tmp \\<newline>push origin x' (shell line continuation) → exit 2 + decision:block" {
+  # Real newline via \$'\n' concatenation — NEVER \$(printf '\n'), which strips a
+  # trailing newline and would silently test 'git -C /tmp \push' instead.
+  local cmd
+  cmd="git -C /tmp \\"$'\n'"push origin x"
+  make_input "$cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "#PAG-LINECONT-COMMIT ALLOW (positive control): peer + 'git -C /tmp \\<newline>commit -m x' (continuation into a non-push) → exit 0" {
+  local cmd
+  cmd="git -C /tmp \\"$'\n'"commit -m x"
+  make_input "$cmd" "toolkit-specialist"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
 # ── #PAG-GUARD — static invariant: every block( call site is immediately followed by
 # return ────────────────────────────────────────────────────────────────────────────
 #
