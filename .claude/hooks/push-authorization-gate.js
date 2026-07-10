@@ -37,6 +37,15 @@ const SKEW_TOLERANCE = 120;   // 2 minutes future tolerance
 // Detect git push in a bash command string (P2a deep detector: segment-aware + exec-aware).
 // Variable indirection and arbitrary language interpreters (python -c, perl -e) remain
 // uncatchable by string parsing; the git-layer pre-push two-stamp is the authoritative backstop.
+//
+// KNOWN LIMITATION: this detector parses a command STRING and cannot fully model the shell.
+// A known-open class remains: backslash-escaping an ORDINARY (non-special) character -- the
+// shell strips an unrecognized `\x` down to plain `x` (e.g. git \push, git p\ush, \git push),
+// but this detector does not perform that stripping, so those forms reach a real push
+// undetected. This detector is best-effort identity defense, not the authoritative push gate;
+// the git-layer .git/hooks/pre-push two-stamp hook is authoritative, since it reads real git
+// refs rather than re-deriving intent from a command string. Do not add another special-case
+// regex for this -- see the CRITICAL redesign item filed to BACKLOG.
 // Pass 1: recurse into executed sub-strings (shell -c '...', $'...', eval '...', $(...), `...`).
 //   $'...' payloads (genuinely dollar-prefixed AND single-quoted -- captured explicitly, not
 //   just optionally matched-and-discarded) are ANSI-C-escape-decoded before recursing, so a
