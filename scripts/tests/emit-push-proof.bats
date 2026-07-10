@@ -161,22 +161,35 @@ PYEOF
 # write_quality_gate_report — writes a valid .androidcommondoc/quality-gate-report.json
 # $1=extra_steps_json (default "") — JSON list of step objects to merge/replace
 # $2=override_deliberation_json (default "") — JSON object to override deliberation block
+# $3=head_override (default "") — see below
 #
 # Wave A: also stamps report.started_at and writes a matching valid bats handoff (via
 # write_valid_bats_handoff) BY DEFAULT — every caller of this helper builds a report
 # whose test-suite step defaults to PASS, so run-qg's report-started-at-* and
 # test-suite-evidence-* checks now fire unconditionally, before any of this helper's
 # callers' own intended die-code is ever reached.
+#
+# report.head ($3): defaults to a freshly-derived current HEAD (never a cached shell
+# variable, mirroring write_valid_bats_handoff's own established pattern) — but
+# #EP-HEADMISMATCH/#EP-HEADABSENT exist SPECIFICALLY to exercise report.head itself, and
+# auto-binding it correctly here would make them vacuous (same lesson as #QR10/11a/11b/12:
+# a shared helper must never silently overwrite the field a test's own name says it tests).
+# Pass a specific 40-hex value to force report-head-mismatch, or "__OMIT__" to delete the
+# key entirely (report-head-absent) — never patch this default away from tests that own it.
 write_quality_gate_report() {
   local extra_steps="${1:-}"
   local override_deliberation="${2:-}"
+  local head_override="${3:-}"
   local started_at
   started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  # 51b0d63: run-qg's report-head-* check requires report.head present and equal to
-  # the current HEAD. Re-derived fresh from git at call time (never a cached shell
-  # variable), mirroring write_valid_bats_handoff's own established pattern.
   local report_head
-  report_head="$(git -C "$REPO" rev-parse HEAD)"
+  if [[ "$head_override" == "__OMIT__" ]]; then
+    report_head=""
+  elif [[ -n "$head_override" ]]; then
+    report_head="$head_override"
+  else
+    report_head="$(git -C "$REPO" rev-parse HEAD)"
+  fi
   python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" \
       "${extra_steps}" "${override_deliberation}" "$started_at" "$report_head" <<'PYEOF'
 import json, sys
@@ -225,7 +238,6 @@ if override_delib_raw.strip():
 
 report = {
     "started_at": started_at,
-    "head": report_head,
     "deliberation": deliberation,
     "pre_pr_coverage": {"status": "PASS", "modules": 3},
     "discovered_rules": [
@@ -233,6 +245,11 @@ report = {
     ],
     "steps": steps,
 }
+# Only add "head" when report_head is non-empty — "__OMIT__" resolves to an empty
+# string in bash, so the key is genuinely ABSENT here, not present-with-empty-value
+# (report-head-absent's fixture must delete the key, not merely blank it).
+if report_head:
+    report["head"] = report_head
 with open(report_path, "w", encoding="utf-8") as f:
     json.dump(report, f, indent=2)
     f.write('\n')
@@ -818,6 +835,81 @@ print((datetime.now(timezone.utc) + timedelta(seconds=600)).strftime('%Y-%m-%dT%
   run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
   [ "$status" -eq 2 ]
   [[ "$output" == *"test-suite-evidence-partial"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #EP-HEADMISMATCH / #EP-HEADABSENT / #EP-HEADMATCH / #EP-HEADORDER — 51b0d63's
+# report-head-* check. emit-push-proof.sh previously had ZERO reads of report.head:
+# --init wrote it, nothing ever compared it to git rev-parse HEAD. A report opened at
+# commit A could be re-sealed and re-evidenced at a later commit B without a re-`--init`
+# — started_at stays plausible (it's a floor, not a ceiling), the evidence lookup selects
+# B's own fresh handoff, verdicts get re-supersede'd to B, the tree is clean, all steps
+# pass — and the mint succeeds, binding report_digest to a report that still literally
+# asserts commit A as its head. Observed live on this repo at the moment the gap was
+# found: report.head pointed at an ancestor while HEAD had already moved past it via
+# routine, unrelated work.
+#
+# RED confirmed against the pre-51b0d63 script (via `git show 16ae614:...` to scratch —
+# scripts/sh/ never touched) before writing these assertions: both #EP-HEADMISMATCH and
+# #EP-HEADABSENT minted a proof successfully (exit 0, push-proof.json written), because
+# report.head was never read at all.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#EP-HEADMISMATCH BLOCK: otherwise-valid report with report.head set to a DIFFERENT commit → report-head-mismatch, no proof minted" {
+  # No write_plan here deliberately: wave_plan_present would default TRUE, but the
+  # default report's path-manifest-audit is SKIP — an unrelated inconsistent-skip that
+  # would fire first and mask the very check this test exists to exercise. write_plan's
+  # own inconsistency is #WP1's subject, not this one's.
+  write_arch_verdicts "test-slug"
+  local wrong_head="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  write_quality_gate_report '' '' "$wrong_head"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"report-head-mismatch"* ]]
+  [ ! -f "$ACDOC/push-proof.json" ]
+  [ ! -f "$ACDOC/quality-gate.stamp" ]
+  [ ! -f "$ACDOC/pre-pr.stamp" ]
+}
+
+@test "#EP-HEADABSENT BLOCK: otherwise-valid report with head key entirely absent (started_at present) → report-head-absent" {
+  # __OMIT__ deletes the key entirely — report-head-absent must not rely on a sibling
+  # check (report-started-at-absent) to catch this; started_at stays present and valid.
+  # No write_plan (see #EP-HEADMISMATCH's comment) — avoids an unrelated inconsistent-skip.
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report '' '' "__OMIT__"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"report-head-absent"* ]]
+  [ ! -f "$ACDOC/push-proof.json" ]
+  [ ! -f "$ACDOC/quality-gate.stamp" ]
+  [ ! -f "$ACDOC/pre-pr.stamp" ]
+}
+
+@test "#EP-HEADMATCH ALLOW (positive control): report.head == current HEAD → run-qg mints proof" {
+  # Proves #EP-HEADMISMATCH/#EP-HEADABSENT exercise a real check, not a mint that
+  # refuses every report unconditionally — write_quality_gate_report's own default
+  # (no override) binds head to the actual current HEAD, exactly like every other
+  # passing #EP-* test already relies on.
+  # No write_plan (see #EP-HEADMISMATCH's comment) — avoids an unrelated inconsistent-skip.
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 0 ]
+  [ -f "$ACDOC/push-proof.json" ]
+}
+
+@test "#EP-HEADORDER BLOCK: report-started-at-absent fires before report-head-mismatch when both are wrong (precedence pin)" {
+  # Textual order in the script is report-started-at-* then report-head-* (the operator
+  # sees the more specific cause first) — pinned here empirically, not assumed from
+  # reading the source, since precedence is a runtime property of die()'s control flow.
+  # No write_plan (see #EP-HEADMISMATCH's comment) — avoids an unrelated inconsistent-skip.
+  write_arch_verdicts "test-slug"
+  local wrong_head="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  write_quality_gate_report '' '' "$wrong_head"
+  override_report_started_at ""
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"report-started-at-absent"* ]]
+  [[ "$output" != *"report-head-mismatch"* ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
