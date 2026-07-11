@@ -41,7 +41,7 @@ No results in: docs/, skills/, pattern index
    - Log decision: `PATTERN-GAP-SKIPPED: <topic>` in wave notes
    - Continue wave with no pattern guidance for the topic
 
-**Portable fallback**: the load-bearing contract here too is the disk artifact, not the AskUserQuestion prompt — the approval above can equally be an `approval/v1` (`decision:"authorized"`, `request_kind:"ingestion"`, `approver: "user"`) written to `approvals/<request_id>.json`, per [coordination-artifact-schema](coordination-artifact-schema.md); AskUserQuestion/SendMessage is the optional accelerator. Both this handler and [tl-ingestion-request-handler](tl-ingestion-request-handler.md) converge into the same doc-updater artifact triple (`request/v1` → `approval/v1` → `result/v1`) — one resolution shape underneath, regardless of which signal (`PATTERN-GAP` or `ingestion-request`) triggered it.
+**Portable fallback**: the load-bearing contract here too is the disk artifact, not the AskUserQuestion prompt — the approval above can equally be an `approval/v1` (`decision:"authorized"`, `request_kind:"ingestion"`, `approver: "user"`) written to `approvals/<request_id>.json` — which must reference a `request/v1` created (or referenced) first at `requests/<request_kind>/<request_id>.json`, since the approval links back to it — per [coordination-artifact-schema](coordination-artifact-schema.md); AskUserQuestion/SendMessage is the optional accelerator. Both this handler and [tl-ingestion-request-handler](tl-ingestion-request-handler.md) converge into the same doc-updater artifact triple (`request/v1` → `approval/v1` → `result/v1`) — one resolution shape underneath, regardless of which signal (`PATTERN-GAP` or `ingestion-request`) triggered it.
 
 ## Origin
 

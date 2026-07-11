@@ -37,9 +37,9 @@ token_budget: 600
 }
 ```
 
-## Shebang Is Required
+## Shebang for CLI Executables
 
-Every file referenced by `bin` needs a shebang as its first line:
+A `bin` file launched directly as a CLI must start with an appropriate shebang; for a Node script this is normally:
 
 ```js
 #!/usr/bin/env node
@@ -51,7 +51,7 @@ Without it, npm still links the file, but invoking it directly fails on POSIX sy
 
 | Install mode | Resolution |
 |---|---|
-| `npm install -g <pkg>` | Linked into the global bins directory — on `PATH`, invokable as a bare command anywhere |
+| `npm install -g <pkg>` | Linked into the global bins directory; invokable as a bare command **if that directory is on `PATH`** (usually the case for a normal global Node install) |
 | `npm install <pkg>` (local/dependency) | **Not** on `PATH` globally — reachable only via `npm exec <cmd>` or an `npm run` script inside that package's own `node_modules/.bin/` |
 
 This is the most common `bin`-field gotcha: a locally-installed dependency's CLI is not directly callable by name from an arbitrary shell — it must go through `npm exec`, `npx`, or a `package.json` script (npm prepends that package's `node_modules/.bin` to `PATH` automatically for scripts).
