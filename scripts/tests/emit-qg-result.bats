@@ -417,6 +417,13 @@ PYEOF
     cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"         "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"          "$REPO/scripts/sh/"
 
+    # H1 (push-authority-bootstrap) W-B2: install the canonical pre-push hook so
+    # emit-push-proof.sh's Part-4 precondition (hook-drift check) passes. Mirrors
+    # the setup() fix in emit-push-proof.bats — see that file for full rationale.
+    cp "$SCRIPTS_SRC/sh/pre-push-hook.sh"               "$REPO/scripts/sh/"
+    cp "$SCRIPTS_SRC/sh/verify-git-hooks.sh"            "$REPO/scripts/sh/"
+    bash "$SCRIPTS_SRC/sh/install-git-hooks.sh" "$REPO"
+
     # Commit all fixtures — tree must be clean before run-qg
     git -C "$REPO" add -A
     git -C "$REPO" commit --quiet -m "test(fixtures): QR6 fixture commit"
@@ -544,6 +551,13 @@ PYEOF
     # emit-pre-pr-report.sh, mint-internal, after the registry re-run.
     cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"         "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"          "$REPO/scripts/sh/"
+
+    # H1 (push-authority-bootstrap) W-B2: install the canonical pre-push hook so
+    # emit-push-proof.sh's Part-4 precondition (hook-drift check) passes. Mirrors
+    # the setup() fix in emit-push-proof.bats — see that file for full rationale.
+    cp "$SCRIPTS_SRC/sh/pre-push-hook.sh"               "$REPO/scripts/sh/"
+    cp "$SCRIPTS_SRC/sh/verify-git-hooks.sh"            "$REPO/scripts/sh/"
+    bash "$SCRIPTS_SRC/sh/install-git-hooks.sh" "$REPO"
 
     git -C "$REPO" add -A
     git -C "$REPO" commit --quiet -m "test(fixtures): QR7 fixture commit"
@@ -1597,6 +1611,13 @@ print(d.get('suite_summary', {}).get('bats_verdict', 'MISSING'))
     # emit-pre-pr-report.sh, mint-internal, after the registry re-run.
     cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"         "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"          "$REPO/scripts/sh/"
+
+    # H1 (push-authority-bootstrap) W-B2: install the canonical pre-push hook so
+    # emit-push-proof.sh's Part-4 precondition (hook-drift check) passes. Mirrors
+    # the setup() fix in emit-push-proof.bats — see that file for full rationale.
+    cp "$SCRIPTS_SRC/sh/pre-push-hook.sh"               "$REPO/scripts/sh/"
+    cp "$SCRIPTS_SRC/sh/verify-git-hooks.sh"            "$REPO/scripts/sh/"
+    bash "$SCRIPTS_SRC/sh/install-git-hooks.sh" "$REPO"
 
     git -C "$REPO" add -A
     git -C "$REPO" commit --quiet -m "test(fixtures): QR31 fixture commit"

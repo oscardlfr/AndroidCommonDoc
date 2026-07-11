@@ -75,6 +75,13 @@ setup() {
   cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"        "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"         "$REPO/scripts/sh/"
 
+  # H1 (push-authority-bootstrap) W-B2: install the canonical pre-push hook so
+  # emit-push-proof.sh's Part-4 precondition (hook-drift check) passes. Mirrors
+  # the setup() fix in emit-push-proof.bats — see that file for full rationale.
+  cp "$SCRIPTS_SRC/sh/pre-push-hook.sh"              "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/verify-git-hooks.sh"           "$REPO/scripts/sh/"
+  bash "$SCRIPTS_SRC/sh/install-git-hooks.sh" "$REPO"
+
   # Commit ALL fixtures so the tree is CLEAN before run-qg.
   # Temp repos have NO skills/ directory → run-qg does NOT pass --require-registry
   # → registry-integrity step returns n/a → only the clean-tree assertion needs satisfying.

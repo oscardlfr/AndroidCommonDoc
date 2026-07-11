@@ -8,6 +8,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { access, readdir } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { getToolkitRoot } from "../utils/paths.js";
 import type { ValidationResult, ValidationDetail } from "../types/results.js";
@@ -164,6 +165,48 @@ export function registerSetupCheckTool(
             : ".claude/agents/ directory not found",
         });
         if (!agentsExist) failCount++;
+
+        // Check 7: git-layer pre-push hook is installed and canonical (H1 bootstrap).
+        // Delegates to verify-git-hooks.sh (DRY -- avoids a 3rd independent copy of
+        // its 5 reason codes; the mint and the JS push-authorization-gate already
+        // delegate to the same script). Resolved off `root`, never a live-repo
+        // default, so an isolated test fixture's own copy is what gets invoked.
+        let hookStatus: "PASS" | "WARN" = "WARN";
+        let hookMessage: string;
+        try {
+          const verifyScript = path.join(
+            root,
+            "scripts",
+            "sh",
+            "verify-git-hooks.sh",
+          );
+          execFileSync("bash", [verifyScript, "--repo-root", root], {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+          });
+          hookStatus = "PASS";
+          hookMessage = "git-layer pre-push hook is installed and canonical";
+        } catch (hookError) {
+          const stdoutVal =
+            hookError instanceof Error
+              ? (hookError as Error & { stdout?: unknown }).stdout
+              : undefined;
+          const reasonCode =
+            typeof stdoutVal === "string" ? stdoutVal.trim() : "";
+          hookMessage = reasonCode
+            ? `pre-push hook is not installed/canonical (${reasonCode}) -- run 'make install-git-hooks' to fix`
+            : "verify-git-hooks.sh could not be run (missing script or spawn failure) -- run 'make install-git-hooks' to fix";
+        }
+        // Q6 (settled -- see arch-platform-verdict.md Item 6): WARN, never
+        // failCount++. A fresh, never-bootstrapped clone is an expected,
+        // recoverable state with a documented one-line fix -- categorically
+        // closer to Check 1's WARN (env-var, recoverable/informational) than
+        // Checks 2-6's FAIL (broken toolkit install).
+        details.push({
+          check: "pre-push-hook-installed",
+          status: hookStatus,
+          message: hookMessage,
+        });
 
         const durationMs = Date.now() - startTime;
         const passCount = details.filter((d) => d.status === "PASS").length;

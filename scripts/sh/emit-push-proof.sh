@@ -774,6 +774,29 @@ PYEOF
     fi
   fi
 
+  # (Part 4) Hook-binding precondition — mint fail-closes unless the
+  #     git-layer pre-push hook is installed AND byte-identical
+  #     (CRLF-normalized) to scripts/sh/pre-push-hook.sh, verified via the
+  #     shared verify-git-hooks.sh primitive (H1 Push Authority Bootstrap).
+  #     Pure precondition — writes nothing into push-proof.json (no
+  #     hook_binding field; schema_version stays 1). Reason code is
+  #     captured from verify-git-hooks.sh's stdout and re-emitted prefixed
+  #     hook-binding- for diagnostic specificity.
+  local _hook_code
+  if ! _hook_code="$(bash "$SCRIPT_DIR/verify-git-hooks.sh" --repo-root "$REPO_ROOT")"; then
+    local _hook_reason
+    case "$_hook_code" in
+      canonical-source-missing) _hook_reason="hook-binding-canonical-source-missing" ;;
+      hook-absent)              _hook_reason="hook-binding-absent" ;;
+      hook-not-executable)      _hook_reason="hook-binding-not-executable" ;;
+      hook-marker-missing)      _hook_reason="hook-binding-marker-missing" ;;
+      hook-drifted)             _hook_reason="hook-binding-drifted" ;;
+      *)                        _hook_reason="hook-binding-unknown:${_hook_code:-<empty>}" ;;
+    esac
+    echo "[emit-push-proof] ERROR: $_hook_reason — git-layer pre-push hook is not installed and byte-identical to scripts/sh/pre-push-hook.sh; run: bash scripts/sh/install-git-hooks.sh (or: make install-git-hooks)." >&2
+    exit 2
+  fi
+
   # (C) Record registry digest into artifact_digests (additive; schema_version stays 1).
   #     sha256(skills/registry.json, CRLF->LF). Merged before the proof-write step.
   if [[ -f "$REPO_ROOT/skills/registry.json" ]]; then

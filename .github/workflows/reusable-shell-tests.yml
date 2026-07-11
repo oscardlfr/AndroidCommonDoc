@@ -2,6 +2,12 @@ name: Shell Script Tests
 
 on:
   workflow_call:
+    inputs:
+      androidcommondoc_path:
+        description: 'Path to AndroidCommonDoc toolkit root (for scripts). Empty = auto-clone.'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   bats:
@@ -9,6 +15,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      - name: Checkout AndroidCommonDoc (for scripts)
+        if: inputs.androidcommondoc_path == ''
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.repository_owner }}/AndroidCommonDoc
+          path: .androidcommondoc-toolkit
+          sparse-checkout: |
+            scripts/sh/install-git-hooks.sh
+            scripts/sh/verify-git-hooks.sh
+            scripts/sh/pre-commit-hook.sh
+            scripts/sh/lib/wave-slug.sh
+            scripts/sh/commit-msg-hook.sh
+            scripts/sh/pre-push-hook.sh
+
+      - name: Resolve script paths
+        id: scripts
+        run: |
+          if [ -n "${{ inputs.androidcommondoc_path }}" ]; then
+            ROOT="${{ inputs.androidcommondoc_path }}"
+          else
+            ROOT=".androidcommondoc-toolkit"
+          fi
+          echo "install=${ROOT}/scripts/sh/install-git-hooks.sh" >> "$GITHUB_OUTPUT"
+          echo "verify=${ROOT}/scripts/sh/verify-git-hooks.sh" >> "$GITHUB_OUTPUT"
 
       - name: Install bats
         run: |
@@ -59,6 +90,22 @@ jobs:
             exit 1
           fi
           echo "bats completeness OK: $total / $expected (complete)"
+
+      - name: Install and verify git hooks (bootstrap smoke)
+        run: |
+          # verify-git-hooks.sh resolves its canonical source relative to
+          # --repo-root / `git rev-parse --show-toplevel` (the checked-out TARGET
+          # repo), never the toolkit clone above -- a target that hasn't vendored
+          # its own scripts/sh/pre-push-hook.sh can never satisfy that check
+          # regardless of clone completeness. Guard on the TARGET tree (not the
+          # toolkit clone) already having its own canonical source before running
+          # the real install+verify smoke.
+          if [ ! -f "scripts/sh/pre-push-hook.sh" ]; then
+            echo "::warning::skipping git-hooks bootstrap smoke -- target repo has no scripts/sh/pre-push-hook.sh (not an L0 toolkit consumer yet)"
+            exit 0
+          fi
+          bash "${{ steps.scripts.outputs.install }}" .
+          bash "${{ steps.scripts.outputs.verify }}"
 
       - name: Run Node.js hook tests
         run: |

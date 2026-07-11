@@ -37,3 +37,17 @@ sbom:
 
 install-skills:
 	$(RUN) setup/install-claude-skills$(EXT)
+
+# L0 self-bootstrap (H1): installs into THIS checkout (no --project-root -- this
+# is not a $(PROJECT)-external-KMP-repo operation), safe on the standard uniform
+# pattern because install-git-hooks.ps1 genuinely delegates to the bash installer.
+install-git-hooks:
+	$(RUN) $(SCRIPTS_DIR)/install-git-hooks$(EXT)
+
+# NOTE: no scripts/ps1/verify-git-hooks.ps1 exists (BACKLOG.md:305 marks .ps1 hooks
+# as a post-macOS-migration pruning candidate) -- this target hardcodes bash on
+# every OS instead of the uniform $(RUN)/$(EXT) pattern. On Windows it requires
+# Git Bash (bash on PATH), the same assumption install-git-hooks.ps1 already makes
+# for its own delegation. There is no PowerShell path for this target.
+verify-git-hooks:
+	bash scripts/sh/verify-git-hooks.sh

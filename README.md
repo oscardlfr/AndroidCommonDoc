@@ -527,7 +527,7 @@ Real-time pattern enforcement and context injection during AI-assisted developme
 | `doc-freshness-alert.js` | Session start | Warns when pattern docs are stale relative to upstream sources |
 | `agent-delegation-reminder.js` | Task start | Nudges the agent to delegate to specialized agents instead of doing everything inline |
 | `registry-pre-commit.sh` | PreToolUse (git commit) | Validates registry.json hashes before commit |
-| `push-authorization-gate.js` | PreToolUse (Bash — push) | Blocks push from peer agents; validates quality-gate and pre-pr stamps for main-orchestrator pushes |
+| `push-authorization-gate.js` | PreToolUse (Bash — push) | Best-effort, Claude-only, evadable push detector; blocks peer/subagent pushes outright, and for the main orchestrator delegates to `verify-git-hooks.sh` to confirm the git-layer pre-push hook is installed and canonical (no longer validates quality-gate/pre-pr stamps — that fallback was removed, wave `push-authority-bootstrap`) |
 
 ---
 
@@ -1002,9 +1002,10 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `rehash-registry` | Recompute SHA-256 hashes in registry.json (CRLF→LF normalized) |
 | `copilot-parity` | Verify Copilot prompt templates match Claude skill definitions |
 | `install-git-hooks` | Install pre-commit (pattern-lint) + commit-msg (conventional commits) + pre-push (two-stamp gate) git hooks |
+| `verify-git-hooks` | Clone-gating verifier (wave `push-authority-bootstrap`): confirms the git-layer pre-push hook is installed, executable, and byte-identical (CRLF-normalized) to canonical `scripts/sh/pre-push-hook.sh`; single primitive shared by the QG mint, `push-authorization-gate.js`, and `setup-check` Check 7 |
 | `pre-commit-hook` | Standalone pre-commit hook body: blocks commits with stale registry hash |
 | `commit-msg-hook` | git commit-msg hook: Conventional Commits format + scope whitelist (universal — fires for all committers; closes team-peer bypass in PreToolUse `commit-scope-validation-gate.js`) |
-| `pre-push-hook` | git pre-push hook: two-stamp gate (quality-gate.stamp + pre-pr.stamp PASS ≤30min, sha-bound; BL-W47 PR-0b) — universal backstop below the Claude-layer push gates |
+| `pre-push-hook` | git pre-push hook: two-stamp gate (quality-gate.stamp + pre-pr.stamp PASS ≤30min, sha-bound; BL-W47 PR-0b) — universal backstop below the Claude-layer push gates **once installed** (`install-git-hooks` / `verify-git-hooks` — git never auto-installs hooks into a fresh clone) |
 | `run-benchmarks` | Detect and run JVM/Android benchmark suites with Gradle |
 | `validate-agent-templates` | Lint agent templates: frontmatter, role keywords, anti-patterns, versioning (7 checks) |
 | `catalog-coverage-check` | Detect hardcoded Gradle dependency versions that should use the version catalog |

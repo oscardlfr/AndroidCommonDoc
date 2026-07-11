@@ -4,16 +4,31 @@ bats_require_minimum_version 1.5.0
 # Tests for .claude/hooks/push-authorization-gate.js (BL-W47 Commits 10a/10b/10d).
 # Replaces the two retired gates: quality-gate-pre-push.sh and pre-push-pre-pr-gate.js.
 #
-# Gate contract:
-#   - Peer/subagent (non-empty agent_type) + git push → BLOCK (exit 2)
-#   - Main orchestrator (empty agent_type) + pre-push hook installed → ALLOW (exit 0)
-#   - Main orchestrator + no pre-push hook + valid stamps → ALLOW (exit 0)
-#   - Main orchestrator + no pre-push hook + missing/stale stamps → BLOCK (exit 2)
-#   - PUSH_AUTHORIZATION_BYPASS=1 → ALLOW regardless of agent or stamps
+# Gate contract (H1 -- Push Authority Bootstrap REWRITE; the stamp/proof-content
+# fallback described by earlier revisions of this comment is fully removed):
+#   - Peer/subagent (non-empty agent_type) + git push → BLOCK (exit 2), unconditionally
+#   - Main orchestrator (empty agent_type) + git-layer pre-push hook installed,
+#     executable, marker-bearing, AND byte-identical (CRLF-normalized) to canonical
+#     scripts/sh/pre-push-hook.sh (verified via scripts/sh/verify-git-hooks.sh,
+#     delegated to via spawnSync) → ALLOW (exit 0)
+#   - Main orchestrator + hook absent / not executable / marker-missing / drifted
+#     → BLOCK (exit 2) -- unconditional, regardless of any stamp/proof/bats_evidence
+#     state; push-authorization-gate.js no longer reads push-proof.json or any
+#     .androidcommondoc/*.stamp file at all (Design Fidelity User-3)
+#   - Main orchestrator + verify-git-hooks.sh invocation itself throws, errors, times
+#     out, or exits non-zero for any reason → BLOCK (exit 2), LOCALLY handled, never
+#     the file's own global fail-open catch (Amendment 3)
+#   - PUSH_AUTHORIZATION_BYPASS=1 → ALLOW regardless of agent or hook state
 #   - "rtk git push" command string → also BLOCK for peers (regex covers both forms)
 #   - Non-push commands → always ALLOW (exit 0)
 #
 # Infra: JSON-piped-to-node. All stamp files written to tmpdir (never live project).
+# setup() also copies scripts/sh/verify-git-hooks.sh and the canonical
+# scripts/sh/pre-push-hook.sh source into the isolated $PROJECT_ROOT, since the
+# main-orchestrator branch resolves the verifier script path relative to
+# $PROJECT_ROOT (via CLAUDE_PROJECT_DIR) -- without both files present, every
+# main-orchestrator test would hit a generic "script not found" failure instead of
+# a real reason code.
 
 HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/push-authorization-gate.js"
 INPUT_FILE="${BATS_TEST_TMPDIR}/push-auth-input-$$.json"
@@ -32,6 +47,22 @@ setup() {
   git -C "$PROJECT_ROOT" commit --allow-empty -q -m "init" 2>/dev/null
   HEAD_SHA="$(git -C "$PROJECT_ROOT" rev-parse HEAD)"
   unset PUSH_AUTHORIZATION_BYPASS
+  # H1: the main-orchestrator branch of push-authorization-gate.js now delegates to
+  # scripts/sh/verify-git-hooks.sh via spawnSync, resolved as
+  # path.join(projectRoot, 'scripts', 'sh', 'verify-git-hooks.sh') -- so the verifier
+  # script itself must exist inside the isolated PROJECT_ROOT for that spawnSync call
+  # to find and execute it at all. Without this, bash exits 127 (script not found,
+  # empty stdout) for EVERY main-orchestrator test regardless of hook state, and the
+  # gate's reasonCode extraction (which reads only stdout) falls back to "unknown" --
+  # masking every real reason code below behind a generic, indistinguishable failure.
+  # verify-git-hooks.sh's OWN canonical-source-missing check (checked FIRST,
+  # unconditionally) reads "$REPO_ROOT/scripts/sh/pre-push-hook.sh", so the canonical
+  # source must ALSO be present at that path -- separate from any per-test
+  # .git/hooks/pre-push INSTALL below, which is the installed-hook location the
+  # verifier compares the canonical source against, not the source itself.
+  mkdir -p "$PROJECT_ROOT/scripts/sh"
+  cp "$BATS_TEST_DIRNAME/../sh/verify-git-hooks.sh" "$PROJECT_ROOT/scripts/sh/verify-git-hooks.sh"
+  cp "$BATS_TEST_DIRNAME/../sh/pre-push-hook.sh" "$PROJECT_ROOT/scripts/sh/pre-push-hook.sh"
 }
 
 teardown() {
@@ -70,113 +101,20 @@ with open(path, "w") as f:
 PYEOF
 }
 
-# Write a canonical-valid push-proof.json + quality-gate-report.json (for in-JS 8-check).
-# a7e855e: in-JS fallback recomputes sha256(report, CRLF→LF) — bogus "0"*64 digest blocks
-# at check 7. This helper writes a minimal report and computes the real digest.
-# f9f0610: check 8 requires proof.bats_evidence present + .head == pushed_sha. Args:
-#   <head_sha> <project_root> <stamp_dir> [<bats_evidence_head>]
-# bats_evidence_head defaults to <head_sha> (matching — the canonical/positive-control
-# shape used by PA-4c/PA-5/#PAG-EV3). Pass "__OMIT__" to omit bats_evidence entirely
-# (#PAG-EV1), or a different 40-hex value to force a head mismatch (#PAG-EV2).
-write_canonical_proof() {
-  local head="$1" root="$2" stamp_dir="$3" bats_evidence_head="${4:-$1}"
-  # The in-JS check 5 reads quality-gate-manifest.json from project root.
-  # Copy the live manifest into the isolated PROJECT_ROOT so the gate can load it.
-  cp "$BATS_TEST_DIRNAME/../../quality-gate-manifest.json" "$root/quality-gate-manifest.json"
-  python3 - "$head" "$root" "$stamp_dir" "$bats_evidence_head" <<'PYEOF'
-import hashlib, json, sys, datetime
-
-head, root, stamp_dir, bats_evidence_head = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-# Dynamic read (never hardcoded) — mirrors the sibling pattern already used correctly by
-# test-push-proof-gate.bats (:198/:363/:398) and pre-push-hook.bats (:174). A literal here
-# rots at the next manifest_version bump; that is exactly how the Wave A hardcoding defect
-# was planted.
-manifest_version = json.load(open(root + '/quality-gate-manifest.json', encoding='utf-8'))['manifest_version']
-
-# Minimal quality-gate-report.json with all 6 required steps (ids match manifest required_steps).
-report = {
-  "steps": {
-    "architect-deliberation": {"ran": True, "result": "PASS"},
-    "pre-pr":                 {"ran": True, "result": "PASS"},
-    "test-suite":             {"ran": True, "result": "PASS"},
-    "rule-cross-check":       {"ran": True, "result": "PASS"},
-    "registry-hash":          {"ran": True, "result": "PASS"},
-    "secret-scan":            {"ran": True, "result": "PASS"}
-  }
-}
-report_raw = json.dumps(report, separators=(',', ':')).encode('utf-8')
-# Normalize CRLF→LF (same as gate's byte-by-byte strip) — LF-only content is unchanged.
-normalized = bytes(
-    b for i, b in enumerate(report_raw)
-    if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A)
-)
-digest = hashlib.sha256(normalized).hexdigest()
-
-report_path = stamp_dir + '/quality-gate-report.json'
-with open(report_path, 'wb') as f:
-    f.write(report_raw)
-
-proof = {
-    "schema_version": 1,
-    "head": head,
-    "generated_at": ts,
-    "worktree_id": root,
-    "manifest_version": manifest_version,
-    "steps_executed": [
-        {"step": "architect-deliberation", "result": "PASS", "ran": True},
-        {"step": "pre-pr",                 "result": "PASS", "ran": True},
-        {"step": "test-suite",             "result": "PASS", "ran": True},
-        {"step": "rule-cross-check",       "result": "PASS", "ran": True},
-        {"step": "registry-hash",          "result": "PASS", "ran": True},
-        {"step": "secret-scan",            "result": "PASS", "ran": True},
-        {"step": "doc-validator-parity",   "result": "PASS", "ran": True}
-    ],
-    "report_digest": digest
-}
-# check 8 (f9f0610): bats_evidence present + .head == pushed_sha. "__OMIT__" leaves it
-# off the proof entirely (#PAG-EV1's absent-evidence scenario); otherwise it's populated
-# with bats_evidence_head, which is the pushed head by default (matching/canonical) or a
-# deliberately different value (#PAG-EV2's mismatch scenario).
-if bats_evidence_head != "__OMIT__":
-    # wave qg-artifact-binding (W7): the in-JS fallback's checks 9-13 re-derive the
-    # SAME completeness predicate run-qg persists (not_ok==0 && scope=='full' &&
-    # complete==true && total==expected && ok>0) — complete/total are additive on
-    # top of the pre-W7 7-key shape; total==ok+not_ok==10 here.
-    proof["bats_evidence"] = {
-        "run_id": "canonical-run",
-        "head": bats_evidence_head,
-        "ok": 10,
-        "not_ok": 0,
-        "expected": 10,
-        "scope": "full",
-        "generated_at": ts,
-        "complete": True,
-        "total": 10,
-    }
-proof_path = stamp_dir + '/push-proof.json'
-with open(proof_path, 'w') as f:
-    json.dump(proof, f)
-PYEOF
-}
-
-# patch_bats_evidence_field <stamp_dir> <field> <json_value>
-# Mutates a single field inside push-proof.json's bats_evidence dict in place.
-# <json_value> is parsed as JSON (so `false`, `true`, `0`, `"foo"` all work) — used
-# by #PAG-BE* to exercise each of the 5 new completeness die-codes (W7) independently,
-# on top of a write_canonical_proof-produced (otherwise-valid) base fixture.
-patch_bats_evidence_field() {
-  local stamp_dir="$1" field="$2" value_json="$3"
-  python3 - "$stamp_dir/push-proof.json" "$field" "$value_json" <<'PYEOF'
-import json, sys
-path, field, value_json = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(path, encoding='utf-8') as f:
-    proof = json.load(f)
-proof.setdefault('bats_evidence', {})[field] = json.loads(value_json)
-with open(path, 'w', encoding='utf-8') as f:
-    json.dump(proof, f)
-PYEOF
-}
+# H1 NOTE: write_canonical_proof() and patch_bats_evidence_field() (the in-JS
+# 7/8/13-check push-proof.json + quality-gate-report.json fixture writers, and the
+# bats_evidence-field mutator built on top of them) were removed here. Both are
+# fully dead post-H1: they existed solely to construct fixtures for the in-JS
+# fallback (JS :319-523, checks 1-13) that push-authorization-gate.js's
+# main-orchestrator branch no longer has -- that branch delegates 100% to
+# verify-git-hooks.sh and never reads push-proof.json, quality-gate-report.json, or
+# any .androidcommondoc/*.stamp file again (Design Fidelity User-3: pure
+# precondition, no new schema field, nothing to verify at this layer). Their former
+# callers (PA-JS1-4, PA-CR3-A/B, #PAG-EV1/#PAG-EV2, #PAG-BE1-5) are deleted below as
+# dead code exercising an unreachable path; PA-4c/PA-5/#PAG-EV3 (which also used to
+# call write_canonical_proof) had those now-inert calls dropped rather than kept, to
+# avoid misleadingly implying proof content still matters. write_stamp() above
+# remains live (PA-6-10 still use it) and is unaffected.
 
 # ── Peer/subagent BLOCK cases ────────────────────────────────────────────────
 
@@ -214,99 +152,151 @@ PYEOF
   [ "$status" -eq 0 ]
 }
 
-@test "PA-4b BLOCK: main + bare stub hook (no ACDOC marker) + no stamps → blocked" {
-  # Codex repro (P1b): a foreign tool's bare stub hook 'exit 0' should NOT skip stamp
-  # validation. Before fix: existsSync alone allowed any hook. After fix: gate reads content
-  # and only trusts hooks bearing the ACDOC-PRE-PUSH-GATE marker.
+@test "PA-4b BLOCK: main + bare stub hook (no ACDOC marker) → blocked on hook-marker-missing (H1: no stamp fallback remains)" {
+  # Codex repro (P1b, pre-H1): a foreign tool's bare stub hook 'exit 0' should NOT be
+  # trusted. H1 REWRITE (PLAN v2 Path-Manifest Group D, arch-testing Check 3/3d): the
+  # in-JS stamp-validation fallback this test originally exercised (JS :319-523, now
+  # fully removed) no longer exists at all -- the main-orchestrator branch delegates
+  # 100% to scripts/sh/verify-git-hooks.sh. A marker-less stub trips that verifier's
+  # hook-marker-missing check (chain: canonical source present via setup(), hook file
+  # present+executable [both satisfied] -- no ACDOC-PRE-PUSH-GATE marker [TRIPPED]) --
+  # BLOCKED regardless of any stamp state, so the stamp-writing lines this test used
+  # to need are gone; keeping them would misleadingly imply they still matter.
+  #
+  # Tightened (arch-testing 3d, the sharpest single item in PREP review): the original
+  # loose 3-way OR (*"stamp"*/*"pre-pr"*/*"quality-gate"*) proved only "some stamp-ish
+  # word appeared somewhere" -- it would have silently stayed green even against a
+  # gate that blocks for a completely unrelated reason, had the new install-instruction
+  # text happened to also mention "quality-gate" by house-style coincidence (it does
+  # not, in the landed text, but a loose substring is fragile by construction and
+  # proves nothing about WHICH check fired). Pin the structured decision field PLUS
+  # the specific hook-marker-missing reason code instead.
   mkdir -p "$PROJECT_ROOT/.git/hooks"
   printf '#!/bin/sh\nexit 0\n' > "$PROJECT_ROOT/.git/hooks/pre-push"
   chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
-  # No stamps written — with a bare stub (no marker) gate must fall through to stamp check.
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 2 ]
-  # Block reason must be stamp-related (not peer-detection).
-  [[ "$output" == *"stamp"* || "$output" == *"pre-pr"* || "$output" == *"quality-gate"* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"hook-marker-missing"* ]]
 }
 
-@test "PA-4c ALLOW: main + bare stub hook (no ACDOC marker) + canonical-valid proof → allowed via stamp path" {
-  # Bare stub without marker → gate falls through to stamp check. With valid fresh stamps
-  # and a canonical-valid proof (all 8 checks pass), the stamp path should allow.
-  # No emit-push-proof.sh in isolated PROJECT_ROOT → in-JS fallback taken.
-  # a7e855e: in-JS now does full 7-check including report_digest recompute — bogus "0"*64
-  # would block at check 7. Write real quality-gate-report.json, compute sha256, embed digest.
-  # f9f0610: an 8th check (bats_evidence present + .head == pushed_sha) now also gates —
-  # write_canonical_proof's default bats_evidence_head (= the pushed head) satisfies it.
+@test "PA-4c BLOCK: main + bare stub hook (no ACDOC marker) + canonical-valid proof → blocked on hook-marker-missing (H1 outcome-flip)" {
+  # OUTCOME-FLIP (PLAN v2 Path-Manifest Group D / Risk R7, arch-testing Check 3/3b):
+  # this test used to ALLOW via the removed in-JS stamp-validation fallback's full
+  # 7/8-check pass -- proof content, once "canonical-valid", was enough to earn a
+  # push even through a marker-less stub hook. Under H1 that fallback no longer
+  # exists: push-authorization-gate.js's main-orchestrator branch never reads
+  # push-proof.json/stamp files at all, so no amount of valid proof content can
+  # substitute for hook state anymore (Design Fidelity User-3 -- pure precondition,
+  # this gate does not gain a new schema field, it just stops looking at the old
+  # ones). The bare, marker-less stub trips verify-git-hooks.sh's hook-marker-missing
+  # check the same way PA-4b's does -- this fixture differs from PA-4b only in that
+  # it ALSO writes a flawless canonical proof, which now has zero bearing on the
+  # outcome. The stamp/proof-writing calls are deliberately dropped (not merely
+  # left inert) since keeping them would misleadingly suggest they still matter.
   mkdir -p "$PROJECT_ROOT/.git/hooks"
   printf '#!/bin/sh\nexit 0\n' > "$PROJECT_ROOT/.git/hooks/pre-push"
   chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
   make_input "git push origin feature/test"
   run_hook
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"hook-marker-missing"* ]]
 }
 
 # ── Main orchestrator: no pre-push hook + fallback stamps ───────────────────
 
-@test "PA-5 ALLOW: main + no pre-push hook + canonical-valid proof → allowed" {
-  # CR-3 (df1a5d1): head must be a valid 40-hex SHA matching current HEAD (unconditional).
-  # setup() now git-inits PROJECT_ROOT and sets HEAD_SHA so binding works in isolation.
-  # a7e855e: in-JS fallback does full 7-check including report_digest recompute — bogus
-  # "0"*64 digest now blocks at check 7. Use canonical proof with real digest.
-  # f9f0610: an 8th check (bats_evidence present + .head == pushed_sha) now also gates —
-  # write_canonical_proof's default bats_evidence_head (= the pushed head) satisfies it.
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+@test "PA-5 BLOCK: main + no pre-push hook + canonical-valid proof → blocked on hook-absent (H1 outcome-flip)" {
+  # OUTCOME-FLIP (PLAN v2 Path-Manifest Group D / Risk R7, arch-testing Check 3/3b):
+  # this was the flagship "fallback still works" ALLOW test -- no hook at all, but a
+  # flawless canonical proof (valid stamps + full 7/8-check-passing push-proof.json)
+  # used to be sufficient on its own. Under H1 there is no fallback left: the
+  # main-orchestrator branch delegates 100% to verify-git-hooks.sh, which only knows
+  # about the git-layer hook's installation/canonicalness -- it never reads
+  # push-proof.json or any .stamp file. With no .git/hooks/pre-push installed at all,
+  # the chain trips hook-absent (canonical-source-missing satisfied via setup()'s new
+  # scripts/sh/pre-push-hook.sh copy; hook-absent TRIPPED since no installed hook
+  # exists) -- BLOCKED, regardless of proof content. Stamp/proof writes dropped: they
+  # no longer affect the outcome, and keeping them would misleadingly suggest
+  # otherwise. See #PAG-HOOKCHECK-ABSENT below for the dedicated, explicitly-named
+  # H1 regression pin for this same hook-absent reason code; this test is retained
+  # under its original PA-5 name for continuity with the wave's R7 inventory.
   make_input "git push origin feature/test"
   run_hook
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"hook-absent"* ]]
 }
 
-@test "PA-6 BLOCK: main + no pre-push hook + missing quality-gate.stamp → blocked with stamp error" {
-  # Only pre-pr.stamp present; quality-gate.stamp absent.
+#
+# PA-6..PA-10 (H1 NOTE, found during the R7 pass, not individually named in the W-C
+# dispatch's own itemized list but sharing the exact same doomed shape as the tests
+# that were named): all five fixtures install NO pre-push hook and previously
+# differentiated FIVE distinct stamp problems (missing quality-gate.stamp, missing
+# pre-pr.stamp, stale quality-gate.stamp, stale pre-pr.stamp, FAIL verdict). Every
+# one of those problems lived entirely inside the removed in-JS fallback
+# (JS :319-523) -- push-authorization-gate.js's main-orchestrator branch no longer
+# reads .androidcommondoc/*.stamp at all post-H1, so none of these five variations
+# can produce a different outcome any more: all five now hit the identical
+# hook-absent path (no hook installed, canonical source present via setup()), the
+# same shape as PA-5 above and #PAG-HOOKCHECK-ABSENT below. Their old assertions
+# (exact-substring "quality-gate.stamp" / "pre-pr.stamp") do not appear anywhere in
+# the new block messages (verified against the landed JS text) and would fail
+# loudly, not silently -- confirming these are genuinely dead, not just stale.
+# Retained (not deleted) as five historical fixture-shape pins per-stamp-scenario,
+# each individually tightened to the new hook-absent reason, since the dispatch's
+# explicit disposition list did not name them for deletion and a conservative
+# tighten-in-place avoids second-guessing that scope boundary; flagged for
+# arch-testing review as an extension beyond the six named items.
+#
+@test "PA-6 BLOCK: main + no pre-push hook + missing quality-gate.stamp → blocked on hook-absent (H1: stamps no longer read)" {
+  # Only pre-pr.stamp present; quality-gate.stamp absent -- irrelevant post-H1.
   write_stamp "pre-pr.stamp" "PASS" 0 ""
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 2 ]
-  [[ "$output" == *"quality-gate.stamp"* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"hook-absent"* ]]
 }
 
-@test "PA-7 BLOCK: main + no pre-push hook + missing pre-pr.stamp → blocked with stamp error" {
+@test "PA-7 BLOCK: main + no pre-push hook + missing pre-pr.stamp → blocked on hook-absent (H1: stamps no longer read)" {
   write_stamp "quality-gate.stamp" "PASS" 0 ""
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 2 ]
-  [[ "$output" == *"pre-pr.stamp"* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"hook-absent"* ]]
 }
 
-@test "PA-8 BLOCK: main + no pre-push hook + stale quality-gate.stamp (35 min) → blocked" {
+@test "PA-8 BLOCK: main + no pre-push hook + stale quality-gate.stamp (35 min) → blocked on hook-absent (H1: stamps no longer read)" {
   write_stamp "quality-gate.stamp" "PASS" $((35 * 60)) ""
   write_stamp "pre-pr.stamp"       "PASS" 0             ""
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 2 ]
-  [[ "$output" == *"quality-gate.stamp"* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"hook-absent"* ]]
 }
 
-@test "PA-9 BLOCK: main + no pre-push hook + stale pre-pr.stamp (35 min) → blocked" {
+@test "PA-9 BLOCK: main + no pre-push hook + stale pre-pr.stamp (35 min) → blocked on hook-absent (H1: stamps no longer read)" {
   write_stamp "quality-gate.stamp" "PASS" 0             ""
   write_stamp "pre-pr.stamp"       "PASS" $((35 * 60)) ""
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 2 ]
-  [[ "$output" == *"pre-pr.stamp"* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"hook-absent"* ]]
 }
 
-@test "PA-10 BLOCK: main + no pre-push hook + FAIL verdict in quality-gate.stamp → blocked" {
+@test "PA-10 BLOCK: main + no pre-push hook + FAIL verdict in quality-gate.stamp → blocked on hook-absent (H1: stamps no longer read)" {
   write_stamp "quality-gate.stamp" "FAIL" 0 ""
   write_stamp "pre-pr.stamp"       "PASS" 0 ""
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 2 ]
-  [[ "$output" == *"quality-gate.stamp"* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"hook-absent"* ]]
 }
 
 # ── Bypass ────────────────────────────────────────────────────────────────────
@@ -591,260 +581,149 @@ PYEOF
   [ "$status" -eq 0 ]
 }
 
-# ── CR-3 (df1a5d1): unconditional head-sha validation in push-authorization-gate
+# ── H1 dead-code disposition (PLAN v2 Path-Manifest Group D / Risk R7, the
+# complete itemized W-C pass) ──────────────────────────────────────────────────
+#
+# DELETED below: PA-CR3-A/PA-CR3-B (head-format validation), PA-JS1-4 (in-JS
+# required-step-coverage / tampered-report / manifest_version-mismatch checks),
+# #PAG-EV1/#PAG-EV2 (bats_evidence absent/mismatched), #PAG-BE1-5 (bats_evidence
+# completeness sub-checks: not_ok/scope/complete/total/ok). Every one of these
+# fixtures installs NO pre-push hook and exercises a piece of the in-JS fallback
+# (JS :319-523) that push-authorization-gate.js's main-orchestrator branch no
+# longer has at all -- under H1 every one of them would hit the new hook-absent
+# BLOCK before ever reaching the stamp/proof-content logic they claim to test,
+# making them silently test nothing (PA-JS1's own loose `*"BLOCKED"*` assertion is
+# the sharpest illustration: it would keep passing, for the wrong reason, forever).
+# Consolidated to ONE representative "no-hook-installed, any stamp/proof state,
+# still BLOCK for hook-absent reason" test per the plan's own explicit disposition
+# rule -- see #PAG-HOOKCHECK-ABSENT below (and PA-5/PA-6-10 above, independently).
+#
+# KEPT + FLIPPED: #PAG-EV3 (below) -- was the ALLOW positive control proving
+# #PAG-EV1/#PAG-EV2 exercised a real check rather than an unconditional block.
+# Since EV1/EV2 are deleted, EV3's original justification no longer applies, but
+# the wave's own W-C disposition list explicitly names it as a required
+# outcome-flip (ALLOW -> BLOCK), not a deletion -- retained under its original
+# name for R7-inventory continuity. Post-flip its fixture is functionally
+# identical to PA-5 (both: canonical proof, no hook -> hook-absent BLOCK) since
+# push-authorization-gate.js no longer inspects push-proof.json content at all;
+# the near-duplication is intentional and documented, not an oversight.
 
-@test "PA-CR3-A BLOCK: pre-pr.stamp with empty head field → BLOCK (head validation)" {
-  # df1a5d1: head validation is now unconditional (not gated on live git HEAD lookup).
-  # Empty head string fails the /^[0-9a-f]{40}$/ regex check → BLOCK.
-  write_stamp "quality-gate.stamp" "PASS" 0
-  write_stamp "pre-pr.stamp" "PASS" 0 ""
-  make_input "git push origin feature/x"
+@test "#PAG-EV3 BLOCK: no hook installed + canonical-valid proof (well-formed bats_evidence) → blocked on hook-absent (H1 outcome-flip)" {
+  # OUTCOME-FLIP (PLAN v2 Path-Manifest Group D / Risk R7, arch-testing Check 3/3b,
+  # the SECOND outcome-flip alongside PA-4c/PA-5). Originally: "in-JS fallback --
+  # bats_evidence.head matches pushed SHA -- still passes", proving #PAG-EV1/EV2
+  # (now deleted) were exercising a real check. Under H1 there is no in-JS
+  # fallback left to be a positive control FOR -- push-authorization-gate.js never
+  # reads push-proof.json/bats_evidence at all once the fallback is removed, so
+  # even a flawless, fully-bound bats_evidence no longer earns an ALLOW through
+  # this file. Stamp/proof writes dropped (identical reasoning to PA-4c/PA-5
+  # above): they have zero bearing on the outcome now, and keeping them would
+  # misleadingly suggest otherwise.
+  make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 2 ]
-  [[ "$output" == *"head"* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"hook-absent"* ]]
 }
 
-@test "PA-CR3-B BLOCK: pre-pr.stamp with non-hex head → BLOCK (head validation)" {
-  # Non-hex string 'not-a-sha' fails the /^[0-9a-f]{40}$/ check → BLOCK.
-  write_stamp "quality-gate.stamp" "PASS" 0
-  write_stamp "pre-pr.stamp" "PASS" 0 "not-a-sha"
-  make_input "git push origin feature/x"
+# ── H1 new tests (PLAN v2 Path-Manifest Group D / W-C items 4-5): the
+# main-orchestrator branch's rewritten verify-git-hooks.sh delegation, exercised
+# directly and minimally (zero incidental stamp/proof setup, since none of it is
+# read anymore) ──────────────────────────────────────────────────────────────────
+
+@test "#PAG-HOOKCHECK-ABSENT BLOCK: main + no pre-push hook installed at all → exit 2, decision:block + hook-absent (H1 new test)" {
+  # New test (W-C item 4): dedicated, explicitly-named positive assertion that the
+  # rewritten main-orchestrator branch fails closed when no .git/hooks/pre-push
+  # exists at all -- the representative "no-hook-installed, any stamp/proof state,
+  # still BLOCK for hook-absent reason" case the wave's own R7 disposition rule
+  # calls for. PA-5/PA-6-10 above independently confirm the same reason code from
+  # their own (now-irrelevant) stamp-shaped fixtures; this is the clean, minimal,
+  # canonical version with zero incidental setup.
+  make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 2 ]
-  [[ "$output" == *"head"* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"hook-absent"* ]]
 }
 
-# ── a7e855e: in-JS fallback 7-check reject cases (bash hidden; proofScript absent = in-JS path) ──
-# Base: canonical proof + report; mutate one thing per test to assert BLOCK.
-# In all cases: no emit-push-proof.sh in isolated PROJECT_ROOT → in-JS fallback taken.
-# (bash may or may not be available — the gate falls back when fs.existsSync(proofScript) is false)
-
-@test "PA-JS1 BLOCK: in-JS fallback — empty steps_executed → BLOCK (required-step coverage)" {
-  # Check 6: all 6 required steps must be present with result=PASS. Empty array → all missing.
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
-  # Overwrite proof with empty steps_executed (keep valid digest for report — digest check
-  # fires AFTER step-coverage check, so any digest value is fine here; step check fires first).
-  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" <<'PYEOF'
-import hashlib, json, sys, datetime
-proof_path, head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
-normalized = bytes(b for i, b in enumerate(report_raw)
-    if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
-digest = hashlib.sha256(normalized).hexdigest()
-# Dynamic read (never hardcoded) — see write_canonical_proof's own comment for why.
-manifest_version = json.load(open(root + '/quality-gate-manifest.json', encoding='utf-8'))['manifest_version']
-proof = {
-    "schema_version": 1, "head": head, "generated_at": ts,
-    "worktree_id": root, "manifest_version": manifest_version,
-    "steps_executed": [],
-    "report_digest": digest
-}
-with open(proof_path, 'w') as f: json.dump(proof, f)
+@test "#PAG-HOOKCHECK-DRIFTED BLOCK: main + drifted pre-push hook (marker intact, 1 byte changed) → exit 2, decision:block + hook-drifted (H1 new test)" {
+  # New test (W-C item 4): the rewritten branch must BLOCK when the installed hook
+  # is present, executable, and marker-bearing but NOT byte-identical
+  # (CRLF-normalized) to the canonical scripts/sh/pre-push-hook.sh source --
+  # proving the new --git-path + sha256 predicate actually replaced the old
+  # existsSync-plus-marker-substring-only check (P1b), which never compared
+  # content at all. Drift fixture mirrors verify-git-hooks.bats's own
+  # write_drifted_hook(): copy the canonical source, then flip ONLY its last line
+  # ("exit 0" -> "exit 1") so the ACDOC-PRE-PUSH-GATE marker (line 2) stays fully
+  # intact -- proving hook-drifted fires on a sha mismatch specifically, not a
+  # marker-missing false-positive. Targeted by list-index (last element), never
+  # text search, so this can never collide with the marker line or the
+  # SKIP_PUSH_GATE bypass branch's own unrelated "exit 0".
+  mkdir -p "$PROJECT_ROOT/.git/hooks"
+  python3 - "$BATS_TEST_DIRNAME/../sh/pre-push-hook.sh" "$PROJECT_ROOT/.git/hooks/pre-push" <<'PYEOF'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+with open(src, "rb") as f:
+    lines = f.readlines()
+last = lines[-1]
+assert last.rstrip(b"\n") == b"exit 0", "canonical source's last line changed: " + repr(last)
+lines[-1] = last.replace(b"exit 0", b"exit 1")
+with open(dst, "wb") as f:
+    f.writelines(lines)
 PYEOF
+  chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 2 ]
-  [[ "$output" == *"BLOCKED"* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"hook-drifted"* ]]
 }
 
-@test "PA-JS2 BLOCK: in-JS fallback — required step result=SKIP → BLOCK (step-not-pass)" {
-  # Check 6: required step 'test-suite' present but result=SKIP (not PASS) → BLOCK.
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
-  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" <<'PYEOF'
-import hashlib, json, sys, datetime
-proof_path, head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
-normalized = bytes(b for i, b in enumerate(report_raw)
-    if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
-digest = hashlib.sha256(normalized).hexdigest()
-# Dynamic read (never hardcoded) — see write_canonical_proof's own comment for why.
-manifest_version = json.load(open(root + '/quality-gate-manifest.json', encoding='utf-8'))['manifest_version']
-proof = {
-    "schema_version": 1, "head": head, "generated_at": ts,
-    "worktree_id": root, "manifest_version": manifest_version,
-    "steps_executed": [
-        {"step": "architect-deliberation", "result": "PASS", "ran": True},
-        {"step": "pre-pr",                 "result": "PASS", "ran": True},
-        {"step": "test-suite",             "result": "SKIP", "ran": False},  # mutated
-        {"step": "rule-cross-check",       "result": "PASS", "ran": True},
-        {"step": "registry-hash",          "result": "PASS", "ran": True},
-        {"step": "secret-scan",            "result": "PASS", "ran": True},
-        {"step": "doc-validator-parity",   "result": "PASS", "ran": True}
-    ],
-    "report_digest": digest
-}
-with open(proof_path, 'w') as f: json.dump(proof, f)
-PYEOF
-  make_input "git push origin feature/test"
-  run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"BLOCKED"* ]]
-}
-
-@test "PA-JS3 BLOCK: in-JS fallback — tampered report (report_digest mismatch) → BLOCK" {
-  # Check 7: recomputed sha256(report) != proof.report_digest → BLOCK (forged or tampered).
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
-  # Overwrite the report file with different content — digest in proof is now stale.
-  printf '{"tampered":true}' > "$STAMP_DIR/quality-gate-report.json"
-  make_input "git push origin feature/test"
-  run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"report_digest"* ]]
-}
-
-@test "PA-JS4 BLOCK: in-JS fallback — manifest_version mismatch → BLOCK" {
-  # Check 5: proof.manifest_version != live manifest.manifest_version → BLOCK.
-  # Canonical manifest has manifest_version=2 (Wave A bump); write proof with manifest_version=99.
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
-  # Overwrite push-proof.json with manifest_version=99 but a valid report digest
-  # (digest check fires after manifest_version check only if manifest check passes,
-  # but we need a valid report.json to exist for check 7 — write_canonical_proof wrote it).
-  python3 - "$STAMP_DIR/push-proof.json" "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" <<'PYEOF'
-import hashlib, json, sys, datetime
-proof_path, head, root, stamp_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-report_raw = open(stamp_dir + '/quality-gate-report.json', 'rb').read()
-normalized = bytes(b for i, b in enumerate(report_raw)
-    if not (b == 0x0D and i + 1 < len(report_raw) and report_raw[i + 1] == 0x0A))
-digest = hashlib.sha256(normalized).hexdigest()
-proof = {
-    "schema_version": 1, "head": head, "generated_at": ts,
-    "worktree_id": root,
-    "manifest_version": 99,   # mutated — live manifest is 2 (Wave A bump); 99 is intentional mismatch test data
-    "steps_executed": [
-        {"step": "architect-deliberation", "result": "PASS", "ran": True},
-        {"step": "pre-pr",                 "result": "PASS", "ran": True},
-        {"step": "test-suite",             "result": "PASS", "ran": True},
-        {"step": "rule-cross-check",       "result": "PASS", "ran": True},
-        {"step": "registry-hash",          "result": "PASS", "ran": True},
-        {"step": "secret-scan",            "result": "PASS", "ran": True},
-        {"step": "doc-validator-parity",   "result": "PASS", "ran": True}
-    ],
-    "report_digest": digest
-}
-with open(proof_path, 'w') as f: json.dump(proof, f)
-PYEOF
-  make_input "git push origin feature/test"
-  run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"manifest_version"* ]]
-}
-
-# ── f9f0610: in-JS fallback check 8 — bats_evidence binding ──────────────────
-# Gate 0b (Codex pre-exec review of .claude/hooks/push-authorization-gate.js) has
-# cleared; toolkit-specialist landed the 8th check in f9f0610. #PAG-EV3 is a POSITIVE
-# CONTROL and is load-bearing: without it, #PAG-EV1/#PAG-EV2 could pass against a gate
-# that blocks every proof unconditionally, proving nothing.
-
-@test "#PAG-EV1 BLOCK: in-JS fallback — push-proof.json missing bats_evidence → BLOCK" {
-  # Check 8: proof.bats_evidence absent → BLOCK. absent-means-skip is a bypass, not a
-  # default — same rule as every earlier check.
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" "__OMIT__"
-  make_input "git push origin feature/test"
-  run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"bats_evidence"* ]]
-}
-
-@test "#PAG-EV2 BLOCK: in-JS fallback — bats_evidence.head mismatched pushed SHA → BLOCK" {
-  # Check 8: proof.bats_evidence.head != headShaForProof → BLOCK. The evidence binding
-  # exists but does not correspond to the commit actually being pushed.
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  local mismatched_head="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR" "$mismatched_head"
-  make_input "git push origin feature/test"
-  run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"bats_evidence"* ]] || [[ "$output" == *"head"* ]]
-}
-
-@test "#PAG-EV3 ALLOW (positive control): in-JS fallback — bats_evidence.head matches pushed SHA → still passes" {
-  # Proves #PAG-EV1/#PAG-EV2 are exercising a real check, not passing against a gate
-  # that blocks every proof unconditionally — a correctly-bound bats_evidence must
-  # still allow the push, exactly like PA-5's canonical scenario.
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+@test "#PAG-HOOKCHECK-ALLOW ALLOW (positive control): main + canonical pre-push hook installed → exit 0 via verify-git-hooks.sh (H1 new test)" {
+  # New test (W-C item 4): positive control paired with #PAG-HOOKCHECK-ABSENT/
+  # -DRIFTED above -- without it, a broken verifier that blocks every
+  # main-orchestrator push unconditionally would still pass both BLOCK tests,
+  # proving nothing about whether a CORRECT install is actually recognized. Same
+  # fixture shape as the pre-existing PA-4 (kept, unchanged, still green under H1
+  # since a byte-identical canonical install trips none of verify-git-hooks.sh's 5
+  # reason codes) -- named explicitly for the H1 rewrite so the three
+  # #PAG-HOOKCHECK-* tests read as one coherent, self-contained BLOCK/BLOCK/ALLOW
+  # triad.
+  mkdir -p "$PROJECT_ROOT/.git/hooks"
+  cp "$BATS_TEST_DIRNAME/../sh/pre-push-hook.sh" "$PROJECT_ROOT/.git/hooks/pre-push"
+  chmod +x "$PROJECT_ROOT/.git/hooks/pre-push"
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 0 ]
 }
 
-# ── wave qg-artifact-binding (W7): in-JS fallback checks 9-13 — bats_evidence ────
-# completeness. Same predicate bash verify_proof() and verify-push-proof.ps1
-# re-derive: not_ok==0 && scope=='full' && complete==true && total==expected &&
-# ok>0. Each die-code gets its own negative (revert exactly one element from the
-# write_canonical_proof-produced positive control) — #PAG-EV3 above already proves
-# the well-formed base fixture allows, so it doubles as this row's positive control.
-# No emit-push-proof.sh in isolated PROJECT_ROOT → in-JS fallback taken (same as
-# every #PAG-EV*/#PAG-JS* test above).
-
-@test "#PAG-BE1 BLOCK: in-JS fallback — bats_evidence.not_ok!=0 → bats-evidence-dirty" {
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
-  patch_bats_evidence_field "$STAMP_DIR" "not_ok" "1"
+@test "#PAG-AMEND3 BLOCK: main + malformed verify-git-hooks.sh invocation → exit 2, decision:block (Amendment 3, never the global fail-open)" {
+  # Amendment 3 (Codex round 1, PLAN v2 Design Fidelity table + Risk R1b): a
+  # failed/malformed verify-git-hooks.sh invocation must be caught LOCALLY (JS
+  # result.status !== 0 branch, lines 302-311) and BLOCK -- it must NEVER bubble
+  # to this file's own outer `catch { process.exit(0); }` (JS lines 318-321), a
+  # deliberate fail-open for genuine parse/crash errors in THIS gate's own JSON
+  # handling, not meant to cover a verifier failure.
+  #
+  # Malformed, not merely absent: overwrite setup()'s copied verify-git-hooks.sh
+  # with a genuine bash syntax error (an unterminated `[` test with no matching
+  # `]`/`fi`) -- bash exits non-zero on a parse failure before any of the 5 real
+  # reason codes could ever be printed, and stdout stays empty (the syntax error
+  # goes to stderr), so reasonCode falls back to "unknown". This is the literal
+  # "invocation itself fails" wording of Amendment 3, a different branch shape
+  # from #PAG-HOOKCHECK-ABSENT/-DRIFTED above (which exercise a WORKING verifier
+  # correctly reporting a real reason code, not a broken one).
+  #
+  # Revert-one-prove-red: deleting the local `if (result.status !== 0) { block(...);
+  # return; }` handler (JS 302-311) would let this exact malformed-invocation
+  # scenario fall through to the bare `process.exit(0)` at JS line 316 -- a silent
+  # ALLOW despite the verifier never having produced a clean pass. This test would
+  # go red the instant that happened.
+  printf 'if [ this is not valid bash syntax\n' > "$PROJECT_ROOT/scripts/sh/verify-git-hooks.sh"
   make_input "git push origin feature/test"
   run_hook
   [ "$status" -eq 2 ]
-  [[ "$output" == *"bats-evidence-dirty"* ]]
-}
-
-@test "#PAG-BE2 BLOCK: in-JS fallback — bats_evidence.scope!='full' → bats-evidence-scope" {
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
-  patch_bats_evidence_field "$STAMP_DIR" "scope" '"targeted"'
-  make_input "git push origin feature/test"
-  run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"bats-evidence-scope"* ]]
-}
-
-@test "#PAG-BE3 BLOCK: in-JS fallback — bats_evidence.complete!=true → bats-evidence-incomplete" {
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
-  patch_bats_evidence_field "$STAMP_DIR" "complete" "false"
-  make_input "git push origin feature/test"
-  run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"bats-evidence-incomplete"* ]]
-}
-
-@test "#PAG-BE4 BLOCK: in-JS fallback — bats_evidence.total!=expected → bats-evidence-count-mismatch" {
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
-  patch_bats_evidence_field "$STAMP_DIR" "total" "999"
-  make_input "git push origin feature/test"
-  run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"bats-evidence-count-mismatch"* ]]
-}
-
-@test "#PAG-BE5 BLOCK: in-JS fallback — bats_evidence.ok<=0 → bats-evidence-floor" {
-  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
-  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
-  patch_bats_evidence_field "$STAMP_DIR" "ok" "0"
-  make_input "git push origin feature/test"
-  run_hook
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"bats-evidence-floor"* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
 }
 
 # ── Peer-block CONTRACT test — NOT a fail-open regression pin; see #PAG-GUARD ────
@@ -939,17 +818,30 @@ PYEOF
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
-@test "#PAG-MAIN-STALE-WRAPPED BLOCK: main + same wrapped command + stale stamps (35 min) → exit 2, stale-stamp reason" {
+@test "#PAG-MAIN-STALE-WRAPPED BLOCK: main + same wrapped command + no hook installed → exit 2, hook-absent reason (H1: stamps no longer read)" {
   # This is literally the shape of team-lead's real push tonight: main orchestrator,
-  # stamps well past the 30-minute freshness window, wrapped invocation.
-  write_stamp "quality-gate.stamp" "PASS" $((35 * 60)) "$HEAD_SHA"
-  write_stamp "pre-pr.stamp"       "PASS" $((35 * 60)) "$HEAD_SHA"
+  # wrapped invocation, no pre-push hook installed. This test's CORE purpose --
+  # proving isGitPushCommand recognizes the wrapped/newline shape at all -- is
+  # entirely about isGitPushCommand (JS :101-176), which H1 leaves byte-identical;
+  # that root-cause narrative above is unaffected by this wave.
+  #
+  # What DOES change: under H1 the main-orchestrator branch no longer reads
+  # .androidcommondoc/*.stamp at all, so the stale-stamp writes that used to
+  # produce the BLOCK here are now irrelevant (dropped, not left as misleading
+  # dead setup) -- the block now fires purely because no hook is installed
+  # (hook-absent), independent of any stamp state.
+  #
+  # Tightened (arch-testing 3d, same reasoning as PA-4b above): the original loose
+  # 3-way OR (*"stamp"*/*"pre-pr"*/*"quality-gate"*) proved only "some stamp-ish
+  # word appeared somewhere", not WHICH check fired -- pin the structured decision
+  # field PLUS the specific hook-absent reason code instead.
   local wrapped_cmd
   wrapped_cmd="env PATH=\"\$HOME/.local/gnubin-l0:/opt/homebrew/bin:\$PATH\" bash -c 'cd $PROJECT_ROOT"$'\n'"git push -u origin br'"
   make_input "$wrapped_cmd"
   run_hook
   [ "$status" -eq 2 ]
-  [[ "$output" == *"stamp"* || "$output" == *"pre-pr"* || "$output" == *"quality-gate"* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"hook-absent"* ]]
 }
 
 # ── Positive controls — pin what must NOT change alongside what must ───────────
@@ -1163,20 +1055,54 @@ PYEOF
 # SANITY FLOOR IS THE WHOLE POINT (repo memory: "a guard that cannot fail is worse than
 # no guard" — a detector that scans and finds zero block( call sites reports "0
 # violations", indistinguishable from "0 call sites", and would pass against an empty
-# file, a moved file, or a broken regex). The floor is >=15, not >=8 and not ==20:
-# >=8 is loose enough that a half-broken regex finding 9 would still pass; ==20 is
-# brittle and would fail spuriously the moment anyone adds or removes a legitimate
-# block() call as part of ordinary maintenance. >=15 fails loudly if the parser breaks
-# and survives ordinary maintenance. The file had exactly 20 call sites when this floor
-# was chosen; wave qg-artifact-binding's W7 completeness checks (9-13, #PAG-BE1-5 above)
-# add 5 more block() call sites on top of that — the floor is intentionally loose so
-# this growth (and any future one) never requires bumping a brittle exact count.
+# file, a moved file, or a broken regex).
 #
-# Four shapes the parser must survive (all verified against the real file AND against a
-# deliberately-broken copy with one return removed, to confirm this is non-vacuous):
+# FLOOR RE-DERIVED FOR H1 (PLAN v2 Risk R9 / Path-Manifest Group D, its own explicit
+# W-C line item — NOT a mechanical drop of the old number). Pre-H1 history: the file
+# had exactly 20 call sites when the >=15 floor was FIRST chosen (loose enough that a
+# half-broken regex finding, say, 9 would still fail; tight enough that ==20 would have
+# been brittle and failed spuriously the moment anyone added or removed a legitimate
+# block() call during ordinary maintenance); wave qg-artifact-binding's W7 completeness
+# checks (9-13) later added 5 more block() call sites on top of that (20 -> 25) without
+# ever needing to bump the threshold, confirming >=15 was loose enough to absorb real
+# growth. H1 removes the entire ~205-line best-effort fallback (JS :319-523, ~24 of
+# those ~25 call sites) and replaces it with a rewritten main-orchestrator branch that
+# delegates to verify-git-hooks.sh — the file now has exactly **5** legitimate call
+# sites: the peer/subagent block (1) plus the four distinct, LOCALLY-handled
+# verify-git-hooks.sh failure modes Amendment 3 requires (spawnSync throw, result.error,
+# result.status===null timeout/signal, result.status!==0 non-zero exit — 4). Re-verified
+# by direct read of the landed 322-line file: block( token matches at exactly 5
+# non-comment, non-definition lines (247, 276, 285, 294, 304).
+#
+# Applying the SAME discipline that produced >=15 from a baseline of 20 (loose enough to
+# survive ordinary maintenance -- adding, removing, or consolidating a block() call or
+# two -- tight enough to fail loudly if the parser breaks or the verification invariant
+# is gutted) to the new baseline of 5: the new floor is **>=3**. This tolerates losing
+# up to two call sites to a future refactor (e.g. collapsing two of the four
+# verify-git-hooks.sh failure branches into one shared handler) without a brittle,
+# spurious break, while still failing loudly the moment the count crashes to 0, 1, or 2
+# — which would mean either the parser broke (file moved/emptied/unreadable) or the
+# security invariant itself was gutted (e.g. most of Amendment 3's exhaustive local
+# failure-mode handling silently disappeared, or the peer-block was dropped). An exact
+# `==5` was rejected for the same reason `==20` was rejected originally: it would fail
+# spuriously on ordinary maintenance. A floor of `>=1` or `>=2` was rejected as too loose
+# at this smaller scale: it would still pass even if 3 of the file's 5 essential
+# branches vanished — precisely the "just lower the number without re-deriving it"
+# trap this guard exists to prevent (repo memory, restated here per the same
+# discipline the original comment documents: do not mechanically drop the threshold
+# without writing down the new reasoning).
+#
+# Four shapes the parser must survive (originally verified against the pre-H1 real file
+# AND against a deliberately-broken copy with one return removed, to confirm this is
+# non-vacuous; the parser logic itself is UNCHANGED by H1 and must keep surviving all
+# four even though the post-H1 live file happens to exercise only shapes 1, 3, and 4
+# today — shape 2 could be reintroduced by a future edit, e.g. a catch-block one-liner,
+# and the parser must not silently mishandle it if so):
 #   1. Multi-line call: `block(\n  '...'\n);` then `return;` on the NEXT physical line.
+#      All 5 of today's call sites (247, 276, 285, 294, 304) use this shape.
 #   2. catch-oneliner:  `catch { block('...'); return; }` — return on the SAME line,
-#      immediately after `);` with no line break.
+#      immediately after `);` with no line break. Not currently present in the live
+#      file post-H1 (it lived in the removed fallback); parser support retained.
 #   3. Leading comment: a line starting with `//` that merely mentions `block()` in
 #      prose (the INVARIANT comment block above `function block` does this twice) — must
 #      be excluded, not counted as a call site.
@@ -1263,6 +1189,8 @@ PYEOF
   violations="$(printf '%s\n' "$output" | python3 -c "import sys; print(next(l.split('=')[1] for l in sys.stdin if l.startswith('violations=')))")"
 
   # Sanity floor FIRST: fails loudly if the parser is broken, not if the code is.
-  [ "$call_sites" -ge 15 ]
+  # H1 (PLAN v2 Risk R9): re-derived from 20/>=15 to 5/>=3 -- see the header comment
+  # above this test for the full re-derivation and why >=3 (not ==5, not >=1/>=2).
+  [ "$call_sites" -ge 3 ]
   [ "$violations" -eq 0 ]
 }

@@ -7,8 +7,8 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-version: 1
-last_updated: "2026-06"
+version: 2
+last_updated: "2026-07-11"
 description: "Canonical authoring conventions for L0 PreToolUse/PostToolUse hook scripts: exit codes, stdin parsing, identity model, matching rules, and bypass pattern"
 ---
 
@@ -120,4 +120,4 @@ See `docs/guides/hook-bypass-recursive-pattern.md` for the recursive-gate proble
 |------|---------------------|
 | `premature-execution-gate.js` | Stdin parse, 5s timeout, `startsWith` subject matching, env bypass, `exit(2)` with JSON reason |
 | `context-provider-gate.js` | Empty-`agent_type` main exemption, `startsWith` prefix exemption, session-scoped flag files, fail-open catch |
-| `push-authorization-gate.js` | **Best-effort identity-aware blocking** (non-empty `agent_type` = block; string-parsing is not exhaustive — see hook-manifest.md), stamp validation, `block()` helper, inline `{ decision, reason }` on stdout |
+| `push-authorization-gate.js` | **Best-effort identity-aware blocking** (non-empty `agent_type` = block; string-parsing is not exhaustive — see hook-manifest.md), `block()` helper, inline `{ decision, reason }` on stdout |

@@ -2,8 +2,8 @@
 scope: [agents, hooks, workflow]
 sources: [androidcommondoc]
 targets: [all]
-version: 2
-last_updated: "2026-06"
+version: 3
+last_updated: "2026-07-11"
 description: "Consumer hook manifest: classifies all 34 L0 hook files as consumer-required / consumer-optional / l0-internal"
 slug: hook-manifest
 status: active
@@ -65,7 +65,7 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 | `team-topology-gate.js` | consumer-optional | RETIRED — named-team roster floor obsolete; no-op tombstone, unregistered from settings.json |
 | `architect-verdict-presence-gate.js` | consumer-optional | Verdict files: blocks arch-* APPROVE without verdict file on disk |
 | `commit-scope-validation-gate.js` | consumer-optional | Commit lint: blocks commit if scope not in `.commitlintrc.json` |
-| `push-authorization-gate.js` | consumer-required | Push gate: **best-effort early-block** of peer/subagent `git push` — catches direct `git push`, `rtk git push`, compound commands, and common shell-exec wrappers (`sh -c`, `eval`, `$(…)`); string-parsing cannot be exhaustive (ANSI-C escapes, variable indirection, language interpreters remain). **Primary enforcement is the git-layer `pre-push` hook** (see Git-Layer Hooks below) — fires on every actual push via `emit-push-proof.sh verify-proof`. This Claude-layer hook is the **secondary/fallback** path: it runs proof verification when the git hook is not installed or the fast-path (hookIsACDoc) is taken. Honest contract: no push without proof the canonical QG ran for real over HEAD — NOT peer-identity enforcement; identity-aware provenance enforcement is deferred to a future harness gate. Replaces legacy `pre-push-pre-pr-gate.js` + `quality-gate-pre-push.sh` |
+| `push-authorization-gate.js` | consumer-required | Push gate: **best-effort early-block** of peer/subagent `git push` — catches direct `git push`, `rtk git push`, compound commands, and common shell-exec wrappers (`sh -c`, `eval`, `$(…)`); string-parsing cannot be exhaustive (ANSI-C escapes, variable indirection, language interpreters remain). **Primary enforcement is the git-layer `pre-push` hook** (see Git-Layer Hooks below) — fires on every actual push via `emit-push-proof.sh verify-proof`, but only once bootstrapped per clone via `install-git-hooks.sh`/`make install-git-hooks` (git never auto-installs hooks — see [qg-proof-push-gate](qg-proof-push-gate.md)). For the main orchestrator, this Claude-layer hook delegates to `scripts/sh/verify-git-hooks.sh` and BLOCKS (fail-closed) when that git-layer hook is absent, non-executable, unmarked, or drifted from canonical — it does **not** fall back to any in-JS proof re-verification (wave `push-authority-bootstrap` removed that ~205-LOC fallback entirely). Honest contract: no push without proof the canonical QG ran for real over HEAD — NOT peer-identity enforcement; identity-aware provenance enforcement is deferred to a future harness gate. Replaces legacy `pre-push-pre-pr-gate.js` + `quality-gate-pre-push.sh` |
 | `subagent-start-context-bundle.js` | consumer-optional | SubagentStart adapter: injects context bundle as additionalContext on teammate spawn/wake; absent or stale bundle → fail-open silently |
 | `knowledge-currency-gate.js` | consumer-optional | KMP gating: blocks arch-platform/arch-testing KMP claims without CP marker — see [knowledge-currency-gate](knowledge-currency-gate.md) |
 | `agent-delegation-reminder.js` | consumer-optional | Advisory: reminder when Composable .kt edited without ui-specialist |

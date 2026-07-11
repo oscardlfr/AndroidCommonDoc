@@ -8,15 +8,21 @@
 //   1. If tool_name != Bash: allow
 //   2. If command does not contain a git push invocation: allow
 //   3. If agent_type is non-empty (peer/subagent): BLOCK with instructive message
-//   4. If agent_type is empty (main orchestrator): validate stamps if pre-push hook
-//      is NOT installed (fallback-stamps path); if hook IS installed, allow
+//   4. If agent_type is empty (main orchestrator): delegate to scripts/sh/verify-git-hooks.sh
+//      (spawnSync) to confirm the git-layer pre-push hook is installed AND canonical; ALLOW
+//      only on that clean pass, BLOCK (fail-closed) otherwise
 //
-// FALLBACK-STAMPS validation (main, no pre-push hook installed):
-//   - Both .androidcommondoc/quality-gate.stamp and pre-pr.stamp must exist
-//   - Both must have verdict=PASS
-//   - Both must be <=30min old (age <= 1800s)
-//   - Both must not be future-stamped (age >= -120s, i.e. not more than 2min ahead)
-//   - pre-pr.stamp head must match HEAD sha (40-char)
+// GIT-HOOK VERIFICATION (main, via verify-git-hooks.sh):
+//   - ALLOW only when the authoritative git-layer pre-push hook is installed, executable, and
+//     canonical (ACDOC-PRE-PUSH-GATE marker present + sha256 matches the canonical
+//     scripts/sh/pre-push-hook.sh source, CRLF-normalized on both sides)
+//   - BLOCK (fail-closed, with an install/repair instruction) when the hook is absent or
+//     drifted, OR when the verify-git-hooks.sh invocation itself fails to launch, errors, or
+//     times out -- post-H1 there is no in-JS fallback validation path left to fall back to
+//   - Peers/subagents are still hard-blocked at step 3 above regardless of hook state; this
+//     step only ever runs for the main orchestrator
+//   - isGitPushCommand() (below) remains a best-effort, string-based detector, not the
+//     authoritative gate -- the git-layer pre-push hook verified here is authoritative
 //
 // BYPASS: PUSH_AUTHORIZATION_BYPASS=1 (session-scoped; explicit user authorization only)
 //
@@ -26,13 +32,9 @@
 //   0 = allow
 //   2 = block (with { decision: 'block', reason } JSON on stdout)
 
-const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-
-const MAX_AGE_SECS = 1800;   // 30 minutes
-const SKEW_TOLERANCE = 120;   // 2 minutes future tolerance
 
 // Detect git push in a bash command string (P2a deep detector: segment-aware + exec-aware).
 // Variable indirection and arbitrary language interpreters (python -c, perl -e) remain
@@ -175,62 +177,6 @@ function isGitPushCommand(cmd) {
   });
 }
 
-// Read and validate a stamp file. Returns { ok: true, head, epoch } or { ok: false, reason }.
-function validateStamp(stampPath) {
-  let raw;
-  try {
-    raw = fs.readFileSync(stampPath, 'utf8');
-  } catch {
-    return { ok: false, reason: `missing (${path.basename(stampPath)} not found)` };
-  }
-
-  let stamp;
-  try {
-    stamp = JSON.parse(raw);
-  } catch {
-    return { ok: false, reason: `malformed JSON in ${path.basename(stampPath)}` };
-  }
-
-  if (stamp.verdict !== 'PASS') {
-    return { ok: false, reason: `verdict is "${stamp.verdict}", not PASS (${path.basename(stampPath)})` };
-  }
-
-  const ts = stamp.timestamp || stamp.ts || '';
-  let epoch;
-  try {
-    epoch = Math.floor(new Date(ts).getTime() / 1000);
-    if (isNaN(epoch)) throw new Error('NaN');
-  } catch {
-    return { ok: false, reason: `unparseable timestamp "${ts}" in ${path.basename(stampPath)}` };
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  const age = now - epoch;
-
-  if (age < -SKEW_TOLERANCE) {
-    return { ok: false, reason: `future timestamp in ${path.basename(stampPath)} (${-age}s ahead of clock)` };
-  }
-  if (age > MAX_AGE_SECS) {
-    return { ok: false, reason: `stale ${path.basename(stampPath)} (${Math.floor(age / 60)} min old, max 30)` };
-  }
-
-  const head = stamp.head || null;
-  return { ok: true, head, epoch };
-}
-
-// Get the current HEAD sha via git rev-parse.
-function getHeadSha(projectRoot) {
-  try {
-    const result = spawnSync('git', ['rev-parse', 'HEAD'], {
-      cwd: projectRoot,
-      timeout: 3000,
-      encoding: 'utf8',
-    });
-    if (result.status === 0) return (result.stdout || '').trim();
-  } catch {}
-  return null;
-}
-
 // INVARIANT: every block() call in this file is IMMEDIATELY followed by `return`.
 // block() only calls process.exit(2) synchronously when stdout.write() returns true; under
 // backpressure it defers exit to the 'drain' event. Without `return`, execution continues past a
@@ -239,8 +185,11 @@ function getHeadSha(projectRoot) {
 //       TypeError, which this handler's outer `catch { process.exit(0) }` (a deliberate
 //       fail-open on script error) swallows into exit 0.
 //   (b) fall-through — execution simply reaches a later unconditional process.exit(0). The
-//       peer/subagent block is the live example: without `return` it fell into
-//       `if (hookIsACDoc) process.exit(0)` (:219), silently allowing a peer's git push.
+//       peer/subagent block is the live example: without `return`, a drain-deferred block()
+//       would fall through into the main-orchestrator verify-git-hooks.sh delegation below,
+//       and -- if that hook happens to be installed and canonical -- reach ITS terminal
+//       process.exit(0) before the deferred process.exit(2) ever fires, silently allowing the
+//       peer's push after all.
 // (b) is the more severe: no exception, no trace, just an allow.
 // The 5s allow-timer (`t`) is cleared at the top of the 'end' handler and is specifically NOT a
 // source of false allows. This is not tidiness — it is the difference between fail-closed and
@@ -270,7 +219,7 @@ process.stdin.on('end', () => {
     const cmd = data.tool_input?.command || '';
     if (!isGitPushCommand(cmd)) process.exit(0);
 
-    // Resolve projectRoot early — needed for bypass audit log and stamp paths alike.
+    // Resolve projectRoot early — needed for the bypass audit log and the verify-git-hooks.sh delegation alike.
     const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
     // Bypass
@@ -304,225 +253,66 @@ process.stdin.on('end', () => {
       return;
     }
 
-    // Main orchestrator (empty agent_type): check if pre-push hook is installed
-    // P1b fix: verify identity via ACDOC-PRE-PUSH-GATE marker — presence alone is not enough
-    // (a foreign stub or bare `exit 0` would otherwise bypass stamp validation).
-    const prePushHook = path.join(projectRoot, '.git', 'hooks', 'pre-push');
-    let hookIsACDoc = false;
+    // Main orchestrator (empty agent_type): delegate to verify-git-hooks.sh, the single
+    // primitive (also used by emit-push-proof.sh's mint precondition and setup-check.ts's
+    // Check 7) that resolves the git-layer pre-push hook via `git rev-parse --git-path`
+    // (core.hooksPath- and worktree-aware -- NEVER a hardcoded .git/hooks/pre-push) and
+    // confirms it is installed, executable, ACDOC-PRE-PUSH-GATE-marked, and byte-identical
+    // (CRLF-normalized on both sides) to the canonical scripts/sh/pre-push-hook.sh source.
+    // Shape-only mirror of the spawnSync delegation pattern this file used to run for its
+    // own canonical-verifier proof check (now removed) -- deliberately REJECTS that
+    // pattern's silent-fall-through-on-spawn-failure resilience: there is no fallback left
+    // to fall through to post-H1. Every failure mode below routes to a LOCAL block()+return;
+    // none may reach the global `catch { process.exit(0) }` below. Only a clean exit 0 with
+    // no spawn error allows.
+    const verifyGitHooksPath = path.join(projectRoot, 'scripts', 'sh', 'verify-git-hooks.sh');
+    let result;
     try {
-      if (fs.existsSync(prePushHook))
-        hookIsACDoc = /ACDOC-PRE-PUSH-GATE/.test(fs.readFileSync(prePushHook, 'utf8'));
-    } catch {}
-    if (hookIsACDoc) process.exit(0); // git-layer ACDoc hook owns stamp validation
-    // else fall through to stamp fallback below
-
-    // Fallback-stamps validation (pre-push hook NOT installed)
-    const stampDir = path.join(projectRoot, '.androidcommondoc');
-    const qgStamp = path.join(stampDir, 'quality-gate.stamp');
-    const ppStamp = path.join(stampDir, 'pre-pr.stamp');
-
-    const qgResult = validateStamp(qgStamp);
-    if (!qgResult.ok) {
+      result = spawnSync(
+        'bash', [verifyGitHooksPath, '--repo-root', projectRoot],
+        { cwd: projectRoot, timeout: 15000, encoding: 'utf8' }
+      );
+    } catch (spawnErr) {
       block(
-        `[push-authorization-gate] BLOCKED: quality-gate.stamp invalid — ${qgResult.reason}. ` +
-        `Run /quality-gate then re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
+        `[push-authorization-gate] BLOCKED: verify-git-hooks.sh invocation threw unexpectedly ` +
+        `(${spawnErr && spawnErr.message}). Run bash scripts/sh/install-git-hooks.sh to install ` +
+        `the pre-push hook, then re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
       return;
     }
 
-    const ppResult = validateStamp(ppStamp);
-    if (!ppResult.ok) {
+    if (result.error) {
       block(
-        `[push-authorization-gate] BLOCKED: pre-pr.stamp invalid — ${ppResult.reason}. ` +
-        `Run /pre-pr then re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
+        `[push-authorization-gate] BLOCKED: verify-git-hooks.sh could not be launched ` +
+        `(${result.error.message}). Run bash scripts/sh/install-git-hooks.sh to install ` +
+        `the pre-push hook, then re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
       return;
     }
 
-    // pre-pr.stamp head must match HEAD.
-    // Block unconditionally if head field is absent, empty, or not a 40-hex SHA —
-    // a stamp without a valid head bypasses commit-binding (CR-3).
-    const SHA_RE = /^[0-9a-f]{40}$/i;
-    if (!ppResult.head || !SHA_RE.test(ppResult.head)) {
+    if (result.status === null) {
       block(
-        `[push-authorization-gate] BLOCKED: pre-pr.stamp has missing or invalid head SHA ` +
-        `("${ppResult.head ?? ''}"). Re-run /pre-pr on the final commit then re-push. ` +
-        `Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
-      );
-      return;
-    }
-    const headSha = getHeadSha(projectRoot);
-    if (headSha && ppResult.head !== headSha) {
-      block(
-        `[push-authorization-gate] BLOCKED: pre-pr.stamp head (${ppResult.head}) does not match ` +
-        `current HEAD (${headSha}). Re-run /pre-pr on the final commit then re-push. ` +
-        `Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
+        `[push-authorization-gate] BLOCKED: verify-git-hooks.sh timed out or was terminated ` +
+        `by a signal before completing. Run bash scripts/sh/install-git-hooks.sh to install ` +
+        `or repair the pre-push hook, then re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
       return;
     }
 
-    // Secondary proof check (fallback: no pre-push hook installed).
-    // Delegates to the canonical verifier (emit-push-proof.sh verify-proof) when bash
-    // is available — single source of truth for all invariants (schema, freshness, head,
-    // worktree_id, manifest_version, steps_executed coverage, report_digest recompute).
-    // Falls back to in-JS checks only when bash is not on PATH.
-    const proofScript = path.join(projectRoot, 'scripts', 'sh', 'emit-push-proof.sh');
-    const headShaForProof = getHeadSha(projectRoot);
-    let usedCanonical = false;
-    try {
-      const bash = spawnSync('bash', ['-c', 'command -v bash'], { timeout: 2000 });
-      if (bash.status === 0 && fs.existsSync(proofScript) && headShaForProof) {
-        const result = spawnSync(
-          'bash', [proofScript, '--subcommand', 'verify-proof', '--pushed-sha', headShaForProof],
-          { cwd: projectRoot, timeout: 15000, encoding: 'utf8' }
-        );
-        if (result.status !== 0) {
-          block(
-            `[push-authorization-gate] BLOCKED: canonical verify-proof failed. ` +
-            `Run /quality-gate to re-mint proof. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
-          );
-          return;
-        }
-        usedCanonical = true;
-      }
-    } catch { /* bash not available; fall through to in-JS checks */ }
-
-    if (!usedCanonical) {
-      // In-JS fallback: fully canonical verify-proof equivalent (13 checks).
-      // Byte-for-byte equivalent in rigor to verify-push-proof.ps1 and the
-      // canonical emit-push-proof.sh verify-proof subcommand -- all three
-      // verifiers now carry equivalent rigor, including the bats_evidence
-      // binding (check 8, below) AND (wave qg-artifact-binding, W7) the same
-      // completeness predicate run-qg persists: not_ok==0 && scope=='full' &&
-      // complete==true && total==expected && ok>0 (checks 9-13).
-      const proofPath = path.join(stampDir, 'push-proof.json');
-      let proof;
-      try { proof = JSON.parse(fs.readFileSync(proofPath, 'utf8')); }
-      catch { block('[push-authorization-gate] BLOCKED: push-proof.json missing or malformed. Run /quality-gate to mint proof. Bypass: PUSH_AUTHORIZATION_BYPASS=1.'); return; }
-
-      // 1. schema_version
-      if (proof.schema_version !== 1) {
-        block(`[push-authorization-gate] BLOCKED: push-proof.json schema_version unknown (${proof.schema_version}).`);
-        return;
-      }
-
-      // 2. head binding
-      if (headShaForProof && proof.head !== headShaForProof) {
-        block(`[push-authorization-gate] BLOCKED: proof head (${proof.head}) != HEAD (${headShaForProof}).`);
-        return;
-      }
-
-      // 3. worktree_id
-      if (proof.worktree_id && proof.worktree_id !== projectRoot) {
-        block(`[push-authorization-gate] BLOCKED: proof worktree_id (${proof.worktree_id}) != project root (${projectRoot}).`);
-        return;
-      }
-
-      // 4. freshness
-      const now2 = Math.floor(Date.now() / 1000);
-      const proofEpoch = Math.floor(new Date(proof.generated_at || '').getTime() / 1000);
-      if (isNaN(proofEpoch) || (now2 - proofEpoch) > MAX_AGE_SECS || (proofEpoch - now2) > SKEW_TOLERANCE) {
-        block('[push-authorization-gate] BLOCKED: push-proof.json stale or invalid timestamp.');
-        return;
-      }
-
-      // 5. manifest_version matches live manifest
-      const manifestPath = path.join(projectRoot, 'quality-gate-manifest.json');
-      let manifest;
-      try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); }
-      catch { block('[push-authorization-gate] BLOCKED: quality-gate-manifest.json missing or malformed.'); return; }
-      if (typeof proof.manifest_version !== 'number') {
-        block('[push-authorization-gate] BLOCKED: push-proof.json missing manifest_version.');
-        return;
-      }
-      if (proof.manifest_version !== manifest.manifest_version) {
-        block(`[push-authorization-gate] BLOCKED: proof manifest_version (${proof.manifest_version}) != live manifest (${manifest.manifest_version}). Re-run /quality-gate.`);
-        return;
-      }
-
-      // 6. required-step COVERAGE: every required step must be present in steps_executed with result=PASS
-      const requiredIds = (manifest.required_steps || []).map(s => s.id);
-      const executedMap = {};
-      for (const s of (proof.steps_executed || [])) { executedMap[s.step] = s; }
-      for (const sid of requiredIds) {
-        const entry = executedMap[sid];
-        if (!entry) {
-          block(`[push-authorization-gate] BLOCKED: required step '${sid}' missing from proof.steps_executed. Re-run /quality-gate.`);
-          return;
-        }
-        if (entry.result !== 'PASS') {
-          block(`[push-authorization-gate] BLOCKED: required step '${sid}' result='${entry.result}' (not PASS) in proof. Re-run /quality-gate.`);
-          return;
-        }
-      }
-
-      // 7. report_digest — recompute sha256(CRLF->LF) of quality-gate-report.json
-      const reportPath = path.join(stampDir, 'quality-gate-report.json');
-      let reportRaw;
-      try { reportRaw = fs.readFileSync(reportPath); }
-      catch { block('[push-authorization-gate] BLOCKED: quality-gate-report.json missing — cannot verify report_digest.'); return; }
-      // Normalize CRLF -> LF byte-by-byte (same as bash/python hashlib.sha256 + replace)
-      const normalized = [];
-      for (let i = 0; i < reportRaw.length; i++) {
-        if (reportRaw[i] === 0x0D && i + 1 < reportRaw.length && reportRaw[i + 1] === 0x0A) {
-          continue; // skip CR in CRLF
-        }
-        normalized.push(reportRaw[i]);
-      }
-      const computedDigest = crypto.createHash('sha256').update(Buffer.from(normalized)).digest('hex');
-      if (computedDigest !== proof.report_digest) {
-        block(`[push-authorization-gate] BLOCKED: report_digest mismatch — proof may be forged or report tampered. Re-run /quality-gate.`);
-        return;
-      }
-
-      // 8. bats_evidence binding: present + head matches pushed_sha
-      // Mirrors verify-push-proof.ps1 and the canonical emit-push-proof.sh verify-proof
-      // subcommand -- a half-done evidence binding would mint correctly but verify
-      // permissively; this closes that gap. absent-means-skip is a bypass, not a
-      // default, same rule as every check above.
-      if (!proof.bats_evidence) {
-        block('[push-authorization-gate] BLOCKED: push-proof.json missing bats_evidence. Re-run /quality-gate.');
-        return; // block() may defer exit(2) until stdout drains (backpressure); unlike
-                // checks 1-7, which move on to an UNRELATED condition after blocking,
-                // the very next line here dereferences .head on the object this branch
-                // just proved absent -- falling through would throw TypeError on
-                // undefined in that deferred window instead of emitting the clean
-                // decision:block JSON. Fail-closed must mean "blocked with a message",
-                // not "blocked by crashing".
-      }
-      if (proof.bats_evidence.head !== headShaForProof) {
-        block(`[push-authorization-gate] BLOCKED: bats_evidence.head (${proof.bats_evidence.head}) != HEAD (${headShaForProof}).`);
-        return;
-      }
-
-      // 9-13. bats_evidence completeness (wave qg-artifact-binding, W7): the SAME
-      // predicate run-qg's verify_proof() (bash) and verify-push-proof.ps1 re-derive
-      // -- not_ok==0 && scope=='full' && complete==true && total==expected && ok>0.
-      // A half-done completeness binding would mint correctly but verify
-      // permissively for these five fields too, same rationale as check 8 above.
-      if (proof.bats_evidence.not_ok !== 0) {
-        block(`[push-authorization-gate] BLOCKED: bats-evidence-dirty: bats_evidence.not_ok (${proof.bats_evidence.not_ok}) != 0.`);
-        return;
-      }
-      if (proof.bats_evidence.scope !== 'full') {
-        block(`[push-authorization-gate] BLOCKED: bats-evidence-scope: bats_evidence.scope (${proof.bats_evidence.scope}) != 'full'.`);
-        return;
-      }
-      if (proof.bats_evidence.complete !== true) {
-        block(`[push-authorization-gate] BLOCKED: bats-evidence-incomplete: bats_evidence.complete (${proof.bats_evidence.complete}) is not true.`);
-        return;
-      }
-      if (proof.bats_evidence.total !== proof.bats_evidence.expected) {
-        block(`[push-authorization-gate] BLOCKED: bats-evidence-count-mismatch: bats_evidence.total (${proof.bats_evidence.total}) != bats_evidence.expected (${proof.bats_evidence.expected}).`);
-        return;
-      }
-      if (!(Number.isInteger(proof.bats_evidence.ok) && proof.bats_evidence.ok > 0)) {
-        block(`[push-authorization-gate] BLOCKED: bats-evidence-floor: bats_evidence.ok (${proof.bats_evidence.ok}) fails sanity floor (must be > 0).`);
-        return;
-      }
+    if (result.status !== 0) {
+      const reasonCode = (result.stdout || '').trim() || 'unknown';
+      block(
+        `[push-authorization-gate] BLOCKED: pre-push hook verification failed (${reasonCode}). ` +
+        `Run bash scripts/sh/install-git-hooks.sh to install or repair the pre-push hook -- this ` +
+        `covers both an absent hook and one that has drifted from the canonical source -- then ` +
+        `re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
+      );
+      return;
     }
 
-    // All checks passed
+    // result.status === 0 and no result.error: hook installed, executable, marker-bearing,
+    // and byte-identical (CRLF-normalized) to the canonical source. git-layer hook owns
+    // push authority from here.
     process.exit(0);
 
   } catch {
