@@ -6,9 +6,9 @@ slug: pre-commit-hooks
 status: active
 layer: L0
 category: guides
-description: "Git hooks: registry rehash + manifest drift on commit, Conventional Commits scope whitelist, two-stamp + QG-proof push gate (fail-closed)"
-version: 3
-last_updated: "2026-06"
+description: "Git hooks: registry rehash + manifest drift on commit, Conventional Commits scope whitelist, two-stamp + QG-proof push gate (fail-closed), clone-bootstrap verification"
+version: 4
+last_updated: "2026-07-11"
 ---
 
 # Pre-Commit Hooks Guide
@@ -25,6 +25,20 @@ Three hooks are managed by `scripts/sh/install-git-hooks.sh`:
 | `commit-msg` | `scripts/sh/commit-msg-hook.sh` | Enforce Conventional Commits format + scope whitelist |
 | `pre-push` | `scripts/sh/pre-push-hook.sh` | Fail-CLOSED push gate: (1) two-stamp validation — quality-gate.stamp + pre-pr.stamp PASS, ≤30 min, matching the pushed commit; (2) QG-proof verification — `emit-push-proof.sh --subcommand verify-proof --pushed-sha $sha` checks push-proof.json schema, HEAD match, freshness, manifest-version, step coverage, and report digest. Missing proof or absent verifier → BLOCK (no fallback path). Bypass: `SKIP_PUSH_GATE=1` (explicit user authorization only — logged to push-proof.log). See [qg-proof-push-gate](../agents/qg-proof-push-gate.md) |
 
+> **Hooks are not versioned by git.** `git clone` never copies `.git/hooks/` content — every fresh clone starts with NO hooks installed. Run `bash scripts/sh/install-git-hooks.sh` (or `make install-git-hooks`) once per clone; verify with `bash scripts/sh/verify-git-hooks.sh` (or `make verify-git-hooks`), which confirms the pre-push hook is installed, executable, and byte-identical (CRLF-normalized) to the canonical `scripts/sh/pre-push-hook.sh` source. See [Troubleshooting](#troubleshooting) below.
+
+### Push Gate: 3-Layer Authoritative Table
+
+Same layering discipline as the [commit-scope table](#three-layer-commit-scope-enforcement) below (wave `push-authority-bootstrap`):
+
+| Layer | Mechanism | Coverage | Authoritative? |
+|-------|-----------|----------|----------------|
+| **PreToolUse** `push-authorization-gate.js` | Claude Code hook — fires on `git push`-shaped Bash calls | Claude-only; best-effort command-string detection (known evasion class stays open — see `BACKLOG.md`'s CRITICAL entry) | No — for the main orchestrator it delegates to `verify-git-hooks.sh`; peers/subagents are hard-blocked outright |
+| **git `pre-push`** `pre-push-hook.sh` | Git hook — fires for every push in the clone | Universal for the clone, but only **once installed** (git never auto-installs hooks) | **Yes, once installed** — reads real git refs, cannot be evaded by command spelling |
+| **CI / branch protection** | GitHub Actions + branch rules | All PRs, all pushers | Backstop |
+
+**Bootstrap note**: a fresh, never-bootstrapped clone has no git-layer gate at all. Wave `push-authority-bootstrap` (H1) closes the practical gap this leaves: the QG mint (`emit-push-proof.sh run-qg`) and any Claude push the JS gate actually detects both now fail closed if `verify-git-hooks.sh` reports the hook absent, non-executable, unmarked, or drifted. See [qg-proof-push-gate](../agents/qg-proof-push-gate.md) for the full mechanism.
+
 ## Installation
 
 Run from the repository root:
@@ -33,13 +47,17 @@ Run from the repository root:
 bash scripts/sh/install-git-hooks.sh
 ```
 
-This copies `scripts/sh/pre-commit-hook.sh` into `.git/hooks/pre-commit`, installs `scripts/sh/commit-msg-hook.sh` as `.git/hooks/commit-msg`, installs `scripts/sh/pre-push-hook.sh` as `.git/hooks/pre-push`, and installs the shared slug resolver at `.git/hooks/lib/wave-slug.sh` for the pre-commit wave-class gate.
+Or via Make (L0 self-bootstrap): `make install-git-hooks`.
+
+This copies `scripts/sh/pre-commit-hook.sh` into `.git/hooks/pre-commit`, installs `scripts/sh/commit-msg-hook.sh` as `.git/hooks/commit-msg`, installs `scripts/sh/pre-push-hook.sh` as `.git/hooks/pre-push`, and installs the shared slug resolver at `.git/hooks/lib/wave-slug.sh` for the pre-commit wave-class gate. Hook resolution honors `core.hooksPath` and worktrees (via `git rev-parse --git-path hooks`) rather than a hardcoded `.git/hooks/`.
 
 To verify hooks are installed:
 
 ```bash
 ls -la .git/hooks/pre-commit .git/hooks/commit-msg .git/hooks/pre-push .git/hooks/lib/wave-slug.sh
 ```
+
+Or, specifically for the pre-push hook's install-and-canonical state: `bash scripts/sh/verify-git-hooks.sh` (or `make verify-git-hooks`) — exits 0 silently on success, or prints one of 5 reason codes (`canonical-source-missing`, `hook-absent`, `hook-not-executable`, `hook-marker-missing`, `hook-drifted`) and a fix instruction on failure.
 
 ## Three-Layer Commit-Scope Enforcement
 
@@ -206,6 +224,8 @@ Hooks are not versioned by git. Re-run installation:
 ```bash
 bash scripts/sh/install-git-hooks.sh
 ```
+
+Verify the fix: `bash scripts/sh/verify-git-hooks.sh` (or `make verify-git-hooks`).
 
 **`rehash-registry.sh: not found`**
 

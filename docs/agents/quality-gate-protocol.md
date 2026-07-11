@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Quality gate protocol: sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit"
-version: 4
-last_updated: "2026-06-21"
+version: 5
+last_updated: "2026-07-11"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
 token_budget: 1500
 ---
@@ -111,7 +111,7 @@ After Steps 0-9 pass, the quality-gater calls `emit-push-proof.sh --subcommand r
 - Recording `steps_executed`, `report_digest` (sha256 of `quality-gate-report.json`), and `artifact_digests`
 - Persisting `bats_evidence` (9 keys as of wave `qg-artifact-binding`, W7 — adds `complete`/`total` to the original 7) so the three equal-rigor push-time verifiers re-derive the same bats completeness predicate, not just presence + HEAD match
 
-The pre-push hook (`pre-push-hook.sh`) verifies this proof before allowing any push. See [qg-proof-push-gate](qg-proof-push-gate.md) for the full subsystem reference.
+The pre-push hook (`pre-push-hook.sh`), once installed (`install-git-hooks.sh`/`make install-git-hooks` — a fresh clone has none until then), verifies this proof before allowing any push. See [qg-proof-push-gate](qg-proof-push-gate.md) for the full subsystem reference.
 
 ### Step 11: Emit qg-result.json (final)
 
