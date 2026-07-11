@@ -67,6 +67,24 @@ setup() {
   cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"        "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"         "$REPO/scripts/sh/"
 
+  # H1 (push-authority-bootstrap): do NOT copy install-git-hooks.sh into the
+  # fixture — its own SCRIPT_DIR-relative transitive deps (pre-commit-hook.sh,
+  # lib/wave-slug.sh, commit-msg-hook.sh) are not staged here, so a copied
+  # installer would abort under set -euo pipefail before ever reaching the
+  # pre-push-hook cp, silently defeating this setup() edit for every test in
+  # this file. Instead: copy pre-push-hook.sh (the canonical source
+  # verify-git-hooks.sh's hook-drifted check compares against) and
+  # verify-git-hooks.sh itself (the sibling script emit-push-proof.sh's new
+  # Part-4 precondition invokes) into $REPO/scripts/sh/, then invoke the REAL
+  # installer from $SCRIPTS_SRC against the isolated $REPO. This installs a
+  # canonical, byte-identical pre-push hook into $REPO/.git/hooks/ — invisible
+  # to `git status`, so it cannot trip the clean-tree assertion below — which
+  # is what keeps every existing PASS-mint test in this file green under the
+  # new hook-binding precondition.
+  cp "$SCRIPTS_SRC/sh/pre-push-hook.sh"              "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/verify-git-hooks.sh"           "$REPO/scripts/sh/"
+  bash "$SCRIPTS_SRC/sh/install-git-hooks.sh" "$REPO"
+
   # Commit ALL fixtures so the tree is CLEAN before run-qg.
   # Temp repos have NO skills/ directory → run-qg does NOT pass --require-registry
   # → registry-integrity step returns n/a → only the clean-tree assertion needs satisfying.
@@ -1284,4 +1302,42 @@ print(','.join(sorted(loop)))
 PYEOF
 )"
   [ "$result" = "doc-validator-parity,secret-scan" ]
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# H1 (push-authority-bootstrap) — Part 4 mint precondition: verify-git-hooks.sh
+# must confirm the git-layer pre-push hook is installed and canonical before
+# run-qg proceeds. setup() installs a canonical hook via the REAL
+# install-git-hooks.sh (see setup()'s own comment for why the installer itself
+# is never copied into the fixture). These two tests take that known-PASS
+# baseline (same fixture shape as #MED-POS, a stable exit-0 regression pin)
+# and break exactly one thing each (revert-one-prove-red): the installed hook
+# is removed / tampered. This pins half (a) of H1's mechanical guarantee — the
+# mint fail-closes unconditionally on hook absence/drift.
+#
+# TDD: RED-pending until the parallel toolkit-specialist lands emit-push-proof.sh's
+# Part 4 gate (immediately after the template-size gate, before the registry-
+# digest-record block) — today the hook state has no effect on run-qg's outcome.
+# ═════════════════════════════════════════════════════════════════════════════
+
+@test "#H1-HOOK-ABSENT BLOCK: pre-push hook removed after install → hook-binding-absent (exit != 0)" {
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  rm "$REPO/.git/hooks/pre-push"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"hook-binding-absent"* ]]
+}
+
+@test "#H1-HOOK-DRIFTED BLOCK: installed pre-push hook tampered, marker kept → hook-binding-drifted (exit != 0)" {
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  # Append a single byte to the END of the installed hook — keeps the
+  # ACDOC-PRE-PUSH-GATE marker (near the top, line 2 of pre-push-hook.sh)
+  # intact and the file executable, so only the sha256 drift check trips,
+  # never hook-marker-missing or hook-not-executable.
+  printf 'x' >> "$REPO/.git/hooks/pre-push"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"hook-binding-drifted"* ]]
 }
