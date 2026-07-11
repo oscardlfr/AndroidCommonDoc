@@ -95,11 +95,18 @@ fail() {  # $1 = reason code, $2 = human-readable detail
   exit 1
 }
 
-sha256_of() {  # $1 = file path; prints hex digest of CRLF->LF-normalized content
+sha256_of() {  # $1 = file path; prints hex digest of the file's content after
+               # folding CRLF (\r\n) pairs to LF -- a lone \r NOT immediately
+               # followed by \n (e.g. a mid-line stray CR byte) is left
+               # untouched and therefore still changes the digest. Mirrors the
+               # canonical `content.replace(b'\r\n', b'\n')` idiom in
+               # emit-push-proof.sh; applied identically to the installed hook
+               # and the canonical source before hashing (see reason code 5).
+  local norm='import sys; sys.stdout.buffer.write(sys.stdin.buffer.read().replace(b"\r\n", b"\n"))'
   if command -v sha256sum >/dev/null 2>&1; then
-    tr -d $'\r' < "$1" | sha256sum | awk '{print $1}'
+    python3 -c "$norm" < "$1" | sha256sum | awk '{print $1}'
   elif command -v shasum >/dev/null 2>&1; then
-    tr -d $'\r' < "$1" | shasum -a 256 | awk '{print $1}'
+    python3 -c "$norm" < "$1" | shasum -a 256 | awk '{print $1}'
   else
     echo "[verify-git-hooks] ERROR: neither sha256sum nor shasum found on PATH" >&2
     exit 1

@@ -138,6 +138,31 @@ PYEOF
   chmod +x "$REPO/.git/hooks/pre-push"
 }
 
+# write_crlf_hook: byte-for-byte canonical content but with EVERY line
+# ending converted from LF to CRLF ("\n" -> "\r\n") -- a legitimate
+# Windows-checked-out hook, not a drift. Positive control for the
+# CRLF-normalization fix: sha256_of() is meant to treat a paired \r\n as
+# equivalent to canonical, so this must PASS both before and after the fix.
+write_crlf_hook() {
+  python3 -c 'import sys;sys.stdout.buffer.write(open(sys.argv[1],"rb").read().replace(b"\n",b"\r\n"))' "$CANONICAL_SRC" > "$REPO/.git/hooks/pre-push"
+  chmod +x "$REPO/.git/hooks/pre-push"
+}
+
+# write_lone_cr_hook: canonical content with exactly one standalone \r
+# byte spliced into the middle of the shebang line (line 1), at byte
+# offset 5 -- deliberately NOT immediately followed by "\n", so it can
+# never be read as one half of a "\r\n" pair. The marker (line 2) and
+# every other byte are untouched, so this fixture independently satisfies
+# checks 1-4 (source present, hook present, executable, marker present)
+# and trips ONLY check 5 under a correct CRLF-pair-only normalization.
+# Discriminator for the tr -d '\r' bug: that primitive deletes every CR
+# unconditionally, including this lone one, so the drifted hook falsely
+# byte-matches canonical.
+write_lone_cr_hook() {
+  python3 -c 'import sys;d=open(sys.argv[1],"rb").read();sys.stdout.buffer.write(d[:5]+b"\r"+d[5:])' "$CANONICAL_SRC" > "$REPO/.git/hooks/pre-push"
+  chmod +x "$REPO/.git/hooks/pre-push"
+}
+
 # ── VGH-1..VGH-7 (7 contract-mandated minimum cases, PLAN v2 Group D a-g) ────
 
 @test "VGH-1 PASS: canonical hook installed + canonical source present -> exit 0" {
@@ -224,4 +249,39 @@ PYEOF
   run bash -c "cd '$other_cwd' && bash '$SCRIPT' --repo-root '$REPO'"
   rm -rf "$other_cwd"
   [ "$status" -eq 0 ]
+}
+
+# ── VGH-8..VGH-9 (CRLF-normalization discriminator, H1 Codex NO-GO fix round) ─
+# sha256_of() currently normalizes with tr -d '\r', which deletes EVERY CR
+# byte, including one that is NOT part of a "\r\n" pair -- a hook drifted
+# by a lone \r false-hashes as canonical. The fix normalizes CRLF pairs
+# only ("\r\n" -> "\n"). VGH-8 is the positive control (a legitimate CRLF
+# checkout must PASS under either implementation); VGH-9 is the
+# discriminator (a lone-\r drift must be caught as hook-drifted -- RED
+# against the current tr -d '\r' primitive, GREEN once the fix lands).
+
+@test "VGH-8 PASS: CRLF-equivalent hook (every LF -> CRLF) -> exit 0" {
+  # Chain: (1) source present (2) hook present (3) executable (4) marker
+  # present (5) sha256 match under CRLF-pair normalization -- all 5 pass.
+  # Control case: a Windows-checked-out hook is legitimately equivalent to
+  # canonical and must PASS both before and after the tr -d '\r' fix.
+  provide_canonical_source
+  write_crlf_hook
+  run bash "$SCRIPT" --repo-root "$REPO"
+  [ "$status" -eq 0 ]
+}
+
+@test "VGH-9 BLOCK (discriminator): lone mid-line \r (not part of a \r\n pair) -> hook-drifted" {
+  # Chain: (1) source present (2) hook present (3) executable (4) marker
+  # present [all satisfied] -- (5) sha256 mismatch from one standalone \r
+  # byte outside any \r\n pair [TRIPPED under a correct implementation].
+  # Against the CURRENT tr -d '\r' primitive (deletes every CR
+  # unconditionally) this lone \r is stripped and the hook false-matches
+  # canonical -- expected RED here until the fix (CRLF-pair-only
+  # normalization) lands.
+  provide_canonical_source
+  write_lone_cr_hook
+  run bash "$SCRIPT" --repo-root "$REPO"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"hook-drifted"* ]] || return 1
 }
