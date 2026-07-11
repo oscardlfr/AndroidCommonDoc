@@ -11,6 +11,11 @@ bats_require_minimum_version 1.5.0
 #   - installed pre-push is executable
 #   - installs lib/wave-slug.sh beside the git hooks so pre-commit does not
 #     depend on falling back to the source tree copy
+#   - installed pre-push PASSES scripts/sh/verify-git-hooks.sh — install↔verify
+#     agreement (H1 Push Authority Bootstrap, IH-7)
+#   - honors `core.hooksPath`: resolves the hooks DIRECTORY via
+#     `git rev-parse --git-path hooks` (never a hardcoded .git/hooks),
+#     joined against the target repo, never ambient $PWD (H1, IH-8)
 #
 # Env isolation (HARD — S4 lesson):
 #   All tests create a temp git repo via mktemp -d + git init.
@@ -19,6 +24,8 @@ bats_require_minimum_version 1.5.0
 # Invocation: bats scripts/tests/install-git-hooks.bats (from repo root)
 
 SCRIPT="$BATS_TEST_DIRNAME/../sh/install-git-hooks.sh"
+VERIFY_SCRIPT="$BATS_TEST_DIRNAME/../sh/verify-git-hooks.sh"
+PRE_PUSH_HOOK_SRC="$BATS_TEST_DIRNAME/../sh/pre-push-hook.sh"
 
 setup() {
   # Isolated git repo for each test.
@@ -30,6 +37,17 @@ setup() {
 
 teardown() {
   rm -rf "$TMP_REPO"
+}
+
+# Copies the REAL canonical scripts/sh/pre-push-hook.sh into the fixture repo
+# so verify-git-hooks.sh (which resolves its comparison target off
+# --repo-root, not off its own script location) has something to compare the
+# installed hook against. Mirrors emit-push-proof.bats's corrected setup()
+# discipline: copy the canonical source in, never re-derive/copy the
+# installer's own transitive deps around it.
+_seed_canonical_pre_push_hook() {
+  mkdir -p "$TMP_REPO/scripts/sh"
+  cp "$PRE_PUSH_HOOK_SRC" "$TMP_REPO/scripts/sh/pre-push-hook.sh"
 }
 
 # ── IH-1: installer places pre-push hook with ACDOC marker ──────────────────
@@ -77,4 +95,53 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"Gate 3: wave=fixture class=HARNESS"* ]]
   [[ "$output" != *"wave-slug.sh not found"* ]]
+}
+
+# ── IH-7: install→verify agreement (default, no core.hooksPath) ─────────────
+# The installer's own output must be something scripts/sh/verify-git-hooks.sh
+# (the single H1 clone-gating verifier — consumed by the mint, the JS gate,
+# and setup-check Check 7) accepts as canonical. This is the install↔verify
+# agreement smoke test — complementary to verify-git-hooks.bats, which only
+# ever exercises the verifier against hand-built fixtures, never the REAL
+# installer's actual output.
+
+@test "IH-7 PASS: hook installed by install-git-hooks.sh passes verify-git-hooks.sh" {
+  _seed_canonical_pre_push_hook
+
+  bash "$SCRIPT" "$TMP_REPO"
+
+  run bash "$VERIFY_SCRIPT" --repo-root "$TMP_REPO"
+  [ "$status" -eq 0 ]
+}
+
+# ── IH-8: core.hooksPath — installer places the hook where --git-path
+#          resolves, and verify-git-hooks.sh agrees ────────────────────────
+# Sets git config core.hooksPath to a repo-relative custom directory BEFORE
+# installing, then confirms the installer resolved the hooks DIRECTORY via
+# `git rev-parse --git-path hooks` (never the hardcoded .git/hooks) and that
+# verify-git-hooks.sh — which independently resolves the identical
+# --git-path — accepts the result (installer↔verifier symmetric under
+# core.hooksPath).
+# Both sides of this comparison deliberately reuse the SAME unresolved
+# $TMP_REPO string (never `git rev-parse --show-toplevel` / `pwd -P`), so a
+# macOS mktemp /var vs /private/var symlink mismatch cannot arise here — see
+# arch-testing Check 4's advisory above.
+
+@test "IH-8 PASS: installer places pre-push at the core.hooksPath-resolved directory and verify-git-hooks.sh accepts it" {
+  _seed_canonical_pre_push_hook
+  git -C "$TMP_REPO" config core.hooksPath custom-hooks-dir
+
+  bash "$SCRIPT" "$TMP_REPO"
+
+  raw_git_path="$(git -C "$TMP_REPO" rev-parse --git-path hooks)"
+  case "$raw_git_path" in
+    /*) hooks_dir="$raw_git_path" ;;
+    *)  hooks_dir="$TMP_REPO/$raw_git_path" ;;
+  esac
+
+  [ -f "$hooks_dir/pre-push" ]
+  [ -x "$hooks_dir/pre-push" ]
+
+  run bash "$VERIFY_SCRIPT" --repo-root "$TMP_REPO"
+  [ "$status" -eq 0 ]
 }

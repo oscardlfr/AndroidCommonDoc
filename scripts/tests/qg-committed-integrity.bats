@@ -52,6 +52,13 @@ setup() {
     cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"          "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"           "$REPO/scripts/sh/"
 
+    # H1 (push-authority-bootstrap) W-B2: install the canonical pre-push hook so
+    # emit-push-proof.sh's Part-4 precondition (hook-drift check) passes. Mirrors
+    # the setup() fix in emit-push-proof.bats — see that file for full rationale.
+    cp "$SCRIPTS_SRC/sh/pre-push-hook.sh"                "$REPO/scripts/sh/"
+    cp "$SCRIPTS_SRC/sh/verify-git-hooks.sh"             "$REPO/scripts/sh/"
+    bash "$SCRIPTS_SRC/sh/install-git-hooks.sh" "$REPO"
+
     # ── Build a real skills/ fixture with one skill + correct hash ────────────
     mkdir -p "$REPO/skills/test-skill"
     mkdir -p "$REPO/.claude/agents"
@@ -267,7 +274,7 @@ run_emitter() {
     # Modify SKILL.md content and commit it WITHOUT rehashing registry.json
     printf 'name: test-skill\ndescription: MODIFIED CONTENT\n' > "$REPO/skills/test-skill/SKILL.md"
     git -C "$REPO" add skills/test-skill/SKILL.md
-    git -C "$REPO" commit --quiet -m "chore: update skill content without rehashing"
+    git -C "$REPO" commit --quiet --no-verify -m "chore: update skill content without rehashing"
     # RE-CAPTURE HEAD after this additional commit
     HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 

@@ -83,6 +83,13 @@ setup() {
   cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"     "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"      "$REPO/scripts/sh/"
 
+  # H1 (push-authority-bootstrap) W-B2: install the canonical pre-push hook so
+  # emit-push-proof.sh's Part-4 precondition (hook-drift check) passes. Mirrors
+  # the setup() fix in emit-push-proof.bats — see that file for full rationale.
+  cp "$SCRIPTS_SRC/sh/pre-push-hook.sh"           "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/verify-git-hooks.sh"        "$REPO/scripts/sh/"
+  bash "$SCRIPTS_SRC/sh/install-git-hooks.sh" "$REPO"
+
   # CRITICAL: validate-agent-templates.sh is called by the (D) size gate.
   # It is NOT in the default emit-push-proof.bats harness — copy it explicitly
   # so tests fail for the correct reason (over-cap) rather than script-not-found.
