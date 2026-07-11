@@ -8,7 +8,7 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Quality gate protocol: sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit"
-version: 5
+version: 4
 last_updated: "2026-07-11"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
 token_budget: 1500
