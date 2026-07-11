@@ -2,8 +2,17 @@
 #
 # Cheap verifier for push-proof.json. Checks schema_version, head, worktree_id,
 # generated_at freshness, manifest_version, steps_executed coverage, report_digest,
-# bats_evidence binding (present + .head == pushed_sha -- Wave A Section A5b).
-# Used by the git-layer hook on Windows.
+# bats_evidence binding (present, .head == pushed_sha -- Wave A Section A5b -- and,
+# as of wave qg-artifact-binding's W7, the same completeness predicate run-qg
+# persists: not_ok==0, scope=='full', complete==true, total==expected, ok>0).
+#
+# NOTE: despite an earlier version of this comment, this script is NOT installed
+# as a git-layer pre-push hook on Windows -- install-git-hooks.ps1 installs no
+# pre-push hook at all. The only installed git-layer pre-push hook, on any OS, is
+# the bash pre-push-hook.sh via scripts/sh/install-git-hooks.sh. This script is a
+# standalone/CI-adjacent verifier today; pwsh is confirmed absent from this
+# project's macOS dev box, so it is exercised by static assertion only (see
+# scripts/tests/emit-push-proof-template-size.bats's #EP-PS1-VERIFY).
 #
 # USAGE
 #   verify-push-proof.ps1 -PushedSha <sha> [-RepoRoot <path>]
@@ -179,6 +188,27 @@ if (-not $proof.bats_evidence) {
 }
 if ($proof.bats_evidence.head -ne $PushedSha) {
     Die "bats_evidence.head ($($proof.bats_evidence.head)) != pushed SHA ($PushedSha) -- proof's test-suite evidence does not correspond to the pushed commit"
+}
+
+# -- 11-15. bats_evidence completeness (wave qg-artifact-binding, W7) --------
+# The SAME predicate bash verify_proof() and push-authorization-gate.js's in-JS
+# fallback re-derive: not_ok==0 && scope=='full' && complete==true &&
+# total==expected && ok>0. A half-done completeness binding would mint correctly
+# but verify permissively for these five fields too, same rationale as -- 10.
+if ($proof.bats_evidence.not_ok -ne 0) {
+    Die "bats-evidence-dirty: bats_evidence.not_ok ($($proof.bats_evidence.not_ok)) != 0"
+}
+if ($proof.bats_evidence.scope -ne 'full') {
+    Die "bats-evidence-scope: bats_evidence.scope ($($proof.bats_evidence.scope)) != 'full'"
+}
+if ($proof.bats_evidence.complete -ne $true) {
+    Die "bats-evidence-incomplete: bats_evidence.complete ($($proof.bats_evidence.complete)) is not true"
+}
+if ($proof.bats_evidence.total -ne $proof.bats_evidence.expected) {
+    Die "bats-evidence-count-mismatch: bats_evidence.total ($($proof.bats_evidence.total)) != bats_evidence.expected ($($proof.bats_evidence.expected))"
+}
+if (-not ($proof.bats_evidence.ok -gt 0)) {
+    Die "bats-evidence-floor: bats_evidence.ok ($($proof.bats_evidence.ok)) fails sanity floor (must be > 0)"
 }
 
 Write-Host "[emit-push-proof] verify-proof: PASS" -ForegroundColor Green

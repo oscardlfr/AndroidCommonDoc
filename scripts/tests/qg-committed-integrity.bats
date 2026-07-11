@@ -40,12 +40,17 @@ setup() {
     cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
 
     # ── Mirror scripts/sh/ (emitter + registry scripts + lib) ─────────────────
+    # wave qg-artifact-binding: run-qg now ALSO invokes emit-rule-inventory.sh and
+    # emit-pre-pr-report.sh, mint-internal, strictly after the registry re-run —
+    # copy both so #CI2/#CI4 (which reach that far) find them.
     mkdir -p "$REPO/scripts/sh/lib"
     cp "$SCRIPTS_SRC/sh/emit-push-proof.sh"             "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/lib/manifest-digest.sh"          "$REPO/scripts/sh/lib/"
     cp "$SCRIPTS_SRC/sh/lib/audit-append.sh"             "$REPO/scripts/sh/lib/"
     cp "$SCRIPTS_SRC/sh/qg-registry-integrity.sh"        "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/rehash-registry.sh"              "$REPO/scripts/sh/"
+    cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"          "$REPO/scripts/sh/"
+    cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"           "$REPO/scripts/sh/"
 
     # ── Build a real skills/ fixture with one skill + correct hash ────────────
     mkdir -p "$REPO/skills/test-skill"
@@ -136,6 +141,24 @@ write_valid_bats_handoff() {
     } > "$ACDOC/bats-result.${run_id}.env"
 }
 
+# write_valid_artifact_receipts — writes HEAD-bound, fresh, status:PASS
+# secret-scan-report.json + doc-validator-report.json into $ACDOC (wave
+# qg-artifact-binding, W1). These are the ONLY two required_steps[] loop members
+# (registry-hash and pre-pr are both mint_rederived, excluded structurally) — every
+# run-qg-to-PASS fixture in this file must stage both, else run-qg dies
+# artifact-binding-absent before ever reaching #CI1's/#CI3's own intended die-code.
+write_valid_artifact_receipts() {
+    local head
+    head="$(git -C "$REPO" rev-parse HEAD)"
+    local generated_at
+    generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    mkdir -p "$ACDOC"
+    printf '{"status":"PASS","reason_code":"OK","tool":"trufflehog","version":"test","count":0,"head":"%s","generated_at":"%s"}\n' \
+        "$head" "$generated_at" > "$ACDOC/secret-scan-report.json"
+    printf '{"step":"doc-validator-parity","ran":true,"result":"PASS","status":"PASS","head":"%s","generated_at":"%s","summary":"test fixture"}\n' \
+        "$head" "$generated_at" > "$ACDOC/doc-validator-report.json"
+}
+
 # write_quality_gate_report — writes a valid quality-gate-report.json
 # $1=extra_steps_json (default ""), $2=override_deliberation_json (default "")
 #
@@ -205,9 +228,18 @@ report = {
     "started_at": started_at,
     "head": report_head,
     "deliberation": deliberation,
-    "pre_pr_coverage": {"status": "PASS", "modules": 1},
+    # wave qg-artifact-binding (W4): managed-key-subset contract — write_valid_
+    # artifact_receipts (called below) stages a matching status:PASS secret-scan
+    # receipt; this repo's registry.json is coherent (setup() writes matching
+    # hashes) so the mint's post-rerun registry-hash result is "clean" -> PASS;
+    # no .commitlintrc.json is copied in so commit_lint has nothing to check -> PASS.
+    "pre_pr_coverage": {
+        "status": "PASS", "modules": 1,
+        "secret_scan": "PASS", "registry_hash_freshness": "PASS", "commit_lint": "PASS",
+    },
     "discovered_rules": [
-        {"rule": "committed-tree-integrity", "verified_by": "qg-committed-integrity.bats"}
+        {"rule": "committed-tree-integrity", "rule_id": "committed-tree-integrity",
+         "verified_by": "qg-committed-integrity.bats"}
     ],
     "steps": steps,
 }
@@ -216,6 +248,7 @@ with open(report_path, "w", encoding="utf-8") as f:
     f.write('\n')
 PYEOF
     write_valid_bats_handoff
+    write_valid_artifact_receipts
 }
 
 # run_emitter — always passes --repo-root so the emitter uses the isolated repo

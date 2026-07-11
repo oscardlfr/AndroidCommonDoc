@@ -111,8 +111,12 @@ report = {
         'incorporated_at': '2026-06-21T00:00:00Z',
     },
     'pre_pr_coverage': {'status': 'PASS', 'modules': 1},
+    # wave qg-artifact-binding (P2a fix-round, abfe58a): every discovered_rules[]
+    # entry MUST carry a non-empty rule_id — the mint now dies fail-closed
+    # (discovered-rule-missing-id) otherwise. Mirrors write_quality_gate_report's
+    # own convention in emit-push-proof.bats for this identical rule name.
     'discovered_rules': [
-        {'rule': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
+        {'rule': 'two-stamp-gate', 'rule_id': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
     ],
     'steps': steps,
 }
@@ -153,8 +157,12 @@ report = {
         'incorporated_at': '2026-06-21T00:00:00Z',
     },
     'pre_pr_coverage': {'status': 'PASS', 'modules': 1},
+    # wave qg-artifact-binding (P2a fix-round, abfe58a): every discovered_rules[]
+    # entry MUST carry a non-empty rule_id — the mint now dies fail-closed
+    # (discovered-rule-missing-id) otherwise. Mirrors write_quality_gate_report's
+    # own convention in emit-push-proof.bats for this identical rule name.
     'discovered_rules': [
-        {'rule': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
+        {'rule': 'two-stamp-gate', 'rule_id': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
     ],
     'steps': steps,
 }
@@ -202,8 +210,12 @@ report = {
         'incorporated_at': '2026-06-21T00:00:00Z',
     },
     'pre_pr_coverage': {'status': 'PASS', 'modules': 1},
+    # wave qg-artifact-binding (P2a fix-round, abfe58a): every discovered_rules[]
+    # entry MUST carry a non-empty rule_id — the mint now dies fail-closed
+    # (discovered-rule-missing-id) otherwise. Mirrors write_quality_gate_report's
+    # own convention in emit-push-proof.bats for this identical rule name.
     'discovered_rules': [
-        {'rule': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
+        {'rule': 'two-stamp-gate', 'rule_id': 'two-stamp-gate', 'verified_by': 'pre-push-hook.bats'},
     ],
     'steps': steps,
 }
@@ -400,6 +412,10 @@ PYEOF
     cp "$SCRIPTS_SRC/sh/lib/bats-handoff.sh"            "$REPO/scripts/sh/lib/"
     cp "$SCRIPTS_SRC/sh/qg-registry-integrity.sh"       "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/rehash-registry.sh"             "$REPO/scripts/sh/"
+    # wave qg-artifact-binding: run-qg now ALSO invokes emit-rule-inventory.sh and
+    # emit-pre-pr-report.sh, mint-internal, after the registry re-run.
+    cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"         "$REPO/scripts/sh/"
+    cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"          "$REPO/scripts/sh/"
 
     # Commit all fixtures — tree must be clean before run-qg
     git -C "$REPO" add -A
@@ -469,6 +485,12 @@ by_id['production-file-verify'] = {'step': 'production-file-verify', 'ran': True
 rpt['steps'] = list(by_id.values())
 rpt['started_at'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 rpt['head'] = report_head
+# wave qg-artifact-binding (W4): managed-key-subset contract — the fixture below
+# stages matching status:PASS secret-scan/doc-validator receipts; this repo has no
+# skills/ dir (registry-hash is n/a -> PASS) and no .commitlintrc.json (commit_lint
+# has nothing to check -> PASS).
+rpt['pre_pr_coverage'] = dict(rpt.get('pre_pr_coverage') or {},
+                               secret_scan='PASS', registry_hash_freshness='PASS', commit_lint='PASS')
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
@@ -476,6 +498,14 @@ PYEOF
     printf 'BATS_OK=%s\nBATS_NOT_OK=%s\nBATS_EXPECTED=%s\nBATS_TOTAL=%s\nBATS_COMPLETE=%s\nBATS_VERDICT=%s\nBATS_LOG=%s\nBATS_HEAD=%s\nBATS_RUN_ID=%s\nBATS_GENERATED_AT=%s\nBATS_SCOPE=%s\n' \
         42 0 42 42 true pass /dev/null "$qr6_head" "$qr6_run_id" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" full \
         > "$ACDOC/bats-result.${qr6_run_id}.env"
+
+    # wave qg-artifact-binding (W1): stage the two required_steps[] loop members
+    # (secret-scan, doc-validator-parity) — else run-qg dies artifact-binding-absent
+    # before ever reaching this test's own clean-tree assertion.
+    printf '{"status":"PASS","reason_code":"OK","tool":"trufflehog","version":"test","count":0,"head":"%s","generated_at":"%s"}\n' \
+        "$qr6_head" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$ACDOC/secret-scan-report.json"
+    printf '{"step":"doc-validator-parity","ran":true,"result":"PASS","status":"PASS","head":"%s","generated_at":"%s","summary":"test fixture"}\n' \
+        "$qr6_head" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$ACDOC/doc-validator-report.json"
 
     # Confirm qg-result.json is gitignored (git status must NOT list it)
     local dirty_lines
@@ -510,6 +540,10 @@ PYEOF
     cp "$SCRIPTS_SRC/sh/lib/bats-handoff.sh"            "$REPO/scripts/sh/lib/"
     cp "$SCRIPTS_SRC/sh/qg-registry-integrity.sh"       "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/rehash-registry.sh"             "$REPO/scripts/sh/"
+    # wave qg-artifact-binding: run-qg now ALSO invokes emit-rule-inventory.sh and
+    # emit-pre-pr-report.sh, mint-internal, after the registry re-run.
+    cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"         "$REPO/scripts/sh/"
+    cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"          "$REPO/scripts/sh/"
 
     git -C "$REPO" add -A
     git -C "$REPO" commit --quiet -m "test(fixtures): QR7 fixture commit"
@@ -565,6 +599,10 @@ by_id['production-file-verify'] = {'step': 'production-file-verify', 'ran': True
 rpt['steps'] = list(by_id.values())
 rpt['started_at'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 rpt['head'] = report_head
+# wave qg-artifact-binding (W4): managed-key-subset contract — see #QR6's sibling
+# comment for why all three managed keys normalize to PASS in this isolated repo.
+rpt['pre_pr_coverage'] = dict(rpt.get('pre_pr_coverage') or {},
+                               secret_scan='PASS', registry_hash_freshness='PASS', commit_lint='PASS')
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
@@ -572,6 +610,12 @@ PYEOF
     printf 'BATS_OK=%s\nBATS_NOT_OK=%s\nBATS_EXPECTED=%s\nBATS_TOTAL=%s\nBATS_COMPLETE=%s\nBATS_VERDICT=%s\nBATS_LOG=%s\nBATS_HEAD=%s\nBATS_RUN_ID=%s\nBATS_GENERATED_AT=%s\nBATS_SCOPE=%s\n' \
         42 0 42 42 true pass /dev/null "$HEAD_SHA" "$qr7_run_id" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" full \
         > "$ACDOC/bats-result.${qr7_run_id}.env"
+
+    # wave qg-artifact-binding (W1): stage the two required_steps[] loop members.
+    printf '{"status":"PASS","reason_code":"OK","tool":"trufflehog","version":"test","count":0,"head":"%s","generated_at":"%s"}\n' \
+        "$HEAD_SHA" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$ACDOC/secret-scan-report.json"
+    printf '{"step":"doc-validator-parity","ran":true,"result":"PASS","status":"PASS","head":"%s","generated_at":"%s","summary":"test fixture"}\n' \
+        "$HEAD_SHA" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$ACDOC/doc-validator-report.json"
 
     # Step 1: run-qg WITHOUT additional qg-result.json content — record the outcome.
     # qg-result.json exists (--init wrote it above) but is gitignored so clean-tree passes.
@@ -1549,6 +1593,10 @@ print(d.get('suite_summary', {}).get('bats_verdict', 'MISSING'))
     cp "$SCRIPTS_SRC/sh/lib/bats-handoff.sh"            "$REPO/scripts/sh/lib/"
     cp "$SCRIPTS_SRC/sh/qg-registry-integrity.sh"       "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/rehash-registry.sh"             "$REPO/scripts/sh/"
+    # wave qg-artifact-binding: run-qg now ALSO invokes emit-rule-inventory.sh and
+    # emit-pre-pr-report.sh, mint-internal, after the registry re-run.
+    cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"         "$REPO/scripts/sh/"
+    cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"          "$REPO/scripts/sh/"
 
     git -C "$REPO" add -A
     git -C "$REPO" commit --quiet -m "test(fixtures): QR31 fixture commit"
@@ -1594,6 +1642,10 @@ by_id['production-file-verify'] = {'step': 'production-file-verify', 'ran': True
 rpt['steps'] = list(by_id.values())
 rpt['started_at'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 rpt['head'] = report_head
+# wave qg-artifact-binding (W4): managed-key-subset contract — see #QR6's sibling
+# comment for why all three managed keys normalize to PASS in this isolated repo.
+rpt['pre_pr_coverage'] = dict(rpt.get('pre_pr_coverage') or {},
+                               secret_scan='PASS', registry_hash_freshness='PASS', commit_lint='PASS')
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
@@ -1601,6 +1653,12 @@ PYEOF
     printf 'BATS_OK=%s\nBATS_NOT_OK=%s\nBATS_EXPECTED=%s\nBATS_TOTAL=%s\nBATS_COMPLETE=%s\nBATS_VERDICT=%s\nBATS_LOG=%s\nBATS_HEAD=%s\nBATS_RUN_ID=%s\nBATS_GENERATED_AT=%s\nBATS_SCOPE=%s\n' \
         42 0 42 42 true pass /dev/null "$HEAD_SHA" "$qr31_run_id" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" full \
         > "$ACDOC/bats-result.${qr31_run_id}.env"
+
+    # wave qg-artifact-binding (W1): stage the two required_steps[] loop members.
+    printf '{"status":"PASS","reason_code":"OK","tool":"trufflehog","version":"test","count":0,"head":"%s","generated_at":"%s"}\n' \
+        "$HEAD_SHA" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$ACDOC/secret-scan-report.json"
+    printf '{"step":"doc-validator-parity","ran":true,"result":"PASS","status":"PASS","head":"%s","generated_at":"%s","summary":"test fixture"}\n' \
+        "$HEAD_SHA" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$ACDOC/doc-validator-report.json"
 
     # Deliberately inject a WRONG fail_class into qg-result.json — run-qg never reads it.
     python3 -c "

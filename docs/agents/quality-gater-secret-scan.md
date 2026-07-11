@@ -25,7 +25,7 @@ Step S invokes the canonical `secret-scan-report.sh` producer, which:
 
 - Runs the configured secret scanner (e.g., TruffleHog).
 - Writes `.androidcommondoc/secret-scan-report.json` with fields:
-  `status` / `reason_code` / `tool` / `version` / `count`.
+  `status` / `reason_code` / `tool` / `version` / `count` / `head` / `generated_at` (the last two additive, wave `qg-artifact-binding` W2 — the envelope the mint's generic binding loop needs to HEAD/freshness-bind this receipt; see [quality-gater-artifact-binding](quality-gater-artifact-binding.md)).
 - Exits 0 on PASS; exits non-zero on any failure (scan failure, absent/erroring scanner, findings detected).
 
 **Absent or erroring scanner = FAIL, never PASS or SKIPPED.**
@@ -46,14 +46,14 @@ The script writes `.androidcommondoc/secret-scan-report.json` on every run. The 
 - **Exit 0** → `append_step_json secret-scan true PASS "<reason>"` → proceed to Step 10.
 - **Non-zero** → `append_step_json secret-scan true FAIL "<reason>"` → **exit 1; do NOT proceed to Step 10 / mint proof.**
 
-The `secret-scan-report.json` file is **informational only** — `emit-push-proof.sh` and `quality-gate-manifest.json` are **untouched**. The manifest-based step-coverage check in `emit-push-proof.sh` only enforces steps that are in `required_steps[]`; it does not block on additional report steps.
+The `secret-scan-report.json` file was informational-only when Step S was first authored. As of wave `qg-artifact-binding`, `emit-push-proof.sh`'s generic binding loop actively opens and validates this report (HEAD/freshness/status) for the pre-existing `secret-scan` `required_steps[]` entry — see [quality-gater-artifact-binding](quality-gater-artifact-binding.md). The narrower point that still holds: Step S itself required no NEW manifest entry to implement (the `secret-scan` entry already existed), and it does not block on report fields outside that entry's own binding.
 
 This is the same enforcement model used by Step X (path-manifest-audit) and Step Z (report-freshness): exit 1 from the gate, do not proceed.
 
 ### What is NOT changed
 
-- `quality-gate-manifest.json` — NOT touched. Adding a manifest entry is unnecessary and would require regenerating `protocol_digest`.
-- `emit-push-proof.sh` — NOT edited. The gate sits ahead of it in the template flow.
+- `quality-gate-manifest.json` — Step S's OWN implementation required no NEW manifest entry (the `secret-scan` `required_steps[]` entry already existed). The manifest as a whole is not static: it has since gained `informational_steps` (Wave A) and, as of wave `qg-artifact-binding`, `manifest_version: 3` plus the generic binding loop that now actively reads this report's `head`/`generated_at`/`status` fields — see [quality-gater-artifact-binding](quality-gater-artifact-binding.md).
+- `emit-push-proof.sh` — Step S's OWN implementation required no edit to this script (the gate sits ahead of it in the template flow: on FAIL, Step S exits 1 before Step 10 / the mint is ever reached). `emit-push-proof.sh` as a whole is not static: as of wave `qg-artifact-binding`, its generic binding loop actively opens and validates this step's own `secret-scan-report.json` (HEAD/freshness/status) as one of the two loop members (the other: doc-validator-parity) — see [quality-gater-artifact-binding](quality-gater-artifact-binding.md).
 
 ### Explicit boundary: `/pre-pr` SKIP is NOT a QG secret-scan PASS
 

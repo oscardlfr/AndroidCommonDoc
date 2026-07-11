@@ -62,12 +62,36 @@ REPORT_DIR="$ROOT/.androidcommondoc"
 REPORT_PATH="$REPORT_DIR/registry-hash-report.json"
 
 # ── Helper: write report and exit ─────────────────────────────────────────────
+# Additive envelope (all 4 call sites, via this single point): every payload gets
+# {head, generated_at, status} merged in before writing. status is derived from
+# the same result->status mapping the QG mint's generic artifact-binding loop
+# expects: clean -> PASS, drift -> FAIL, n/a -> PASS (n/a means "nothing to
+# check", not a failure).
 write_report_and_exit() {
     local result="$1"
     local exit_code="$2"
     local payload="$3"
     mkdir -p "$REPORT_DIR"
-    printf '%s\n' "$payload" > "$REPORT_PATH"
+
+    local envelope_status="FAIL"
+    if [[ "$result" == "clean" || "$result" == "n/a" ]]; then
+        envelope_status="PASS"
+    fi
+    local envelope_head envelope_generated_at
+    envelope_head="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "unknown")"
+    envelope_generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+    local merged
+    merged="$(python3 -c "
+import json, sys
+payload = json.loads(sys.argv[1])
+payload['head'] = sys.argv[2]
+payload['generated_at'] = sys.argv[3]
+payload['status'] = sys.argv[4]
+print(json.dumps(payload, indent=2))
+" "$payload" "$envelope_head" "$envelope_generated_at" "$envelope_status" 2>/dev/null || printf '%s' "$payload")"
+
+    printf '%s\n' "$merged" > "$REPORT_PATH"
     if [[ "$result" == "clean" ]]; then
         echo "[qg-registry-integrity] PASS: registry integrity clean" >&2
     elif [[ "$result" == "n/a" ]]; then

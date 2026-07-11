@@ -56,6 +56,7 @@ Runs in sequence, failing CLOSED on any integrity violation:
 4. **Committed-tree integrity** (fail-CLOSED — both parts run after verdict→HEAD binding):
    - **Part 1 — Clean-tree assertion**: `git status --porcelain` must be empty except paths matching `^\.claude/wave-quality-gates/`. Any other modified/untracked tracked path → exit 2: `[emit-push-proof] ERROR: tracked artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG.` Note: `.planning/wave*/` and `.androidcommondoc/` are gitignored → invisible to `git status` → naturally excluded. The allowlist is exactly ONE narrow entry.
    - **Part 2 — Registry integrity**: calls `qg-registry-integrity.sh --project-root .` (plus `--require-registry` when `skills/` exists). Recomputes registry hashes against the committed tree and compares to stored hashes, replicating CI's `skill-registry` job. Drift → exit 2: `[emit-push-proof] ERROR: derived artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG.` Writes `.androidcommondoc/registry-hash-report.json` with `result`: `clean` / `drift` / `n/a`. The `n/a` escape (no `registry.json`) is only valid when `--require-registry` is NOT passed — i.e., genuinely-minimal repos without `skills/`. See [quality-gater-registry-integrity](quality-gater-registry-integrity.md).
+   - **Part 3 — Template size gate** (wave `qg-artifact-binding`): calls `validate-agent-templates.sh --check size-limits --templates-dir setup/agent-templates --agents-dir .claude/agents` to enforce the ≤435-line cap on every agent template. Guarded by `-d setup/agent-templates` (N/A, not a bypass, when the dir is absent). Drift → exit 2: `[emit-push-proof] ERROR: agent template size cap exceeded; trim template, rerun QG.` Remedy: extract domain knowledge into a sub-doc — see [project-constraints.md](../guides/project-constraints.md) ("Splitting is the design pattern. Never compress content to fit — create hub + sub-docs").
 
    **Sequencing note (Wave A):** this check runs against the COMMITTED tree — `git status --porcelain` flags staged-but-uncommitted changes too. Any wave that regenerates a derived artifact (e.g. `skills/registry.json` during a template-version ceremony) must commit it before dispatching the formal QG; `git add` alone is not enough and will still trip this check.
 5. **Compute `report_digest`**: sha256 of `quality-gate-report.json` (CRLF→LF).
@@ -71,7 +72,7 @@ Runs in sequence, failing CLOSED on any integrity violation:
 
 #### Evidence Binding (`test-suite-evidence-*`, Wave A)
 
-A claimed `report.steps[]` entry of `{"step":"test-suite","result":"PASS"}` is no longer accepted on faith. `run-qg` calls `lib/bats-handoff.sh select --since <report.started_at> --require-scope full` and requires the returned evidence to satisfy ALL of: `status == "ok"`, `head == <current HEAD>`, `scope == "full"`, `complete == true`, `not_ok == 0`, plus a sanity floor (`ok > 0`, `expected > 0`, `total == ok + not_ok`, `total == expected` — closing the bypass where an internally-inconsistent count would otherwise pass every other check). Failure die-codes: `test-suite-evidence-absent` (no qualifying handoff, or the sanity floor's `ok`/`expected` checks fail), `test-suite-evidence-stale` (`head` mismatch), `test-suite-evidence-partial` (`scope`/`complete` mismatch, or the sanity floor's count-consistency checks fail), `test-suite-evidence-dirty` (`not_ok > 0`). The selected evidence — `{run_id, head, ok, not_ok, expected, scope, generated_at}`, no filesystem paths — is carried into `push-proof.json` as `bats_evidence` (see schema below).
+A claimed `report.steps[]` entry of `{"step":"test-suite","result":"PASS"}` is no longer accepted on faith. `run-qg` calls `lib/bats-handoff.sh select --since <report.started_at> --require-scope full` and requires the returned evidence to satisfy ALL of: `status == "ok"`, `head == <current HEAD>`, `scope == "full"`, `complete == true`, `not_ok == 0`, plus a sanity floor (`ok > 0`, `expected > 0`, `total == ok + not_ok`, `total == expected` — closing the bypass where an internally-inconsistent count would otherwise pass every other check). Failure die-codes: `test-suite-evidence-absent` (no qualifying handoff, or the sanity floor's `ok`/`expected` checks fail), `test-suite-evidence-stale` (`head` mismatch), `test-suite-evidence-partial` (`scope`/`complete` mismatch, or the sanity floor's count-consistency checks fail), `test-suite-evidence-dirty` (`not_ok > 0`). The selected evidence — `{run_id, head, ok, not_ok, expected, scope, generated_at}`, no filesystem paths — is carried into `push-proof.json` as `bats_evidence` (see schema below). **Wave `qg-artifact-binding` (W7)** additively persists two more fields into the same object, `complete` and `total`, growing it to 9 keys — see "Eight integrity checks" below for what the extra fields unlock at verify time.
 
 ### `verify-proof` — Cheap Git-Layer Verifier (pre-push hook)
 
@@ -88,11 +89,11 @@ Eight integrity checks, all fail-CLOSED (exit 2 on failure):
 5. `proof.manifest_version == manifest.manifest_version`
 6. All required steps present in `steps_executed` with `result == PASS`
 7. `report_digest` matches recomputed sha256 of current `quality-gate-report.json`
-8. **(Wave A)** `bats_evidence` present, and `bats_evidence.head == pushed_sha` — a proof minted at one commit cannot authorize a push at a different one, even when checks 1-7 all still pass.
+8. **(Wave A, grown in W7)** `bats_evidence` present, `bats_evidence.head == pushed_sha`, AND the full completeness predicate: `not_ok == 0 && scope == 'full' && complete == True && total == expected && ok > 0` — checked via 5 granular die-codes (`bats-evidence-dirty`, `bats-evidence-scope`, `bats-evidence-incomplete`, `bats-evidence-count-mismatch`, `bats-evidence-floor`) so a partial, stale, wrong-scope, or internally-inconsistent run cannot authorize a push, even when checks 1-7 all still pass.
 
 `verify-proof` does NOT re-evaluate predicates. Predicate consistency was enforced at mint (run-qg) and is bound cryptographically via `report_digest`. Post-mint tampering with `quality-gate-report.json` causes a digest mismatch and blocks. Check 8 is a narrower, independent binding: even a byte-identical, untampered proof carried over from an earlier commit fails it, since `report_digest` alone does not encode which commit the bats evidence was gathered for.
 
-All three verifiers implement this same 8-check contract at equivalent rigor: this bash `verify_proof` subcommand, `scripts/ps1/verify-push-proof.ps1` (Windows git-layer parity), and the in-JS fallback inside `.claude/hooks/push-authorization-gate.js` (used only when it cannot delegate to bash).
+All three verifiers implement this same 8-check contract at equivalent rigor: this bash `verify_proof` subcommand, `scripts/ps1/verify-push-proof.ps1` (Windows git-layer parity), and the in-JS fallback inside `.claude/hooks/push-authorization-gate.js` (used only when it cannot delegate to bash) — all three independently re-derive the SAME W7 completeness predicate over `bats_evidence`, not just presence + head match.
 
 **Narrowed claim (2026-07-10):** the 8-check contract above governs the *proof verification* logic once a command has been identified as a push attempt. The separate *push-detection* logic inside `push-authorization-gate.js` (`isGitPushCommand`, PreToolUse) is best-effort command-string parsing with a known, unbounded shell-evasion surface (see `BACKLOG.md`'s CRITICAL entry) — it is **not** authoritative. The authoritative, escape-proof push gate is the git-layer `.git/hooks/pre-push` hook, which validates real git refs and stamps rather than parsing a command string, and so cannot be evaded by any command spelling.
 
@@ -107,7 +108,7 @@ All three verifiers implement this same 8-check contract at equivalent rigor: th
   "worktree_id":      "<absolute path from git rev-parse --show-toplevel>",
   "generated_at":     "<ISO-8601 UTC>",
   "wave_slug":        "<branch last-segment>",
-  "manifest_version": 2,
+  "manifest_version": 3,
   "steps_executed":   [{"step": "<id>", "result": "PASS|SKIP", "ran": true|false}],
   "report_digest":    "<sha256 hex>",
   "artifact_digests": {
@@ -121,7 +122,9 @@ All three verifiers implement this same 8-check contract at equivalent rigor: th
     "not_ok":       0,
     "expected":     0,
     "scope":        "full",
-    "generated_at": "<ISO-8601 UTC, the handoff's own timestamp>"
+    "generated_at": "<ISO-8601 UTC, the handoff's own timestamp>",
+    "complete":     true,
+    "total":        0
   }
 }
 ```
@@ -130,7 +133,7 @@ All three verifiers implement this same 8-check contract at equivalent rigor: th
 - **`arch-*-verdict.md`**: VERIFY-FINAL verdict files; bound at step 3 (verdict→HEAD binding). Digest mismatch after post-mint tampering → `report_digest` cascade blocks push.
 - **`skills/registry.json`**: sha256 (CRLF→LF) of the committed registry file, recorded for audit. `verify-proof` does NOT re-evaluate this digest — the committed-tree integrity check (step 4) already ran at mint time; the digest is a post-hoc record. `schema_version` stays 1.
 
-`bats_evidence` (additive, Wave A; `schema_version` stays 1): the bats handoff selected by `lib/bats-handoff.sh select --since report.started_at --require-scope full` at mint time (see "Evidence Binding" above), carried into the proof for re-binding at verify time. No filesystem paths — the selector never emits one in its JSON payload. Unlike `artifact_digests`, **`verify-proof` DOES re-check one field of this at verify time**: `bats_evidence.head` must equal the pushed SHA, so a proof minted at commit A cannot authorize a push at commit B even if every other check still passes (see check 8 below). Mirrored identically by `verify-push-proof.ps1` and the in-JS fallback in `push-authorization-gate.js`.
+`bats_evidence` (additive, Wave A + W7; `schema_version` stays 1): the bats handoff selected by `lib/bats-handoff.sh select --since report.started_at --require-scope full` at mint time (see "Evidence Binding" above), carried into the proof for re-binding at verify time. No filesystem paths — the selector never emits one in its JSON payload. `complete`/`total` (W7) are additive fields alongside the original 7 keys. Unlike `artifact_digests`, **`verify-proof` DOES re-check this object at verify time** — not just `bats_evidence.head == pushed SHA`, but the full W7 completeness predicate (`not_ok==0 && scope=='full' && complete==True && total==expected && ok>0`), so a proof minted at commit A cannot authorize a push at commit B, and a partial/dirty/inconsistent run cannot authorize any push at all (see check 8 below). Mirrored identically by `verify-push-proof.ps1` and the in-JS fallback in `push-authorization-gate.js`.
 
 ---
 

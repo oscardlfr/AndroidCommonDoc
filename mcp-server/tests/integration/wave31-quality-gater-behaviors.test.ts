@@ -81,9 +81,9 @@ describe("quality-gater template enforces T-BUG-015 Search Dispatch Protocol", (
     expect(agentRaw).toBe(setupRaw);
   });
 
-  it('template_version is "2.23.0" (higher than BL-W31.7-10 baseline "2.6.0")', () => {
+  it('template_version is "2.24.0" (higher than BL-W31.7-10 baseline "2.6.0")', () => {
     expect(setupFrontmatter).not.toBeNull();
-    expect(setupFrontmatter?.template_version).toBe("2.23.0");
+    expect(setupFrontmatter?.template_version).toBe("2.24.0");
   });
 
   it("FORBIDDEN block appears before Phase 3 execution steps (Step 0)", () => {

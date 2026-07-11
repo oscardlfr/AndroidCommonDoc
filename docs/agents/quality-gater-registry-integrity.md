@@ -93,6 +93,8 @@ The script replicates CI's three `skill-registry` job checks against `--project-
 
 Writes `.androidcommondoc/registry-hash-report.json` with explicit `result` field (`clean` / `drift` / `n/a`). Exit 0 for clean/n-a, exit 2 for drift. **Never mutates `skills/registry.json`.**
 
+**Envelope note (wave `qg-artifact-binding`, W2):** all four write sites additively emit `head` (`git rev-parse HEAD`) and `generated_at` (UTC ISO-8601); the two early literal-JSON sites (missing registry + required / missing + not-required) gained both fields plus `status`, the two later Python-composed sites (already carrying a `timestamp`) gained `head`/`status`. This report is `registry-hash`'s `mint_rederived` receipt — the mint re-runs this script itself and reads the fresh envelope for `pre-pr-report.json`'s `registry_hash_freshness` check, never the pre-rerun copy. See [quality-gater-artifact-binding](quality-gater-artifact-binding.md).
+
 ---
 
 ## How It Closes the Rubber-Stamp

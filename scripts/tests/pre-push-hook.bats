@@ -190,9 +190,14 @@ proof = {
     # Wave A: verify-proof's 8th check requires bats_evidence present + .head == pushed
     # SHA. This test invokes pre-push-hook.sh (which delegates to verify-proof), never
     # run-qg, so no started_at/handoff is needed here — only this proof field.
+    # wave qg-artifact-binding (W7): verify-proof ALSO re-derives the completeness
+    # predicate run-qg persists (not_ok==0 && scope=='full' && complete==True &&
+    # total==expected && ok>0) — complete/total are additive on top of the pre-W7
+    # 7-key shape; total==ok+not_ok==10 here.
     "bats_evidence": {
         "run_id": "canonical-run", "head": head, "ok": 10, "not_ok": 0,
         "expected": 10, "scope": "full", "generated_at": ts,
+        "complete": True, "total": 10,
     },
 }
 with open(proof_path, "w", encoding="utf-8") as f:

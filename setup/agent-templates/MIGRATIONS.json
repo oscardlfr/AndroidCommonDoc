@@ -343,6 +343,11 @@
         "date": "2026-07-09",
         "breaking": false,
         "summary": "qg-evidence-integrity: bats evidence binding for test-suite:PASS via new lib/bats-handoff.sh (five named checks in emit-push-proof.sh, informational_steps in quality-gate-manifest.json); corrects two stale template lines -- exit-code taxonomy (STOP on any non-zero run-bats.sh exit, not just not_ok>0) and the report-freshness manifest-untouched claim."
+      },
+      "2.24.0": {
+        "date": "2026-07-10",
+        "breaking": false,
+        "summary": "qg-artifact-binding: Step 8 (Project Rule Cross-Check) replaced with an equal-or-shorter pointer to the new quality-gater-artifact-binding.md sub-doc for the rule_id requirement -- every discovered_rules[] entry from Step 1 must carry a rule_id, which the mint diffs against the newly mint-generated rule-inventory.json (emit-rule-inventory.sh), dying rule-coverage-gap on any gap."
       }
     },
     "doc-migrator": {

@@ -32,6 +32,15 @@ set -euo pipefail
 
 PROJECT_ROOT="${1:-.}"
 
+# ── Envelope metadata (additive on every write-site below) ───────────────────
+# head/generated_at let the QG mint's generic artifact-binding loop (required_
+# steps[] entries with kind=="automatable" + artifact + no evidence sub-object +
+# not mint_rederived) confirm this receipt is HEAD-bound and fresh before trusting
+# its status. Computed once, reused across every possible exit path.
+
+HEAD_SHA="$(git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null || echo "unknown")"
+GENERATED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
 mkdir -p .androidcommondoc
@@ -56,7 +65,8 @@ fi
 if [[ -z "$BIN" ]]; then
   echo "[secret-scan-report] ERROR: no trufflehog executable found — SCANNER_UNAVAILABLE." >&2
   echo "[secret-scan-report] Checked: \$TRUFFLEHOG_BIN, PATH trufflehog, ~/.local/bin/trufflehog{,.exe}" >&2
-  printf '{"status":"FAIL","reason_code":"SCANNER_UNAVAILABLE","tool":"none","version":"unknown","count":0}\n' > "$REPORT"
+  printf '{"status":"FAIL","reason_code":"SCANNER_UNAVAILABLE","tool":"none","version":"unknown","count":0,"head":"%s","generated_at":"%s"}\n' \
+    "$HEAD_SHA" "$GENERATED_AT" > "$REPORT"
   exit 1
 fi
 
@@ -88,8 +98,8 @@ fi
 
 if [[ $RC -ne 0 ]]; then
   echo "[secret-scan-report] ERROR: scanner exited $RC — SCANNER_ERROR." >&2
-  printf '{"status":"FAIL","reason_code":"SCANNER_ERROR","tool":"%s","version":"%s","count":0}\n' \
-    "$TOOL_NAME" "$VERSION" > "$REPORT"
+  printf '{"status":"FAIL","reason_code":"SCANNER_ERROR","tool":"%s","version":"%s","count":0,"head":"%s","generated_at":"%s"}\n' \
+    "$TOOL_NAME" "$VERSION" "$HEAD_SHA" "$GENERATED_AT" > "$REPORT"
   exit 1
 fi
 
@@ -99,12 +109,12 @@ COUNT="$(printf '%s' "$OUT" | grep -c . || true)"
 
 if [[ "$COUNT" -eq 0 ]]; then
   echo "[secret-scan-report] PASS: 0 verified secrets found." >&2
-  printf '{"status":"PASS","reason_code":"OK","tool":"%s","version":"%s","count":0}\n' \
-    "$TOOL_NAME" "$VERSION" > "$REPORT"
+  printf '{"status":"PASS","reason_code":"OK","tool":"%s","version":"%s","count":0,"head":"%s","generated_at":"%s"}\n' \
+    "$TOOL_NAME" "$VERSION" "$HEAD_SHA" "$GENERATED_AT" > "$REPORT"
   exit 0
 else
   echo "[secret-scan-report] FAIL: $COUNT verified secret(s) found — SECRETS_FOUND." >&2
-  printf '{"status":"FAIL","reason_code":"SECRETS_FOUND","tool":"%s","version":"%s","count":%s}\n' \
-    "$TOOL_NAME" "$VERSION" "$COUNT" > "$REPORT"
+  printf '{"status":"FAIL","reason_code":"SECRETS_FOUND","tool":"%s","version":"%s","count":%s,"head":"%s","generated_at":"%s"}\n' \
+    "$TOOL_NAME" "$VERSION" "$COUNT" "$HEAD_SHA" "$GENERATED_AT" > "$REPORT"
   exit 1
 fi

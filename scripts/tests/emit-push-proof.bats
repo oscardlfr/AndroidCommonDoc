@@ -56,12 +56,16 @@ setup() {
   # at $REPO_ROOT/scripts/sh/ (mirrors real deployment).
   # Also copy qg-registry-integrity.sh + rehash-registry.sh (called by the new
   # committed-tree integrity block in run-qg).
+  # wave qg-artifact-binding: run-qg now ALSO invokes emit-rule-inventory.sh and
+  # emit-pre-pr-report.sh, mint-internal, strictly after the registry re-run.
   mkdir -p "$REPO/scripts/sh/lib"
   cp "$SCRIPTS_SRC/sh/emit-push-proof.sh"           "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/lib/manifest-digest.sh"        "$REPO/scripts/sh/lib/"
   cp "$SCRIPTS_SRC/sh/lib/audit-append.sh"           "$REPO/scripts/sh/lib/"
   cp "$SCRIPTS_SRC/sh/qg-registry-integrity.sh"      "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/rehash-registry.sh"            "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"        "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"         "$REPO/scripts/sh/"
 
   # Commit ALL fixtures so the tree is CLEAN before run-qg.
   # Temp repos have NO skills/ directory → run-qg does NOT pass --require-registry
@@ -138,6 +142,108 @@ write_custom_bats_handoff() {
 # an evidence test starts from a clean slate before writing its own specific fixture.
 clear_handoffs() {
   rm -f "$ACDOC"/bats-result.*.env 2>/dev/null || true
+}
+
+# write_valid_artifact_receipts — writes HEAD-bound, fresh, status:PASS
+# secret-scan-report.json + doc-validator-report.json into $ACDOC (wave
+# qg-artifact-binding, W1). These are the ONLY two required_steps[] entries the
+# generic artifact-binding loop binds (registry-hash and pre-pr are both
+# mint_rederived, excluded structurally — see #LOOP-ORDER below) — every
+# run-qg-to-PASS fixture in this file must stage both, else run-qg dies
+# artifact-binding-absent before ever reaching the caller's own intended outcome.
+# HEAD is re-derived fresh from git at call time (never a cached shell variable,
+# mirroring write_valid_bats_handoff's own established pattern); generated_at is
+# captured "now" (after the caller's own started_at), satisfying the loop's
+# freshness window.
+write_valid_artifact_receipts() {
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  local generated_at
+  generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  mkdir -p "$ACDOC"
+  printf '{"status":"PASS","reason_code":"OK","tool":"trufflehog","version":"test","count":0,"head":"%s","generated_at":"%s"}\n' \
+    "$head" "$generated_at" > "$ACDOC/secret-scan-report.json"
+  printf '{"step":"doc-validator-parity","ran":true,"result":"PASS","status":"PASS","head":"%s","generated_at":"%s","summary":"test fixture"}\n' \
+    "$head" "$generated_at" > "$ACDOC/doc-validator-report.json"
+}
+
+# override_artifact_receipt_field <file_basename> <field> <json_value>
+# Mutates a single field inside a staged artifact receipt (secret-scan-report.json or
+# doc-validator-report.json) in place — used by #AB-HEAD/#AB-STALE/#AB-STATUS to
+# construct a specific invalid/edge-case receipt on top of the golden default
+# write_valid_artifact_receipts writes. Mirrors override_report_started_at's
+# established pattern in this same file (never silently patch away the field a
+# test's own name says it tests).
+override_artifact_receipt_field() {
+  local file_basename="$1" field="$2" value_json="$3"
+  python3 - "$ACDOC/$file_basename" "$field" "$value_json" <<'PYEOF'
+import json, sys
+path, field, value_json = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path, encoding='utf-8') as f:
+    r = json.load(f)
+r[field] = json.loads(value_json)
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(r, f, indent=2)
+    f.write('\n')
+PYEOF
+}
+
+# recompute_and_repaste_digest <manifest_path>
+# Recomputes protocol_digest via the SAME canonical algorithm as
+# scripts/sh/lib/manifest-digest.sh's canonical_digest() and overwrites the
+# manifest's protocol_digest field in place. Any fixture mutating
+# required_steps[]/conditional_steps[] (e.g. #MED-NEG below) MUST call this, else
+# manifest-drift (an earlier, unrelated check) fires first and masks the die-code
+# actually under test (R6 trap).
+recompute_and_repaste_digest() {
+  local manifest_path="$1"
+  python3 - "$manifest_path" <<'PYEOF'
+import hashlib, json, sys
+path = sys.argv[1]
+m = json.load(open(path, encoding='utf-8'))
+req  = json.dumps(m['required_steps'],   sort_keys=True, separators=(',', ':'))
+cond = json.dumps(m['conditional_steps'], sort_keys=True, separators=(',', ':'))
+combined = (req + cond).encode('utf-8').replace(b'\r\n', b'\n')
+m['protocol_digest'] = hashlib.sha256(combined).hexdigest()
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(m, f, indent=2)
+    f.write('\n')
+PYEOF
+}
+
+# write_rule_sources — creates minimal REAL rule-inventory sources inside $REPO
+# (docs/guides/project-constraints.md with 2 "## " headers, .commitlintrc.json with
+# valid_scopes) so emit-rule-inventory.sh generates a non-empty inventory with
+# predictable ids: pc:rule-one, pc:rule-two, commitlint:valid-scopes. Commits them
+# immediately (else the clean-tree assertion at step 4A sees untracked files) and
+# leaves HEAD advanced — callers must derive HEAD/write verdicts/report AFTER this.
+write_rule_sources() {
+  mkdir -p "$REPO/docs/guides"
+  printf '%s\n' \
+    '# Project Constraints' \
+    '' \
+    '## Rule One' \
+    'Do the first thing.' \
+    '' \
+    '## Rule Two' \
+    'Do the second thing.' \
+    > "$REPO/docs/guides/project-constraints.md"
+  # "fixtures" is in valid_scopes because this file's own fixture-commit convention
+  # (e.g. "test(fixtures): add rule sources", committed right below) uses that scope —
+  # a REAL .commitlintrc.json now exists in $REPO, so emit-pre-pr-report.sh's own
+  # commit_lint check runs for real over base..head and must not spuriously FAIL
+  # against this fixture's own commit history (that would be an accidental
+  # cross-interaction with the UNRELATED W4 managed-key contract, not this section's
+  # subject).
+  printf '%s\n' '{"valid_scopes": ["core", "tests", "fixtures"]}' > "$REPO/.commitlintrc.json"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit --quiet -m "test(fixtures): add rule sources"
+  # Re-capture HEAD_SHA (no `local` — deliberately updates the caller's variable, same
+  # pattern as #CI1's re-capture in qg-committed-integrity.bats): write_arch_verdicts's
+  # default head argument is "${2:-$HEAD_SHA}", so callers relying on that default
+  # (rather than passing HEAD explicitly) must see the POST-commit sha, not setup()'s
+  # stale one — else verdict-head-binding fires before rule-coverage-gap is ever reached.
+  HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 }
 
 # override_report_started_at <new_value_or_empty>
@@ -239,9 +345,19 @@ if override_delib_raw.strip():
 report = {
     "started_at": started_at,
     "deliberation": deliberation,
-    "pre_pr_coverage": {"status": "PASS", "modules": 3},
+    # wave qg-artifact-binding (W4): managed-key-subset contract — write_valid_
+    # artifact_receipts (called below) stages a matching status:PASS secret-scan
+    # receipt; this repo has no skills/ dir (registry-hash is n/a -> PASS) and no
+    # .commitlintrc.json by default (commit_lint has nothing to check -> PASS). Tests
+    # that call write_rule_sources add a REAL .commitlintrc.json but its scopes never
+    # appear in a conventional-commit subject in these fixtures, so commit_lint stays
+    # PASS there too.
+    "pre_pr_coverage": {
+        "status": "PASS", "modules": 3,
+        "secret_scan": "PASS", "registry_hash_freshness": "PASS", "commit_lint": "PASS",
+    },
     "discovered_rules": [
-        {"rule": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}
+        {"rule": "two-stamp-gate", "rule_id": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}
     ],
     "steps": steps,
 }
@@ -255,6 +371,7 @@ with open(report_path, "w", encoding="utf-8") as f:
     f.write('\n')
 PYEOF
   write_valid_bats_handoff
+  write_valid_artifact_receipts
 }
 
 # write_arch_verdicts — writes APPROVED-VERIFY-FINAL + HEAD-bound verdicts for all 3
@@ -370,7 +487,7 @@ report = {
         "incorporated_at": "2026-06-14T00:00:00Z",
     },
     "pre_pr_coverage": {"status": "PASS", "modules": 3},
-    "discovered_rules": [{"rule": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}],
+    "discovered_rules": [{"rule": "two-stamp-gate", "rule_id": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}],
     "steps": steps,
 }
 with open(sys.argv[1], "w", encoding="utf-8") as f:
@@ -497,7 +614,7 @@ report = {
         "incorporated_at": "2026-06-14T00:00:00Z",
     },
     "pre_pr_coverage": {"status": "PASS", "modules": 3},
-    "discovered_rules": [{"rule": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}],
+    "discovered_rules": [{"rule": "two-stamp-gate", "rule_id": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}],
     "steps": steps,
 }
 with open(sys.argv[1], "w", encoding="utf-8") as f:
@@ -939,4 +1056,232 @@ PYEOF
   run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
   [ "$status" -eq 2 ]
   [ ! -f "$ACDOC/push-proof.json" ]
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Wave qg-artifact-binding — W1 generic artifact binding (new tests)
+#
+# No write_plan in any of these (mirrors #EP-HEADMATCH's own comment): wave_plan_
+# present would default TRUE and the default report's path-manifest-audit SKIP would
+# then be an unrelated inconsistent-skip, firing inside Section 3 — BEFORE the
+# artifact-binding loop (3c) this whole section exists to exercise ever runs.
+# ═════════════════════════════════════════════════════════════════════════════
+
+@test "#AB-POS PASS (positive control): both loop receipts present + fresh + PASS → run-qg mints proof (exit 0)" {
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 0 ]
+  [ -f "$ACDOC/push-proof.json" ]
+}
+
+@test "#AB-ABSENT BLOCK: secret-scan-report.json deleted (loop member) → artifact-binding-absent" {
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  rm -f "$ACDOC/secret-scan-report.json"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"artifact-binding-absent"* ]]
+}
+
+@test "#AB-HEAD BLOCK: secret-scan-report.json.head is a foreign sha → artifact-binding-head" {
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  override_artifact_receipt_field "secret-scan-report.json" "head" '"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"'
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"artifact-binding-head"* ]]
+}
+
+@test "#AB-STALE BLOCK: doc-validator-report.json.generated_at predates report.started_at (loop member) → artifact-binding-stale" {
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  override_artifact_receipt_field "doc-validator-report.json" "generated_at" '"2020-01-01T00:00:00Z"'
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"artifact-binding-stale"* ]]
+}
+
+@test "#AB-STATUS BLOCK: doc-validator-report.json.status flipped to FAIL → artifact-binding-status" {
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  override_artifact_receipt_field "doc-validator-report.json" "status" '"FAIL"'
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"artifact-binding-status"* ]]
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Wave qg-artifact-binding — W4 pre_pr_coverage managed-key-subset contract
+# ═════════════════════════════════════════════════════════════════════════════
+
+@test "#PPCD-POS PASS (positive control): every managed key's pre_pr_coverage status agrees with its receipt → exit 0" {
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 0 ]
+}
+
+@test "#PPCD-NEG BLOCK: pre_pr_coverage managed key disagrees with its receipt → pre-pr-coverage-drift" {
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  # The receipt stays status:PASS (write_valid_artifact_receipts); the mint's derived
+  # secret_scan status is therefore PASS — a report claiming FAIL for the same
+  # managed key must die pre-pr-coverage-drift.
+  python3 - "$ACDOC/quality-gate-report.json" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+r = json.load(open(path, encoding='utf-8'))
+r['pre_pr_coverage']['secret_scan'] = 'FAIL'
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(r, f, indent=2); f.write('\n')
+PYEOF
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"pre-pr-coverage-drift"* ]]
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Wave qg-artifact-binding — W5 rule-inventory / rule-coverage-gap
+# ═════════════════════════════════════════════════════════════════════════════
+
+@test "#RCG-POS PASS: discovered_rules ⊇ mint-generated inventory (superset allowed) → exit 0" {
+  write_rule_sources
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  python3 - "$ACDOC/quality-gate-report.json" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+r = json.load(open(path, encoding='utf-8'))
+r['discovered_rules'] = [
+    {"rule": "Rule One", "rule_id": "pc:rule-one", "verified_by": "test"},
+    {"rule": "Rule Two", "rule_id": "pc:rule-two", "verified_by": "test"},
+    {"rule": "commitlint scopes", "rule_id": "commitlint:valid-scopes", "verified_by": "test"},
+    {"rule": "extra rule not in inventory", "rule_id": "extra:not-in-inventory", "verified_by": "test"},
+]
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(r, f, indent=2); f.write('\n')
+PYEOF
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 0 ]
+}
+
+@test "#RCG-NEG BLOCK: discovered_rules omits an id the mint-generated inventory contains → rule-coverage-gap" {
+  write_rule_sources
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  # commitlint:valid-scopes is deliberately omitted — the freshly generated inventory
+  # contains it (write_rule_sources' .commitlintrc.json), so the mint must die.
+  python3 - "$ACDOC/quality-gate-report.json" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+r = json.load(open(path, encoding='utf-8'))
+r['discovered_rules'] = [
+    {"rule": "Rule One", "rule_id": "pc:rule-one", "verified_by": "test"},
+    {"rule": "Rule Two", "rule_id": "pc:rule-two", "verified_by": "test"},
+]
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(r, f, indent=2); f.write('\n')
+PYEOF
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"rule-coverage-gap"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #RIM-NEG  discovered-rule-missing-id (P2a fix-round addition, abfe58a) — a
+# discovered_rules[] entry missing rule_id (or carrying an empty string) must die
+# BEFORE the rule-coverage-gap diff above (#RCG-*) ever runs. Without this
+# fail-closed check, entry.get('rule_id') is falsy, the bad entry silently drops
+# out of discovered_ids (the old `if d.get('rule_id')` filter), and an extra,
+# unidentified rule slips through the coverage diff undetected — the exact class
+# of bug this check closes. #RCG-POS (above) already doubles as this same
+# contract's positive control: every entry there already carries a non-empty
+# rule_id, and that fixture is unchanged/still green.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#RIM-NEG BLOCK: discovered_rules entry missing rule_id (one key absent, one empty string) → discovered-rule-missing-id" {
+  write_rule_sources
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  python3 - "$ACDOC/quality-gate-report.json" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+r = json.load(open(path, encoding='utf-8'))
+r['discovered_rules'] = [
+    {"rule": "Rule One", "rule_id": "pc:rule-one", "verified_by": "test"},
+    {"rule": "Rule Two — rule_id key absent entirely", "verified_by": "test"},
+    {"rule": "commitlint scopes — rule_id is empty string", "rule_id": "", "verified_by": "test"},
+]
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(r, f, indent=2); f.write('\n')
+PYEOF
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"discovered-rule-missing-id"* ]]
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Wave qg-artifact-binding — W6 manifest-evidence-drift (R6 trap: digest MUST be
+# recomputed+repasted in the same fixture edit, else manifest-drift fires first)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@test "#MED-POS PASS: test-suite.evidence is require_scope=full/max_not_ok=0/require_complete=true (undisturbed manifest) → exit 0" {
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 0 ]
+}
+
+@test "#MED-NEG BLOCK: test-suite.evidence.require_scope mutated to 'targeted' + digest repasted → manifest-evidence-drift" {
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  python3 - "$REPO/quality-gate-manifest.json" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+m = json.load(open(path, encoding='utf-8'))
+ts_step = next(s for s in m['required_steps'] if s['id'] == 'test-suite')
+ts_step['evidence']['require_scope'] = 'targeted'
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(m, f, indent=2); f.write('\n')
+PYEOF
+  # R6 trap: without this recompute+repaste, manifest-drift (an earlier, unrelated
+  # check) fires first and masks manifest-evidence-drift entirely.
+  recompute_and_repaste_digest "$REPO/quality-gate-manifest.json"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"manifest-evidence-drift"* ]]
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Wave qg-artifact-binding — R3 ordering: loop membership enumerated from the
+# post-W6 manifest, proving BOTH registry-hash AND pre-pr are excluded (each via its
+# own mint_rederived marker) — not incidentally, not by assertion. Pure static
+# enumeration; never invokes the emitter.
+# ═════════════════════════════════════════════════════════════════════════════
+
+@test "#LOOP-ORDER STATIC: generic artifact-binding loop membership == exactly {secret-scan, doc-validator-parity}; registry-hash and pre-pr excluded via mint_rederived" {
+  local result
+  result="$(python3 - "$REPO/quality-gate-manifest.json" <<'PYEOF'
+import json, sys
+m = json.load(open(sys.argv[1], encoding='utf-8'))
+loop = []
+for rs in m.get('required_steps', []):
+    if rs.get('kind') != 'automatable':
+        continue
+    if not rs.get('artifact'):
+        continue
+    if 'evidence' in rs:
+        continue
+    if rs.get('mint_rederived'):
+        continue
+    loop.append(rs['id'])
+by_id = {rs['id']: rs for rs in m['required_steps']}
+assert by_id['registry-hash'].get('mint_rederived') is True, "registry-hash must be mint_rederived"
+assert by_id['pre-pr'].get('mint_rederived') is True, "pre-pr must be mint_rederived"
+assert 'registry-hash' not in loop, "registry-hash must be excluded from the loop"
+assert 'pre-pr' not in loop, "pre-pr must be excluded from the loop"
+print(','.join(sorted(loop)))
+PYEOF
+)"
+  [ "$result" = "doc-validator-parity,secret-scan" ]
 }

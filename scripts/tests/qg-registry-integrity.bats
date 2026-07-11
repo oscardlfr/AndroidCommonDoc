@@ -31,6 +31,16 @@ setup() {
     printf 'name: my-skill\n' > "$WORK_DIR/skills/my-skill/SKILL.md"
     printf 'name: test-agent\n' > "$WORK_DIR/.claude/agents/test-agent.md"
     printf '# Command\n' > "$WORK_DIR/.claude/commands/test-cmd.md"
+
+    # wave qg-artifact-binding (W2): write_report_and_exit now merges {head,
+    # generated_at, status} into every one of the 4 write sites (envelope
+    # normalization). git-init WORK_DIR so head resolves to a REAL sha (not the
+    # script's "unknown" fallback) — #RI1/#RI2/#RI7 assert against it below.
+    git -C "$WORK_DIR" init --quiet
+    git -C "$WORK_DIR" config user.email "test@test.com"
+    git -C "$WORK_DIR" config user.name "Test"
+    git -C "$WORK_DIR" commit --allow-empty --quiet -m "init"
+    WORK_HEAD="$(git -C "$WORK_DIR" rev-parse HEAD)"
 }
 
 teardown() {
@@ -97,6 +107,18 @@ PYEOF
     [ "$status" -eq 0 ]
     result="$(parse_report_result)"
     [ "$result" = "clean" ]
+
+    # wave qg-artifact-binding (W2): envelope normalization — result==clean maps to
+    # status==PASS, and head/generated_at are stamped (additive, on top of the
+    # pre-existing result/timestamp/checks keys).
+    local report="$WORK_DIR/.androidcommondoc/registry-hash-report.json"
+    local status_val head_val generated_at_val
+    status_val="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['status'])" "$report")"
+    [ "$status_val" = "PASS" ]
+    head_val="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['head'])" "$report")"
+    [ "$head_val" = "$WORK_HEAD" ]
+    generated_at_val="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['generated_at'])" "$report")"
+    [[ "$generated_at_val" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -116,6 +138,12 @@ PYEOF
     [ "$status" -eq 2 ]
     result="$(parse_report_result)"
     [ "$result" = "drift" ]
+
+    # wave qg-artifact-binding (W2): result==drift maps to status==FAIL.
+    local report="$WORK_DIR/.androidcommondoc/registry-hash-report.json"
+    local status_val
+    status_val="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['status'])" "$report")"
+    [ "$status_val" = "FAIL" ]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -203,6 +231,14 @@ EOF
     [ "$status" -eq 0 ]
     result="$(parse_report_result)"
     [ "$result" = "n/a" ]
+
+    # wave qg-artifact-binding (W2): result==n/a ALSO maps to status==PASS ("nothing to
+    # check" is not a failure) — this is the third leg of the clean/n-a -> PASS,
+    # drift -> FAIL mapping (see #RI1/#RI2's sibling assertions).
+    local report="$WORK_DIR/.androidcommondoc/registry-hash-report.json"
+    local status_val
+    status_val="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['status'])" "$report")"
+    [ "$status_val" = "PASS" ]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

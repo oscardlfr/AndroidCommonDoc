@@ -70,12 +70,18 @@ setup() {
   cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
 
   # Mirror scripts/sh/ into isolated repo so the emitter finds lib/ dependencies
+  # wave qg-artifact-binding: run-qg now ALSO invokes emit-rule-inventory.sh and
+  # emit-pre-pr-report.sh, mint-internal, strictly after the registry re-run and
+  # BEFORE the (D) size gate this file exists to test — copy both so TSZ-2/TSZ-6
+  # (which reach past the size gate to mint) find them.
   mkdir -p "$REPO/scripts/sh/lib"
   cp "$SCRIPTS_SRC/sh/emit-push-proof.sh"        "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/lib/manifest-digest.sh"     "$REPO/scripts/sh/lib/"
   cp "$SCRIPTS_SRC/sh/lib/audit-append.sh"        "$REPO/scripts/sh/lib/"
   cp "$SCRIPTS_SRC/sh/qg-registry-integrity.sh"   "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/rehash-registry.sh"         "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"     "$REPO/scripts/sh/"
+  cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"      "$REPO/scripts/sh/"
 
   # CRITICAL: validate-agent-templates.sh is called by the (D) size gate.
   # It is NOT in the default emit-push-proof.bats harness — copy it explicitly
@@ -158,6 +164,25 @@ write_valid_bats_handoff() {
   } > "$ACDOC/bats-result.${run_id}.env"
 }
 
+# write_valid_artifact_receipts -- writes HEAD-bound, fresh, status:PASS
+# secret-scan-report.json + doc-validator-report.json into $ACDOC (wave
+# qg-artifact-binding, W1). These are the ONLY two required_steps[] loop members
+# (registry-hash and pre-pr are both mint_rederived, excluded structurally) -- every
+# run-qg-to-PASS fixture in this file must stage both, else run-qg dies
+# artifact-binding-absent BEFORE ever reaching the (D) size gate this file exists to
+# test (the loop runs earlier in run_qg than the size gate does).
+write_valid_artifact_receipts() {
+  local head
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  local generated_at
+  generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  mkdir -p "$ACDOC"
+  printf '{"status":"PASS","reason_code":"OK","tool":"trufflehog","version":"test","count":0,"head":"%s","generated_at":"%s"}\n' \
+    "$head" "$generated_at" > "$ACDOC/secret-scan-report.json"
+  printf '{"step":"doc-validator-parity","ran":true,"result":"PASS","status":"PASS","head":"%s","generated_at":"%s","summary":"test fixture"}\n' \
+    "$head" "$generated_at" > "$ACDOC/doc-validator-report.json"
+}
+
 # write_quality_gate_report -- writes a valid quality-gate-report.json with all required
 # steps PASS and all conditional steps SKIP (same template as emit-push-proof.bats)
 #
@@ -197,9 +222,16 @@ report = {
         "architects_consulted": ["arch-platform", "arch-testing", "arch-integration"],
         "incorporated_at": "2026-06-14T00:00:00Z",
     },
-    "pre_pr_coverage": {"status": "PASS", "modules": 3},
+    # wave qg-artifact-binding (W4): managed-key-subset contract -- write_valid_
+    # artifact_receipts (called below) stages a matching status:PASS secret-scan
+    # receipt; this repo has no skills/ dir (registry-hash is n/a -> PASS) and no
+    # .commitlintrc.json (commit_lint has nothing to check -> PASS).
+    "pre_pr_coverage": {
+        "status": "PASS", "modules": 3,
+        "secret_scan": "PASS", "registry_hash_freshness": "PASS", "commit_lint": "PASS",
+    },
     "discovered_rules": [
-        {"rule": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}
+        {"rule": "two-stamp-gate", "rule_id": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}
     ],
     "steps": steps,
 }
@@ -208,6 +240,7 @@ with open(sys.argv[1], "w", encoding="utf-8") as f:
     f.write('\n')
 PYEOF
   write_valid_bats_handoff
+  write_valid_artifact_receipts
 }
 
 # write_overcap_template -- writes an agent template padded to 436 lines (one over the 435 cap).
@@ -364,6 +397,15 @@ PYEOF
 
   # The stamp MUST NOT have been written
   [ ! -f "$ACDOC/quality-gate.stamp" ]
+
+  # Opportunistic tightening (wave qg-artifact-binding, non-blocking/dormant -- see the
+  # PLAN's Regression Matrix note): a bare exit!=0 + stamp-absence pair cannot
+  # discriminate "the size gate specifically fired" from "ps1 refuses to mint
+  # regardless" -- and per #EP-PS1-DISABLED (Wave A, Section A5a), the latter IS this
+  # script's actual behavior: Invoke-RunQg unconditionally refuses to mint before any
+  # size-gate branch is ever reached. Assert the real, current reason so this test
+  # cannot be read as size-gate coverage it does not provide.
+  [[ "$output" == *"run-qg is disabled in the PowerShell path pending evidence binding"* ]]
 }
 
 # TSZ-4  static guard -- sh contains explicit --templates-dir + --agents-dir
@@ -532,6 +574,22 @@ PYEOF
   run grep -c "bats_evidence missing from push-proof.json" "$ps1"
   [ "$output" != "0" ]
   run grep -c "bats_evidence.head -ne" "$ps1"
+  [ "$output" != "0" ]
+
+  # wave qg-artifact-binding (W7): pin the 5 NEW bats-evidence-* die-code strings so
+  # the .ps1 update ships proven, not merely green-because-unasserted (R7 -- "update,
+  # do not disable" applies just as much to the grep this test extends as to the
+  # script itself). Identical literals across bash (emit-push-proof.sh verify_proof),
+  # JS (push-authorization-gate.js in-JS fallback, #PAG-BE1-5), and here.
+  run grep -c "bats-evidence-dirty" "$ps1"
+  [ "$output" != "0" ]
+  run grep -c "bats-evidence-scope" "$ps1"
+  [ "$output" != "0" ]
+  run grep -c "bats-evidence-incomplete" "$ps1"
+  [ "$output" != "0" ]
+  run grep -c "bats-evidence-count-mismatch" "$ps1"
+  [ "$output" != "0" ]
+  run grep -c "bats-evidence-floor" "$ps1"
   [ "$output" != "0" ]
 }
 

@@ -26,13 +26,29 @@
 #                 one without a re-`--init`, minting report_digest over a report that
 #                 still asserts the wrong commit). push-proof.json additively gains a
 #                 bats_evidence object {run_id, head, ok, not_ok, expected, scope,
-#                 generated_at} (no filesystem paths); schema_version stays 1.
+#                 generated_at, complete, total} (9 keys as of wave qg-artifact-binding's
+#                 W7, up from 7 — no filesystem paths); schema_version stays 1.
+#
+#                 GENERIC ARTIFACT BINDING (wave qg-artifact-binding, W1): every OTHER
+#                 required_steps[] entry with kind=="automatable" + a declared artifact +
+#                 no evidence sub-object + not mint_rederived (today: exactly {secret-scan,
+#                 doc-validator-parity}) is bound the same way test-suite's evidence is --
+#                 artifact must open, .head==HEAD, report.started_at<=.generated_at<=now+skew,
+#                 .status=="PASS", else die(...) artifact-binding-{absent,head,stale,status}.
+#                 registry-hash and pre-pr are marked mint_rederived: true (manifest) and
+#                 excluded from this loop -- the mint re-derives/composes them itself,
+#                 later in this same function (see (B) registry re-run, and the rule-
+#                 inventory/pre-pr-report producers invoked after it). rule-cross-check
+#                 and architect-deliberation are kind=="judgment", excluded structurally.
+#                 Full detail: docs/agents/quality-gater-artifact-binding.md.
 #
 #   verify-proof  Cheap verifier for the git-layer hook. Reads push-proof.json and checks:
 #                 schema_version, head, worktree_id, generated_at freshness, manifest_version,
-#                 steps_executed coverage, report_digest, bats_evidence binding (present +
-#                 .head == pushed_sha — mirrors verify-push-proof.ps1 and
-#                 push-authorization-gate.js, all three now at equivalent rigor).
+#                 steps_executed coverage, report_digest, bats_evidence binding — present,
+#                 .head == pushed_sha, AND (W7) the same completeness predicate run-qg
+#                 persists: not_ok==0 && scope=='full' && complete==True && total==expected
+#                 && ok>0. Mirrors verify-push-proof.ps1 and push-authorization-gate.js,
+#                 all three now at equivalent rigor.
 #
 #                 IMPORTANT: verify-proof does NOT re-evaluate predicates. Predicate
 #                 consistency was enforced at mint (run-qg) and is bound cryptographically
@@ -281,6 +297,21 @@ except Exception as e:
 
 with open(manifest_path, encoding='utf-8') as f:
     manifest = json.load(f)
+
+# manifest-evidence-drift (W6): the mint HARDCODES {require_scope:'full',
+# max_not_ok:0, require_complete:True} in the test-suite-evidence-* checks below
+# (Wave A) -- the manifest's own declared test-suite.evidence sub-object is
+# advisory/documentation only, never read at runtime (reading it here would let a
+# manifest edit alone loosen enforcement). This guard is a drift-guard, not a new
+# source of truth: it asserts the manifest's declared intent still agrees with
+# what the mint actually enforces, so a manifest edit can never create a false
+# impression of loosened (or tightened) enforcement.
+_ts_step = next((s for s in manifest.get('required_steps', []) if s.get('id') == 'test-suite'), None)
+_ts_evidence = (_ts_step or {}).get('evidence') or {}
+if (_ts_evidence.get('require_scope') != 'full'
+        or _ts_evidence.get('max_not_ok') != 0
+        or _ts_evidence.get('require_complete') is not True):
+    die(f"manifest-evidence-drift: test-suite.evidence must be require_scope='full', max_not_ok=0, require_complete=true; got {_ts_evidence!r}")
 
 diff_list = [l for l in diff_files.splitlines() if l.strip()]
 
@@ -619,6 +650,82 @@ print(json.dumps(digests))
 PYEOF
 )"
 
+  # -- 3c. Generic artifact binding (W1) ----------------------------------------
+  # required_steps[] entries where kind=="automatable" AND artifact is declared
+  # AND no evidence sub-object is present AND not marked mint_rederived. Loop
+  # membership today is exactly {secret-scan, doc-validator-parity} -- this
+  # follows MECHANICALLY from each other required step's own marker, never by
+  # assertion: test-suite carries an evidence sub-object (Wave A's checks above
+  # already cover it); registry-hash and pre-pr both carry mint_rederived: true
+  # (re-derived/composed later in this function, never bound here); rule-
+  # cross-check and architect-deliberation both carry kind=="judgment". See
+  # docs/agents/quality-gater-artifact-binding.md for the full membership table.
+  artifact_digests_json="$(python3 - "$MANIFEST_PATH" "$REPO_ROOT" "$head_sha" "$report_started_at" "$SKEW_TOLERANCE" "$artifact_digests_json" << 'PYEOF'
+import datetime, hashlib, json, os, sys
+
+manifest_path      = sys.argv[1]
+repo_root          = sys.argv[2]
+head_sha_arg       = sys.argv[3]
+report_started_at  = sys.argv[4]
+skew_tolerance     = int(sys.argv[5])
+digests            = json.loads(sys.argv[6])
+
+def die(code, msg):
+    print(f"[emit-push-proof] ERROR: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+manifest = json.load(open(manifest_path, encoding='utf-8'))
+
+# report_started_at was already validated (present, parseable, plausible) by the
+# report-started-at-* checks earlier in this same run_qg invocation -- safe to
+# parse without re-validating here.
+_started_dt = datetime.datetime.strptime(report_started_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+_now_dt = datetime.datetime.now(datetime.timezone.utc)
+_skew = datetime.timedelta(seconds=skew_tolerance)
+
+for rs in manifest.get('required_steps', []):
+    if rs.get('kind') != 'automatable':
+        continue
+    if not rs.get('artifact'):
+        continue
+    if 'evidence' in rs:
+        continue
+    if rs.get('mint_rederived'):
+        continue
+
+    sid = rs['id']
+    rel_path = rs['artifact']
+    artifact_path = os.path.join(repo_root, rel_path)
+
+    try:
+        with open(artifact_path, encoding='utf-8') as f:
+            artifact = json.load(f)
+    except Exception as e:
+        die(2, f"artifact-binding-absent: required step '{sid}' artifact not found/unreadable at {rel_path}: {e}")
+
+    if artifact.get('head') != head_sha_arg:
+        die(2, f"artifact-binding-head: required step '{sid}' artifact head={artifact.get('head')!r} != current HEAD={head_sha_arg!r} ({rel_path})")
+
+    _gen_at = artifact.get('generated_at') or ''
+    try:
+        _gen_dt = datetime.datetime.strptime(_gen_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except ValueError:
+        die(2, f"artifact-binding-stale: required step '{sid}' artifact generated_at unparseable: {_gen_at!r} ({rel_path})")
+    if _gen_dt < _started_dt:
+        die(2, f"artifact-binding-stale: required step '{sid}' artifact generated_at={_gen_at} predates report.started_at={report_started_at} ({rel_path})")
+    if _gen_dt > _now_dt + _skew:
+        die(2, f"artifact-binding-stale: required step '{sid}' artifact generated_at={_gen_at} is in the future beyond skew tolerance ({rel_path})")
+
+    if artifact.get('status') != 'PASS':
+        die(2, f"artifact-binding-status: required step '{sid}' artifact status={artifact.get('status')!r} (expected 'PASS') ({rel_path})")
+
+    raw = open(artifact_path, 'rb').read().replace(b'\r\n', b'\n')
+    digests[rel_path] = hashlib.sha256(raw).hexdigest()
+
+print(json.dumps(digests))
+PYEOF
+)"
+
   # -- 4. Committed-tree integrity (Part 1: clean-tree + Part 2: registry) ------
   # Runs AFTER verdict->HEAD binding, BEFORE report_digest.
   # (A) Clean-tree assertion: git status --porcelain must be empty except
@@ -684,6 +791,118 @@ d['skills/registry.json'] = sys.argv[2]
 print(json.dumps(d))
 " "$artifact_digests_json" "$_reg_digest")"
   fi
+
+  # (E) Rule inventory (W5): mint-internal derived-artifact producer, invoked
+  #     AFTER the registry re-run/template-size gate above. Diffs the freshly
+  #     generated inventory's rule ids against report.discovered_rules[] (which
+  #     must be a superset, never fewer) -- rule-coverage-gap on any gap. Digest
+  #     recorded into artifact_digests for the tamper-evident fingerprint (R13:
+  #     only the inventory's declared INPUTS are provenance-pinned, via
+  #     per-source sha256 -- the derived artifact's own generated_at is always
+  #     "now" and is not itself freshness-bound).
+  if ! bash "$SCRIPT_DIR/emit-rule-inventory.sh" --project-root "$REPO_ROOT" >&2; then
+    echo "[emit-push-proof] ERROR: rule-inventory-empty-source — a rule source exists but parsed to zero rules." >&2
+    exit 2
+  fi
+
+  local rule_inventory_path="$ACDOC_DIR/rule-inventory.json"
+  artifact_digests_json="$(python3 - "$rule_inventory_path" "$REPORT_PATH" "$artifact_digests_json" << 'PYEOF'
+import hashlib, json, sys
+
+inventory_path, report_path, digests_json = sys.argv[1:4]
+
+def die(msg):
+    print(f"[emit-push-proof] ERROR: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+try:
+    with open(inventory_path, encoding='utf-8') as f:
+        inventory = json.load(f)
+except Exception as e:
+    die(f"rule-inventory-empty-source: rule-inventory.json unreadable after emit-rule-inventory.sh ran: {e}")
+
+inventory_ids = {r['id'] for r in inventory.get('rules', [])}
+
+with open(report_path, encoding='utf-8') as f:
+    report = json.load(f)
+
+# Fail-closed rule_id enforcement (mirrors the per-entry verified_by check in
+# run_qg's main validation pass, above): every discovered_rules[] entry MUST
+# carry a non-empty rule_id BEFORE the coverage diff below. Without this, an
+# entry missing rule_id silently drops out of discovered_ids (via the old
+# `if d.get('rule_id')` filter) and is never checked against the inventory --
+# an extra, unidentified rule would pass undetected.
+discovered_rules = report.get('discovered_rules') or []
+for _entry in discovered_rules:
+    if not _entry.get('rule_id'):
+        die(f"discovered-rule-missing-id: discovered_rules entry missing rule_id: {_entry}")
+discovered_ids = {d['rule_id'] for d in discovered_rules}
+
+missing = sorted(inventory_ids - discovered_ids)
+if missing:
+    die(f"rule-coverage-gap: inventory rule id(s) not present in report.discovered_rules[]: {missing}")
+
+digests = json.loads(digests_json)
+raw = open(inventory_path, 'rb').read().replace(b'\r\n', b'\n')
+digests['.androidcommondoc/rule-inventory.json'] = hashlib.sha256(raw).hexdigest()
+print(json.dumps(digests))
+PYEOF
+)"
+
+  # (F) Pre-PR composition (W3) + managed-key-subset cross-check (W4). Mint-
+  #     internal derived artifact -- reads the two W1-bound receipts + the
+  #     post-(B) authoritative registry state + commit-lint over base..head.
+  #     NOT a new required_steps[] entry: pre-pr is marked mint_rederived: true
+  #     (W6) precisely because this step is what produces the artifact that
+  #     marker refers to.
+  if ! bash "$SCRIPT_DIR/emit-pre-pr-report.sh" --project-root "$REPO_ROOT" --base-sha "$base_sha" --head-sha "$head_sha" >&2; then
+    echo "[emit-push-proof] ERROR: emit-pre-pr-report.sh failed to compose pre-pr-report.json." >&2
+    exit 2
+  fi
+
+  local pre_pr_report_path="$ACDOC_DIR/pre-pr-report.json"
+  artifact_digests_json="$(python3 - "$pre_pr_report_path" "$REPORT_PATH" "$artifact_digests_json" << 'PYEOF'
+import hashlib, json, re, sys
+
+pre_pr_path, report_path, digests_json = sys.argv[1:4]
+
+def die(msg):
+    print(f"[emit-push-proof] ERROR: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+try:
+    with open(pre_pr_path, encoding='utf-8') as f:
+        pre_pr = json.load(f)
+except Exception as e:
+    die(f"pre-pr-coverage-drift: pre-pr-report.json unreadable after emit-pre-pr-report.sh ran: {e}")
+
+# Managed-key subset contract (W4, binding): fixed constant; extending this set
+# later is additive. The other 9 keys the gater's own /pre-pr hand-authors are
+# unmanaged -- pass through unchecked, untouched by this wave.
+MANAGED_KEYS = ("secret_scan", "registry_hash_freshness", "commit_lint")
+
+with open(report_path, encoding='utf-8') as f:
+    report = json.load(f)
+pre_pr_coverage = report.get('pre_pr_coverage') or {}
+
+STATUS_RE = re.compile(r'^(PASS|FAIL|SKIP|N/A)\b')
+derived_checks = pre_pr.get('checks', {})
+for key in MANAGED_KEYS:
+    if key not in pre_pr_coverage:
+        die(f"pre-pr-coverage-drift: managed key '{key}' absent from report.pre_pr_coverage")
+    raw_value = str(pre_pr_coverage[key])
+    m = STATUS_RE.match(raw_value.strip())
+    normalized = m.group(1) if m else None
+    derived = derived_checks.get(key)
+    if normalized != derived:
+        die(f"pre-pr-coverage-drift: managed key '{key}' — report.pre_pr_coverage says {raw_value!r} (normalized {normalized!r}) but derived status is {derived!r}")
+
+digests = json.loads(digests_json)
+raw = open(pre_pr_path, 'rb').read().replace(b'\r\n', b'\n')
+digests['.androidcommondoc/pre-pr-report.json'] = hashlib.sha256(raw).hexdigest()
+print(json.dumps(digests))
+PYEOF
+)"
 
   # -- 5. Compute report_digest (sha256 of report file, CRLF->LF) ---------------
   local report_digest
@@ -753,9 +972,14 @@ try:
     _ev = json.loads(sys.argv[10])
 except Exception:
     _ev = {}
-# Exactly {run_id, head, ok, not_ok, expected, scope, generated_at} -- no filesystem
-# paths (bats-handoff.sh's CLI never emits one). status/complete/total are the CLI's
-# own selection metadata and are intentionally NOT persisted into the proof.
+# Exactly {run_id, head, ok, not_ok, expected, scope, generated_at, complete,
+# total} -- no filesystem paths (bats-handoff.sh's CLI never emits one). complete
+# and total are additive (W7) so all three verifiers (this script's own
+# verify_proof, push-authorization-gate.js's in-JS fallback, verify-push-proof.ps1)
+# can re-derive the SAME completeness predicate at push time instead of trusting
+# an unpersisted "ok" count alone. status remains the CLI's own selection
+# metadata and is intentionally NOT persisted into the proof. schema_version
+# stays 1 (additive, not a breaking shape change).
 bats_evidence = {
     "run_id":       _ev.get("run_id", ""),
     "head":         _ev.get("head", ""),
@@ -764,6 +988,8 @@ bats_evidence = {
     "expected":     _ev.get("expected", 0),
     "scope":        _ev.get("scope", ""),
     "generated_at": _ev.get("generated_at", ""),
+    "complete":     _ev.get("complete", False),
+    "total":        _ev.get("total", 0),
 }
 
 proof = {
@@ -893,18 +1119,33 @@ recomputed = hashlib.sha256(content).hexdigest()
 if recomputed != proof.get('report_digest'):
     die(f"report_digest mismatch: stored={proof.get('report_digest')} recomputed={recomputed} — quality-gate-report.json may have been tampered with post-mint")
 
-# -- 9. bats_evidence binding: present + head matches pushed_sha ------------------
+# -- 9. bats_evidence binding: present + head matches pushed_sha + completeness --
 # A half-done Section A4 would mint correctly (run_qg's five named checks) but verify
 # permissively -- this closes that gap. This is the design doc's "8th check" (counting
 # schema_version..report_digest as checks 1-7; this file's own comment numbering above
 # additionally counts "Load proof" as step 1, so this lands as "-- 9." here). Mirrors
 # the rigor of the other two verifiers (verify-push-proof.ps1, push-authorization-
-# gate.js) -- all three now carry equivalent 8-check rigor.
+# gate.js) -- all three now carry equivalent rigor, including the W7 completeness
+# predicate (not_ok==0 && scope=='full' && complete==True && total==expected &&
+# ok>0), not just presence + head.
 bats_evidence = proof.get('bats_evidence')
 if not bats_evidence:
     die("bats_evidence missing from push-proof.json — proof was minted before this wave's evidence binding, or evidence was stripped. Re-run /quality-gate.")
 if bats_evidence.get('head') != pushed_sha:
     die(f"bats_evidence.head ({bats_evidence.get('head')}) != pushed SHA ({pushed_sha}) — proof's test-suite evidence does not correspond to the pushed commit")
+if bats_evidence.get('not_ok', 1) != 0:
+    die(f"bats-evidence-dirty: bats_evidence.not_ok ({bats_evidence.get('not_ok')!r}) != 0 — proof's test-suite evidence is not clean")
+if bats_evidence.get('scope') != 'full':
+    die(f"bats-evidence-scope: bats_evidence.scope ({bats_evidence.get('scope')!r}) != 'full' — proof's test-suite evidence is not full-scope")
+if bats_evidence.get('complete') is not True:
+    die(f"bats-evidence-incomplete: bats_evidence.complete ({bats_evidence.get('complete')!r}) is not True — proof's test-suite evidence run did not complete")
+_bv_total = bats_evidence.get('total', 0)
+_bv_expected = bats_evidence.get('expected', 0)
+if _bv_total != _bv_expected:
+    die(f"bats-evidence-count-mismatch: bats_evidence.total ({_bv_total!r}) != bats_evidence.expected ({_bv_expected!r})")
+_bv_ok = bats_evidence.get('ok', 0)
+if not (isinstance(_bv_ok, int) and _bv_ok > 0):
+    die(f"bats-evidence-floor: bats_evidence.ok ({_bv_ok!r}) fails sanity floor (must be > 0)")
 
 print("[emit-push-proof] verify-proof: PASS", file=sys.stderr)
 PYEOF

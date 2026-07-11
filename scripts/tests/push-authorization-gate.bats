@@ -139,6 +139,10 @@ proof = {
 # with bats_evidence_head, which is the pushed head by default (matching/canonical) or a
 # deliberately different value (#PAG-EV2's mismatch scenario).
 if bats_evidence_head != "__OMIT__":
+    # wave qg-artifact-binding (W7): the in-JS fallback's checks 9-13 re-derive the
+    # SAME completeness predicate run-qg persists (not_ok==0 && scope=='full' &&
+    # complete==true && total==expected && ok>0) — complete/total are additive on
+    # top of the pre-W7 7-key shape; total==ok+not_ok==10 here.
     proof["bats_evidence"] = {
         "run_id": "canonical-run",
         "head": bats_evidence_head,
@@ -147,9 +151,29 @@ if bats_evidence_head != "__OMIT__":
         "expected": 10,
         "scope": "full",
         "generated_at": ts,
+        "complete": True,
+        "total": 10,
     }
 proof_path = stamp_dir + '/push-proof.json'
 with open(proof_path, 'w') as f:
+    json.dump(proof, f)
+PYEOF
+}
+
+# patch_bats_evidence_field <stamp_dir> <field> <json_value>
+# Mutates a single field inside push-proof.json's bats_evidence dict in place.
+# <json_value> is parsed as JSON (so `false`, `true`, `0`, `"foo"` all work) — used
+# by #PAG-BE* to exercise each of the 5 new completeness die-codes (W7) independently,
+# on top of a write_canonical_proof-produced (otherwise-valid) base fixture.
+patch_bats_evidence_field() {
+  local stamp_dir="$1" field="$2" value_json="$3"
+  python3 - "$stamp_dir/push-proof.json" "$field" "$value_json" <<'PYEOF'
+import json, sys
+path, field, value_json = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path, encoding='utf-8') as f:
+    proof = json.load(f)
+proof.setdefault('bats_evidence', {})[field] = json.loads(value_json)
+with open(path, 'w', encoding='utf-8') as f:
     json.dump(proof, f)
 PYEOF
 }
@@ -759,6 +783,70 @@ PYEOF
   [ "$status" -eq 0 ]
 }
 
+# ── wave qg-artifact-binding (W7): in-JS fallback checks 9-13 — bats_evidence ────
+# completeness. Same predicate bash verify_proof() and verify-push-proof.ps1
+# re-derive: not_ok==0 && scope=='full' && complete==true && total==expected &&
+# ok>0. Each die-code gets its own negative (revert exactly one element from the
+# write_canonical_proof-produced positive control) — #PAG-EV3 above already proves
+# the well-formed base fixture allows, so it doubles as this row's positive control.
+# No emit-push-proof.sh in isolated PROJECT_ROOT → in-JS fallback taken (same as
+# every #PAG-EV*/#PAG-JS* test above).
+
+@test "#PAG-BE1 BLOCK: in-JS fallback — bats_evidence.not_ok!=0 → bats-evidence-dirty" {
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+  patch_bats_evidence_field "$STAMP_DIR" "not_ok" "1"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bats-evidence-dirty"* ]]
+}
+
+@test "#PAG-BE2 BLOCK: in-JS fallback — bats_evidence.scope!='full' → bats-evidence-scope" {
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+  patch_bats_evidence_field "$STAMP_DIR" "scope" '"targeted"'
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bats-evidence-scope"* ]]
+}
+
+@test "#PAG-BE3 BLOCK: in-JS fallback — bats_evidence.complete!=true → bats-evidence-incomplete" {
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+  patch_bats_evidence_field "$STAMP_DIR" "complete" "false"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bats-evidence-incomplete"* ]]
+}
+
+@test "#PAG-BE4 BLOCK: in-JS fallback — bats_evidence.total!=expected → bats-evidence-count-mismatch" {
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+  patch_bats_evidence_field "$STAMP_DIR" "total" "999"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bats-evidence-count-mismatch"* ]]
+}
+
+@test "#PAG-BE5 BLOCK: in-JS fallback — bats_evidence.ok<=0 → bats-evidence-floor" {
+  write_stamp "quality-gate.stamp" "PASS" 0 "$HEAD_SHA"
+  write_stamp "pre-pr.stamp"       "PASS" 0 "$HEAD_SHA"
+  write_canonical_proof "$HEAD_SHA" "$PROJECT_ROOT" "$STAMP_DIR"
+  patch_bats_evidence_field "$STAMP_DIR" "ok" "0"
+  make_input "git push origin feature/test"
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bats-evidence-floor"* ]]
+}
+
 # ── Peer-block CONTRACT test — NOT a fail-open regression pin; see #PAG-GUARD ────
 #
 # Asserts the peer-block contract: agent_type != '' + git push => exit 2 +
@@ -1079,7 +1167,10 @@ PYEOF
 # >=8 is loose enough that a half-broken regex finding 9 would still pass; ==20 is
 # brittle and would fail spuriously the moment anyone adds or removes a legitimate
 # block() call as part of ordinary maintenance. >=15 fails loudly if the parser breaks
-# and survives ordinary maintenance. The file has exactly 20 call sites as of this wave.
+# and survives ordinary maintenance. The file had exactly 20 call sites when this floor
+# was chosen; wave qg-artifact-binding's W7 completeness checks (9-13, #PAG-BE1-5 above)
+# add 5 more block() call sites on top of that — the floor is intentionally loose so
+# this growth (and any future one) never requires bumping a brittle exact count.
 #
 # Four shapes the parser must survive (all verified against the real file AND against a
 # deliberately-broken copy with one return removed, to confirm this is non-vacuous):

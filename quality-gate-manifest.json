@@ -1,12 +1,12 @@
 {
-  "manifest_version": 2,
-  "protocol_digest": "b2799496d91bf9a3621491821bc6450eb0e165cce94745b1ffe3421026ded930",
+  "manifest_version": 3,
+  "protocol_digest": "8f06987ac7445a0c63ae4e2606690a59a8a0304ee07e937c0a31bc26ef6410e9",
   "required_steps": [
     {"id": "architect-deliberation", "kind": "judgment",    "artifact_glob": ".planning/wave-*/arch-*-verdict.md", "head_bound": true, "required_roles": ["arch-platform","arch-testing","arch-integration"]},
-    {"id": "pre-pr",                 "kind": "automatable", "artifact": ".androidcommondoc/pre-pr-report.json"},
-    {"id": "test-suite",             "kind": "automatable", "artifact": ".androidcommondoc/test-suite-report.json", "evidence": {"kind": "bats-handoff", "require_scope": "full", "max_not_ok": 0, "require_complete": true, "require_since": "report.started_at"}},
-    {"id": "rule-cross-check",       "kind": "runtime",     "artifact": ".androidcommondoc/quality-gate-report.json"},
-    {"id": "registry-hash",          "kind": "automatable", "artifact": ".androidcommondoc/registry-hash-report.json"},
+    {"id": "pre-pr",                 "kind": "automatable", "artifact": ".androidcommondoc/pre-pr-report.json", "mint_rederived": true},
+    {"id": "test-suite",             "kind": "automatable", "evidence": {"kind": "bats-handoff", "require_scope": "full", "max_not_ok": 0, "require_complete": true, "require_since": "report.started_at"}},
+    {"id": "rule-cross-check",       "kind": "judgment"},
+    {"id": "registry-hash",          "kind": "automatable", "artifact": ".androidcommondoc/registry-hash-report.json", "mint_rederived": true},
     {"id": "secret-scan",            "kind": "automatable", "artifact": ".androidcommondoc/secret-scan-report.json"},
     {"id": "doc-validator-parity",   "kind": "automatable", "artifact": ".androidcommondoc/doc-validator-report.json"}
   ],
