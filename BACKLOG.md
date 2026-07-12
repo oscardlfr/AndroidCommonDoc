@@ -1,367 +1,550 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-07-12; Harness Realignment Waves 0-4 (#234 `0bbf6fa`, #235 `125409b`, #236 `68ed036`, #237 `8aacc05`, #238 `30de240`), Wave 5 (Portable Ingestion + Wave 38 Content, #242 `0db5773`), and H1 — Push Authority Bootstrap (#243 `1e0be41`) are all MERGED to develop; **`harden-reusable-workflow-inputs` is the active wave**; RTK template sweep remains deferred pending separate approval
-> **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
-> **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
+> **Last updated**: 2026-07-12
+> **Roadmap baseline**: `develop@619d9a7` (PR #245). **H1 and G0 — Reusable Workflow Input Boundary Hardening are SHIPPED.**
+> **Next executable wave**: **Wave 1 — Portable Runtime Consultation & Messaging Adapters.**
+> **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
 
-## Active (proposed wave order)
+## Operating contract
 
-### Agent-teams upstream notification delivery report (LOW/MED — upstream/runtime)
+- The load-bearing portability floor is **validated disk artifacts**. Runtime messaging is an optional acceleration layer.
+- Adapter delivery, message text, an MCP return value, or a live peer saying “GO” is never evidence. Only a valid, correlated result artifact counts as a protocol-valid consultation answer; phase and push authorization still require their own contracts.
+- Execute Waves 1-6 in order; Wave 1 is next. Do not split routine implementation details into extra micro-waves.
+- Re-audit observations and file counts at each wave's starting HEAD. Post-G0 counts below were recorded by PR #245 at `619d9a7`; they are a planning baseline, not permanent truth.
+- Each wave must have one frozen scope, explicit no-go boundaries, proportional tests, and a shipped memory entry before the backlog advances.
+- Rich runtimes may add `SendMessage`, persistent peers, MCP invocation, app-server threads, or wakeups; failure or absence of those capabilities must not invalidate the disk floor.
 
-The in-repo root fix for unreliable quality-gater completion messages is already shipped: poll-able `qg-result.json` + heartbeat/session-health recovery. Remaining work is an upstream repro/report for the experimental agent-teams notification drop. This is **not** a blocker for the QG harness and should not drive another local harness wave unless a new in-repo failure appears.
+## Gate 0 — completed prerequisite (not counted among the six waves)
 
-### Harness Realignment Sequence (active track, ahead of Wave 38)
+### G0 — Reusable Workflow Input Boundary Hardening
 
-Recommended wave sequence from `.planning/harness-realignment-deep-audit-plan.md` (local, gitignored) to reconcile the harness's Claude-first legacy with its shipped disk-first portable floor:
+**Status**: SHIPPED — MERGED to `develop@619d9a7`, PR #245.
 
-- **Wave 0 — Harness State Ledger Reconciliation** (MERGED to develop `0bbf6fa`, PR #234) — made the ledger honest before new harness work started. No SHIPPED stamp — this is the ledger reconciliation itself, not a shipped feature (stays here, not in `## Shipped`).
-- **Wave 1 — Runtime/Topology Contract Realignment** (MERGED to develop `125409b`, PR #235 — see `## Shipped (recent)`) — made every orchestration doc describe one coherent model: portable disk floor plus optional Claude-rich accelerators.
-- **Wave 2 — Portable Coordination Artifact Layer** (MERGED to develop `68ed036`, PR #236 — see `## Shipped (recent)`) — implemented the ADR-001 disk-inbox fallback so non-Claude runtimes can coordinate without SendMessage.
-- **Wave 3 — Phase-Orchestration Restoration** (MERGED to develop `8aacc05`, PR #237 — see `## Shipped (recent)`; executed DOC: docs/agents wording reconciliation, HARNESS mechanization deferred to BL-W4-10) — restored "living system by phases" on top of the portable contract.
-- **Wave 4 — QG/macOS/Local-CI Parity Hardening** (MERGED to develop `30de240`, PR #238 — see `## Shipped (recent)`) — make local QG on this Mac honest and reproducible without ad hoc per-wave explanations.
-- **Wave 5 — Portable Ingestion + Wave 38 Content** (MERGED to develop `0db5773`, PR #242) — made the ingestion loop portable, then processed the deferred Wave 38 content (below) through the corrected loop.
-- **Wave 6 (optional) — Topology Pilot** (DOC or HARNESS depending on outcome) — measure when Claude-rich background peers are worth using versus single-use/disk-only execution.
+**Objective delivered**: close the targeted post-H1 reusable-workflow shell-injection surface without expanding into the repository-wide audit.
 
-**Sequencing**: Waves 0-5 are MERGED. Wave 6 (optional — Topology Pilot) may follow. This wave completed the recommended minimum Waves 0-5; Wave 6 is optional hardening after Wave 5.
+**Outcome**:
 
-**Source**: `.planning/harness-realignment-deep-audit-plan.md` (local, gitignored).
+- Hardened `.github/workflows/reusable-shell-tests.yml`, `reusable-copilot-parity.yml`, `reusable-lint-resources.yml`, and `reusable-agent-parity.yml` across both direct `${{ inputs.* }}` and indirect `${{ steps.*.outputs.* }}` run-block paths by projecting values through namespaced `env:` boundaries and quoting shell references.
+- Added newline-guarded `GITHUB_ENV` script paths, `persist-credentials: false` on primary/toolkit checkouts, Bash-array argument construction where applicable, and a run-block extractor plus a 13-test regression fence.
+- Closed the scoped H1/CodeRabbit documentation nits without changing H1 push behavior.
+- Owner-recorded final QG at PR head `c7ba941`: 2,042 Bats PASS / 0 FAIL, 2,607 Vitest PASS, three architect VERIFY-FINAL verdicts, proof mint and pre-push verification PASS before squash to `619d9a7`.
+- Preserved the broader security/doc/portability findings below as deferred fast-follows; none blocks Wave 1.
 
-### Broader reusable/workflow input-handling audit (deferred, LOW/MED)
+## Post-G0 fast-follows — retained, deferred, and outside Wave 1
 
-Out of scope for wave `harden-reusable-workflow-inputs` (off `1e0be41`), which hardened the `androidcommondoc_path` input handling on its 4 targeted reusable workflows. Remaining census: 36 run-block `${{ inputs.* }}` interpolation sites across 8 other workflows — `readme-audit.yml` (19), `doc-audit.yml` (3), `doc-monitor.yml` (1), `reusable-architecture-guards.yml` (1), `reusable-check-outdated.yml` (3), `reusable-kmp-safety-check.yml` (3), `reusable-audit-report.yml` (3), `reusable-commit-lint.yml` (3) — plus 3 `github.event.inputs.tag_name` sites in `l0-release-assets.yml` (L45/46/142), same injection class, arguably higher-risk since they come from a release-event payload rather than a `workflow_call`/`workflow_dispatch` input. Most sites are low-risk (numeric/enum/defaulted inputs); re-confirm the per-file census when this item is picked up.
+| Fast-follow | Priority | Exact retained scope | Owner / sequencing |
+|---|---|---|---|
+| `l0-release-assets.yml` `tag_name` boundary | HIGH | Three shell sites at the PR #245 baseline (`L45`, `L46`, `L142`) consume `github.event.inputs.tag_name`; the workflow has `contents: write` and therefore needs focused validation before its next release use | Wave 2. If a release must run first, land the focused fix before that release; do not pull it into Wave 1 |
+| Broader workflow input audit | LOW/MED | 36 remaining run-block `${{ inputs.* }}` sites across eight workflows: `readme-audit.yml` (19), `doc-audit.yml` (3), `doc-monitor.yml` (1), `reusable-architecture-guards.yml` (1), `reusable-check-outdated.yml` (3), `reusable-kmp-safety-check.yml` (3), `reusable-audit-report.yml` (3), and `reusable-commit-lint.yml` (3) | Wave 2; recount at its starting HEAD |
+| README count/table reconciliation | LOW/MED | Revalidated at `619d9a7`: 21 findings (0 HIGH, 15 MEDIUM, 6 LOW) — project-tree scripts `50→63`, guides `28→29`, sub-docs `97→102`, 12 missing script rows, four misclassified library rows, and incomplete agents/testing hub coverage | Wave 6 bundle; no standalone micro-wave |
+| qg-local-green grep portability | LOW | GNU-only BRE `\s`/`\+` usages in `scripts/tests/session-coverage.bats:63,109` and `scripts/tests/script-utils.bats:267`; convert to POSIX/ERE and sweep siblings. Canonical GNU grep is green; Apple grep exposes the latent gap | Independent portability fast-follow; never part of adapter scope |
+| Post-#245 documentation precision | LOW | State exact hook-manifest exemptions as `refs/heads/{develop,master,main}`; distinguish pre-commit gate-check reason codes from usage/environment errors; reconcile the README PS1-only wording at its current equivalents of former `L21`/`L963` | Independent documentation follow-up; never part of adapter scope |
+| BL-W4-8 documentation/test nits | LOW | Stale line cite in `arch-dispatch-modes.md`; C7.3 test name vs actual `docs/agents/` scope; named-team negation recognizes `never` but not `Do NOT` | Wave 6; one owner, no standalone wave |
 
-**Source**: `harden-reusable-workflow-inputs` wave scoping, 2026-07-12.
+## Ordered six-wave program
 
-### README count/table reconciliation (deferred, LOW — /readme-audit --fix)
+| Order | Professional name | Primary outcome | State |
+|---:|---|---|---|
+| 1 | Portable Runtime Consultation & Messaging Adapters | Live Claude/Codex consultation without making runtime messaging authoritative | **NEXT** |
+| 2 | Workflow Expression & Input Boundary Audit | Repository-wide control of untrusted workflow inputs crossing into shell | QUEUED |
+| 3 | Structured Verdict Evidence Contract | Verdicts become strictly parsed, correlated, evidence-backed records | QUEUED |
+| 4 | Reproducible Evidence & Bats Provenance | Independent runs and handoffs become comparable and fail closed | QUEUED |
+| 5 | Native Push Authority & Peer Authorization Policy | Git-layer push authority, robust intent detection, explicit actor policy | QUEUED |
+| 6 | Class-Aware Phase & Topology Control Plane | Wave class, phase, required roles, and peer lifecycle become mechanized | QUEUED |
 
-Pre-existing README drift surfaced during `harden-reusable-workflow-inputs` #7, which intentionally fixed ONLY the L21/L963 script-pair/Bash-only counts (45/18/1) per H1/CodeRabbit scope. The rest is unrelated to input hardening, non-blocking (bats green), and explicitly deferred.
+---
 
-Drift to fix in a dedicated `/readme-audit --fix` pass:
-- project-tree script count: README says **50**, actual **63**
-- guides: README says **28**, actual **29**
-- sub-docs: README says **97**, actual **102**
-- 11 script rows present on disk but missing from the README table: `emit-pre-pr-report`, `emit-push-proof`, `emit-qg-result`, `emit-rule-inventory`, `qg-doc-validators`, `qg-path-audit`, `qg-registry-integrity`, `run-bats`, `secret-scan-report`, `write-coordination-artifact`, `write-specialist-dispatch`, `write-verdict`
+## Wave 1 — Portable Runtime Consultation & Messaging Adapters
 
-**Source**: `harden-reusable-workflow-inputs` #7 `/readme-audit` scan, 2026-07-12.
+**Class**: HARNESS
 
-### qg-local-green: portable grep in PS1-parity BRE patterns (deferred, LOW)
+### Objective
 
-- Several bats tests grep with GNU-only BRE `\s`/`\+` extensions, e.g. `grep -c '^\s.*\+= "--rerun-tasks"'`. These ERROR under Apple's `/usr/bin/grep` ("repetition-operator operand invalid") but pass under the canonical `$HOME/.local/gnubin-l0` GNU grep 3.12. Latent portability gap — only bites if a non-canonical grep is first on PATH.
-- Sibling sites to make ERE/POSIX-portable (`grep -Ec '^[[:space:]].*[+]='`) in one repo-wide pass: `scripts/tests/session-coverage.bats:63,109` (PS1-kover #5/#16) and `scripts/tests/script-utils.bats:267` (coverage-phase check). Sweep for any other `\s`/`\+`-BRE grep siblings while at it.
-- Provenance: surfaced 2026-07-12 during `harden-reusable-workflow-inputs`; initially MISDIAGNOSED as a baseline regression (root cause was a PATH/grep mismatch, not code). Non-blocking under the canonical env; belongs in a dedicated qg-local-green-portability pass, deliberately NOT folded into the input-hardening wave.
+Restore reliable live collaboration during EXECUTE while preserving the portable contract. A specialist consults its reporting `arch-platform`, `arch-testing`, or `arch-integration`; that architect may open a nested consultation with `context-provider`. The protocol is transport-neutral, but a role-policy validator must reject disallowed direct specialist → context-provider transitions and reuse the existing concern-ownership/reporting-architect map rather than create a second topology map. The allowed chain must work whether activation uses Claude `SendMessage`, a persistent Codex session, Codex invoked through MCP, a spawned worker, or an already supervised disk-polling worker.
 
-### Realignment follow-ups (Wave 4 — QG/macOS parity)
+This wave must support both agreed operating modes:
 
-Specific findings enumerated in `.planning/harness-realignment-deep-audit-plan.md` (Wave 0 scope block) to be addressed under Wave 4 — QG/macOS/Local-CI Parity Hardening, above:
+1. **Persistent dual runtime** — Claude Code and Codex remain available concurrently and can receive work without the user relaying messages.
+2. **On-demand MCP** — Claude invokes Codex through MCP when a persistent Codex worker is unnecessary or unavailable.
 
-- **BL-W4-1** (OPEN, 2026-07-04) — qg-path-audit Class-parser anchoring: `qg-path-audit.sh` extracts the first bold `**Class**:` marker anywhere in `PLAN.md`, not the one under `### Wave Class`; can false-fail detailed plans. **RESOLVED — Wave 4 MERGED `30de240` (PR #238).**
-- **BL-W4-2** (OPEN, 2026-07-04) — qg-doc-validators `ANDROID_COMMON_DOC` propagation: `qg-doc-validators.sh` accepts `--toolkit-root` but does not export `ANDROID_COMMON_DOC` to the vitest subprocess; structure check fails without the env var exported even when `--toolkit-root` is passed. **RESOLVED — Wave 4 MERGED `30de240` (PR #238).**
-- **BL-W4-3** (OPEN, 2026-07-04) — validate-agent-templates Bash 3.2 policy: macOS ships Bash 3.2 by default; `validate-agent-templates.sh --check tool-body-xref` fails on `declare -A TOOL_PATTERNS` (`TeamCreate: unbound variable`) — needs an explicit compatibility policy (portable Bash 3.2 rewrite, or a fail-closed probe that routes to modern bash without silent skip). **RESOLVED — Wave 4 MERGED `30de240` (PR #238).**
-- **BL-W4-4** (OPEN, 2026-07-04) — qg-result delta-honest semantics: tighten what "0-new" / accepted-harness-gap means for `qg-result.json` `status:fail` outcomes so local pre-existing failures don't require a manual per-wave explanation. **RESOLVED — Wave 4 MERGED `30de240` (PR #238).** — `emit-qg-result.sh` manifest-membership code fix (required-steps lookup now sourced from `quality-gate-manifest.json`'s `required_steps[].id` instead of a per-step `required` default, closing the conditional-SKIP-flips-fail false negative) + `docs/agents/qg-proof-push-gate.md` doc-contract clarification (qg-result.json MAY still read `fail` in a degraded local/macOS env; `push-proof.json`/`verify-proof`/two-stamp gate remain sole push authority regardless).
-- **BL-W4-5** (AUDITED — NOT A BUG, 2026-07-04) — `.androidcommondoc/bats-result.*.env` collision: audited as a non-issue — producer names are unique per run, the consumer validates HEAD + started_at + max, and both rejection paths are tested. Originally flagged as a "multi-agent handoff collision risk" in `project_wave_live_tree_write_bats_hygiene_shipped.md`. Two optional LOW-severity hardening notes recorded as non-blocking.
-- **BL-W4-6** (OPEN, 2026-07-04) — validate-doc-update root-target confinement: for root-level markdown such as `BACKLOG.md`, docsRoot resolution can walk up to `/` and duplicate detection may traverse the whole filesystem / trigger permission prompts / hang. Fix by rejecting or fast-pathing non-docs targets, bounding the duplicate scan to the project `docs/` root, and adding a regression proving `BACKLOG.md` returns quickly without scanning `/`. (Concrete cause found this wave; refines D9.) **RESOLVED — Wave 4 MERGED `30de240` (PR #238).** — this very BACKLOG.md edit is still routed around the running (pre-fix) MCP server instance rather than through it, since the fix isn't live in-process yet.
-- **BL-W4-7** (OPEN, 2026-07-07) — qg-path-audit current-wave sentinel auto-recognition: `qg-path-audit.sh` should auto-recognize a wave's own `.claude/wave-quality-gates/<slug>.md` sentinel (mirror the clean-tree exemption) so future waves don't each declare it as a Path-Manifest bullet — candidate HARNESS wave; supersedes the per-wave Path-Manifest workaround used in Waves 1 and 2. **RESOLVED — Wave 4 MERGED `30de240` (PR #238).**
-- **BL-W4-8** (OPEN, 2026-07-07) — bats-test-authoring hygiene (3 items): (a) stale line cite in `arch-dispatch-modes.md` (`premature-execution-gate.js:77` → ~144); (b) `capability-preservation.bats` C7.3 named "tl-* doc" but greps bare `docs/agents/`; (c) `named-team-regression-guard.bats` bare-`.planning/PLAN.md` negation matches literal "never" only, not "Do NOT".
-- **BL-W4-9** (OPEN, 2026-07-07) — Harden `write-specialist-dispatch.sh:345` confinement prefix check: the `.planning*` bare-glob matches a sibling like `.planning-evil`; needs a trailing-separator / exact-match guard, mirroring the `write-coordination-artifact.sh` fix. Low-severity (only reachable via a symlink planted inside `.planning/`, already a trusted write surface). Surfaced by the Wave 2 Codex-round security re-review. **RESOLVED — Wave 4 MERGED `30de240` (PR #238).** — `write-verdict.sh` sibling also hardened with the same trailing-separator/exact-match guard.
-- **BL-W4-10** (OPEN, 2026-07-07) — Class-aware phase mechanization gap: the `.claude/hooks/*.js` control plane is class-blind (HARNESS/DOC/FAST-PATH lives only in prose + `wave-topology.yaml`/`resolve-required-roles.js`/`qg-path-audit.sh`, never in a hook); no `SessionStart` hook; `wave-topology.yaml phase_gates` has only 2 booleans with no PREP→dispatch→VERIFY-FINAL state machine; `quality-gate-manifest.json` `architect-deliberation.required_roles` hardcodes the 3 architects (over-blocks DOC/FAST-PATH waves declaring fewer). This is the deep-audit-plan's original Wave-3 HARNESS mechanization idea, deferred (Wave 3 shipped DOC — docs/agents wording reconciliation only). Route to Wave 4 or a dedicated HARNESS wave.
-- **BL-W4-11** (OPEN, 2026-07-07) — README + skills fixed-roster drift: `README.md:36,657,659`, `skills/work/SKILL.md:105,182` (the `/work` T-BUG-010 HARD-GATE), `skills/init-session/SKILL.md:28` still teach the old '6 core subagents / 5 core specialists' fixed roster, contradicting the class-aware model reconciled in `docs/agents/` this wave. Both skills are `copilot:false` (no template mirror) but touch the `/work` runtime gate + `/sync-l0` surface, so scoped out of this DOC wave. Reconcile to selective/class-aware.
-- **BL-W4-12** (OPEN, 2026-07-07) — No hook blocks orchestrator verdict-forging: `architect-self-edit-gate.js` gates only `agent_type.startsWith('arch-')` (and even then exempts verdict-shaped paths); `push-authorization-gate.js` only intercepts `git push`; `premature-execution-gate.js` excludes `arch-*`/orchestrator by design. Verified via direct source read (Wave 3 PREP): no hook prevents the orchestrator (empty `agent_type`) from directly Write/Edit-ing an `arch-*-verdict.md` path (hand-authoring a verdict instead of `write-verdict.sh`). The 'no-forged-verdict' rule added to `agent-verdict-protocol.md` this wave is discipline-enforced only; this tracks the HARNESS-track mechanical closure.
-- **BL-W4-13** (OPEN, 2026-07-09) — baseline-worktree/node_modules isolation: never symlink main's `node_modules` into a throwaway measurement worktree — a test's `rm -rf node_modules/` follows the symlink and empties MAIN deps (Wave 4 incident, recovered via `npm ci`). Prefer scoped wave+consumer checks in the main repo.
-- **BL-W4-14** (OPEN, 2026-07-09) — `emit-push-proof.sh` worktree_id non-canonical path bug: `worktree_id` is set from `git rev-parse --show-toplevel` in both emit (`:534`) and verify (`:620`), and verify hard-fails on mismatch (`:654`). On macOS, `--show-toplevel` returns `/var/…` vs `/private/var/…` inconsistently (symlink), so a worktree emit/verify pair can disagree → "proof worktree_id != current worktree" — the source of the 4 non-wave `test-push-proof-gate.bats` failures. Fix: canonicalize worktree_id (`pwd -P`/realpath) consistently in emit + verify. HARNESS-track.
+Both modes share one disk protocol and differ only in how a target is woken or invoked.
 
-**Source**: `.planning/harness-realignment-deep-audit-plan.md` (Wave 0 scope + Wave 4 scope), `project_wave_live_tree_write_bats_hygiene_shipped.md`.
+### Why it is first
 
-### Realignment follow-ups (Wave A — QG Evidence Integrity)
+Wave 2 coordination artifacts restored the portable data plane, but not a complete live consultation loop. Architects/context-provider no longer reliably survive through EXECUTE, specialists cannot consume a correlated protocol-valid answer portably, and Codex/Claude still need a manual bridge in many sessions. Fixing this collaboration layer first improves every later wave's planning, audit, and quality-gate review without weakening disk-first evidence.
 
-Findings from `.planning/wave-qg-evidence-integrity/PLAN.md`, filed once Steps 5, 9, and 11 had actually landed (confirmed on disk at filing time):
+### Historical baseline and retained lessons
 
-- **D0** (RESOLVED by Wave A) — `scripts/sh/emit-push-proof.sh` accepted a claimed `{"step":"test-suite","result":"PASS"}` on faith: duplicate step ids silently last-won, `result` was never checked against an enum, unknown step ids were never checked. Closed by five named evidence-binding checks (`invalid-step-result`, `duplicate-step-id`, `unknown-step-id`, `report-started-at-*`, `test-suite-evidence-*`).
-- **D2** (RESOLVED by Wave A) — `docs/agents/quality-gater-freshness-gate.md`'s `ls .../bats-result.*.env | sort | tail -1` handoff discovery reimplemented, incorrectly (no HEAD check, no scope check), logic that already existed correctly in `emit-qg-result.sh`. Extracted to shared `scripts/sh/lib/bats-handoff.sh`; the doc now calls `select_bats_handoff --since <report.started_at> --require-scope full` and fails Step Z when it returns anything other than `ok`.
-- **D3** (RESOLVED by Wave A) — `emit-qg-result.sh` conflated bats-run completeness with test-pass success — a complete-but-failing run was indistinguishable from a truncated one. Now emits separate `suite_summary.bats_complete` and `suite_summary.bats_verdict`.
-- **D5** (ADDRESSED by wave `qg-artifact-binding`, pending merge — see below) — `pre_pr_coverage` and `discovered_rules` have zero producers repo-wide; `emit-push-proof.sh` still only checks their *presence*, not that the content is real. Explicitly out of Wave A's scope. **Fix**: mint-internal `emit-pre-pr-report.sh` + `emit-rule-inventory.sh` derived-artifact producers, a `pre_pr_coverage` managed-key contract (`secret_scan`/`registry_hash_freshness`/`commit_lint`), and a `rule-coverage-gap` check diffing `discovered_rules[].rule_id` against the generated inventory — see [quality-gater-artifact-binding.md](docs/agents/quality-gater-artifact-binding.md).
-- **D6** (RESOLVED by Wave A) — the QG report carried no session timestamp. `emit-qg-result.sh --init` now stamps `started_at`/`head` into `quality-gate-report.json`, used both as the evidence-lookup `--since` floor and as `emit-push-proof.sh`'s own `report-started-at-*` plausibility check (`now-86400s <= started_at <= now+120s`).
-- **Decorative `artifact` field** (LOW) — `quality-gate-manifest.json`'s `required_steps[].artifact` (e.g. `test-suite`'s declared `.androidcommondoc/test-suite-report.json`) stays decorative — no code reads it. Wave A binds evidence through the new `evidence` sub-object instead. Low-priority cleanup: either wire a real producer/consumer for `artifact` or drop the field.
-- **PS1 `run-qg` restoration** (MED) — `scripts/ps1/emit-push-proof.ps1`'s `run-qg` is disabled (hard-refuses to mint, exit 2) pending a PowerShell port of the evidence-binding logic; `pwsh` was not available on the box Wave A was implemented on, so writing an untested security-critical PS1 evidence binding was correctly deferred rather than risked. Needs a box with `pwsh` installed, plus parity tests against the bash implementation. `verify-push-proof.ps1` (the read-only verifier) is unaffected and already carries the same `bats_evidence` 8th check as bash.
-- **`docs/agents/dual-location-protocol.md` doc drift** (LOW, non-blocking) — its 5-line Sync Steps (lines 16-24) *omit* Patas 3-4 of the Rule 9 ceremony entirely: the doc never mentions `skills/registry.json` or `generate-registry.js` anywhere in its body, even though a template-version bump also requires regenerating the registry's embedded `frontmatter.template_version` copy (a different artifact than the manifest hash the doc does cover). Both existing lines in the doc are individually correct about the manifest-hash artifact — the doc simply omits the registry-sync patas, it does not contradict them.
-- **HIGH — `docs/agents/quality-gate-protocol.md` is stale on the bats-evidence subsystem** — currently inaccurate, not a future risk (pure prose; nothing gates on it, so not test-breaking). Not in the 29-file Path-Manifest; `PLAN.md` is frozen (amending it would invalidate three PREP verdicts and three dispatch artifacts mid-flight), so filed here rather than fixed this wave. Found by context-provider: `:206-218`'s handoff-fields table lists 10 fields while `run-bats.sh` now writes 13 (adds `BATS_SCOPE`, `BATS_TARGET_DIGEST`, `BATS_ENV_FINGERPRINT`); `:220-233` describes the old inline discovery algorithm, but `emit-qg-result.sh:289` now delegates entirely to `select_bats_handoff --require-scope full` in `lib/bats-handoff.sh` and the doc has no concept of `--require-scope`; and the doc has zero mention of `fail_class` (`emit-qg-result.sh:378-389`) or of `bats_verdict` as distinct from `bats_complete` (the D3 fix, `:369-376`).
-- **`docs/agents/quality-gater-secret-scan.md:49,55`** (FIXED by wave `qg-artifact-binding`) — blanket claim `"quality-gate-manifest.json — NOT touched"`. The specific point (secret-scan needs no NEW manifest entry) stays true, but the unscoped wording was false: Step 9 already touched the manifest for an unrelated reason (`informational_steps`), and wave `qg-artifact-binding` touches it further (`manifest_version: 3`, generic binding loop that now actively reads this report). Both lines rescoped to the narrow true point; same defect shape as the freshness-gate lines already fixed in Wave A, lower severity.
-- **`mcp-server/src/tools/validate-agents.ts:325`** — `const MAX_LINES = 435;`, a second, independent copy of the agent-template line cap, parallel to `validate-agent-templates.sh:429`. Not broken by this wave (the template stays at exactly 435, satisfying both). Risk: the two magic numbers could drift apart in some future change. `docs/guides/project-constraints.md:23` states the ≤435 policy as prose (not a pin) — benign.
+- At the PR #213 (`aac0257`) snapshot, the dominant documented Claude topology kept context-provider, doc-updater, three architects, and Phase-2 specialists alive, then used a temporary QG peer with live architect deliberation. Some start-roster docs already disagreed on whether QG was persistent, which is historical evidence that prose-only lifecycle rules drift.
+- PR #219 (`1f4214b`) deliberately removed mandatory `TeamCreate` dependence and moved architects toward single-use/background-optional execution. That improved portability but reduced live continuity.
+- PR #220 (`2622205`) documented an adapter/capability direction with pseudocode and a textual capability guard; it did not ship an executable runtime-neutral loop.
+- PR #235 (`125409b`) realigned documentation, not runtime liveness.
+- PR #236 (`68ed036`) shipped the portable coordination-artifact floor: six typed schemas, a writer, validator, context-provider disk branch, and Bats/Node coverage. It did not ship an inbox consumer, poller, wakeup, or respawn loop.
+- PR #237 (`8aacc05`) reconciled phase wording and explicitly deferred HARNESS mechanization to BL-W4-10.
+- Today `consult/v1` is a context-provider marker, `message/v1` may be content-free, and `result/v1` has no request correlation or actor binding. Direct-final writes are collision-safe but not temp+rename atomic; the context-provider disk branch excludes specialists, which still depend on an architect-written live-message flag.
 
-**Methodology note (context-provider) — a sweep axis prior audits structurally could not cover.** Every axis swept this wave asked "does anything *reference* the value I am changing?" But a doc asserting `"quality-gate-manifest.json — NOT touched"` contains neither `manifest_version` nor `informational_steps` as literal text — **a value-grep can never catch a stale negative claim.** New axis: after changing a shared artifact, additionally grep for the *pattern* of denials about it — `"untouched"`, `"NOT touched"`, `"informational only"`, `"does not"`, `"is unnecessary"` — not just its field names. This single idea found the two doc items above, plus the two lines already fixed in `quality-gater-freshness-gate.md:45,51`.
+The target is not to resurrect the Claude-only topology. It is to recover its useful liveness through replaceable transports.
 
-**Wave C — QG Artifact Binding — MERGED @ `7428b81` (#241).** The branch lands a real producer for `pre_pr_coverage` and `discovered_rules`: mint-internal `emit-pre-pr-report.sh` + `emit-rule-inventory.sh`, a `pre_pr_coverage` managed-key contract, and a `rule-coverage-gap` check diffing `discovered_rules[].rule_id` against the generated inventory (see [quality-gater-artifact-binding.md](docs/agents/quality-gater-artifact-binding.md)). Same wave also closes the `secret-scan`/`doc-validator-parity` "declared-but-never-opened" gap via a generic binding loop, and the `registry-hash`/`rule-cross-check` tautology/circularity via the `mint_rederived` marker and a rule-inventory-based coverage check respectively. This completed the B → A → C prerequisite and cleared Wave 5 to resume on top of `7428b81`.
+### Architecture contract
 
-**LOW/MED — commit-lint semantics duplicated across three validators; extract a shared helper.** The Codex NO-GO fix round's P1 fix (wave `qg-artifact-binding`) ported `scripts/sh/commit-msg-hook.sh`'s conventional-commit-scope semantics INLINE into `scripts/sh/emit-pre-pr-report.sh` (the mint's `commit_lint` managed-key producer — see [quality-gater-artifact-binding.md](docs/agents/quality-gater-artifact-binding.md)), kept contained to that one file per the wave's own Path-Manifest. That leaves **three** independent bash/JS implementations that can silently drift: `scripts/sh/commit-msg-hook.sh` (git hook), `scripts/sh/emit-pre-pr-report.sh` (mint), and `.claude/hooks/commit-scope-validation-gate.js` (pre-commit JS gate) — plus `.github/workflows/reusable-commit-lint.yml` as the CI-side sibling to keep in view (not a fourth implementation to merge, a comparison point). **Desired fix**: extract one shared commit-lint helper the bash-side validators source, so the semantics cannot drift; re-verify the JS gate against it. Not a blocker for Wave C's merge — filed as a follow-up.
+Separate two planes:
 
-**LOW/MED — `readme-audit` surfaced `README.md` staleness while auditing wave `qg-artifact-binding`'s own docs work (NOT fixed — `README.md` is outside this wave's Path-Manifest).** Sub-docs count stale (README says 97, actual 99 — includes this wave's new `quality-gater-artifact-binding.md`); sh-scripts count stale (README project tree says 50, actual 62 — includes this wave's 2 new `emit-pre-pr-report.sh`/`emit-rule-inventory.sh`, though the 12-script gap is mostly pre-existing); 11 scripts (including both of this wave's new ones) missing from the README scripts table entirely. Fix with `/readme-audit --fix` in a dedicated pass — do not fold into a wave whose Path-Manifest doesn't include `README.md`.
+- **Authoritative data plane**: validated artifacts below one configured base `coordination_root` (default `<worktree>/.planning/coordination`). It carries requests, correlation, results, freshness, transaction cancellation, and acknowledgement state.
+- **Best-effort wake plane**: `SendMessage`, Codex app-server/thread input, Codex MCP invocation, runtime spawn/respawn, or no-op. It only tells a worker which artifact to read.
 
-**HIGH — `APPROVED-PREP` is an unbacked assertion, same defect class as D0, one layer earlier.** `.claude/hooks/premature-execution-gate.js:143` unlocks all specialist Write/Edit/Bash execution on the literal token `APPROVED-PREP` plus a matching `PLAN_SHA256` — but `scripts/sh/write-verdict.sh`'s `prep` mode (`:9`) mints that token from **no analysis input at all**; only its `verify-final` mode (`:11`) reads a verdict body from stdin. Anything driving `write-verdict.sh --phase prep` can unlock specialist execution without ever having produced a structured PREP analysis. Desired fix: bind the `APPROVED-PREP` token to a structured, non-empty PREP body (mirroring how `verify-final` already requires one) before it can unlock specialist execution. *User-approved for filing 2026-07-09; explicitly NOT folded into Wave A's own scope.*
+Proposed transport-neutral facade:
 
-**HIGH — `APPROVED-VERIFY-FINAL` is an unbacked assertion, same defect class as D0 and as the `APPROVED-PREP` item above, one phase later and one layer more load-bearing.** `scripts/sh/write-verdict.sh` verify-final reads the architect's body from stdin with a bare `stdin_content="$(cat)"` — accepting anything, including an empty body. Worse, `scripts/sh/emit-push-proof.sh:573` tests the seal with a bare substring check, `if 'APPROVED-VERIFY-FINAL' not in content`, so **the token is satisfied by any occurrence of the literal string anywhere in the file — including prose that merely mentions it.**
-
-**Demonstrated live during Wave A.** `arch-integration-verdict.md` carries the string twice: once at `:126` as its actual seal, and once at `:112` inside a sentence *describing this very backlog item*. **Delete the seal and the file still passes.** Paired with the `**HEAD**:` regex, which matches any line of the form `**HEAD**: <40-hex>`, **a prose-only file satisfies `verdict-head-binding` entirely.** The token does not prove an architect reviewed anything; it does not prove `write-verdict.sh` was ever run. Unlike `APPROVED-PREP`, which unlocks specialist execution, this token unlocks the **push**.
-
-**And the `**HEAD**:` line is stamped by `write-verdict.sh` at write time from `git rev-parse HEAD` — never asserted against the evidence the verdict body cites.** Observed in Wave A: an architect verified the tree at one commit, a docs commit landed during its verification pass, and its sealed verdict bound the newer commit while its Evidence section cited handoffs from the older one — with no bats handoff at the bound commit at all. The mint fail-closes on a stale `**HEAD**:`, so this is not exploitable; but **a verdict can be internally inconsistent and still satisfy `verdict-head-binding`.** Same defect class as `report.head` (fixed in `51b0d63`), one layer up: a field written by the tooling, never cross-checked against the content it accompanies. Found by `arch-testing` auditing its own artifact.
-
-**Operational rule until the verdict evidence contract is fixed:** re-check HEAD and `git status --porcelain` immediately before every `write-verdict.sh` invocation, not once at the start of a verification pass. A long, careful pass is exactly when HEAD moves underneath you.
-
-**Desired fix — and a non-empty-body check is explicitly insufficient.** Do not test for a substring. Require a **structurally delimited seal block** that `write-verdict.sh` alone emits, carrying evidence-bound review content, and **reject any file where the token appears outside that block**. Mirror §A4: the gate reads evidence, not an assertion — and a *mention* of an assertion is not even the assertion. *Explicitly NOT fixed in Wave A, by user decision — it changes both the verdict evidence contract and the push-mint semantics, so it belongs in a dedicated follow-up / Wave C scope. Do not add `write-verdict.sh` to Wave A's Path-Manifest. No silent deferral: this is a named, owned item, not a parked one.*
-
-**HIGH — the evidence binding requires evidence to be PRESENT, never REPRODUCIBLE. It is order-dependent.** Wave A binds `test-suite: PASS` to a HEAD-bound, full-scope, complete bats handoff with `not_ok=0`. It never establishes that a second run at the same HEAD would agree. Two handoffs observed on disk during Wave A, same commit `dc6aef0`, same scope, both `complete=true`:
-
-```
-21:29:15   OK=1945   NOT_OK=0   COMPLETE=true   VERDICT=pass
-21:33:32   OK=1941   NOT_OK=4   COMPLETE=true   VERDICT=fail
+```text
+dispatch(target_role, request_artifact_path, policy) -> DeliveryReceipt
+await_result(request_id, expected_role, deadline) -> ValidatedResult | Timeout
 ```
 
-`scripts/sh/lib/bats-handoff.sh` (Pass 3b) selects the candidate with the **maximum `BATS_GENERATED_AT`** among valid, fresh, full-scope, HEAD-matching handoffs. **The newest run wins.**
+`DeliveryReceipt` is diagnostic telemetry only. `ValidatedResult` means **protocol-valid consultation result**, not authenticated actor identity or permission to advance a phase. It exists only after request/result correlation, allowed role transition, wave, PLAN digest, exact subject snapshot/scope, schema, status, and content checks pass.
 
-For the pair above, the newest is the *failing* one, so the mint correctly dies `test-suite-evidence-dirty`. **That ordering is safe.** The hazard is the **reverse**: a failing run followed by any later clean run — *including a simple retry* — leaves a clean handoff as newest. The mint binds it and has **no awareness that an earlier run at the same commit disagreed.** The gate silently rewards *"re-run until green,"* which is precisely the culture a flaky suite produces.
+### Protocol evolution
 
-The evidence of disagreement is not lost. `run-bats.sh` writes a **new file per run and never overwrites**, so every same-HEAD handoff persists in `.androidcommondoc/`. **The mint reads exactly one and ignores the rest.** The data required to detect non-reproducibility is already on disk, unread.
+Keep existing schemas readable during migration, but do not overload weak v1 meanings:
 
-**Desired fix.** At mint time, enumerate **all** valid full-scope HEAD-matching handoffs rather than only the newest, and **die if any two disagree** on `ok` / `not_ok` / `expected`. No new artifact is needed — only reading what `run-bats.sh` already writes. Optionally strengthen to *require* ≥2 agreeing runs, so a single unrepeated measurement cannot mint at all. Mirror §A4: the gate reads evidence, not an assertion — and **one answer is an assertion about *the* answer.**
-
-*Found by arch-testing in the raw handoff archive; the ordering semantics corrected by arch-platform while sealing VERIFY-FINAL, against the orchestrator's own (backwards) description. User-approved for filing 2026-07-09. Explicitly NOT fixed in Wave A — the root cause is fixed; the gate hardening is a tracked follow-up, not a blocker. To be disclosed in the PR body as a known limitation.*
-
-**MED — `run-bats.sh` and `emit-qg-result.sh` default `PROJECT_ROOT` to the live repo; under bats this silently reads live artifacts.** `run-bats.sh:72` and `emit-qg-result.sh:79` both resolve `${ANDROID_COMMON_DOC:-$(cd "$SCRIPT_DIR/../.." && pwd)}`. Both branches yield the live repo — there is no safe branch. A bats test that invokes either without `--project-root` receives isolated `--report`/`--out` paths but a **live** handoff-discovery directory (`scripts/sh/lib/bats-handoff.sh:111` enumerates `$repo_root/.androidcommondoc`).
-
-Observed in Wave A (2026-07-09): eight tests in `scripts/tests/emit-qg-result.bats` (`#QR1`, `#QR2`, `#QR3`, `#QR9`, `#QR22`, `#QR23`, `#QR24`, `#QR26`) passed for four hours for the wrong reason — no handoff had ever bound a live HEAD, so every live candidate was rejected as foreign and the script fell back to the `--bats-log` fixture each test was actually asserting. The first honest `run-bats.sh` run wrote a full-scope handoff bound to HEAD; `select_bats_handoff` then returned `ok`, the script consumed the real run instead of the fixture, and the tests broke. Fixed in-wave by passing `--project-root "$REPO"` (plus copying the manifest into the sandbox, without which the required-steps evaluator fails closed and the tests go red for a different wrong reason). **Failure mode is silent passing**, so no amount of green tells you it is absent.
-
-Currently dormant elsewhere: `scripts/tests/bats-handoff.bats` and `scripts/tests/emit-push-proof.bats` are clean. `scripts/tests/run-bats.bats` is clean **by two different routes, and only one of them generalises**: `#RB1`–`#RB10b` and `#RB17` invoke `--eval-only`, which never performs handoff discovery or writing at all — immune **by construction**. The remaining seven — `#RB11`, `#RB12`, `#RB13`, `#RB14`, `#RB15`, `#RB16`, `#RB18` — are full-run invocations kept safe only because each explicitly passes `--project-root "$WORK_DIR"` — safe **by discipline**. The set is **non-contiguous**: a range grep for `#RB13`–`#RB18` silently misses `#RB11`/`#RB12` and wrongly includes `#RB17`. `--eval-only` immunity survives a careless future test; flag-passing discipline does not. Dormant is not fixed.
-
-Desired fix — do not rely on discipline; make the default impossible under test: under Bats (`BATS_TEST_FILENAME` or `BATS_TEST_TMPDIR` set), `run-bats.sh` must fail closed if `--project-root` was not passed explicitly (`die` rather than silently defaulting to the live repo). Production and `quality-gater` behaviour are unchanged — the live-repo default remains correct outside tests. Add a regression proving the die fires (and a positive control proving the explicit flag still works). `emit-qg-result.sh:79` carries the identical pattern and warrants the same treatment. *User-approved for filing 2026-07-09. Explicitly NOT fixed in Wave A unless it becomes an active blocker.*
-
-**HIGH — `wave-phase-gate.js` Rule A is inert; it cannot fail.** `.claude/hooks/wave-phase-gate.js:58` blocks `git push`/`gh pr create` only when the wave sentinel is absent. `.claude/hooks/plan-md-write-gate.js:55` auto-creates that exact file at PLAN.md-write time, guarded by `if (!fs.existsSync(...))` — so it can never overwrite, and the stub's promise ("overwritten by QG verdict at pre-PR time") is unfulfillable by that writer; no other writer exists. The literal `status: PASS` in the stub is parsed by nothing. `emit-push-proof.sh:616` additionally exempts the path from the clean-tree assertion. Found by `quality-gater`; independently corroborated by `context-provider` across three sweeps (zero readers of the sentinel content). Note `scripts/tests/planner-write-gate.bats:86` asserts the stub text, so removing the false promise is not a one-liner. Both hook files are outside Wave A's Path-Manifest. Same defect class as the `APPROVED-PREP` and `APPROVED-VERIFY-FINAL` entries above: a gate whose predicate cannot be false. *Not a live authorization bypass — real push authority is `push-authorization-gate.js` plus the two-stamp git hook.*
-
-**MED — `bats_evidence` omits `complete` and `total`.** `emit-push-proof.sh` validates `complete == true` and `total == expected` (the sanity floor) at mint time, then persists only `{run_id, head, ok, not_ok, expected, scope, generated_at}`. `verify_proof`'s 8th check is presence + `.head == pushed_sha` — nothing more. So the three "equivalent-rigor" verifiers (bash `verify-proof`, `verify-push-proof.ps1`, the `push-authorization-gate.js` fallback) confirm evidence exists and names the right commit, never what it said. `emit-push-proof.sh:35` already admits the consequence: *"a hand-authored, well-formed, correct-HEAD handoff file is not distinguishable from a genuine one by this mechanism alone."* Desired fix: persist `complete` and `total`; have all three verifiers re-derive `not_ok == 0 && scope == "full" && complete && total == expected && ok > 0`. Found by `quality-gater`. *Explicitly not fixed in Wave A by user decision — the `report.head` fix must not widen.*
-
-**LOW — `PA-JS1`/`PA-JS2` match a loose substring where a structured field exists.** Both tests (`scripts/tests/push-authorization-gate.bats:598`, `:629`) correctly pin `[ "$status" -eq 2 ]`, but assert the decision with `[[ "$output" == *"BLOCKED"* ]]` — a substring that merely happens to live inside the hook's reason string — rather than the structured `[[ "$output" == *'"decision":"block"'* ]]` field that `#PAG-PEER-BLOCK` (`:818`) already uses. A future reason-string rewording, or any output containing the word incidentally, would satisfy the assertion without the hook having emitted a block decision.
-
-**Desired fix:** assert the structured `"decision":"block"` field alongside the existing exit-code check, matching `#PAG-PEER-BLOCK`'s pattern. Flagged by `arch-testing` during review; the mechanism corrected by `arch-integration`, which read both tests rather than accept the filed description. Same defect class as `#PAG-PEER-BLOCK`'s vacuity: **an assertion weaker than the property it names.**
-
-**INCIDENT — push-authorization bypass, 2026-07-10.** `push-authorization-gate.js`'s `isGitPushCommand` split on `&&`, `||`, `;`, `|` but not on newlines, then anchored `^git push` per segment. A `bash -c` body whose first line was `cd …` became one segment starting with `cd` and went undetected. `:174`'s `if (!isGitPushCommand(cmd)) process.exit(0)` precedes the peer-block, so the false negative disabled the entire gate — a peer could push (verified: `agent_type=toolkit-specialist` + `bash -c 'cd /repo\ngit push'` → ALLOW). The bypass shape is the shape this project mandates (`env PATH=… bash -c 'cd …\n<cmd>'`, required for the GNU userland). `.git/hooks/pre-push` was not installed in the clone, so the documented git-layer fallback was absent too. One push occurred through the hole: branch `feature/qg-evidence-integrity` at `1809ff6`, with stamps 58 minutes stale.
-
-**State plainly: this was an AUTHORIZATION bypass, not evidence fraud.** `proof.head == bats_evidence.head == origin/feature/qg-evidence-integrity == 1809ff6`. The pushed commit is exactly the one the proof binds, and that proof was minted from a QG whose bats evidence came from a run inside its own session. No bad code shipped; a gate simply failed to gate. *(That distinction is `quality-gater`'s, and it is the right one.)*
-
-`#PAG-PEER-BLOCK` — the regression written specifically to guard this property — was green throughout, because it feeds the hook a bare `git push`, an input nobody issues. Fixed in `3c64643` (newline and background-operator separators) with `#PAG-PEER-WRAPPED`/`#PAG-MAIN-STALE-WRAPPED` covering the real shape. `install-git-hooks.sh` was run as immediate mitigation.
-
-**Update (Codex NO-GO round, 2026-07-10): the detector is best-effort, not authoritative — and one class stays open.** The newline/`&` (`3c64643`), global-git-option + ANSI-C (`3f23add`), and line-continuation (`737c1b9`) evasions were narrowed. A **known class remains OPEN by design decision** (redesign, not another special case): backslash-escape of ordinary characters. A shell strips `\x`→`x`, so every one of these executes a real `git push` yet the detector ALLOWs it — nine confirmed shapes (fake-`git`-on-PATH proof): `git \push`, `\git push`, `git p\ush`, `g\it push`, `git pu\sh`, `git \p\ush`, `git -C /tmp \push`, `rtk git \push`, `git \push\ origin`. The naive `replace(/\\(.)/g,'$1')` over-normalizes escaped spaces and stays in the regex-vs-shell trap; rejected. **The authoritative push gate is the git-layer `.git/hooks/pre-push` hook**, which reads git's native pre-push refs (not a command string) and so cannot be evaded by any spelling; it blocked a stale-stamp push with exit 1 in this branch. **Wave A's delivered contract is test-suite evidence integrity + proof binding, not complete shell-command push authorization.**
-
-**LOW — `push-authorization-gate.js` Pass 1 recurses into any backtick span, so ANY Bash call whose text contains backtick-quoted push-like content is blocked as a push.** `isGitPushCommand`'s `EXEC` list treats `` `…` `` as command substitution and recurses into it regardless of whether the content resembles a command. **Pass 1 runs on the ORIGINAL command, before Pass 2 strips heredoc bodies and quoted spans** (`:57`) — so a heredoc offers no protection.
-
-**The blast radius is Bash calls generally, not commit messages.** Observed live in Wave A: `arch-platform`'s `write-verdict.sh --phase verify-final --supersede` invocation — a command touching no git — was blocked as *"arch-platform attempted git push"*, because its heredoc body described the bypass using backtick-quoted syntax. A plain `echo` with backticked push text blocks identically.
-
-Pre-existing for a backtick span whose content is bare `git push`. The newline and `&` separators added in `3c64643` each created a new instance: a backtick span containing `cd /x` on one line and `git push` on the next (the newline case), and `` `sleep 1 & git push` `` (the `&` case) — both were allowed before and block now.
-
-**Over-blocking, not under-blocking** — fail-closed, and strictly safer than the bypass it replaced. Reported by `toolkit-specialist` against its own change after its own commit was refused; scope corrected by `arch-platform` after its own verdict-write was refused. Both rephrased rather than widening the detector or bypassing it.
-
-**Desired fix (design question, `toolkit-specialist`'s suggestion):** Pass 1 should require backtick content to look like a command before recursing, rather than merely be non-empty. Must preserve the existing prose guards and must not reopen the newline/`&` bypass.
-
-**Practical note until fixed:** avoid backtick-quoted push syntax in any Bash argument — commit messages, heredocs, `echo`, verdict bodies. Plain prose is fine.
-
-**CRITICAL — replace the command-string-parsing push detector; stop treating regex parsing as authoritative.** `push-authorization-gate.js`'s `isGitPushCommand` parses a Bash command string with regex to decide whether it is a `git push`. This is structurally unable to keep pace with the shell's grammar — four evasion families were closed in sequence (newline, `&`, global-options/ANSI-C, line-continuation) and a fifth (backslash-escape of ordinary characters, 9 shapes) remains open. Do not add a fifth special case. Redesign options: (1) treat the git-layer `.git/hooks/pre-push` hook as the sole authority and demote the JS PreToolUse hook to advisory identity defense; (2) replace the regex with a conservative shell tokenizer modeling unquoted backslash, line continuation, wrappers, and git global options, with explicit **deny-on-unknown for peer agents**; (3) for peers, block any Bash command whose normalized body contains an executable `git` token unless proven non-push. The detector must fail **closed** for peers, not open. The same regex fragility also produces **false positives**, not only false negatives: during this round a plain `git commit` (no push) was blocked as "attempted git push" because Pass 1's non-greedy `$(…)` match closed on an unrelated inner `$(…)` before the heredoc's true end, leaking a git-push example string past heredoc-stripping. A detector that both misses real pushes and blocks legitimate non-pushes is wrong in both directions — the definitive case for replacement over patching. *User-directed CRITICAL, 2026-07-10.*
-
-**HIGH — install `.git/hooks/pre-push` automatically; manual install leaves clones unprotected.** The git-layer two-stamp pre-push hook is the authoritative, escape-proof push gate, but `install-git-hooks.sh` is a manual step (documented in README / `docs/guides/pre-commit-hooks.md`, not wired into any automatic setup/bootstrap). A fresh clone with the hook absent has **no** authoritative push gate — exactly the state that allowed the `1809ff6` push during this wave. Wire installation into onboarding/setup so the git-layer gate is present by default, or have a checked-in mechanism verify+install it. *User-directed HIGH, 2026-07-10.*
-
-**ADDRESSED by wave `push-authority-bootstrap` (H1), 2026-07-11.** A checked-in mechanism now verifies (and the mint enforces): `scripts/sh/verify-git-hooks.sh` confirms the git-layer hook is installed, executable, and canonical; the QG mint (`emit-push-proof.sh run-qg`) fails closed unconditionally when it isn't; `push-authorization-gate.js` fails closed on the same condition for any Claude push it detects (its ~205-LOC in-JS stamp/proof fallback removed entirely — no permissive path left); `setup-check` Check 7 and the CI install→verify smoke surface the gap proactively (WARN, recoverable one-line fix). Narrowly scoped, not eliminated: a terminal push in a clone that was never bootstrapped remains inherently uncoverable (git never auto-runs hooks from a fresh clone) — that clone also cannot mint a valid push-proof, so it cannot dress up as QG-green. The command-string detector redesign (line 139, CRITICAL) stays explicitly OPEN — H1 does not touch `isGitPushCommand`.
-
-**Source**: `.planning/wave-qg-evidence-integrity/PLAN.md`, `.planning/wave-qg-evidence-integrity/arch-integration-verdict.md`.
-
-### Wave 38 — Ingestion bundle (LOW urgency, ~2-4h) — DEFERRED to Harness Realignment Wave 5
-
-Content deferred — not the next harness wave. Will be processed via **Wave 5 (Portable Ingestion + Wave 38 Content)** of the Harness Realignment Sequence above, once the ingestion loop is made portable, not executed standalone.
-
-| ID | Item |
-|----|------|
-| Ingest-1 | npm-cli-bin-field doc |
-| Ingest-2 | gradle-patterns-plugin-authoring doc |
-| Ingest-3 | testing-vitest-cjs-esm-mock-boundary doc |
-| Ingest-4 | testing-vitest-esm-coverage-instrumentation doc |
-| BL-W36-check | `/release-build-verify` promotion eval (calendar BL-W38 ~2026-07-03) — EVAL (Wave 5, 2026-07-09): no concrete gap identified vs the existing `/pre-release` command; recommend DEFER promotion — a dedicated `/release-build-verify` would touch `.claude/commands`+`skills` (HARNESS); revisit as a follow-on wave only if a specific release-build-verify need arises. |
-
-**Source**: `project_w31.5_ingestion_deferred.md`, `project_bl_w36_backlog.md`.
-**Recommendation**: SUPERSEDED (Wave 5, 2026-07-09) — the 4 items shipped as atomic docs under existing categories (docs/guides, docs/gradle, docs/testing); a dedicated grouping would be a new top-level category = a separate HARNESS wave if ever wanted.
-
-### Wave 39 — Wave 19 topology debt + housekeeping (~10-15h)
-
-| ID | Severity | Item |
-|----|----------|------|
-| W19-#3 | MED | session teardown hook (TeamDelete on session end) |
-| W19-#4 | MED | `/work` skill rewrite for 3-phase topology |
-| W19-#6 | MED | PREP/EXECUTE dispatch modes (verify partial Wave 23 ship) |
-| BL-W36-02 | MED | test-specialist sub-docs vm-testing (10 lines) + coverage-targets (8 lines) are stub-sized per `doc-migrator.md:157`. Consider consolidating into a single `test-specialist-patterns.md` sub-doc or merging back to template (if line budget allows) |
-| BL-W36-03 | LOW | MIGRATIONS.json field divergence — older entries use `note`, recent (1.16.0/1.17.0/1.18.0) use `summary`. Normalize in cleanup pass |
-| BL-W36-04 | LOW | quality-gater stash-test methodology gave false "pre-existing" verdict on PR4 manifest-validator failures (actually PR4-introduced version mismatch). Investigate stash hygiene or replace with `git diff develop` baseline check |
-| BL-W37-02 | MED | `/sync-l0` does NOT propagate `.claude/hooks/` — extend manifest/distribution path to cover hook files. Caused L1 to go stale after BL-W33 PR #102 logger fix; manual cross-repo PR was required (Wave 37 PR1) |
-| BL-W37-03 | LOW | When L1 grows `scripts/tests/*.bats` files, fold the inline `shell-tests` job in L1's `ci.yml` (added by BL-W37 PR2) into a call to L0's `reusable-shell-tests.yml`. Currently inline because L0's reusable would fail on empty `.bats` glob in L1 |
-| BL-W37-04 | LOW | L1 calls L0 reusable workflows via `@master` (4 invocations + 1 from BL-W37). Pin to immutable SHA or release tag for supply-chain hardening; auto-bump via dependabot or scheduled CI |
-| Housekeeping | LOW | `.gsd/agents/` gitignore decision, `l0-manifest.json` source vs output, `material-3-skill/` triage, lingering remote branches |
-| Modularization paso 2 | LOW | rewrite "Target architecture" section in `.planning/MODULARIZATION-PLAN.md` (~1h) |
-
-**Source**: `project_wave19_topology_debt.md`, `project_wave19_sprint2_deferred.md`, `project_modularization_paso2_pending.md`.
-
-### Wave 40 — Wave 17 L2 hardening (BIG, ~19-32h)
-
-19 findings (5 HIGH, 13 MED, 1 LOW) from L2 consumer session 2026-04-18. Hardens prose rules → mechanical gates (hooks, numbered-step assertions, liveness probes).
-
-**Source**: `project_wave17_l2_topology_findings.md`, plan at `.planning/wave17-l2-topology-findings.md`.
-**Trigger**: schedule AFTER Wave 35-39 cleared for clean context.
-
-### Wave 41 — Plugin v0.2.0 generalize (TBD effort)
-
-9 DSL settings + 3 enums + sha256+prefix + custom frontmatter lambda. Decouple plugin from AndroidCommonDoc opinions.
-
-**Source**: `project_plugin_v0.2.0_generalize.md`, plan at `.planning/plugin-v0.2.0-generalize.md`.
-**Sequencing**: per memory directive, "Start AFTER Wave 17".
-
-### Wave 42 — OSS Phase 1 modularization (~12-20h)
-
-`@oscardlfr/claude-kmp-mcp` npm + `io.github.oscardlfr:detekt-kmp-rules` Maven Central + `oscardlfr.github.io/AndroidCommonDoc` VitePress. Apache-2.0 LICENSE prereq met.
-
-**Source**: `project_claude_for_oss_modularization.md`.
-
-### Wave 43 — Wave 18 hypothesis triage (data-driven)
-
-3 candidates: dev pattern-matching loop detection, arch flip-flop guard (one-topic-per-message), CP grep scope auto-validation.
-
-**Trigger**: review when `/metrics` data shows measurable pattern frequency.
-**Source**: `project_wave18_backlog.md`.
-
-### Wave BL-W47 — Adaptive Harness Redesign (meta plan) — CORE SHIPPED 2026-06-16
-
-Core goal of all BL-W47-prep-X waves. Redesigns the wave harness for resilience, mechanical enforcement, and self-improvement. Full plan at `.planning/BL-W47-PLAN-v2.md` (v2 supersedes v1).
-
-**Status (post bl-w47-tail closeout)**: core sequence SHIPPED across S1–S6 + tail (cleanup+0a → 0b+rotation-docs → bundles → 0c → floors → tail) plus inserted follow-ups (supersede, prepr-proof). Final closeout (bl-w47-tail) = registry drift hotfix + Terminal L1/L2 sync + Wave-Close + Ex-PR1 Q&A.
-
-**Deferred to follow-on waves (user-consented 2026-06-16)**:
-- **Ex-PR6 — HOLD ack-checkpoint**: blocked on OQ10 (checkpoint-density decision); own wave.
-- **Topology Pilot — subagent-first wave class**: deserves its own *measured* wave (peer-team vs subagent-first comparison); DO-ON-MAC preferred. NOT the same as bl-w47-tail's runtime-necessity subagent adaptation.
-- **Council design implementation**: explicitly next-iteration (user's sole deferral, Gate record item 4).
-- **D9** (LOW) — `validate-doc-update` perf: avg 160s/call; MCP perf issue, not harness-critical; owner: doc-updater domain. **Root cause identified 2026-07-04 (Codex audit): target-confinement bug — root-level markdown resolves docsRoot toward `/` and scans the whole filesystem; refined/superseded by BL-W4-6 (Realignment follow-ups).**
-- **Dead-skill pruning** (LOW) — 46/61 skills at 0.94% traffic (Part E #17); owner needed.
-
-**Sub-findings from bl-w47-prepr-proof** (deferred, user-consented 2026-06-15):
-
-- **BL-W47-PREPR-1** (MED) — Missing `/quality-gate` command entrypoint: `/quality-gate` is referenced harness-wide (`scripts/sh/pre-push-hook.sh`, `scripts/sh/emit-push-proof.sh` error messages, `docs/agents/context-rotation-guide.md:80`) but no `.claude/commands/quality-gate.md` backs it. Root fix: create `quality-gate.md` command + matching skill/template driving the QG ceremony, OR sweep all refs to the real runner name. Blocked on harness-entrypoint design decision; out of scope for messaging-only waves.
-
-- **BL-W47-PREPR-2** (RESOLVED for current harness, 2026-06-23) — quality-gater secret-scan proof honesty is closed by `qg-proof-honesty-hardening` (Step S fail-closed producer) and `/pre-pr`/MCP present-error semantics are closed by `qg-local-ci-security-closure`. Absent-scanner `/pre-pr` SKIPPED remains intentionally informational; QG required secret-scan remains fail-closed.
-
-**Sub-findings from prep-19** (deferred):
-- **SF-prep-19-A** (LOW) — Backslash heredoc Windows path gap: `cat <<'EOF' > C:\...` mangles path in MSYS Bash. Filed by arch-testing. **Obsoleted by Mac migration ~2026-06 → re-eval post-migration.**
-- **SF-prep-19-B** (LOW) — TDD bundling protocol: QG WARN in prep-19 C2 (bats+fix bundled in one commit). Future waves may tighten protocol; defer to post-BL-W47 harness review.
-
-**Source**: `.planning/BL-W47-PLAN.md`, `project_wave_bl_w47_prep_19_shipped.md`.
-
-### Wave BL-W47-WATCHER — Release-trigger watcher framework (~4-8h iterative)
-
-Unified upstream-change watcher with 3 output handlers. Replaces ad-hoc calendar items (e.g., `BL-W36-check`) and manual reminders for upstream releases / doc drift.
-
-| Component | Description | Status |
-|-----------|-------------|--------|
-| Watcher core | Registry of targets + `/schedule` cron + diff vs last snapshot | scoped |
-| Handler A | Version trigger — new non-prerelease tag → `/note` + backlog entry + ping for upgrade wave | first iteration |
-| Handler B | Doc ingest — new upstream doc URL → existing Ingestion Loop (CP flag → user approval → `ingest-content`) | follow-on |
-| Handler C | Drift detection — ingested doc upstream diverges from `last_verified` frontmatter → revalidate finding | follow-on |
-
-**Dependencies**: `/schedule` user-trigger semantics (billable, not auto-launched by Claude), `ingest-content` MCP, `monitor-sources` MCP, `check-outdated` MCP, `validate_upstream` frontmatter.
-
-**Sequencing**: NOT a blocker for BL-W47 main harness wave — independent + parallel. Recommended start AFTER Mac migration completes (~2026-06-07) so watcher targets + Handler B integration validate on the stable post-migration shell environment.
-
-**Source**: `project_wave_bl_w47_prep_20_shipped.md` (filed 2026-05-31).
-
-### Wave BL-W47-RENDER — Headless Compose render-to-PNG autofix loop (~4-8h iterative)
-
-Off-screen rendering of `@Composable` functions to PNG using `androidx.compose.ui.ImageComposeScene` (Skiko-backed). Enables ui-specialist + test-specialist autonomous visual-regression iteration without a display. Fills the "Screenshot diff (future)" gap noted in `docs/guides/compose-semantic-diff.md:126`.
-
-| Component | Description | Status |
-|-----------|-------------|--------|
-| Renderer wrapper | Thin Kotlin wrapper around `ImageComposeScene` (secondary constructor — no `@ExperimentalComposeUiApi` opt-in) | scoped |
-| L0 MCP tool `render-composable` | Invokes renderer via Gradle task, returns PNG path + dimensions | scoped |
-| ui-specialist autofix loop | render → multimodal read → detect issues → Edit → re-render → pixel diff | scoped |
-| /audit + /full-audit integration | Fold render step into existing audit commands as new dimension | follow-on |
-
-**API surface (CP-verified, source: JetBrains/compose-multiplatform-core jb-main)**:
-- Class `androidx.compose.ui.ImageComposeScene` lives in `skikoMain` — available on Desktop JVM, iOS, macOS, Linux (NOT Android, NOT Wasm/JS)
-- `render(nanoTime: Long = 0): org.jetbrains.skia.Image` — stable in practice (used by compose-hot-reload since 1.10.0+)
-- Conversion chain: `Image.toComposeImageBitmap().toAwtImage()` → `ImageIO.write(...)` PNG (Desktop JVM path)
-- Initial implementation: Desktop JVM only (AWT for PNG encoding). iOS/macOS need platform-specific encoder.
-
-**Dependencies**: CMP ≥ 1.10.0 (Skiko-backed targets), Desktop JVM toolchain. NOT integrated with `runComposeUiTest` (which is a separate test API — see `testing-compose-ui-test-v2` for that domain).
-
-**Sequencing**: post Mac migration (~2026-06-07). Re-eval after migration smoke-test confirms Desktop builds clean on macOS. Future Handler B (CI integration) when Wave-RENDER first iteration ships clean.
-
-**Source**: spike pattern observed in L2 consumer project (2026-05-31). CP Context7 + source verification confirmed API. Ingestion-request flagged for new L0 doc `compose-headless-render-imagescene.md` under `category: compose` — file as follow-on wave or fold into RENDER C1 implementation.
-
-### Wave BL-W47-HOOK-MANIFEST — Consumer Hook Manifest (doc-only, ~1h)
-
-File a canonical reference classifying all 34 L0 hooks
-(`consumer-required` / `consumer-optional` / `l0-internal`).
-Addresses the silent settings.json registration gap: even after hook files land
-on disk (`.js` via sync-l0, `.sh` via install-hooks), the consumer must still
-decide which to REGISTER in settings.json. Currently the L2 consumer project
-registers 5 of 12 consumer-required hooks.
-
-**Components**:
-| Doc | Change |
+| Artifact | Wave 1 role |
 |---|---|
-| `docs/agents/hook-manifest.md` | NEW — 34-hook classification table |
-| `docs/agents/agents-hub.md` | +1 row to Documents table |
+| `coordination/consult/v1` | Legacy pre-PLAN context-provider contact marker; readable for compatibility, not proof that a response completed and not the general transaction format |
+| `coordination/consult/v2` | Post-PLAN general consultation request with stable `request_id`, target role, question/task or content reference, reply contract, deadline/policy, PLAN digest, and exact subject snapshot digest |
+| `coordination/message/v1` | Legacy notification envelope only; never a consultation result and too weak to be the v2 inbox reference |
+| `coordination/inbox-ref/v1` | Immutable inbox reference carrying `request_id`, confined transaction-relative path, request digest, and kind; no independent copy of request authority |
+| `coordination/result/v1` | Legacy result, readable with its shipped semantics; do not add stricter required fields |
+| `coordination/result/v2` | Correlated post-PLAN response carrying `in_reply_to`, attempt/epoch, expected roles, result kind/status, non-empty content or confined content reference+digest, PLAN digest, and exact observed subject snapshot |
+| `coordination/cancel/v1` | Transaction-local timeout/cancel state; means “this consultation will not be accepted,” not “kill the peer” and not harness phase authority |
+| `coordination/stop/v1` | Legacy presence signal only; never controls a new persistent worker generation |
+| `coordination/stop/v2` | Session-bound best-effort stop for a worker spawned/owned by the adapter, with worker/session, attempt/lease epoch, expiry, and acknowledgement; general peer lifecycle stays in Wave 6 |
+| `coordination/request/v1` + `approval/v1` | Keep their shipped ingestion-loop semantics; do not repurpose them for arbitrary consultations |
 
-**Sequencing**: Independent of Mac Platform Shift. Doc-only; no hook code changes.
-Follow-on wave (out of scope here): extend sync-l0 to validate consumer settings.json
-against the manifest (warn-only).
+Audit every shipped producer/consumer before implementation, but the compatibility direction is fixed: preserve v1 semantics and add the v2/result/inbox/cancel contracts above. Do not silently tighten persisted v1 artifacts. General `consult/v2` is post-PLAN because PLAN digest is required; this wave must not make planner/PREP startup depend on a PLAN that does not yet exist. Any future completed pre-PLAN response needs a separately designed `brief_digest`-bound profile and is not implied by this wave.
 
-**Source**: BL-W47-prep-22 planning, 2026-05-31.
+Required validation primitive:
 
-## Platform Shift (MacBook Pro M5 Max migration) — RESOLVED — macOS migration shipped 2026-06-01
+```text
+validate_result_for(request_artifact, result_artifact) -> valid | reason
+```
 
-> **RESOLVED (2026-07-04)**: two-phase outcome — do not read this as a flat "target met" or "still undecided". **Environment/hardware readiness** was met on schedule: macOS migration shipped 2026-06-01 (`project_macos_migration_shipped.md`), inside the original ~2026-06-01–06-07 window. **Operational switch** to macOS-primary daily-driver harness use was still pending as of this section's own 2026-06-21 STALE flag, which correctly reported continued Windows/win32 harness operation at that date. The switch has *since* completed — confirmed by continuous macOS-native harness operation across PRs #227-#233 (2026-06-23 through 2026-07-03: Homebrew, zsh, JDK 21, trufflehog-via-Homebrew, macOS/BSD `realpath -m` fixes) with zero Windows-specific activity in that span. No single record pins the exact switchover date between 06-21 (last known Windows) and 06-23 (first confirmed macOS-native PR, #227) — none is fabricated here.
->
-> The harness now runs natively on macOS/darwin. The home-model decision (Windows-primary + Mac-available vs. effective migration) is resolved: effective migration, operationally macOS-primary as of ~2026-06-23. Windows-specific DIE items below are confirmed dead; RE-EVAL items below are reframed as concrete Mac-env follow-ups.
+There is no protocol-valid answer when the result is missing, empty, stale, uncorrelated, outside the allowed requester→target→kind policy, written under the wrong declared role, or valid only as free-form runtime/MCP text. Because any process with filesystem write access can self-declare `from`, Wave 1 must not claim actor authentication; Waves 3 and 5 own phase evidence and the strongest honest host/runtime actor policy.
 
-**Target (environment ready on schedule 2026-06-01; operational switch to macOS-primary completed ~2026-06-23)**: ~2026-06-01 to ~2026-06-07 (≤1 week from filing).
-**Trigger**: Hardware migration off Windows + MSYS/Git-Bash environment to native macOS.
+### Transaction layout and fencing
 
-### Items that DIE with migration (no follow-up needed — confirmed dead, operational switch complete)
+Avoid timestamp scans as the consumer API. Define a deterministic, confined namespace such as:
 
-- **SSL/PKIX Windows-ROOT trust store workaround** — JVM trust chain mismatch resolved by `-Djavax.net.ssl.trustStoreType=Windows-ROOT` flag. Irrelevant on Mac (default keychain trust).
-- **Backslash heredoc Windows path gap** (`SF-prep-19-A`) — MSYS Bash mangles `cat <<'EOF' > C:\Users\...\verdict.md`. Native macOS bash/zsh: no such issue.
-- **MSYS path quirks** — `/c/` prefixes, cygdrive translation, `/tmp` vs `C:\Users\...\Temp` divergence. All gone on Mac.
-- **.ps1 hooks** — never invoked outside PowerShell; prune from settings.json post-migration.
+```text
+<coordination_root>/<repo_id>/<wave_slug>/<plan_digest>/
+  inbox/<target_role>/<request_id>.json
+  transactions/<request_id>/
+    request.json
+    claims/<attempt_id>.json
+    active-lease.json
+    delivery/<attempt_id>.json
+    results/<attempt_id>.json
+    accepted-result.json
+    ack.json
+    cancel.json
+  workers/<target_role>/<worker_session_id>/stop.json
+```
 
-### Mac-env follow-ups (post-migration status, reframed from "RE-EVAL on Mac")
+Role inboxes contain validated immutable `inbox-ref/v1` references to transaction paths, not copies with independent authority. The contract must specify discovery bounds, filename/path allowlists, maximum envelope/content sizes, `content_ref` confinement beneath approved roots, digest verification, acknowledgement/consumption, retention, and cleanup. A receipt under `delivery/` records only driver, request/attempt identifiers, timestamps, outcome, and bounded error code; it never stores prompt/result text, secrets, or authority.
 
-- Shell defaults — zsh is macOS default; verify all bats + shell hooks work under zsh quirks. **CONFIRMED**: current machine runs zsh as default shell; broader "all bats + shell hooks" zsh-quirk verification still open.
-- Gradle truststore — likely zero-config on Mac (keychain trust); confirm by attempting one full build without flags. Still open — not yet re-verified.
-- bats runner — confirm `scripts/tests/*.bats` execution under macOS bats-core (Homebrew install). **CONFIRMED** (`feedback_macos_build_toolchain.md`): L0 bats needs GNU userland on PATH (`~/.local/gnubin-l0`) — not zero-config out of the box.
-- Xcode/iOS targets — newly available. L2 consumer projects can finally compile iOS/macOS targets. Schedule smoke-test wave once core toolchain verified. Still open — no smoke-test run yet; do not treat as confirmed.
-- `~/.gradle/gradle.properties` — re-create empty on Mac (don't copy Windows-specific flags). Still open — not yet re-verified.
+The requester/supervisor allocates each `attempt_id` and advertised monotonic `lease_epoch`; a target may claim only that attempt. Serialize claim, takeover, cancellation, and acceptance through a confined portable transition lock implemented by exclusive directory creation (or an equivalent no-clobber primitive in the shared Node core), not by an assumed rename-CAS. Stale-lock takeover must itself be single-winner and bounded. While holding the lock, re-read active state, publish via temp+rename, and create terminal acceptance with exclusive/no-clobber semantics. A takeover is allowed once, increments the epoch, and never overwrites the previous claim/result.
 
-### Migration playbook reference
+Required transaction state model:
 
-See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration plan: fresh install + selective restore of `~/.claude/` user-level config + project clones + re-auth all credentials (no token copy).
+| From | Allowed transition | Constraint |
+|---|---|---|
+| `PUBLISHED` | `CLAIMED` | only the advertised attempt/epoch can win |
+| `CLAIMED` | `ANSWERED` | immutable per-attempt candidate result; not successful until requester acceptance |
+| `ANSWERED` | `ACCEPTED` | requester only; `validate_result_for(...)` passes for the current attempt/epoch and exact subject/PLAN, then exclusive no-clobber acceptance wins atomically against cancellation |
+| `CLAIMED` | `BLOCKED` | protocol-valid negative terminal result; requester may acknowledge it, but it is never accepted as an answer and never permits phase advance |
+| `CLAIMED` | `SUPERSEDED` → new `CLAIMED` | one expired-lease takeover maximum, new attempt and higher epoch |
+| any non-terminal state | `EXPIRED` or `CANCELLED` | transaction-local terminal state; does not stop a persistent peer |
 
-## Long-term / no fixed order
+`validate_result_for(...)` rejects a result whose attempt/epoch is not current, even if it arrives late with otherwise valid fields. Competing files remain visible for conflict detection instead of being overwritten last-writer-wins. Same-digest duplicates may be idempotent; conflicting current results force transaction cancellation plus a harness STOP/report with no phase advance. A stale `stop/v1` can never stop a new worker; `stop/v2` is confined to a specific adapter-owned worker session.
 
-- **L2 consumer product alignment** session — pricing drift, feature contradictions, dormant context-bridge — `project_dawsync_product_alignment.md`
-- **Future agents** — D1 guardian for L2 web consumer, context-provider-as-internal-context7-agent — `project_future_agents.md`
-- **Plugin v0.2.1** — triggered-only (10 @Disabled tests pending Maven Central v0.3.0) — `project_plugin_v0.2.1_status.md`
-- **BL-W32-04** — CP zombie session start — active observation, no fix yet — `project_BL-W32-04_shipped.md`
+The current validator accepts an artifact bound to a HEAD ancestor. Post-PLAN consultation must be stricter, but it must distinguish the reviewed subject from the worker checkout: request/result bind exactly to immutable `subject_head`, `plan_digest`, and `subject_scope_digest`; result records the worker's `producer_head` and `producer_worktree_id` separately as diagnostic provenance and repeats the exact subject snapshot it observed. A target checkout need not equal the subject HEAD, but it must consume the referenced subject snapshot. If the requester's subject HEAD/scope changes before acceptance, the result is stale and a new transaction is required; a result for subject A is never reused implicitly for subject B.
+
+### Adapter drivers and routing
+
+Implement a `ConsultationAdapter` above the existing ADR-001 nine-operation `RuntimeAdapter` contract, or deliberately version that contract with a migration plan; do not leave two unrelated adapter APIs. Phase 0 must produce a capability ledger by probing the actual installed Claude/Codex surfaces and correcting stale ADR mappings before freezing the PLAN. A host-provided capability manifest/bridge owns runtime-native operations, handshakes, version compatibility, approval flow, and at least one real conformance path for each agreed operating mode. Portable shell code owns the disk transaction/wait floor and cannot pretend to invoke host-native Claude/Codex primitives by itself.
+
+Runtime spawn, app-server, and MCP operations execute only through explicitly registered host bridges outside the portable shell core. A manifest is declarative: allowlisted driver/executable identifiers, fixed argv fields, versions, availability, and approval state. It cannot supply an arbitrary command string, model/permission flags from a request, or anything evaluated with `eval`/shell interpolation. Reconcile the existing CLI-spawn policy/gate explicitly; do not create a hidden exception that shells out to `claude -p`, `codex exec`, or another model CLI from request-controlled data.
+
+Use one registry/capability probe with deterministic per-role routing. Activation drivers are distinct from wait strategies:
+
+| Activation driver | Use | Required behavior |
+|---|---|---|
+| `claude-sendmessage` | Wake an existing Claude peer | Send only role + artifact path + kind/request id; never treat reply text as evidence |
+| `codex-app-server` / persistent thread | Wake a parked Codex worker | Resume the canonical worker and point it to the request artifact |
+| `codex-mcp` | Invoke Codex on demand from Claude or another MCP host | Instruct the invocation to read the request and write its own result artifact; returned text alone is insufficient |
+| `runtime-spawn` | Start/respawn the canonical role when no live peer exists | Rehydrate from a bounded disk context bundle and preserve the same request id |
+| `noop` | Notification unavailable | Record an unavailable receipt and leave progress to the disk loop or fail closed at deadline |
+
+Requester result polling and optional worker inbox polling are bounded wait strategies, not activation drivers. `noop` plus disk polling completes only when a separately registered external supervisor/worker consumer already exists; otherwise it deterministically times out.
+
+Example policy, stored as configuration rather than hard-coded branching:
+
+```text
+verifier:       [codex-app-server, codex-mcp, runtime-spawn, noop]
+quality-gater:  [codex-app-server, codex-mcp, runtime-spawn, noop]
+arch-*:         [claude-sendmessage, runtime-spawn, noop]
+context-provider: [claude-sendmessage, runtime-spawn, noop]
+```
+
+The logical role remains canonical regardless of whether Claude or Codex executes it; runtime choice never creates a new authority role. Do not race two active drivers for the same request by default. `SendMessage`, Codex thread/app-server turns, and Codex MCP are host-native bridges selected only after a capability handshake. Use the stable request/attempt/lease fencing above so fallback cannot create two current authors. A late result from a superseded attempt is invalid; two conflicting otherwise-valid results trigger cancellation + harness STOP/report.
+
+### Runtime consultation loop
+
+1. The requester writes through the sanctioned writer to a temporary path, atomically renames into the deterministic transaction, then validates the request and `inbox-ref/v1` reference. Nested requests carry `root_request_id`, optional `parent_request_id`, and bounded `max_depth` (default 2); role transitions and depth are validated to prevent loops.
+2. The adapter checks the host capability manifest/handshake, selects the first allowed driver, and emits a non-authoritative delivery receipt.
+3. The target worker atomically claims the active lease, performs the role-specific work, and writes its own immutable per-attempt correlated result through the sanctioned writer.
+4. The requester polls/waits with a bounded deadline and atomically records an accepted result only when `validate_result_for(...) == valid` for the active epoch.
+5. If the peer is dead or its lease expires, perform at most one canonical respawn/re-invocation with the same request id, a new attempt id, and a higher lease epoch.
+6. If no valid result arrives, write transaction `cancel/v1`, emit a harness STOP/report that prevents phase advance, and surface the unresolved consultation. Do not stop an unrelated persistent peer and never synthesize the target's verdict in the orchestrator.
+
+Specialist consultation remains mediated where architecture requires it:
+
+```text
+specialist -> architect request artifact
+architect -> context-provider nested request artifact (when needed)
+context-provider -> architect correlated result artifact
+architect -> specialist correlated result artifact
+```
+
+The context-provider and architect must author their own results. Because `context-provider` is otherwise read-only, add one narrowly confined publication path: it may invoke only the sanctioned transaction-result writer for its own active claim, with no general Write/Edit capability; update its template, guards, and tests accordingly. The orchestrator may schedule, wake, validate, and report; it may not impersonate either role.
+
+### Persistent dual-runtime behavior
+
+- A host-side supervisor owns process/session liveness; language models are not expected to block forever inside one inference call.
+- Claude and Codex workers may be parked in bounded wait cycles, woken by their native surface, and resumed against the configured coordination root.
+- Either runtime can initiate a request by writing the same artifact. The other can answer without the user copying text between applications.
+- Default mode sets `coordination_root=<worktree>/.planning/coordination`; all new transaction paths use the single namespace defined above. Exactly one root/version is authoritative per request. A legacy v1 adapter is read-only and may translate an observation into diagnostics, but it cannot mirror two authoritative copies or let a v1 marker satisfy v2 completion.
+- To support the current “Claude and Codex in sibling worktrees” case, Wave 1 also allows the base `coordination_root` to be explicitly configured to a same-machine host-local directory shared by those worktrees. The root must be canonicalized, symlink-safe, owner-confined (`0700`-equivalent where supported), explicitly granted to both runtimes, and keyed by a stable repository identity separate from worktree ids. Requests bind the reviewed subject snapshot exactly while recording each producer worktree/HEAD separately; different producer HEADs do not invalidate a result by themselves, but an undeclared or changed subject snapshot does.
+- Cross-host/network federation remains deferred; a shared coordination root is a same-machine disk transport, not a broker.
+- If only one runtime is running, the same protocol works through spawn/MCP/polling or terminates cleanly at its deadline.
+
+### Fallback matrix
+
+| Condition | Expected action |
+|---|---|
+| Live Claude peer + `SendMessage` available | Persist request, notify through Claude driver, validate disk result |
+| Persistent Codex worker available | Persist request, wake/resume worker, validate disk result |
+| No persistent Codex worker + Codex MCP available | Persist request, invoke through MCP, require invoked worker to write result |
+| Runtime has no messaging capability | Persist request, record no-op delivery, and use bounded polling only if a registered external worker/supervisor consumes that inbox; otherwise timeout deterministically |
+| Canonical peer is dead | One bounded canonical respawn/re-invocation, then continue polling |
+| Adapter fails but disk result appears | Accept only after full artifact validation; report adapter degradation |
+| No valid result before deadline | Transaction cancel + harness STOP/report; consultation remains unanswered and a persistent peer is not killed |
+
+### Included scope and probable files
+
+- Phase-0 producer/consumer compatibility census plus a runtime-capability ledger, real host-bridge conformance probe, adapter registry, routing policy, non-authoritative delivery receipts, bounded wait strategies, claim/lease, and one-respawn lifecycle.
+- Deterministic transaction paths, role inbox references, acknowledgement/consumption, atomic artifact publication, attempt/lease fencing, strict request/result correlation, and a confined optional sibling-worktree coordination root.
+- A canonical runtime-messaging document, likely `docs/agents/runtime-messaging-adapters.md`.
+- Schema/ADR changes in `docs/agents/coordination-artifact-schema.md`, `docs/adr/ADR-001-runtime-adapter-contract.md`, and `.claude/hooks/coordination-artifact.js` if required.
+- One shared portable core, likely `scripts/lib/runtime-consultation.cjs`, owning ids, validation, atomic state, correlation, and bounded waits; thin `scripts/sh/runtime-consultation.sh` and, if distributed as a cross-platform contract, `scripts/ps1/runtime-consultation.ps1` wrappers must not duplicate protocol logic.
+- Bats/Node tests under `scripts/tests/` for protocol, transport selection, lifecycle, and failures.
+- Specialist, architect, context-provider, orchestrator, and quality-gater guidance/templates; regenerate registries/adapters only where canonical sources require it.
+- Correct stale runtime capability mapping in ADR/docs after probing the actual Claude and Codex surfaces available at implementation time.
+- Preserve and extend `capability-preservation.bats` and `named-team-regression-guard.bats`; adapter work must not erase capabilities or silently revive mandatory named teams.
+- Keep `consult/v1` only as the legacy pre-PLAN context-provider contact marker. Post-PLAN architect/specialist flows require a correlated completed `consult/v2` → `result/v2`; writing the marker alone never means “answered”. Do not make planner/PREP startup depend on a PLAN that does not yet exist.
+- Add the narrowly confined context-provider result-publication path for its active claim; preserve its read-only boundary everywhere else.
+
+### No-go / out of scope
+
+- Runtime message bodies as evidence or authority.
+- Mandatory Claude `SendMessage`, mandatory MCP, or mandatory persistent processes.
+- A bespoke network broker, cloud queue, or cross-host federation. A confined same-machine coordination root for sibling worktrees is included.
+- Reintroducing `TeamCreate` as the portable floor.
+- Unlimited polling, unlimited respawn, duplicate concurrent invocations, or orchestrator-authored role results.
+- General persistent-worker lifecycle/parking policy beyond the bounded adapter-owned attempt; Wave 6 owns topology mechanization.
+- General phase/topology state-machine work (Wave 6), verdict grammar redesign (Wave 3), or push authorization redesign (Wave 5).
+
+### Principal risks
+
+- Duplicate or late workers produce conflicting results.
+- A transport reports delivery while no worker actually claims the request.
+- MCP returns plausible prose without writing an artifact.
+- Non-atomic writes expose partial JSON to pollers.
+- Stale PLAN/subject snapshot, stale worker-stop sentinels, self-declared role spoofing, unconstrained content references, or an empty `result/v2` passes a structurally weak validator.
+- Persistent sessions disappear between wake and response; unbounded recovery becomes a zombie loop.
+- Runtime docs encode capabilities that have changed; capability probes and adapters must isolate that churn.
+- Subject and producer HEADs are conflated, or sibling worktrees consume a transaction from the wrong repo/worktree namespace.
+
+### Verification expected
+
+- Producer→schema→path→consumer compatibility census; legacy v1 fixture tests plus fixed `consult/v2`, `result/v2`, `inbox-ref/v1`, `cancel/v1`, and session-bound `stop/v2` tests.
+- Persist-before-notify, atomic temp+rename, exclusive transition-lock, stale-lock takeover, and no-clobber acceptance tests.
+- Deterministic-path/inbox discovery bounds, path traversal/symlink, payload-size, confined `content_ref`, digest, ACK, retention, and cleanup tests.
+- Transaction-state-table tests with `attempt_id` + `lease_epoch` fencing; immutable competing results, same-digest idempotence, no last-writer-wins replacement, single takeover, superseded-result rejection, and stale-stop-after-respawn rejection.
+- Activation-driver contract tests for Claude, persistent Codex, Codex MCP, spawn, and no-op, plus separate requester/worker polling tests: available, unavailable, timeout, and transport failure.
+- Host capability-manifest handshake, version mismatch, approval-denied, hostile argv/newline/metacharacter, owner-permission, and arbitrary-command rejection tests; prove shell-only mode never claims a native driver it cannot invoke.
+- Split fake-driver CI conformance from opt-in host integration tests. Rich adapters may capability-gate a SKIP only when unavailable; disk-floor tests always run. Demonstrate a real host bridge for persistent dual-runtime and on-demand MCP modes or stop the wave as incomplete.
+- MCP/App-server test proving returned text without a valid result artifact is rejected.
+- Dead-peer → one respawn → valid result, and dead-peer → exhausted recovery → transaction cancel + harness STOP tests; prove timeout does not kill an unrelated persistent peer.
+- Wrong-role, disallowed direct specialist→context-provider transition, nested-depth overflow, wrong/root/parent request, stale subject HEAD/scope/PLAN, empty-content, malformed, duplicate, late-attempt, and conflicting-result rejection.
+- Two-poller/claim race, idempotent re-read, backoff/deadline, session-exact worker stop, transaction cancel, and cleanup tests.
+- End-to-end same-worktree Claude ↔ Codex consultation and specialist → architect → context-provider → architect → specialist chain.
+- End-to-end sibling-worktree Claude ↔ Codex consultation through a confined shared root, including different producer HEADs with exact subject binding and changed/undeclared subject rejection.
+- Portability proof with every rich adapter disabled: disk-only flow completes only with a registered polling worker or otherwise fails closed deterministically.
+
+### Backlog and memory impact
+
+- **Closes/touches**: agent-teams notification residual (local portion), the operational gap left after Wave 2 coordination artifacts, and the live-collaboration part of the optional Topology Pilot.
+- **Touches, does not close**: BL-W4-12 (actor/role authorship), because cryptographic or OS-level identity is not promised here; Wave 3 and Wave 5 complete the policy/evidence sides.
+- **Memory on ship**: create `project_wave_portable_runtime_messaging_adapters_shipped.md`; refresh the Wave 2 coordination-artifacts and harness-audit memories with the shipped consumer loop, exact adapters, compatibility decision, and measured degraded-mode behavior.
+
+---
+
+## Wave 2 — Workflow Expression & Input Boundary Audit
+
+**Class**: SECURITY / HARNESS
+
+**Objective**: inventory and harden every untrusted GitHub Actions value that crosses into a shell or privileged workflow operation, extending G0 from its focused fix to a repository-wide trust-boundary contract.
+
+**Why second**: G0 established the corrected targeted pattern. Wave 1 then gives this broad security audit portable Claude/Codex review paths. The audit precedes new evidence and push machinery so later waves build on trustworthy CI inputs.
+
+**Included**:
+
+- Recount every `${{ inputs.* }}`, `${{ github.event.inputs.* }}`, dispatch input, reusable-workflow input, and relevant tainted step output at the wave's starting HEAD.
+- Review direct expression interpolation inside `run:`, safe `env:` projection, shell quoting, boolean coercion, arrays/multiline values, validation/allowlists, output propagation, and least permissions.
+- Post-G0 census recorded at `619d9a7`, excluding the four workflows closed by G0: 36 `${{ inputs.* }}` run-block sites across eight workflows — `readme-audit.yml` (19), `doc-audit.yml` (3), `doc-monitor.yml` (1), `reusable-architecture-guards.yml` (1), `reusable-check-outdated.yml` (3), `reusable-kmp-safety-check.yml` (3), `reusable-audit-report.yml` (3), and `reusable-commit-lint.yml` (3) — plus three `github.event.inputs.tag_name` run-block sites in `.github/workflows/l0-release-assets.yml`. Recount at the Wave-2 starting HEAD.
+- Treat `l0-release-assets.yml` as elevated risk because it has `contents: write`; if it must run before Wave 2, either bring that focused check forward or block the run pending review.
+- Add a repeatable extractor/check so the inventory does not depend on a one-time grep.
+
+**No-go**: action-SHA pinning program, release architecture redesign, unrelated workflow DRY work, or broad permission changes not justified by the taint path.
+
+**Risks**: YAML/expression/shell quoting interactions; false confidence from simple regex; trusted-looking step outputs that preserve taint; behavior changes in release paths.
+
+**Verification expected**: parser/extractor fixtures for scalar, multiline, folded, nested, and allowed `if:`/`with:` contexts; shell tests for hostile values; actionlint/YAML validation; focused workflow tests; required CI; manual review of every write-capable workflow.
+
+**Backlog entries**: closes the broader reusable/workflow input-handling audit created by G0; records any unrelated release hardening as separately justified residual rather than expanding this wave.
+
+**Memory on ship**: link the final G0 shipped record; create `project_wave_workflow_input_boundary_audit_shipped.md` with the complete inventory, allowed patterns, elevated-permission review, and residuals.
+
+---
+
+## Wave 3 — Structured Verdict Evidence Contract
+
+**Class**: HARNESS / EVIDENCE
+
+**Objective**: replace substring/token-based PREP and VERIFY-FINAL acceptance with a strict, correlated verdict record whose decision, rationale, evidence references/digests, role, PLAN, and HEAD are machine-validated.
+
+**Why third**: Wave 1 establishes correlated role results and Wave 2 secures CI inputs. Verdicts can then reuse the correlation/freshness primitives instead of inventing a second messaging protocol.
+
+**Included**:
+
+- Define explicit verdict schema/grammar, decision enums, required non-empty rationale, evidence references/digests, author role, phase, PLAN digest, HEAD, and request/dispatch correlation.
+- Reject verdict tokens embedded in prose, duplicate/conflicting decisions, empty sections, unknown enums, stale artifacts, wrong-role authors, and unbacked evidence claims.
+- Bind `APPROVED-PREP` and `APPROVED-VERIFY-FINAL` to the exact phase transition and evidence set they authorize.
+- Decide how verdicts relate to Wave 1 `result` artifacts without conflating consultation responses with phase authorization.
+
+**No-go**: claims of cryptographic human/agent identity, redesign of test provenance, or a broad phase-state machine.
+
+**Risks**: breaking old verdict fixtures; ambiguous migration between prose files and structured artifacts; a strict syntax that encourages boilerplate without better evidence.
+
+**Verification expected**: parser fixtures for token-in-prose, missing/empty body, duplicate decision, wrong role/phase/request, stale PLAN/HEAD, altered evidence digest, and valid PREP/VERIFY-FINAL; end-to-end proof that no unbacked verdict advances the gate.
+
+**Backlog entries**: closes the Wave A `APPROVED-PREP` and `APPROVED-VERIFY-FINAL` evidence gaps; materially addresses BL-W4-12 but leaves true runtime actor authorization to Wave 5.
+
+**Memory on ship**: create `project_wave_structured_verdict_evidence_contract_shipped.md`; update the Wave A evidence-integrity and phase-orchestration memories with the new verdict format and migration boundary.
+
+---
+
+## Wave 4 — Reproducible Evidence & Bats Provenance
+
+**Class**: HARNESS / EVIDENCE
+
+**Objective**: make test and quality-gate evidence independently reproducible, comparable across runs, and fail closed when handoff selection, metadata, target, environment, or counts disagree.
+
+**Why fourth**: strict verdicts need a trustworthy evidence object to cite. This wave builds on Waves 1 and 3 correlation and avoids redesigning result/verdict schemas twice.
+
+**Included**:
+
+- Enumerate all Bats/QG handoff producers and consumers; centralize selection and validation rather than relying on newest-wins discovery.
+- Bind run identity, HEAD, PLAN/wave, target/scope, started/finished timestamps, complete/total/not-ok counts, verdict, target digest, environment fingerprint, and relevant tool versions.
+- Require agreement across the declared evidence set; reject count/metadata disagreement, stale handoffs, wrong target/scope, and truncated runs.
+- Establish an independent rerun policy. Default target: two agreeing full runs for security-critical mint evidence, with explicit documented exceptions where cost requires a different rule.
+- Make project-root handling under Bats fail closed and portable; update stale quality-gate protocol prose to the shipped metadata contract.
+
+**No-go**: reopening Wave C's already-closed manifest artifact binding, redefining `bats_complete`/`bats_verdict` unless an audit finds a real defect, or restoring untested PS1 mint authority without a PowerShell parity environment.
+
+**Risks**: nondeterministic environment fingerprints; excessive runtime; accidental acceptance of two runs derived from one cached artifact; compatibility with macOS/Bash 3.2 tooling.
+
+**Verification expected**: two independent full-run comparison; disagreement/newest-wins rejection; stale HEAD/PLAN, wrong scope/target/digest, truncated and reused-artifact tests; portable project-root tests; docs-contract checks; canonical mint and proof verification.
+
+**Backlog entries**: closes the Wave A rerun-until-green/reproducibility residual, unsafe `PROJECT_ROOT` under Bats, and stale `quality-gate-protocol.md` metadata coverage. `bats_evidence complete/total` remains recorded as already resolved by Wave C.
+
+**Memory on ship**: create `project_wave_reproducible_evidence_bats_provenance_shipped.md`; update Wave A/C and macOS QG memories with the final handoff schema, rerun policy, and measured cost.
+
+---
+
+## Wave 5 — Native Push Authority & Peer Authorization Policy
+
+**Class**: SECURITY / HARNESS
+
+**Objective**: make the installed git `pre-push` hook the sole portable push authority, redesign advisory runtime push-intent detection, and define what runtime-specific controls can honestly restrict which peer may request or perform a push.
+
+**Why fifth**: H1 bootstrapped the git authority but intentionally left command detection open. This redesign should consume the structured verdict and reproducible evidence contracts from Waves 3-4 rather than encode their old weak forms.
+
+**Included**:
+
+- Preserve the git-layer pre-push hook as the load-bearing enforcement point for refs and proof artifacts.
+- Replace fragile command-string/regex detection with parsed command intent or a narrower, testable advisory design covering quoting, wrappers, backticks, substitutions, chained commands, aliases, and explicit exceptions.
+- Define peer authorization as a policy/capability layer: portable disk evidence proves conditions; rich runtimes may additionally restrict actor/tool access when they expose a real identity/capability boundary.
+- Clarify that a Claude/Codex hook claiming an actor name is defense-in-depth unless backed by a non-spoofable runtime capability.
+
+**No-go**: making a JS/runtime hook the sole push authority, regex patch accumulation, blocking harmless text that merely contains `git push`, or promising cross-runtime identity guarantees that the host cannot enforce.
+
+**Risks**: shell grammar complexity; false positives/negatives around wrappers; bypass through alternate git transports; confusing evidence authority with actor authorization.
+
+**Verification expected**: adversarial command corpus with evasive spelling and benign false positives; direct git/pre-push integration; missing/stale/invalid proof rejection; explicit exception tests; rich-adapter unavailable path proving git-layer enforcement still holds.
+
+**Backlog entries**: closes H1's deferred CRITICAL command-string detector redesign and advances BL-W4-12 from discipline-only to the strongest honest host/runtime policy available.
+
+**Memory on ship**: create `project_wave_native_push_authority_peer_policy_shipped.md`; update H1 shipped memory with the detector successor, exact portable authority boundary, and any runtime-specific actor guarantees.
+
+---
+
+## Wave 6 — Class-Aware Phase & Topology Control Plane
+
+**Class**: HARNESS
+
+**Objective**: mechanize the PREP → EXECUTE → VERIFY-FINAL → QG lifecycle, derive required roles from wave class, and manage selective peer activation/liveness without returning to a fixed Claude-only team.
+
+**Why sixth**: the control plane should be the final composition step. It depends on portable consultations, strict verdicts, reproducible evidence, and honest push authority; implementing it earlier would hard-code transitional contracts.
+
+**Included**:
+
+- A fail-closed phase state machine with legal transitions and persisted state.
+- Class-aware role floors for HARNESS, DOC, and FAST-PATH; resolve required architects/specialists from declared scope rather than a fixed roster.
+- Selective spawn/wake/park/stop behavior using Wave 1 adapters; lifecycle/heartbeat policy and bounded recovery.
+- Mechanize `wave-topology.yaml`/required-role/quality-gate integration, including the currently inert Rule A in `wave-phase-gate.js`, and reconcile README/AGENTS counts, roster, script/hub tables, `/work`, `/init-session`, templates, registries, and generated adapters.
+- Close or deliberately disposition the README audit revalidated at `619d9a7`: 21 findings (0 HIGH, 15 MEDIUM, 6 LOW), comprising 12 missing shell-script rows (`emit-pre-pr-report`, `emit-push-proof`, `emit-qg-result`, `emit-rule-inventory`, `qg-doc-validators`, `qg-path-audit`, `qg-registry-integrity`, `run-bats`, `secret-scan-report`, `write-coordination-artifact`, `write-specialist-dispatch`, `write-verdict`), four library scripts misclassified as standalone, guide/sub-doc/shell-script count drift (`28→29`, `97→102`, `50→63`), and incomplete agents/testing hub coverage. Re-run `readme-audit` at the Wave-6 starting HEAD rather than treating this baseline as permanent.
+- Run the deferred Topology Pilot with measured persistent-peer vs on-demand/subagent/disk-only comparisons.
+
+**No-go**: mandatory `TeamCreate`, spawning every role for every wave, another parallel state ledger, or changing domain/product architecture.
+
+**Risks**: deadlocks from over-strict transitions; class misclassification; fixed-roster drift reappearing in generated surfaces; lifecycle automation stopping a still-needed worker.
+
+**Verification expected**: state-transition table tests; role-floor fixtures for all wave classes; illegal transition and missing-role rejection; persistent/on-demand/disk-only topology scenarios; liveness/stop/respawn tests; README/skill/template/registry parity; measured pilot report.
+
+**Backlog entries**: closes BL-W4-10 (class-aware mechanization), BL-W4-11 (README/skills fixed-roster drift), the current README/doc-index audit, BL-W4-8's three hygiene items, Wave 39's phase/topology items after re-audit, and the BL-W47 Topology Pilot.
+
+**Memory on ship**: create `project_wave_class_aware_phase_topology_control_plane_shipped.md`; update phase-orchestration, adaptive-harness, Wave 19 topology, topology-pilot, and README-audit memories with measurements, final role floors, and the disposition of all 21 baseline doc findings.
+
+---
+
+## Residuals mapped to the ordered program
+
+Historical text below is not an instruction to execute old wave plans literally. Re-audit each item at the target wave's starting HEAD.
+
+| Finding / historical entry | Current disposition | Roadmap home |
+|---|---|---|
+| Agent-team completion notification drop | Upstream/runtime report remains optional; local liveness/consultation behavior belongs here | Wave 1; upstream report independent |
+| Wave 2 artifacts have no general consumer/wakeup/result loop | Open | Wave 1 |
+| BL-W4-12 orchestrator can forge architect-shaped verdict path | Open; spans result authorship, verdict evidence, and honest actor policy | Waves 1, 3, 5 |
+| Broad workflow input/expression inventory after targeted H1 follow-up | Open | Wave 2 |
+| Wave A unbacked `APPROVED-PREP` / weak VERIFY-FINAL substring acceptance | Open | Wave 3 |
+| Wave A evidence reproducibility / rerun-until-green concern | Open | Wave 4 |
+| Bats unsafe project-root and stale protocol metadata prose | Open | Wave 4 |
+| H1 command-string push detector | Explicitly deferred by H1 | Wave 5 |
+| BL-W4-10 class-aware phase mechanization | Open | Wave 6 |
+| BL-W4-11 README + `/work` + `/init-session` fixed-roster drift | Open | Wave 6 |
+| BL-W47 Topology Pilot / Wave 39 topology debt | Re-audit; do not replay old TeamCreate assumptions | Wave 6 |
+| BL-W4-8 Bats test-authoring hygiene (three small doc/test naming issues) | Open; one owner, no standalone cleanup wave | Wave 6 |
+| BL-W36-04 stash/baseline methodology | Re-audit against current diff/baseline tooling | Wave 4 if still reproducible |
+| BL-W32-04 context-provider zombie observation | Reproduce during Wave 1; close only if adapter liveness covers the observed failure, otherwise emit a measured Wave-6 residual | Wave 1, conditionally Wave 6 |
+| README/AGENTS/doc index audit revalidated at `619d9a7` | Open; 21 findings (0 HIGH, 15 MEDIUM, 6 LOW) cover 12 missing script rows, four misclassified library rows, count drift, and hub coverage; fixed-roster prose remains an additional Wave-6 concern | Wave 6; bundle, no standalone cleanup wave |
+
+## Independent / incubator backlog
+
+These items are not allowed to interrupt Waves 1-6 unless a concrete blocker or security trigger changes priority.
+
+| Item | Status / trigger |
+|---|---|
+| Upstream agent-teams notification delivery report | LOW/MED; file only with a minimal runtime repro; not a local harness blocker |
+| PS1 `run-qg` restoration | MED; requires an environment with `pwsh` and security-critical parity tests |
+| `dual-location-protocol.md` registry-sync omission | LOW; fold into the next canonical/template registry edit |
+| Duplicate `MAX_LINES = 435` policy in shell/TypeScript validators | LOW; centralize when either validator next changes |
+| Commit-lint semantics duplicated across hook, mint, JS gate, and CI comparison point | LOW/MED; shared-helper design, not part of messaging |
+| BL-W47-PREPR-1 missing `/quality-gate` command entrypoint | MED; requires an explicit harness-entrypoint decision |
+| RTK template sweep | Deferred; requires separate explicit user approval before any template edits |
+| BL-W36-check `/release-build-verify` promotion candidate | Trigger-only; revisit only when a concrete release need or measured gap appears |
+| BL-W47-WATCHER release-trigger watcher | Incubator; independent product/tooling wave |
+| BL-W47-RENDER headless Compose render-to-PNG loop | Incubator; Desktop JVM first, separate product/tooling wave |
+| Consumer `settings.json` validation against the shipped hook manifest | Optional follow-up only; `docs/agents/hook-manifest.md` itself is already shipped |
+| macOS zsh/hooks sweep | Migration resolved; full shell/hook sweep still needs current evidence |
+| macOS Gradle truststore check | Verify one full build without legacy flags |
+| Xcode/iOS target smoke test | Run when an owning KMP validation wave is scheduled |
+| `~/.gradle/gradle.properties` hygiene | Re-verify the Mac-local configuration without copying Windows flags |
+| L2 consumer product alignment / future agents / plugin v0.2.1 | Long-term, trigger-driven; retain source memory entries |
+
+## Legacy candidates — re-audit before scheduling
+
+Do not preserve old ordering merely because a wave number exists. These tracks predate Waves A/C/H1 and the realignment; each needs a fresh problem statement, current evidence, and consolidation decision.
+
+| Legacy track | Disposition |
+|---|---|
+| Wave 39 `W19-#3` / `W19-#4` / `W19-#6` | Session teardown, `/work` phase rewrite, and PREP/EXECUTE dispatch modes map to Wave 6 after re-audit |
+| Wave 39 `BL-W36-02` / `BL-W36-03` | Stub-doc consolidation and MIGRATIONS field normalization remain independent housekeeping |
+| Wave 39 `BL-W36-04` | Stash/baseline methodology maps conditionally to Wave 4 after reproduction |
+| Wave 39 `BL-W37-03` / `BL-W37-04` | Empty-Bats reusable workflow and immutable L0 workflow pinning remain L1/supply-chain follow-ups |
+| Wave 39 housekeeping / modularization paso 2 | Independent cleanup; require a current inventory before scheduling |
+| Wave 40 — Wave 17 L2 hardening | Re-audit against current L2 consumer and new harness contracts after Wave 6 |
+| Wave 41 — Plugin v0.2.0 generalization | Product/plugin roadmap; independent of harness ordering |
+| Wave 42 — OSS Phase 1 modularization | Product/packaging roadmap; independent of harness ordering |
+| Wave 43 — Wave 18 hypothesis triage | Data-triggered only; use current metrics before scheduling |
+| BL-W47 Ex-PR6 HOLD checkpoint / council design / dead-skill pruning | Re-audit after Wave 6; do not revive superseded adaptive-harness mechanics |
+| SF-prep-19-B TDD bundling protocol | Policy candidate only; revisit with current QG evidence rather than replaying the old warning |
+| Platform-shift Mac follow-ups | Migration itself resolved; four concrete checks are retained in Independent / incubator above |
+
+## Completed / stale entries compacted from Active
+
+The following are historical, not executable backlog items:
+
+- **Harness Realignment Waves 0-5** — merged through PRs #234-#238 and #242. Wave 6's old optional Topology Pilot is incorporated into ordered Wave 6 above.
+- **Wave A — QG Evidence Integrity** (`19db9d2`, PR #240) — D0/D2/D3/D6 resolved.
+- **Wave B — macOS local-green portability** (`e726ca9`, PR #239) — also resolved BL-W4-14 canonical `worktree_id`; do not keep it OPEN.
+- **Wave C — QG Artifact Binding** (`7428b81`, PR #241) — D5, secret-scan wording, manifest artifact binding, and Bats `complete/total` evidence resolved.
+- **Wave 4 parity follow-ups BL-W4-1/2/3/4/6/7/9** (`30de240`, PR #238) — resolved. BL-W4-5 was audited as not a bug. BL-W4-13 is an operational lesson: never symlink a mutable `node_modules` into a disposable worktree.
+- **BL-W37-02 hook distribution** (`2aba991`) — resolved; `.claude/hooks/` is propagated by `sync-l0`.
+- **BL-W47-HOOK-MANIFEST** (`1d9355f`) — the canonical hook-classification document shipped; only optional consumer-settings validation remains.
+- **Wave 38 content ingestion** (`0db5773`, PR #242) — shipped; do not schedule the old content list again.
+- **Platform Shift** — environment migration shipped and macOS-primary operation confirmed; Windows-only items are dead.
+- **H1 — Push Authority Bootstrap** (`1e0be41`, PR #243) — shipped. Only its explicitly deferred detector redesign remains, mapped to Wave 5.
+- **G0 — Reusable Workflow Input Boundary Hardening** (`619d9a7`, PR #245) — shipped. Its focused four-workflow boundary is closed; the exact broader census, release `tag_name` risk, README drift, grep portability, and documentation precision follow-ups remain mapped above.
+
+## Memory ledger update plan
+
+This roadmap PR changes `BACKLOG.md` only. Shipped history is factual; queued-wave memory must be updated by the owning implementation wave, not speculatively marked shipped here.
+
+| Milestone | Required memory action |
+|---|---|
+| G0 shipped backfill | Reconcile `project_followup_ci_harden_workflow_inputs_queued.md` with PR #245, `619d9a7`, final evidence, and the retained residual inventory; keep `project_wave_push_authority_bootstrap_shipped.md` unchanged except for a factual follow-up link if needed |
+| Wave 1 | Add portable-runtime-adapters shipped memory; refresh Wave 2 coordination and harness-audit memories with exact implemented transports and degraded-mode proof |
+| Wave 2 | Add workflow-input-boundary audit shipped memory with a machine-generated inventory and privileged-workflow review |
+| Wave 3 | Add structured-verdict contract shipped memory; amend evidence-integrity/phase memories with migration semantics |
+| Wave 4 | Add reproducibility/Bats-provenance shipped memory; amend Wave A/C/QG memories without reopening resolved findings |
+| Wave 5 | Add native-push/peer-policy shipped memory; link H1's intentionally deferred detector item to its closure |
+| Wave 6 | Add class-aware phase/topology shipped memory; consolidate obsolete Wave 19/BL-W47 topology records and retain pilot measurements |
 
 ## Shipped (recent)
 
-- **push-authority-bootstrap** (2026-07-11) — CLASS HARNESS. Addresses the HIGH auto-install item above: `scripts/sh/verify-git-hooks.sh` (new) confirms the git-layer `pre-push` hook is installed, executable, and byte-identical (CRLF-normalized) to canonical `scripts/sh/pre-push-hook.sh`; the QG mint (`emit-push-proof.sh run-qg`, Part 4) now fails closed unconditionally when that check fails, and `push-authorization-gate.js`'s main-orchestrator branch fails closed on the same condition for any Claude push it detects — its ~205-LOC in-JS stamp/proof fallback removed entirely, no permissive path left. Bootstrap via `install-git-hooks.sh`/`make install-git-hooks`; `setup-check` Check 7 reports hook status as WARN (recoverable, one-line fix), not FAIL. The command-string push-detector redesign (line 139, CRITICAL) stays explicitly OUT of scope — `isGitPushCommand` untouched. Pushed from `feature/push-authority-bootstrap`; MERGED to develop `1e0be41` (PR #243, squash).
-- **portable-ingestion-wave38** (2026-07-11) — QG PASS (Codex GO; CI 24/24 green; canonical mint bats 2025 ok / 0 not_ok; verify-proof + git-layer pre-push PASS). Pushed from `feature/portable-ingestion-wave38`; MERGED to develop `0db5773` (PR #242, squash). Docs-only resume: mapped the ingestion loop to the Wave-2 coordination-artifact schemas (zero new code) + 4 cited docs (`npm-cli-bin-field`, `gradle-patterns-plugin-authoring`, `testing-vitest-cjs-esm-mock-boundary`, `testing-vitest-esm-coverage-instrumentation`) + this BACKLOG backfill; rebased onto `7428b81`, ingestion request/approval re-emitted at the final HEAD with genuine user re-consent, 3 architects re-sealed. — `project_wave_portable_ingestion_wave38_shipped.md`
-- **qg-macos-local-ci-parity** (2026-07-08) — MERGED to develop `30de240` (PR #238, squash). CLASS HARNESS; fixed 7 BL-W4 items (1/2/3/4/6/7/9): qg-path-audit `**Class**:` anchoring + resolve-required-roles fail-open surface, ANDROID_COMMON_DOC export to the qg-doc-validators vitest child, bash-3.2-safe TOOL_PATTERNS (no `declare -A`), emit-qg-result conditional-FAIL semantics, bounded `findDocsRoot()` + repo-root exemption in validate-doc-update, qg-path-audit self-sentinel auto-exempt, and `.planning` confinement hardening in write-specialist-dispatch/write-verdict (pure-shell `pwd -P`, no python3 dep). Codex GO after a NO-GO fix round; CI 24/24; delta-clean; node_modules incident recovered via `npm ci`. — `project_wave_qg_macos_local_ci_parity_shipped.md`
-- **phase-orchestration-restoration** (2026-07-08) — QG PASS (7/7 required steps; 3/3 arch VERIFY-FINAL HEAD-bound @ e5b836e; test-suite delta-honest 1793 ok / 71 pre-existing not-ok, 0 new, byte-identical across 2 independent runs; secret-scan trufflehog 3.95.8 clean). Pushed from `feature/phase-orchestration-restoration`; MERGED to develop `8aacc05` (PR #237, squash). CLASS **DOC** (Codex-ratified vs plan's HARNESS): surgical docs/agents wording reconciliation (phase-loop/class-awareness already ~90% shipped by Waves 1-2) plus a no-forged-verdict rule and a Wave 2 Shipped-entry backfill; HARNESS mechanization deferred to BL-W4-10. Codex GO after a NO-GO fix round (arch-dispatch-modes READY wording, converged w/ CodeRabbit). — `project_wave_phase_orchestration_restoration_shipped.md`
-- **portable-coordination-artifacts** (2026-07-07) — QG PASS (3/3 arch VERIFY-FINAL HEAD-bound; bats 52/52; push-proof + quality-gate-report minted). Pushed from `feature/portable-coordination-artifacts`; MERGED to develop `68ed036` (PR #236). Implemented the ADR-001 disk-inbox portable coordination layer: 6 typed schemas (consult/message/result/request/approval/stop v1) with `.claude/hooks/coordination-artifact.js` validator + `scripts/sh/write-coordination-artifact.sh` writer + `docs/agents/coordination-artifact-schema.md`; additive fail-closed CP-gate disk-consult. Codex GO after a NO-GO fix round. — `project_wave_portable_coordination_artifacts_shipped.md`
-For full wave history: `git log` + memory `project_*shipped.md` files.
+- **G0 — Reusable Workflow Input Boundary Hardening** — MERGED `619d9a7`, PR #245 (2026-07-12). Closed the four targeted reusable workflows with namespaced environment boundaries, quoted shell consumption, checkout hardening, a run-block extractor, and a 13-test regression fence; owner-recorded final QG at `c7ba941` was 2,042 Bats / 2,607 Vitest before squash. Broader workflow, release `tag_name`, README, grep-portability, and documentation-precision findings remain explicitly deferred above.
+- **H1 — Push Authority Bootstrap** — MERGED `1e0be41`, PR #243 (2026-07-11). Installed-hook identity is required by the QG mint and Claude push gate; in-JS proof fallback removed. Command detector intentionally deferred to Wave 5.
+- **Portable Ingestion + Wave 38 Content** — MERGED `0db5773`, PR #242 (2026-07-11).
+- **Wave C — QG Artifact Binding** — MERGED `7428b81`, PR #241.
+- **Wave A — QG Evidence Integrity** — MERGED `19db9d2`, PR #240.
+- **Wave B — macOS Local-Green Portability** — MERGED `e726ca9`, PR #239.
+
+For full history use `git log` and the corresponding `project_*shipped.md` memory entries.
 
 ## How to use this document
 
-1. **Starting a session**: pick the topmost active wave; review the linked source memory files for detailed context.
-2. **Wave brief**: write `.planning/wave-bl-w{N}-prompt.md` modeled after `.planning/wave-bl-w34-l1-security-prep-prompt.md` (gitignored — local).
-3. **On wave completion**: doc-updater moves entry to `## Shipped (recent)`, prunes oldest if section >5 waves, commits via PR.
-4. **Adding new items**: append to active waves or create new wave entry; preserve priority order rationale.
-5. **Cross-references**: every active wave row links to a memory file with full context. If memory entry is missing, file before starting that wave.
+1. Start with Wave 1, the first row marked **NEXT**, and re-audit its mapped findings at current `develop`.
+2. After each shipment, promote exactly one subsequent row to **NEXT**; do not reopen G0 or execute historical entries literally.
+3. Freeze one plan/path manifest, preserve the wave's no-go boundary, and avoid standalone micro-waves for routine cleanup.
+4. On completion, record final PR/commit/tests in memory, move the wave to Shipped, and promote the next row.
+5. If a real security or release blocker requires reordering, document the evidence and dependency explicitly rather than silently changing the sequence.
