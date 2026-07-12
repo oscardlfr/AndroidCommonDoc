@@ -57,7 +57,7 @@ To verify hooks are installed:
 ls -la .git/hooks/pre-commit .git/hooks/commit-msg .git/hooks/pre-push .git/hooks/lib/wave-slug.sh
 ```
 
-Or, specifically for the pre-push hook's install-and-canonical state: `bash scripts/sh/verify-git-hooks.sh` (or `make verify-git-hooks`) — exits 0 silently on success, or prints one of 5 reason codes (`canonical-source-missing`, `hook-absent`, `hook-not-executable`, `hook-marker-missing`, `hook-drifted`) and a fix instruction on failure.
+Or, specifically for the pre-push hook's install-and-canonical state: `bash scripts/sh/verify-git-hooks.sh` (or `make verify-git-hooks`) — on success, exits 0 and writes an `OK:` confirmation to stderr (stdout stays empty); on failure, exits non-zero and prints one of 5 reason codes (`canonical-source-missing`, `hook-absent`, `hook-not-executable`, `hook-marker-missing`, `hook-drifted`) to stdout plus a fix instruction to stderr.
 
 ## Three-Layer Commit-Scope Enforcement
 
