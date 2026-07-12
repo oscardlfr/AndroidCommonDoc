@@ -17,7 +17,7 @@ assumes_read: quality-gate-protocol, agent-verdict-protocol
 
 The QG-proof push gate closes the loop between the quality-gater (Phase 3) and the git layer (pre-push hook). The quality-gater mints a cryptographically-bound proof after completing Steps 0-9; the pre-push hook verifies that proof before allowing any push.
 
-**Honest contract**: no push without proof the canonical QG ran for real over HEAD, backed by a real bats evidence handoff for that same HEAD (Wave A) — not just an asserted `test-suite: PASS`. This is NOT peer-identity enforcement — identity-aware provenance enforcement is deferred to a future harness gate.
+**Honest contract**: no **normal branch** push without proof the canonical QG ran for real over HEAD (the pre-push hook exempts branch deletions, tags, protected-branch merge refs, and `SKIP_PUSH_GATE=1`), backed by a real bats evidence handoff for that same HEAD (Wave A) — not just an asserted `test-suite: PASS`. This is NOT peer-identity enforcement — identity-aware provenance enforcement is deferred to a future harness gate.
 
 ---
 

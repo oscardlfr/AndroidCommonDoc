@@ -24,6 +24,8 @@ TOPOLOGY_DOC="$L0_ROOT/docs/architecture/layer-topology.md"
 source "$BATS_TEST_DIRNAME/lib/orchestration-guide.sh"
 # Disk-derived count helpers — avoids hardcoded README count literals.
 source "$BATS_TEST_DIRNAME/lib/readme-counts.sh"
+# Reusable workflow run: block extractor -- for the input-interpolation fence.
+source "$BATS_TEST_DIRNAME/lib/workflow-run-blocks.sh"
 
 setup() {
     source "$SH_LIB"
@@ -399,7 +401,8 @@ teardown() {
 }
 
 @test "reusable-agent-parity: resolves script paths from L0 or clone" {
-    grep -q "scripts.outputs.sync\|scripts.outputs.check" "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+    grep -qF 'SYNC_SCRIPT=' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+    grep -qF 'CHECK_SCRIPT=' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
 }
 
 @test "reusable-agent-parity: does NOT hardcode scripts/ as local path" {
@@ -408,9 +411,9 @@ teardown() {
     ! grep -q 'bash scripts/sh/check-agent-parity.sh' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
 }
 
-@test "reusable-agent-parity: uses resolved paths via step outputs" {
-    grep -q 'steps.scripts.outputs.sync' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
-    grep -q 'steps.scripts.outputs.check' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+@test "reusable-agent-parity: uses resolved paths via env vars" {
+    grep -qF 'bash "$SYNC_SCRIPT"' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+    grep -qF 'bash "$CHECK_SCRIPT"' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
 }
 
 @test "reusable-lint-resources: has same L0 clone pattern" {
@@ -1496,5 +1499,136 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 @test "dept: agents-hub has session-level rule" {
     grep -q "session-level" "$L0_ROOT/docs/agents/agents-hub.md"
     grep -q "context-provider" "$L0_ROOT/docs/agents/agents-hub.md"
+}
+
+# ============================================================
+# Section: reusable workflow run: blocks -- no direct input interpolation
+# (CodeRabbit H1 review, Major finding #3 -- shell-injection shape fix)
+# ============================================================
+
+@test "run_block_lines: emits body of a real single-line run: (no block-mode swallow)" {
+    # reusable-shell-tests.yml "Install kmp-test-runner" step is a single-line
+    # `run: npm install ...` (no | / > block indicator). A naive block-tracking
+    # implementation would flip into continuation mode and emit nothing for
+    # it -- this is a regression guard against exactly that failure mode.
+    result="$(run_block_lines "$L0_ROOT/.github/workflows/reusable-shell-tests.yml")"
+    echo "$result" | grep -q "npm install -g kmp-test-runner"
+}
+
+@test "run_block_lines: block body continues past a blank line (does not terminate early)" {
+    cat > "$WORK_DIR/blank-mid-block.yml" <<'YAML'
+jobs:
+  x:
+    steps:
+      - name: has a blank line mid-block
+        run: |
+          echo "marker-before"
+
+          echo "marker-after"
+YAML
+    result="$(run_block_lines "$WORK_DIR/blank-mid-block.yml")"
+    echo "$result" | grep -q "marker-before"
+    echo "$result" | grep -q "marker-after"
+}
+
+@test "run_block_lines: positive control - flags raw input interpolation inside a block-form run:" {
+    cat > "$WORK_DIR/bad-block.yml" <<'YAML'
+on:
+  workflow_call:
+    inputs:
+      x:
+        type: string
+        default: ''
+jobs:
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - name: unsafe block
+        run: |
+          echo "before"
+
+          echo "${{ inputs.x }}"
+YAML
+    run_block_lines "$WORK_DIR/bad-block.yml" | grep -q '${{ inputs\.'
+}
+
+@test "run_block_lines: positive control - flags raw input interpolation inside a single-line run:" {
+    cat > "$WORK_DIR/bad-single-line.yml" <<'YAML'
+on:
+  workflow_call:
+    inputs:
+      x:
+        type: string
+        default: ''
+jobs:
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - name: unsafe single-line
+        run: echo ${{ inputs.x }}
+YAML
+    run_block_lines "$WORK_DIR/bad-single-line.yml" | grep -q '${{ inputs\.'
+}
+
+@test "run_block_lines: positive control - flags step-output interpolation inside a block-form run: (CodeRabbit PR #245 Major #2)" {
+    cat > "$WORK_DIR/bad-steps-block.yml" <<'YAML'
+jobs:
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - name: unsafe block
+        run: |
+          echo "before"
+
+          bash "${{ steps.foo.outputs.bar }}"
+YAML
+    run_block_lines "$WORK_DIR/bad-steps-block.yml" | grep -q '${{ steps\.'
+}
+
+@test "input-fence: reusable-shell-tests.yml has no raw input interpolation inside run: blocks" {
+    wf="$L0_ROOT/.github/workflows/reusable-shell-tests.yml"
+    ! run_block_lines "$wf" | grep -q '${{ inputs\.'
+    ! run_block_lines "$wf" | grep -q '${{ steps\.'
+}
+
+@test "input-fence: reusable-shell-tests.yml env-maps androidcommondoc_path" {
+    grep -q 'ACD_ANDROIDCOMMONDOC_PATH: ${{ inputs.androidcommondoc_path }}' \
+        "$L0_ROOT/.github/workflows/reusable-shell-tests.yml"
+}
+
+@test "input-fence: reusable-copilot-parity.yml has no raw input interpolation inside run: blocks" {
+    wf="$L0_ROOT/.github/workflows/reusable-copilot-parity.yml"
+    ! run_block_lines "$wf" | grep -q '${{ inputs\.'
+    ! run_block_lines "$wf" | grep -q '${{ steps\.'
+}
+
+@test "input-fence: reusable-copilot-parity.yml env-maps androidcommondoc_path" {
+    grep -q 'ACD_ANDROIDCOMMONDOC_PATH: ${{ inputs.androidcommondoc_path }}' \
+        "$L0_ROOT/.github/workflows/reusable-copilot-parity.yml"
+}
+
+@test "input-fence: reusable-lint-resources.yml has no raw input interpolation inside run: blocks" {
+    wf="$L0_ROOT/.github/workflows/reusable-lint-resources.yml"
+    ! run_block_lines "$wf" | grep -q '${{ inputs\.'
+    ! run_block_lines "$wf" | grep -q '${{ steps\.'
+}
+
+@test "input-fence: reusable-lint-resources.yml env-maps androidcommondoc_path, strict, and module_path" {
+    wf="$L0_ROOT/.github/workflows/reusable-lint-resources.yml"
+    grep -q 'ACD_ANDROIDCOMMONDOC_PATH: ${{ inputs.androidcommondoc_path }}' "$wf"
+    grep -q 'ACD_INPUT_STRICT: ${{ inputs.strict }}' "$wf"
+    grep -q 'ACD_INPUT_MODULE_PATH: ${{ inputs.module_path }}' "$wf"
+}
+
+@test "input-fence: reusable-agent-parity.yml has no raw input interpolation inside run: blocks" {
+    wf="$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+    ! run_block_lines "$wf" | grep -q '${{ inputs\.'
+    ! run_block_lines "$wf" | grep -q '${{ steps\.'
+}
+
+@test "input-fence: reusable-agent-parity.yml job-level env-maps androidcommondoc_path and target" {
+    wf="$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+    grep -q 'ACD_ANDROIDCOMMONDOC_PATH: ${{ inputs.androidcommondoc_path }}' "$wf"
+    grep -q 'ACD_INPUT_TARGET: ${{ inputs.target }}' "$wf"
 }
 

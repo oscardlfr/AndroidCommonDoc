@@ -1,6 +1,6 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-07-11; Harness Realignment Waves 0-4 (#234 `0bbf6fa`, #235 `125409b`, #236 `68ed036`, #237 `8aacc05`, #238 `30de240`) and Wave 5 (Portable Ingestion + Wave 38 Content, #242 `0db5773`) are all MERGED to develop; **H1 — Push Authority Bootstrap is the active wave**; RTK template sweep remains deferred pending separate approval
+> **Last updated**: 2026-07-12; Harness Realignment Waves 0-4 (#234 `0bbf6fa`, #235 `125409b`, #236 `68ed036`, #237 `8aacc05`, #238 `30de240`), Wave 5 (Portable Ingestion + Wave 38 Content, #242 `0db5773`), and H1 — Push Authority Bootstrap (#243 `1e0be41`) are all MERGED to develop; **`harden-reusable-workflow-inputs` is the active wave**; RTK template sweep remains deferred pending separate approval
 > **Source of truth**: this file is the ordered index. Detailed entries live in `git log` + `~/.claude/projects/.../memory/` (`project_*shipped.md`, `project_*backlog.md`).
 > **Update protocol**: when a wave ships, move entry to `## Shipped (recent)`. New items appended in priority order under `## Active`.
 
@@ -25,6 +25,30 @@ Recommended wave sequence from `.planning/harness-realignment-deep-audit-plan.md
 **Sequencing**: Waves 0-5 are MERGED. Wave 6 (optional — Topology Pilot) may follow. This wave completed the recommended minimum Waves 0-5; Wave 6 is optional hardening after Wave 5.
 
 **Source**: `.planning/harness-realignment-deep-audit-plan.md` (local, gitignored).
+
+### Broader reusable/workflow input-handling audit (deferred, LOW/MED)
+
+Out of scope for wave `harden-reusable-workflow-inputs` (off `1e0be41`), which hardened the `androidcommondoc_path` input handling on its 4 targeted reusable workflows. Remaining census: 36 run-block `${{ inputs.* }}` interpolation sites across 8 other workflows — `readme-audit.yml` (19), `doc-audit.yml` (3), `doc-monitor.yml` (1), `reusable-architecture-guards.yml` (1), `reusable-check-outdated.yml` (3), `reusable-kmp-safety-check.yml` (3), `reusable-audit-report.yml` (3), `reusable-commit-lint.yml` (3) — plus 3 `github.event.inputs.tag_name` sites in `l0-release-assets.yml` (L45/46/142), same injection class, arguably higher-risk since they come from a release-event payload rather than a `workflow_call`/`workflow_dispatch` input. Most sites are low-risk (numeric/enum/defaulted inputs); re-confirm the per-file census when this item is picked up.
+
+**Source**: `harden-reusable-workflow-inputs` wave scoping, 2026-07-12.
+
+### README count/table reconciliation (deferred, LOW — /readme-audit --fix)
+
+Pre-existing README drift surfaced during `harden-reusable-workflow-inputs` #7, which intentionally fixed ONLY the L21/L963 script-pair/Bash-only counts (45/18/1) per H1/CodeRabbit scope. The rest is unrelated to input hardening, non-blocking (bats green), and explicitly deferred.
+
+Drift to fix in a dedicated `/readme-audit --fix` pass:
+- project-tree script count: README says **50**, actual **63**
+- guides: README says **28**, actual **29**
+- sub-docs: README says **97**, actual **102**
+- 11 script rows present on disk but missing from the README table: `emit-pre-pr-report`, `emit-push-proof`, `emit-qg-result`, `emit-rule-inventory`, `qg-doc-validators`, `qg-path-audit`, `qg-registry-integrity`, `run-bats`, `secret-scan-report`, `write-coordination-artifact`, `write-specialist-dispatch`, `write-verdict`
+
+**Source**: `harden-reusable-workflow-inputs` #7 `/readme-audit` scan, 2026-07-12.
+
+### qg-local-green: portable grep in PS1-parity BRE patterns (deferred, LOW)
+
+- Several bats tests grep with GNU-only BRE `\s`/`\+` extensions, e.g. `grep -c '^\s.*\+= "--rerun-tasks"'`. These ERROR under Apple's `/usr/bin/grep` ("repetition-operator operand invalid") but pass under the canonical `$HOME/.local/gnubin-l0` GNU grep 3.12. Latent portability gap — only bites if a non-canonical grep is first on PATH.
+- Sibling sites to make ERE/POSIX-portable (`grep -Ec '^[[:space:]].*[+]='`) in one repo-wide pass: `scripts/tests/session-coverage.bats:63,109` (PS1-kover #5/#16) and `scripts/tests/script-utils.bats:267` (coverage-phase check). Sweep for any other `\s`/`\+`-BRE grep siblings while at it.
+- Provenance: surfaced 2026-07-12 during `harden-reusable-workflow-inputs`; initially MISDIAGNOSED as a baseline regression (root cause was a PATH/grep mismatch, not code). Non-blocking under the canonical env; belongs in a dedicated qg-local-green-portability pass, deliberately NOT folded into the input-hardening wave.
 
 ### Realignment follow-ups (Wave 4 — QG/macOS parity)
 
@@ -327,7 +351,7 @@ See conversation history (post BL-W47-prep-19, 2026-05-31) for full migration pl
 
 ## Shipped (recent)
 
-- **push-authority-bootstrap** (2026-07-11) — CLASS HARNESS. Addresses the HIGH auto-install item above: `scripts/sh/verify-git-hooks.sh` (new) confirms the git-layer `pre-push` hook is installed, executable, and byte-identical (CRLF-normalized) to canonical `scripts/sh/pre-push-hook.sh`; the QG mint (`emit-push-proof.sh run-qg`, Part 4) now fails closed unconditionally when that check fails, and `push-authorization-gate.js`'s main-orchestrator branch fails closed on the same condition for any Claude push it detects — its ~205-LOC in-JS stamp/proof fallback removed entirely, no permissive path left. Bootstrap via `install-git-hooks.sh`/`make install-git-hooks`; `setup-check` Check 7 reports hook status as WARN (recoverable, one-line fix), not FAIL. The command-string push-detector redesign (line 139, CRITICAL) stays explicitly OUT of scope — `isGitPushCommand` untouched. Pushed from `feature/push-authority-bootstrap`; pending Codex GO + 3 architect VERIFY-FINAL + final QG mint before merge to develop (memory entry + merge sha/PR backfilled by a post-merge doc-updater follow-up).
+- **push-authority-bootstrap** (2026-07-11) — CLASS HARNESS. Addresses the HIGH auto-install item above: `scripts/sh/verify-git-hooks.sh` (new) confirms the git-layer `pre-push` hook is installed, executable, and byte-identical (CRLF-normalized) to canonical `scripts/sh/pre-push-hook.sh`; the QG mint (`emit-push-proof.sh run-qg`, Part 4) now fails closed unconditionally when that check fails, and `push-authorization-gate.js`'s main-orchestrator branch fails closed on the same condition for any Claude push it detects — its ~205-LOC in-JS stamp/proof fallback removed entirely, no permissive path left. Bootstrap via `install-git-hooks.sh`/`make install-git-hooks`; `setup-check` Check 7 reports hook status as WARN (recoverable, one-line fix), not FAIL. The command-string push-detector redesign (line 139, CRITICAL) stays explicitly OUT of scope — `isGitPushCommand` untouched. Pushed from `feature/push-authority-bootstrap`; MERGED to develop `1e0be41` (PR #243, squash).
 - **portable-ingestion-wave38** (2026-07-11) — QG PASS (Codex GO; CI 24/24 green; canonical mint bats 2025 ok / 0 not_ok; verify-proof + git-layer pre-push PASS). Pushed from `feature/portable-ingestion-wave38`; MERGED to develop `0db5773` (PR #242, squash). Docs-only resume: mapped the ingestion loop to the Wave-2 coordination-artifact schemas (zero new code) + 4 cited docs (`npm-cli-bin-field`, `gradle-patterns-plugin-authoring`, `testing-vitest-cjs-esm-mock-boundary`, `testing-vitest-esm-coverage-instrumentation`) + this BACKLOG backfill; rebased onto `7428b81`, ingestion request/approval re-emitted at the final HEAD with genuine user re-consent, 3 architects re-sealed. — `project_wave_portable_ingestion_wave38_shipped.md`
 - **qg-macos-local-ci-parity** (2026-07-08) — MERGED to develop `30de240` (PR #238, squash). CLASS HARNESS; fixed 7 BL-W4 items (1/2/3/4/6/7/9): qg-path-audit `**Class**:` anchoring + resolve-required-roles fail-open surface, ANDROID_COMMON_DOC export to the qg-doc-validators vitest child, bash-3.2-safe TOOL_PATTERNS (no `declare -A`), emit-qg-result conditional-FAIL semantics, bounded `findDocsRoot()` + repo-root exemption in validate-doc-update, qg-path-audit self-sentinel auto-exempt, and `.planning` confinement hardening in write-specialist-dispatch/write-verdict (pure-shell `pwd -P`, no python3 dep). Codex GO after a NO-GO fix round; CI 24/24; delta-clean; node_modules incident recovered via `npm ci`. — `project_wave_qg_macos_local_ci_parity_shipped.md`
 - **phase-orchestration-restoration** (2026-07-08) — QG PASS (7/7 required steps; 3/3 arch VERIFY-FINAL HEAD-bound @ e5b836e; test-suite delta-honest 1793 ok / 71 pre-existing not-ok, 0 new, byte-identical across 2 independent runs; secret-scan trufflehog 3.95.8 clean). Pushed from `feature/phase-orchestration-restoration`; MERGED to develop `8aacc05` (PR #237, squash). CLASS **DOC** (Codex-ratified vs plan's HARNESS): surgical docs/agents wording reconciliation (phase-loop/class-awareness already ~90% shipped by Waves 1-2) plus a no-forged-verdict rule and a Wave 2 Shipped-entry backfill; HARNESS mechanization deferred to BL-W4-10. Codex GO after a NO-GO fix round (arch-dispatch-modes READY wording, converged w/ CodeRabbit). — `project_wave_phase_orchestration_restoration_shipped.md`

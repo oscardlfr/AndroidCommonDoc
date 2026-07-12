@@ -15,11 +15,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Checkout AndroidCommonDoc (for scripts)
         if: inputs.androidcommondoc_path == ''
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           repository: ${{ github.repository_owner }}/AndroidCommonDoc
           path: .androidcommondoc-toolkit
           sparse-checkout: |
@@ -31,15 +34,21 @@ jobs:
             scripts/sh/pre-push-hook.sh
 
       - name: Resolve script paths
-        id: scripts
+        env:
+          ACD_ANDROIDCOMMONDOC_PATH: ${{ inputs.androidcommondoc_path }}
         run: |
-          if [ -n "${{ inputs.androidcommondoc_path }}" ]; then
-            ROOT="${{ inputs.androidcommondoc_path }}"
+          if [ -n "$ACD_ANDROIDCOMMONDOC_PATH" ]; then
+            ROOT="$ACD_ANDROIDCOMMONDOC_PATH"
           else
             ROOT=".androidcommondoc-toolkit"
           fi
-          echo "install=${ROOT}/scripts/sh/install-git-hooks.sh" >> "$GITHUB_OUTPUT"
-          echo "verify=${ROOT}/scripts/sh/verify-git-hooks.sh" >> "$GITHUB_OUTPUT"
+          case "$ROOT" in
+            *$'\n'*) echo "::error::androidcommondoc_path must not contain a newline" >&2; exit 1 ;;
+          esac
+          {
+            echo "INSTALL_SCRIPT=${ROOT}/scripts/sh/install-git-hooks.sh"
+            echo "VERIFY_SCRIPT=${ROOT}/scripts/sh/verify-git-hooks.sh"
+          } >> "$GITHUB_ENV"
 
       - name: Install bats
         run: |
@@ -104,8 +113,8 @@ jobs:
             echo "::warning::skipping git-hooks bootstrap smoke -- target repo has no scripts/sh/pre-push-hook.sh (not an L0 toolkit consumer yet)"
             exit 0
           fi
-          bash "${{ steps.scripts.outputs.install }}" .
-          bash "${{ steps.scripts.outputs.verify }}"
+          bash "$INSTALL_SCRIPT" .
+          bash "$VERIFY_SCRIPT"
 
       - name: Run Node.js hook tests
         run: |
