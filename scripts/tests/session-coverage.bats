@@ -401,7 +401,8 @@ teardown() {
 }
 
 @test "reusable-agent-parity: resolves script paths from L0 or clone" {
-    grep -q "scripts.outputs.sync\|scripts.outputs.check" "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+    grep -qF 'SYNC_SCRIPT=' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+    grep -qF 'CHECK_SCRIPT=' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
 }
 
 @test "reusable-agent-parity: does NOT hardcode scripts/ as local path" {
@@ -410,9 +411,9 @@ teardown() {
     ! grep -q 'bash scripts/sh/check-agent-parity.sh' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
 }
 
-@test "reusable-agent-parity: uses resolved paths via step outputs" {
-    grep -q 'steps.scripts.outputs.sync' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
-    grep -q 'steps.scripts.outputs.check' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+@test "reusable-agent-parity: uses resolved paths via env vars" {
+    grep -qF 'bash "$SYNC_SCRIPT"' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
+    grep -qF 'bash "$CHECK_SCRIPT"' "$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
 }
 
 @test "reusable-lint-resources: has same L0 clone pattern" {
