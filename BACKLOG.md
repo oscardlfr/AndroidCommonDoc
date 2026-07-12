@@ -44,6 +44,12 @@ Drift to fix in a dedicated `/readme-audit --fix` pass:
 
 **Source**: `harden-reusable-workflow-inputs` #7 `/readme-audit` scan, 2026-07-12.
 
+### qg-local-green: portable grep in PS1-parity BRE patterns (deferred, LOW)
+
+- Several bats tests grep with GNU-only BRE `\s`/`\+` extensions, e.g. `grep -c '^\s.*\+= "--rerun-tasks"'`. These ERROR under Apple's `/usr/bin/grep` ("repetition-operator operand invalid") but pass under the canonical `$HOME/.local/gnubin-l0` GNU grep 3.12. Latent portability gap — only bites if a non-canonical grep is first on PATH.
+- Sibling sites to make ERE/POSIX-portable (`grep -Ec '^[[:space:]].*[+]='`) in one repo-wide pass: `scripts/tests/session-coverage.bats:63,109` (PS1-kover #5/#16) and `scripts/tests/script-utils.bats:267` (coverage-phase check). Sweep for any other `\s`/`\+`-BRE grep siblings while at it.
+- Provenance: surfaced 2026-07-12 during `harden-reusable-workflow-inputs`; initially MISDIAGNOSED as a baseline regression (root cause was a PATH/grep mismatch, not code). Non-blocking under the canonical env; belongs in a dedicated qg-local-green-portability pass, deliberately NOT folded into the input-hardening wave.
+
 ### Realignment follow-ups (Wave 4 — QG/macOS parity)
 
 Specific findings enumerated in `.planning/harness-realignment-deep-audit-plan.md` (Wave 0 scope block) to be addressed under Wave 4 — QG/macOS/Local-CI Parity Hardening, above:
