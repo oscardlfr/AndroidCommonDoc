@@ -38,6 +38,8 @@ jobs:
       ACD_INPUT_TARGET: ${{ inputs.target }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Checkout AndroidCommonDoc (for scripts)
         if: inputs.androidcommondoc_path == ''
@@ -51,15 +53,19 @@ jobs:
             scripts/sh/check-agent-parity.sh
 
       - name: Resolve script paths
-        id: scripts
         run: |
           if [ -n "$ACD_ANDROIDCOMMONDOC_PATH" ]; then
             ROOT="$ACD_ANDROIDCOMMONDOC_PATH"
           else
             ROOT=".androidcommondoc-toolkit"
           fi
-          echo "sync=${ROOT}/scripts/sh/sync-gsd-agents.sh" >> "$GITHUB_OUTPUT"
-          echo "check=${ROOT}/scripts/sh/check-agent-parity.sh" >> "$GITHUB_OUTPUT"
+          case "$ROOT" in
+            *$'\n'*) echo "::error::androidcommondoc_path must not contain a newline" >&2; exit 1 ;;
+          esac
+          {
+            echo "SYNC_SCRIPT=${ROOT}/scripts/sh/sync-gsd-agents.sh"
+            echo "CHECK_SCRIPT=${ROOT}/scripts/sh/check-agent-parity.sh"
+          } >> "$GITHUB_ENV"
 
       - name: Setup GSD agents directory
         run: |
@@ -71,13 +77,13 @@ jobs:
 
       - name: Sync GSD agents
         run: |
-          bash "${{ steps.scripts.outputs.sync }}" \
+          bash "$SYNC_SCRIPT" \
             --target "$ACD_INPUT_TARGET" \
             --project-root "$(pwd)" \
             --verbose
 
       - name: Check agent parity
         run: |
-          bash "${{ steps.scripts.outputs.check }}" \
+          bash "$CHECK_SCRIPT" \
             --target "$ACD_INPUT_TARGET" \
             --project-root "$(pwd)"

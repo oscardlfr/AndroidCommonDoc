@@ -40,6 +40,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Checkout AndroidCommonDoc (for lint script)
         if: inputs.androidcommondoc_path == ''
@@ -51,15 +53,18 @@ jobs:
           sparse-checkout: scripts/sh/lint-resources.sh
 
       - name: Resolve script path
-        id: script
         env:
           ACD_ANDROIDCOMMONDOC_PATH: ${{ inputs.androidcommondoc_path }}
         run: |
           if [ -n "$ACD_ANDROIDCOMMONDOC_PATH" ]; then
-            echo "path=${ACD_ANDROIDCOMMONDOC_PATH}/scripts/sh/lint-resources.sh" >> "$GITHUB_OUTPUT"
+            LINT_SCRIPT_PATH="${ACD_ANDROIDCOMMONDOC_PATH}/scripts/sh/lint-resources.sh"
           else
-            echo "path=.androidcommondoc-toolkit/scripts/sh/lint-resources.sh" >> "$GITHUB_OUTPUT"
+            LINT_SCRIPT_PATH=".androidcommondoc-toolkit/scripts/sh/lint-resources.sh"
           fi
+          case "$LINT_SCRIPT_PATH" in
+            *$'\n'*) echo "::error::androidcommondoc_path must not contain a newline" >&2; exit 1 ;;
+          esac
+          echo "LINT_SCRIPT=${LINT_SCRIPT_PATH}" >> "$GITHUB_ENV"
 
       - name: Lint string resource keys
         env:
@@ -70,4 +75,4 @@ jobs:
           [ "$ACD_INPUT_STRICT" = "true" ] && ARGS+=(--strict)
           [ -n "$ACD_INPUT_MODULE_PATH" ] && ARGS+=(--module-path "$ACD_INPUT_MODULE_PATH")
           ARGS+=(--show-details)
-          bash "${{ steps.script.outputs.path }}" "${ARGS[@]}"
+          bash "$LINT_SCRIPT" "${ARGS[@]}"

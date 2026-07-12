@@ -28,6 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Checkout AndroidCommonDoc (for scripts)
         if: inputs.androidcommondoc_path == ''
@@ -40,7 +42,6 @@ jobs:
             scripts/sh/copilot-parity.sh
 
       - name: Resolve script paths
-        id: scripts
         env:
           ACD_ANDROIDCOMMONDOC_PATH: ${{ inputs.androidcommondoc_path }}
         run: |
@@ -49,10 +50,13 @@ jobs:
           else
             ROOT=".androidcommondoc-toolkit"
           fi
-          echo "check=${ROOT}/scripts/sh/copilot-parity.sh" >> "$GITHUB_OUTPUT"
+          case "$ROOT" in
+            *$'\n'*) echo "::error::androidcommondoc_path must not contain a newline" >&2; exit 1 ;;
+          esac
+          echo "CHECK_SCRIPT=${ROOT}/scripts/sh/copilot-parity.sh" >> "$GITHUB_ENV"
 
       - name: Check copilot template parity
         run: |
-          bash "${{ steps.scripts.outputs.check }}" \
+          bash "$CHECK_SCRIPT" \
             --project-root "$(pwd)" \
             --verbose
