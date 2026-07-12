@@ -252,13 +252,14 @@ write_lone_cr_hook() {
 }
 
 # ── VGH-8..VGH-9 (CRLF-normalization discriminator, H1 Codex NO-GO fix round) ─
-# sha256_of() currently normalizes with tr -d '\r', which deletes EVERY CR
-# byte, including one that is NOT part of a "\r\n" pair -- a hook drifted
-# by a lone \r false-hashes as canonical. The fix normalizes CRLF pairs
-# only ("\r\n" -> "\n"). VGH-8 is the positive control (a legitimate CRLF
-# checkout must PASS under either implementation); VGH-9 is the
-# discriminator (a lone-\r drift must be caught as hook-drifted -- RED
-# against the current tr -d '\r' primitive, GREEN once the fix lands).
+# sha256_of() normalizes CRLF pairs only ("\r\n" -> "\n"), not every CR byte
+# unconditionally -- the earlier bare tr -d '\r' primitive deleted EVERY CR
+# byte, including one that is NOT part of a "\r\n" pair, so a hook drifted
+# by a lone \r false-hashed as canonical under that primitive. VGH-8 is the
+# positive control (a legitimate CRLF checkout PASSes under the shipped
+# normalization); VGH-9 is the standing discriminator (a lone-\r drift is
+# caught as hook-drifted under the shipped normalization -- it would go RED
+# again if this were regressed back to bare tr -d '\r').
 
 @test "VGH-8 PASS: CRLF-equivalent hook (every LF -> CRLF) -> exit 0" {
   # Chain: (1) source present (2) hook present (3) executable (4) marker
@@ -275,10 +276,12 @@ write_lone_cr_hook() {
   # Chain: (1) source present (2) hook present (3) executable (4) marker
   # present [all satisfied] -- (5) sha256 mismatch from one standalone \r
   # byte outside any \r\n pair [TRIPPED under a correct implementation].
-  # Against the CURRENT tr -d '\r' primitive (deletes every CR
-  # unconditionally) this lone \r is stripped and the hook false-matches
-  # canonical -- expected RED here until the fix (CRLF-pair-only
-  # normalization) lands.
+  # Against the shipped CRLF-pair-only normalization, this lone \r is
+  # preserved (not stripped) and the hook correctly fails to match
+  # canonical. Standing discriminator: this test would go RED if the
+  # CRLF-pair fold were regressed back to bare tr -d '\r' (which strips
+  # every CR unconditionally and would false-match this lone-\r drift as
+  # canonical).
   provide_canonical_source
   write_lone_cr_hook
   run bash "$SCRIPT" --repo-root "$REPO"
