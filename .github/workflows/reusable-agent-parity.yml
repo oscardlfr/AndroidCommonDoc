@@ -33,6 +33,9 @@ jobs:
   agent-parity:
     name: Check .claude/agents ↔ GSD parity
     runs-on: ubuntu-latest
+    env:
+      ACD_ANDROIDCOMMONDOC_PATH: ${{ inputs.androidcommondoc_path }}
+      ACD_INPUT_TARGET: ${{ inputs.target }}
     steps:
       - uses: actions/checkout@v5
 
@@ -40,6 +43,7 @@ jobs:
         if: inputs.androidcommondoc_path == ''
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           repository: ${{ github.repository_owner }}/AndroidCommonDoc
           path: .androidcommondoc-toolkit
           sparse-checkout: |
@@ -49,8 +53,8 @@ jobs:
       - name: Resolve script paths
         id: scripts
         run: |
-          if [ -n "${{ inputs.androidcommondoc_path }}" ]; then
-            ROOT="${{ inputs.androidcommondoc_path }}"
+          if [ -n "$ACD_ANDROIDCOMMONDOC_PATH" ]; then
+            ROOT="$ACD_ANDROIDCOMMONDOC_PATH"
           else
             ROOT=".androidcommondoc-toolkit"
           fi
@@ -59,7 +63,7 @@ jobs:
 
       - name: Setup GSD agents directory
         run: |
-          if [ "${{ inputs.target }}" = "user" ]; then
+          if [ "$ACD_INPUT_TARGET" = "user" ]; then
             mkdir -p ~/.gsd/agent/agents
           else
             mkdir -p .gsd/agents
@@ -68,12 +72,12 @@ jobs:
       - name: Sync GSD agents
         run: |
           bash "${{ steps.scripts.outputs.sync }}" \
-            --target "${{ inputs.target }}" \
+            --target "$ACD_INPUT_TARGET" \
             --project-root "$(pwd)" \
             --verbose
 
       - name: Check agent parity
         run: |
           bash "${{ steps.scripts.outputs.check }}" \
-            --target "${{ inputs.target }}" \
+            --target "$ACD_INPUT_TARGET" \
             --project-root "$(pwd)"

@@ -45,24 +45,29 @@ jobs:
         if: inputs.androidcommondoc_path == ''
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           repository: ${{ github.repository_owner }}/AndroidCommonDoc
           path: .androidcommondoc-toolkit
           sparse-checkout: scripts/sh/lint-resources.sh
 
       - name: Resolve script path
         id: script
+        env:
+          ACD_ANDROIDCOMMONDOC_PATH: ${{ inputs.androidcommondoc_path }}
         run: |
-          if [ -n "${{ inputs.androidcommondoc_path }}" ]; then
-            echo "path=${{ inputs.androidcommondoc_path }}/scripts/sh/lint-resources.sh" >> $GITHUB_OUTPUT
+          if [ -n "$ACD_ANDROIDCOMMONDOC_PATH" ]; then
+            echo "path=${ACD_ANDROIDCOMMONDOC_PATH}/scripts/sh/lint-resources.sh" >> "$GITHUB_OUTPUT"
           else
-            echo "path=.androidcommondoc-toolkit/scripts/sh/lint-resources.sh" >> $GITHUB_OUTPUT
+            echo "path=.androidcommondoc-toolkit/scripts/sh/lint-resources.sh" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Lint string resource keys
+        env:
+          ACD_INPUT_STRICT: ${{ inputs.strict }}
+          ACD_INPUT_MODULE_PATH: ${{ inputs.module_path }}
         run: |
-          ARGS="--project-root $(pwd) --output-format human"
-          [ "${{ inputs.strict }}" = "true" ] && ARGS="$ARGS --strict"
-          [ -n "${{ inputs.module_path }}" ] && ARGS="$ARGS --module-path ${{ inputs.module_path }}"
-          ARGS="$ARGS --show-details"
-
-          bash "${{ steps.script.outputs.path }}" $ARGS
+          ARGS=(--project-root "$(pwd)" --output-format human)
+          [ "$ACD_INPUT_STRICT" = "true" ] && ARGS+=(--strict)
+          [ -n "$ACD_INPUT_MODULE_PATH" ] && ARGS+=(--module-path "$ACD_INPUT_MODULE_PATH")
+          ARGS+=(--show-details)
+          bash "${{ steps.script.outputs.path }}" "${ARGS[@]}"

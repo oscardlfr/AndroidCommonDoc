@@ -20,6 +20,7 @@ jobs:
         if: inputs.androidcommondoc_path == ''
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           repository: ${{ github.repository_owner }}/AndroidCommonDoc
           path: .androidcommondoc-toolkit
           sparse-checkout: |
@@ -32,9 +33,11 @@ jobs:
 
       - name: Resolve script paths
         id: scripts
+        env:
+          ACD_ANDROIDCOMMONDOC_PATH: ${{ inputs.androidcommondoc_path }}
         run: |
-          if [ -n "${{ inputs.androidcommondoc_path }}" ]; then
-            ROOT="${{ inputs.androidcommondoc_path }}"
+          if [ -n "$ACD_ANDROIDCOMMONDOC_PATH" ]; then
+            ROOT="$ACD_ANDROIDCOMMONDOC_PATH"
           else
             ROOT=".androidcommondoc-toolkit"
           fi
