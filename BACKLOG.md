@@ -32,6 +32,18 @@ Out of scope for wave `harden-reusable-workflow-inputs` (off `1e0be41`), which h
 
 **Source**: `harden-reusable-workflow-inputs` wave scoping, 2026-07-12.
 
+### README count/table reconciliation (deferred, LOW — /readme-audit --fix)
+
+Pre-existing README drift surfaced during `harden-reusable-workflow-inputs` #7, which intentionally fixed ONLY the L21/L963 script-pair/Bash-only counts (45/18/1) per H1/CodeRabbit scope. The rest is unrelated to input hardening, non-blocking (bats green), and explicitly deferred.
+
+Drift to fix in a dedicated `/readme-audit --fix` pass:
+- project-tree script count: README says **50**, actual **63**
+- guides: README says **28**, actual **29**
+- sub-docs: README says **97**, actual **102**
+- 11 script rows present on disk but missing from the README table: `emit-pre-pr-report`, `emit-push-proof`, `emit-qg-result`, `emit-rule-inventory`, `qg-doc-validators`, `qg-path-audit`, `qg-registry-integrity`, `run-bats`, `secret-scan-report`, `write-coordination-artifact`, `write-specialist-dispatch`, `write-verdict`
+
+**Source**: `harden-reusable-workflow-inputs` #7 `/readme-audit` scan, 2026-07-12.
+
 ### Realignment follow-ups (Wave 4 — QG/macOS parity)
 
 Specific findings enumerated in `.planning/harness-realignment-deep-audit-plan.md` (Wave 0 scope block) to be addressed under Wave 4 — QG/macOS/Local-CI Parity Hardening, above:
