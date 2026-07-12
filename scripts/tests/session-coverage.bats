@@ -1569,9 +1569,25 @@ YAML
     run_block_lines "$WORK_DIR/bad-single-line.yml" | grep -q '${{ inputs\.'
 }
 
+@test "run_block_lines: positive control - flags step-output interpolation inside a block-form run: (CodeRabbit PR #245 Major #2)" {
+    cat > "$WORK_DIR/bad-steps-block.yml" <<'YAML'
+jobs:
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - name: unsafe block
+        run: |
+          echo "before"
+
+          bash "${{ steps.foo.outputs.bar }}"
+YAML
+    run_block_lines "$WORK_DIR/bad-steps-block.yml" | grep -q '${{ steps\.'
+}
+
 @test "input-fence: reusable-shell-tests.yml has no raw input interpolation inside run: blocks" {
     wf="$L0_ROOT/.github/workflows/reusable-shell-tests.yml"
     ! run_block_lines "$wf" | grep -q '${{ inputs\.'
+    ! run_block_lines "$wf" | grep -q '${{ steps\.'
 }
 
 @test "input-fence: reusable-shell-tests.yml env-maps androidcommondoc_path" {
@@ -1582,6 +1598,7 @@ YAML
 @test "input-fence: reusable-copilot-parity.yml has no raw input interpolation inside run: blocks" {
     wf="$L0_ROOT/.github/workflows/reusable-copilot-parity.yml"
     ! run_block_lines "$wf" | grep -q '${{ inputs\.'
+    ! run_block_lines "$wf" | grep -q '${{ steps\.'
 }
 
 @test "input-fence: reusable-copilot-parity.yml env-maps androidcommondoc_path" {
@@ -1592,6 +1609,7 @@ YAML
 @test "input-fence: reusable-lint-resources.yml has no raw input interpolation inside run: blocks" {
     wf="$L0_ROOT/.github/workflows/reusable-lint-resources.yml"
     ! run_block_lines "$wf" | grep -q '${{ inputs\.'
+    ! run_block_lines "$wf" | grep -q '${{ steps\.'
 }
 
 @test "input-fence: reusable-lint-resources.yml env-maps androidcommondoc_path, strict, and module_path" {
@@ -1604,6 +1622,7 @@ YAML
 @test "input-fence: reusable-agent-parity.yml has no raw input interpolation inside run: blocks" {
     wf="$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
     ! run_block_lines "$wf" | grep -q '${{ inputs\.'
+    ! run_block_lines "$wf" | grep -q '${{ steps\.'
 }
 
 @test "input-fence: reusable-agent-parity.yml job-level env-maps androidcommondoc_path and target" {
