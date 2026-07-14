@@ -59,6 +59,8 @@ tmp/
 # pattern at line 47 only matches depth 1; subdirs need their own rules).
 .planning/verdicts/
 .planning/wave*/
+# Wave 1: default same-worktree runtime coordination root (PLAN.md Namespace & Root Security)
+.planning/coordination/
 # Verdict channel rationale doc — long-lived design record tracked alongside repo
 !.planning/BL-W47-verdict-channel.md
 # Note: wave quality-gate sentinels live in .claude/wave-quality-gates/ (tracked)

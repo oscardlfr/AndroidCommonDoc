@@ -1,0 +1,708 @@
+#!/usr/bin/env bats
+bats_require_minimum_version 1.5.0
+#
+# Policy/lifecycle-CLI tests for the portable runtime-collaboration core, Wave 1
+# (portable-runtime-messaging-adapters), WP1/WP3 -- PLAN.md "Tracked policy versus
+# host-local presence" (~L86-119), "Host-native lifecycle action boundary (frozen
+# execution contract)" (~L134-170), and this file's own Path-Manifest row (~L1302).
+#
+# CLI under test: node scripts/lib/runtime-role-lifecycle.cjs <subcommand> ... (Frozen
+# pre-hook caller grammar, PLAN.md ~L138-150). This file owns the closed
+# `runtime-collaboration-policy/v1` project/toolkit pair-atomic lookup, the closed
+# `coordination/lifecycle-cli-result/v1` stdout envelope, scalar/array/null role
+# encoding at the CLI-argv surface, `ensure` idempotency/ephemeral-availability/
+# fail-closed persistent-mode behavior, `action-failed`/`ready`/`wait-ready` argv +
+# zero-match rejection, `notify`/`rotate`/`stop-owned`/`status` argv validation, and
+# the "no caller-supplied identity/grant/prompt field" boundary. Per this file's own
+# Path-Manifest row (PLAN.md ~L1302): "policy modes, exact support plane, scalar/
+# array/null lifecycle grants, init-twice idempotency, sanctioned one-supervisor
+# launch, draft->final rebind without respawn, WAITING reuse, death/respawn/
+# rehydration, restart invalidation, Agent-Teams-disabled one-shot availability,
+# ambiguous-owner rejection" and the ~L169 coverage summary.
+#
+# STATUS: RED. `scripts/lib/runtime-role-lifecycle.cjs` does not exist yet (WP1 has
+# not landed). Every test below is expected to FAIL now -- `node` reports the module
+# missing and exits non-zero, which trips the very first `[ "$status" -eq ... ]`
+# assertion in each test before any later JSON-shape assertion runs, exactly like
+# `runtime-consultation-protocol.bats`'s own documented RED precedent. These tests are
+# written against the frozen contract so they become the GREEN target once WP1 lands.
+#
+# Scope boundary (mirrors protocol.bats's own scoping discipline): this file is scoped
+# to the protocol/schema/policy/argv-validation layer of `runtime-role-lifecycle.cjs`
+# reachable WITHOUT a live Claude Agent Teams / Codex capability. Live capability
+# conformance (real team-ensure->role-spawn ordering, a real sanctioned supervisor
+# process, real draft->final `role-rebind`, real idle-reuse/death/respawn, real
+# restart rediscovery) requires a fake-driver harness or a genuine runtime and is
+# proven by `runtime-consultation-bridge.bats` (WP3) and the WP6 E2E suite instead --
+# not fabricated here via guessed host-private registry file paths (the host-local
+# presence registry is explicitly "gitignored" with NO frozen path/schema in PLAN.md,
+# unlike `coordination_root`'s fully-frozen Namespace & Root Security tree that
+# protocol.bats safely fabricates fixtures against). Where this file's Path-Manifest
+# citation names a capability-bearing behavior (sanctioned one-supervisor launch,
+# draft->final rebind, WAITING reuse, death/respawn/rehydration, restart invalidation,
+# Agent-Teams-disabled one-shot availability), this file's contribution is the
+# deterministic FAIL-CLOSED contract in a bare no-capability sandbox (a role may never
+# be silently reported healthy/spawned without a proven connector, per PLAN.md ~L113)
+# plus the argv/schema surface those transitions are driven through (`rotate`,
+# `stop-owned`, `wait-ready`, `status`, ephemeral-mode `ensure`) -- not a live-success
+# assertion this sandbox cannot honestly produce.
+#
+# Key interpretive decisions (documented so a future correction is a small, obvious
+# fix rather than a silent divergence -- mirrors protocol.bats's own practice):
+#   - Every invocation sets `NODE_ENV=test` + a self-minted
+#     `RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY` fixture token, exactly mirroring
+#     protocol.bats's own documented precedent ("this bats suite IS the harness for
+#     direct-CLI protocol testing, so it mints its own fixed token here"). PLAN.md
+#     freezes an analogous `RUNTIME_CONSULTATION_TEST_CAPABILITY` for the SIBLING
+#     `runtime-consultation.cjs` ABI only (~L752); this file's own test-capability
+#     name/value is this suite's own reasonable, precedented invention for the
+#     lifecycle CLI, not a literal PLAN quote.
+#   - The one-use `--lifecycle-binding <grant>` flag is hook-injected
+#     (`context-provider-gate.js` / `runtime-consultation-target-gate.js`, PLAN.md
+#     ~L150, ~L580) and is NEVER caller-supplied; this file exercises the pre-injection
+#     caller grammar directly (no hook runs in a bats subprocess), and separately
+#     proves that a CALLER-supplied `--lifecycle-binding`/identity/prompt flag is
+#     itself rejected (see the "no caller-supplied identity" section) rather than
+#     assuming injection happened.
+#   - `coordination/lifecycle-cli-result/v1`'s closed `status` enum (exactly
+#     `READY|EPHEMERAL_AVAILABLE|ACTION_REQUIRED|WAITING|UNAVAILABLE|STOPPED|INVALID`,
+#     PLAN.md ~L152) has no literal "USAGE_ERROR" member even though the rc mapping
+#     calls rc2 "usage" (distinct from rc3's own "INVALID"). For rc2 (missing/
+#     duplicate/unrecognized argv) cases, this file therefore asserts only the CERTAIN
+#     parts -- `code==2` and `ok==false` -- via `_assert_lifecycle_result`'s
+#     empty-string sentinel for `expected_status`/`expected_detail`, rather than
+#     guessing which of the 7 closed literals rc2 prints.
+#   - "Scalar/array/null grant-role encoding" (Path-Manifest, ~L1302) names the
+#     host-private `runtime/lifecycle-command-grant/v1.role` field (~L576), which is
+#     hook-minted and never printed to stdout, so it cannot be inspected directly in a
+#     direct-CLI test. This file instead exercises its CLI-argv-level proxy, which the
+#     Frozen CLI ABI table (~L138-150) ties 1:1 to that same union: a single `--role`
+#     for scalar-role commands (`rotate`, `stop-owned`), repeated `--role` for
+#     multi-role `ensure`, and no `--role` at all for whole-support-plane `probe`/
+#     `status`.
+#   - "Zero/multiple roster matches" (~L169): zero matches is directly testable by
+#     addressing a well-formed but never-minted `--action <64-hex>` id. Multiple/
+#     ambiguous-owner matches require a live multi-peer race this sandbox cannot
+#     honestly fabricate without guessing the host-private registry's undocumented
+#     file layout; this file instead pins `AMBIGUOUS_OWNER`'s presence in the closed,
+#     asserted `detail_code` enum (via `_assert_lifecycle_result`'s generic membership
+#     check on every invocation) and defers a live ambiguous-owner reproduction to the
+#     WP3 fake-driver/E2E suites, per this file's own scope-boundary note above.
+#   - This suite hedges against an internal PLAN/wave discovery step the Frozen CLI ABI
+#     table does not spell out for `runtime-role-lifecycle.cjs` (unlike
+#     `runtime-consultation.cjs`, whose commands take an explicit `--plan`) by
+#     providing the same kind of throwaway `.planning/wave-<slug>/PLAN.md` fixture
+#     `runtime-consultation-protocol.bats` already establishes as reasonable, without
+#     asserting a specific discovery algorithm.
+#   - `ready_timeout_seconds`'s policy bound is inferred as inclusive `1..120`: PLAN.md
+#     ~L154 states a lifecycle action's expiry is "bounded by the selected policy's
+#     `ready_timeout_seconds` (maximum 120 seconds)" and the sibling CLI-level
+#     `wait-ready --timeout` flag (~L145) is explicitly `1..120`; this file infers the
+#     policy field shares that same closed bound rather than quoting a literal PLAN
+#     sentence naming it directly.
+#
+# Invocation: bats scripts/tests/runtime-role-lifecycle.bats (from repo root), or
+# scripts/sh/run-bats.sh --project-root "$(pwd)" scripts/tests/runtime-role-lifecycle.bats
+
+IMPL="$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs"
+WAVE_SLUG="rll-test-wave"
+# Self-minted fixture token -- see "Key interpretive decisions" above.
+TEST_CAPABILITY="bats-runtime-role-lifecycle-fixture-capability"
+
+setup() {
+  PROJ="$(mktemp -d)"
+  git -C "$PROJ" init -q 2>/dev/null
+  git -C "$PROJ" config user.email "bats@test.local"
+  git -C "$PROJ" config user.name "Bats Test"
+  git -C "$PROJ" commit -q --allow-empty -m init 2>/dev/null
+
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  printf '# Fixture PLAN for runtime-role-lifecycle.bats\n\nThrowaway per-test fixture -- not the real Wave 1 PLAN.md.\n' > "$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
+
+  mkdir -p "$PROJ/scripts/lib"
+
+  _ID_COUNTER=0
+}
+
+teardown() {
+  rm -rf "$PROJ"
+}
+
+# ── Generic helpers ──────────────────────────────────────────────────────────
+
+_sha256_string() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$1" | sha256sum | awk '{print $1}'
+  else
+    printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
+  fi
+}
+
+# Plausible core-generated-shaped fixture action id: 64 lowercase-hex chars
+# (satisfies the `--action <32+-hex>` format) that was never minted by any `ensure`
+# call in this test -- used for "zero roster match" cases.
+_gen_hex_id() {
+  _ID_COUNTER=$((_ID_COUNTER + 1))
+  _sha256_string "rll-fixture-action-$$-${_ID_COUNTER}-${RANDOM}-${RANDOM}"
+}
+
+_run_lifecycle() {
+  run --separate-stderr env NODE_ENV=test \
+    RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    node "$IMPL" "$@"
+}
+
+# ── Policy/routing fixture builders (runtime-collaboration-policy/v1, PLAN.md
+# ~L90-106; runtime-routing/v1, PLAN.md ~L1094-1110) ─────────────────────────
+# Each builder merges a small JSON "overrides" object over a fully-populated default
+# object, mirroring runtime-consultation-protocol.bats's own `_write_request`
+# convention. A value of the literal string "__OMIT__" in overrides deletes that key
+# from the merged result (used for "missing required key" cases).
+
+_write_policy() {
+  local overrides="$1"
+  mkdir -p "$PROJ/scripts/lib"
+  node -e '
+    const fs = require("fs");
+    const overrides = JSON.parse(process.argv[1]);
+    const outPath = process.argv[2];
+    const defaults = {
+      schema: "runtime-collaboration-policy/v1",
+      version: 1,
+      mode: "auto",
+      support_plane: ["arch-platform","arch-testing","arch-integration","context-provider","doc-updater"],
+      wave_scoped_roles: "derive-from-wave-class-and-scope",
+      phase_scoped_roles: ["planner","verifier","quality-gater"],
+      idle_behavior: "waiting",
+      session_restart: "rediscover-or-canonical-respawn-rehydrate",
+      ready_timeout_seconds: 120,
+      max_persistent_roles: 5,
+      max_respawns_per_role: 1,
+      routing_ref: "scripts/lib/runtime-routing.json",
+      documentation_workflow: {pattern_gap_ingestion:true, user_approval_required:true}
+    };
+    const merged = Object.assign({}, defaults, overrides);
+    for (const k of Object.keys(merged)) {
+      if (merged[k] === "__OMIT__") delete merged[k];
+    }
+    fs.writeFileSync(outPath, JSON.stringify(merged));
+  ' "$overrides" "$PROJ/scripts/lib/runtime-collaboration-policy.json"
+}
+
+_write_routing() {
+  local out="$1" overrides="$2"
+  mkdir -p "$(dirname "$out")"
+  node -e '
+    const fs = require("fs");
+    const overrides = JSON.parse(process.argv[1]);
+    const outPath = process.argv[2];
+    const defaults = {
+      schema: "runtime-routing/v1",
+      version: 1,
+      routes: {
+        "verifier": ["codex-app-server","codex-mcp","claude-agent","runtime-spawn","noop"],
+        "quality-gater": ["codex-app-server","codex-mcp","claude-agent","runtime-spawn","noop"],
+        "arch-platform": ["claude-sendmessage","claude-agent","codex-app-server","codex-mcp","runtime-spawn","noop"],
+        "arch-testing": ["claude-sendmessage","claude-agent","codex-app-server","codex-mcp","runtime-spawn","noop"],
+        "arch-integration": ["claude-sendmessage","claude-agent","codex-app-server","codex-mcp","runtime-spawn","noop"],
+        "context-provider": ["claude-sendmessage","claude-agent","codex-app-server","codex-mcp","runtime-spawn","noop"],
+        "doc-updater": ["claude-sendmessage","claude-agent","codex-app-server","codex-mcp","runtime-spawn","noop"],
+        "toolkit-specialist": ["claude-sendmessage","claude-agent","codex-app-server","codex-mcp","runtime-spawn","noop"],
+        "test-specialist": ["claude-sendmessage","claude-agent","codex-app-server","codex-mcp","runtime-spawn","noop"]
+      }
+    };
+    const merged = Object.assign({}, defaults, overrides);
+    for (const k of Object.keys(merged)) {
+      if (merged[k] === "__OMIT__") delete merged[k];
+    }
+    fs.writeFileSync(outPath, JSON.stringify(merged));
+  ' "$overrides" "$out"
+}
+
+# ── Envelope assertion (coordination/lifecycle-cli-result/v1, PLAN.md ~L152) ─
+# Parses the most recent `_run_lifecycle` invocation's captured stdout ($output) and
+# asserts: exactly the closed key set (additionalProperties:false), literal schema,
+# the given expected command, ok/code consistency (`ok === (code === 0)`), that
+# `bindings`/`actions` are arrays, and generic closed-enum membership for `status`/
+# `detail_code`. An empty string for `expected_command`/`expected_status`/
+# `expected_detail` skips that ONE specific-value check (membership/shape checks
+# still run) -- see "Key interpretive decisions" above for when/why this is used.
+_assert_lifecycle_result() {
+  local expected_command="$1" expected_status="$2" expected_detail="$3"
+  node -e '
+    let data;
+    try {
+      data = JSON.parse(process.argv[1]);
+    } catch (err) {
+      console.error("stdout is not valid JSON: " + err.message);
+      process.exit(1);
+    }
+    const expectedCommand = process.argv[2];
+    const expectedStatus = process.argv[3];
+    const expectedDetail = process.argv[4];
+    const allowedKeys = ["schema","command","ok","status","code","detail_code","bindings","actions"];
+    const statusEnum = ["READY","EPHEMERAL_AVAILABLE","ACTION_REQUIRED","WAITING","UNAVAILABLE","STOPPED","INVALID"];
+    const detailEnum = ["NONE","CAPABILITY_UNAVAILABLE","NATIVE_TOOL_ERROR","ACTION_EXPIRED","ACTION_REPLAY","IDENTITY_MISMATCH","AMBIGUOUS_OWNER","READY_TIMEOUT","POLICY_INVALID","INTERNAL_ERROR"];
+    const keys = Object.keys(data);
+    const extra = keys.filter((k) => !allowedKeys.includes(k));
+    const missing = allowedKeys.filter((k) => !keys.includes(k));
+    if (extra.length) { console.error("unexpected extra keys: " + extra.join(",")); process.exit(1); }
+    if (missing.length) { console.error("missing required keys: " + missing.join(",")); process.exit(1); }
+    if (data.schema !== "coordination/lifecycle-cli-result/v1") { console.error("wrong schema: " + data.schema); process.exit(1); }
+    if (expectedCommand && data.command !== expectedCommand) { console.error("expected command " + expectedCommand + " got " + data.command); process.exit(1); }
+    if (typeof data.ok !== "boolean") { console.error("ok is not boolean"); process.exit(1); }
+    if (typeof data.code !== "number") { console.error("code is not a number"); process.exit(1); }
+    if (data.ok !== (data.code === 0)) { console.error("ok/code inconsistent"); process.exit(1); }
+    if (!Array.isArray(data.bindings)) { console.error("bindings is not an array"); process.exit(1); }
+    if (!Array.isArray(data.actions)) { console.error("actions is not an array"); process.exit(1); }
+    if (!statusEnum.includes(data.status)) { console.error("status not in closed enum: " + data.status); process.exit(1); }
+    if (!detailEnum.includes(data.detail_code)) { console.error("detail_code not in closed enum: " + data.detail_code); process.exit(1); }
+    if (expectedStatus && data.status !== expectedStatus) { console.error("expected status " + expectedStatus + " got " + data.status); process.exit(1); }
+    if (expectedDetail && data.detail_code !== expectedDetail) { console.error("expected detail_code " + expectedDetail + " got " + data.detail_code); process.exit(1); }
+  ' "$output" "$expected_command" "$expected_status" "$expected_detail"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# probe -- read-only, whole-support-plane (Frozen CLI ABI, PLAN.md ~L140)
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-probe-1 PASS: probe with only --project-root succeeds and prints exactly one closed-shape envelope on one stdout line" {
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 0 ]
+  _assert_lifecycle_result "probe" "" ""
+  local line_count; line_count="$(printf '%s\n' "$output" | wc -l | tr -d ' ')"
+  [ "$line_count" -eq 1 ]
+}
+
+@test "LRL-probe-2 FAIL: probe missing --project-root is a usage error" {
+  _run_lifecycle probe
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-probe-3 FAIL: probe rejects an unrecognized flag (--role is not part of probe's own argv)" {
+  _run_lifecycle probe --project-root "$PROJ" --role arch-testing
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-probe-4: a failing probe still prints exactly one closed-shape object on one stdout line" {
+  _run_lifecycle probe
+  [ "$status" -eq 2 ]
+  local line_count; line_count="$(printf '%s\n' "$output" | wc -l | tr -d ' ')"
+  [ "$line_count" -eq 1 ]
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# Policy pair-atomicity (PLAN.md ~L108-110, ~L88-119)
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-policy-1 PASS: absent project policy falls back to the toolkit-owned policy/routing pair" {
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 0 ]
+  _assert_lifecycle_result "probe" "" ""
+}
+
+@test "LRL-policy-2 PASS: project policy plus a valid sibling routing file both present and valid" {
+  _write_policy '{}'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 0 ]
+  _assert_lifecycle_result "probe" "" ""
+}
+
+@test "LRL-policy-3 FAIL: project policy present but its fixed sibling routing file is absent -- fails closed, never mixes project policy with toolkit routing" {
+  _write_policy '{}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "POLICY_INVALID"
+}
+
+@test "LRL-policy-4 FAIL: project policy present with a sibling routing file missing its required 'routes' key -- fails closed" {
+  _write_policy '{}'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{"routes":"__OMIT__"}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "POLICY_INVALID"
+}
+
+@test "LRL-policy-5 FAIL: project policy missing a required key (max_respawns_per_role) is rejected" {
+  _write_policy '{"max_respawns_per_role":"__OMIT__"}'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "POLICY_INVALID"
+}
+
+@test "LRL-policy-6 FAIL: project policy with an unknown additional top-level key is rejected (additionalProperties:false)" {
+  _write_policy '{"totally_unknown_field_xyz":"nope"}'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "POLICY_INVALID"
+}
+
+@test "LRL-policy-7 FAIL: project policy 'mode' outside the closed auto|persistent|ephemeral|disk-only enum is rejected" {
+  _write_policy '{"mode":"totally-invalid-mode"}'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "POLICY_INVALID"
+}
+
+@test "LRL-policy-8 FAIL: project policy 'support_plane' containing a duplicate role is rejected (unique canonical enums)" {
+  _write_policy '{"support_plane":["arch-testing","arch-testing","context-provider","doc-updater","arch-platform"]}'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "POLICY_INVALID"
+}
+
+@test "LRL-policy-9 FAIL: project policy 'ready_timeout_seconds' above the pinned 120s maximum is rejected" {
+  _write_policy '{"ready_timeout_seconds":121}'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "POLICY_INVALID"
+}
+
+@test "LRL-policy-10 FAIL: project policy 'ready_timeout_seconds' of 0 (below the inferred 1s floor) is rejected" {
+  _write_policy '{"ready_timeout_seconds":0}'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "POLICY_INVALID"
+}
+
+@test "LRL-policy-11 FAIL: project policy 'routing_ref' overridden to a non-canonical path is rejected (never request-controlled)" {
+  _write_policy '{"routing_ref":"/tmp/some-other-routing.json"}'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "POLICY_INVALID"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# ensure -- scalar role encoding (Frozen CLI ABI, PLAN.md ~L141)
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-ensure-scalar-1: ensure with a single canonical --role is accepted at the argv/schema layer (not a usage error)" {
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing
+  [ "$status" -ne 2 ]
+  _assert_lifecycle_result "ensure" "" ""
+}
+
+@test "LRL-ensure-scalar-2 FAIL: ensure with an unknown/non-canonical role is rejected" {
+  _run_lifecycle ensure --project-root "$PROJ" --role nonexistent-role-xyz
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "ensure" "INVALID" ""
+}
+
+@test "LRL-ensure-scalar-3 FAIL: ensure with no --role at all is a usage error (at least one role is required)" {
+  _run_lifecycle ensure --project-root "$PROJ"
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# ensure -- array/multi-role encoding (Frozen CLI ABI, PLAN.md ~L141)
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-ensure-array-1: ensure with multiple distinct canonical --role flags is accepted at the argv/schema layer" {
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --role context-provider --role doc-updater
+  [ "$status" -ne 2 ]
+  _assert_lifecycle_result "ensure" "" ""
+}
+
+@test "LRL-ensure-array-2 FAIL: ensure with the identical role repeated is rejected (repeated roles rejected)" {
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --role arch-testing
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "ensure" "INVALID" ""
+}
+
+@test "LRL-ensure-array-3 FAIL: ensure where one of several roles is unknown/non-canonical is rejected as a whole (no partial ensure)" {
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --role nonexistent-role-xyz
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "ensure" "INVALID" ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# ensure-twice idempotency (PLAN.md ~L167, ~L169 "ensure-twice one action/binding")
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-ensure-idem-1: two consecutive ensure calls for the identical role set produce byte-identical envelopes (idempotent, no flaky duplicate side effect)" {
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --role context-provider
+  local first_output="$output" first_status="$status"
+  # Absolute envelope-validity check on the FIRST call, so this test genuinely fails
+  # now (module absent -> $output is not valid JSON) instead of only ever comparing
+  # two identical failures to each other (which would trivially "pass" at RED).
+  _assert_lifecycle_result "ensure" "" ""
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --role context-provider
+  [ "$status" -eq "$first_status" ]
+  [ "$output" = "$first_output" ]
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# ensure -- policy-mode behavior (PLAN.md ~L112-115, ~L167)
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-ensure-ephemeral-1: under ephemeral mode, ensure reports EPHEMERAL_AVAILABLE with empty bindings/actions (Agent-Teams-disabled one-shot availability, no pre-spawn claim)" {
+  _write_policy '{"mode":"ephemeral"}'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing
+  [ "$status" -eq 0 ]
+  _assert_lifecycle_result "ensure" "EPHEMERAL_AVAILABLE" "NONE"
+  node -e '
+    const data = JSON.parse(process.argv[1]);
+    if (data.bindings.length !== 0) { console.error("expected empty bindings, got " + data.bindings.length); process.exit(1); }
+    if (data.actions.length !== 0) { console.error("expected empty actions, got " + data.actions.length); process.exit(1); }
+  ' "$output"
+}
+
+@test "LRL-ensure-diskonly-1 FAIL: under disk-only mode with no registered supervised consumer, ensure fails closed rather than fabricating readiness" {
+  _write_policy '{"mode":"disk-only"}'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing
+  [ "$status" -eq 4 ]
+  _assert_lifecycle_result "ensure" "UNAVAILABLE" ""
+}
+
+@test "LRL-ensure-persistent-1 FAIL: under persistent mode with no proven connector capability, ensure reports the role UNAVAILABLE rather than silently omitting it" {
+  _write_policy '{"mode":"persistent"}'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing
+  [ "$status" -eq 4 ]
+  _assert_lifecycle_result "ensure" "UNAVAILABLE" ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# action-failed / ready / wait-ready -- argv validation (Frozen CLI ABI, PLAN.md
+# ~L143-145)
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-action-argv-1 FAIL: action-failed with a malformed (too-short) --action is rejected" {
+  _run_lifecycle action-failed --action deadbeef --reason deadline
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-action-argv-2 FAIL: action-failed with an invalid --reason value is rejected" {
+  local action_id; action_id="$(_gen_hex_id)"
+  _run_lifecycle action-failed --action "$action_id" --reason totally-invalid-reason
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-action-argv-3 FAIL: ready with a malformed (too-short) --action is rejected" {
+  _run_lifecycle ready --action deadbeef
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-action-argv-4 FAIL: wait-ready with --timeout 0 (below the 1..120 bound) is rejected" {
+  local action_id; action_id="$(_gen_hex_id)"
+  _run_lifecycle wait-ready --action "$action_id" --timeout 0
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-action-argv-5 FAIL: wait-ready with --timeout 121 (above the 1..120 bound) is rejected" {
+  local action_id; action_id="$(_gen_hex_id)"
+  _run_lifecycle wait-ready --action "$action_id" --timeout 121
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-action-argv-6: wait-ready with --timeout at the inclusive lower boundary (1) passes argv validation (not a usage error)" {
+  local action_id; action_id="$(_gen_hex_id)"
+  _run_lifecycle wait-ready --action "$action_id" --timeout 1
+  [ "$status" -ne 2 ]
+  # `-ne 2` alone would trivially pass against ANY non-usage failure (including a
+  # crashed/absent module); the envelope check makes this test genuinely RED now.
+  _assert_lifecycle_result "wait-ready" "" ""
+}
+
+@test "LRL-action-argv-7: wait-ready with --timeout at the inclusive upper boundary (120) passes argv validation (not a usage error)" {
+  local action_id; action_id="$(_gen_hex_id)"
+  _run_lifecycle wait-ready --action "$action_id" --timeout 120
+  [ "$status" -ne 2 ]
+  # `-ne 2` alone would trivially pass against ANY non-usage failure (including a
+  # crashed/absent module); the envelope check makes this test genuinely RED now.
+  _assert_lifecycle_result "wait-ready" "" ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# Zero roster match (PLAN.md ~L169 "zero/multiple roster matches")
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-action-zero-1 FAIL: action-failed against a well-formed but never-minted action id has no match" {
+  local action_id; action_id="$(_gen_hex_id)"
+  _run_lifecycle action-failed --action "$action_id" --reason capability-unavailable
+  [ "$status" -ne 0 ]
+  _assert_lifecycle_result "action-failed" "" ""
+}
+
+@test "LRL-action-zero-2 FAIL: ready against a well-formed but never-minted action id has no match" {
+  local action_id; action_id="$(_gen_hex_id)"
+  _run_lifecycle ready --action "$action_id"
+  [ "$status" -ne 0 ]
+  _assert_lifecycle_result "ready" "" ""
+}
+
+@test "LRL-action-zero-3 FAIL: wait-ready against a well-formed but never-minted action id never reports READY (bounded, deterministic non-match)" {
+  local action_id; action_id="$(_gen_hex_id)"
+  _run_lifecycle wait-ready --action "$action_id" --timeout 1
+  [ "$status" -ne 0 ]
+  _assert_lifecycle_result "wait-ready" "" ""
+  node -e '
+    const data = JSON.parse(process.argv[1]);
+    if (data.status === "READY") { console.error("a never-minted action must never report READY"); process.exit(1); }
+  ' "$output"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# notify (Frozen CLI ABI, PLAN.md ~L142)
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-notify-1 FAIL: notify with an invalid --kind value is rejected" {
+  local artifact="$PROJ/fixture-artifact.json"
+  printf '{}' > "$artifact"
+  _run_lifecycle notify --project-root "$PROJ" --role arch-testing --artifact "$artifact" --kind totally-invalid-kind
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-notify-2 FAIL: notify with a missing --artifact flag is a usage error" {
+  _run_lifecycle notify --project-root "$PROJ" --role arch-testing --kind session-control
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-notify-3 FAIL: notify pointing --artifact at a nonexistent path is rejected" {
+  _run_lifecycle notify --project-root "$PROJ" --role arch-testing --artifact "$PROJ/does-not-exist.json" --kind session-control
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "notify" "INVALID" ""
+}
+
+@test "LRL-notify-4 FAIL: notify with an unknown role is rejected" {
+  local artifact="$PROJ/fixture-artifact.json"
+  printf '{}' > "$artifact"
+  _run_lifecycle notify --project-root "$PROJ" --role nonexistent-role-xyz --artifact "$artifact" --kind session-control
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "notify" "INVALID" ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# status (Frozen CLI ABI, PLAN.md ~L146)
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-status-1 PASS: status with only --project-root (whole-plane) succeeds and is read-only" {
+  _run_lifecycle status --project-root "$PROJ"
+  [ "$status" -eq 0 ]
+  _assert_lifecycle_result "status" "" ""
+}
+
+@test "LRL-status-2 PASS: status with --project-root plus a single canonical --role succeeds" {
+  _run_lifecycle status --project-root "$PROJ" --role arch-testing
+  [ "$status" -eq 0 ]
+  _assert_lifecycle_result "status" "" ""
+}
+
+@test "LRL-status-3 FAIL: status with --role supplied twice is rejected (not repeatable for status)" {
+  _run_lifecycle status --project-root "$PROJ" --role arch-testing --role context-provider
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-status-4 FAIL: status with an unknown role is rejected" {
+  _run_lifecycle status --project-root "$PROJ" --role nonexistent-role-xyz
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "status" "INVALID" ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# rotate (Frozen CLI ABI, PLAN.md ~L147) -- respawn/rehydration/restart-invalidation
+# proxy per this file's scope-boundary note above
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-rotate-1 FAIL: rotate with no --role is a usage error" {
+  _run_lifecycle rotate --project-root "$PROJ"
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-rotate-2 FAIL: rotate with --role supplied twice is rejected (not repeatable for rotate)" {
+  _run_lifecycle rotate --project-root "$PROJ" --role arch-testing --role context-provider
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-rotate-3 FAIL: rotate against a role with no owned binding fails closed rather than fabricating a respawn" {
+  _run_lifecycle rotate --project-root "$PROJ" --role arch-testing
+  [ "$status" -ne 0 ]
+  _assert_lifecycle_result "rotate" "" ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# stop-owned (Frozen CLI ABI, PLAN.md ~L148)
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-stopowned-1 FAIL: stop-owned with an invalid --reason value is rejected" {
+  _run_lifecycle stop-owned --project-root "$PROJ" --role arch-testing --reason totally-invalid-reason
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-stopowned-2 FAIL: stop-owned with no --role is a usage error" {
+  _run_lifecycle stop-owned --project-root "$PROJ" --reason operator
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-stopowned-3 FAIL: stop-owned against a role with no owned binding fails closed (never addresses an unowned/ambiguous peer)" {
+  _run_lifecycle stop-owned --project-root "$PROJ" --role arch-testing --reason operator
+  [ "$status" -ne 0 ]
+  _assert_lifecycle_result "stop-owned" "" ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# No caller-supplied identity/grant/prompt fields (PLAN.md ~L150, ~L169 "no caller
+# IDs/prompts")
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "LRL-nocaller-1 FAIL: probe with a caller-supplied --lifecycle-binding is rejected (the grant is hook-injected, never caller-supplied)" {
+  _run_lifecycle probe --project-root "$PROJ" --lifecycle-binding "forged-grant-value"
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-nocaller-2 FAIL: ensure with a caller-supplied --session-generation is rejected" {
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --session-generation "forged-session-gen"
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-nocaller-3 FAIL: ensure with a caller-supplied --binding-id is rejected" {
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --binding-id "forged-binding-id"
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-nocaller-4 FAIL: ensure with a caller-supplied --team-name is rejected" {
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --team-name "forged-team-name"
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-nocaller-5 FAIL: ready with a caller-supplied --prompt is rejected" {
+  local action_id; action_id="$(_gen_hex_id)"
+  _run_lifecycle ready --action "$action_id" --prompt "hello from a caller"
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}
+
+@test "LRL-nocaller-6 FAIL: probe with a caller-supplied --policy-path overriding the fixed policy/routing location is rejected" {
+  _run_lifecycle probe --project-root "$PROJ" --policy-path "/tmp/attacker-controlled-policy.json"
+  [ "$status" -eq 2 ]
+  _assert_lifecycle_result "" "" ""
+}

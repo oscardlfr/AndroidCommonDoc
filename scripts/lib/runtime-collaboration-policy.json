@@ -1,0 +1,15 @@
+{
+  "schema": "runtime-collaboration-policy/v1",
+  "version": 1,
+  "mode": "auto",
+  "support_plane": ["arch-platform", "arch-testing", "arch-integration", "context-provider", "doc-updater"],
+  "wave_scoped_roles": "derive-from-wave-class-and-scope",
+  "phase_scoped_roles": ["planner", "verifier", "quality-gater"],
+  "idle_behavior": "waiting",
+  "session_restart": "rediscover-or-canonical-respawn-rehydrate",
+  "ready_timeout_seconds": 120,
+  "max_persistent_roles": 5,
+  "max_respawns_per_role": 1,
+  "routing_ref": "scripts/lib/runtime-routing.json",
+  "documentation_workflow": {"pattern_gap_ingestion": true, "user_approval_required": true}
+}

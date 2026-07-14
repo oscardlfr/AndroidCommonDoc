@@ -18,6 +18,15 @@
 //
 // Parity-exempt: this file has no .ps1 twin (precedent: resolve-required-roles.js,
 // premature-execution-gate.js — script-parity only compares direct children of scripts/sh<->scripts/ps1).
+//
+// Wave 1 (portable-runtime-messaging-adapters) addendum: hasValidV2InboxRef(dir, ctx) below
+// is an additive, NOT-YET-WIRED v2-recognition helper (same pre-wiring shape hasValidConsult
+// itself was in before an earlier wave wired it into context-provider-gate.js). It delegates
+// schema/correlation/durability checks to runtime-consultation.cjs's `validate --kind
+// inbox-ref-v1` via spawnSync (that file has nothing require()-able for this purpose), then
+// applies this file's own consult-style freshness window on top (validateInboxRefV1 itself
+// enforces no TTL). See the WP1 cross-verify note under
+// .planning/wave-portable-runtime-messaging-adapters/ for the full contract.
 
 const fs = require('fs');
 const path = require('path');
@@ -296,6 +305,119 @@ function hasValidConsult(dir, ctx) {
   return false;
 }
 
+// ── inbox-ref/v1 (v2 protocol) per-candidate validation — delegates schema/correlation/
+// durability checks to runtime-consultation.cjs over a process boundary (spawnSync; that
+// file exports nothing require()-able for this — see header note above), then applies
+// this file's own consult-style freshness window on top (validateInboxRefV1 itself
+// enforces no TTL bound). ctx: {coordRoot, projectRoot, now, runtimeConsultationPath?,
+// expectedDir} — expectedDir lets hasValidV2InboxRef pass the already-known scan dir,
+// mirroring isConsultFileValid's own expectedDir convention.
+function isV2InboxRefCandidateValid(filePath, ctx) {
+  try {
+    const realFile = fs.realpathSync(filePath);
+    const realDir = fs.realpathSync(ctx.expectedDir);
+    const rel = path.relative(realDir, realFile);
+    // Non-recursive: candidate must be a DIRECT child of the inbox dir (same "never
+    // descend" contract as isConsultFileValid).
+    if (rel === '' || isOutside(rel) || rel.includes(path.sep)) return false;
+
+    const st = fs.statSync(realFile);
+    if (!st.isFile()) return false;
+    if (st.size > MAX_CONSULT_BYTES) return false; // oversized -> skip, never read
+
+    const cliPath = ctx.runtimeConsultationPath
+      || path.join(ctx.projectRoot, 'scripts', 'lib', 'runtime-consultation.cjs');
+    // NOTE: --artifact uses the ORIGINAL filePath (not realFile) so its relationship to
+    // --coordination-root stays textually consistent for the CLI's own
+    // planRootFromArtifact path-relative math (both sides share the same caller-supplied,
+    // possibly-symlinked prefix — e.g. macOS /tmp -> /private/tmp).
+    const r = spawnSync(process.execPath, [
+      cliPath, 'validate',
+      '--coordination-root', ctx.coordRoot,
+      '--kind', 'inbox-ref-v1',
+      '--artifact', filePath,
+    ], { cwd: ctx.projectRoot, timeout: 3000, encoding: 'utf8' });
+    if (r.error || r.status !== 0 || typeof r.stdout !== 'string') return false;
+
+    let parsed;
+    try {
+      parsed = JSON.parse(r.stdout.trim());
+    } catch {
+      return false;
+    }
+    if (!parsed || parsed.schema !== 'coordination/cli-result/v1' || parsed.status !== 'SUCCESS') {
+      return false;
+    }
+
+    // validateInboxRefV1 checks schema/correlation/durability only — no freshness bound —
+    // so re-read the candidate's own created_at directly here (the cli-result envelope
+    // does not echo artifact fields) and apply the SAME directional-TTL window
+    // isConsultFileValid already uses.
+    const raw = fs.readFileSync(realFile, 'utf8'); // bounded by the size check above
+    const obj = JSON.parse(raw);
+    if (!obj || typeof obj !== 'object' || typeof obj.created_at !== 'string') return false;
+    const createdMs = Date.parse(obj.created_at);
+    if (Number.isNaN(createdMs)) return false;
+    const now = (typeof ctx.now === 'number') ? ctx.now : Date.now();
+    if (now - createdMs > CONSULT_TTL_SECONDS * 1000) return false; // too old (stale)
+    if (createdMs - now > MAX_CONSULT_FUTURE_SKEW_SECONDS * 1000) return false; // too far future
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ── Public API: hasValidV2InboxRef(dir, ctx) — bounded scan for the newest valid
+// coordination/inbox-ref/v1 candidate (additive, NOT YET WIRED into any call site — see
+// the WP1 cross-verify note under .planning/wave-portable-runtime-messaging-adapters/ for
+// the full contract). ctx = {coordRoot, projectRoot, now?, runtimeConsultationPath?}.
+function hasValidV2InboxRef(dir, ctx) {
+  if (!ctx || !ctx.coordRoot || !ctx.projectRoot) return false;
+
+  let dirHandle;
+  try {
+    dirHandle = fs.opendirSync(dir);
+  } catch {
+    return false; // dir absent/unreadable — routine "no inbox-ref yet", not a genuine error
+  }
+
+  const candidates = []; // ascending-sorted; bounded to the MAX_CONSULT_ENTRIES newest names
+  let totalSeen = 0;
+  try {
+    let entry = dirHandle.readSync();
+    while (entry !== null) {
+      totalSeen += 1;
+      if (totalSeen > MAX_CONSULT_HARD_CAP) {
+        return false; // DoS guard — abort without inspecting this or any further entry
+      }
+      if (entry.isFile() && /^[a-f0-9]{32,128}\.json$/.test(entry.name)) {
+        insertCandidate(candidates, entry.name, MAX_CONSULT_ENTRIES);
+      }
+      entry = dirHandle.readSync();
+    }
+  } catch {
+    return false;
+  } finally {
+    try { dirHandle.closeSync(); } catch { /* best-effort close */ }
+  }
+
+  const now = (typeof ctx.now === 'number') ? ctx.now : Date.now();
+  for (let i = candidates.length - 1; i >= 0; i -= 1) {
+    const candidatePath = path.join(dir, candidates[i]);
+    if (isV2InboxRefCandidateValid(candidatePath, {
+      coordRoot: ctx.coordRoot,
+      projectRoot: ctx.projectRoot,
+      now,
+      runtimeConsultationPath: ctx.runtimeConsultationPath,
+      expectedDir: dir,
+    })) {
+      return true;
+    }
+  }
+  return false;
+}
+
 module.exports = {
   CONSULT_TTL_SECONDS,
   MAX_CONSULT_FUTURE_SKEW_SECONDS,
@@ -304,6 +426,7 @@ module.exports = {
   MAX_CONSULT_BYTES,
   validate,
   hasValidConsult,
+  hasValidV2InboxRef,
 };
 
 // ── CLI ───────────────────────────────────────────────────────────────────────────────
