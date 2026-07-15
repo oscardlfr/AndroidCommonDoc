@@ -146,6 +146,27 @@ _iso_plus_seconds() {
   date -j -f '%Y-%m-%dT%H:%M:%SZ' "${base}" -v"+${n}S" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null
 }
 
+# Frozen-base-relative ISO timestamp: the CLI's own `--fixed-clock` default base
+# (`2025-01-01T00:00:00.000Z`, RUNTIME_CONSULTATION_FAKE_CLOCK not overridden by
+# this file) plus N milliseconds, computed entirely via node -- never shell
+# `date`/`_iso_plus_seconds`. `--fixed-clock` is now genuinely wired (WP2
+# fake-clock/fixed-ids seam): `nowIso()` freezes every emitted `created_at` to
+# that exact base under `--fixed-clock`, so a `consult/v2` fixture's `expiry`
+# must be computed relative to THAT frozen base (not real wall-clock time) to
+# satisfy `CONSULT_V2_FIELDS.expiry.check`'s `120 <= (expiry-created_at) <=
+# 3600` window -- otherwise a real-now-relative expiry sits over a year outside
+# that window and trips SCHEMA_INVALID. Used only by fixtures that keep
+# --fixed-clock active for their publish-request call -- fixtures that drop
+# --fixed-clock (Finding D3: a second same-plan-root --fixed-ids
+# publish-request would otherwise mint the identical deterministic request_id
+# and lose the no-clobber race -- exactly the Group E RCR-noclobber-* cases
+# below) keep their original real-time-relative _iso_plus_seconds computation
+# instead. Mirrors runtime-consultation-protocol.bats's own helper of the same
+# name verbatim.
+_frozen_iso_plus_ms() {
+  node -e 'process.stdout.write(new Date(Date.parse("2025-01-01T00:00:00.000Z") + Number(process.argv[1])).toISOString())' "$1"
+}
+
 _base64url_encode() {
   node -e 'process.stdout.write(Buffer.from(require("fs").readFileSync(0)).toString("base64url"))'
 }
@@ -348,20 +369,20 @@ _assert_cli_result() {
   _assert_cli_result "SUCCESS" "NONE"
 }
 
-@test "RCR-root-5 FAIL: root-validate on a non-existent root reports UNAVAILABLE" {
+@test "RCR-root-5 FAIL: root-validate on a non-existent root reports INVALID/SCHEMA_INVALID" {
   local root="$COORD_ROOT/lifecycle-does-not-exist-root"
   _run_root_validate "$root"
-  [ "$status" -eq 4 ]
-  _assert_cli_result "UNAVAILABLE" "NONE"
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
 }
 
-@test "RCR-root-6 FAIL: root-validate on a path that exists but is a regular file (not a directory) reports UNAVAILABLE" {
+@test "RCR-root-6 FAIL: root-validate on a path that exists but is a regular file (not a directory) reports INVALID/SCHEMA_INVALID" {
   mkdir -p "$COORD_ROOT"
   local root="$COORD_ROOT/lifecycle-plain-file-not-a-dir"
   printf 'this is a file, not a coordination root directory' > "$root"
   _run_root_validate "$root"
-  [ "$status" -eq 4 ]
-  _assert_cli_result "UNAVAILABLE" "NONE"
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -553,9 +574,11 @@ _assert_cli_result() {
 # ══════════════════════════════════════════════════════════════════════════
 
 @test "RCR-noclobber-1 PASS: two publish-request calls sharing the same PLAN bytes are idempotent for the shared plan_ref" {
-  local now expiry intent intent_b64
-  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  expiry="$(_iso_plus_seconds "$now" 1800)"
+  local expiry intent intent_b64
+  # Frozen-base-relative (not real-now-relative): this FIRST call keeps
+  # --fixed-clock, which genuinely freezes created_at to the CLI's default
+  # frozen base -- see _frozen_iso_plus_ms's own header note.
+  expiry="$(_frozen_iso_plus_ms 1800000)"
   intent="$(printf '{"target_role":"arch-testing","question":"RCR-noclobber-1 fixture question A","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry")"
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
@@ -565,13 +588,24 @@ _assert_cli_result() {
   _assert_cli_result "SUCCESS" "NONE"
   local plan_ref_before; plan_ref_before="$(_sha256_file "$(_plan_root)/plan_ref")"
 
-  local expiry2 intent2 intent2_b64
+  # Deliberately WITHOUT --fixed-ids/--fixed-clock on this SECOND call (Finding
+  # D3): it shares the first call's exact plan-root, and the deterministic id
+  # counter resets to 0 every fresh process -- a second --fixed-ids
+  # publish-request here would mint the IDENTICAL request_id the first call
+  # already consumed and lose the no-clobber race on its own
+  # transactions/<id>/request.json before this test's actual subject (the
+  # shared plan_ref) is even reached. A REAL random request_id plus a REAL
+  # wall-clock created_at (paired with a real-time-relative expiry2 below)
+  # sidesteps that unrelated collision while still proving two publish-request
+  # calls sharing the same PLAN bytes leave the shared plan_ref untouched.
+  local now expiry2 intent2 intent2_b64
+  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   expiry2="$(_iso_plus_seconds "$now" 1800)"
   intent2="$(printf '{"target_role":"arch-testing","question":"RCR-noclobber-1 fixture question B","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry2")"
   intent2_b64="$(printf '%s' "$intent2" | _base64url_encode)"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
-      --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent2_b64" --fixed-ids --fixed-clock
+      --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent2_b64"
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
   local plan_ref_after; plan_ref_after="$(_sha256_file "$(_plan_root)/plan_ref")"
@@ -579,9 +613,11 @@ _assert_cli_result() {
 }
 
 @test "RCR-noclobber-2 FAIL: a tampered existing plan_ref causes a subsequent publish-request to fail closed" {
-  local now expiry intent intent_b64
-  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  expiry="$(_iso_plus_seconds "$now" 1800)"
+  local expiry intent intent_b64
+  # Frozen-base-relative (not real-now-relative): this FIRST call keeps
+  # --fixed-clock, which genuinely freezes created_at to the CLI's default
+  # frozen base -- see _frozen_iso_plus_ms's own header note.
+  expiry="$(_frozen_iso_plus_ms 1800000)"
   intent="$(printf '{"target_role":"arch-testing","question":"RCR-noclobber-2 fixture question A","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry")"
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
@@ -591,13 +627,24 @@ _assert_cli_result() {
 
   printf 'tampered plan_ref bytes, not the real PLAN.md content' > "$(_plan_root)/plan_ref"
 
-  local expiry2 intent2 intent2_b64
+  # Deliberately WITHOUT --fixed-ids/--fixed-clock on this SECOND call (Finding
+  # D3): it shares the first call's exact plan-root, and the deterministic id
+  # counter resets to 0 every fresh process -- a second --fixed-ids
+  # publish-request here would mint the IDENTICAL request_id the first call
+  # already consumed and lose the no-clobber race on its own
+  # transactions/<id>/request.json BEFORE this test's actual subject (the
+  # tampered plan_ref) is even reached. A REAL random request_id plus a REAL
+  # wall-clock created_at (paired with a real-time-relative expiry2 below)
+  # sidesteps that unrelated collision while still proving a tampered
+  # existing plan_ref fails a subsequent publish-request closed.
+  local now expiry2 intent2 intent2_b64
+  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   expiry2="$(_iso_plus_seconds "$now" 1800)"
   intent2="$(printf '{"target_role":"arch-testing","question":"RCR-noclobber-2 fixture question B","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry2")"
   intent2_b64="$(printf '%s' "$intent2" | _base64url_encode)"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
-      --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent2_b64" --fixed-ids --fixed-clock
+      --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent2_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "AUTHORITY_INVALID"
 }

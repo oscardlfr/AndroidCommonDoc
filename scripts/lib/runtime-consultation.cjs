@@ -47,6 +47,17 @@ const DETAIL_CODES = new Set([
 ]);
 
 /**
+ * Closed activation-driver enum (PLAN.md ~L330, cross-referenced against the
+ * Activation Drivers table ~L841-848 and record-delivery's own driver argv,
+ * ~L763). Shared by `activation/v1` validation, `dispatch`'s driver selection,
+ * and `record-delivery`'s compatibility-table enforcement -- ONE literal list,
+ * not three independently-typed copies.
+ */
+const DRIVER_ENUM = [
+  'claude-sendmessage', 'claude-agent', 'codex-app-server', 'codex-mcp', 'runtime-spawn', 'noop',
+];
+
+/**
  * Structured CLI-level error. Every command handler throws this to signal a
  * non-SUCCESS terminal outcome; the top-level dispatcher converts it into the
  * frozen `coordination/cli-result/v1` envelope.
@@ -91,14 +102,88 @@ function sha256File(filePath) {
   return sha256Buffer(fs.readFileSync(filePath));
 }
 
-/** Core-generated identifier: >=128 bits via crypto.randomBytes, lowercase hex. */
-function genId() {
+/**
+ * Fixed-ids test-mode state (WP2 fake-clock/fixed-ids seam). `FIXED_IDS_ACTIVE`
+ * is set once per process in main(), immediately after parseFlags succeeds.
+ * `fixedIdCounter` is a fresh per-process monotonic counter -- Node processes
+ * share no memory, so a separate CLI invocation always starts back at 0.
+ */
+let FIXED_IDS_ACTIVE = false;
+let fixedIdCounter = 0;
+
+/**
+ * Core-generated identifier: >=128 bits via crypto.randomBytes, lowercase hex.
+ * Under the active fixed-ids test mode, returns a deterministic 32-char
+ * zero-padded hex counter instead -- schema-compatible with the existing
+ * HEX_ID_RE/isHexId UNCHANGED (Option Y: a hex-conformant fixed id, adopted
+ * over a non-hex `fixed-id-NNNN` shape + isHexId/assertHexId relaxation,
+ * because the relaxation would create a cross-process isHexId-coherence
+ * hazard in readTakeoverIfValid -- see
+ * .planning/wave-portable-runtime-messaging-adapters/arch-testing-fixed-seam-cross-verify.md
+ * Finding C). `opts.raw === true` ALWAYS uses real crypto randomness
+ * regardless of fixed-ids mode -- reserved for publishNoClobber's/
+ * publishReplace's own internal temp-file-name nonces, which must never
+ * consume or be visible in the deterministic schema-id counter sequence.
+ */
+function genId(opts) {
+  const raw = Boolean(opts && opts.raw);
+  if (!raw && FIXED_IDS_ACTIVE) {
+    const hex = fixedIdCounter.toString(16).padStart(32, '0');
+    fixedIdCounter += 1;
+    return hex;
+  }
   return crypto.randomBytes(32).toString('hex');
+}
+
+/**
+ * Core-generated 128-bit identifier (32 lowercase-hex chars). Record #12's
+ * `stop_id` is explicitly 128-bit (PLAN.md ~L511), distinct from the 256-bit
+ * ids `genId()` produces for request/attempt/instance identifiers elsewhere.
+ */
+function genId128() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+const FIXED_CLOCK_DEFAULT_BASE_ISO = '2025-01-01T00:00:00.000Z';
+
+let FIXED_CLOCK_ACTIVE = false;
+let FIXED_CLOCK_BASE_MS = null;
+let FIXED_CLOCK_ADVANCE_MS = 0;
+
+/**
+ * Resolves the fixed-clock activation state ONCE per process, in main(),
+ * immediately after parseFlags succeeds -- mirrors FIXED_IDS_ACTIVE's
+ * activation point exactly. RUNTIME_CONSULTATION_FAKE_CLOCK/
+ * RUNTIME_CONSULTATION_FAKE_CLOCK_ADVANCE_MS are consulted ONLY when
+ * --fixed-clock is ALSO active for this invocation -- they refine/override
+ * WITHIN fixed-clock mode, they do not independently activate it.
+ */
+function resolveFixedClockState(flags) {
+  FIXED_CLOCK_ACTIVE = isTestCapability() && Boolean(flags['fixed-clock']);
+  if (!FIXED_CLOCK_ACTIVE) return;
+  const overrideEnv = process.env.RUNTIME_CONSULTATION_FAKE_CLOCK;
+  const baseIso = (typeof overrideEnv === 'string' && overrideEnv.length > 0) ? overrideEnv : FIXED_CLOCK_DEFAULT_BASE_ISO;
+  FIXED_CLOCK_BASE_MS = isoToMs(baseIso);
+  const advanceEnv = process.env.RUNTIME_CONSULTATION_FAKE_CLOCK_ADVANCE_MS;
+  let advance = (typeof advanceEnv === 'string' && advanceEnv.length > 0) ? Number.parseInt(advanceEnv, 10) : 0;
+  if (!Number.isFinite(advance) || advance < 0) advance = 0;
+  FIXED_CLOCK_ADVANCE_MS = advance;
+}
+
+/**
+ * Single gated clock-read source of truth -- used by BOTH nowIso() (schema
+ * timestamp minting) and cmdAwaitResult's deadline arithmetic (W06). This is
+ * the ONE place a wall-clock value is read for schema/deadline purposes in
+ * the entire file (acquireLock's Date.now() is a deliberate exception -- W11
+ * multiprocess mutex, always real regardless of test/production).
+ */
+function currentClockMs() {
+  return FIXED_CLOCK_ACTIVE ? (FIXED_CLOCK_BASE_MS + FIXED_CLOCK_ADVANCE_MS) : Date.now();
 }
 
 /** ISO-8601 UTC with a trailing 'Z' and no sub-second component. */
 function nowIso() {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  return new Date(currentClockMs()).toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 function isoPlusSeconds(iso, seconds) {
@@ -145,8 +230,56 @@ function encodeBase64Url(buf) {
 
 const BOOLEAN_FLAGS = new Set(['fixed-ids', 'fixed-clock']);
 
+/**
+ * Per-command closed flag allowlist (Frozen CLI ABI, PLAN.md ~L750: "no WP2 naming
+ * latitude" -- every flag name a subcommand accepts is exactly this list; anything
+ * else is USAGE_ERROR/INVALID_ARGUMENT, RCC-argv-7). `fixed-ids`/`fixed-clock` are
+ * closed test-capability-gated flags accepted UNIFORMLY across every command
+ * (PLAN.md ~L752 gates them by NODE_ENV=test + the harness capability, not by
+ * subcommand identity) -- confirmed empirically: `runtime-consultation-state.bats`
+ * passes `--fixed-ids` to `claim` and other state-mutating commands, not only
+ * `publish-request`, for deterministic-ID test fixtures.
+ */
+const COMMAND_FLAGS = {
+  'root-init': ['coordination-root'],
+  'root-validate': ['coordination-root'],
+  validate: ['coordination-root', 'kind', 'artifact'],
+  'publish-request': ['coordination-root', 'plan', 'subject-bundle', 'intent'],
+  'publish-blob': ['coordination-root', 'plan', 'subject-bundle', 'entry'],
+  dispatch: ['coordination-root', 'request'],
+  'record-delivery': ['coordination-root', 'request', 'attempt', 'epoch', 'driver', 'outcome', 'commit-point'],
+  claim: ['coordination-root', 'request', 'role', 'worker-session'],
+  'lease-heartbeat': ['coordination-root', 'request', 'claim'],
+  takeover: ['coordination-root', 'request'],
+  'publish-result': ['coordination-root', 'request', 'claim', 'content', 'blocked-reason'],
+  'await-result': ['coordination-root', 'request', 'timeout'],
+  'accept-result': ['coordination-root', 'request'],
+  'transaction-ack': ['coordination-root', 'request', 'disposition'],
+  cancel: ['coordination-root', 'request', 'reason'],
+  'worker-stop': ['coordination-root', 'role', 'worker-session', 'kind', 'request'],
+  'worker-stop-ack': ['coordination-root', 'stop', 'disposition'],
+  cleanup: ['coordination-root', 'request'],
+};
+for (const cmdName of Object.keys(COMMAND_FLAGS)) {
+  COMMAND_FLAGS[cmdName] = COMMAND_FLAGS[cmdName].concat(['fixed-ids', 'fixed-clock']);
+}
+
+/**
+ * Portable argv caps (Frozen CLI ABI, PLAN.md ~L754): each PATH token is at most
+ * 2048 UTF-8 bytes, checked before decode/allocation. `--intent`/`--content` are
+ * semantic payloads, not paths, and obey their OWN downstream caps instead
+ * (question<=8192B, native content<=12288B) -- deliberately excluded here so a
+ * legitimately large-but-in-spec question/content is never falsely rejected by
+ * the path-token cap (RCC-caps-1).
+ */
+const PATH_FLAG_NAMES = new Set([
+  'coordination-root', 'request', 'plan', 'artifact', 'claim', 'stop', 'subject-bundle', 'entry',
+]);
+const MAX_PATH_TOKEN_BYTES = 2048;
+
 /** Parses `--flag value` pairs (plus known boolean flags) after the subcommand token. */
-function parseFlags(argv) {
+function parseFlags(argv, command) {
+  const allowedFlags = COMMAND_FLAGS[command] || [];
   const out = {};
   let i = 0;
   while (i < argv.length) {
@@ -155,6 +288,9 @@ function parseFlags(argv) {
       throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', 'unexpected argument: ' + tok);
     }
     const name = tok.slice(2);
+    if (!allowedFlags.includes(name)) {
+      throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', 'unrecognized flag for ' + command + ': --' + name);
+    }
     if (BOOLEAN_FLAGS.has(name)) {
       if (Object.prototype.hasOwnProperty.call(out, name)) {
         throw new CliError('USAGE_ERROR', 'DUPLICATE_ARGUMENT', 'duplicate --' + name);
@@ -167,6 +303,9 @@ function parseFlags(argv) {
     if (val === undefined) {
       throw new CliError('USAGE_ERROR', 'MISSING_ARGUMENT', 'missing value for --' + name);
     }
+    if (PATH_FLAG_NAMES.has(name) && Buffer.byteLength(val, 'utf8') > MAX_PATH_TOKEN_BYTES) {
+      throw new CliError('INVALID', 'INVALID_ARGUMENT', '--' + name + ' exceeds the 2048-byte path-token cap');
+    }
     if (Object.prototype.hasOwnProperty.call(out, name)) {
       throw new CliError('USAGE_ERROR', 'DUPLICATE_ARGUMENT', 'duplicate --' + name);
     }
@@ -175,6 +314,13 @@ function parseFlags(argv) {
   }
   if (('fixed-ids' in out || 'fixed-clock' in out) && !isTestCapability()) {
     throw new CliError('INVALID', 'INVALID_ARGUMENT', '--fixed-ids/--fixed-clock require the test capability');
+  }
+  // RUNTIME_CONSULTATION_ACL_PROBE shares the same test-capability gate as
+  // --fixed-ids/--fixed-clock (PLAN.md ~L752) but is an env var, not an argv flag,
+  // so it is checked unconditionally here rather than via the allowlist above
+  // (RCC-determinism-4).
+  if (process.env.RUNTIME_CONSULTATION_ACL_PROBE && !isTestCapability()) {
+    throw new CliError('INVALID', 'INVALID_ARGUMENT', 'RUNTIME_CONSULTATION_ACL_PROBE requires the test capability');
   }
   return out;
 }
@@ -264,6 +410,11 @@ function requestPathFor(planRoot, requestId) {
   return path.join(transactionDir(planRoot, requestId), 'request.json');
 }
 
+/** Record #2b `activation/v1` path (PLAN.md ~L318) -- written before claim (#3). */
+function activationPathFor(txnDir, attemptId) {
+  return path.join(txnDir, 'activations', attemptId + '.json');
+}
+
 function claimPathFor(txnDir, attemptId) {
   return path.join(txnDir, 'claims', attemptId + '.json');
 }
@@ -306,6 +457,20 @@ function inboxPathFor(planRoot, role, requestId) {
 
 function blobPathFor(planRoot, digest) {
   return path.join(planRoot, 'blobs', digest);
+}
+
+/**
+ * Record #12 `stop/v2` path (PLAN.md ~L506): `workers/<target_role>/<worker_session_id>/stops/<stop_id>.json`.
+ * Confirmed plan-root-relative by the frozen suite's own `_stop_path()` fixture
+ * helper in `runtime-consultation-cli.bats`.
+ */
+function stopPathFor(base, role, workerSessionId, stopId) {
+  return path.join(base, 'workers', role, workerSessionId, 'stops', stopId + '.json');
+}
+
+/** Sibling immutable acknowledgement: `.../stops/<stop_id>.ack.json` (PLAN.md ~L519). */
+function stopAckPathFor(stopPath, stopId) {
+  return path.join(path.dirname(stopPath), stopId + '.ack.json');
 }
 
 /** Safe-segment guard: rejects traversal/absolute/empty path segments used as filenames. */
@@ -364,7 +529,7 @@ function publishNoClobber(targetPath, bytes, opts) {
   const options = opts || {};
   const dir = path.dirname(targetPath);
   fs.mkdirSync(dir, { recursive: true });
-  const tempPath = path.join(dir, '.' + path.basename(targetPath) + '.' + process.pid + '.' + genId().slice(0, 16) + '.tmp-owner');
+  const tempPath = path.join(dir, '.' + path.basename(targetPath) + '.' + process.pid + '.' + genId({ raw: true }).slice(0, 16) + '.tmp-owner');
   fs.writeFileSync(tempPath, bytes);
   const fd = fs.openSync(tempPath, 'r+');
   try {
@@ -401,7 +566,7 @@ function publishNoClobber(targetPath, bytes, opts) {
 function publishReplace(targetPath, bytes) {
   const dir = path.dirname(targetPath);
   fs.mkdirSync(dir, { recursive: true });
-  const tempPath = path.join(dir, '.' + path.basename(targetPath) + '.' + process.pid + '.' + genId().slice(0, 16) + '.refresh-tmp-owner');
+  const tempPath = path.join(dir, '.' + path.basename(targetPath) + '.' + process.pid + '.' + genId({ raw: true }).slice(0, 16) + '.refresh-tmp-owner');
   fs.writeFileSync(tempPath, bytes);
   const fd = fs.openSync(tempPath, 'r+');
   try {
@@ -488,7 +653,7 @@ function acquireLock(txnDir) {
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
       if (Date.now() - start >= LOCK_MAX_WAIT_MS) {
-        throw new CliError('TIMEOUT', 'NONE', 'transition lock acquisition timed out: ' + lockDir);
+        throw new CliError('TIMEOUT', 'DEADLINE_EXCEEDED', 'transition lock acquisition timed out: ' + lockDir);
       }
       sleepSync(LOCK_POLL_MS);
     }
@@ -812,6 +977,36 @@ function validateInboxRefV1(artifactPath, coordRoot) {
   if (reqObj.target_role !== obj.target_role) {
     throw new CliError('INVALID', 'CORRELATION_INVALID', 'inbox-ref target_role does not match request.target_role');
   }
+  return obj;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `activation` (record #2b) -- field table PLAN.md ~L318-336. Written first-
+// writer-wins BEFORE claim (#3) and initial `inbox-ref/v1` exposure (Ordered
+// Runtime Loop step 6).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ACTIVATION_V1_FIELDS = {
+  schema: { check: (v) => v === 'coordination/activation/v1' },
+  version: { check: (v) => v === 1 },
+  request_id: { check: isHexId },
+  request_digest: { check: isHex64 },
+  attempt_id: { check: isHexId },
+  lease_epoch: { check: isNonNegativeInteger },
+  target_role_profile_digest: { check: isHex64 },
+  routing_policy_version: { check: isNonEmptyString },
+  routing_policy_digest: { check: isHex64 },
+  selected_driver: { check: isEnum(DRIVER_ENUM) },
+  native_target_binding_id: { check: orNull(isNonEmptyString) },
+  native_spawn_action_id: { check: orNull(isNonEmptyString) },
+  created_at: { check: isIsoTimestamp },
+  activation_liveness_expiry: { check: isIsoTimestamp },
+};
+
+function validateActivationV1(artifactPath) {
+  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  assertClosedShape(obj, ACTIVATION_V1_FIELDS);
+  assertDurable(artifactPath);
   return obj;
 }
 
@@ -1218,6 +1413,57 @@ function validateTakeoverV1(artifactPath) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// `stop` (record #12, `stop/v2`) + `stop-ack/v1` -- field tables PLAN.md ~L506-519
+// ─────────────────────────────────────────────────────────────────────────────
+
+const HEX128_RE = /^[a-f0-9]{32}$/;
+
+const STOP_V2_FIELDS = {
+  schema: { check: (v) => v === 'coordination/stop/v2' },
+  stop_id: { check: (v) => typeof v === 'string' && HEX128_RE.test(v) },
+  kind: { check: isEnum(['transaction', 'session-shutdown']) },
+  target_role: { check: isNonEmptyString },
+  worker_session_id: { check: isNonEmptyString },
+  request_id: { check: orNull(isHexId) },
+  attempt_id: { check: orNull(isHexId) },
+  lease_epoch: { check: orNull(isNonNegativeInteger) },
+  expiry: { check: isIsoTimestamp },
+  requested_at: { check: isIsoTimestamp },
+};
+
+/**
+ * Whole-object cross-field rule (PLAN.md ~L515): request_id/attempt_id/lease_epoch
+ * are all required (non-null) for `kind:"transaction"` and all null for
+ * `kind:"session-shutdown"` -- epoch alone is never sufficient.
+ */
+function assertStopCorrelationTriple(obj) {
+  const allNull = obj.request_id === null && obj.attempt_id === null && obj.lease_epoch === null;
+  const allSet = obj.request_id !== null && obj.attempt_id !== null && obj.lease_epoch !== null;
+  if (obj.kind === 'transaction' && !allSet) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'transaction stop requires request_id/attempt_id/lease_epoch all set');
+  }
+  if (obj.kind === 'session-shutdown' && !allNull) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'session-shutdown stop requires request_id/attempt_id/lease_epoch all null');
+  }
+}
+
+function validateStopV2(artifactPath) {
+  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  assertClosedShape(obj, STOP_V2_FIELDS);
+  assertStopCorrelationTriple(obj);
+  assertDurable(artifactPath);
+  return obj;
+}
+
+const STOP_ACK_V1_FIELDS = {
+  schema: { check: (v) => v === 'coordination/stop-ack/v1' },
+  stop_id: { check: (v) => typeof v === 'string' && HEX128_RE.test(v) },
+  worker_session_id: { check: isNonEmptyString },
+  disposition: { check: isEnum(['exact-transaction', 'stale', 'unrelated', 'session-shutdown']) },
+  acked_at: { check: isIsoTimestamp },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Command dispatch registry -- populated incrementally as each cmd* is defined
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1280,10 +1526,14 @@ function cmdRootValidate(flags) {
   try {
     stat = fs.statSync(coordRoot);
   } catch (err) {
-    throw new CliError('UNAVAILABLE', 'NONE', 'coordination root does not exist: ' + coordRoot);
+    // A missing/wrong root path is bad input, not a transient unavailability --
+    // matches this file's own consistent not-found convention (INVALID/
+    // SCHEMA_INVALID, e.g. readArtifactBytes/assertDurable/resolveContentRefOrThrow)
+    // rather than the lone UNAVAILABLE/NONE outlier this handler previously used.
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'coordination root does not exist: ' + coordRoot);
   }
   if (!stat.isDirectory()) {
-    throw new CliError('UNAVAILABLE', 'NONE', 'coordination root is not a directory: ' + coordRoot);
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'coordination root is not a directory: ' + coordRoot);
   }
   return { artifact_ref: coordRoot };
 }
@@ -1312,10 +1562,46 @@ function printResultAndExit(command, statusName, detailCode, extra) {
   process.exit(rc);
 }
 
+// Portable argv cap (Frozen CLI ABI, PLAN.md ~L754): the complete post-hook argv
+// is at most 131072 UTF-8 bytes on POSIX, or 28672 UTF-16 code units on Windows,
+// checked before decode/allocation -- i.e. before even a per-flag path-token
+// check, independent of subcommand.
+const MAX_TOTAL_ARGV_BYTES = 131072;
+const MAX_TOTAL_ARGV_UTF16_UNITS_WINDOWS = 28672;
+
+/**
+ * Effective platform for the total-argv-cap branch (Gap#1, PLAN.md ~L754).
+ * `RUNTIME_CONSULTATION_FORCE_PLATFORM` is honored ONLY when the harness test
+ * capability is active (`isTestCapability()`: NODE_ENV=test +
+ * RUNTIME_CONSULTATION_TEST_CAPABILITY) -- mirrors resolveFixedClockState's own
+ * isTestCapability()-gated env-var override. Production (no capability) always
+ * observes the real `process.platform`; the override can NEVER be honored
+ * outside the test capability, by construction.
+ */
+function resolveEffectivePlatform() {
+  if (isTestCapability()) {
+    const overrideEnv = process.env.RUNTIME_CONSULTATION_FORCE_PLATFORM;
+    if (typeof overrideEnv === 'string' && overrideEnv.length > 0) return overrideEnv;
+  }
+  return process.platform;
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const command = argv[0];
   try {
+    const isWindowsArgvCap = resolveEffectivePlatform() === 'win32';
+    if (isWindowsArgvCap) {
+      const totalArgvUtf16Units = argv.reduce((sum, tok) => sum + String(tok).length, 0);
+      if (totalArgvUtf16Units > MAX_TOTAL_ARGV_UTF16_UNITS_WINDOWS) {
+        throw new CliError('INVALID', 'INVALID_ARGUMENT', 'post-hook argv exceeds the 28672-UTF-16-unit total budget');
+      }
+    } else {
+      const totalArgvBytes = argv.reduce((sum, tok) => sum + Buffer.byteLength(String(tok), 'utf8'), 0);
+      if (totalArgvBytes > MAX_TOTAL_ARGV_BYTES) {
+        throw new CliError('INVALID', 'INVALID_ARGUMENT', 'post-hook argv exceeds the 131072-byte total budget');
+      }
+    }
     if (!command) {
       throw new CliError('USAGE_ERROR', 'MISSING_ARGUMENT', 'missing subcommand');
     }
@@ -1323,7 +1609,16 @@ function main() {
     if (!handler) {
       throw new CliError('USAGE_ERROR', 'UNKNOWN_COMMAND', 'unknown subcommand: ' + command);
     }
-    const flags = parseFlags(argv.slice(1));
+    const flags = parseFlags(argv.slice(1), command);
+    // Fixed-ids/fixed-clock test-mode activation (WP2 fake-clock/fixed-ids
+    // seam): resolved ONCE per process, immediately after parseFlags succeeds
+    // and before any handler runs. parseFlags already throws before this
+    // point if fixed-ids/fixed-clock is set without the test capability
+    // (see the '--fixed-ids/--fixed-clock require the test capability' check
+    // above) -- the isTestCapability() re-check here is defensive-but-
+    // harmless, not load-bearing.
+    FIXED_IDS_ACTIVE = isTestCapability() && Boolean(flags['fixed-ids']);
+    resolveFixedClockState(flags);
     const extra = handler(flags) || {};
     printResultAndExit(command, 'SUCCESS', 'NONE', extra);
   } catch (err) {
@@ -1375,10 +1670,8 @@ function decodeIntentOrThrow(intentB64) {
 }
 
 /**
- * `subject-bundle-manifest/v1` -- minimal WP1 closed shape (PLAN.md ~L647, ~L804).
- * `entries` carries the caller's manifested subject-scope entries; per-entry deep
- * adversarial validation (symlink/traversal/hard-link -- `publish-blob`'s own
- * `BLOB-AUTH-01..08` matrix) is WP2/WP3 and intentionally NOT done here. The manifest
+ * `subject-bundle-manifest/v1` -- minimal closed shape (PLAN.md ~L647, ~L804).
+ * `entries` carries the caller's manifested subject-scope entries. The manifest
  * must NOT itself carry `subject_scope_digest` -- that value is always DERIVED (hash
  * of this exact validated manifest), never caller-supplied, so a caller cannot forge
  * a digest that does not match its own manifest bytes.
@@ -1389,14 +1682,54 @@ const SUBJECT_BUNDLE_MANIFEST_V1_FIELDS = {
 };
 
 /**
+ * Safe RELATIVE entry-path predicate (distinct from `assertSafeSegment`, which
+ * forbids ANY separator and is used for single-component filenames like request
+ * IDs). A manifest entry path may be nested (`src/Foo.kt`) but must never be
+ * absolute, traverse (`..`), contain a NUL byte, or name a `.git` segment
+ * (categorical Git-metadata rejection, PLAN.md ~L777).
+ */
+function isSafeRelativeEntryPath(v) {
+  if (typeof v !== 'string' || v.length === 0 || v.length > 2048) return false;
+  if (v.includes('\0')) return false;
+  if (path.isAbsolute(v)) return false;
+  const segments = v.split('/');
+  for (const seg of segments) {
+    if (seg === '' || seg === '.' || seg === '..' || seg === '.git') return false;
+  }
+  return true;
+}
+
+/**
+ * Per-entry closed shape for `publish-blob`'s "exact manifested subject entry"
+ * (PLAN.md ~L760, ~L777): the manifest author's own pre-declared expected
+ * size/digest, revalidated against the fd-bound real file at `publish-blob` time
+ * -- never trusted alone. `size`/`digest` are optional at the manifest-shape
+ * level -- an entry may exist in the subject bundle purely to influence
+ * `subject_scope_digest` (e.g. `runtime-consultation-protocol.bats` RCP-publish-4's
+ * `{"path":"fixture-a.txt"}`-only fixtures) without ever being `publish-blob`-eligible;
+ * `cmdPublishBlob` itself requires both to be present on the MATCHED entry before
+ * treating it as a valid blob source (SCHEMA_INVALID otherwise).
+ */
+const SUBJECT_BUNDLE_ENTRY_FIELDS = {
+  path: { check: isSafeRelativeEntryPath },
+  size: { required: false, check: isNonNegativeInteger },
+  digest: { required: false, check: isHex64 },
+};
+
+/**
  * Reads+parses+validates the `--subject-bundle` manifest file against its OWN closed
- * shape. Unlike `decodeIntentOrThrow` (base64url argv payload), this is a path to a
- * caller-prepared file on disk (Frozen CLI ABI `publish-request` row, PLAN.md ~L761).
+ * shape, plus each entry's own closed shape (additive: an empty `entries` array --
+ * every WP1 fixture -- trivially satisfies this with nothing to iterate). Unlike
+ * `decodeIntentOrThrow` (base64url argv payload), this is a path to a caller-prepared
+ * file on disk (Frozen CLI ABI `publish-request`/`publish-blob` rows, PLAN.md ~L760-761).
  */
 function decodeSubjectBundleManifestOrThrow(manifestPath) {
   const bytes = readArtifactBytes(manifestPath);
   const obj = parseJsonOrSchemaInvalid(bytes);
   assertClosedShape(obj, SUBJECT_BUNDLE_MANIFEST_V1_FIELDS);
+  for (const entry of obj.entries) {
+    assertClosedShape(entry, SUBJECT_BUNDLE_ENTRY_FIELDS);
+  }
   return obj;
 }
 
@@ -1511,12 +1844,20 @@ function cmdPublishRequest(flags) {
   };
   if (intent.content_ref) requestObj.content_ref = intent.content_ref;
 
+  // Gap#2 (WP2 conformance, PLAN.md ~L761): "content_ref must equal a freshly
+  // revalidated publish-blob handle" -- a shape-valid-but-fabricated content_ref
+  // (blob != digest, or no real backing file) must be rejected HERE, at publish
+  // time, not only by a later optional `validate` call. Mirrors
+  // validateConsultV2's own `if (obj.content_ref) resolveContentRefOrThrow(...)`
+  // pattern (~L893-895), applied here to the not-yet-published request object.
+  if (intent.content_ref) resolveContentRefOrThrow(planRoot, intent.content_ref);
+
   // Fail closed on any internal inconsistency rather than publishing a record
   // `validate --kind consult-v2` would later reject.
   assertClosedShape(requestObj, CONSULT_V2_FIELDS);
 
   const requestPath = requestPathFor(planRoot, requestId);
-  publishNoClobber(requestPath, Buffer.from(canonicalJSONStringify(requestObj), 'utf8'));
+  publishNoClobber(requestPath, Buffer.from(canonicalJSONStringify(requestObj), 'utf8'), { allowIdenticalIdempotent: true });
 
   return { request_id: requestId, artifact_ref: requestPath };
 }
@@ -1791,6 +2132,13 @@ function cmdCancel(flags) {
     if (fs.existsSync(acceptedResultPathFor(txnDir))) {
       throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction already has an accepted-result.json');
     }
+    if (fs.existsSync(cancelPathFor(txnDir))) {
+      // A second cancel (matching or different --reason) observes the SAME
+      // terminal CANCELLED disposition as accept-result-after-cancel (PLAN.md
+      // ~L781 rc6 rule) -- not RESULT_CONFLICT (reserved for differing RESULT
+      // candidates, record #10 ~L476-484), and not a generic AUTHORITY_INVALID.
+      throw new CliError('CANCELLED', 'TRANSACTION_CANCELLED', 'transaction was already cancelled');
+    }
     const cancelObj = {
       schema: 'coordination/cancel/v1',
       request_id: reqObj.request_id,
@@ -1867,7 +2215,10 @@ function cmdAcceptResult(flags) {
       throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction already has an accepted-result.json');
     }
     if (fs.existsSync(cancelPathFor(txnDir))) {
-      throw new CliError('INVALID', 'TRANSACTION_CANCELLED', 'transaction was already cancelled');
+      // CLI-RESULT-07: a terminal cancelled outcome maps to the frozen CANCELLED/rc6
+      // status (PLAN.md ~L781: "rc6-> the observed terminal BLOCKED|CANCELLED|CONFLICT"),
+      // not INVALID/rc3 -- detail_code stays TRANSACTION_CANCELLED.
+      throw new CliError('CANCELLED', 'TRANSACTION_CANCELLED', 'transaction was already cancelled');
     }
     const entries = listResultFiles(txnDir);
     if (entries.length === 0) {
@@ -1890,7 +2241,11 @@ function cmdAcceptResult(flags) {
     }
 
     if (resultObj.status !== 'ANSWERED') {
-      throw new CliError('INVALID', 'RESULT_BLOCKED', 'candidate result is not ANSWERED (never accepted as an answer)');
+      // Finding #1 (arch-platform-wp2-cli-mapping-cross-verify.md): a protocol-valid
+      // BLOCKED candidate is a terminal state (PLAN.md ~L781 rc6 rule), the same
+      // latent gap as Q1's CANCELLED case in this same function -- not INVALID/rc3.
+      // detail_code stays RESULT_BLOCKED.
+      throw new CliError('BLOCKED', 'RESULT_BLOCKED', 'candidate result is not ANSWERED (never accepted as an answer)');
     }
 
     const acceptedObj = {
@@ -1906,7 +2261,10 @@ function cmdAcceptResult(flags) {
       schema_version: 1,
     };
     const acceptedPath = acceptedResultPathFor(txnDir);
-    publishNoClobber(acceptedPath, Buffer.from(canonicalJSONStringify(acceptedObj), 'utf8'), { raceDetailCode: 'TRANSACTION_CANCELLED' });
+    // A double-accept no-clobber race lost here is a RACE (another accept won
+    // first), not a cancellation -- matches cmdClaim's own claim-race labeling
+    // (AUTHORITY_INVALID), not the unrelated TRANSACTION_CANCELLED detail code.
+    publishNoClobber(acceptedPath, Buffer.from(canonicalJSONStringify(acceptedObj), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
     return { request_id: reqObj.request_id, artifact_ref: acceptedPath };
   });
 }
@@ -1949,33 +2307,591 @@ function cmdAwaitResult(flags) {
     throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', '--timeout must be an integer in 1..3600');
   }
   const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
-  const deadlineMs = Date.now() + timeoutSeconds * 1000;
+  // W06 fixed-clock deadline seam: the deadline ANCHOR is computed from the
+  // UNADVANCED base while the live loop check (below) reads the ADVANCED
+  // value -- these are deliberately DIFFERENT quantities under fixed-clock
+  // mode, so RUNTIME_CONSULTATION_FAKE_CLOCK_ADVANCE_MS can force an
+  // immediate deadline-exceeded on iteration 1 with zero real sleep. Outside
+  // fixed-clock mode both resolve to real, independently-advancing
+  // Date.now() values -- unchanged production behavior.
+  const deadlineBaseMs = FIXED_CLOCK_ACTIVE ? FIXED_CLOCK_BASE_MS : Date.now();
+  const deadlineMs = deadlineBaseMs + timeoutSeconds * 1000;
 
   for (;;) {
     if (fs.existsSync(acceptedResultPathFor(txnDir))) {
       return { request_id: reqObj.request_id, artifact_ref: acceptedResultPathFor(txnDir) };
     }
     if (fs.existsSync(cancelPathFor(txnDir))) {
-      throw new CliError('INVALID', 'TRANSACTION_CANCELLED', 'transaction was cancelled');
+      // rc6 terminal (PLAN.md ~L781), mirroring cmdCancel's/cmdAcceptResult's own
+      // CANCELLED/TRANSACTION_CANCELLED terminal-cancel status -- not INVALID/rc3.
+      throw new CliError('CANCELLED', 'TRANSACTION_CANCELLED', 'transaction was cancelled');
     }
     const entries = listResultFiles(txnDir);
     if (entries.length > 0) {
       const candidatePath = path.join(txnDir, 'results', entries[0]);
+      let validated = null;
       try {
-        validateResultV2(candidatePath, coordRoot);
-        return { request_id: reqObj.request_id, artifact_ref: candidatePath };
+        validated = validateResultV2(candidatePath, coordRoot);
       } catch (err) {
         // an invalid/stale/not-yet-authoritative candidate does not itself satisfy
         // await-result -- keep polling until the deadline.
       }
+      if (validated) {
+        if (validated.obj.status === 'BLOCKED') {
+          // CLI-RESULT-06: a protocol-valid BLOCKED candidate is a terminal state
+          // (PLAN.md ~L768: "or terminal state"; ~L781 rc6), never silent success.
+          throw new CliError('BLOCKED', 'RESULT_BLOCKED', 'await-result observed a protocol-valid BLOCKED candidate', { request_id: reqObj.request_id, artifact_ref: candidatePath });
+        }
+        return { request_id: reqObj.request_id, artifact_ref: candidatePath };
+      }
     }
-    if (Date.now() >= deadlineMs) {
-      throw new CliError('TIMEOUT', 'NONE', 'await-result timed out with no valid current candidate');
+    if (currentClockMs() >= deadlineMs) {
+      // CLI-RESULT-05: NONE is legal only with success (PLAN.md ~L781); a TIMEOUT
+      // failure names the specific literal DEADLINE_EXCEEDED.
+      throw new CliError('TIMEOUT', 'DEADLINE_EXCEEDED', 'await-result timed out with no valid current candidate');
     }
     sleepSync(100);
   }
 }
 COMMANDS['await-result'] = cmdAwaitResult;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `publish-blob` (PLAN.md ~L760, ~L777) -- sole content-ref materializer. Deep
+// per-entry `BLOB-AUTH-01..08` adversarial validation (outside-root, host-auth/
+// config/home, coordination/evidence, traversal, symlink/hard-link/reparse,
+// post-open mutation, >10MiB), reusing the exact fd-bind / O_NOFOLLOW / fstat /
+// re-fstat-identity pattern already established by `resolveContentRefOrThrow`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MAX_BLOB_BYTES = 10485760;
+
+// Best-effort categorical host-auth/config/home denylist (PLAN.md ~L777) -- this
+// file's own reasonable inference of the segment denylist, since no PLAN range
+// read for this task enumerates literal segment names. `.planning` covers this
+// repo's own coordination/evidence convention as an additional segment-level
+// belt to the resolved-path coordination-root check below.
+const BLOB_DENYLISTED_SEGMENTS = new Set(['.ssh', '.aws', '.gnupg', '.netrc', '.planning']);
+
+function cmdPublishBlob(flags) {
+  requireFlags(flags, ['coordination-root', 'plan', 'subject-bundle', 'entry']);
+  const coordRoot = resolveAbsolute(flags['coordination-root']);
+  const planPath = resolveAbsolute(flags.plan);
+  const subjectBundlePath = resolveAbsolute(flags['subject-bundle']);
+  const manifest = decodeSubjectBundleManifestOrThrow(subjectBundlePath);
+
+  if (!isSafeRelativeEntryPath(flags.entry)) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', '--entry is not a safe relative path');
+  }
+  const entry = manifest.entries.find((e) => e.path === flags.entry);
+  if (!entry || !Number.isInteger(entry.size) || typeof entry.digest !== 'string') {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', '--entry is not a blob-eligible manifested subject entry');
+  }
+  for (const seg of entry.path.split('/')) {
+    if (BLOB_DENYLISTED_SEGMENTS.has(seg)) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'entry references a categorically denylisted path segment');
+    }
+  }
+
+  const planDigest = sha256File(planPath);
+  const waveSlug = path.basename(path.dirname(planPath)).replace(/^wave-/, '');
+  const repoId = computeRepoId(coordRoot);
+  const planRoot = planRootPath(coordRoot, repoId, waveSlug, planDigest);
+
+  // Staging root: the same git worktree toplevel every other identity field in
+  // this file is already derived from (computeWorktreeId's own gitRevParse call)
+  // -- no new manifest field is required to carry it (BLOB-AUTH-02/outside-root).
+  const stagingRoot = realpathOrSelf(gitRevParse(coordRoot, ['rev-parse', '--show-toplevel']));
+  const resolvedStagingRoot = path.resolve(stagingRoot);
+  const resolvedCandidate = path.resolve(path.join(stagingRoot, entry.path));
+  if (resolvedCandidate !== resolvedStagingRoot && !resolvedCandidate.startsWith(resolvedStagingRoot + path.sep)) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'entry resolves outside the staging root (BLOB-AUTH-05 traversal)');
+  }
+  // Categorical coordination/evidence rejection (PLAN.md ~L777): never blob the
+  // coordination root's own internal state, even if it happens to sit inside the
+  // staging root.
+  const resolvedCoordRoot = path.resolve(coordRoot);
+  if (resolvedCandidate === resolvedCoordRoot || resolvedCandidate.startsWith(resolvedCoordRoot + path.sep)) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'entry resolves inside coordination/evidence state');
+  }
+
+  let lst;
+  try {
+    lst = fs.lstatSync(resolvedCandidate);
+  } catch (err) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'manifested entry not found on disk: ' + entry.path);
+  }
+  if (lst.isSymbolicLink()) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'manifested entry is a symlink (rejected, BLOB-AUTH-06)');
+  }
+  if (!lst.isFile()) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'manifested entry is not a regular file');
+  }
+
+  let fd;
+  try {
+    fd = fs.openSync(resolvedCandidate, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  } catch (err) {
+    if (err && err.code === 'ELOOP') {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'manifested entry path is a symlink (rejected at open time)');
+    }
+    throw err;
+  }
+  try {
+    const fstat = fs.fstatSync(fd);
+    if (!fstat.isFile() || fstat.nlink !== 1) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'manifested entry durability unproven (hard-linked, BLOB-AUTH-06)');
+    }
+    if (fstat.size !== entry.size || fstat.size > MAX_BLOB_BYTES) {
+      throw new CliError('INVALID', 'SCHEMA_INVALID', 'manifested entry size mismatch/overflow (BLOB-AUTH-08)');
+    }
+    const bytes = fs.readFileSync(fd);
+    const digest = sha256Buffer(bytes);
+    if (digest !== entry.digest) {
+      throw new CliError('INVALID', 'SCHEMA_INVALID', 'manifested entry digest mismatch (tampered content)');
+    }
+    const fstat2 = fs.fstatSync(fd);
+    if (fstat2.dev !== fstat.dev || fstat2.ino !== fstat.ino || fstat2.size !== fstat.size) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'manifested entry identity changed during read (BLOB-AUTH-07 post-open mutation)');
+    }
+    const blobPath = blobPathFor(planRoot, digest);
+    publishNoClobber(blobPath, bytes, { allowIdenticalIdempotent: true });
+    return {
+      artifact_ref: blobPath,
+      content_ref: { blob: digest, digest, size: fstat.size },
+    };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+COMMANDS['publish-blob'] = cmdPublishBlob;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `dispatch` (PLAN.md ~L762, ~L798-810) -- validate capability/routing, publish
+// `activation/v1`, publish the requester-owned intent WAL when applicable,
+// publish `inbox-ref`, return one non-authoritative `ActivationAction`. Real
+// driver selection/routing (the per-role `runtime-routing.json` route table) and
+// the five non-noop driver branches (SendMessage/Agent/bridge argv) are WP3 --
+// this WP2 pass implements the ONE driver it can honestly execute end-to-end
+// without fabricating a peer/bridge -- `noop` -- plus the full
+// activation/WAL/inbox-ref ordering and closed ActivationAction shape.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function cmdDispatch(flags) {
+  requireFlags(flags, ['coordination-root', 'request']);
+  const coordRoot = resolveAbsolute(flags['coordination-root']);
+  const requestPath = resolveAbsolute(flags.request);
+  const txnDir = path.dirname(requestPath);
+  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
+  const planRoot = planRootFromArtifact(coordRoot, requestPath);
+
+  // Routing policy must already be materialized at this EXACT immutable snapshot
+  // (Ordered Runtime Loop step 2, PLAN.md ~L803) before any driver can be
+  // selected; its absence is a genuine "no available driver" signal (CLI-RESULT-04),
+  // not a fabricated one -- real per-role route-table selection is WP3.
+  const routingPolicyPath = path.join(planRoot, 'routing-policies', reqObj.routing_policy_digest + '.json');
+  if (!fs.existsSync(routingPolicyPath)) {
+    throw new CliError('UNAVAILABLE', 'DRIVER_UNAVAILABLE', 'no routing policy materialized for this plan-root; no driver available');
+  }
+
+  const attemptId = reqObj.initial_attempt_id;
+  const leaseEpoch = reqObj.initial_lease_epoch;
+  const activationPath = activationPathFor(txnDir, attemptId);
+  const now = nowIso();
+  const activationObj = {
+    schema: 'coordination/activation/v1',
+    version: 1,
+    request_id: reqObj.request_id,
+    request_digest: sha256File(requestPath),
+    attempt_id: attemptId,
+    lease_epoch: leaseEpoch,
+    target_role_profile_digest: reqObj.target_role_profile_digest,
+    routing_policy_version: reqObj.routing_policy_version,
+    routing_policy_digest: reqObj.routing_policy_digest,
+    selected_driver: 'noop',
+    native_target_binding_id: null,
+    native_spawn_action_id: null,
+    created_at: now,
+    activation_liveness_expiry: activationLivenessDeadline(reqObj),
+  };
+  assertClosedShape(activationObj, ACTIVATION_V1_FIELDS);
+  publishNoClobber(activationPath, Buffer.from(canonicalJSONStringify(activationObj), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
+
+  // `noop` is not a requester-owned accelerator (claude-sendmessage/claude-agent/
+  // runtime-spawn) -- no intent WAL is written; the core itself writes the noop
+  // delivery record directly (Activation Drivers table, PLAN.md ~L848: "Receipt
+  // writer: delivery/<attempt_id>.json records driver:'noop' explicitly").
+  const deliveryObj = {
+    schema: 'coordination/delivery/v1',
+    request_id: reqObj.request_id,
+    attempt_id: attemptId,
+    lease_epoch: leaseEpoch,
+    driver: 'noop',
+    claim_digest: null,
+    commit_point: null,
+    commit_point_at: null,
+    created_at: now,
+    delivered: false,
+    outcome: null,
+    detail_code: 'NONE',
+  };
+  assertClosedShape(deliveryObj, DELIVERY_V1_FIELDS);
+  publishNoClobber(
+    deliveryPathFor(txnDir, attemptId),
+    Buffer.from(canonicalJSONStringify(deliveryObj), 'utf8'),
+    { allowIdenticalIdempotent: true },
+  );
+
+  const inboxRefObj = {
+    schema: 'coordination/inbox-ref/v1',
+    request_id: reqObj.request_id,
+    request_digest: sha256File(requestPath),
+    kind: 'consult',
+    target_role: reqObj.target_role,
+    created_at: now,
+  };
+  assertClosedShape(inboxRefObj, INBOX_REF_V1_FIELDS);
+  publishNoClobber(
+    inboxPathFor(planRoot, reqObj.target_role, reqObj.request_id),
+    Buffer.from(canonicalJSONStringify(inboxRefObj), 'utf8'),
+    { allowIdenticalIdempotent: true },
+  );
+
+  // noop requires no caller execution -- activation_action stays null (ABI:
+  // "codex-app-server/noop adds no payload keys and therefore returns no action").
+  return { request_id: reqObj.request_id, artifact_ref: activationPath, activation_action: null };
+}
+COMMANDS.dispatch = cmdDispatch;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `record-delivery` (PLAN.md ~L763, ~L870-881) -- publish the branch-owned
+// `delivery/v1` record; enforce the driver/commit-point/outcome compatibility
+// table. Rejected for either Codex branch or `noop` (PLAN.md ~L779): only
+// requester-owned accelerators may call this CLI themselves.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const REQUESTER_OWNED_DRIVERS = new Set(['claude-sendmessage', 'claude-agent', 'runtime-spawn']);
+
+/** Driver -> its own "crossed the commit point" token (PLAN.md ~L872-881). */
+const DRIVER_CROSSED_COMMIT_POINT = {
+  'claude-sendmessage': 'sendmessage-returned',
+  'claude-agent': 'agent-start-observed',
+  'codex-app-server': 'turn-start-accepted',
+  'codex-mcp': 'turn-start-accepted',
+  'runtime-spawn': 'wake-helper-returned',
+};
+
+const COMMIT_POINT_ENUM = [
+  'sendmessage-returned', 'agent-start-observed', 'turn-start-accepted', 'wake-helper-returned', 'none',
+];
+// The CLI token `noop` is legal argv shape only for the noop driver (PLAN.md
+// ~L881) -- which is itself rejected below before this enum's 'noop' member
+// could ever reach the compatibility-table mapping.
+const RECORD_DELIVERY_OUTCOME_ENUM = ['possibly-delivered', 'confirmed-failed-before-commit', 'noop'];
+
+function cmdRecordDelivery(flags) {
+  requireFlags(flags, ['coordination-root', 'request', 'attempt', 'epoch', 'driver', 'outcome', 'commit-point']);
+  const requestPath = resolveAbsolute(flags.request);
+  const txnDir = path.dirname(requestPath);
+  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
+
+  if (!DRIVER_ENUM.includes(flags.driver)) {
+    throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', 'invalid --driver: ' + flags.driver);
+  }
+  if (!RECORD_DELIVERY_OUTCOME_ENUM.includes(flags.outcome)) {
+    throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', 'invalid --outcome: ' + flags.outcome);
+  }
+  if (!COMMIT_POINT_ENUM.includes(flags['commit-point'])) {
+    throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', 'invalid --commit-point: ' + flags['commit-point']);
+  }
+  const epoch = Number.parseInt(flags.epoch, 10);
+  if (!Number.isInteger(epoch) || epoch < 0 || String(epoch) !== flags.epoch) {
+    throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', '--epoch must be a non-negative integer');
+  }
+  assertHexId(flags.attempt, '--attempt');
+
+  // Requester `record-delivery` is rejected for either Codex branch or noop
+  // (PLAN.md ~L779) -- only requester-owned accelerators may call this CLI
+  // themselves; the trusted bridge/core write those branches' own delivery.
+  if (!REQUESTER_OWNED_DRIVERS.has(flags.driver)) {
+    throw new CliError('INVALID', 'INVALID_ARGUMENT', 'record-delivery is rejected for driver: ' + flags.driver);
+  }
+
+  const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+  if (flags.attempt !== auth.attemptId || epoch !== auth.leaseEpoch) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'record-delivery attempt/epoch is not the current authoritative pair');
+  }
+
+  const crossedToken = DRIVER_CROSSED_COMMIT_POINT[flags.driver];
+  const commitPointCli = flags['commit-point'];
+  const outcomeCli = flags.outcome;
+  let commitPointJson;
+  let outcomeJson;
+  let delivered;
+  if (commitPointCli === crossedToken) {
+    if (outcomeCli !== 'possibly-delivered') {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'driver/commit-point/outcome tuple does not match the frozen compatibility table');
+    }
+    commitPointJson = crossedToken;
+    outcomeJson = 'possibly-delivered';
+    delivered = true;
+  } else if (commitPointCli === 'none') {
+    if (outcomeCli !== 'possibly-delivered' && outcomeCli !== 'confirmed-failed-before-commit') {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'driver/commit-point/outcome tuple does not match the frozen compatibility table');
+    }
+    commitPointJson = null;
+    outcomeJson = outcomeCli;
+    delivered = false;
+  } else {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'commit-point is not valid for driver: ' + flags.driver);
+  }
+
+  // detail_code inference (no PLAN range read for this task pins this field's
+  // exact CLI-argv mapping): confirmed-failure carries its own named diagnostic;
+  // an uncrossed ("none") possibly-delivered outcome is the ambiguous-before-
+  // commit case; a cleanly-crossed possibly-delivered outcome carries no
+  // diagnostic (NONE).
+  let deliveryDetailCode;
+  if (outcomeJson === 'confirmed-failed-before-commit') {
+    deliveryDetailCode = 'CONFIRMED_PRECOMMIT_FAILURE';
+  } else if (outcomeJson === 'possibly-delivered' && commitPointJson === null) {
+    deliveryDetailCode = 'AMBIGUOUS_BEFORE_COMMIT';
+  } else {
+    deliveryDetailCode = 'NONE';
+  }
+
+  const now = nowIso();
+  const deliveryObj = {
+    schema: 'coordination/delivery/v1',
+    request_id: reqObj.request_id,
+    attempt_id: flags.attempt,
+    lease_epoch: epoch,
+    driver: flags.driver,
+    claim_digest: null,
+    commit_point: commitPointJson,
+    commit_point_at: commitPointJson === null ? null : now,
+    created_at: now,
+    delivered,
+    outcome: outcomeJson,
+    detail_code: deliveryDetailCode,
+  };
+  assertClosedShape(deliveryObj, DELIVERY_V1_FIELDS);
+  const deliveryPath = deliveryPathFor(txnDir, flags.attempt);
+  publishNoClobber(deliveryPath, Buffer.from(canonicalJSONStringify(deliveryObj), 'utf8'), { allowIdenticalIdempotent: true });
+  return { request_id: reqObj.request_id, artifact_ref: deliveryPath };
+}
+COMMANDS['record-delivery'] = cmdRecordDelivery;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `worker-stop` (PLAN.md ~L772, record #12 `stop/v2` field table ~L506-519) --
+// mint a new stop_id and publish exact stop correlation.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function cmdWorkerStop(flags) {
+  requireFlags(flags, ['coordination-root', 'role', 'worker-session', 'kind']);
+  const coordRoot = resolveAbsolute(flags['coordination-root']);
+  const kind = flags.kind;
+  if (kind !== 'transaction' && kind !== 'session-shutdown') {
+    throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', 'invalid --kind: ' + kind);
+  }
+  if (kind === 'transaction' && !('request' in flags)) {
+    throw new CliError('USAGE_ERROR', 'MISSING_ARGUMENT', '--request is required for --kind transaction');
+  }
+  if (kind === 'session-shutdown' && ('request' in flags)) {
+    throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', '--request is not valid for --kind session-shutdown');
+  }
+  assertSafeSegment(flags.role, '--role');
+  assertSafeSegment(flags['worker-session'], '--worker-session');
+
+  const now = nowIso();
+  const stopId = genId128();
+  let base;
+  let requestId = null;
+  let attemptId = null;
+  let leaseEpoch = null;
+
+  if (kind === 'transaction') {
+    const requestPath = resolveAbsolute(flags.request);
+    const txnDir = path.dirname(requestPath);
+    const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
+    const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+    base = planRootFromArtifact(coordRoot, requestPath);
+    requestId = reqObj.request_id;
+    attemptId = auth.attemptId;
+    leaseEpoch = auth.leaseEpoch;
+  } else {
+    // session-shutdown carries no request reference at all (Frozen CLI ABI:
+    // "--request <path> only for transaction") -- there is no argv-supplied plan
+    // identity to derive a plan-root from, and the ABI forbids inventing a new
+    // flag ("no WP2 naming latitude"). A session shutdown is not scoped to one
+    // plan/wave, so its stop tree lives directly under coordination_root instead
+    // of a specific plan-root -- a considered inference, not a literal PLAN quote.
+    base = coordRoot;
+  }
+
+  const stopObj = {
+    schema: 'coordination/stop/v2',
+    stop_id: stopId,
+    kind,
+    target_role: flags.role,
+    worker_session_id: flags['worker-session'],
+    request_id: requestId,
+    attempt_id: attemptId,
+    lease_epoch: leaseEpoch,
+    expiry: isoPlusSeconds(now, 300),
+    requested_at: now,
+  };
+  assertClosedShape(stopObj, STOP_V2_FIELDS);
+  assertStopCorrelationTriple(stopObj);
+  const stopPath = stopPathFor(base, flags.role, flags['worker-session'], stopId);
+  publishNoClobber(stopPath, Buffer.from(canonicalJSONStringify(stopObj), 'utf8'));
+  return { request_id: requestId, artifact_ref: stopPath };
+}
+COMMANDS['worker-stop'] = cmdWorkerStop;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `worker-stop-ack` (PLAN.md ~L773, record #12's ack sibling ~L519) -- publish
+// one per-stop immutable acknowledgement.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const STOP_ACK_DISPOSITION_ENUM = ['exact-transaction', 'stale', 'unrelated', 'session-shutdown'];
+
+function cmdWorkerStopAck(flags) {
+  requireFlags(flags, ['coordination-root', 'stop', 'disposition']);
+  if (!STOP_ACK_DISPOSITION_ENUM.includes(flags.disposition)) {
+    throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', 'invalid --disposition: ' + flags.disposition);
+  }
+  const stopPath = resolveAbsolute(flags.stop);
+  const stopObj = validateStopV2(stopPath);
+
+  const ackObj = {
+    schema: 'coordination/stop-ack/v1',
+    stop_id: stopObj.stop_id,
+    worker_session_id: stopObj.worker_session_id,
+    disposition: flags.disposition,
+    acked_at: nowIso(),
+  };
+  assertClosedShape(ackObj, STOP_ACK_V1_FIELDS);
+  const ackPath = stopAckPathFor(stopPath, stopObj.stop_id);
+  publishNoClobber(ackPath, Buffer.from(canonicalJSONStringify(ackObj), 'utf8'));
+  return { request_id: stopObj.request_id, artifact_ref: ackPath };
+}
+COMMANDS['worker-stop-ack'] = cmdWorkerStopAck;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `publish-result` (PLAN.md ~L767, ~L1129-1136) -- the two native-target XOR
+// forms (--content / --blocked-reason); core derives all authority fields from
+// request+claim. (Real Codex-bridge result publication is WP3.)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const NATIVE_CONTENT_MAX_B64URL_CHARS = 16384;
+const NATIVE_CONTENT_MAX_DECODED_BYTES = 12288;
+const BLOCKED_REASON_ENUM = [
+  'CONTENT_TOO_LARGE', 'INSUFFICIENT_CONTEXT', 'UNSUPPORTED_REQUEST', 'CONSULTATION_FAILED', 'POLICY_DENIED',
+];
+
+function cmdPublishResult(flags) {
+  requireFlags(flags, ['coordination-root', 'request', 'claim']);
+  const hasContent = 'content' in flags;
+  const hasBlockedReason = 'blocked-reason' in flags;
+  if (hasContent === hasBlockedReason) {
+    throw new CliError(
+      'USAGE_ERROR',
+      hasContent ? 'INVALID_ARGUMENT' : 'MISSING_ARGUMENT',
+      'exactly one of --content/--blocked-reason is required',
+    );
+  }
+
+  const coordRoot = resolveAbsolute(flags['coordination-root']);
+  const requestPath = resolveAbsolute(flags.request);
+  const txnDir = path.dirname(requestPath);
+  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
+
+  const claimPath = resolveAbsolute(flags.claim);
+  let claimObj;
+  try {
+    claimObj = JSON.parse(fs.readFileSync(claimPath, 'utf8'));
+  } catch (err) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'claim file does not resolve');
+  }
+  const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+  if (claimObj.attempt_id !== auth.attemptId || claimObj.lease_epoch !== auth.leaseEpoch) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'claim is not the current authoritative attempt/epoch');
+  }
+
+  let status;
+  let content;
+  let reason;
+  if (hasContent) {
+    if (flags.content.length > NATIVE_CONTENT_MAX_B64URL_CHARS) {
+      throw new CliError('INVALID', 'INVALID_ARGUMENT', '--content exceeds the 16384-character native base64url ceiling');
+    }
+    const decoded = decodeBase64Url(flags.content);
+    if (decoded.length > NATIVE_CONTENT_MAX_DECODED_BYTES) {
+      throw new CliError('INVALID', 'INVALID_ARGUMENT', '--content decoded payload exceeds the 12288-byte native ceiling');
+    }
+    status = 'ANSWERED';
+    content = decoded.toString('utf8');
+    reason = null;
+  } else {
+    if (!BLOCKED_REASON_ENUM.includes(flags['blocked-reason'])) {
+      throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', 'invalid --blocked-reason: ' + flags['blocked-reason']);
+    }
+    status = 'BLOCKED';
+    reason = flags['blocked-reason'];
+  }
+
+  const now = nowIso();
+  const resultObj = {
+    schema: 'coordination/result/v2',
+    in_reply_to: reqObj.request_id,
+    request_digest: sha256File(requestPath),
+    plan_digest: reqObj.plan_digest,
+    repo_id: reqObj.repo_id,
+    wave_slug: reqObj.wave_slug,
+    protocol_profile: reqObj.protocol_profile,
+    max_depth: reqObj.max_depth,
+    routing_policy_version: reqObj.routing_policy_version,
+    routing_policy_digest: reqObj.routing_policy_digest,
+    root_request_id: reqObj.root_request_id,
+    parent_request_id: reqObj.parent_request_id,
+    depth: reqObj.depth,
+    attempt_id: auth.attemptId,
+    lease_epoch: auth.leaseEpoch,
+    driver: claimObj.driver,
+    claimant_instance_id: claimObj.claimant_instance_id,
+    worker_session_id: claimObj.worker_session_id || null,
+    claim_digest: sha256File(claimPath),
+    target_role_profile_version: reqObj.target_role_profile_version,
+    target_role_profile_digest: reqObj.target_role_profile_digest,
+    from_role: reqObj.target_role,
+    to_role: reqObj.source_role,
+    result_kind: status === 'BLOCKED' ? 'BLOCKED' : reqObj.expected_result_kind,
+    status,
+    reason,
+    subject_repo_id: reqObj.subject_repo_id,
+    subject_worktree_id: reqObj.subject_worktree_id,
+    subject_head: reqObj.subject_head,
+    subject_scope_digest: reqObj.subject_scope_digest,
+    consultation_dependencies: [],
+    producer_worktree_id: computeWorktreeId(coordRoot),
+    producer_head: computeSubjectHead(coordRoot),
+    created_at: now,
+  };
+  if (status === 'ANSWERED') resultObj.content = content;
+
+  // Fail closed on any internal inconsistency rather than publishing a record
+  // `validate --kind result-v2` would later reject (mirrors cmdPublishRequest's
+  // own "fail closed" convention).
+  assertClosedShape(resultObj, RESULT_V2_FIELDS);
+  assertResultContentXor(resultObj);
+
+  const resultPath = resultPathFor(txnDir, auth.attemptId);
+  return withLock(txnDir, () => {
+    publishNoClobber(resultPath, Buffer.from(canonicalJSONStringify(resultObj), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
+    return { request_id: reqObj.request_id, artifact_ref: resultPath };
+  });
+}
+COMMANDS['publish-result'] = cmdPublishResult;
 
 if (require.main === module) {
   main();

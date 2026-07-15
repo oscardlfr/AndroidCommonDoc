@@ -156,6 +156,28 @@ _iso_plus_seconds() {
   date -j -f '%Y-%m-%dT%H:%M:%SZ' "${base}" -v"+${n}S" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null
 }
 
+# Frozen-base-relative ISO timestamp: the CLI's own `--fixed-clock` default base
+# (`2025-01-01T00:00:00.000Z`, RUNTIME_CONSULTATION_FAKE_CLOCK not overridden by
+# this file) plus N milliseconds, computed entirely via node -- never shell
+# `date`/`_iso_plus_seconds`. `--fixed-clock` is now genuinely wired (WP2
+# fake-clock/fixed-ids seam): `nowIso()` freezes every emitted `created_at` to
+# that exact base under `--fixed-clock`, so a `consult/v2` fixture's `expiry`
+# must be computed relative to THAT frozen base (not real wall-clock time) to
+# satisfy `CONSULT_V2_FIELDS.expiry.check`'s `120 <= (expiry-created_at) <=
+# 3600` window -- otherwise a real-now-relative expiry sits over a year outside
+# that window and trips SCHEMA_INVALID. Node (not shell `date`) also sidesteps
+# the documented BSD/macOS `date -j` fallback bug in `_iso_plus_seconds`
+# (`runtime-consultation-cli.test.js`'s own header note: `-v"+${n}S"` placed
+# after the positional date string is silently mis-parsed on this machine's
+# `/bin/date`). Used only by fixtures that keep `--fixed-clock` active for
+# their publish-request call -- fixtures that drop `--fixed-clock` (Finding D3:
+# a second same-plan-root `--fixed-ids` publish-request would otherwise mint
+# the identical deterministic request_id and lose the no-clobber race) keep
+# their original real-time-relative `_iso_plus_seconds` computation instead.
+_frozen_iso_plus_ms() {
+  node -e 'process.stdout.write(new Date(Date.parse("2025-01-01T00:00:00.000Z") + Number(process.argv[1])).toISOString())' "$1"
+}
+
 # base64url-encodes stdin. Node's own Buffer "base64url" encoding is used deliberately --
 # the CLI ABI's `--intent`/`--content` flags are documented as base64url, and the real
 # implementation will use the same Node primitive, so this stays byte-consistent with it.
@@ -870,9 +892,11 @@ _run_has_valid_v2_inbox_ref() {
 # ══════════════════════════════════════════════════════════════════════════
 
 @test "RCP-publish-1 PASS: publish-request creates a valid root request (root_request_id==request_id, parent null, depth 0)" {
-  local now expiry intent intent_b64
-  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  expiry="$(_iso_plus_seconds "$now" 1800)"
+  local expiry intent intent_b64
+  # Frozen-base-relative (not real-now-relative): this call keeps --fixed-clock,
+  # which genuinely freezes created_at to the CLI's default frozen base -- see
+  # _frozen_iso_plus_ms's own header note.
+  expiry="$(_frozen_iso_plus_ms 1800000)"
   intent="$(printf '{"target_role":"arch-testing","question":"RCP-publish-1 fixture question","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry")"
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
 
@@ -894,9 +918,11 @@ _run_has_valid_v2_inbox_ref() {
 }
 
 @test "RCP-publish-2 PASS: a second publish-request with parent_request_id creates a valid nested request (depth==parent.depth+1, same root)" {
-  local now expiry intent intent_b64
-  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  expiry="$(_iso_plus_seconds "$now" 1800)"
+  local expiry intent intent_b64
+  # Frozen-base-relative (not real-now-relative): this ROOT call keeps
+  # --fixed-clock, which genuinely freezes created_at to the CLI's default
+  # frozen base -- see _frozen_iso_plus_ms's own header note.
+  expiry="$(_frozen_iso_plus_ms 1800000)"
   intent="$(printf '{"target_role":"arch-testing","question":"RCP-publish-2 root fixture question","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry")"
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
 
@@ -906,16 +932,27 @@ _run_has_valid_v2_inbox_ref() {
   [ "$status" -eq 0 ]
   local root_request_id; root_request_id="$(node -e 'console.log(JSON.parse(process.argv[1]).request_id)' "$output")"
 
-  local child_expiry child_intent child_intent_b64
+  local now child_expiry child_intent child_intent_b64
+  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   child_expiry="$(_iso_plus_seconds "$now" 1800)"
   # Same target_role as the root (arch-testing) deliberately -- this test isolates
   # depth/root linkage, not role-policy (see RCP-role-policy-* for that guard).
   child_intent="$(printf '{"target_role":"arch-testing","question":"RCP-publish-2 nested fixture question","expected_result_kind":"TEST_RESULT","expiry":"%s","parent_request_id":"%s"}' "$child_expiry" "$root_request_id")"
   child_intent_b64="$(printf '%s' "$child_intent" | _base64url_encode)"
 
+  # Deliberately WITHOUT --fixed-ids/--fixed-clock (Finding D3): this child call
+  # shares the root call's exact plan-root (same COORD_ROOT/PLAN_FILE/repo/wave),
+  # and the deterministic id counter resets to 0 every fresh process -- a second
+  # --fixed-ids publish-request here would mint the IDENTICAL request_id the
+  # root call already consumed and lose the no-clobber race against its own
+  # transactions/<id>/request.json (AUTHORITY_INVALID, not SUCCESS). This call
+  # therefore gets a REAL random request_id and a REAL wall-clock created_at (so
+  # its own real-time-relative child_expiry above, unchanged, stays valid) --
+  # this test's actual subject (root/parent/depth linkage) needs no determinism
+  # on the child at all.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
-      --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$child_intent_b64" --fixed-ids --fixed-clock
+      --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$child_intent_b64"
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
 
@@ -949,9 +986,12 @@ _run_has_valid_v2_inbox_ref() {
 }
 
 @test "RCP-publish-4 PASS: two textually-different valid subject-bundle manifests at the same git HEAD produce different subject_scope_digest values (real-content digest, not a HEAD-only placeholder)" {
-  local now expiry
+  local frozen_expiry now real_expiry
+  # Frozen-base-relative for the FIRST (--fixed-clock) call; real-time-relative
+  # for the SECOND (Finding D3 -- see below).
+  frozen_expiry="$(_frozen_iso_plus_ms 1800000)"
   now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  expiry="$(_iso_plus_seconds "$now" 1800)"
+  real_expiry="$(_iso_plus_seconds "$now" 1800)"
 
   local bundle_a bundle_b
   bundle_a="$PROJ/.planning/coordination-subject-bundle-a.json"
@@ -960,7 +1000,7 @@ _run_has_valid_v2_inbox_ref() {
   _write_subject_bundle "$bundle_b" '{"entries":[{"path":"fixture-b.txt"}]}'
 
   local intent_a intent_a_b64
-  intent_a="$(printf '{"target_role":"arch-testing","question":"RCP-publish-4 fixture question A","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry")"
+  intent_a="$(printf '{"target_role":"arch-testing","question":"RCP-publish-4 fixture question A","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$frozen_expiry")"
   intent_a_b64="$(printf '%s' "$intent_a" | _base64url_encode)"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
@@ -970,11 +1010,23 @@ _run_has_valid_v2_inbox_ref() {
   local output_a="$output"
 
   local intent_b intent_b_b64
-  intent_b="$(printf '{"target_role":"arch-testing","question":"RCP-publish-4 fixture question B","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry")"
+  intent_b="$(printf '{"target_role":"arch-testing","question":"RCP-publish-4 fixture question B","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$real_expiry")"
   intent_b_b64="$(printf '%s' "$intent_b" | _base64url_encode)"
+  # Deliberately WITHOUT --fixed-ids/--fixed-clock (Finding D3): this call
+  # shares bundle_a's exact plan-root (same COORD_ROOT/PLAN_FILE/repo/wave --
+  # subject-bundle content never affects plan-root, only subject_scope_digest),
+  # and the deterministic id counter resets to 0 every fresh process -- a
+  # second --fixed-ids publish-request here would mint the IDENTICAL
+  # request_id the FIRST call already consumed and lose the no-clobber race
+  # against its own transactions/<id>/request.json (AUTHORITY_INVALID, not
+  # SUCCESS). A REAL random request_id plus a REAL wall-clock created_at
+  # (pairing with the real-time-relative real_expiry above) sidesteps the
+  # collision entirely while still proving this test's actual subject: two
+  # different subject-bundle manifests produce two different
+  # subject_scope_digest values.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
-      --subject-bundle "$bundle_b" --intent "$intent_b_b64" --fixed-ids --fixed-clock
+      --subject-bundle "$bundle_b" --intent "$intent_b_b64"
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
   local output_b="$output"
@@ -988,6 +1040,67 @@ _run_has_valid_v2_inbox_ref() {
     if (reqA.subject_head !== reqB.subject_head) { console.error("fixture bug: HEAD moved between publishes -- not an isolated-HEAD comparison"); process.exit(1); }
     if (reqA.subject_scope_digest === reqB.subject_scope_digest) { console.error("subject_scope_digest identical for two textually-different manifests at the same HEAD"); process.exit(1); }
   ' "$output_a" "$output_b"
+}
+
+@test "RCP-publish-5 FAIL (Gap#2): publish-request rejects a fabricated content_ref (blob!=digest, no real backing blob file) at publish time, not only via a later validate call" {
+  local expiry intent intent_b64
+  # Frozen-base-relative (not real-now-relative): keeps --fixed-clock, which
+  # genuinely freezes created_at to the CLI's default frozen base -- see
+  # _frozen_iso_plus_ms's own header note.
+  expiry="$(_frozen_iso_plus_ms 1800000)"
+  local fake_blob fake_digest
+  fake_blob="$(printf 'a%.0s' {1..64})"
+  fake_digest="$(printf 'b%.0s' {1..64})"
+  intent="$(printf '{"target_role":"arch-testing","question":"RCP-publish-5 fixture question","expected_result_kind":"TEST_RESULT","expiry":"%s","content_ref":{"blob":"%s","digest":"%s","size":11}}' "$expiry" "$fake_blob" "$fake_digest")"
+  intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
+
+  run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+      --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent_b64" --fixed-ids --fixed-clock
+
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+  # Fail-closed: no transaction was ever materialized for this rejected publish
+  # (mirrors this file's own established "no partial write on rejection" convention).
+  local txns_dir; txns_dir="$(_plan_root)/transactions"
+  [ ! -d "$txns_dir" ]
+}
+
+@test "RCP-publish-6 PASS (Gap#2 contrast): publish-request accepts a REAL content_ref produced by an actual publish-blob call first" {
+  local blob_entry_rel="rcp-publish-6-fixture-entry.txt"
+  local blob_content="RCP-publish-6 real blob content, produced via the actual publish-blob CLI verb"
+  printf '%s' "$blob_content" > "$PROJ/$blob_entry_rel"
+  local blob_size; blob_size="$(wc -c < "$PROJ/$blob_entry_rel" | tr -d ' ')"
+  local blob_digest; blob_digest="$(_sha256_file "$PROJ/$blob_entry_rel")"
+
+  local blob_bundle_file; blob_bundle_file="$PROJ/.planning/coordination-subject-bundle-rcp-publish-6.json"
+  _write_subject_bundle "$blob_bundle_file" "$(printf '{"entries":[{"path":"%s","size":%s,"digest":"%s"}]}' "$blob_entry_rel" "$blob_size" "$blob_digest")"
+
+  run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    node "$IMPL" publish-blob --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+      --subject-bundle "$blob_bundle_file" --entry "$blob_entry_rel"
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+
+  local expiry intent intent_b64
+  expiry="$(_frozen_iso_plus_ms 1800000)"
+  intent="$(printf '{"target_role":"arch-testing","question":"RCP-publish-6 fixture question","expected_result_kind":"TEST_RESULT","expiry":"%s","content_ref":{"blob":"%s","digest":"%s","size":%s}}' "$expiry" "$blob_digest" "$blob_digest" "$blob_size")"
+  intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
+
+  run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+      --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent_b64" --fixed-ids --fixed-clock
+
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+  node -e '
+    const fs = require("fs");
+    const data = JSON.parse(process.argv[1]);
+    const expectedDigest = process.argv[2];
+    const req = JSON.parse(fs.readFileSync(data.artifact_ref, "utf8"));
+    if (!req.content_ref) { console.error("published request is missing content_ref"); process.exit(1); }
+    if (req.content_ref.blob !== expectedDigest) { console.error("content_ref.blob mismatch"); process.exit(1); }
+  ' "$output" "$blob_digest"
 }
 
 # ══════════════════════════════════════════════════════════════════════════

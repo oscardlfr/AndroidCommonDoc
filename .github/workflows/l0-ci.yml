@@ -143,6 +143,10 @@ jobs:
         working-directory: mcp-server
         run: npm run lint
 
+  runtime-consultation-windows:
+    name: Runtime Consultation Windows
+    uses: ./.github/workflows/runtime-consultation-windows.yml
+
   # ── Wave 3: Cross-cutting validation ───────────────────────────────────
 
   skill-registry:
@@ -188,6 +192,7 @@ jobs:
       - shell-tests
       - detekt-rules
       - mcp-server
+      - runtime-consultation-windows
       - skill-registry
       - agent-template-lint
     runs-on: ubuntu-latest
@@ -202,6 +207,7 @@ jobs:
             "${{ needs.shell-tests.result }}"
             "${{ needs.detekt-rules.result }}"
             "${{ needs.mcp-server.result }}"
+            "${{ needs.runtime-consultation-windows.result }}"
             "${{ needs.skill-registry.result }}"
             "${{ needs.agent-template-lint.result }}"
           )

@@ -453,8 +453,8 @@ _assert_cli_result() {
   local result_f; result_f="$(_result_path "$rid" "$aid")"
   _write_result "$result_f" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"BLOCKED","result_kind":"BLOCKED","reason":"CONSULTATION_FAILED","content":"__OMIT__"}' "$rid" "$req_digest" "$rid" "$aid")"
   _run_cli accept-result --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids
-  [ "$status" -eq 3 ]
-  _assert_cli_result "INVALID" ""
+  [ "$status" -eq 6 ]
+  _assert_cli_result "BLOCKED" "RESULT_BLOCKED"
 }
 
 @test "STATE-10 PASS: PUBLISHED -> SUPERSEDED via takeover once active-lease-expired eligibility holds" {
@@ -955,6 +955,46 @@ _write_takeover() {
   [ "$rc1" -ne "$rc2" ]
 }
 
+@test "F3-noconcurrent-accept-01: two truly concurrent accept-result invocations for the same current candidate -- exactly one succeeds, the loser observes AUTHORITY_INVALID (not TRANSACTION_CANCELLED)" {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local req_digest; req_digest="$(_sha256_file "$req")"
+  local result_f; result_f="$(_result_path "$rid" "$aid")"
+  _write_result "$result_f" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED"}' "$rid" "$req_digest" "$rid" "$aid")"
+  local out1 out2; out1="$(mktemp)"; out2="$(mktemp)"
+  ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+      node "$IMPL" accept-result --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids >"$out1" 2>&1; echo $? >> "$out1" ) &
+  local pid1=$!
+  ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+      node "$IMPL" accept-result --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids >"$out2" 2>&1; echo $? >> "$out2" ) &
+  local pid2=$!
+  wait "$pid1" || true
+  wait "$pid2" || true
+  local rc1 rc2; rc1="$(tail -n1 "$out1")"; rc2="$(tail -n1 "$out2")"
+  local body1 body2; body1="$(head -n1 "$out1")"; body2="$(head -n1 "$out2")"
+  rm -f "$out1" "$out2"
+  # Same exact-sum/differ idiom as DX-noconcurrent-01 above (exactly one winner
+  # rc0, one loser rc3), now applied to the withLock-serialized accept-result path
+  # instead of claim's own publishNoClobber-EEXIST race: the loser's own
+  # `fs.existsSync(acceptedResultPathFor(txnDir))` check (inside withLock, run
+  # strictly after the winner released the lock) deterministically observes the
+  # winner's already-published accepted-result.json and rejects AUTHORITY_INVALID
+  # -- never TRANSACTION_CANCELLED (no cancel.json exists in this fixture at all).
+  [ "$((rc1 + rc2))" -eq 3 ]
+  [ "$rc1" -ne "$rc2" ]
+  local loser_body
+  if [ "$rc1" -eq 3 ]; then loser_body="$body1"; else loser_body="$body2"; fi
+  node -e '
+    let data;
+    try { data = JSON.parse(process.argv[1]); } catch (err) { console.error("loser stdout is not valid JSON: " + err.message); process.exit(1); }
+    if (data.status !== "INVALID" || data.detail_code !== "AUTHORITY_INVALID") {
+      console.error("expected loser INVALID/AUTHORITY_INVALID, got " + data.status + "/" + data.detail_code);
+      process.exit(1);
+    }
+  ' "$loser_body"
+}
+
 @test "RESULT-TO-01: a valid current candidate result that wins first blocks a subsequent takeover" {
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
@@ -1260,8 +1300,20 @@ _write_conflict() {
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
   _run_cli accept-result --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids
-  [ "$status" -eq 3 ]
-  _assert_cli_result "INVALID" "TRANSACTION_CANCELLED"
+  [ "$status" -eq 6 ]
+  _assert_cli_result "CANCELLED" "TRANSACTION_CANCELLED"
+}
+
+@test "CANCEL-VS-AWAIT-01 FAIL: await-result observes CANCELLED once cancel.json has already committed (the await-result half of the cancel/terminal contract -- mirrors CANCEL-VS-ACCEPT-01's accept-result half; this is the regression case that would have caught fix D, await-result's cancelled-txn detail_code)" {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  _run_cli cancel --coordination-root "$COORD_ROOT" --request "$req" --reason explicit --fixed-ids
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+  _run_cli await-result --coordination-root "$COORD_ROOT" --request "$req" --timeout 1
+  [ "$status" -eq 6 ]
+  _assert_cli_result "CANCELLED" "TRANSACTION_CANCELLED"
 }
 
 @test "RESULT-SUBJECT-MISMATCH-01 FAIL: a result/v2 candidate whose subject_head diverges from its request is rejected (a result for subject A is never reused for subject B)" {
