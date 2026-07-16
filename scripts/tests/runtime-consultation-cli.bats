@@ -313,7 +313,8 @@ _write_request() {
     for (const k of Object.keys(merged)) {
       if (merged[k] === "__OMIT__") delete merged[k];
     }
-    fs.writeFileSync(outPath, JSON.stringify(merged));
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+    fs.chmodSync(outPath, 0o600);
   ' "$overrides" "$out"
 }
 
@@ -369,7 +370,8 @@ _write_result() {
     for (const k of Object.keys(merged)) {
       if (merged[k] === "__OMIT__") delete merged[k];
     }
-    fs.writeFileSync(outPath, JSON.stringify(merged));
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+    fs.chmodSync(outPath, 0o600);
   ' "$overrides" "$out"
 }
 
@@ -388,7 +390,8 @@ _write_subject_bundle() {
     for (const k of Object.keys(merged)) {
       if (merged[k] === "__OMIT__") delete merged[k];
     }
-    fs.writeFileSync(outPath, JSON.stringify(merged));
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+    fs.chmodSync(outPath, 0o600);
   ' "$overrides" "$out"
 }
 
@@ -422,7 +425,8 @@ _write_stop() {
     for (const k of Object.keys(merged)) {
       if (merged[k] === "__OMIT__") delete merged[k];
     }
-    fs.writeFileSync(outPath, JSON.stringify(merged));
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+    fs.chmodSync(outPath, 0o600);
   ' "$overrides" "$out"
 }
 

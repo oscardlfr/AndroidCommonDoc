@@ -373,7 +373,8 @@ function writeRawRequest(destPath, ctx, overrides) {
     if (merged[k] === OMIT) delete merged[k];
   }
   fs.mkdirSync(path.dirname(destPath), { recursive: true });
-  fs.writeFileSync(destPath, JSON.stringify(merged));
+  fs.writeFileSync(destPath, JSON.stringify(merged), { mode: 0o600 });
+  fs.chmodSync(destPath, 0o600);
   return merged;
 }
 
@@ -422,7 +423,8 @@ function writeRawResult(destPath, ctx, overrides) {
     if (merged[k] === OMIT) delete merged[k];
   }
   fs.mkdirSync(path.dirname(destPath), { recursive: true });
-  fs.writeFileSync(destPath, JSON.stringify(merged));
+  fs.writeFileSync(destPath, JSON.stringify(merged), { mode: 0o600 });
+  fs.chmodSync(destPath, 0o600);
   return merged;
 }
 
@@ -1083,6 +1085,306 @@ test('Gap#1: RUNTIME_CONSULTATION_FORCE_PLATFORM is honored ONLY under the test 
     const data = assertCliResult(result, { command: 'cancel', status: 'INVALID', detail_code: 'CORRELATION_INVALID' });
     assert.notStrictEqual(data.detail_code, 'INVALID_ARGUMENT',
       'RUNTIME_CONSULTATION_FORCE_PLATFORM must be inert without the test capability (isTestCapability() gate), same as --fixed-ids/--fixed-clock');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── DUR-A: writeAllSync fail-closed on a stuck zero-progress write ───────────────
+// A blocking write to a regular file advances by >=1 byte or throws; a writeSync()
+// returning 0 with bytes still pending makes no progress. The pre-fix loop
+// `while (offset < len) offset += fs.writeSync(...)` would spin FOREVER on such a
+// 0-return -- a durability-path liveness hazard, since publishNoClobber and
+// publishReplace both stream their canonical bytes through writeAllSync. This unit
+// test binds the exported helper directly and forces the pathological 0-return via a
+// scoped, call-capped fs.writeSync stub (the cap guarantees the test process can
+// never actually hang whether or not the guard exists), then requires the guard's
+// own no-progress error to surface. Pre-fix, the stub's cap sentinel (a DISTINCT
+// message) escapes instead, so the /made no progress/ match fails RED.
+test('DUR-A: writeAllSync fails closed on a stuck zero-progress writeSync instead of looping forever', () => {
+  const rc = require(IMPL);
+  assert.strictEqual(typeof rc.writeAllSync, 'function',
+    'writeAllSync must be exported so its fail-closed loop guard can be exercised directly');
+  const realWriteSync = fs.writeSync;
+  let calls = 0;
+  fs.writeSync = function stuckZeroProgressWrite() {
+    calls += 1;
+    if (calls > 10000) {
+      // Safety net: without the guard the loop is unbounded. Cap it so the process
+      // can never truly hang, and throw a DISTINCT sentinel whose message does NOT
+      // contain "made no progress" -- so the assertion below fails RED pre-fix.
+      throw new Error('writeAllSync-unbounded-loop-sentinel');
+    }
+    return 0; // a write that persists nothing: offset must not advance
+  };
+  try {
+    assert.throws(
+      () => rc.writeAllSync(1 /* fd unused: the stub never touches it */, Buffer.from('durability-payload')),
+      /made no progress/,
+      'writeAllSync must fail closed with a no-progress error on writeSync()===0, never spin',
+    );
+  } finally {
+    fs.writeSync = realWriteSync;
+  }
+});
+
+// ── LOCK-08 (DUR-J item 2): unforgeable WeakMap-private transition-lock token ────
+// A transition-lock token is a frozen empty object; ALL its authority lives in a module-
+// private WeakMap. LOCK-08a freezes the READ side (plain/clone/mutated/wrong-txn/traversal/
+// stale tokens all rejected for a mutable immutablePath:false read); LOCK-08b freezes the
+// RELEASE side (a forged / double / deleted-recreated release never mutates the filesystem).
+test('LOCK-08a: a mutable read requires a LIVE authentic same-txn transition-lock token -- plain / clone / wrong-txn / traversal / stale tokens are all rejected', () => {
+  const rc = require(IMPL);
+  for (const name of ['classifyDurableRead', 'acquireLock', 'releaseLock']) {
+    assert.strictEqual(typeof rc[name], 'function', name + ' must be exported');
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-tok-a-'));
+  try {
+    const txnA = path.join(dir, 'txnA');
+    const txnB = path.join(dir, 'txnB');
+    fs.mkdirSync(txnA);
+    fs.mkdirSync(txnB);
+    const leaseInA = path.join(txnA, 'active-lease.json');
+    const readWith = (tok, p) => rc.classifyDurableRead(p || leaseInA, { immutablePath: false, lockToken: tok });
+    const tokenA = rc.acquireLock(txnA);
+    const tokenB = rc.acquireLock(txnB);
+    try {
+      // plain / faked-field / shallow-clone tokens are not in the registry -> rejected.
+      assert.throws(() => readWith({}), /authentic transition-lock token/, 'plain object rejected');
+      assert.throws(() => readWith({ active: true, canonicalTxnDir: txnA, canonicalLockDir: path.join(txnA, '.lock') }), /authentic transition-lock token/, 'faked-field object rejected');
+      assert.throws(() => readWith(Object.assign({}, tokenA)), /authentic transition-lock token/, 'shallow clone rejected');
+      assert.ok(Object.isFrozen(tokenA), 'token is frozen -- no metadata to mutate');
+      // wrong-txn: tokenB does not authorize a txnA path.
+      assert.throws(() => readWith(tokenB), /authentic transition-lock token/, 'wrong-txn token rejected');
+      // traversal / sibling-prefix: tokenA does not authorize a path outside txnA.
+      assert.throws(() => readWith(tokenA, path.join(txnA, '..', 'escape.json')), /authentic transition-lock token/, '.. traversal rejected');
+      assert.throws(() => readWith(tokenA, path.join(txnB, 'x.json')), /authentic transition-lock token/, 'sibling-dir path rejected');
+      // the authentic same-txn token DOES authorize (absent -> ABSENT, no throw).
+      assert.strictEqual(readWith(tokenA).state, 'ABSENT', 'authentic same-txn token authorizes the mutable read');
+    } finally {
+      rc.releaseLock(tokenA);
+      rc.releaseLock(tokenB);
+    }
+    // stale (already-released) token is rejected.
+    assert.throws(() => readWith(tokenA), /authentic transition-lock token/, 'stale/released token rejected');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── AUDIT (DUR-J item 6): no by-path hash of a coordination record ──────────────
+// Freeze the exit criterion "cero raw authority hashes": sha256File may hash ONLY the
+// non-authoritative caller inputs (planPath -- PLAN.md / subject). Every coordination
+// record (request/claim/result/...) is hashed from the SAME accredited fd-bound read
+// (readDurableRecord / publishNoClobber bytes), never re-hashed by path.
+test('AUDIT-sha256File: sha256File is called ONLY on planPath (non-authoritative input); zero coordination-record by-path hashes remain', () => {
+  const src = fs.readFileSync(IMPL, 'utf8');
+  const offenders = src.split('\n')
+    .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+    .filter((x) => /sha256File\(/.test(x.line) && !/^function sha256File/.test(x.line))
+    .filter((x) => !/sha256File\(planPath\)/.test(x.line));
+  assert.deepStrictEqual(offenders, [], 'sha256File must be planPath-only; record by-path hashes found: ' + JSON.stringify(offenders));
+});
+
+// Section 0.4 (correction pass): AUDIT-sha256File above whitelists only DIRECT textual
+// `sha256File(...)` calls -- it says nothing about a raw `fs.readFileSync`/`readArtifactBytes`
+// by-path re-read of a coordination record feeding some OTHER hash or comparison. This audit
+// closes that gap: every raw-content-read call site in the whole file must be either fd-bound
+// (the argument is literally `fd` -- already open+fstat+identity-verified by its caller), one
+// of the two named non-authoritative caller inputs (`planPath` for PLAN materialize,
+// `manifestPath` for the subject-bundle manifest via readArtifactBytes), or inside the gated
+// fault-injection test seam (`injectReadMutationFault`, which deliberately mutates/rereads a
+// fixture to PROVE the durable reader rejects it -- never a production authority path). A new
+// occurrence outside this exact, hand-reviewed allowlist must fail this test until explicitly
+// added here.
+test('AUDIT-raw-reads: every raw fs.readFileSync/readArtifactBytes call site is fd-bound, a named non-authoritative caller input, or gated fault-injection test-seam code', () => {
+  const src = fs.readFileSync(IMPL, 'utf8');
+  const ALLOWED_EXACT_LINES = new Set([
+    'return sha256Buffer(fs.readFileSync(filePath));', // sha256File primitive (planPath-only, per AUDIT-sha256File)
+    'return fs.readFileSync(artifactPath);', // readArtifactBytes primitive
+    'const bytes = fs.readFileSync(planPath);', // materializePlanRef (PLAN.md itself, non-authoritative)
+    'const bytes = readArtifactBytes(manifestPath);', // subject-bundle manifest (caller input, non-authoritative)
+    "else if (kind === 'rewrite') fs.writeFileSync(artifactPath, fs.readFileSync(artifactPath)); // same inode+size, new ctime/mtime", // injectReadMutationFault test seam
+    'fs.writeFileSync(other, fs.readFileSync(artifactPath), { mode: 0o600 });', // injectReadMutationFault test seam
+  ]);
+  const offenders = src.split('\n')
+    .map((raw, i) => ({ line: raw.trim(), n: i + 1 }))
+    .filter((x) => /fs\.readFileSync\(|readArtifactBytes\(/.test(x.line))
+    .filter((x) => !/^function (sha256File|readArtifactBytes)\b/.test(x.line)) // definition headers, not calls
+    .filter((x) => !/fs\.readFileSync\(fd\)/.test(x.line)) // fd-bound: already open+fstat+identity-verified
+    .filter((x) => !ALLOWED_EXACT_LINES.has(x.line));
+  assert.deepStrictEqual(offenders, [], 'raw by-path read outside the hand-reviewed allowlist: ' + JSON.stringify(offenders));
+});
+
+test('LOCK-08b: releaseLock authenticates BEFORE any fs mutation -- a forged / double / deleted-recreated release never removes the real .lock and is rejected', () => {
+  const rc = require(IMPL);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-tok-b-'));
+  try {
+    const txn = path.join(dir, 'txn');
+    fs.mkdirSync(txn);
+    const lockDir = path.join(txn, '.lock');
+    const token = rc.acquireLock(txn);
+    // a forged release must NOT touch the filesystem -- the real .lock survives.
+    assert.throws(() => rc.releaseLock({}), /non-authentic|already-released/, 'forged plain release rejected');
+    assert.throws(() => rc.releaseLock(Object.assign({}, token)), /non-authentic|already-released/, 'forged clone release rejected');
+    assert.ok(fs.existsSync(lockDir), 'forged releases did NOT remove the real .lock');
+    // genuine release removes it + revokes the token.
+    rc.releaseLock(token);
+    assert.ok(!fs.existsSync(lockDir), 'genuine release removed the .lock');
+    // double release is rejected (token revoked) and creates/removes nothing.
+    assert.throws(() => rc.releaseLock(token), /non-authentic|already-released/, 'double release rejected');
+    // deleted+recreated lock: a token whose .lock inode changed is rejected at release.
+    const token2 = rc.acquireLock(txn);
+    fs.rmdirSync(lockDir);
+    fs.mkdirSync(lockDir); // a DIFFERENT inode occupies the path now.
+    assert.throws(() => rc.releaseLock(token2), /identity changed|vanished/, 'deleted+recreated lock rejected at release');
+    fs.rmdirSync(lockDir);
+    // release-rmdir FAILURE revokes the token even though the .lock is left orphan: a stale
+    // token after a failed release is rejected for a mutable read (residual: revoke BEFORE rmdir).
+    const token3 = rc.acquireLock(txn);
+    fs.writeFileSync(path.join(lockDir, 'squatter'), 'x'); // make rmdir fail (ENOTEMPTY)
+    assert.throws(() => rc.releaseLock(token3), /rmdir failed|DURABILITY_UNPROVEN/i, 'release with a failing rmdir fails closed');
+    assert.ok(fs.existsSync(lockDir), 'the .lock is left as a durable orphan after the failed release');
+    assert.throws(
+      () => rc.classifyDurableRead(path.join(txn, 'active-lease.json'), { immutablePath: false, lockToken: token3 }),
+      /authentic transition-lock token/,
+      'the token is STALE (revoked) after the failed release even though .lock still exists');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── Section 8 (await/enumeration correctness): listResultFiles/findResultWithStatus ──
+
+test('listResultFiles: ENOENT (missing results/ directory) is harmlessly empty; EACCES is a distinct DURABILITY_UNPROVEN STOP, never silently folded into "no results"', () => {
+  const rc = require(IMPL);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-lrf-'));
+  try {
+    const txnDir = path.join(dir, 'txn');
+    fs.mkdirSync(txnDir);
+    // Genuinely missing results/ directory -- harmlessly empty.
+    assert.deepStrictEqual(rc.listResultFiles(txnDir), [], 'ENOENT results/ directory is empty, not an error');
+
+    if (process.platform === 'win32' || typeof process.getuid !== 'function' || process.getuid() === 0) {
+      return; // chmod-based permission denial is not meaningfully testable as non-root/win32
+    }
+    const resultsDir = path.join(txnDir, 'results');
+    fs.mkdirSync(resultsDir);
+    fs.chmodSync(resultsDir, 0o000);
+    try {
+      assert.throws(
+        () => rc.listResultFiles(txnDir),
+        (err) => err && err.detailCode === 'DURABILITY_UNPROVEN',
+        'EACCES enumeration failure STOPs, never returns [] as if genuinely empty',
+      );
+    } finally {
+      fs.chmodSync(resultsDir, 0o700);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('findResultWithStatus: an entry the directory listing reports but that has vanished by the time it is opened is DURABILITY_UNPROVEN, never a harmless "no such status" null', () => {
+  const rc = require(IMPL);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-frws-vanish-'));
+  try {
+    const txnDir = path.join(dir, 'txn');
+    const resultsDir = path.join(txnDir, 'results');
+    fs.mkdirSync(resultsDir, { recursive: true });
+    // Simulate a genuine listed-then-vanished race deterministically (no real second
+    // process needed): wrap fs.opendirSync (Codex NO-GO round 2, blocker 4:
+    // listResultFiles now streams via opendirSync/readSync, not readdirSync) so the
+    // Dir handle findResultWithStatus reads from reports one extra entry that was
+    // never actually written to disk -- exactly what a directory listing would show
+    // if a concurrent actor removed the file between the listing and this function's
+    // own subsequent read.
+    const originalOpendirSync = fs.opendirSync;
+    fs.opendirSync = function patchedOpendirSync(target, options) {
+      const real = originalOpendirSync.call(fs, target, options);
+      if (path.resolve(String(target)) !== path.resolve(resultsDir)) return real;
+      let ghostServed = false;
+      return {
+        readSync() {
+          const entry = real.readSync();
+          if (entry !== null) return entry;
+          if (!ghostServed) {
+            ghostServed = true;
+            return { name: 'ghost-attempt-id.json' };
+          }
+          return null;
+        },
+        closeSync() {
+          return real.closeSync();
+        },
+      };
+    };
+    try {
+      assert.throws(
+        () => rc.findResultWithStatus(txnDir, 'ANSWERED'),
+        (err) => err && err.detailCode === 'DURABILITY_UNPROVEN' && /vanished/.test(String(err.message)),
+        'a listed-then-vanished entry is DURABILITY_UNPROVEN, never a harmless miss',
+      );
+    } finally {
+      fs.opendirSync = originalOpendirSync;
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('reconcileOneNoClobberTemp (Codex NO-GO round 2, blocker 1): a genuine nlink==2 crash-cut pair with NO faults reaches status "unlink-unsafe" EXPLICITLY and the temp is NEVER unlinked -- no portable primitive can prove a path-based unlink targets the fd-accredited inode, so recovery no longer auto-deletes at all', () => {
+  const rc = require(IMPL);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-reconcile-unsafe-pair-'));
+  try {
+    const targetPath = path.join(dir, 'target.json');
+    fs.writeFileSync(targetPath, '{"x":1}', { mode: 0o600 });
+    fs.chmodSync(targetPath, 0o600); // exact 0600 independent of umask, matching the real writer
+    const tempName = '.target.json.999999.deadbeefcafebabe.tmp-owner';
+    const tempPath = path.join(dir, tempName);
+    fs.linkSync(targetPath, tempPath); // simulates the crash-cut: nlink==2, barrier1-durable, unlink never ran
+    const result = rc.reconcileOneNoClobberTemp(dir, tempName, 'target.json');
+    assert.strictEqual(result.status, 'unlink-unsafe', 'a genuine, fully-proven crash-cut pair must reach status "unlink-unsafe" explicitly, never "recovered"');
+    assert.strictEqual(fs.existsSync(tempPath), true, 'the temp must be left completely untouched -- no unlink is ever attempted');
+    assert.strictEqual(fs.lstatSync(targetPath).nlink, 2, 'the target must stay at nlink==2 -- never silently promoted');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('reconcileOneNoClobberTemp (Codex NO-GO round 2, blocker 1): a genuine nlink==1 stray with NO faults reaches status "unlink-unsafe" EXPLICITLY and is NEVER unlinked -- the empirically-reproduced attack (rename the accredited original away, plant a substitute at the same path, the substitute gets deleted instead) is eliminated by never deleting anything, not by trying to out-race it', () => {
+  const rc = require(IMPL);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-reconcile-unsafe-stray-'));
+  try {
+    const tempName = '.target.json.999999.deadbeefcafebabe.tmp-owner';
+    const tempPath = path.join(dir, tempName);
+    fs.writeFileSync(tempPath, '{"x":1}', { mode: 0o600 });
+    fs.chmodSync(tempPath, 0o600); // exact 0600 independent of umask -- a genuine standalone stray, nlink==1
+    const result = rc.reconcileOneNoClobberTemp(dir, tempName, 'target.json');
+    assert.strictEqual(result.status, 'unlink-unsafe', 'a genuine nlink==1 stray must reach status "unlink-unsafe" explicitly, never "stray-removed"');
+    assert.strictEqual(fs.existsSync(tempPath), true, 'the stray must be left completely untouched -- no unlink is ever attempted, matching Codex\'s own repro that a path-based unlink here cannot be proven to target the accredited inode');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('reconcileOneNoClobberTemp (Codex NO-GO round 2, blocker 2): an EACCES opening a temp matching our exact production grammar is a FAILURE (propagates), never folded into the benign "not ours" skip -- only ENOENT/ELOOP are skip', () => {
+  if (process.platform === 'win32' || typeof process.getuid !== 'function' || process.getuid() === 0) {
+    return; // chmod-based permission denial is not meaningfully testable as non-root/win32
+  }
+  const rc = require(IMPL);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-reconcile-eacces-'));
+  try {
+    const tempName = '.target.json.999999.deadbeefcafebabe.tmp-owner';
+    const tempPath = path.join(dir, tempName);
+    fs.writeFileSync(tempPath, '{"x":1}', { mode: 0o600 });
+    fs.chmodSync(tempPath, 0o000); // owner-unreadable -- open(O_RDONLY) fails EACCES, not ENOENT
+    try {
+      const result = rc.reconcileOneNoClobberTemp(dir, tempName, 'target.json');
+      assert.strictEqual(result.status, 'failed', 'an EACCES on a temp matching our own grammar must propagate as a failure, not a benign skip');
+    } finally {
+      fs.chmodSync(tempPath, 0o600); // restore before the outer rmSync cleanup
+    }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

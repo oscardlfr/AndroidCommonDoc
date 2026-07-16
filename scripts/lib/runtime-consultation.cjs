@@ -500,20 +500,304 @@ function assertHexId(value, label) {
 // Portable no-clobber primitive (PLAN.md ~L679-683) + directory durability barrier
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Opens+fsyncs+closes a directory fd -- the portable "flush directory barrier". */
-function fsyncDir(dirPath) {
+/**
+ * WP1 durability fault-injection seam (correction pass, verified NO-GO DUR-01..03):
+ * when active, forces the directory-fsync step below to fail deterministically
+ * instead of relying on a platform/filesystem that happens to reject an O_RDONLY
+ * directory descriptor. Gated ONLY under the harness test capability -- mirrors
+ * resolveEffectivePlatform's/resolveFixedClockState's own isTestCapability()-gated
+ * env-var overrides EXACTLY; production (no capability) never honors this env var,
+ * by construction. WP1 durability correction pass 2: `fsyncDir` below is now
+ * fail-closed -- this seam's injected failure surfaces as a proven `false` return
+ * (DUR-01), never a swallowed fail-open success.
+ */
+function isDirFsyncFaultActive(barrierLabel) {
+  if (!isTestCapability()) return false;
+  const v = process.env.RUNTIME_CONSULTATION_FAULT_DIR_FSYNC;
+  if (typeof v !== 'string' || v.length === 0) return false;
+  // "1"/"all" fails EVERY directory barrier (backward-compat, DUR-01). Otherwise
+  // the value names the single barrier to fail independently -- "barrier1",
+  // "barrier2" (publishNoClobber), or "replace" (publishReplace) -- so a RED test
+  // can prove each barrier's own fail-closed behavior in isolation.
+  return v === '1' || v === 'all' || v === barrierLabel;
+}
+
+/**
+ * Capability-gated seam (Section 0.1): force the PRIMARY post-fsync directory-fd
+ * close to fail, independent of `isDirFsyncFaultActive` -- so a test can prove
+ * `fsyncDir` fails closed on a genuine close failure even though the fsync itself
+ * genuinely succeeded, without manufacturing an unrelated EBADF via a redundant
+ * second close of an already-closed fd. Same barrierLabel matching convention as
+ * the fsync seam ("1"/"all" -> every barrier; otherwise the one named barrier).
+ */
+function isDirCloseFaultActive(barrierLabel) {
+  if (!isTestCapability()) return false;
+  const v = process.env.RUNTIME_CONSULTATION_FAULT_DIR_CLOSE;
+  if (typeof v !== 'string' || v.length === 0) return false;
+  return v === '1' || v === 'all' || v === barrierLabel;
+}
+
+/** Non-schema-visible fault-injection counter (test/diagnostic use only). */
+let dirFsyncFaultInjectedCount = 0;
+let dirCloseFaultInjectedCount = 0;
+
+/**
+ * Diagnostic-only: the most recent throwable `fsyncDir` observed on either its
+ * fsync or its primary-close step (whichever actually failed). NOT authoritative
+ * -- `fsyncDir`'s boolean return remains the sole proof callers act on -- this
+ * exists only so a caller's CliError message can name the real underlying cause
+ * (Section 0.1: "preserve the most useful underlying cause for diagnostics").
+ * Safe as module-scoped state: this file is entirely synchronous (Sync fs calls
+ * throughout), so there is no concurrent `fsyncDir` call that could interleave.
+ */
+let lastFsyncDirError = null;
+
+/** Capability-gated seam: force the post-barrier-1 temp unlink to fail (DUR-E). */
+function isTempUnlinkFaultActive() {
+  return (
+    isTestCapability()
+    && typeof process.env.RUNTIME_CONSULTATION_FAULT_TEMP_UNLINK === 'string'
+    && process.env.RUNTIME_CONSULTATION_FAULT_TEMP_UNLINK.length > 0
+  );
+}
+
+/**
+ * Capability-gated seam (Section 0.2): force a no-clobber EEXIST LOSER's own
+ * temp-cleanup unlink to fail -- distinct from `isTempUnlinkFaultActive`
+ * (DUR-E), which targets the WINNER's post-barrier-1 cleanup unlink. A single
+ * `publishNoClobber` call only ever reaches one of the two sites, so the two
+ * seams never interact within one test.
+ */
+function isLoserUnlinkFaultActive() {
+  return (
+    isTestCapability()
+    && typeof process.env.RUNTIME_CONSULTATION_FAULT_LOSER_UNLINK === 'string'
+    && process.env.RUNTIME_CONSULTATION_FAULT_LOSER_UNLINK.length > 0
+  );
+}
+
+/** Capability-gated seam: force publishReplace's PRE_RENAME temp file-fsync to fail (item 7). */
+function isTempFsyncFaultActive() {
+  return (
+    isTestCapability()
+    && typeof process.env.RUNTIME_CONSULTATION_FAULT_TEMP_FSYNC === 'string'
+    && process.env.RUNTIME_CONSULTATION_FAULT_TEMP_FSYNC.length > 0
+  );
+}
+
+/**
+ * Capability-gated seam (Section 0.3): force EITHER step of the post-create
+ * temp-hardening to fail, for both publishNoClobber's and publishReplace's temps --
+ * `phase` is `'fchmod'` (the mode-forcing call itself) or `'fstat'` (the SEPARATE
+ * proving fstat immediately after it; Codex NO-GO round 2, missing-evidence item 1 --
+ * a single boolean env var could only ever exercise whichever step ran first, never
+ * the fstat call in isolation with fchmod having genuinely succeeded).
+ */
+function isTempHardenFaultActive(phase) {
+  return isTestCapability() && process.env.RUNTIME_CONSULTATION_FAULT_TEMP_HARDEN === phase;
+}
+
+/**
+ * Capability-gated seam (Codex P1-1): deterministically simulate an attacker swapping
+ * the no-clobber temp's content AFTER our own write+fsync+identity-capture but BEFORE
+ * our `linkSync` -- proves the post-link revalidation's identity binding (dev/ino
+ * captured from OUR OWN temp fd, not just a byte compare) rejects a target that got
+ * hard-linked to a DIFFERENT (attacker-controlled) inode. `phase` is currently only
+ * `'swap'`; a single env var carrying a phase selector mirrors
+ * `isReplacePostRenameFaultActive`'s convention for closely-related seams in one function.
+ */
+function isNoclobberPrelinkFaultActive(phase) {
+  return isTestCapability() && process.env.RUNTIME_CONSULTATION_FAULT_NOCLOBBER_PRELINK === phase;
+}
+
+/**
+ * Capability-gated seam (Codex P1-1): deterministically mutate the JUST-PUBLISHED
+ * target AFTER barrier 2 but BEFORE publishNoClobber's final fd-bound revalidation --
+ * `'delete'` removes it entirely, `'hardlink'` adds a second link -- proving the
+ * revalidation (not the barriers alone) is what gates the writer's own SUCCESS claim.
+ */
+function isNoclobberPrevalidateFaultActive(phase) {
+  return isTestCapability() && process.env.RUNTIME_CONSULTATION_FAULT_NOCLOBBER_PREVALIDATE === phase;
+}
+
+/**
+ * Capability-gated seam (Codex gap #4, round 1): force the VERY FIRST fstat of the
+ * temp itself (proving it is a genuine owner-confined 0600 regular file) to fail --
+ * the earliest possible fstat failure in the whole decision. `isReconcileUnlinkFault
+ * Active`/`isReconcileRevalidateFaultActive`/`isReconcileFinalLstatFaultActive`
+ * (targeting the temp-unlink and post-unlink revalidation steps) were REMOVED in the
+ * Codex NO-GO round 2 (blocker 1) rewrite -- `reconcileOneNoClobberTemp` no longer
+ * performs any destructive unlink, so those steps no longer exist to fault-inject.
+ */
+function isReconcileTempFstatFaultActive() {
+  return (
+    isTestCapability()
+    && typeof process.env.RUNTIME_CONSULTATION_FAULT_RECONCILE_TEMP_FSTAT === 'string'
+    && process.env.RUNTIME_CONSULTATION_FAULT_RECONCILE_TEMP_FSTAT.length > 0
+  );
+}
+
+/** Capability-gated seam: force releaseLock's rmdir(.lock) to fail (item 8). */
+function isLockRmdirFaultActive() {
+  return (
+    isTestCapability()
+    && typeof process.env.RUNTIME_CONSULTATION_FAULT_LOCK_RMDIR === 'string'
+    && process.env.RUNTIME_CONSULTATION_FAULT_LOCK_RMDIR.length > 0
+  );
+}
+
+/**
+ * Capability-gated seam: force a specific POST-RENAME step of publishReplace to throw so a
+ * test can prove EVERY post-rename throwable (barrier | open | fstat1 | read | fstat2 |
+ * lstat | close) is caught by the outer catch, poisons the lock, and retains .lock (item 3).
+ */
+function isReplacePostRenameFaultActive(step) {
+  return isTestCapability() && process.env.RUNTIME_CONSULTATION_FAULT_REPLACE_POSTRENAME === step;
+}
+
+/**
+ * Capability-gated seam: DETERMINISTICALLY mutate an artifact mid-read (between the first
+ * fstat snapshot and the read/re-fstat) so a test can prove the durable reader's BigInt
+ * snapshot comparison rejects a chmod drift, a same-inode rewrite (ctime/mtime), an added
+ * hardlink, growth, or a path rebound -- rather than depending on a real TOCTOU race
+ * (DUR-J item 5). Inert without the test capability + env var.
+ */
+function injectReadMutationFault(artifactPath) {
+  if (!isTestCapability()) return;
+  const kind = process.env.RUNTIME_CONSULTATION_FAULT_READ_MUTATE;
+  if (!kind) return;
+  try {
+    if (kind === 'chmod') fs.chmodSync(artifactPath, 0o640);
+    else if (kind === 'grow') fs.appendFileSync(artifactPath, 'X');
+    else if (kind === 'hardlink') fs.linkSync(artifactPath, artifactPath + '.evil-hardlink');
+    else if (kind === 'rewrite') fs.writeFileSync(artifactPath, fs.readFileSync(artifactPath)); // same inode+size, new ctime/mtime
+    else if (kind === 'rebind') {
+      const other = artifactPath + '.rebind-src';
+      fs.writeFileSync(other, fs.readFileSync(artifactPath), { mode: 0o600 });
+      fs.renameSync(other, artifactPath); // a DIFFERENT inode now occupies the path
+    }
+  } catch (e) { /* best-effort test seam */ }
+}
+
+/**
+ * Opens+fsyncs+closes a directory fd -- the portable "flush directory barrier".
+ * Fail-closed (WP1 durability correction pass 2, PLAN.md ~L679-683; Section 0.1
+ * correction): returns `true` ONLY when the flush is actually PROVEN -- a real
+ * `fs.fsyncSync` against the open directory fd completed without error AND the
+ * PRIMARY `fs.closeSync` of that same fd also completed without error. A close
+ * failure after a successful fsync is NOT swallowed: this function used to
+ * close the fd only in a best-effort `finally` that never affected the return
+ * value, so a real close failure was silently laundered into `true`. Returns
+ * `false` on ANY failure to prove the barrier -- the platform/filesystem
+ * rejecting the O_RDONLY directory descriptor, `fs.fsyncSync` throwing, the
+ * primary `fs.closeSync` throwing, or either WP1 fault-injection seam
+ * (`isDirFsyncFaultActive` / `isDirCloseFaultActive` above) firing. The
+ * close-fault seam takes the PRIMARY close's place (never a redundant second
+ * close of an already-closed fd, which would manufacture an unrelated EBADF)
+ * -- when it fires, the fd is still closed for real via the `finally` cleanup
+ * below, so no fd leaks even though the fault-injected error is what
+ * determines `proven`. This function itself never throws for an ordinary
+ * flush/close failure -- that decision belongs one level up, to each caller
+ * (`publishNoClobber` fails closed on a `false` return; `publishReplace` does
+ * not check it -- see its own comment, out of scope for this pass).
+ */
+function fsyncDir(dirPath, barrierLabel) {
   let fd;
+  let proven = false;
+  let primaryClosed = false;
   try {
     fd = fs.openSync(dirPath, 'r');
-    fs.fsyncSync(fd);
-  } catch (err) {
-    // Directory fsync is best-effort on platforms/filesystems that reject O_RDONLY
-    // directory descriptors; the file-level fsync + linkSync ordering below is the
-    // load-bearing durability step for this WP1 pass.
-  } finally {
-    if (fd !== undefined) {
-      try { fs.closeSync(fd); } catch (err) { /* already closed */ }
+    if (isDirFsyncFaultActive(barrierLabel)) {
+      dirFsyncFaultInjectedCount += 1;
+      const injected = new Error('simulated directory-fsync failure (RUNTIME_CONSULTATION_FAULT_DIR_FSYNC)');
+      injected.code = 'EIO';
+      throw injected;
     }
+    fs.fsyncSync(fd);
+    if (isDirCloseFaultActive(barrierLabel)) {
+      dirCloseFaultInjectedCount += 1;
+      const injected = new Error('simulated directory-close failure (RUNTIME_CONSULTATION_FAULT_DIR_CLOSE)');
+      injected.code = 'EIO';
+      throw injected;
+    }
+    fs.closeSync(fd);
+    primaryClosed = true;
+    lastFsyncDirError = null;
+    proven = true;
+  } catch (err) {
+    lastFsyncDirError = err;
+    proven = false;
+  } finally {
+    if (fd !== undefined && !primaryClosed) {
+      try { fs.closeSync(fd); } catch (err) { /* best-effort cleanup after an already-failed/faulted primary close */ }
+    }
+  }
+  return proven;
+}
+
+/** Diagnostic-only suffix naming `fsyncDir`'s last observed cause (Section 0.1); '' if none. */
+function fsyncDirCauseSuffix() {
+  return lastFsyncDirError ? (' (' + (lastFsyncDirError.message || lastFsyncDirError.code) + ')') : '';
+}
+
+/** Writes an entire buffer via `fs.writeSync`, looping to cover any partial write. */
+function writeAllSync(fd, buffer) {
+  let offset = 0;
+  while (offset < buffer.length) {
+    const written = fs.writeSync(fd, buffer, offset, buffer.length - offset);
+    // A blocking write to a regular file advances by >=1 byte or throws. A 0-byte
+    // return with bytes still pending can make no forward progress -- fail closed
+    // (DUR-A) rather than spin forever on the durability write path.
+    if (written <= 0) {
+      throw new Error('writeSync made no progress (' + written + ' of ' + (buffer.length - offset) + ' pending bytes) on fd ' + fd);
+    }
+    offset += written;
+  }
+}
+
+/**
+ * Section 0.3: after an exclusive O_NOFOLLOW temp create, forces the fd to EXACT
+ * owner-only 0600 regardless of the process umask -- `open()`'s mode argument is
+ * itself subject to umask (an unusually restrictive umask can silently strip
+ * owner bits, e.g. 0600 requested under umask 0277 lands as 0400), but
+ * `fchmodSync` is not -- and proves it via `fstatSync` before any byte is
+ * written. Shared by publishNoClobber's and publishReplace's temps. Throws
+ * CliError(DURABILITY_UNPROVEN) on any fchmod/fstat failure, an unexpected
+ * identity, or the WP1 fault-injection seam (`isTempHardenFaultActive`) firing
+ * -- the caller is responsible for closing/unlinking the temp on this throw, as
+ * it already does for every other pre-durability temp-setup failure.
+ */
+function hardenTempFdExact0600(fd, tempPath) {
+  if (process.platform === 'win32') return; // POSIX-mode discipline only; Windows ACL confinement is PENDING_CI.
+  try {
+    if (isTempHardenFaultActive('fchmod')) {
+      const injected = new Error('injected temp-harden fchmod failure (RUNTIME_CONSULTATION_FAULT_TEMP_HARDEN=fchmod)');
+      injected.code = 'EIO';
+      throw injected;
+    }
+    fs.fchmodSync(fd, 0o600);
+  } catch (err) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'temp fchmod to exact 0600 failed: ' + tempPath + ' (' + (err && err.message) + ')');
+  }
+  let st;
+  try {
+    if (isTempHardenFaultActive('fstat')) {
+      const injected = new Error('injected temp-harden fstat failure (RUNTIME_CONSULTATION_FAULT_TEMP_HARDEN=fstat)');
+      injected.code = 'EIO';
+      throw injected;
+    }
+    st = fs.fstatSync(fd, { bigint: true });
+  } catch (err) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'temp fstat after fchmod failed: ' + tempPath + ' (' + (err && err.message) + ')');
+  }
+  if (!statIsRegularFile(st)) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'temp is not a regular file after fchmod: ' + tempPath);
+  }
+  if ((st.mode & 0o777n) !== 0o600n) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'temp mode is not exact owner-only 0600 after fchmod: ' + tempPath);
+  }
+  if (typeof process.getuid === 'function' && st.uid !== BigInt(process.getuid())) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'temp owner is not the current process after fchmod: ' + tempPath);
   }
 }
 
@@ -523,39 +807,219 @@ function fsyncDir(dirPath) {
  * -> unlink temp -> directory barrier 2. Throws CliError(INVALID, AUTHORITY_INVALID)
  * on an EEXIST no-clobber race loss (some callers remap this to a more specific
  * detail_code). Idempotent-if-byte-identical for content-addressed targets when
- * `allowIdenticalIdempotent` is true.
+ * `allowIdenticalIdempotent` is true -- but ONLY once the EXISTING target is
+ * itself proven durable (nlink===1); an nlink!=1 target means some other
+ * publisher's own barrier 1 (this same temp-link scheme) never completed, so
+ * this call must not launder a SUCCESS on top of that unproven state either
+ * (WP1 durability correction pass 2, DUR-05).
+ *
+ * Fail-closed on either directory-fsync barrier (WP1 durability correction
+ * pass 2, PLAN.md ~L679: "Writer returns only after barrier 2"): if
+ * `fsyncDir` cannot PROVE the flush, this throws CliError(INVALID,
+ * DURABILITY_UNPROVEN, ...) instead of returning the target as SUCCESS
+ * (DUR-01).
  */
 function publishNoClobber(targetPath, bytes, opts) {
   const options = opts || {};
   const dir = path.dirname(targetPath);
   fs.mkdirSync(dir, { recursive: true });
+  const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
   const tempPath = path.join(dir, '.' + path.basename(targetPath) + '.' + process.pid + '.' + genId({ raw: true }).slice(0, 16) + '.tmp-owner');
-  fs.writeFileSync(tempPath, bytes);
-  const fd = fs.openSync(tempPath, 'r+');
+  // Exclusive/no-follow temp create (defense-in-depth, DUR-06): O_CREAT|O_EXCL
+  // rejects a pre-planted file already sitting at this (random-nonce, so
+  // practically unguessable) temp path instead of silently overwriting it;
+  // O_NOFOLLOW rejects a pre-planted symlink at that exact path instead of
+  // following it. Neither flag changes behavior for the overwhelmingly-common
+  // case (temp path never previously existed) -- a fresh cryptographically-
+  // random nonce every call -- so this open() succeeds exactly as the prior
+  // plain writeFileSync did.
+  const tempFd = fs.openSync(
+    tempPath,
+    fs.constants.O_CREAT | fs.constants.O_WRONLY | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
+    0o600,
+  );
+  let tempIdentity;
   try {
-    fs.fsyncSync(fd);
+    // Section 0.3: force exact 0600 via fchmod (never trust open()'s mode argument
+    // alone, which is subject to the process umask) before any byte is written.
+    hardenTempFdExact0600(tempFd, tempPath);
+    writeAllSync(tempFd, buf);
+    fs.fsyncSync(tempFd);
+    // Codex P1-1: capture OUR OWN temp's identity (dev/ino) while its fd is still open
+    // and trusted -- the post-link revalidation below binds the final target back to
+    // THIS exact inode, so a temp swapped out from under us between this close and the
+    // linkSync call cannot be laundered into a SUCCESS merely because linkSync itself
+    // did not error.
+    tempIdentity = fs.fstatSync(tempFd, { bigint: true });
   } finally {
-    fs.closeSync(fd);
+    fs.closeSync(tempFd);
+  }
+  if (isNoclobberPrelinkFaultActive('swap')) {
+    // Test-only (Codex P1-1 repro): simulate an attacker swapping the temp's content
+    // between our own fsync+identity-capture and our linkSync below.
+    try { fs.unlinkSync(tempPath); } catch (e) { /* best-effort test setup */ }
+    fs.writeFileSync(tempPath, Buffer.from('RUNTIME_CONSULTATION_TEST_ATTACKER_SWAP_CONTENT'), { mode: 0o600 });
+  } else if (isNoclobberPrelinkFaultActive('swap-same-bytes')) {
+    // Test-only (Codex NO-GO round 2, missing-evidence item 3): swap to a FRESH file
+    // carrying the EXACT SAME bytes we just wrote (`buf`) -- a different inode, but
+    // byte-identical content. Isolates that the post-link revalidation's identity
+    // binding (dev/ino), not merely a byte comparison, is what rejects the foreign
+    // inode: a byte-only check would see identical content and wrongly accept it.
+    try { fs.unlinkSync(tempPath); } catch (e) { /* best-effort test setup */ }
+    fs.writeFileSync(tempPath, buf, { mode: 0o600 });
   }
   try {
     fs.linkSync(tempPath, targetPath);
   } catch (err) {
-    try { fs.unlinkSync(tempPath); } catch (cleanupErr) { /* best effort */ }
     if (err.code === 'EEXIST') {
+      // Loser cleanup (PLAN.md ~L679-683 binding: "losers clean temp + flush"), CHECKED,
+      // strictly BEFORE any idempotent-success or race-loss classification (Section 0.2):
+      // unlink our own owned temp, then flush the directory. Either step failing means we
+      // cannot PROVE our temp is durably gone, so the call fails closed DURABILITY_UNPROVEN
+      // -- never an idempotent SUCCESS (even against a byte-identical target) and never a
+      // silent best-effort swallow that leaves a false completion claim.
+      try {
+        if (isLoserUnlinkFaultActive()) {
+          const injected = new Error('injected loser-cleanup unlink failure (RUNTIME_CONSULTATION_FAULT_LOSER_UNLINK)');
+          injected.code = 'EIO';
+          throw injected;
+        }
+        fs.unlinkSync(tempPath);
+      } catch (unlinkErr) {
+        throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'no-clobber loser could not durably remove its own temp: ' + tempPath + ' (' + (unlinkErr && unlinkErr.message) + ')');
+      }
+      if (!fsyncDir(dir, 'loser-cleanup')) {
+        throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'no-clobber loser temp cleanup could not be flushed durable for ' + dir + fsyncDirCauseSuffix());
+      }
       if (options.allowIdenticalIdempotent) {
-        const existing = fs.readFileSync(targetPath);
-        if (Buffer.compare(existing, Buffer.from(bytes)) === 0) return targetPath;
+        // DUR-F (PLAN.md ~L679-683): the idempotent no-op must FD-BIND the existing
+        // target and prove it is a genuine, owner-confined, durable REGULAR FILE --
+        // never read it by path (which follows a symlink and would accept an
+        // attacker-planted byte-identical file, or a hard link, as the durable
+        // artifact). O_NOFOLLOW rejects a symlinked target at open; fstat proves
+        // regular-file + owner + owner-only mode + nlink==1; the compare is
+        // fd-bound and re-fstat'd for identity (no swap mid-read).
+        let existingFd;
+        try {
+          existingFd = fs.openSync(targetPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+        } catch (openErr) {
+          if (openErr && openErr.code === 'ELOOP') {
+            throw new CliError('INVALID', 'SECURITY_INVALID', 'idempotent target is a symlink (rejected at open): ' + targetPath);
+          }
+          throw openErr;
+        }
+        try {
+          // DUR-J item 5: reuse the shared BigInt comparator to prove the existing target is
+          // a genuine, owner-confined, EXACT-0600, nlink==1, identity-stable durable file
+          // carrying EXACTLY our bytes (with a final re-lstat). Byte-identical + durable -> an
+          // idempotent no-op success; a genuine durable target with DIFFERENT bytes is a
+          // no-clobber race-loss (a different publisher won); nlink==2 / symlink / wrong-mode /
+          // identity drift propagate as their own SECURITY/DURABILITY failure.
+          try {
+            assertDurableTargetMatches(existingFd, targetPath, buf);
+          } catch (cmpErr) {
+            if (cmpErr && cmpErr.byteMismatch) {
+              throw new CliError('INVALID', options.raceDetailCode || 'AUTHORITY_INVALID', 'no-clobber race lost (existing durable target differs) for ' + targetPath);
+            }
+            throw cmpErr;
+          }
+          return targetPath;
+        } finally {
+          fs.closeSync(existingFd);
+        }
       }
       throw new CliError('INVALID', options.raceDetailCode || 'AUTHORITY_INVALID', 'no-clobber race lost for ' + targetPath);
     }
+    // Non-EEXIST linkSync failure: NOT the PLAN-bound loser-cleanup path above (an
+    // arbitrary fs error, not a race loss) -- best-effort temp cleanup, as before.
+    try { fs.unlinkSync(tempPath); } catch (cleanupErr) { /* best effort */ }
     throw err;
   }
-  fsyncDir(dir); // barrier 1: target link durable while nlink==2
+  // Barrier 1: target link durable while nlink==2. If NOT proven, the target
+  // currently exists with nlink==2 (still hard-linked from tempPath) -- the
+  // exact crash-cut state CC-02/CC-03 already model for an out-of-process
+  // crash (a reader's assertDurable correctly rejects nlink==2 as
+  // DURABILITY_UNPROVEN) -- fail closed: the writer itself must never claim
+  // SUCCESS on an unproven durability barrier.
+  if (!fsyncDir(dir, 'barrier1')) {
+    // Fail closed and deliberately LEAVE the target at nlink==2 (the owner-tagged
+    // temp stays hard-linked): barrier 1 was never proven, so unlinking the temp
+    // here would drop the target to nlink==1 and break the PLAN.md ~L681 invariant
+    // (nlink==1 IMPLIES barrier-1-durable) -- a reader's assertDurable or an
+    // idempotent retry would then launder this unproven barrier as durable
+    // (DUR-C). Codex NO-GO round 2 (blocker 1): the nlink==2 orphan is later
+    // DETECTED and REPORTED by `reconcileTempArtifacts`/`cleanup` (`'unlink-unsafe'`,
+    // DUR-H) -- it is NOT auto-completed/reconciled away; no portable primitive can
+    // prove a path-based unlink targets the fd-accredited inode, so recovery
+    // reports the orphan rather than resolving it.
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'directory-fsync barrier 1 not proven for ' + dir + fsyncDirCauseSuffix());
+  }
   try {
+    if (isTempUnlinkFaultActive()) {
+      const injected = new Error('injected temp-unlink failure (RUNTIME_CONSULTATION_FAULT_TEMP_UNLINK)');
+      injected.code = 'EIO';
+      throw injected;
+    }
     fs.unlinkSync(tempPath);
-  } catch (err) { /* best effort */ }
-  fsyncDir(dir); // barrier 2: cleanup durable
-  return targetPath;
+  } catch (err) {
+    // DUR-E: a failed post-barrier-1 temp unlink leaves the target hard-linked
+    // (nlink==2) -- a reader/idempotent-retry rejects it -- so the writer must
+    // fail closed rather than swallow the failure and return a non-durable
+    // SUCCESS. Codex NO-GO round 2 (blocker 1): the nlink==2 orphan is later
+    // DETECTED and REPORTED (never auto-completed) by `cleanup` (DUR-H).
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'temp cleanup unlink failed after barrier 1; target not durable: ' + tempPath);
+  }
+  // Barrier 2: cleanup durable. The target link is already fully present at
+  // nlink==1 by this point regardless of this barrier's own outcome -- but
+  // the writer's OWN contract (PLAN.md ~L679: "Writer returns only after
+  // barrier 2") is stricter than what a reader can currently observe here, so
+  // an unproven barrier 2 still fails the publish closed rather than
+  // returning SUCCESS.
+  if (!fsyncDir(dir, 'barrier2')) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'directory-fsync barrier 2 not proven for ' + dir + fsyncDirCauseSuffix());
+  }
+  // Codex P1-1: the writer's own SUCCESS claim must be PROVEN, not merely inferred from
+  // the barriers having reported clean -- a temp swapped in before linkSync, a target
+  // deleted after it, or a hardlink added after it would otherwise let this function
+  // return SUCCESS over a target that is foreign, absent, or no longer nlink==1. This
+  // final fd-bound revalidation re-opens the target NO_FOLLOW and binds it back to the
+  // ORIGINAL temp's captured identity (dev/ino) via the shared comparator, re-proving
+  // regular/owner/exact-0600/nlink==1/exact-bytes/stable-metadata. From this point the
+  // durable link is ALREADY established (mirroring publishReplace's POST_RENAME_UNPROVEN
+  // phase) -- ANY failure here POISONS so a caller holding the transition lock retains it
+  // as a durable orphan for later reconciliation rather than silently releasing over a
+  // compromised or vanished target.
+  try {
+    if (isNoclobberPrevalidateFaultActive('delete')) {
+      // Test-only (Codex P1-1 repro): simulate an attacker deleting the just-published
+      // target after barrier 2 but before this revalidation observes it.
+      try { fs.unlinkSync(targetPath); } catch (e) { /* best-effort test setup */ }
+    } else if (isNoclobberPrevalidateFaultActive('hardlink')) {
+      // Test-only (Codex P1-1 repro): simulate an attacker adding a second hardlink to
+      // the just-published target after barrier 2 but before this revalidation observes
+      // it -- the shared comparator's nlink==1 check must reject it.
+      try { fs.linkSync(targetPath, targetPath + '.attacker-hardlink-test-only'); } catch (e) { /* best-effort test setup */ }
+    }
+    let checkFd;
+    try {
+      checkFd = fs.openSync(targetPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    } catch (err) {
+      if (err && err.code === 'ELOOP') {
+        throw new CliError('INVALID', 'SECURITY_INVALID', 'published target is a symlink (rejected at post-publish revalidation): ' + targetPath);
+      }
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'published target vanished before post-publish revalidation: ' + targetPath + ' (' + (err && err.message) + ')');
+    }
+    try {
+      assertDurableTargetMatches(checkFd, targetPath, buf, { dev: tempIdentity.dev, ino: tempIdentity.ino });
+    } finally {
+      try { fs.closeSync(checkFd); } catch (e) { /* best-effort cleanup */ }
+    }
+    return targetPath; // COMPLETE: publish credited durable + fully revalidated.
+  } catch (err) {
+    const poisoned = new CliError('INVALID', 'DURABILITY_UNPROVEN', 'post-publish target not accredited durable (POST_LINK_UNPROVEN): ' + (err && err.message));
+    poisoned.cause = err;
+    throw markPoisoned(poisoned);
+  }
 }
 
 /**
@@ -563,20 +1027,205 @@ function publishNoClobber(targetPath, bytes, opts) {
  * `publishNoClobber`): same-directory owner-tagged exclusive temp -> canonical
  * write+fsync -> atomic rename over target -> directory fsync.
  */
+const S_IFMT = 0o170000n;
+const S_IFREG = 0o100000n;
+function statIsRegularFile(bigintStat) { return (bigintStat.mode & S_IFMT) === S_IFREG; }
+
+/** Bounded fd read (position-explicit): reads at most `cap` bytes from position 0 -- never an
+ *  uncapped readFileSync(fd) after a racy precheck (DUR-J item 5). */
+function readAllFromFd(fd, cap) {
+  const buf = Buffer.allocUnsafe(cap);
+  let total = 0;
+  while (total < cap) {
+    const n = fs.readSync(fd, buf, total, cap - total, total);
+    if (n === 0) break;
+    total += n;
+  }
+  return buf.subarray(0, total);
+}
+
+/**
+ * Shared fd-bound durable comparator (DUR-J item 5), reused by publishReplace's post-rename
+ * revalidation AND the EEXIST idempotent path. Given an OPEN no-follow fd on `targetPath`,
+ * proves it is a regular file, owner-confined, EXACT 0600 (POSIX), nlink==1, size-bounded,
+ * carries EXACTLY `expectedBytes`, and that a BigInt stat snapshot (dev/ino/nlink/size/mode/
+ * uid/gid/ctimeNs/mtimeNs) is unchanged across the read, with a final lstat re-proving ALL
+ * of those invariants on the path (rejecting a same-inode rewrite, chmod drift, an added
+ * hardlink, growth, or a path rebound). Throws CliError on any violation.
+ *
+ * Section 0.4: a byte/size mismatch is RECORDED, never thrown immediately -- fstat2 and the
+ * final lstat still run regardless, so genuine metadata drift during the read is never masked
+ * by an early return. Metadata drift wins over a race-loss classification: only once identity
+ * and path are proven STABLE throughout (fstat2 + lstat both clean) is the recorded mismatch
+ * finally surfaced, `byteMismatch`-tagged, for an idempotent caller to map to AUTHORITY/race-
+ * loss. When size already mismatches, the byte-for-byte read/compare is skipped (the sizes
+ * already prove content differs) but fstat2/lstat still run on the untouched fd/path.
+ *
+ * `expectedIdentity` (Codex P1-1, optional `{dev, ino}` BigInts): when provided, the FIRST
+ * fstat's (dev, ino) must match exactly, or the call fails closed SECURITY_INVALID before any
+ * other check -- binding the open fd back to a SPECIFIC previously-captured inode (e.g.
+ * publishNoClobber's own just-written temp) rather than accepting any regular, owner-
+ * confined, byte-matching file as sufficient proof. Omitted by both publishReplace's and the
+ * EEXIST-loser's callers, which have no single inode of their own to bind against.
+ */
+function assertDurableTargetMatches(fd, targetPath, expectedBytes, expectedIdentity) {
+  if (isReplacePostRenameFaultActive('fstat1')) throw new Error('injected fstat1 fault');
+  const st = fs.fstatSync(fd, { bigint: true });
+  if (!statIsRegularFile(st)) throw new CliError('INVALID', 'SECURITY_INVALID', 'target is not a regular file: ' + targetPath);
+  const isPosix = process.platform !== 'win32';
+  if (isPosix && typeof process.getuid === 'function' && st.uid !== BigInt(process.getuid())) throw new CliError('INVALID', 'SECURITY_INVALID', 'target is not owner-confined: ' + targetPath);
+  if (isPosix && (st.mode & 0o777n) !== 0o600n) throw new CliError('INVALID', 'SECURITY_INVALID', 'target mode is not owner-only 0600: ' + targetPath);
+  if (expectedIdentity && (st.dev !== expectedIdentity.dev || st.ino !== expectedIdentity.ino)) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'target inode does not match the originally published temp (swap/tamper between write and link): ' + targetPath);
+  }
+  if (st.nlink !== 1n) throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'target nlink!=1: ' + targetPath);
+
+  let mismatchErr = null;
+  if (st.size !== BigInt(expectedBytes.length)) {
+    // A size difference IS a content difference (byte-mismatch); recorded, not thrown yet.
+    mismatchErr = new CliError('INVALID', 'DURABILITY_UNPROVEN', 'target size does not match the payload: ' + targetPath);
+    mismatchErr.byteMismatch = true;
+  } else {
+    if (isReplacePostRenameFaultActive('read')) throw new Error('injected read fault');
+    const readback = readAllFromFd(fd, Number(st.size) + 1);
+    if (Buffer.compare(readback, expectedBytes) !== 0) {
+      // A genuine, durable target that simply carries DIFFERENT bytes is flagged distinctly so
+      // an idempotent caller can map it to a no-clobber race-loss rather than a durability fault.
+      mismatchErr = new CliError('INVALID', 'DURABILITY_UNPROVEN', 'target bytes do not match the payload: ' + targetPath);
+      mismatchErr.byteMismatch = true;
+    }
+  }
+
+  if (isReplacePostRenameFaultActive('fstat2')) throw new Error('injected fstat2 fault');
+  const st2 = fs.fstatSync(fd, { bigint: true });
+  if (st2.dev !== st.dev || st2.ino !== st.ino || st2.nlink !== st.nlink || st2.size !== st.size || st2.mode !== st.mode || st2.uid !== st.uid || st2.gid !== st.gid || st2.ctimeNs !== st.ctimeNs || st2.mtimeNs !== st.mtimeNs) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'target identity changed during read (rewrite/chmod/hardlink/growth): ' + targetPath);
+  }
+  if (isReplacePostRenameFaultActive('lstat')) throw new Error('injected lstat fault');
+  const lst = fs.lstatSync(targetPath, { bigint: true });
+  // PRESENT requires the LAST snapshot still be a single-link (nlink==1) inode with ALL
+  // invariants -- including ctimeNs/mtimeNs -- unchanged from the stable fstat snapshot.
+  if (lst.dev !== st.dev || lst.ino !== st.ino || lst.nlink !== st.nlink || lst.size !== st.size || lst.mode !== st.mode || lst.uid !== st.uid || lst.gid !== st.gid || lst.ctimeNs !== st.ctimeNs || lst.mtimeNs !== st.mtimeNs) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'target path rebound or invariants changed after read: ' + targetPath);
+  }
+
+  // Identity/path proven STABLE throughout the read -- ONLY NOW may a genuine byte/size
+  // mismatch be surfaced as a race-loss candidate.
+  if (mismatchErr) throw mismatchErr;
+}
+
 function publishReplace(targetPath, bytes) {
   const dir = path.dirname(targetPath);
   fs.mkdirSync(dir, { recursive: true });
   const tempPath = path.join(dir, '.' + path.basename(targetPath) + '.' + process.pid + '.' + genId({ raw: true }).slice(0, 16) + '.refresh-tmp-owner');
-  fs.writeFileSync(tempPath, bytes);
-  const fd = fs.openSync(tempPath, 'r+');
+  // DUR-G (PLAN.md ~L677): the refresh temp is created with the SAME owner-confined,
+  // no-follow, exclusive discipline as publishNoClobber -- O_EXCL rejects a colliding
+  // stray, O_NOFOLLOW rejects a planted symlink at the temp path, 0600 keeps it
+  // owner-only -- then the canonical bytes are written through that one fd and the
+  // FILE is fsync'd via the same fd (never re-opened by path, which would re-follow).
+  let tempFd;
   try {
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
+    tempFd = fs.openSync(tempPath, fs.constants.O_CREAT | fs.constants.O_WRONLY | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
+  } catch (err) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'refresh temp could not be created exclusively: ' + (err && err.message));
   }
-  fs.renameSync(tempPath, targetPath);
-  fsyncDir(dir);
-  return targetPath;
+  try {
+    // Section 0.3: force exact 0600 via fchmod (never trust open()'s mode argument
+    // alone, which is subject to the process umask) before any byte is written.
+    hardenTempFdExact0600(tempFd, tempPath);
+    writeAllSync(tempFd, bytes);
+    if (isTempFsyncFaultActive()) {
+      const injected = new Error('injected refresh temp fsync failure (RUNTIME_CONSULTATION_FAULT_TEMP_FSYNC)');
+      injected.code = 'EIO';
+      throw injected;
+    }
+    fs.fsyncSync(tempFd);
+  } catch (err) {
+    try { fs.closeSync(tempFd); } catch (e) { /* already closed */ }
+    try { fs.unlinkSync(tempPath); } catch (e) { /* best-effort cleanup */ }
+    // PRE_RENAME failure: the rename has NOT happened, the prior target is intact -> a
+    // normal (non-poisoning) error, so the caller's lock is released. A CliError from
+    // hardenTempFdExact0600 above is preserved verbatim (its own detail_code is more
+    // specific than a generic wrap); any other fs-level error is wrapped as before.
+    throw (err instanceof CliError) ? err : new CliError('INVALID', 'DURABILITY_UNPROVEN', 'refresh temp write/fsync failed (PRE_RENAME, prior lease intact): ' + (err && err.message));
+  }
+  // The pre-rename temp CLOSE is part of PRE_RENAME: a failed close means the temp cannot
+  // be trusted as fully committed, so we do NOT rename (the prior target stays intact).
+  try {
+    fs.closeSync(tempFd);
+  } catch (err) {
+    try { fs.unlinkSync(tempPath); } catch (e) { /* best-effort PRE_RENAME cleanup */ }
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'refresh temp close failed (PRE_RENAME, prior lease intact): ' + (err && err.message));
+  }
+
+  // DUR-J item 7 -- explicit progress states. The RENAME is the durability boundary. A
+  // rename FAILURE leaves the prior target intact (PRE_RENAME) -> a NORMAL error, so the
+  // caller's lock may be released and the prior lease remains valid.
+  try {
+    fs.renameSync(tempPath, targetPath);
+  } catch (err) {
+    try { fs.unlinkSync(tempPath); } catch (e) { /* best-effort PRE_RENAME cleanup */ }
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'refresh rename failed (prior lease intact, PRE_RENAME): ' + (err && err.message));
+  }
+
+  // POST_RENAME_UNPROVEN: the new bytes are visible at the target (nlink==1) but NOT yet
+  // proven durable, and a crash could revert to the prior lease. An OUTER catch turns ANY
+  // throwable from here to COMPLETE -- the directory barrier, or any open/fstat/read/fstat/
+  // lstat/close of the fd-bound revalidation, or an unexpected error -- into a POISONED
+  // DURABILITY_UNPROVEN so withLock retains .lock as a durable orphan and later actors
+  // timeout+STOP. The phase boundary is STRUCTURAL (this try region), never per-throw marking.
+  try {
+    if (isReplacePostRenameFaultActive('barrier') || !fsyncDir(dir, 'replace')) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'refresh directory barrier could not be flushed after rename: ' + targetPath + fsyncDirCauseSuffix());
+    }
+    // POST_DIR_FSYNC: revalidate the durable target with the shared fd-bound comparator (the
+    // fstat1/read/fstat2/lstat fault seams live INSIDE the comparator, at the real steps).
+    if (isReplacePostRenameFaultActive('open')) throw new Error('injected post-rename open fault');
+    const checkFd = fs.openSync(targetPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    let revalErr = null;
+    try {
+      assertDurableTargetMatches(checkFd, targetPath, bytes);
+    } catch (err) {
+      revalErr = err;
+    }
+    // The post-rename CLOSE of the revalidation fd is a durability step, NOT silenced. The
+    // 'close' seam takes the PRIMARY close's own place (Section 0.4: never a redundant SECOND
+    // close of an already-closed fd, which would manufacture an unrelated EBADF instead of
+    // proving a genuine primary-close failure) -- the real fd is still closed for real via the
+    // `finally` cleanup below, so no fd leaks even when the fault fires. If both the
+    // revalidation and the close fail, both are preserved (close as cause) but the primary
+    // outcome is still a poisoned DURABILITY_UNPROVEN.
+    let closeErr = null;
+    let checkFdClosed = false;
+    try {
+      if (isReplacePostRenameFaultActive('close')) {
+        const injected = new Error('injected post-rename close fault (RUNTIME_CONSULTATION_FAULT_REPLACE_POSTRENAME=close)');
+        injected.code = 'EBADF';
+        throw injected;
+      }
+      fs.closeSync(checkFd);
+      checkFdClosed = true;
+    } catch (err) {
+      closeErr = err;
+    } finally {
+      if (!checkFdClosed) {
+        try { fs.closeSync(checkFd); } catch (err) { /* best-effort cleanup after the primary close failed/was faulted */ }
+      }
+    }
+    if (revalErr) {
+      if (closeErr) revalErr.cause = closeErr;
+      throw revalErr;
+    }
+    if (closeErr) throw closeErr;
+    return targetPath; // COMPLETE: rename credited durable + fully revalidated.
+  } catch (err) {
+    // Residual: after the rename, the PRIMARY truth is that the newly-visible target was NOT
+    // accredited durable -> ALWAYS a fresh poisoned DURABILITY_UNPROVEN, with the original
+    // (possibly SECURITY_INVALID / SCHEMA_INVALID / an fs error) preserved only as cause.
+    const poisoned = new CliError('INVALID', 'DURABILITY_UNPROVEN', 'post-rename target not accredited durable (POST_RENAME_UNPROVEN): ' + (err && err.message));
+    poisoned.cause = err;
+    throw markPoisoned(poisoned);
+  }
 }
 
 /**
@@ -599,28 +1248,524 @@ function assertDurable(targetPath) {
   }
 }
 
+// Coordination records are small canonical JSON; a file larger than this is not a
+// genuine record and is refused before it is ever read into memory (DUR-J size bound).
+const DEFAULT_MAX_DURABLE_ARTIFACT_BYTES = 1024 * 1024;
+
+// Codex gap #2 (PLAN.md ~L698 "scan hard cap 1024 entries / 256 kept candidates"): the
+// SAME DoS-bound scan caps the coordination-artifact hook scanner already uses
+// (`MAX_CONSULT_HARD_CAP`/`MAX_CONSULT_ENTRIES` in `.claude/hooks/coordination-
+// artifact.js`) -- deliberately the SAME NUMBERS, not a cross-file import (a CLI and a
+// hook are architecturally separate consumers of the same PLAN-frozen bound) -- reused
+// here for `listResultFiles` and DUR-H recovery directory enumeration so an
+// implausibly large directory fails closed rather than silently scanning or keeping an
+// unbounded set.
+const MAX_ENUM_HARD_CAP = 1024;    // total directory entries scanned before fail-closed abort
+const MAX_ENUM_KEPT_ENTRIES = 256; // max matching candidates kept/processed after filtering
+
 /**
- * Reconciles leftover no-clobber/refresh temp siblings in one directory: a temp
- * still hard-linked to its target (crash between barrier 1 and unlink) completes
- * the unlink; a stray non-hardlinked temp (crash after unlink, before barrier 2
- * observed) is simply removed. Never touches non-temp files (so terminal records
- * are never at risk -- `TERMINAL-NO-DELETE-01`).
+ * Codex NO-GO round 2, blocker 4 / round 3, cleanup item 1: bounded top-K insert,
+ * ascending-sorted by `key`, evicting the LARGEST once `capacity` is exceeded -- so
+ * the retained set is always the `capacity` SMALLEST/FIRST-sorted keys seen so far.
+ * FROZEN policy (round 3): this deliberately matches the pre-existing, already-
+ * shipped `listResultFiles` contract (`entries.filter(...).sort().slice(0,
+ * MAX_ENUM_KEPT_ENTRIES)` -- ascending sort, keep the FIRST N) and `ENUM-CAP-02`'s own
+ * test title ("keeps only the first 256 sorted names"). Distinct from `.claude/hooks/
+ * coordination-artifact.js`'s own `insertCandidate` (which evicts the SMALLEST,
+ * retaining the LARGEST/"newest" N -- a deliberately DIFFERENT policy for that
+ * scanner's own "newest-first" freshness need); this helper is patterned after that
+ * one's bounded-insert SHAPE only, not its eviction direction. Generalized to carry an
+ * optional `extra` payload alongside the sort key (DUR-H recovery needs the derived
+ * target basename, not just the temp's own name). Small capacity (<=256) keeps the
+ * O(capacity) shift-insert negligible.
+ */
+function insertBoundedCandidate(list, key, extra, capacity) {
+  let i = list.length;
+  list.push([key, extra]);
+  while (i > 0 && list[i - 1][0] > list[i][0]) {
+    const tmp = list[i - 1];
+    list[i - 1] = list[i];
+    list[i] = tmp;
+    i -= 1;
+  }
+  if (list.length > capacity) list.pop();
+}
+
+// Explicit durable-read classification (DUR-J) -- there is NO fail-open fallback. A
+// read of any no-clobber-/replace-published record resolves to EXACTLY one of:
+//   ABSENT  -- ENOENT at the initial open ONLY (genuinely not there yet).
+//   PENDING -- the ONE recognized in-flight window, nlink==2 (an owner-tagged temp
+//              still hard-linked); meaningful only inside a bounded poll.
+//   PRESENT -- a durable regular file, fd-bound, identity-stable, parsed + shape-valid.
+// Everything else -- symlink, wrong owner/mode, oversize, nlink>2, malformed JSON,
+// wrong shape, identity drift, path rebound, short read -- THROWS (STOP); it is NEVER
+// downgraded to ABSENT nor silently skipped.
+const DURABLE_ABSENT = 'ABSENT';
+const DURABLE_PENDING = 'PENDING';
+const DURABLE_PRESENT = 'PRESENT';
+
+/**
+ * DUR-J (PLAN.md ~L679-683): the ONE fd-bound durable classifier. EVERY authoritative
+ * read of a no-clobber-/replace-published record funnels through here so no reader can
+ * be fooled by the transient nlink==2 window, a symlink swap, an other-writable
+ * (tamperable) artifact, an oversized file, malformed/wrong-shape content, or an inode
+ * substitution mid-read. It is deliberately NOT `assertDurable(path)` + a separate
+ * `readFileSync(path)`: that pair re-resolves the path twice, a TOCTOU gap.
+ *
+ * Sequence (all against ONE fd): open `O_RDONLY|O_NOFOLLOW` -> fstat -> regular file
+ * -> owner-confined (uid) -> EXACT owner-only 0600 (POSIX; matches the write-side
+ * discipline exactly -- 0644/0444/etc. are rejected SECURITY_INVALID, not merely "no
+ * group/other write") -> nlink (==2 PENDING, >2 STOP) -> size bound -> read(fd) ->
+ * re-fstat dev/ino/nlink/size stable -> [immutablePath] re-lstat the path still names
+ * that inode -> [parse+shape] parse JSON and run the caller's closed-shape check.
+ * `immutablePath` defaults TRUE -- every immutable no-clobber record is path-identity-
+ * checked; the sole exception is the mutable active-lease/presence (caller passes
+ * immutablePath:false), whose in-place replace is serialized by the transition lock
+ * instead.
+ */
+function classifyDurableRead(artifactPath, policy) {
+  policy = policy || {};
+  const maxSize = policy.maxSize === undefined ? DEFAULT_MAX_DURABLE_ARTIFACT_BYTES : policy.maxSize;
+  const immutablePath = policy.immutablePath === undefined ? true : policy.immutablePath;
+  // DUR-J item 6: a MUTABLE read (immutablePath:false -- the active-lease/presence
+  // exception, which forgoes the path-identity check because the record is replaced in
+  // place) is trustworthy ONLY under an authentic transition-lock token for this same
+  // txnDir. Without one an unlocked reader could observe a half-completed replace, so a
+  // mutable read that is not proven to hold the lock is rejected outright.
+  if (immutablePath === false && !isValidLockTokenFor(policy.lockToken, artifactPath)) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'a mutable (immutablePath:false) durable read requires an authentic transition-lock token for this txnDir: ' + artifactPath);
+  }
+  const isPosix = process.platform !== 'win32';
+  let fd;
+  try {
+    fd = fs.openSync(artifactPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return { state: DURABLE_ABSENT };
+    if (err && err.code === 'ELOOP') {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'artifact is a symlink (rejected at open): ' + artifactPath);
+    }
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'artifact could not be opened no-follow: ' + artifactPath + ' (' + (err && err.code) + ')');
+  }
+  try {
+    const st1 = fs.fstatSync(fd, { bigint: true });
+    if (!statIsRegularFile(st1)) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'artifact is not a regular file: ' + artifactPath);
+    }
+    if (isPosix && typeof process.getuid === 'function' && st1.uid !== BigInt(process.getuid())) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'artifact is not owner-confined: ' + artifactPath);
+    }
+    // EXACT owner-only 0600 for authoritative records (POSIX), matching the real writer;
+    // 0644/0444/etc. are rejected. Windows ACL/SID confinement is PENDING_CI, not GREEN local.
+    if (isPosix && (st1.mode & 0o777n) !== 0o600n) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'artifact mode is not owner-only 0600: ' + artifactPath);
+    }
+    if (st1.nlink === 2n) {
+      // The single recognized in-flight window. A poll treats PENDING as "keep waiting";
+      // every one-shot wrapper converts it to a DURABILITY_UNPROVEN STOP.
+      return { state: DURABLE_PENDING };
+    }
+    if (st1.nlink !== 1n) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'artifact nlink=' + st1.nlink + ' is not a recognized durable/in-flight state: ' + artifactPath);
+    }
+    if (st1.size > BigInt(maxSize)) {
+      throw new CliError('INVALID', 'SCHEMA_INVALID', 'artifact exceeds max durable size (' + st1.size + '>' + maxSize + '): ' + artifactPath);
+    }
+    injectReadMutationFault(artifactPath);
+    const bytes = readAllFromFd(fd, Number(st1.size) + 1);
+    if (BigInt(bytes.length) !== st1.size) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'artifact read length (' + bytes.length + ') != size snapshot (' + st1.size + '): ' + artifactPath);
+    }
+    const st2 = fs.fstatSync(fd, { bigint: true });
+    // Reject ANY drift across the read -- same-inode rewrite (ctime/mtime), chmod (mode),
+    // added hardlink (nlink), growth (size), owner change. PRESENT requires the LAST snapshot
+    // still be a single-link (nlink==1) inode identical to the first.
+    if (st2.dev !== st1.dev || st2.ino !== st1.ino || st2.nlink !== st1.nlink || st2.size !== st1.size || st2.mode !== st1.mode || st2.uid !== st1.uid || st2.gid !== st1.gid || st2.ctimeNs !== st1.ctimeNs || st2.mtimeNs !== st1.mtimeNs) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'artifact identity changed during read (rewrite/chmod/hardlink/growth): ' + artifactPath);
+    }
+    if (st2.nlink !== 1n) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'artifact nlink!=1 in the final snapshot: ' + artifactPath);
+    }
+    if (immutablePath) {
+      let lst;
+      try {
+        lst = fs.lstatSync(artifactPath, { bigint: true });
+      } catch (err) {
+        throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'artifact path vanished after read: ' + artifactPath);
+      }
+      if (lst.dev !== st1.dev || lst.ino !== st1.ino || lst.nlink !== st1.nlink || lst.size !== st1.size || lst.mode !== st1.mode || lst.uid !== st1.uid || lst.gid !== st1.gid || lst.ctimeNs !== st1.ctimeNs || lst.mtimeNs !== st1.mtimeNs) {
+        throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'artifact path rebound or invariants changed after read: ' + artifactPath);
+      }
+    }
+    let obj;
+    if (policy.parse || policy.shape) {
+      obj = parseJsonOrSchemaInvalid(bytes);
+      if (policy.shape) policy.shape(obj, artifactPath);
+    }
+    return { state: DURABLE_PRESENT, bytes: bytes, obj: obj };
+  } finally {
+    try { fs.closeSync(fd); } catch (e) { /* already closed */ }
+  }
+}
+
+/** One-shot STOP for the nlink==2 in-flight window (a caller with no wait budget). */
+function pendingDurableStop(artifactPath) {
+  return new CliError('INVALID', 'DURABILITY_UNPROVEN', 'artifact in the nlink==2 in-flight window, not yet durable: ' + artifactPath);
+}
+function absentDurableStop(artifactPath, policy) {
+  const e = new CliError('INVALID', policy.absentDetail || 'SCHEMA_INVALID', policy.absentMessage || ('artifact not found: ' + artifactPath));
+  e.durableAbsent = true;
+  return e;
+}
+
+/** Required fd-bound durable read (bytes): throws on absent (absentDetail) or PENDING. */
+function readDurableBytes(artifactPath, policy) {
+  policy = policy || {};
+  const r = classifyDurableRead(artifactPath, policy);
+  if (r.state === DURABLE_ABSENT) throw absentDurableStop(artifactPath, policy);
+  if (r.state === DURABLE_PENDING) throw pendingDurableStop(artifactPath);
+  return r.bytes;
+}
+
+/** Optional fd-bound durable read (bytes): null IFF genuinely absent; PENDING STOPs. */
+function readDurableBytesOptional(artifactPath, policy) {
+  const r = classifyDurableRead(artifactPath, policy || {});
+  if (r.state === DURABLE_ABSENT) return null;
+  if (r.state === DURABLE_PENDING) throw pendingDurableStop(artifactPath);
+  return r.bytes;
+}
+
+/** Required fd-bound durable JSON read (parsed + optional closed-shape check). */
+function readJsonDurable(artifactPath, policy) {
+  policy = Object.assign({ parse: true }, policy || {});
+  const r = classifyDurableRead(artifactPath, policy);
+  if (r.state === DURABLE_ABSENT) throw absentDurableStop(artifactPath, policy);
+  if (r.state === DURABLE_PENDING) throw pendingDurableStop(artifactPath);
+  return r.obj;
+}
+
+/** Optional fd-bound durable JSON read: null IFF genuinely absent; PENDING STOPs. */
+function readJsonDurableOptional(artifactPath, policy) {
+  policy = Object.assign({ parse: true }, policy || {});
+  const r = classifyDurableRead(artifactPath, policy);
+  if (r.state === DURABLE_ABSENT) return null;
+  if (r.state === DURABLE_PENDING) throw pendingDurableStop(artifactPath);
+  return r.obj;
+}
+
+/**
+ * DUR-J item 6: required fd-bound durable read returning the ACCREDITED bytes + parsed obj +
+ * content digest from ONE read, so no caller ever re-hashes a coordination record by path
+ * (`sha256File` on a record is a TOCTOU + a second unaccredited read). Absence and PENDING
+ * (nlink==2) STOP exactly like readDurableBytes.
+ */
+function readDurableRecord(artifactPath, policy) {
+  const bytes = readDurableBytes(artifactPath, policy);
+  return { bytes: bytes, obj: parseJsonOrSchemaInvalid(bytes), digest: sha256Buffer(bytes) };
+}
+
+/**
+ * Section 4 (transactional boundaries): required fd-bound durable record read +
+ * CLOSED-SHAPE enforcement in ONE call -- {obj, bytes, digest} from the same
+ * accredited read, with `obj` proven to be a well-formed instance of `fieldDefs`
+ * before any caller trusts its fields. A parsed-but-unvalidated record (durable,
+ * but with a missing/wrong-typed/extra field) must never drive a transactional
+ * decision or be woven into a NEW authoritative record's fields.
+ */
+function readClosedRecord(artifactPath, fieldDefs, policy) {
+  const rec = readDurableRecord(artifactPath, policy);
+  assertClosedShape(rec.obj, fieldDefs);
+  return rec;
+}
+
+/** Optional variant of `readClosedRecord`: null IFF genuinely absent; PENDING/shape-invalid still STOP. */
+function readClosedRecordOptional(artifactPath, fieldDefs, policy) {
+  const bytes = readDurableBytesOptional(artifactPath, policy);
+  if (bytes === null) return null;
+  const obj = parseJsonOrSchemaInvalid(bytes);
+  assertClosedShape(obj, fieldDefs);
+  return { bytes: bytes, obj: obj, digest: sha256Buffer(bytes) };
+}
+
+// Section 7 (DUR-H recovery): the EXACT, closed grammar for a no-clobber owner-tagged
+// temp -- `.{target-basename}.{pid}.{16-lowercase-hex}.tmp-owner`, byte-for-byte
+// matching publishNoClobber's own construction. Deliberately excludes
+// `.refresh-tmp-owner` (publishReplace's own, unrelated naming scheme): a mutable-
+// lease refresh temp is NEVER a valid nlink==2 no-clobber recovery companion --
+// publishReplace renames, it never hard-links.
+const NOCLOBBER_TEMP_RE = /^\.(.+)\.(\d+)\.([0-9a-f]{16})\.tmp-owner$/;
+
+// Codex P1-3/round-2 blocker 1: outcomes that mean "a plausibly-genuine temp of ours
+// was found but could NOT be accredited as safely not-ours, and either was not
+// destructively touched (a genuine stray/pair reported 'unlink-unsafe' -- no portable
+// primitive can prove a path-based unlink targets the fd-accredited inode) or could
+// not even be characterized ('ambiguous'/'drift'/'failed')" -- all four are
+// indistinguishable at the CALLER's level (`cmdCleanup`): each means the directory
+// could not be fully reconciled and must propagate as DURABILITY_UNPROVEN, never a
+// silent SUCCESS.
+// Codex NO-GO round 2, blocker 1: 'unlink-unsafe' (a genuinely-proven stray/crash-cut
+// pair that reconcile deliberately does NOT delete) is a FAILURE from cmdCleanup's own
+// perspective -- the target remains non-durable (nlink==2, reader-rejected) or the
+// stray remains on disk, and cleanup could not complete its job, even though nothing
+// is ambiguous/corrupted/malfunctioning about what was found.
+const RECONCILE_FAILURE_STATUSES = new Set(['ambiguous', 'drift', 'failed', 'unlink-unsafe']);
+
+/**
+ * Reconciles leftover no-clobber temp siblings in one directory. Only entries
+ * matching the EXACT production no-clobber temp grammar are ever touched; the
+ * target basename is DERIVED from that name, never inferred by a generic inode
+ * scan (Section 7: "expected.json" can never be paired with "malicious.json"
+ * merely because the two happen to be inode-linked). Never touches non-temp
+ * files (terminal records are never at risk -- `TERMINAL-NO-DELETE-01`).
+ *
+ * Codex P1-3: returns an EXPLICIT `{ok, results}` outcome rather than void -- `ok` is
+ * false iff ANY matched temp resolved to `RECONCILE_FAILURE_STATUSES`, so `cmdCleanup`
+ * can propagate ambiguity/drift/failure as DURABILITY_UNPROVEN instead of always
+ * reporting SUCCESS regardless of what reconciliation actually found. A directory that
+ * genuinely does not exist yet (ENOENT -- e.g. this transaction never had a `claims/`
+ * or `delivery/` subdirectory) is NOT a failure; any OTHER enumeration error (EACCES,
+ * ENOTDIR, ...) is, mirroring `listResultFiles`'s own ENOENT-vs-other-errors split.
+ *
+ * Codex gap #2 / NO-GO round 2 blocker 4: `MAX_ENUM_HARD_CAP`/`MAX_ENUM_KEPT_ENTRIES`
+ * bound this scan the same way `listResultFiles` is bounded -- an implausibly large
+ * directory, or more grammar-matching temp candidates than can be safely processed,
+ * fails closed ('failed'/'ambiguous') rather than silently scanning or promoting only
+ * a subset while claiming the directory was fully accounted for. The hard cap is
+ * enforced via a TRUE streaming `opendirSync`/`readSync` cutoff (never materializing
+ * more than `MAX_ENUM_HARD_CAP` dirents at once) -- the prior `readdirSync()` fully
+ * materialized the directory into memory BEFORE checking its length, which bounded
+ * downstream processing but not the scan/allocation itself.
  */
 function reconcileTempArtifacts(dirPath) {
-  let entries;
+  let dirHandle;
   try {
-    entries = fs.readdirSync(dirPath);
+    dirHandle = fs.opendirSync(dirPath);
   } catch (err) {
-    return;
+    if (err && err.code === 'ENOENT') return { ok: true, results: [] };
+    return { ok: false, results: [{ status: 'failed', reason: 'directory could not be enumerated: ' + (err && err.code) }] };
   }
-  const tempRe = /^\.(.+)\.(tmp-owner|refresh-tmp-owner)$/;
-  for (const entry of entries) {
-    const m = tempRe.exec(entry);
-    if (!m) continue;
-    const tempPath = path.join(dirPath, entry);
+  const matched = []; // ascending-sorted [tempName, targetBasename] pairs, bounded to MAX_ENUM_KEPT_ENTRIES
+  let totalSeen = 0;
+  let matchedCount = 0;
+  let hardCapExceeded = false;
+  try {
+    let entry = dirHandle.readSync();
+    while (entry !== null) {
+      totalSeen += 1;
+      if (totalSeen > MAX_ENUM_HARD_CAP) {
+        hardCapExceeded = true;
+        break; // abort without inspecting this or any further entry
+      }
+      const m = NOCLOBBER_TEMP_RE.exec(entry.name);
+      if (m) {
+        matchedCount += 1;
+        insertBoundedCandidate(matched, entry.name, m[1], MAX_ENUM_KEPT_ENTRIES);
+      }
+      entry = dirHandle.readSync();
+    }
+  } catch (err) {
+    return { ok: false, results: [{ status: 'failed', reason: 'directory enumeration failed mid-scan: ' + (err && err.code) }] };
+  } finally {
+    try { dirHandle.closeSync(); } catch (e) { /* best-effort close */ }
+  }
+  if (hardCapExceeded) {
+    return { ok: false, results: [{ status: 'failed', reason: 'directory exceeds the max scanned-entry bound (>' + MAX_ENUM_HARD_CAP + ')' }] };
+  }
+  if (matchedCount > MAX_ENUM_KEPT_ENTRIES) {
+    return { ok: false, results: [{ status: 'ambiguous', reason: 'directory has more matching temp candidates than the max kept bound (' + matchedCount + '>' + MAX_ENUM_KEPT_ENTRIES + ')' }] };
+  }
+  const results = matched.map(([entry, targetBasename]) => reconcileOneNoClobberTemp(dirPath, entry, targetBasename));
+  const ok = results.every((r) => !RECONCILE_FAILURE_STATUSES.has(r.status));
+  return { ok, results };
+}
+
+/**
+ * DUR-H recovery for exactly one production-named no-clobber temp. Codex NO-GO round
+ * 2 (blocker 1): this function performs NO destructive unlink at all, in EITHER the
+ * nlink==1 (stray) or nlink==2 (crash-cut pair) case -- no portable primitive can
+ * prove a path-based `unlinkSync` targets the SAME inode an earlier `fstatSync(tfd)`
+ * accredited (an fd's fstat is invariant to what its path currently names, so it
+ * cannot detect a path rebind; Codex proved even a path-based lstat immediately
+ * before the unlink does not close that race). It instead proves as much as it
+ * safely can -- temp genuineness, and for a pair, companion genuineness + byte
+ * identity + mid-read stability -- and then STOPs, reporting what it found rather
+ * than acting on it. The temp's own fd is kept open through the complete decision
+ * (never re-resolved by path mid-decision).
+ *
+ * Codex P1-3/round-2/round-3: returns an EXPLICIT `{status, reason}` outcome instead
+ * of a bare `return` (void) at every branch -- `status` is one of:
+ *   'skip'          -- genuinely not ours (temp gone/symlink/wrong-owner/wrong-mode):
+ *                       benign, no failure to report.
+ *   'unlink-unsafe' -- a genuine nlink==1 stray, OR a genuine nlink==2 crash-cut pair
+ *                       (companion proven, bytes matched, identity stable) -- fully
+ *                       identified and durably confirmed, but deliberately NOT
+ *                       auto-deleted/promoted (see this function's own reasoning
+ *                       above). A FAILURE from `cmdCleanup`'s perspective: it could
+ *                       not complete reconciliation, even though nothing is
+ *                       ambiguous or malfunctioning about what it found.
+ *   'ambiguous'     -- a plausibly-genuine temp whose companion does not resolve/
+ *                       validate as the exact expected pair (Codex: "ambigüedad"),
+ *                       or whose own nlink is >2 (not a recognized no-clobber state).
+ *   'drift'         -- genuine temp+companion, but metadata/bytes changed mid-read
+ *                       (Codex: "drift").
+ *   'failed'        -- an anomalous I/O error (EACCES/EIO/...) on a temp/companion
+ *                       that otherwise matches our exact grammar -- never folded into
+ *                       a benign skip (Codex NO-GO round 2, blocker 2).
+ */
+/**
+ * Codex NO-GO round 2, blocker 1: `reconcileOneNoClobberTemp` NEVER destructively
+ * unlinks `tempPath` -- neither for a genuine nlink==1 stray nor to complete a genuine
+ * nlink==2 crash-cut recovery. `fstatSync(tfd)` accredits the OPEN inode, but a
+ * subsequent `unlinkSync(tempPath)` is inherently PATH-based (POSIX has no
+ * `funlinkat`-style primitive, and Node's `fs` module exposes none either): nothing
+ * proves `tempPath` still names that SAME inode at the moment the unlink executes.
+ * Empirically reproduced: an attacker renames the accredited original away and plants
+ * a substitute at the identical path between the last check and the unlink -- the
+ * SUBSTITUTE gets deleted, not the accredited original, which is left moved/orphaned
+ * elsewhere, while the stray-removal path still reported SUCCESS. Re-fstat-ing the
+ * SAME already-open fd immediately before the unlink (this function's own PRIOR
+ * attempt at closing this gap) does not help: an fd's fstat is invariant to what its
+ * path currently names, so that check can structurally never detect a path rebind. A
+ * path-based `lstat(tempPath)` immediately before the unlink narrows but does not
+ * close the window either -- PLAN.md permits recovery to delete once it PROVES
+ * durability; it does not require deletion. This function therefore proves as much as
+ * it safely can (temp genuineness, companion genuineness, byte-identity, stability)
+ * and then STOPs rather than performing an unlink no available primitive can bind to
+ * the accredited inode.
+ */
+function reconcileOneNoClobberTemp(dirPath, tempName, targetBasename) {
+  const tempPath = path.join(dirPath, tempName);
+  const isPosix = process.platform !== 'win32';
+  let tfd;
+  try {
+    tfd = fs.openSync(tempPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  } catch (err) {
+    // Codex NO-GO round 2, blocker 2: only a genuinely ABSENT temp (ENOENT) or a
+    // symlink at the temp's own name (ELOOP -- O_NOFOLLOW rejected it; there is
+    // nothing further this function COULD inspect or act on) is a benign skip. Any
+    // OTHER open failure (EACCES, EIO, EMFILE, ...) is an anomaly on a path matching
+    // our own production grammar and must propagate, never be folded into "not ours".
+    if (err && err.code === 'ENOENT') return { status: 'skip', reason: 'temp gone' };
+    if (err && err.code === 'ELOOP') return { status: 'skip', reason: 'temp path is a symlink (rejected at open, O_NOFOLLOW)' };
+    return { status: 'failed', reason: 'temp open failed unexpectedly (' + (err && err.code) + ')' };
+  }
+  try {
+    // 1. Prove the temp itself is a genuine owner-owned, EXACT owner-only 0600 REGULAR
+    //    file. Wrong owner/mode is not ours -- leave it untouched (never auto-reclaim
+    //    by age). nlink>2 (Codex blocker 2) is NOT a recognized no-clobber state for
+    //    a temp that otherwise matches our exact naming grammar -- that is an anomaly,
+    //    not a benign skip, and must propagate.
+    let tst;
     try {
-      fs.unlinkSync(tempPath);
-    } catch (err) { /* best effort */ }
+      if (isReconcileTempFstatFaultActive()) {
+        const injected = new Error('injected reconcile temp-fstat failure (RUNTIME_CONSULTATION_FAULT_RECONCILE_TEMP_FSTAT)');
+        injected.code = 'EIO';
+        throw injected;
+      }
+      tst = fs.fstatSync(tfd, { bigint: true });
+    } catch (err) {
+      // Codex gap #4 (round 1): an fstat failing on an fd we JUST successfully opened
+      // (proving the temp exists and is not a symlink) is an anomaly, not "genuinely
+      // not ours" -- unlike a wrong-owner/wrong-mode temp (a definite skip), this
+      // cannot be characterized as safe to ignore, so it is a FAILURE that must
+      // propagate.
+      return { status: 'failed', reason: 'temp fstat failed' };
+    }
+    if (!statIsRegularFile(tst)) return { status: 'skip', reason: 'temp is not a regular file' };
+    if (tst.nlink > 2n) return { status: 'failed', reason: 'temp nlink>2 is not a recognized no-clobber state' };
+    const ownerOk = !isPosix || typeof process.getuid !== 'function' || tst.uid === BigInt(process.getuid());
+    const modeOk = !isPosix || (tst.mode & 0o777n) === 0o600n;
+    if (!ownerOk || !modeOk) return { status: 'skip', reason: 'temp is not owner-confined exact-0600' };
+
+    // Codex gap: a byte-size bound BEFORE any size-derived read/allocation below (mirrors
+    // classifyDurableRead's own DEFAULT_MAX_DURABLE_ARTIFACT_BYTES bound) -- a temp
+    // claiming an implausible size is ambiguous, never trusted enough to size an
+    // allocation from.
+    if (tst.size > BigInt(DEFAULT_MAX_DURABLE_ARTIFACT_BYTES)) {
+      return { status: 'ambiguous', reason: 'temp exceeds max durable size' };
+    }
+
+    if (tst.nlink === 1n) {
+      // A genuine stray (crash before linkSync, or after the target's unlink): not
+      // hard-linked to anything, so it is not blocking any target's promotion. Report
+      // it as PROVEN-but-not-removed -- see the function's own doc comment for why a
+      // path-based unlink here can never be proven to target this accredited inode.
+      return { status: 'unlink-unsafe', reason: 'genuine stray temp identified but not auto-removed (no fd-bound unlink primitive)' };
+    }
+
+    // 2. nlink === 2: DUR-H recovery. Open the EXACT same-directory target DERIVED from
+    //    the temp's own encoded name -- never any other name, and never merely "some
+    //    inode-linked file" (an inode match to a WRONGLY-named file is ambiguity/attack,
+    //    not a companion).
+    const targetPath = path.join(dirPath, targetBasename);
+    let xfd;
+    try {
+      xfd = fs.openSync(targetPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    } catch (err) {
+      return { status: 'ambiguous', reason: 'no companion at the derived target path (or it is a symlink)' };
+    }
+    try {
+      let xst;
+      try {
+        xst = fs.fstatSync(xfd, { bigint: true });
+      } catch (err) {
+        return { status: 'ambiguous', reason: 'companion fstat failed' };
+      }
+      // Exact dev/ino relationship (the SAME inode the temp is linked to -- a genuinely
+      // separate file that merely happens to share a name is rejected here), regular
+      // file, owner, EXACT 0600, nlink==2 (its only two links are this temp and this
+      // target -- a second link outside this directory would leave some OTHER file
+      // owning the "real" companion role, so dev/ino already fails to match here).
+      if (
+        xst.dev !== tst.dev || xst.ino !== tst.ino
+        || !statIsRegularFile(xst) || xst.nlink !== 2n
+        || (isPosix && typeof process.getuid === 'function' && xst.uid !== BigInt(process.getuid()))
+        || (isPosix && (xst.mode & 0o777n) !== 0o600n)
+      ) {
+        return { status: 'ambiguous', reason: 'derived target is not the temp\'s exact genuine companion' };
+      }
+      if (xst.size > BigInt(DEFAULT_MAX_DURABLE_ARTIFACT_BYTES)) {
+        return { status: 'ambiguous', reason: 'companion exceeds max durable size' };
+      }
+      // Bounded identical bytes/digest between temp and target, both fd-bound from the
+      // two already-open, already-identity-proven descriptors -- proves the content a
+      // reader would see is exactly what a completed recovery would have promoted. The
+      // fault seam mirrors classifyDurableRead's own mid-read mutation hook, positioned
+      // BEFORE the read so a live drift (chmod/rewrite/hardlink/grow/rebind) is
+      // reflected in the bytes read AND is still caught by the stability re-fstat
+      // immediately below.
+      injectReadMutationFault(targetPath);
+      const tempBytes = readAllFromFd(tfd, Number(tst.size) + 1);
+      const targetBytes = readAllFromFd(xfd, Number(xst.size) + 1);
+      if (tst.size !== xst.size || Buffer.compare(tempBytes, targetBytes) !== 0) {
+        return { status: 'ambiguous', reason: 'temp/target byte mismatch' }; // a temp encoding one target's name cannot be paired with different bytes
+      }
+      // Stability re-check: the target's identity must be UNCHANGED across the read
+      // above (same discipline as classifyDurableRead's own st1-vs-st2 comparison) --
+      // catches a drift whose byte-for-byte content still happened to compare equal
+      // (e.g. a same-inode rewrite or an added hardlink).
+      let xst1b;
+      try {
+        xst1b = fs.fstatSync(xfd, { bigint: true });
+      } catch (err) {
+        return { status: 'ambiguous', reason: 'companion re-fstat failed' };
+      }
+      if (
+        xst1b.dev !== xst.dev || xst1b.ino !== xst.ino || xst1b.nlink !== xst.nlink
+        || xst1b.size !== xst.size || xst1b.mode !== xst.mode || xst1b.uid !== xst.uid
+        || xst1b.gid !== xst.gid || xst1b.ctimeNs !== xst.ctimeNs || xst1b.mtimeNs !== xst.mtimeNs
+      ) {
+        return { status: 'drift', reason: 'companion identity drifted mid-read' }; // never promoted on stale metadata
+      }
+      // The genuine crash-cut pair IS now durably confirmed (companion proven, bytes
+      // matched, identity stable) -- but per this function's own doc comment, recovery
+      // reports it rather than performing the unlink no available primitive can prove
+      // targets this accredited inode.
+      return { status: 'unlink-unsafe', reason: 'genuine crash-cut pair identified but not auto-completed (no fd-bound unlink primitive)' };
+    } finally {
+      try { fs.closeSync(xfd); } catch (e) { /* already closed */ }
+    }
+  } finally {
+    try { fs.closeSync(tfd); } catch (e) { /* already closed */ }
   }
 }
 
@@ -637,42 +1782,206 @@ function sleepSync(ms) {
   Atomics.wait(ia, 0, 0, ms);
 }
 
+const RENDEZVOUS_MAX_WAIT_MS = 5000;
+const RENDEZVOUS_POLL_MS = 20;
+
 /**
- * Exclusive `mkdir` of `.lock/`; bounded wait; never age-reclaimed (an orphaned
- * lock is never unblocked by its age alone -- `LOCK-ORPHAN-01`). Times out with
- * `CliError('TIMEOUT', ...)` rather than hanging or inferring staleness.
+ * Section 4 (six deterministic interleavings): capability-gated rendezvous, NOT a
+ * timing sleep. When `RUNTIME_CONSULTATION_TEST_RENDEZVOUS===name` under the test
+ * capability, writes a durable "-ready" sentinel under `txnDir` then polls (bounded)
+ * for a "-go" sentinel before returning -- letting a bats test deterministically run a
+ * SECOND process's complete operation between two exact points inside THIS one (e.g.
+ * "claim published, about to acquire the lock"), rather than guessing at a race with
+ * sleeps. Throws if the "-go" sentinel never appears within the bound (a hung
+ * rendezvous must fail loud, never hang the test suite). Inert (immediate no-op)
+ * whenever the named rendezvous point is not the one under test.
+ */
+function testRendezvous(txnDir, name) {
+  if (!isTestCapability()) return;
+  if (process.env.RUNTIME_CONSULTATION_TEST_RENDEZVOUS !== name) return;
+  const readyPath = path.join(txnDir, '.rendezvous-' + name + '-ready');
+  const goPath = path.join(txnDir, '.rendezvous-' + name + '-go');
+  fs.writeFileSync(readyPath, String(process.pid));
+  const start = Date.now();
+  while (!fs.existsSync(goPath)) {
+    if (Date.now() - start >= RENDEZVOUS_MAX_WAIT_MS) {
+      throw new Error('test rendezvous "' + name + '" timed out waiting for the -go sentinel');
+    }
+    sleepSync(RENDEZVOUS_POLL_MS);
+  }
+}
+
+// An opaque, unforgeable transition-lock token. ONLY acquireLock mints one (a fresh
+// object carrying this private brand + the bound txnDir); a forged plain object, or a
+// token minted for a DIFFERENT txnDir, is rejected by isValidLockTokenFor.
+// DUR-J item 2: a transition-lock token is an OPAQUE, frozen, empty object. ALL of its
+// authority lives in this module-private WeakMap -- nothing is observable on the token, so
+// it cannot be forged (a plain/cloned object is simply absent from the map), mutated
+// (frozen, no metadata), or replayed after release (`active` flips false). The record binds
+// the canonical txnDir/lockDir plus the .lock directory's dev/ino at acquisition, so a
+// later use can prove the SAME directory still stands (a deleted+recreated .lock differs).
+const lockRegistry = new WeakMap();
+
+// DUR-J item 3: errors that POISON the lock (a publishReplace past the rename that could not
+// be proven durable) are marked in a private WeakSet -- an unforgeable flag a caller cannot
+// set on an arbitrary error to trick withLock into orphaning the lock.
+const poisonedErrors = new WeakSet();
+function markPoisoned(err) { poisonedErrors.add(err); return err; }
+function isPoisoned(err) { return !!err && poisonedErrors.has(err); }
+
+/** Canonical containment: `artifactPath` is `base` itself or strictly beneath it (no `..`, no sibling-prefix). */
+function isPathWithin(base, artifactPath) {
+  const rel = path.relative(base, path.resolve(artifactPath));
+  return rel === '' || (rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel));
+}
+
+/**
+ * True iff `token` is a LIVE, authentic transition-lock token authorizing a read of
+ * `artifactPath` under its txnDir. Proves: registered (not a plain/cloned/mutated object),
+ * still active (not released), `artifactPath` canonically contained in the token's txnDir,
+ * AND the on-disk .lock is still the SAME directory (dev/ino) the token was minted for (a
+ * deleted+recreated lock is rejected).
+ */
+function isValidLockTokenFor(token, artifactPath) {
+  if (!token || typeof token !== 'object') return false;
+  const rec = lockRegistry.get(token);
+  if (!rec || rec.active !== true) return false;
+  if (!isPathWithin(rec.canonicalTxnDir, artifactPath)) return false;
+  let st;
+  try {
+    st = fs.lstatSync(rec.canonicalLockDir, { bigint: true });
+  } catch (err) {
+    return false; // the .lock we hold is gone -> the token no longer proves exclusion.
+  }
+  return st.isDirectory() && st.dev === rec.lockDev && st.ino === rec.lockIno;
+}
+
+/**
+ * Exclusive `mkdir` of `.lock/`; bounded wait; never age-reclaimed (an orphaned lock is
+ * never unblocked by its age alone -- `LOCK-ORPHAN-01`). Times out with CliError(TIMEOUT)
+ * rather than hanging or inferring staleness. DUR-J item 5: the lock is a DURABLE
+ * in-progress signal -- ORDER is mkdir(.lock) -> fsync(txnDir); the parent barrier is
+ * proven BEFORE a usable token is minted. If that barrier cannot be proven, the .lock is
+ * LEFT in place as a durable/unproven orphan (a later actor times out + STOPs, never
+ * silently reclaims it) and acquisition fails closed with DURABILITY_UNPROVEN.
  */
 function acquireLock(txnDir) {
-  const lockDir = path.join(txnDir, '.lock');
-  fs.mkdirSync(txnDir, { recursive: true });
+  const canonicalTxnDir = path.resolve(txnDir);
+  const lockDir = path.join(canonicalTxnDir, '.lock');
+  fs.mkdirSync(canonicalTxnDir, { recursive: true });
   const start = Date.now();
   for (;;) {
     try {
       fs.mkdirSync(lockDir);
-      return lockDir;
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
       if (Date.now() - start >= LOCK_MAX_WAIT_MS) {
         throw new CliError('TIMEOUT', 'DEADLINE_EXCEEDED', 'transition lock acquisition timed out: ' + lockDir);
       }
       sleepSync(LOCK_POLL_MS);
+      continue;
     }
+    // mkdir succeeded -> prove the acquisition barrier (mkdir precedes fsync by construction).
+    if (!fsyncDir(canonicalTxnDir, 'lock-acquire')) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock acquisition barrier could not be proven durable; .lock retained as a durable orphan: ' + lockDir + fsyncDirCauseSuffix());
+    }
+    let st;
+    try {
+      st = fs.lstatSync(lockDir, { bigint: true });
+    } catch (err) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock directory could not be stat-verified after acquisition: ' + lockDir);
+    }
+    if (!st.isDirectory()) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock path is not a directory after acquisition: ' + lockDir);
+    }
+    const token = Object.freeze({});
+    lockRegistry.set(token, {
+      canonicalTxnDir: canonicalTxnDir,
+      canonicalLockDir: lockDir,
+      lockDev: st.dev, // BigInt
+      lockIno: st.ino, // BigInt
+      active: true,
+    });
+    return token;
   }
 }
 
-function releaseLock(lockDir) {
+/**
+ * DUR-J item 8: NOT best-effort, and runs ONLY on a COMPLETE operation. Order is
+ * rmdir(.lock) -> fsync(txnDir). An rmdir failure retains the lock and STOPs. A
+ * removal-barrier failure reports DURABILITY_UNPROVEN: a crash could resurrect the .lock,
+ * but that only makes a later actor timeout + STOP -- never unsafe acceptance.
+ */
+function releaseLock(lockToken) {
+  // AUTHENTICATE the token BEFORE any disk mutation: a plain / cloned / mutated / stale
+  // (already-released) / wrong-txn / double-release token is rejected with NO filesystem
+  // change -- a forged release can never remove a directory.
+  const rec = (lockToken && typeof lockToken === 'object') ? lockRegistry.get(lockToken) : undefined;
+  if (!rec || rec.active !== true) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'releaseLock called with a non-authentic or already-released transition-lock token (no filesystem change made)');
+  }
+  // Prove the .lock we hold is still the SAME directory before removing it -- never rmdir a
+  // directory that was deleted+recreated (a different inode) under us.
+  let st;
   try {
-    fs.rmdirSync(lockDir);
-  } catch (err) { /* best effort */ }
+    st = fs.lstatSync(rec.canonicalLockDir, { bigint: true });
+  } catch (err) {
+    rec.active = false;
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock directory vanished before release: ' + rec.canonicalLockDir);
+  }
+  if (!st.isDirectory() || st.dev !== rec.lockDev || st.ino !== rec.lockIno) {
+    rec.active = false;
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock directory identity changed before release: ' + rec.canonicalLockDir);
+  }
+  // Identity authenticated -> REVOKE the token NOW, BEFORE the effective removal. If rmdir
+  // (or the barrier) then fails, the .lock is left orphan AND the token is already inactive,
+  // so a stale-token replay is rejected rather than appearing to still hold a lock that is
+  // (or is about to be) gone.
+  rec.active = false;
+  try {
+    if (isLockRmdirFaultActive()) {
+      const injected = new Error('injected lock rmdir failure (RUNTIME_CONSULTATION_FAULT_LOCK_RMDIR)');
+      injected.code = 'EIO';
+      throw injected;
+    }
+    fs.rmdirSync(rec.canonicalLockDir);
+  } catch (err) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock release rmdir failed; lock retained (token revoked): ' + rec.canonicalLockDir);
+  }
+  if (!fsyncDir(rec.canonicalTxnDir, 'lock-release')) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock release barrier could not be proven durable: ' + rec.canonicalLockDir + fsyncDirCauseSuffix());
+  }
 }
 
+/**
+ * Runs `fn(lockToken)` under the durable transition lock. The token is threaded to inner
+ * readers (item 6 reentrancy) so a lease read under the lock never re-acquires -> deadlock.
+ * A COMPLETE run releases the lock durably (item 8). A CLEAN failure (validation/authority,
+ * or a PRE_RENAME publishReplace error) releases the lock so the txn is not wedged, then
+ * re-throws. A POISONED failure (`err.lockPoisoned` -- a publishReplace that reached
+ * POST_RENAME_UNPROVEN) LEAVES the .lock as a durable orphan so every later actor times
+ * out + STOPs and never accepts the half-replaced record (item 7).
+ */
 function withLock(txnDir, fn) {
-  const lockDir = acquireLock(txnDir);
+  const lockToken = acquireLock(txnDir);
+  let result;
   try {
-    return fn();
-  } finally {
-    releaseLock(lockDir);
+    result = fn(lockToken);
+  } catch (err) {
+    if (isPoisoned(err)) throw err; // POST_RENAME_UNPROVEN etc. -> retain .lock as a durable orphan.
+    // Clean failure: release the lock so the txn is not wedged. If release ALSO fails, its
+    // DURABILITY_UNPROVEN is primary (a stuck/unproven lock is the more urgent fact) and the
+    // original cause is preserved for diagnosis.
+    try {
+      releaseLock(lockToken);
+    } catch (releaseErr) {
+      releaseErr.cause = err;
+      throw releaseErr;
+    }
+    throw err;
   }
+  releaseLock(lockToken);
+  return result;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -843,13 +2152,29 @@ function assertRolePolicy(sourceRole, targetRole) {
 // `consult/v2` (record #1) -- field table PLAN.md ~L272-303
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Codex NO-GO round 5: PLAN.md ~L281/~L659 freezes `max_depth` at the fixed literal
+ * `2` -- it is NOT a per-request configurable ceiling. The single source of truth
+ * lives here; every site that either writes or compares against the frozen nesting
+ * ceiling references this constant, never a bare literal `2`.
+ */
+const MAX_DEPTH_LIMIT = 2;
+
 const CONSULT_V2_FIELDS = {
   schema: { check: (v) => v === 'coordination/consult/v2' },
   request_id: { check: isHexId },
   root_request_id: { check: isHexId },
   parent_request_id: { check: orNull(isHexId) },
   depth: { check: isNonNegativeInteger },
-  max_depth: { check: isNonNegativeInteger },
+  // Codex NO-GO round 5: was `isNonNegativeInteger` -- accepted ANY non-negative
+  // integer, so a durable, otherwise-canonical record with max_depth:0 (or any value
+  // != the frozen 2) passed shape validation. Combined with `cmdPublishRequest`'s own
+  // `parentObj.max_depth || 2` truthy-fallback bug (0 is falsy in JS), a parent
+  // carrying max_depth:0 was silently treated as max_depth:2, letting a nested publish
+  // that should have been rejected succeed and mutate disk. Reproduced empirically.
+  // Fixed at the source: max_depth is no longer a free-form field at all, it MUST be
+  // exactly the frozen ceiling.
+  max_depth: { check: (v) => v === MAX_DEPTH_LIMIT },
   source_role: { check: isNonEmptyString },
   target_role: { check: isNonEmptyString },
   target_role_profile_version: { check: isNonEmptyString },
@@ -883,11 +2208,38 @@ const CONSULT_V2_FIELDS = {
   initial_lease_epoch: { check: isNonNegativeInteger },
 };
 
+/**
+ * Codex NO-GO round 3, blocker 1: the SOLE canonical way to read an authoritative
+ * request.json. `readClosedRecord(..., CONSULT_V2_FIELDS, ...)` alone proves
+ * durability + fd-bound identity + closed shape, but proves NOTHING about whether the
+ * record's OWN embedded `request_id` matches the identity its storage location
+ * implies -- a request.json's PATH and its CONTENT can silently diverge (bytes copied
+ * wholesale from a genuinely durable, correctly-shaped, DIFFERENT request planted at
+ * `transactions/<A>/request.json` while internally still claiming `request_id: "B"`).
+ * Empirically reproduced (Codex): a shape-valid, durable, digest-matching request B
+ * planted at transaction A's own path made `validate --kind inbox-ref-v1` return
+ * SUCCESS. This helper closes that gap with one extra check: `obj.request_id` MUST
+ * equal the caller's `expectedRequestId` (mirroring `cmdLeaseHeartbeat`'s own
+ * established claim/attempt_id self-consistency check, same SECURITY_INVALID
+ * detail_code -- a content/location identity mismatch is a confinement violation, not
+ * a mere correlation mismatch). MECHANICAL RULE: no other `readClosedRecord(...,
+ * CONSULT_V2_FIELDS, ...)` call may exist anywhere in this file -- every authoritative
+ * request.json read funnels through here.
+ */
+function readCanonicalRequestRecord(requestPath, expectedRequestId, policy) {
+  const rec = readClosedRecord(requestPath, CONSULT_V2_FIELDS, policy);
+  if (rec.obj.request_id !== expectedRequestId) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'request.json content does not match its own canonical identity: ' + requestPath);
+  }
+  return rec;
+}
+
 /** Full `validate --kind consult-v2` pipeline: shape -> durability -> graph -> role-policy -> content_ref. */
 function validateConsultV2(artifactPath, coordRoot) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
-  assertClosedShape(obj, CONSULT_V2_FIELDS);
-  assertDurable(artifactPath);
+  const expectedRequestId = path.basename(path.dirname(artifactPath));
+  const obj = readCanonicalRequestRecord(artifactPath, expectedRequestId, {}).obj;
+  // DUR-J item 4: durability + fd-bound identity are proven inside readCanonicalRequestRecord
+  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
   const planRoot = planRootFromArtifact(coordRoot, artifactPath);
 
   if (obj.content_ref) {
@@ -902,7 +2254,26 @@ function validateConsultV2(artifactPath, coordRoot) {
   return obj;
 }
 
-/** Root/parent/depth validation table (PLAN.md ~L659-671): root shape, nesting, cycles, cross-root. */
+/**
+ * Root/parent/depth validation table (PLAN.md ~L659-671): root shape, nesting, cycles,
+ * cross-root.
+ *
+ * Codex NO-GO round 4: the walk now validates EVERY edge and EVERY node it traverses,
+ * not just the immediate parent's depth relationship. Empirically reproduced: a
+ * "root-shaped" (parent_request_id:null, depth:0) but internally self-contradictory
+ * ancestor (root_request_id != request_id) was accepted as a valid chain terminus --
+ * neither `cmdPublishRequest`'s single-hop parent lookup nor this walk ever re-checked
+ * the TERMINAL node's own root invariants, since that check previously lived ONLY in
+ * the `obj.parent_request_id === null` branch below (which fires when the artifact
+ * BEING validated is itself a root -- never when a root is merely encountered partway
+ * through an ancestor walk). Fixed: (1) `parent.depth + 1 === child.depth` is now
+ * checked for EVERY edge via a rolling `childObj` cursor (previously gated to the
+ * first hop only, `isImmediateParent`); (2) the moment a traversed ancestor's OWN
+ * `parent_request_id` is null (it is the chain's terminus), that ancestor is REQUIRED
+ * to satisfy the exact same `root_request_id===request_id`/`depth===0` invariants a
+ * directly-validated root would -- never silently accepted merely because the walk
+ * stops there.
+ */
 function validateRequestGraph(obj, planRoot) {
   if (obj.parent_request_id === null) {
     if (obj.root_request_id !== obj.request_id) {
@@ -915,28 +2286,42 @@ function validateRequestGraph(obj, planRoot) {
   }
   const visited = new Set([obj.request_id]);
   let curId = obj.parent_request_id;
-  let isImmediateParent = true;
+  let childObj = obj; // the node whose depth we are about to verify against curId's own record
   let hops = 0;
   while (curId !== null) {
     if (visited.has(curId)) {
       throw new CliError('INVALID', 'CORRELATION_INVALID', 'parent_request_id cycle detected');
     }
     visited.add(curId);
-    let parentObj;
-    try {
-      parentObj = JSON.parse(fs.readFileSync(requestPathFor(planRoot, curId), 'utf8'));
-    } catch (err) {
-      throw new CliError('INVALID', 'CORRELATION_INVALID', 'parent_request_id does not resolve: ' + curId);
-    }
-    if (isImmediateParent) {
-      if (parentObj.depth + 1 !== obj.depth) {
-        throw new CliError('INVALID', 'CORRELATION_INVALID', 'depth != parent.depth + 1');
-      }
-      isImmediateParent = false;
+    // DUR-J: fd-bound durable read of each ancestor request -- an unresolved ancestor
+    // stays CORRELATION_INVALID; an nlink==2 / symlink / foreign-owner / malformed
+    // ancestor STOPs, never read raw into the topology walk. Codex NO-GO round 2
+    // (blocker 3): closed-shape CONSULT_V2_FIELDS is enforced. Round 3 (blocker 1):
+    // routed through readCanonicalRequestRecord -- the ancestor's OWN embedded
+    // request_id must equal `curId`, never merely parsed/shape-checked and trusted.
+    const parentObj = readCanonicalRequestRecord(requestPathFor(planRoot, curId), curId, {
+      absentDetail: 'CORRELATION_INVALID',
+      absentMessage: 'parent_request_id does not resolve: ' + curId,
+    }).obj;
+    // Codex NO-GO round 4: every edge, not only the first hop.
+    if (parentObj.depth + 1 !== childObj.depth) {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'depth != parent.depth + 1');
     }
     if (parentObj.root_request_id !== obj.root_request_id) {
       throw new CliError('INVALID', 'CORRELATION_INVALID', 'cross-root parent linkage');
     }
+    if (parentObj.parent_request_id === null) {
+      // Codex NO-GO round 4: this ancestor IS the chain's terminal root -- it must
+      // satisfy the same local invariants a directly-validated root request would,
+      // never accepted merely because the walk stops here.
+      if (parentObj.root_request_id !== parentObj.request_id) {
+        throw new CliError('INVALID', 'CORRELATION_INVALID', 'terminal root must have root_request_id==request_id');
+      }
+      if (parentObj.depth !== 0) {
+        throw new CliError('INVALID', 'CORRELATION_INVALID', 'terminal root must have depth==0');
+      }
+    }
+    childObj = parentObj;
     curId = parentObj.parent_request_id;
     hops += 1;
     if (hops > 4096) {
@@ -959,21 +2344,28 @@ const INBOX_REF_V1_FIELDS = {
 };
 
 function validateInboxRefV1(artifactPath, coordRoot) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  const obj = readJsonDurable(artifactPath);
   assertClosedShape(obj, INBOX_REF_V1_FIELDS);
-  assertDurable(artifactPath);
+  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
+  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
   const planRoot = planRootFromArtifact(coordRoot, artifactPath);
   const reqPath = requestPathFor(planRoot, obj.request_id);
-  let reqBytes;
-  try {
-    reqBytes = fs.readFileSync(reqPath);
-  } catch (err) {
-    throw new CliError('INVALID', 'CORRELATION_INVALID', 'inbox-ref request_id does not resolve to a request');
-  }
-  if (sha256Buffer(reqBytes) !== obj.request_digest) {
+  // DUR-J: fd-bound-durable read; the same bytes drive the request_digest check and the
+  // parsed reqObj -- no by-path readFileSync, no TOCTOU between the two. Codex NO-GO
+  // round 2 (blocker 3): closed-shape CONSULT_V2_FIELDS is enforced. Round 3 (blocker
+  // 1): routed through readCanonicalRequestRecord -- the referenced request's OWN
+  // embedded request_id must equal `obj.request_id` (this inbox-ref's own field), not
+  // merely a digest match over whatever bytes happen to live at the derived path
+  // (bytes copied wholesale from a DIFFERENT, but genuinely valid/durable, request
+  // would otherwise still correlate).
+  const reqRec = readCanonicalRequestRecord(reqPath, obj.request_id, {
+    absentDetail: 'CORRELATION_INVALID',
+    absentMessage: 'inbox-ref request_id does not resolve to a request',
+  });
+  if (reqRec.digest !== obj.request_digest) {
     throw new CliError('INVALID', 'CORRELATION_INVALID', 'inbox-ref request_digest does not match request.json bytes');
   }
-  const reqObj = JSON.parse(reqBytes.toString('utf8'));
+  const reqObj = reqRec.obj;
   if (reqObj.target_role !== obj.target_role) {
     throw new CliError('INVALID', 'CORRELATION_INVALID', 'inbox-ref target_role does not match request.target_role');
   }
@@ -1004,9 +2396,10 @@ const ACTIVATION_V1_FIELDS = {
 };
 
 function validateActivationV1(artifactPath) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  const obj = readJsonDurable(artifactPath);
   assertClosedShape(obj, ACTIVATION_V1_FIELDS);
-  assertDurable(artifactPath);
+  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
+  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
   return obj;
 }
 
@@ -1015,30 +2408,42 @@ function validateActivationV1(artifactPath) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function readRequestForTxnOrCorrelationInvalid(txnDir) {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(txnDir, 'request.json'), 'utf8'));
-  } catch (err) {
-    throw new CliError('INVALID', 'CORRELATION_INVALID', 'referenced request.json does not resolve');
-  }
+  // DUR-J: fd-bound durable read -- a genuinely absent request stays CORRELATION_INVALID;
+  // an nlink==2 window / symlink / foreign-owner / malformed request now STOPs
+  // (DURABILITY_UNPROVEN / SECURITY_INVALID / SCHEMA_INVALID), never read raw.
+  // Codex P1-2: closed-shape (CONSULT_V2_FIELDS) is enforced HERE, the single choke
+  // point every caller (claim, lease-heartbeat, takeover, cancel, record-delivery,
+  // worker-stop, await-result, ...) shares. Round 3 (blocker 1): routed through
+  // readCanonicalRequestRecord -- the request's OWN embedded request_id must equal
+  // this transaction directory's own name (the canonical identity its storage
+  // location implies), not merely be well-formed CONSULT_V2_FIELDS JSON.
+  return readCanonicalRequestRecord(path.join(txnDir, 'request.json'), path.basename(txnDir), {
+    absentDetail: 'CORRELATION_INVALID',
+    absentMessage: 'referenced request.json does not resolve',
+  }).obj;
 }
 
 function readTakeoverIfValid(txnDir) {
   const takeoverPath = takeoverPathFor(txnDir);
-  let raw;
-  try {
-    raw = fs.readFileSync(takeoverPath, 'utf8');
-  } catch (err) {
-    return null;
+  // DUR-J: fd-bound durable read. A genuinely ABSENT takeover (ENOENT) returns null
+  // -> the initial attempt is authoritative (the one legitimate fallback). The
+  // nlink==2 in-flight window, a symlink swap, a foreign-owner/other-writable plant,
+  // an oversize file, or malformed JSON is NEVER silently downgraded to "absent":
+  // readJsonDurableOptional THROWS (DURABILITY_UNPROVEN / SECURITY_INVALID /
+  // SCHEMA_INVALID) and that STOP propagates -- an in-flight/tampered takeover can no
+  // longer masquerade as "no takeover" and let a superseded attempt keep authority.
+  const to = readJsonDurableOptional(takeoverPath);
+  if (to === null) return null;
+  if (
+    to && to.schema === 'coordination/takeover/v1'
+    && isHexId(to.new_attempt_id) && Number.isInteger(to.new_lease_epoch)
+  ) {
+    return to;
   }
-  try {
-    const to = JSON.parse(raw);
-    if (
-      to && to.schema === 'coordination/takeover/v1'
-      && isHexId(to.new_attempt_id) && Number.isInteger(to.new_lease_epoch)
-    ) {
-      return to;
-    }
-  } catch (err) { /* fall through */ }
+  // Boundary (DUR-J point 8): a DURABLE, well-formed-JSON but WRONG-SHAPE takeover
+  // still falls through to null (initial attempt authoritative). Turning that into a
+  // hard STOP ("invalid takeover => STOP not fallback", PLAN.md ~L702) is AUTH
+  // attempt-authority LOGIC, deferred to the AUTH area; DUR-J only hardens the READ.
   return null;
 }
 
@@ -1075,9 +2480,10 @@ const CLAIM_V1_FIELDS = {
 };
 
 function validateClaimV1(artifactPath, coordRoot) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  const obj = readJsonDurable(artifactPath);
   assertClosedShape(obj, CLAIM_V1_FIELDS);
-  assertDurable(artifactPath);
+  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
+  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
   const planRoot = planRootFromArtifact(coordRoot, artifactPath);
   const txnDir = transactionDir(planRoot, obj.request_id);
   const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
@@ -1107,11 +2513,23 @@ const ACTIVE_LEASE_V1_FIELDS = {
   created_at: { check: isIsoTimestamp },
 };
 
+/**
+ * Section 4: active-lease is the ONE mutable record (replaced in place via
+ * publishReplace, never no-clobber-published) -- reading it durably requires the
+ * SAME transition lock a writer holds, exactly like cmdLeaseHeartbeat's own
+ * immutablePath:false read. An orphaned or poisoned lock (a writer crashed or
+ * hung mid-replace) must timeout+STOP here too: the visible bytes alone -- even
+ * a clean nlink==1 regular file -- are never sufficient proof, since a writer
+ * that reached POST_RENAME_UNPROVEN can leave EXACTLY that shape behind with
+ * the lock still held as the honest "unproven" signal. This validator must
+ * never read past that signal and accept the visible lease as durable.
+ */
 function validateActiveLeaseV1(artifactPath) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
-  assertClosedShape(obj, ACTIVE_LEASE_V1_FIELDS);
-  assertDurable(artifactPath);
-  return obj;
+  const txnDir = path.dirname(path.dirname(artifactPath));
+  return withLock(txnDir, (lockToken) => {
+    const rec = readClosedRecord(artifactPath, ACTIVE_LEASE_V1_FIELDS, { immutablePath: false, lockToken: lockToken });
+    return rec.obj;
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1129,7 +2547,7 @@ const ACTIVATION_INTENT_V1_FIELDS = {
 };
 
 function validateActivationIntentV1(artifactPath) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  const obj = readJsonDurable(artifactPath);
   assertClosedShape(obj, ACTIVATION_INTENT_V1_FIELDS);
   return obj;
 }
@@ -1154,7 +2572,7 @@ const DELIVERY_V1_FIELDS = {
 };
 
 function validateDeliveryV1(artifactPath) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  const obj = readJsonDurable(artifactPath);
   assertClosedShape(obj, DELIVERY_V1_FIELDS);
   return obj;
 }
@@ -1233,10 +2651,12 @@ function assertResultMirrorsRequest(obj, reqObj) {
  * `accept-result`/`takeover` to evaluate an existing candidate.
  */
 function validateResultV2(artifactPath, coordRoot) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  const rec = readDurableRecord(artifactPath);
+  const obj = rec.obj;
   assertClosedShape(obj, RESULT_V2_FIELDS);
   assertResultContentXor(obj);
-  assertDurable(artifactPath);
+  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
+  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
 
   const planRoot = planRootFromArtifact(coordRoot, artifactPath);
   const txnDir = path.dirname(path.dirname(artifactPath));
@@ -1250,14 +2670,20 @@ function validateResultV2(artifactPath, coordRoot) {
     throw new CliError('INVALID', 'CORRELATION_INVALID', 'in_reply_to does not match containing transaction');
   }
 
-  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
-  let reqBytes;
-  try {
-    reqBytes = fs.readFileSync(path.join(txnDir, 'request.json'));
-  } catch (err) {
-    throw new CliError('INVALID', 'CORRELATION_INVALID', 'referenced request.json does not resolve');
-  }
-  if (sha256Buffer(reqBytes) !== obj.request_digest) {
+  // DUR-J: read request.json ONCE, fd-bound-durable, and derive BOTH the bytes (for the
+  // request_digest comparison) and the parsed reqObj (for the mirror check) from it --
+  // no second by-path read, no TOCTOU between the digested bytes and the parsed object.
+  // Codex NO-GO round 2 (blocker 3): closed-shape CONSULT_V2_FIELDS is enforced. Round
+  // 3 (blocker 1): routed through readCanonicalRequestRecord -- the request's OWN
+  // embedded request_id must equal `requestId` (this transaction's own name, already
+  // proven above via `obj.in_reply_to !== requestId`), not merely a digest match over
+  // whatever bytes happen to live at request.json.
+  const reqRec = readCanonicalRequestRecord(path.join(txnDir, 'request.json'), requestId, {
+    absentDetail: 'CORRELATION_INVALID',
+    absentMessage: 'referenced request.json does not resolve',
+  });
+  const reqObj = reqRec.obj;
+  if (reqRec.digest !== obj.request_digest) {
     throw new CliError('INVALID', 'CORRELATION_INVALID', 'request_digest does not match request.json bytes');
   }
   assertResultMirrorsRequest(obj, reqObj);
@@ -1289,7 +2715,7 @@ function validateResultV2(artifactPath, coordRoot) {
     throw new CliError('INVALID', 'AUTHORITY_INVALID', 'result attempt/epoch is not the current authoritative pair');
   }
 
-  return { obj, reqObj, txnDir, planRoot, requestId };
+  return { obj, bytes: rec.bytes, digest: rec.digest, reqObj, txnDir, planRoot, requestId };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1310,9 +2736,10 @@ const ACCEPTED_RESULT_V1_FIELDS = {
 };
 
 function validateAcceptedResultV1(artifactPath) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  const obj = readJsonDurable(artifactPath);
   assertClosedShape(obj, ACCEPTED_RESULT_V1_FIELDS);
-  assertDurable(artifactPath);
+  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
+  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
   return obj;
 }
 
@@ -1328,9 +2755,10 @@ const ACK_V1_FIELDS = {
 };
 
 function validateAckV1(artifactPath) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  const obj = readJsonDurable(artifactPath);
   assertClosedShape(obj, ACK_V1_FIELDS);
-  assertDurable(artifactPath);
+  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
+  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
   return obj;
 }
 
@@ -1347,9 +2775,10 @@ const CANCEL_V1_FIELDS = {
 };
 
 function validateCancelV1(artifactPath) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  const obj = readJsonDurable(artifactPath);
   assertClosedShape(obj, CANCEL_V1_FIELDS);
-  assertDurable(artifactPath);
+  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
+  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
   return obj;
 }
 
@@ -1365,9 +2794,10 @@ const CONFLICT_V1_FIELDS = {
 };
 
 function validateConflictV1(artifactPath) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  const obj = readJsonDurable(artifactPath);
   assertClosedShape(obj, CONFLICT_V1_FIELDS);
-  assertDurable(artifactPath);
+  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
+  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
   return obj;
 }
 
@@ -1392,9 +2822,10 @@ const TAKEOVER_V1_FIELDS = {
 };
 
 function validateTakeoverV1(artifactPath) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  const obj = readJsonDurable(artifactPath);
   assertClosedShape(obj, TAKEOVER_V1_FIELDS);
-  assertDurable(artifactPath);
+  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
+  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
   const txnDir = path.dirname(artifactPath);
   const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
   if (obj.request_id !== path.basename(txnDir)) {
@@ -1448,10 +2879,11 @@ function assertStopCorrelationTriple(obj) {
 }
 
 function validateStopV2(artifactPath) {
-  const obj = parseJsonOrSchemaInvalid(readArtifactBytes(artifactPath));
+  const obj = readJsonDurable(artifactPath);
   assertClosedShape(obj, STOP_V2_FIELDS);
   assertStopCorrelationTriple(obj);
-  assertDurable(artifactPath);
+  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
+  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
   return obj;
 }
 
@@ -1685,12 +3117,29 @@ const SUBJECT_BUNDLE_MANIFEST_V1_FIELDS = {
  * Safe RELATIVE entry-path predicate (distinct from `assertSafeSegment`, which
  * forbids ANY separator and is used for single-component filenames like request
  * IDs). A manifest entry path may be nested (`src/Foo.kt`) but must never be
- * absolute, traverse (`..`), contain a NUL byte, or name a `.git` segment
- * (categorical Git-metadata rejection, PLAN.md ~L777).
+ * absolute, traverse (`..`), contain a NUL byte or any other control character,
+ * name a `.git` segment (categorical Git-metadata rejection, PLAN.md ~L777), or
+ * embed a backslash ANYWHERE (WP2 BLOB-AUTH PATH-04 correction).
+ *
+ * The backslash rejection is unconditional, not merely an addition to the
+ * segment denylist below: every consumer of an already-grammar-validated entry
+ * path (this file's own `BLOB_DENYLISTED_SEGMENTS` categorical check and
+ * `cmdPublishBlob`'s own per-component confinement walk) splits the value on
+ * `/` ONLY. A value like `innocuous\.ssh\config` contains zero `/` characters,
+ * so without a grammar-level `\` rejection it sails through both of those
+ * downstream `/`-only splits as one long, non-matching "segment" and is never
+ * compared piecewise against anything they categorically forbid. Rejecting `\`
+ * HERE -- before either downstream split ever runs -- is what keeps that
+ * split-on-`/` convention sound, instead of requiring every current and future
+ * caller to separately remember to split on both separators.
  */
 function isSafeRelativeEntryPath(v) {
   if (typeof v !== 'string' || v.length === 0 || v.length > 2048) return false;
-  if (v.includes('\0')) return false;
+  for (let i = 0; i < v.length; i += 1) {
+    const code = v.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) return false; // control chars, NUL (0x00) included
+  }
+  if (v.includes('\\')) return false;
   if (path.isAbsolute(v)) return false;
   const segments = v.split('/');
   for (const seg of segments) {
@@ -1781,28 +3230,66 @@ function cmdPublishRequest(flags) {
   const subjectScopeDigest = sha256String(canonicalJSONStringify(subjectBundleManifest));
 
   const planRoot = planRootPath(coordRoot, repoId, waveSlug, planDigest);
-  fs.mkdirSync(planRoot, { recursive: true });
-  materializePlanRef(planRoot, planPath);
-  materializeRoutingPolicy(planRoot);
-  materializeSubjectBundle(planRoot, subjectScopeDigest, subjectBundleManifest);
 
+  // Codex NO-GO round 3 (blocker 2): the FULL parent validation must complete BEFORE
+  // the FIRST write. This block moved ahead of planRoot's own materialization
+  // (mkdirSync/plan_ref/routing-policy/subject-bundle below) -- neither `planRoot`
+  // (a pure path computation) nor reading an EXISTING parent's request.json (if the
+  // parent was ever genuinely published, its own txnDir already exists from THAT
+  // call) requires planRoot to be created by US first. A schema-invalid/absent/
+  // depth-exceeding parent must never let this call grow the persistent inventory
+  // even though the overall publish ultimately fails (Codex repro: parent
+  // schema-invalid -> rc3/SCHEMA_INVALID, but the inventory still grew from 3 to 9
+  // entries under the prior write-before-validate order).
   let parentRequestId = null;
   let depth = 0;
   let rootRequestId;
   if (intent.parent_request_id) {
     parentRequestId = intent.parent_request_id;
+    // Codex NO-GO round 4: the parent is now validated via the FULL canonical
+    // pipeline (`validateConsultV2` -- durability + identity + closed shape + the
+    // COMPLETE ancestry graph walk, now itself hardened this same round to check
+    // every edge and the walk's terminal root -- + role-policy + content_ref), not
+    // merely durability+shape+identity. A parent that is itself durable/shape-valid/
+    // canonically-identified but has an INVALID ancestry somewhere up its OWN chain
+    // (e.g. a corrupted terminal root) must not be trusted to derive this nested
+    // request's depth/root_request_id from -- reproduced: a parent with
+    // parent_request_id:null/depth:0 but root_request_id!=request_id previously let
+    // BOTH this call and a subsequent `validate --kind consult-v2` on the resulting
+    // child return SUCCESS.
+    const parentPath = requestPathFor(planRoot, parentRequestId);
     let parentObj;
     try {
-      parentObj = JSON.parse(fs.readFileSync(requestPathFor(planRoot, parentRequestId), 'utf8'));
+      parentObj = validateConsultV2(parentPath, coordRoot);
     } catch (err) {
-      throw new CliError('INVALID', 'CORRELATION_INVALID', 'parent_request_id does not resolve to an existing request');
+      // A genuinely ABSENT parent stays CORRELATION_INVALID, this call site's own
+      // pre-existing contract (`validateConsultV2` itself defaults absence to
+      // SCHEMA_INVALID, correct for its OTHER caller, direct `validate` on an
+      // arbitrary --artifact path). Every OTHER validateConsultV2 failure (shape,
+      // graph/ancestry, role-policy, content_ref) propagates with its own correct
+      // detail_code exactly as thrown, never silently downgraded or re-labeled.
+      if (err && err.durableAbsent) {
+        throw new CliError('INVALID', 'CORRELATION_INVALID', 'parent_request_id does not resolve to an existing request');
+      }
+      throw err;
     }
     depth = parentObj.depth + 1;
     rootRequestId = parentObj.root_request_id;
-    if (depth > (parentObj.max_depth || 2)) {
+    // Codex NO-GO round 5: was `parentObj.max_depth || 2` -- a parent that passed
+    // validateConsultV2 with max_depth:0 (0 is falsy in JS) had its real ceiling
+    // silently replaced by the default 2, permitting nesting the record itself
+    // forbade. `parentObj.max_depth` is now compared directly: CONSULT_V2_FIELDS
+    // guarantees it is exactly MAX_DEPTH_LIMIT already (validateConsultV2 would have
+    // thrown SCHEMA_INVALID otherwise), so no fallback is needed or safe to have.
+    if (depth > parentObj.max_depth) {
       throw new CliError('INVALID', 'CORRELATION_INVALID', 'nested request would exceed max_depth');
     }
   }
+
+  fs.mkdirSync(planRoot, { recursive: true });
+  materializePlanRef(planRoot, planPath);
+  materializeRoutingPolicy(planRoot);
+  materializeSubjectBundle(planRoot, subjectScopeDigest, subjectBundleManifest);
 
   const sourceRole = process.env.RUNTIME_CONSULTATION_SOURCE_ROLE || 'cli-requester';
   assertRolePolicy(sourceRole, intent.target_role);
@@ -1816,7 +3303,7 @@ function cmdPublishRequest(flags) {
     root_request_id: rootRequestId,
     parent_request_id: parentRequestId,
     depth,
-    max_depth: 2,
+    max_depth: MAX_DEPTH_LIMIT,
     source_role: sourceRole,
     target_role: intent.target_role,
     target_role_profile_version: TARGET_ROLE_PROFILE_VERSION,
@@ -1879,6 +3366,9 @@ function cmdClaim(flags) {
   const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
   const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
 
+  // claim/v1 remains the no-clobber ELECTION, outside .lock (PLAN-frozen first-writer-
+  // wins semantics -- the lock is not needed to WIN the claim, only to safely publish
+  // what follows it).
   const claimObj = {
     schema: 'coordination/claim/v1',
     request_id: reqObj.request_id,
@@ -1895,28 +3385,53 @@ function cmdClaim(flags) {
   const claimPath = claimPathFor(txnDir, auth.attemptId);
   publishNoClobber(claimPath, Buffer.from(canonicalJSONStringify(claimObj), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
 
-  // Immediately after winning claim, durably publish the initial active-lease
-  // before WAL/role work (record #4 writer note, PLAN.md ~L373).
-  const claimDigest = sha256File(claimPath);
-  const now = nowIso();
-  const leaseObj = {
-    schema: 'coordination/active-lease/v1',
-    attempt_id: auth.attemptId,
-    lease_epoch: auth.leaseEpoch,
-    holder_role: flags.role,
-    claimant_instance_id: claimObj.claimant_instance_id,
-    worker_session_id: claimObj.worker_session_id,
-    claim_digest: claimDigest,
-    ttl_seconds: 300,
-    heartbeat_interval_seconds: 60,
-    last_heartbeat_at: now,
-    lease_expiry: minIso(isoPlusSeconds(now, 300), reqObj.expiry),
-    created_at: now,
-  };
-  const leasePath = activeLeasePathFor(txnDir, auth.attemptId);
-  publishNoClobber(leasePath, Buffer.from(canonicalJSONStringify(leaseObj), 'utf8'), { allowIdenticalIdempotent: true });
+  // Section 4: the initial active-lease publish moves INSIDE the transition lock -- a
+  // takeover racing between the claim election above and lock acquisition must be
+  // re-checked under the SAME durable lock a heartbeat/takeover itself uses, never
+  // assumed still current just because we won the election.
+  testRendezvous(txnDir, 'claim-pre-lock');
+  return withLock(txnDir, () => {
+    // Re-read/revalidate the request and CURRENT attempt/epoch UNDER the lock -- a
+    // takeover could have committed between the election above and lock acquisition.
+    const reqObj2 = readRequestForTxnOrCorrelationInvalid(txnDir);
+    const auth2 = resolveAuthoritativeAttempt(reqObj2, txnDir);
+    if (auth2.attemptId !== auth.attemptId || auth2.leaseEpoch !== auth.leaseEpoch) {
+      // A takeover committed before lock acquisition: our claim was for the NOW-
+      // superseded attempt. Reject -- never publish an initial lease for it.
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'a takeover superseded this attempt before the initial lease could be published');
+    }
+    // Re-read the exact canonical claim just published, fd-bound-durable + closed-shape,
+    // under the lock -- the lease's claim_digest is recomputed from THESE accredited
+    // bytes, never the in-memory bytes from before the lock (DUR-J item 6 discipline,
+    // extended across the lock boundary).
+    const claimRec = readClosedRecord(claimPath, CLAIM_V1_FIELDS, {
+      absentDetail: 'CORRELATION_INVALID',
+      absentMessage: 'the just-published claim does not resolve',
+    });
+    if (claimRec.obj.attempt_id !== auth2.attemptId || claimRec.obj.lease_epoch !== auth2.leaseEpoch) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'claim attempt/epoch is not the current authoritative pair');
+    }
 
-  return { request_id: reqObj.request_id, artifact_ref: claimPath };
+    const now = nowIso();
+    const leaseObj = {
+      schema: 'coordination/active-lease/v1',
+      attempt_id: auth2.attemptId,
+      lease_epoch: auth2.leaseEpoch,
+      holder_role: flags.role,
+      claimant_instance_id: claimRec.obj.claimant_instance_id,
+      worker_session_id: claimRec.obj.worker_session_id,
+      claim_digest: claimRec.digest,
+      ttl_seconds: 300,
+      heartbeat_interval_seconds: 60,
+      last_heartbeat_at: now,
+      lease_expiry: minIso(isoPlusSeconds(now, 300), reqObj2.expiry),
+      created_at: now,
+    };
+    const leasePath = activeLeasePathFor(txnDir, auth2.attemptId);
+    publishNoClobber(leasePath, Buffer.from(canonicalJSONStringify(leaseObj), 'utf8'), { allowIdenticalIdempotent: true });
+
+    return { request_id: reqObj2.request_id, artifact_ref: claimPath };
+  });
 }
 COMMANDS.claim = cmdClaim;
 
@@ -1926,49 +3441,75 @@ COMMANDS.claim = cmdClaim;
 
 function cmdLeaseHeartbeat(flags) {
   requireFlags(flags, ['coordination-root', 'request', 'claim']);
+  // Outside the lock: parse argv and derive canonical paths ONLY (Section 4). Every
+  // durable read, the authority resolution, and the expiry decision happen INSIDE the
+  // one withLock below -- a heartbeat is a REFRESH transaction, not a lock-free lookup.
   const requestPath = resolveAbsolute(flags.request);
   const txnDir = path.dirname(requestPath);
-  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
-  const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
-
   const claimPath = resolveAbsolute(flags.claim);
-  let claimObj;
-  try {
-    claimObj = JSON.parse(fs.readFileSync(claimPath, 'utf8'));
-  } catch (err) {
-    throw new CliError('INVALID', 'CORRELATION_INVALID', 'claim file does not resolve');
-  }
-  if (claimObj.attempt_id !== auth.attemptId || claimObj.lease_epoch !== auth.leaseEpoch) {
-    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'claim is not the current authoritative attempt/epoch');
-  }
 
-  return withLock(txnDir, () => {
-    const now = nowIso();
-    const leasePath = activeLeasePathFor(txnDir, auth.attemptId);
-    let existing = null;
-    try {
-      existing = JSON.parse(fs.readFileSync(leasePath, 'utf8'));
-    } catch (err) { /* first publish -- no existing lease */ }
-    const claimDigest = sha256File(claimPath);
-    const merged = Object.assign({}, existing, {
-      schema: 'coordination/active-lease/v1',
-      attempt_id: auth.attemptId,
-      lease_epoch: auth.leaseEpoch,
-      holder_role: claimObj.claimant_role,
-      claimant_instance_id: claimObj.claimant_instance_id,
-      worker_session_id: claimObj.worker_session_id || null,
-      claim_digest: claimDigest,
-      ttl_seconds: (existing && existing.ttl_seconds) || 300,
-      heartbeat_interval_seconds: (existing && existing.heartbeat_interval_seconds) || 60,
-      last_heartbeat_at: now,
-      lease_expiry: minIso(isoPlusSeconds(now, (existing && existing.ttl_seconds) || 300), reqObj.expiry),
-      created_at: (existing && existing.created_at) || now,
+  testRendezvous(txnDir, 'heartbeat-pre-lock');
+  return withLock(txnDir, (lockToken) => {
+    const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
+    const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+
+    // DUR-J + Section 4: fd-bound durable read, closed-shape enforced, under the lock,
+    // from wherever the caller points.
+    const claimRec = readClosedRecord(claimPath, CLAIM_V1_FIELDS, {
+      absentDetail: 'CORRELATION_INVALID',
+      absentMessage: 'claim file does not resolve',
     });
-    if (existing) {
-      publishReplace(leasePath, Buffer.from(canonicalJSONStringify(merged), 'utf8'));
-    } else {
-      publishNoClobber(leasePath, Buffer.from(canonicalJSONStringify(merged), 'utf8'), { allowIdenticalIdempotent: true });
+    // Self-consistency/confinement: the claim must be stored at ITS OWN canonical path
+    // for the attempt it names -- never a claim for attempt X read back from some other,
+    // non-canonical location (PATH-07 confinement discipline).
+    if (path.resolve(claimPath) !== path.resolve(claimPathFor(txnDir, claimRec.obj.attempt_id))) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', '--claim is not stored at its own canonical path for its attempt_id');
     }
+    // AUTHORITY: the claim's attempt/epoch must be the CURRENT authoritative pair -- a
+    // self-consistent claim for a NOW-superseded attempt is an authority problem, not a
+    // correlation/path problem.
+    if (claimRec.obj.attempt_id !== auth.attemptId || claimRec.obj.lease_epoch !== auth.leaseEpoch) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'claim is not the current authoritative attempt/epoch');
+    }
+
+    // Section 4: heartbeat REQUIRES an existing lease -- it must never create a missing
+    // initial lease (that is solely cmdClaim's job, published under ITS OWN lock).
+    // immutablePath:false is the mutable-lease exception (DUR-J item 3), valid only
+    // because the authentic lockToken for this txnDir is threaded through (item 6
+    // reentrancy -- no second acquire).
+    const leasePath = activeLeasePathFor(txnDir, auth.attemptId);
+    const existingRec = readClosedRecordOptional(leasePath, ACTIVE_LEASE_V1_FIELDS, { immutablePath: false, lockToken: lockToken });
+    if (existingRec === null) {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'no existing active-lease to refresh for the current attempt');
+    }
+    const existing = existingRec.obj;
+
+    // Never revive a superseded or foreign lease: the existing lease must itself match
+    // the current attempt/epoch AND the presenting claim's own identity fields.
+    if (
+      existing.attempt_id !== auth.attemptId
+      || existing.lease_epoch !== auth.leaseEpoch
+      || existing.holder_role !== claimRec.obj.claimant_role
+      || existing.claimant_instance_id !== claimRec.obj.claimant_instance_id
+      || (existing.worker_session_id || null) !== (claimRec.obj.worker_session_id || null)
+      || existing.claim_digest !== claimRec.digest
+    ) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'existing active-lease does not match the current attempt/claimant -- refusing to refresh a stale or foreign lease');
+    }
+
+    // Section 4: now < lease_expiry AND now < request expiry, STRICT -- now==lease_expiry
+    // is already expired. Never revive an expired lease.
+    const now = nowIso();
+    const nowMs = isoToMs(now);
+    if (!(nowMs < isoToMs(existing.lease_expiry)) || !(nowMs < isoToMs(reqObj.expiry))) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'active-lease or request has already expired; heartbeat rejected');
+    }
+
+    const merged = Object.assign({}, existing, {
+      last_heartbeat_at: now,
+      lease_expiry: minIso(isoPlusSeconds(now, existing.ttl_seconds), reqObj.expiry),
+    });
+    publishReplace(leasePath, Buffer.from(canonicalJSONStringify(merged), 'utf8'));
     return { request_id: reqObj.request_id, artifact_ref: leasePath };
   });
 }
@@ -1991,29 +3532,33 @@ function activationLivenessDeadline(reqObj) {
 
 function currentValidResultExists(txnDir, auth) {
   const resultPath = resultPathFor(txnDir, auth.attemptId);
-  try {
-    const obj = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
-    return Boolean(obj) && obj.status === 'ANSWERED';
-  } catch (err) {
-    return false;
-  }
+  // DUR-J: a genuinely absent result (null) is "no valid result"; an nlink==2 /
+  // symlink / foreign-owner / malformed / wrong-RESULT_V2-shape result STOPs
+  // (readJsonDurableOptional throws) rather than being silently counted as "no result"
+  // -- a non-durable or malformed in-flight result must not silently unblock a takeover.
+  const obj = readJsonDurableOptional(resultPath, { shape: (o) => assertClosedShape(o, RESULT_V2_FIELDS) });
+  return obj !== null && obj.status === 'ANSWERED';
 }
 
 function confirmedFailedDelivery(txnDir, attemptId, claimDigestOrNull) {
-  let d;
-  try {
-    d = JSON.parse(fs.readFileSync(deliveryPathFor(txnDir, attemptId), 'utf8'));
-  } catch (err) {
-    return false;
-  }
-  if (!d || d.delivered !== false || d.outcome !== 'confirmed-failed-before-commit') return false;
+  // DUR-J + Section 4: a genuinely absent delivery (null) is "no confirmed failure"; an
+  // nlink==2 / symlink / malformed / wrong-shape delivery STOPs rather than silently
+  // establishing (or failing to establish) eligibility off a non-durable or unvalidated
+  // record.
+  const rec = readClosedRecordOptional(deliveryPathFor(txnDir, attemptId), DELIVERY_V1_FIELDS);
+  if (rec === null) return false;
+  const d = rec.obj;
+  if (d.delivered !== false || d.outcome !== 'confirmed-failed-before-commit') return false;
   if (claimDigestOrNull !== null && d.claim_digest !== claimDigestOrNull) return false;
   return true;
 }
 
 /** Returns `{eligibilityKind, reason, deadline}` or throws CliError(INVALID, AUTHORITY_INVALID, ...). */
-function computeTakeoverEligibility(reqObj, txnDir, nowMs) {
-  if (fs.existsSync(takeoverPathFor(txnDir))) {
+function computeTakeoverEligibility(reqObj, txnDir, nowMs, lockToken) {
+  // DUR-J: a durably-committed takeover blocks a second takeover; a genuinely absent
+  // one (null) does not block; an nlink==2 / symlink / malformed takeover STOPs
+  // (readJsonDurableOptional throws) rather than being coarsely counted as "present".
+  if (readJsonDurableOptional(takeoverPathFor(txnDir)) !== null) {
     throw new CliError('INVALID', 'AUTHORITY_INVALID', 'a takeover has already committed for this request');
   }
   const initialAttempt = reqObj.initial_attempt_id;
@@ -2022,8 +3567,13 @@ function computeTakeoverEligibility(reqObj, txnDir, nowMs) {
     throw new CliError('INVALID', 'AUTHORITY_INVALID', 'a valid current result already exists; takeover is blocked');
   }
 
+  // DUR-J + Section 4: fd-bound durable read + closed-shape enforcement -- a genuinely
+  // absent claim (null) takes the no-claim branch; an nlink==2 / symlink / foreign-
+  // owner / malformed / wrong-shape claim STOPs (never mis-read as absent). The digest
+  // is taken from the exact durable bytes, not a second sha256File re-read.
   const claimPath = claimPathFor(txnDir, initialAttempt);
-  if (!fs.existsSync(claimPath)) {
+  const claimRec = readClosedRecordOptional(claimPath, CLAIM_V1_FIELDS);
+  if (claimRec === null) {
     if (confirmedFailedDelivery(txnDir, initialAttempt, null)) {
       return { eligibilityKind: 'confirmed-failed-before-commit', reason: 'confirmed-failed-before-commit', deadline: null };
     }
@@ -2034,14 +3584,19 @@ function computeTakeoverEligibility(reqObj, txnDir, nowMs) {
     throw new CliError('INVALID', 'AUTHORITY_INVALID', 'activation liveness has not yet expired');
   }
 
-  const claimObj = JSON.parse(fs.readFileSync(claimPath, 'utf8'));
-  const claimDigest = sha256File(claimPath);
+  const claimObj = claimRec.obj;
+  const claimDigest = claimRec.digest;
   if (confirmedFailedDelivery(txnDir, initialAttempt, claimDigest)) {
     return { eligibilityKind: 'confirmed-failed-before-commit', reason: 'confirmed-failed-before-commit', deadline: null };
   }
 
+  // DUR-J + Section 4: same fd-bound durable read + closed-shape enforcement for the
+  // active-lease -- a genuinely absent lease (null) takes the no-lease branch; an
+  // nlink==2 / symlink / malformed / wrong-shape lease STOPs, never mis-read as absent.
   const leasePath = activeLeasePathFor(txnDir, initialAttempt);
-  if (!fs.existsSync(leasePath)) {
+  // DUR-J item 6: the mutable-lease read is valid only under the authentic threaded token.
+  const leaseRec = readClosedRecordOptional(leasePath, ACTIVE_LEASE_V1_FIELDS, { immutablePath: false, lockToken: lockToken });
+  if (leaseRec === null) {
     const deadline = minIso(
       isoPlusSeconds(claimObj.created_at, CLAIM_NO_LEASE_WINDOW_S),
       minIso(activationLivenessDeadline(reqObj), isoPlusSeconds(reqObj.expiry, -REQUEST_EXPIRY_MARGIN_S)),
@@ -2051,8 +3606,8 @@ function computeTakeoverEligibility(reqObj, txnDir, nowMs) {
     }
     throw new CliError('INVALID', 'AUTHORITY_INVALID', 'claim-without-lease effective deadline has not yet passed');
   }
+  const leaseObj = leaseRec.obj;
 
-  const leaseObj = JSON.parse(fs.readFileSync(leasePath, 'utf8'));
   if (nowMs >= isoToMs(leaseObj.lease_expiry)) {
     return { eligibilityKind: 'active-lease-expired', reason: 'lease-expired', deadline: leaseObj.lease_expiry };
   }
@@ -2065,8 +3620,12 @@ function cmdTakeover(flags) {
   const txnDir = path.dirname(requestPath);
   const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
 
-  return withLock(txnDir, () => {
-    const eligibility = computeTakeoverEligibility(reqObj, txnDir, Date.now());
+  return withLock(txnDir, (lockToken) => {
+    // DUR-J item 6/Takeover: the lease read used for eligibility AND the takeover
+    // transition below occur under the SAME durable exclusion -- the authentic lockToken
+    // is threaded into computeTakeoverEligibility so its immutablePath:false lease read is
+    // valid without a second acquire (which would deadlock).
+    const eligibility = computeTakeoverEligibility(reqObj, txnDir, Date.now(), lockToken);
     const nowStr = nowIso();
     const takeoverObj = {
       schema: 'coordination/takeover/v1',
@@ -2094,16 +3653,55 @@ COMMANDS.takeover = cmdTakeover;
 
 const CANCEL_REASON_ENUM = ['expired', 'explicit', 'invalid-takeover-exhaustion', 'conflict'];
 
+/**
+ * Section 8: ENOENT (the results/ directory genuinely does not exist yet) is
+ * harmlessly empty; EACCES/EIO/ENOTDIR/any other enumeration failure STOPs -- it is
+ * never silently folded into "no results", which would mask a real I/O problem as
+ * a legitimate empty-transaction state.
+ *
+ * Codex gap #2 / NO-GO round 2 blocker 4 (PLAN.md ~L698): `MAX_ENUM_HARD_CAP`/
+ * `MAX_ENUM_KEPT_ENTRIES` bound this scan via a TRUE streaming `opendirSync`/
+ * `readSync` cutoff -- a directory with an implausible number of raw entries fails
+ * closed DURABILITY_UNPROVEN WITHOUT ever materializing more than
+ * `MAX_ENUM_HARD_CAP` dirents at once (the prior `readdirSync()` fully materialized
+ * the directory into memory BEFORE checking its length, which bounded downstream
+ * processing but not the scan/allocation itself), and the sorted `.json` candidate
+ * set kept is capped so a caller never processes an unbounded list.
+ */
 function listResultFiles(txnDir) {
+  const resultsDir = path.join(txnDir, 'results');
+  let dirHandle;
   try {
-    return fs.readdirSync(path.join(txnDir, 'results')).filter((f) => f.endsWith('.json')).sort();
+    dirHandle = fs.opendirSync(resultsDir);
   } catch (err) {
-    return [];
+    if (err && err.code === 'ENOENT') return [];
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'results directory could not be enumerated (' + (err && err.code) + '): ' + resultsDir);
   }
+  const kept = []; // ascending-sorted [name, null] pairs, bounded to MAX_ENUM_KEPT_ENTRIES
+  let totalSeen = 0;
+  try {
+    let entry = dirHandle.readSync();
+    while (entry !== null) {
+      totalSeen += 1;
+      if (totalSeen > MAX_ENUM_HARD_CAP) {
+        throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'results directory exceeds the max scanned-entry bound (>' + MAX_ENUM_HARD_CAP + '): ' + resultsDir);
+      }
+      if (entry.name.endsWith('.json')) insertBoundedCandidate(kept, entry.name, null, MAX_ENUM_KEPT_ENTRIES);
+      entry = dirHandle.readSync();
+    }
+  } finally {
+    try { dirHandle.closeSync(); } catch (e) { /* best-effort close */ }
+  }
+  return kept.map(([name]) => name);
 }
 
 function writeConflictDiagnosticIfApplicable(txnDir) {
-  const entries = listResultFiles(txnDir);
+  let entries;
+  try {
+    entries = listResultFiles(txnDir);
+  } catch (err) {
+    return; // diagnostic only -- never blocks the terminal cancel (mirrors the publish catch below)
+  }
   if (entries.length < 2) return;
   const a = path.basename(entries[0], '.json');
   const b = path.basename(entries[1], '.json');
@@ -2129,10 +3727,14 @@ function cmdCancel(flags) {
     // Terminal mutual exclusion (PLAN.md ~L474/~L690): accepted-result.json and
     // cancel.json are mutually exclusive terminal records. `cmdAcceptResult` already
     // rejects when a cancel exists (symmetric check); this is the other half.
-    if (fs.existsSync(acceptedResultPathFor(txnDir))) {
+    // DUR-J: each terminal is read fd-bound-durable -- a durable one blocks as before;
+    // a genuinely absent one lets the cancel proceed; an nlink==2 / symlink / malformed
+    // terminal STOPs (readJsonDurableOptional throws) rather than being counted by mere
+    // existsSync presence.
+    if (readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) }) !== null) {
       throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction already has an accepted-result.json');
     }
-    if (fs.existsSync(cancelPathFor(txnDir))) {
+    if (readJsonDurableOptional(cancelPathFor(txnDir), { shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) }) !== null) {
       // A second cancel (matching or different --reason) observes the SAME
       // terminal CANCELLED disposition as accept-result-after-cancel (PLAN.md
       // ~L781 rc6 rule) -- not RESULT_CONFLICT (reserved for differing RESULT
@@ -2162,11 +3764,30 @@ COMMANDS.cancel = cmdCancel;
 
 function findResultWithStatus(txnDir, status) {
   const resultsDir = path.join(txnDir, 'results');
+  let sawPending = false;
   for (const entry of listResultFiles(txnDir)) {
-    try {
-      const obj = JSON.parse(fs.readFileSync(path.join(resultsDir, entry), 'utf8'));
-      if (obj && obj.status === status) return path.join(resultsDir, entry);
-    } catch (err) { /* skip unparsable candidate */ }
+    const candidatePath = path.join(resultsDir, entry);
+    // DUR-J (Gap 1) + Section 8: classify each candidate EXPLICITLY. A durable,
+    // shape-valid PRESENT result whose status matches is returned immediately. A
+    // PRESENT non-match keeps scanning. ANY INVALID candidate -- symlink, wrong
+    // owner/mode, oversize, malformed JSON, wrong RESULT_V2 shape, identity drift,
+    // path rebound -- THROWS (STOP), never silently skipped. A PENDING candidate
+    // (the recognized nlink==2 in-flight window) is NOT treated as absent: it is a
+    // relevant candidate that could become ANY status once durable, so if the scan
+    // finishes with no matching PRESENT while a PENDING was seen, we CANNOT
+    // truthfully answer "no <status> result exists" -- fail closed with
+    // DURABILITY_UNPROVEN. An ABSENT entry here was JUST enumerated by
+    // listResultFiles above -- a subsequent ENOENT is a genuine vanish-between-
+    // list-and-read, never a harmless "wasn't there" (Section 8).
+    const r = classifyDurableRead(candidatePath, { shape: (o) => assertClosedShape(o, RESULT_V2_FIELDS) });
+    if (r.state === DURABLE_ABSENT) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'result candidate was enumerated then vanished before it could be read: ' + candidatePath);
+    }
+    if (r.state === DURABLE_PENDING) { sawPending = true; continue; }
+    if (r.obj.status === status) return candidatePath;
+  }
+  if (sawPending) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'a result candidate is still in the nlink==2 in-flight window; cannot prove no ' + status + ' result exists yet');
   }
   return null;
 }
@@ -2181,10 +3802,24 @@ function cmdTransactionAck(flags) {
   if (!['accepted', 'blocked'].includes(disposition)) {
     throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', 'invalid --disposition: ' + disposition);
   }
-  if (disposition === 'blocked' && !findResultWithStatus(txnDir, 'BLOCKED')) {
-    throw new CliError('INVALID', 'RESULT_BLOCKED', 'no BLOCKED result exists to acknowledge');
+  if (disposition === 'blocked') {
+    // Section 8: the BLOCKED disposition must acknowledge the CURRENT authoritative
+    // attempt's OWN canonical result -- never any shape-valid BLOCKED result that
+    // happens to exist from a superseded attempt (findResultWithStatus's free scan
+    // is deliberately NOT used here).
+    const canonicalResultPath = resultPathFor(txnDir, auth.attemptId);
+    const r = classifyDurableRead(canonicalResultPath, { shape: (o) => assertClosedShape(o, RESULT_V2_FIELDS) });
+    if (r.state === DURABLE_PENDING) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'the current attempt\'s result is still in the nlink==2 in-flight window');
+    }
+    if (r.state !== DURABLE_PRESENT || r.obj.status !== 'BLOCKED') {
+      throw new CliError('INVALID', 'RESULT_BLOCKED', 'no BLOCKED result exists for the current authoritative attempt to acknowledge');
+    }
   }
-  if (disposition === 'accepted' && !fs.existsSync(acceptedResultPathFor(txnDir))) {
+  // DUR-J: the ack-accepted requirement reads the accepted-result fd-bound-durable --
+  // a genuinely absent one stays CORRELATION_INVALID; an nlink==2 / symlink / foreign /
+  // malformed accepted-result STOPs rather than being counted "present" by existsSync.
+  if (disposition === 'accepted' && readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) }) === null) {
     throw new CliError('INVALID', 'CORRELATION_INVALID', 'no accepted-result.json exists to acknowledge');
   }
   const ackObj = {
@@ -2208,13 +3843,22 @@ function cmdAcceptResult(flags) {
   const coordRoot = resolveAbsolute(flags['coordination-root']);
   const requestPath = resolveAbsolute(flags.request);
   const txnDir = path.dirname(requestPath);
-  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
+  // DUR-J item 6: read the request fd-bound-durable ONCE -> reuse its accredited digest for
+  // accepted-result.request_digest (never re-hash the request by path).
+  // Codex NO-GO round 3 (blocker 1): routed through readCanonicalRequestRecord -- the
+  // request's OWN embedded request_id must equal `path.basename(txnDir)`.
+  const reqRec = readCanonicalRequestRecord(path.join(txnDir, 'request.json'), path.basename(txnDir), { absentDetail: 'CORRELATION_INVALID', absentMessage: 'referenced request.json does not resolve' });
+  const reqObj = reqRec.obj;
 
   return withLock(txnDir, () => {
-    if (fs.existsSync(acceptedResultPathFor(txnDir))) {
+    // DUR-J: terminal mutual exclusion reads each terminal fd-bound-durable -- a durable
+    // accepted-result/cancel blocks as before; a genuinely absent one lets accept
+    // proceed; an nlink==2 / symlink / malformed terminal STOPs rather than being
+    // counted by mere existsSync presence.
+    if (readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) }) !== null) {
       throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction already has an accepted-result.json');
     }
-    if (fs.existsSync(cancelPathFor(txnDir))) {
+    if (readJsonDurableOptional(cancelPathFor(txnDir), { shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) }) !== null) {
       // CLI-RESULT-07: a terminal cancelled outcome maps to the frozen CANCELLED/rc6
       // status (PLAN.md ~L781: "rc6-> the observed terminal BLOCKED|CANCELLED|CONFLICT"),
       // not INVALID/rc3 -- detail_code stays TRANSACTION_CANCELLED.
@@ -2228,7 +3872,7 @@ function cmdAcceptResult(flags) {
     // Full shape/correlation/authority/durability pipeline -- propagates the exact
     // detail_code a direct `validate --kind result-v2` would produce (RESULT-TO-02
     // pins AUTHORITY_INVALID here specifically for a superseded-attempt candidate).
-    const { obj: resultObj } = validateResultV2(candidatePath, coordRoot);
+    const { obj: resultObj, digest: resultDigest } = validateResultV2(candidatePath, coordRoot);
 
     // SC-10 (PLAN.md ~L647/~L1711): the full subject_scope_digest re-scan (fresh
     // git-scope-scan of tracked/modified/untracked/deleted/renamed entries) is
@@ -2250,9 +3894,9 @@ function cmdAcceptResult(flags) {
 
     const acceptedObj = {
       schema: 'coordination/accepted-result/v1',
-      request_digest: sha256File(requestPath),
+      request_digest: reqRec.digest,
       candidate_result_path: 'results/' + path.basename(candidatePath),
-      result_digest: sha256File(candidatePath),
+      result_digest: resultDigest,
       accepted_attempt_id: resultObj.attempt_id,
       accepted_lease_epoch: resultObj.lease_epoch,
       routing_policy_digest: reqObj.routing_policy_digest,
@@ -2282,13 +3926,36 @@ function cmdCleanup(flags) {
   // (accepted-result.json, cancel.json, ack.json, takeover.json) and any current
   // candidate never match the temp naming pattern, so they are never at risk
   // (`TERMINAL-NO-DELETE-01`).
+  //
+  // Codex P1-3: reconcileTempArtifacts now returns an explicit {ok, results} outcome
+  // per subdirectory -- ambiguity, drift, or a failed recovery step in ANY of them
+  // means this cleanup pass could NOT fully account for the directory, and must
+  // propagate DURABILITY_UNPROVEN rather than always reporting SUCCESS regardless of
+  // what reconciliation actually found.
+  let anyReconcileFailure = false;
   for (const sub of ['results', 'claims', 'active-leases', 'delivery']) {
-    reconcileTempArtifacts(path.join(txnDir, sub));
+    const outcome = reconcileTempArtifacts(path.join(txnDir, sub));
+    if (!outcome.ok) anyReconcileFailure = true;
   }
+  if (anyReconcileFailure) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'cleanup could not accredit every no-clobber temp sibling as genuinely not-ours or safely reconciled (a genuine stray/crash-cut pair identified but not auto-deleted, ambiguity, drift, or an anomalous I/O error)');
+  }
+  // DUR-J: the request_id here is a DISPLAY value for cleanup's response envelope, not
+  // an authority decision -- the reconcile work above already ran and this can never
+  // change that outcome. Codex NO-GO round 4: previously read via `readJsonDurableOptional`
+  // (durability + parse only) -- a request.json stored at THIS transaction's own path
+  // but internally embedding a DIFFERENT request_id (the same confused-deputy shape as
+  // the round-3 blocker 1 finding) would have been echoed back verbatim, a non-
+  // authoritative id in cleanup's own response. Now reuses the SAME canonical
+  // durability+shape+identity validation every other authoritative reader uses; on ANY
+  // failure (absent, non-durable, malformed, or a content/path identity mismatch) the
+  // response simply omits the id (`null`) rather than displaying an unearned one --
+  // reconciliation semantics above are completely unaffected either way.
   let requestId = null;
   try {
-    requestId = JSON.parse(fs.readFileSync(requestPath, 'utf8')).request_id;
-  } catch (err) { /* best effort */ }
+    const rec = readCanonicalRequestRecord(requestPath, path.basename(txnDir), {});
+    requestId = rec.obj.request_id;
+  } catch (err) { /* best effort -- display only */ }
   return { request_id: requestId, artifact_ref: txnDir };
 }
 COMMANDS.cleanup = cmdCleanup;
@@ -2296,6 +3963,21 @@ COMMANDS.cleanup = cmdCleanup;
 // ─────────────────────────────────────────────────────────────────────────────
 // `await-result` (PLAN.md ~L768) -- bounded poll, never hangs/fabricates success
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Section 8: the FROZEN allowlist of result-candidate validation outcomes that let
+// await-result keep polling instead of STOPping shrinks to ONE principled member --
+// AUTHORITY_INVALID, proof (via resolveAuthoritativeAttempt) that the candidate's own
+// attempt has genuinely been superseded, which can occur in a narrow race between
+// resolving the current attempt and validating its result. CORRELATION_INVALID is
+// REMOVED: a stale/wrong-digest/wrong-role/wrong-root/wrong-depth candidate is an
+// honest correlation failure that must STOP immediately, never be laundered into a
+// generic TIMEOUT by broad pollability. Any other failure (SECURITY_INVALID /
+// SCHEMA_INVALID / DURABILITY_UNPROVEN / identity / I/O) propagates and STOPs, as
+// before. Tested by DUR-J-Gap2-await-* + XACT-07..10.
+const AWAIT_POLLABLE_CANDIDATE_DETAILS = new Set(['AUTHORITY_INVALID']);
+function isAwaitPollableCandidateError(err) {
+  return err instanceof CliError && err.status === 'INVALID' && AWAIT_POLLABLE_CANDIDATE_DETAILS.has(err.detailCode);
+}
 
 function cmdAwaitResult(flags) {
   requireFlags(flags, ['coordination-root', 'request', 'timeout']);
@@ -2316,25 +3998,63 @@ function cmdAwaitResult(flags) {
   // Date.now() values -- unchanged production behavior.
   const deadlineBaseMs = FIXED_CLOCK_ACTIVE ? FIXED_CLOCK_BASE_MS : Date.now();
   const deadlineMs = deadlineBaseMs + timeoutSeconds * 1000;
+  // Section 8: tracks whether the RESULT candidate (not accepted-result/cancel, which
+  // have their own pendingObservedThisPass-only tracking, unchanged) was EVER seen
+  // PENDING across iterations. If it is later observed ABSENT, that is a genuine
+  // vanish-from-the-in-flight-window, not a fresh pre-publish absence -- STOP.
+  let resultEverPending = false;
 
   for (;;) {
-    if (fs.existsSync(acceptedResultPathFor(txnDir))) {
+    // DUR-J: await completes/cancels only on a DURABLY-committed, shape-valid terminal.
+    // Each terminal is classified EXPLICITLY -- PRESENT completes; PENDING (the one
+    // recognized nlink==2 in-flight window) keeps waiting; ABSENT keeps waiting; ANY
+    // INVALID (symlink / wrong owner-mode / oversize / malformed / wrong closed-shape /
+    // identity drift / path rebound) THROWS (STOP), never silently skipped. The
+    // accepted-result CORRELATION check (AUTH-06/07) stays in the AUTH area; DUR-J
+    // requires the terminal be durable AND a valid closed shape here.
+    let pendingObservedThisPass = false;
+    const acc = classifyDurableRead(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) });
+    if (acc.state === DURABLE_PRESENT) {
       return { request_id: reqObj.request_id, artifact_ref: acceptedResultPathFor(txnDir) };
     }
-    if (fs.existsSync(cancelPathFor(txnDir))) {
+    if (acc.state === DURABLE_PENDING) pendingObservedThisPass = true;
+    const can = classifyDurableRead(cancelPathFor(txnDir), { shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) });
+    if (can.state === DURABLE_PRESENT) {
       // rc6 terminal (PLAN.md ~L781), mirroring cmdCancel's/cmdAcceptResult's own
       // CANCELLED/TRANSACTION_CANCELLED terminal-cancel status -- not INVALID/rc3.
       throw new CliError('CANCELLED', 'TRANSACTION_CANCELLED', 'transaction was cancelled');
     }
-    const entries = listResultFiles(txnDir);
-    if (entries.length > 0) {
-      const candidatePath = path.join(txnDir, 'results', entries[0]);
+    if (can.state === DURABLE_PENDING) pendingObservedThisPass = true;
+
+    // Section 8: the result candidate is ALWAYS the CURRENT authoritative attempt's
+    // OWN canonical path, re-resolved fresh THIS iteration (a takeover can commit
+    // between iterations) -- never a directory-listing entries[0], which could pick a
+    // superseded attempt's leftover result and never even reach the current one.
+    const currentAuth = resolveAuthoritativeAttempt(reqObj, txnDir);
+    const candidatePath = resultPathFor(txnDir, currentAuth.attemptId);
+    const resClassify = classifyDurableRead(candidatePath);
+    if (resClassify.state === DURABLE_PENDING) {
+      pendingObservedThisPass = true;
+      resultEverPending = true;
+    } else if (resClassify.state === DURABLE_ABSENT) {
+      if (resultEverPending) {
+        throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'result candidate transitioned from the in-flight window to absent: ' + candidatePath);
+      }
+      // Genuinely, never-before-pending absence: the authoritative attempt simply has
+      // not published a result yet -- fine, keep waiting.
+    } else {
+      // DURABLE_PRESENT -- run the full shape/correlation/authority pipeline. A result
+      // sitting at the CURRENT attempt's OWN canonical path can still fail
+      // AUTHORITY_INVALID in a narrow race (a takeover committed between the
+      // currentAuth resolution above and this validation) -- the ONE principled
+      // pollable reason to keep waiting; a superseded result is ignored only because
+      // attempt authority proves it is old, never because an error class is broadly
+      // pollable.
       let validated = null;
       try {
         validated = validateResultV2(candidatePath, coordRoot);
       } catch (err) {
-        // an invalid/stale/not-yet-authoritative candidate does not itself satisfy
-        // await-result -- keep polling until the deadline.
+        if (!isAwaitPollableCandidateError(err)) throw err;
       }
       if (validated) {
         if (validated.obj.status === 'BLOCKED') {
@@ -2345,7 +4065,15 @@ function cmdAwaitResult(flags) {
         return { request_id: reqObj.request_id, artifact_ref: candidatePath };
       }
     }
+
     if (currentClockMs() >= deadlineMs) {
+      if (pendingObservedThisPass) {
+        // DUR-J + Section 8: a terminal was still in the recognized nlink==2 in-flight
+        // window at the deadline -- report the durability truth (DURABILITY_UNPROVEN),
+        // NOT a generic timeout, so a persistently-unproven publish is never laundered
+        // as "timed out".
+        throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'await-result deadline reached with a terminal still in the nlink==2 in-flight window');
+      }
       // CLI-RESULT-05: NONE is legal only with success (PLAN.md ~L781); a TIMEOUT
       // failure names the specific literal DEADLINE_EXCEEDED.
       throw new CliError('TIMEOUT', 'DEADLINE_EXCEEDED', 'await-result timed out with no valid current candidate');
@@ -2361,6 +4089,24 @@ COMMANDS['await-result'] = cmdAwaitResult;
 // config/home, coordination/evidence, traversal, symlink/hard-link/reparse,
 // post-open mutation, >10MiB), reusing the exact fd-bind / O_NOFOLLOW / fstat /
 // re-fstat-identity pattern already established by `resolveContentRefOrThrow`.
+//
+// CORRECTION PASS (WP2 BLOB-AUTH, post NO-GO audit): the original shipped
+// version's staging-root confinement was LEXICAL ONLY (`path.resolve`/
+// `path.join` never touch the filesystem) and its `fs.lstatSync`/
+// `fs.openSync(..., O_NOFOLLOW)` pair inspected only the FINAL path component,
+// so a symlinked PARENT directory anywhere earlier in `entry.path` was
+// transparently followed by the OS with no error at all (RCR-blob-parent-
+// symlink / RCR-blob-outside-abs, PATH-01/PATH-06). Separately, the
+// categorical denylist and `isSafeRelativeEntryPath` itself both split
+// candidate segments on `/` only, so a segment embedding a denylisted name
+// behind an internal `\` was never caught (RCR-blob-backslash, PATH-04). This
+// pass fixes all three: `isSafeRelativeEntryPath` now rejects `\` and control
+// chars unconditionally (see its own doc comment); `--entry`'s grammar is
+// checked BEFORE the subject-bundle manifest is decoded (so an unsafe --entry
+// always surfaces THIS verb's own SECURITY_INVALID, never the manifest
+// decode's generic SCHEMA_INVALID for the identical string); and the staging-
+// root confinement below is now a per-component symlink-rejecting walk, not a
+// single lexical string comparison.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MAX_BLOB_BYTES = 10485760;
@@ -2369,7 +4115,10 @@ const MAX_BLOB_BYTES = 10485760;
 // file's own reasonable inference of the segment denylist, since no PLAN range
 // read for this task enumerates literal segment names. `.planning` covers this
 // repo's own coordination/evidence convention as an additional segment-level
-// belt to the resolved-path coordination-root check below.
+// belt to the resolved-path coordination-root check below. Safe to split on
+// `/` alone: `isSafeRelativeEntryPath` (the sole gate every entry path here has
+// already passed) categorically rejects `\` anywhere, so a `/`-only split can
+// no longer be smuggled past by a backslash-joined lookalike segment.
 const BLOB_DENYLISTED_SEGMENTS = new Set(['.ssh', '.aws', '.gnupg', '.netrc', '.planning']);
 
 function cmdPublishBlob(flags) {
@@ -2377,16 +4126,28 @@ function cmdPublishBlob(flags) {
   const coordRoot = resolveAbsolute(flags['coordination-root']);
   const planPath = resolveAbsolute(flags.plan);
   const subjectBundlePath = resolveAbsolute(flags['subject-bundle']);
-  const manifest = decodeSubjectBundleManifestOrThrow(subjectBundlePath);
 
+  // --entry's OWN grammar is checked BEFORE the subject-bundle manifest is ever
+  // decoded (WP2 BLOB-AUTH correction, ordering fix, RCR-blob-backslash): this
+  // flag's raw value and every manifest entry's own `path` field are validated
+  // by the SAME isSafeRelativeEntryPath predicate (SUBJECT_BUNDLE_ENTRY_FIELDS.path,
+  // enforced inside decodeSubjectBundleManifestOrThrow immediately below). The
+  // expected, legitimate case has --entry appear byte-for-byte as a manifest
+  // entry's own path too -- checking it here, first, means an unsafe --entry
+  // always surfaces this verb's own specific SECURITY_INVALID, rather than
+  // being masked by the manifest decode's generic SCHEMA_INVALID for the
+  // identical string.
   if (!isSafeRelativeEntryPath(flags.entry)) {
     throw new CliError('INVALID', 'SECURITY_INVALID', '--entry is not a safe relative path');
   }
+
+  const manifest = decodeSubjectBundleManifestOrThrow(subjectBundlePath);
   const entry = manifest.entries.find((e) => e.path === flags.entry);
   if (!entry || !Number.isInteger(entry.size) || typeof entry.digest !== 'string') {
     throw new CliError('INVALID', 'SCHEMA_INVALID', '--entry is not a blob-eligible manifested subject entry');
   }
-  for (const seg of entry.path.split('/')) {
+  const entrySegments = entry.path.split('/');
+  for (const seg of entrySegments) {
     if (BLOB_DENYLISTED_SEGMENTS.has(seg)) {
       throw new CliError('INVALID', 'SECURITY_INVALID', 'entry references a categorically denylisted path segment');
     }
@@ -2400,31 +4161,90 @@ function cmdPublishBlob(flags) {
   // Staging root: the same git worktree toplevel every other identity field in
   // this file is already derived from (computeWorktreeId's own gitRevParse call)
   // -- no new manifest field is required to carry it (BLOB-AUTH-02/outside-root).
+  // Realpath'd up front so the per-component walk below starts from a base
+  // that is already known to be symlink-free.
   const stagingRoot = realpathOrSelf(gitRevParse(coordRoot, ['rev-parse', '--show-toplevel']));
   const resolvedStagingRoot = path.resolve(stagingRoot);
-  const resolvedCandidate = path.resolve(path.join(stagingRoot, entry.path));
+
+  // Coarse lexical pre-check (defense-in-depth, BLOB-AUTH-05 traversal): with
+  // the hardened isSafeRelativeEntryPath grammar above (no '..' segment, never
+  // absolute, never '\'), entry.path can never lexically resolve outside
+  // resolvedStagingRoot -- this can in practice never itself fire post-grammar,
+  // but costs nothing to assert explicitly rather than relying on the grammar
+  // alone.
+  const lexicalCandidate = path.resolve(path.join(resolvedStagingRoot, entry.path));
+  if (lexicalCandidate !== resolvedStagingRoot && !lexicalCandidate.startsWith(resolvedStagingRoot + path.sep)) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'entry resolves outside the staging root (BLOB-AUTH-05 traversal)');
+  }
+
+  // Per-component symlink-confinement walk (WP2 BLOB-AUTH correction, fixes
+  // PATH-01/PATH-06 -- RCR-blob-parent-symlink/RCR-blob-outside-abs): the
+  // lexical check above is a pure string operation that never touches the
+  // filesystem, so it cannot see a symlinked PATH COMPONENT (top-level or
+  // nested) whose real target sits outside the staging root. Walk from the
+  // already-realpath'd staging root one segment at a time; lstat EVERY
+  // component -- including intermediates, not just the final/leaf component --
+  // and reject the FIRST symlink found before ever descending into or opening
+  // it. A real (non-symlink), '.'/'..' -free child name joined onto an
+  // already-real parent is itself already that prefix's own realpath by
+  // construction, so no repeated fs.realpathSync call (and therefore no extra
+  // TOCTOU window) is needed per component.
+  //
+  // Windows junction/reparse note (verification gap, documented rather than
+  // assumed): the rejection test below is `fs.lstatSync(...).isSymbolicLink()`
+  // -- the same Node API call regardless of platform, since Node exposes no
+  // separate cross-platform "is this a reparse point" primitive. Whether this
+  // reliably reports `true` for a Windows junction (not only a Windows
+  // symlink) could not be verified via context7/WebFetch in this pass (tool
+  // unavailable this session) or via a live architect (unreachable, NO-TEAM
+  // mode this session) -- flagged rather than assumed. Neither
+  // runtime-consultation-windows.bats nor runtime-consultation-windows.ps1
+  // currently exercises a real junction against this guard. Until the
+  // windows.ps1 CI leg adds that case and confirms rejection, treat Windows-
+  // junction coverage here as UNVERIFIED even though the POSIX-symlink case
+  // this walk targets is fully covered and tested.
+  const walkedDevIno = [];
+  let walked = resolvedStagingRoot;
+  for (let i = 0; i < entrySegments.length; i += 1) {
+    const seg = entrySegments[i];
+    const isLeaf = i === entrySegments.length - 1;
+    const candidate = path.join(walked, seg);
+    let lst;
+    try {
+      lst = fs.lstatSync(candidate);
+    } catch (err) {
+      throw new CliError('INVALID', 'SCHEMA_INVALID', 'manifested entry not found on disk: ' + entry.path);
+    }
+    if (lst.isSymbolicLink()) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'manifested entry path component is a symlink (rejected, BLOB-AUTH-06/PATH-01/PATH-06)');
+    }
+    if (isLeaf) {
+      if (!lst.isFile()) {
+        throw new CliError('INVALID', 'SCHEMA_INVALID', 'manifested entry is not a regular file');
+      }
+    } else if (!lst.isDirectory()) {
+      throw new CliError('INVALID', 'SCHEMA_INVALID', 'manifested entry path component is not a directory: ' + seg);
+    }
+    walkedDevIno.push({ dev: lst.dev, ino: lst.ino });
+    walked = candidate;
+  }
+  const resolvedCandidate = walked;
+
+  // Real-target confinement (belt-and-suspenders): the walk above is built by
+  // repeated path.join off resolvedStagingRoot itself, so resolvedCandidate is
+  // already guaranteed to sit inside it by construction -- this assertion can
+  // never itself fire, but is kept as an explicit, independent, cheap check
+  // rather than relying on that construction alone.
   if (resolvedCandidate !== resolvedStagingRoot && !resolvedCandidate.startsWith(resolvedStagingRoot + path.sep)) {
     throw new CliError('INVALID', 'SECURITY_INVALID', 'entry resolves outside the staging root (BLOB-AUTH-05 traversal)');
   }
+
   // Categorical coordination/evidence rejection (PLAN.md ~L777): never blob the
   // coordination root's own internal state, even if it happens to sit inside the
   // staging root.
   const resolvedCoordRoot = path.resolve(coordRoot);
   if (resolvedCandidate === resolvedCoordRoot || resolvedCandidate.startsWith(resolvedCoordRoot + path.sep)) {
     throw new CliError('INVALID', 'SECURITY_INVALID', 'entry resolves inside coordination/evidence state');
-  }
-
-  let lst;
-  try {
-    lst = fs.lstatSync(resolvedCandidate);
-  } catch (err) {
-    throw new CliError('INVALID', 'SCHEMA_INVALID', 'manifested entry not found on disk: ' + entry.path);
-  }
-  if (lst.isSymbolicLink()) {
-    throw new CliError('INVALID', 'SECURITY_INVALID', 'manifested entry is a symlink (rejected, BLOB-AUTH-06)');
-  }
-  if (!lst.isFile()) {
-    throw new CliError('INVALID', 'SCHEMA_INVALID', 'manifested entry is not a regular file');
   }
 
   let fd;
@@ -2453,6 +4273,37 @@ function cmdPublishBlob(flags) {
     if (fstat2.dev !== fstat.dev || fstat2.ino !== fstat.ino || fstat2.size !== fstat.size) {
       throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'manifested entry identity changed during read (BLOB-AUTH-07 post-open mutation)');
     }
+
+    // Chain re-validation (WP2 BLOB-AUTH correction, best-effort substitution
+    // detection -- PATH-02): pure Node has no openat/RESOLVE_NO_SYMLINKS
+    // primitive that would make the walk-then-open sequence above a single
+    // atomic operation, so a parent directory component could in principle
+    // still be swapped for a symlink strictly between this walk's lstat of it
+    // and the leaf's own open() call re-resolving the full path internally.
+    // Re-lstat every walked component now (leaf included) and compare dev/ino
+    // against what the walk itself recorded; any mismatch (or a component that
+    // is now itself a symlink) is treated exactly like this file's existing
+    // "identity changed during read" class of rejection just above. This is
+    // the SAME documented, accepted residual as RCR-blob-9 (skipped): fd/
+    // lstat-bound checks close the window for everything a single-process,
+    // syscall-level observation CAN see, but cannot deterministically win a
+    // race against a second process acting at the exact syscall boundary --
+    // that residual is named here rather than silently assumed away.
+    let revalidatePath = resolvedStagingRoot;
+    for (let i = 0; i < entrySegments.length; i += 1) {
+      revalidatePath = path.join(revalidatePath, entrySegments[i]);
+      let relst;
+      try {
+        relst = fs.lstatSync(revalidatePath);
+      } catch (err) {
+        throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'manifested entry path component vanished during read (BLOB-AUTH-07 post-open mutation)');
+      }
+      const recorded = walkedDevIno[i];
+      if (relst.isSymbolicLink() || relst.dev !== recorded.dev || relst.ino !== recorded.ino) {
+        throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'manifested entry path component identity changed during read (BLOB-AUTH-07 post-open mutation)');
+      }
+    }
+
     const blobPath = blobPathFor(planRoot, digest);
     publishNoClobber(blobPath, bytes, { allowIdenticalIdempotent: true });
     return {
@@ -2481,7 +4332,11 @@ function cmdDispatch(flags) {
   const coordRoot = resolveAbsolute(flags['coordination-root']);
   const requestPath = resolveAbsolute(flags.request);
   const txnDir = path.dirname(requestPath);
-  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
+  // DUR-J item 6: read the request fd-bound-durable ONCE; reuse its accredited digest below.
+  // Codex NO-GO round 3 (blocker 1): routed through readCanonicalRequestRecord -- the
+  // request's OWN embedded request_id must equal `path.basename(txnDir)`.
+  const reqRec = readCanonicalRequestRecord(path.join(txnDir, 'request.json'), path.basename(txnDir), { absentDetail: 'CORRELATION_INVALID', absentMessage: 'referenced request.json does not resolve' });
+  const reqObj = reqRec.obj;
   const planRoot = planRootFromArtifact(coordRoot, requestPath);
 
   // Routing policy must already be materialized at this EXACT immutable snapshot
@@ -2489,7 +4344,12 @@ function cmdDispatch(flags) {
   // selected; its absence is a genuine "no available driver" signal (CLI-RESULT-04),
   // not a fabricated one -- real per-role route-table selection is WP3.
   const routingPolicyPath = path.join(planRoot, 'routing-policies', reqObj.routing_policy_digest + '.json');
-  if (!fs.existsSync(routingPolicyPath)) {
+  // DUR-J: the routing policy is a no-clobber-materialized record. A genuinely absent
+  // one is the legitimate "no driver available" signal (UNAVAILABLE/CLI-RESULT-04); an
+  // nlink==2 / symlink / foreign-owner / malformed policy STOPs (readDurableBytesOptional
+  // throws) instead of being mistaken for "absent" -- an in-flight or tampered policy
+  // must never read as "no driver".
+  if (readDurableBytesOptional(routingPolicyPath) === null) {
     throw new CliError('UNAVAILABLE', 'DRIVER_UNAVAILABLE', 'no routing policy materialized for this plan-root; no driver available');
   }
 
@@ -2501,7 +4361,7 @@ function cmdDispatch(flags) {
     schema: 'coordination/activation/v1',
     version: 1,
     request_id: reqObj.request_id,
-    request_digest: sha256File(requestPath),
+    request_digest: reqRec.digest,
     attempt_id: attemptId,
     lease_epoch: leaseEpoch,
     target_role_profile_digest: reqObj.target_role_profile_digest,
@@ -2544,7 +4404,7 @@ function cmdDispatch(flags) {
   const inboxRefObj = {
     schema: 'coordination/inbox-ref/v1',
     request_id: reqObj.request_id,
-    request_digest: sha256File(requestPath),
+    request_digest: reqRec.digest,
     kind: 'consult',
     target_role: reqObj.target_role,
     created_at: now,
@@ -2804,20 +4664,10 @@ function cmdPublishResult(flags) {
   const coordRoot = resolveAbsolute(flags['coordination-root']);
   const requestPath = resolveAbsolute(flags.request);
   const txnDir = path.dirname(requestPath);
-  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
-
   const claimPath = resolveAbsolute(flags.claim);
-  let claimObj;
-  try {
-    claimObj = JSON.parse(fs.readFileSync(claimPath, 'utf8'));
-  } catch (err) {
-    throw new CliError('INVALID', 'CORRELATION_INVALID', 'claim file does not resolve');
-  }
-  const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
-  if (claimObj.attempt_id !== auth.attemptId || claimObj.lease_epoch !== auth.leaseEpoch) {
-    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'claim is not the current authoritative attempt/epoch');
-  }
 
+  // Section 4: decode the BOUNDED caller content/reason outside the lock -- pure
+  // caller-input validation, no durable read depends on it.
   let status;
   let content;
   let reason;
@@ -2840,53 +4690,86 @@ function cmdPublishResult(flags) {
     reason = flags['blocked-reason'];
   }
 
-  const now = nowIso();
-  const resultObj = {
-    schema: 'coordination/result/v2',
-    in_reply_to: reqObj.request_id,
-    request_digest: sha256File(requestPath),
-    plan_digest: reqObj.plan_digest,
-    repo_id: reqObj.repo_id,
-    wave_slug: reqObj.wave_slug,
-    protocol_profile: reqObj.protocol_profile,
-    max_depth: reqObj.max_depth,
-    routing_policy_version: reqObj.routing_policy_version,
-    routing_policy_digest: reqObj.routing_policy_digest,
-    root_request_id: reqObj.root_request_id,
-    parent_request_id: reqObj.parent_request_id,
-    depth: reqObj.depth,
-    attempt_id: auth.attemptId,
-    lease_epoch: auth.leaseEpoch,
-    driver: claimObj.driver,
-    claimant_instance_id: claimObj.claimant_instance_id,
-    worker_session_id: claimObj.worker_session_id || null,
-    claim_digest: sha256File(claimPath),
-    target_role_profile_version: reqObj.target_role_profile_version,
-    target_role_profile_digest: reqObj.target_role_profile_digest,
-    from_role: reqObj.target_role,
-    to_role: reqObj.source_role,
-    result_kind: status === 'BLOCKED' ? 'BLOCKED' : reqObj.expected_result_kind,
-    status,
-    reason,
-    subject_repo_id: reqObj.subject_repo_id,
-    subject_worktree_id: reqObj.subject_worktree_id,
-    subject_head: reqObj.subject_head,
-    subject_scope_digest: reqObj.subject_scope_digest,
-    consultation_dependencies: [],
-    producer_worktree_id: computeWorktreeId(coordRoot),
-    producer_head: computeSubjectHead(coordRoot),
-    created_at: now,
-  };
-  if (status === 'ANSWERED') resultObj.content = content;
-
-  // Fail closed on any internal inconsistency rather than publishing a record
-  // `validate --kind result-v2` would later reject (mirrors cmdPublishRequest's
-  // own "fail closed" convention).
-  assertClosedShape(resultObj, RESULT_V2_FIELDS);
-  assertResultContentXor(resultObj);
-
-  const resultPath = resultPathFor(txnDir, auth.attemptId);
+  testRendezvous(txnDir, 'publish-result-pre-lock');
   return withLock(txnDir, () => {
+    // Section 4: re-read/revalidate the request and CURRENT authority INSIDE the lock
+    // -- a takeover racing before lock acquisition must be observed here, never
+    // trusted from a pre-lock snapshot. Codex NO-GO round 3 (blocker 1): routed
+    // through readCanonicalRequestRecord -- the request's OWN embedded request_id
+    // must equal `path.basename(txnDir)`.
+    const reqRec = readCanonicalRequestRecord(path.join(txnDir, 'request.json'), path.basename(txnDir), {
+      absentDetail: 'CORRELATION_INVALID',
+      absentMessage: 'referenced request.json does not resolve',
+    });
+    const reqObj = reqRec.obj;
+    const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+
+    // The canonical claim for the CURRENT authoritative attempt: self-consistency
+    // (own canonical path for its own attempt_id) then authority (current
+    // attempt/epoch) -- mirrors cmdLeaseHeartbeat's discipline exactly.
+    const claimRec = readClosedRecord(claimPath, CLAIM_V1_FIELDS, {
+      absentDetail: 'CORRELATION_INVALID',
+      absentMessage: 'claim file does not resolve',
+    });
+    if (path.resolve(claimPath) !== path.resolve(claimPathFor(txnDir, claimRec.obj.attempt_id))) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', '--claim is not stored at its own canonical path for its attempt_id');
+    }
+    if (claimRec.obj.attempt_id !== auth.attemptId || claimRec.obj.lease_epoch !== auth.leaseEpoch) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'claim is not the current authoritative attempt/epoch');
+    }
+
+    // Section 4: every authority field and digest below is constructed from THESE
+    // inside-lock records -- never the pre-lock decode above (which carries no
+    // authority fields) nor any snapshot taken before this point.
+    const now = nowIso();
+    const resultObj = {
+      schema: 'coordination/result/v2',
+      in_reply_to: reqObj.request_id,
+      request_digest: reqRec.digest,
+      plan_digest: reqObj.plan_digest,
+      repo_id: reqObj.repo_id,
+      wave_slug: reqObj.wave_slug,
+      protocol_profile: reqObj.protocol_profile,
+      max_depth: reqObj.max_depth,
+      routing_policy_version: reqObj.routing_policy_version,
+      routing_policy_digest: reqObj.routing_policy_digest,
+      root_request_id: reqObj.root_request_id,
+      parent_request_id: reqObj.parent_request_id,
+      depth: reqObj.depth,
+      attempt_id: auth.attemptId,
+      lease_epoch: auth.leaseEpoch,
+      driver: claimRec.obj.driver,
+      claimant_instance_id: claimRec.obj.claimant_instance_id,
+      worker_session_id: claimRec.obj.worker_session_id || null,
+      claim_digest: claimRec.digest,
+      target_role_profile_version: reqObj.target_role_profile_version,
+      target_role_profile_digest: reqObj.target_role_profile_digest,
+      from_role: reqObj.target_role,
+      to_role: reqObj.source_role,
+      result_kind: status === 'BLOCKED' ? 'BLOCKED' : reqObj.expected_result_kind,
+      status,
+      reason,
+      subject_repo_id: reqObj.subject_repo_id,
+      subject_worktree_id: reqObj.subject_worktree_id,
+      subject_head: reqObj.subject_head,
+      subject_scope_digest: reqObj.subject_scope_digest,
+      consultation_dependencies: [],
+      producer_worktree_id: computeWorktreeId(coordRoot),
+      producer_head: computeSubjectHead(coordRoot),
+      created_at: now,
+    };
+    if (status === 'ANSWERED') resultObj.content = content;
+
+    // Fail closed on any internal inconsistency rather than publishing a record
+    // `validate --kind result-v2` would later reject (mirrors cmdPublishRequest's
+    // own "fail closed" convention).
+    assertClosedShape(resultObj, RESULT_V2_FIELDS);
+    assertResultContentXor(resultObj);
+
+    // Section 4: publish only after the final inside-lock authority check above --
+    // a takeover that won before lock acquisition was already rejected there, so
+    // this publish is never reached for a superseded attempt.
+    const resultPath = resultPathFor(txnDir, auth.attemptId);
     publishNoClobber(resultPath, Buffer.from(canonicalJSONStringify(resultObj), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
     return { request_id: reqObj.request_id, artifact_ref: resultPath };
   });
@@ -2897,5 +4780,5 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { canonicalJSONStringify, sha256Buffer, sha256String, sha256File };
+module.exports = { canonicalJSONStringify, sha256Buffer, sha256String, sha256File, writeAllSync, classifyDurableRead, isValidLockTokenFor, acquireLock, releaseLock, listResultFiles, findResultWithStatus, reconcileOneNoClobberTemp };
 

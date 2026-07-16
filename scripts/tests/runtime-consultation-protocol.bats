@@ -152,8 +152,16 @@ _compute_worktree_id() {
 # (mirrors the sha256sum||shasum idiom used throughout this repo's bats suites).
 _iso_plus_seconds() {
   local base="$1" n="$2"
-  date -u -d "${base} +${n} seconds" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null && return
-  date -j -f '%Y-%m-%dT%H:%M:%SZ' "${base}" -v"+${n}S" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null
+  # Portable node-based ISO (base + n seconds). No GNU/BSD `date` divergence: the
+  # old `date -j -f ... -v"+${n}S"` BSD fallback silently corrupted output when a
+  # positional was consumed. Strips milliseconds to preserve this helper's
+  # historical no-ms `%Y-%m-%dT%H:%M:%SZ` shape.
+  node -e 'process.stdout.write(new Date(Date.parse(process.argv[1]) + Number(process.argv[2]) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z"))' "$base" "$n"
+}
+
+# Portable node-based current-UTC ISO (no shell `date`); no-ms shape to match _iso_plus_seconds.
+_iso_now() {
+  node -e 'process.stdout.write(new Date().toISOString().replace(/\.\d{3}Z$/, "Z"))'
 }
 
 # Frozen-base-relative ISO timestamp: the CLI's own `--fixed-clock` default base
@@ -183,6 +191,44 @@ _frozen_iso_plus_ms() {
 # implementation will use the same Node primitive, so this stays byte-consistent with it.
 _base64url_encode() {
   node -e 'process.stdout.write(Buffer.from(require("fs").readFileSync(0)).toString("base64url"))'
+}
+
+# Codex NO-GO round 3 (blocker 2, cleanup item 6): a full recursive disk snapshot
+# {path, type, mode, digest} of everything under $1, sorted, one line per entry --
+# for proving a FAILED call caused literally ZERO bytes of mutation, not merely that
+# a transaction-directory COUNT stayed the same (a directory count misses a
+# same-count same-directory content SWAP, and misses growth in EXISTING directories
+# like routing-policies/ or subject-bundles/ entirely).
+_snapshot_tree() {
+  local root="$1"
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const crypto = require("crypto");
+    const root = process.argv[1];
+    const out = [];
+    function walk(dir) {
+      let entries;
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+      for (const e of entries) {
+        const full = path.join(dir, e.name);
+        const rel = path.relative(root, full);
+        const lst = fs.lstatSync(full);
+        let type = "other";
+        let digest = "";
+        if (lst.isDirectory()) { type = "dir"; walk(full); }
+        else if (lst.isSymbolicLink()) { type = "symlink"; }
+        else if (lst.isFile()) {
+          type = "file";
+          digest = crypto.createHash("sha256").update(fs.readFileSync(full)).digest("hex");
+        }
+        out.push(rel + "\t" + type + "\t" + (lst.mode & 0o777).toString(8) + "\t" + digest);
+      }
+    }
+    if (fs.existsSync(root)) walk(root);
+    out.sort();
+    process.stdout.write(out.join("\n"));
+  ' "$root"
 }
 
 # ── Path helpers (Namespace & Root Security tree, PLAN.md ~L602-628) ────────
@@ -261,7 +307,8 @@ _write_request() {
     for (const k of Object.keys(merged)) {
       if (merged[k] === "__OMIT__") delete merged[k];
     }
-    fs.writeFileSync(outPath, JSON.stringify(merged));
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+    fs.chmodSync(outPath, 0o600);
   ' "$overrides" "$out"
 }
 
@@ -284,7 +331,8 @@ _write_inbox_ref() {
     for (const k of Object.keys(merged)) {
       if (merged[k] === "__OMIT__") delete merged[k];
     }
-    fs.writeFileSync(outPath, JSON.stringify(merged));
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+    fs.chmodSync(outPath, 0o600);
   ' "$overrides" "$out"
 }
 
@@ -336,7 +384,8 @@ _write_result() {
     for (const k of Object.keys(merged)) {
       if (merged[k] === "__OMIT__") delete merged[k];
     }
-    fs.writeFileSync(outPath, JSON.stringify(merged));
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+    fs.chmodSync(outPath, 0o600);
   ' "$overrides" "$out"
 }
 
@@ -362,7 +411,8 @@ _write_subject_bundle() {
     for (const k of Object.keys(merged)) {
       if (merged[k] === "__OMIT__") delete merged[k];
     }
-    fs.writeFileSync(outPath, JSON.stringify(merged));
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+    fs.chmodSync(outPath, 0o600);
   ' "$overrides" "$out"
 }
 
@@ -719,6 +769,22 @@ _run_has_valid_v2_inbox_ref() {
   _assert_cli_result "INVALID" "AUTHORITY_INVALID"
 }
 
+@test "RCP-role-policy-3 (Codex NO-GO round 2 blocker 3, missing-evidence item 5) FAIL: an otherwise-valid child whose ANCESTOR request.json is itself schema-invalid is rejected -- validateRequestGraph's ancestor walk now enforces CONSULT_V2_FIELDS on every parent it reads, not merely parse-and-trust" {
+  local root_id; root_id="$(_gen_hex_id)"
+  local root_f; root_f="$(_request_path "$root_id")"
+  # The ROOT is missing a required CONSULT_V2_FIELDS field (question) -- otherwise a
+  # completely ordinary root request the child's own depth/root linkage matches.
+  _write_request "$root_f" "$(printf '{"request_id":"%s","root_request_id":"%s","parent_request_id":null,"depth":0,"source_role":"test-specialist","target_role":"arch-testing","question":"__OMIT__"}' "$root_id" "$root_id")"
+
+  local child_id; child_id="$(_gen_hex_id)"
+  local child_f; child_f="$(_request_path "$child_id")"
+  _write_request "$child_f" "$(printf '{"request_id":"%s","root_request_id":"%s","parent_request_id":"%s","depth":1,"source_role":"test-specialist","target_role":"arch-testing"}' "$child_id" "$root_id" "$root_id")"
+
+  _run_validate consult-v2 "$child_f"
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # inbox-ref/v1 (record #2, PLAN.md ~L305-316)
 # ══════════════════════════════════════════════════════════════════════════
@@ -774,6 +840,48 @@ _run_has_valid_v2_inbox_ref() {
   _assert_cli_result "INVALID" "SCHEMA_INVALID"
 }
 
+@test "RCP-inbox-ref-5 (Codex NO-GO round 2 blocker 3, missing-evidence item 5) FAIL: a valid-shaped inbox-ref referencing a request.json that is itself schema-invalid is rejected -- validateInboxRefV1 now enforces CONSULT_V2_FIELDS on the referenced request, not merely a digest match" {
+  local id; id="$(_gen_hex_id)"
+  local req_f; req_f="$(_request_path "$id")"
+  # Deliberately OMIT a required CONSULT_V2_FIELDS field (target_role) -- a request
+  # digest can still be computed over these malformed bytes, so a digest match alone
+  # would previously have let a shape-invalid request drive correlation.
+  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","target_role":"__OMIT__"}' "$id" "$id")"
+  local digest; digest="$(_sha256_file "$req_f")"
+
+  local ref_f; ref_f="$(_inbox_path "arch-testing" "$id")"
+  _write_inbox_ref "$ref_f" "$(printf '{"request_id":"%s","request_digest":"%s","target_role":"arch-testing"}' "$id" "$digest")"
+
+  _run_validate inbox-ref-v1 "$ref_f"
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+}
+
+@test "RCP-inbox-ref-6 (Codex NO-GO round 3, blocker 1) FAIL: transactions/A/request.json planted with FULLY VALID bytes copied wholesale from a DIFFERENT request B (durable, shape-valid, even digest-matching once recomputed -- but internally still claims request_id B, not A) is rejected -- content identity must match the storage-path identity, not merely durability+shape+digest" {
+  # Request B: fully valid, durable, standing on its OWN canonical path.
+  local id_b; id_b="$(_gen_hex_id)"
+  local req_b_f; req_b_f="$(_request_path "$id_b")"
+  _write_request "$req_b_f" "$(printf '{"request_id":"%s","root_request_id":"%s","target_role":"arch-testing"}' "$id_b" "$id_b")"
+
+  # transactions/A/request.json: request B's EXACT bytes, copied wholesale (not
+  # re-derived) -- durable (nlink==1, exact 0600), shape-valid (genuine CONSULT_V2_FIELDS
+  # JSON), and the inbox-ref's digest below is recomputed OVER THESE EXACT bytes (so a
+  # digest check alone cannot catch this) -- yet the embedded request_id is still "B".
+  local id_a; id_a="$(_gen_hex_id)"
+  local req_a_f; req_a_f="$(_request_path "$id_a")"
+  mkdir -p "$(dirname "$req_a_f")"
+  cp "$req_b_f" "$req_a_f"
+  chmod 0600 "$req_a_f"
+  local digest; digest="$(_sha256_file "$req_a_f")"
+
+  local ref_f; ref_f="$(_inbox_path "arch-testing" "$id_a")"
+  _write_inbox_ref "$ref_f" "$(printf '{"request_id":"%s","request_digest":"%s","target_role":"arch-testing"}' "$id_a" "$digest")"
+
+  _run_validate inbox-ref-v1 "$ref_f"
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SECURITY_INVALID"
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # coordination-artifact.js hasValidV2InboxRef (v2 branch, Path-Manifest L1289)
 # ══════════════════════════════════════════════════════════════════════════
@@ -784,7 +892,7 @@ _run_has_valid_v2_inbox_ref() {
   _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","target_role":"arch-testing"}' "$id" "$id")"
   local digest; digest="$(_sha256_file "$req_f")"
 
-  local now; now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  local now; now="$(_iso_now)"
   local ref_f; ref_f="$(_inbox_path "arch-testing" "$id")"
   _write_inbox_ref "$ref_f" "$(printf '{"request_id":"%s","request_digest":"%s","target_role":"arch-testing","created_at":"%s"}' "$id" "$digest" "$now")"
 
@@ -799,7 +907,7 @@ _run_has_valid_v2_inbox_ref() {
   _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","target_role":"arch-testing"}' "$id" "$id")"
   local digest; digest="$(_sha256_file "$req_f")"
 
-  local now; now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  local now; now="$(_iso_now)"
   local ref_f; ref_f="$(_inbox_path "arch-testing" "$id")"
   _write_inbox_ref "$ref_f" "$(printf '{"request_id":"%s","request_digest":"%s","target_role":"arch-testing","created_at":"%s","kind":"__OMIT__"}' "$id" "$digest" "$now")"
 
@@ -836,7 +944,7 @@ _run_has_valid_v2_inbox_ref() {
   _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","target_role":"arch-testing"}' "$id" "$id")"
   local digest; digest="$(_sha256_file "$req_f")"
 
-  local now; now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  local now; now="$(_iso_now)"
   local ref_f; ref_f="$(_inbox_path "arch-testing" "$id")"
   _write_inbox_ref "$ref_f" "$(printf '{"request_id":"%s","request_digest":"%s","target_role":"arch-testing","created_at":"%s"}' "$id" "$digest" "$now")"
 
@@ -933,7 +1041,7 @@ _run_has_valid_v2_inbox_ref() {
   local root_request_id; root_request_id="$(node -e 'console.log(JSON.parse(process.argv[1]).request_id)' "$output")"
 
   local now child_expiry child_intent child_intent_b64
-  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  now="$(_iso_now)"
   child_expiry="$(_iso_plus_seconds "$now" 1800)"
   # Same target_role as the root (arch-testing) deliberately -- this test isolates
   # depth/root linkage, not role-policy (see RCP-role-policy-* for that guard).
@@ -969,7 +1077,7 @@ _run_has_valid_v2_inbox_ref() {
 
 @test "RCP-publish-3 FAIL: a caller-supplied request_id in the intent is rejected (IDs are core-generated, R2-C7)" {
   local now expiry intent intent_b64
-  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  now="$(_iso_now)"
   expiry="$(_iso_plus_seconds "$now" 1800)"
   intent="$(printf '{"target_role":"arch-testing","question":"RCP-publish-3 fixture question","expected_result_kind":"TEST_RESULT","expiry":"%s","request_id":"caller-chosen-id-not-allowed"}' "$expiry")"
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
@@ -990,7 +1098,7 @@ _run_has_valid_v2_inbox_ref() {
   # Frozen-base-relative for the FIRST (--fixed-clock) call; real-time-relative
   # for the SECOND (Finding D3 -- see below).
   frozen_expiry="$(_frozen_iso_plus_ms 1800000)"
-  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  now="$(_iso_now)"
   real_expiry="$(_iso_plus_seconds "$now" 1800)"
 
   local bundle_a bundle_b
@@ -1103,6 +1211,164 @@ _run_has_valid_v2_inbox_ref() {
   ' "$output" "$blob_digest"
 }
 
+@test "RCP-publish-7 (Codex NO-GO round 3, blocker 2) FAIL: publish-request with parent_request_id rejects a schema-invalid PARENT -- SCHEMA_INVALID, and a FULL disk snapshot proves literally ZERO bytes were written anywhere (not even planRoot/plan_ref/routing-policy/subject-bundle materialization)" {
+  # The parent is written via DIRECT fixture (_write_request), NEVER through a real
+  # `publish-request` call -- this plan_root has had NOTHING published against it
+  # yet, so plan_ref/routing-policies/subject-bundles genuinely do not exist before
+  # this test's own single CLI call. (The prior version of this test called
+  # `publish-request` for the root FIRST, which itself materialized those three
+  # shared artifacts as a side effect -- the child's own, later, redundant
+  # materialization calls are idempotent no-ops against already-existing files, so
+  # counting transaction directories alone could never observe their growth. Codex's
+  # own repro: parent schema-invalid -> rc3/SCHEMA_INVALID, but the persistent
+  # inventory still grew from 3 to 9 entries under the write-before-validate order
+  # this test's OWN prior version could not detect.)
+  local id_a; id_a="$(_gen_hex_id)"
+  local req_a_f; req_a_f="$(_request_path "$id_a")"
+  # Deliberately OMIT a required CONSULT_V2_FIELDS field (question).
+  _write_request "$req_a_f" "$(printf '{"request_id":"%s","root_request_id":"%s","question":"__OMIT__"}' "$id_a" "$id_a")"
+
+  local before; before="$(_snapshot_tree "$COORD_ROOT")"
+
+  local now child_expiry child_intent child_intent_b64
+  now="$(_iso_now)"
+  child_expiry="$(_iso_plus_seconds "$now" 1800)"
+  child_intent="$(printf '{"target_role":"arch-testing","question":"RCP-publish-7 nested fixture question","expected_result_kind":"TEST_RESULT","expiry":"%s","parent_request_id":"%s"}' "$child_expiry" "$id_a")"
+  child_intent_b64="$(printf '%s' "$child_intent" | _base64url_encode)"
+
+  run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+      --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$child_intent_b64"
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+
+  local after; after="$(_snapshot_tree "$COORD_ROOT")"
+  [ "$before" = "$after" ]
+}
+
+@test "RCP-publish-8 (Codex NO-GO round 4) FAIL: publish-request with parent_request_id rejects a PARENT that is itself closed-shape/durable/canonically-identified but has an INVALID terminal-root shape (parent_request_id:null, depth:0, yet root_request_id != request_id) -- rc3/CORRELATION_INVALID, full disk snapshot proves zero mutation" {
+  # A structurally root-shaped (parent_request_id:null, depth:0) but internally
+  # self-contradictory record: root_request_id deliberately DIFFERENT from its own
+  # request_id. Otherwise fully CONSULT_V2_FIELDS-valid, durable, and canonically
+  # identified at its own path (request_id matches the transaction directory name) --
+  # `readCanonicalRequestRecord`'s own identity check (round 3) does NOT catch this,
+  # since it only binds request_id to the STORAGE PATH, never to root_request_id.
+  local id_root; id_root="$(_gen_hex_id)"
+  local req_root_f; req_root_f="$(_request_path "$id_root")"
+  local wrong_root_id; wrong_root_id="$(_gen_hex_id)"
+  _write_request "$req_root_f" "$(printf '{"request_id":"%s","root_request_id":"%s","parent_request_id":null,"depth":0}' "$id_root" "$wrong_root_id")"
+
+  local before; before="$(_snapshot_tree "$COORD_ROOT")"
+
+  local now child_expiry child_intent child_intent_b64
+  now="$(_iso_now)"
+  child_expiry="$(_iso_plus_seconds "$now" 1800)"
+  child_intent="$(printf '{"target_role":"arch-testing","question":"RCP-publish-8 nested fixture question","expected_result_kind":"TEST_RESULT","expiry":"%s","parent_request_id":"%s"}' "$child_expiry" "$id_root")"
+  child_intent_b64="$(printf '%s' "$child_intent" | _base64url_encode)"
+
+  run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+      --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$child_intent_b64"
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "CORRELATION_INVALID"
+
+  local after; after="$(_snapshot_tree "$COORD_ROOT")"
+  [ "$before" = "$after" ]
+}
+
+@test "RCP-publish-9 (Codex NO-GO round 4, corrected round 5) FAIL: validate --kind consult-v2 on a well-formed LEAF whose ancestor chain terminates at an invalid root TWO HOPS removed (LEAF's own immediate edge is entirely valid) is rejected -- validateRequestGraph's walk re-checks the terminal node's own invariants at whichever hop it is actually encountered, not merely on the walk's first iteration" {
+  # Codex NO-GO round 5: the PRIOR version of this test named itself "two hops
+  # removed" but its fixture only ever built ROOT -> CHILD (one hop) -- the child's
+  # own immediate parent WAS the corrupt root, so validating it exercised the exact
+  # same iteration of the walk a direct 1-hop nested request would (the terminal
+  # check firing on the walk's very first iteration). It could not distinguish a
+  # correct every-iteration check from a bug that only fired correctly on iteration 1.
+  # Fixed: a genuine 3-node chain (ROOT -> MID -> LEAF) where LEAF's own immediate
+  # edge (to MID) is entirely valid, and only the second hop (MID -> ROOT) discovers
+  # ROOT's own invalid terminal shape.
+  local id_root; id_root="$(_gen_hex_id)"
+  local req_root_f; req_root_f="$(_request_path "$id_root")"
+  local wrong_root_id; wrong_root_id="$(_gen_hex_id)"
+  _write_request "$req_root_f" "$(printf '{"request_id":"%s","root_request_id":"%s","parent_request_id":null,"depth":0}' "$id_root" "$wrong_root_id")"
+
+  local id_mid; id_mid="$(_gen_hex_id)"
+  local req_mid_f; req_mid_f="$(_request_path "$id_mid")"
+  # MID's own edge to ROOT is entirely valid: depth == root.depth+1, same
+  # root_request_id propagated from that (corrupt) root.
+  _write_request "$req_mid_f" "$(printf '{"request_id":"%s","root_request_id":"%s","parent_request_id":"%s","depth":1}' "$id_mid" "$wrong_root_id" "$id_root")"
+
+  local id_leaf; id_leaf="$(_gen_hex_id)"
+  local req_leaf_f; req_leaf_f="$(_request_path "$id_leaf")"
+  # LEAF's own immediate edge to MID is ALSO entirely valid: depth == mid.depth+1,
+  # same root_request_id. The ONLY corruption anywhere in this fixture is ROOT's own
+  # local shape -- reachable exclusively by crossing the non-immediate MID->ROOT edge.
+  _write_request "$req_leaf_f" "$(printf '{"request_id":"%s","root_request_id":"%s","parent_request_id":"%s","depth":2}' "$id_leaf" "$wrong_root_id" "$id_mid")"
+
+  _run_validate consult-v2 "$req_leaf_f"
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "CORRELATION_INVALID"
+}
+
+@test "RCP-publish-10 (Codex NO-GO round 5) FAIL: publish-request with parent_request_id rejects a PARENT declaring max_depth:0 (below the frozen ceiling) -- rc3/SCHEMA_INVALID, full disk snapshot proves zero mutation" {
+  # Codex NO-GO round 5: max_depth was `isNonNegativeInteger` in CONSULT_V2_FIELDS, so
+  # a durable, otherwise-canonical parent with max_depth:0 passed shape validation.
+  # Combined with cmdPublishRequest's own `parentObj.max_depth || 2` truthy-fallback
+  # bug (0 is falsy in JS), the parent's real, more restrictive ceiling was silently
+  # replaced by the default 2, and a nested publish that max_depth:0 should have
+  # forbidden outright was accepted (rc0/SUCCESS) and mutated disk. Fixed at the
+  # schema layer: max_depth must now be exactly the frozen literal 2
+  # (MAX_DEPTH_LIMIT), so this fixture is rejected SCHEMA_INVALID before
+  # cmdPublishRequest's own depth comparison is ever reached.
+  local id_root; id_root="$(_gen_hex_id)"
+  local req_root_f; req_root_f="$(_request_path "$id_root")"
+  _write_request "$req_root_f" "$(printf '{"request_id":"%s","root_request_id":"%s","parent_request_id":null,"depth":0,"max_depth":0}' "$id_root" "$id_root")"
+
+  local before; before="$(_snapshot_tree "$COORD_ROOT")"
+
+  local now child_expiry child_intent child_intent_b64
+  now="$(_iso_now)"
+  child_expiry="$(_iso_plus_seconds "$now" 1800)"
+  child_intent="$(printf '{"target_role":"arch-testing","question":"RCP-publish-10 nested fixture question","expected_result_kind":"TEST_RESULT","expiry":"%s","parent_request_id":"%s"}' "$child_expiry" "$id_root")"
+  child_intent_b64="$(printf '%s' "$child_intent" | _base64url_encode)"
+
+  run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+      --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$child_intent_b64"
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+
+  local after; after="$(_snapshot_tree "$COORD_ROOT")"
+  [ "$before" = "$after" ]
+}
+
+@test "RCP-publish-11 (Codex NO-GO round 5) FAIL: publish-request with parent_request_id rejects a PARENT declaring max_depth:5 (above the frozen ceiling) -- rc3/SCHEMA_INVALID, full disk snapshot proves zero mutation" {
+  # A second, distinct max_depth value (neither 0 nor the frozen 2) proves the fix is
+  # an exact-match constraint, not a falsy-value special case: a permissive schema
+  # plus ONLY the fallback-removed comparison (`depth > parentObj.max_depth`, no
+  # `|| 2`) would have let max_depth:5 sail through uncaught (1 > 5 is false) -- only
+  # the schema's exact-2 requirement closes this shape.
+  local id_root; id_root="$(_gen_hex_id)"
+  local req_root_f; req_root_f="$(_request_path "$id_root")"
+  _write_request "$req_root_f" "$(printf '{"request_id":"%s","root_request_id":"%s","parent_request_id":null,"depth":0,"max_depth":5}' "$id_root" "$id_root")"
+
+  local before; before="$(_snapshot_tree "$COORD_ROOT")"
+
+  local now child_expiry child_intent child_intent_b64
+  now="$(_iso_now)"
+  child_expiry="$(_iso_plus_seconds "$now" 1800)"
+  child_intent="$(printf '{"target_role":"arch-testing","question":"RCP-publish-11 nested fixture question","expected_result_kind":"TEST_RESULT","expiry":"%s","parent_request_id":"%s"}' "$child_expiry" "$id_root")"
+  child_intent_b64="$(printf '%s' "$child_intent" | _base64url_encode)"
+
+  run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+      --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$child_intent_b64"
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+
+  local after; after="$(_snapshot_tree "$COORD_ROOT")"
+  [ "$before" = "$after" ]
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # coordination/cli-result/v1 stdout envelope shape (Frozen CLI ABI, PLAN.md ~L779-781)
 # ══════════════════════════════════════════════════════════════════════════
@@ -1144,6 +1410,7 @@ _run_has_valid_v2_inbox_ref() {
   f="$(_result_path "$id" "$attempt")"
   mkdir -p "$(dirname "$f")"
   : > "$f"
+  chmod 0600 "$f"
   _run_validate result-v2 "$f"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "SCHEMA_INVALID"
@@ -1156,6 +1423,7 @@ _run_has_valid_v2_inbox_ref() {
   f="$(_result_path "$id" "$attempt")"
   mkdir -p "$(dirname "$f")"
   printf '{}' > "$f"
+  chmod 0600 "$f"
   _run_validate result-v2 "$f"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "SCHEMA_INVALID"

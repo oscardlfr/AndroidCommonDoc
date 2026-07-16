@@ -142,8 +142,16 @@ _compute_worktree_id() {
 
 _iso_plus_seconds() {
   local base="$1" n="$2"
-  date -u -d "${base} +${n} seconds" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null && return
-  date -j -f '%Y-%m-%dT%H:%M:%SZ' "${base}" -v"+${n}S" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null
+  # Portable node-based ISO (base + n seconds). No GNU/BSD `date` divergence: the
+  # old `date -j -f ... -v"+${n}S"` BSD fallback silently corrupted output when a
+  # positional was consumed. Strips milliseconds to preserve this helper's
+  # historical no-ms `%Y-%m-%dT%H:%M:%SZ` shape.
+  node -e 'process.stdout.write(new Date(Date.parse(process.argv[1]) + Number(process.argv[2]) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z"))' "$base" "$n"
+}
+
+# Portable node-based current-UTC ISO (no shell `date`); no-ms shape to match _iso_plus_seconds.
+_iso_now() {
+  node -e 'process.stdout.write(new Date().toISOString().replace(/\.\d{3}Z$/, "Z"))'
 }
 
 # Frozen-base-relative ISO timestamp: the CLI's own `--fixed-clock` default base
@@ -253,7 +261,8 @@ _write_request() {
     for (const k of Object.keys(merged)) {
       if (merged[k] === "__OMIT__") delete merged[k];
     }
-    fs.writeFileSync(outPath, JSON.stringify(merged));
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+    fs.chmodSync(outPath, 0o600);
   ' "$overrides" "$out"
 }
 
@@ -275,7 +284,8 @@ _write_subject_bundle() {
     for (const k of Object.keys(merged)) {
       if (merged[k] === "__OMIT__") delete merged[k];
     }
-    fs.writeFileSync(outPath, JSON.stringify(merged));
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+    fs.chmodSync(outPath, 0o600);
   ' "$overrides" "$out"
 }
 
@@ -546,7 +556,7 @@ _assert_cli_result() {
 # assertDurable(), broader than just blobs (WP1-reachable via plain `validate`).
 # ══════════════════════════════════════════════════════════════════════════
 
-@test "RCR-durable-1 FAIL: a request.json artifact that is itself a symlink (not a regular file) is rejected fail-closed" {
+@test "RCR-durable-1 FAIL: a request.json artifact that is itself a symlink (not a regular file) is rejected fail-closed with SECURITY_INVALID (DUR-J fd-bound O_NOFOLLOW open rejects the symlink at open, stronger than the old lstat->SCHEMA_INVALID)" {
   local id; id="$(_gen_hex_id)"
   local real_target="$PROJ/real-request-target-for-symlink-test.json"
   _write_request "$real_target" "$(printf '{"request_id":"%s","root_request_id":"%s"}' "$id" "$id")"
@@ -555,7 +565,7 @@ _assert_cli_result() {
   ln -s "$real_target" "$f"
   _run_validate consult-v2 "$f"
   [ "$status" -eq 3 ]
-  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+  _assert_cli_result "INVALID" "SECURITY_INVALID"
 }
 
 @test "RCR-durable-2 FAIL: a request.json artifact with nlink==2 (hard-linked) is rejected fail-closed (durability unproven)" {
@@ -599,7 +609,7 @@ _assert_cli_result() {
   # sidesteps that unrelated collision while still proving two publish-request
   # calls sharing the same PLAN bytes leave the shared plan_ref untouched.
   local now expiry2 intent2 intent2_b64
-  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  now="$(_iso_now)"
   expiry2="$(_iso_plus_seconds "$now" 1800)"
   intent2="$(printf '{"target_role":"arch-testing","question":"RCR-noclobber-1 fixture question B","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry2")"
   intent2_b64="$(printf '%s' "$intent2" | _base64url_encode)"
@@ -638,7 +648,7 @@ _assert_cli_result() {
   # sidesteps that unrelated collision while still proving a tampered
   # existing plan_ref fails a subsequent publish-request closed.
   local now expiry2 intent2 intent2_b64
-  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  now="$(_iso_now)"
   expiry2="$(_iso_plus_seconds "$now" 1800)"
   intent2="$(printf '{"target_role":"arch-testing","question":"RCR-noclobber-2 fixture question B","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry2")"
   intent2_b64="$(printf '%s' "$intent2" | _base64url_encode)"
@@ -647,4 +657,186 @@ _assert_cli_result() {
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent2_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "AUTHORITY_INVALID"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# Group F -- `publish-blob` entry-path confinement adversarial matrix (WP2
+# BLOB-AUTH, CORRECTION PASS). Added after a NO-GO audit against the frozen
+# adversarial matrix `cmdPublishBlob`'s own header comment names
+# (runtime-consultation.cjs ~L2359-2364: "BLOB-AUTH-01..08 -- outside-root,
+# host-auth/config/home, coordination/evidence, traversal, symlink/hard-link/
+# reparse, post-open mutation, >10MiB") found three concrete, currently-
+# reproducible escapes in the SHIPPED `cmdPublishBlob` (~L2375-2464), verified
+# by direct code reading, not asserted from the audit alone:
+#   - Staging-root confinement (~L2403-2408) is LEXICAL ONLY: `path.resolve`/
+#     `path.join` never touch the filesystem, so a `..`-free `entry.path`
+#     (already enforced by `isSafeRelativeEntryPath`, ~L1691-1700) ALWAYS
+#     lexically resolves under the staging root as a plain string -- this
+#     confinement check can therefore never itself reject anything UNLESS a
+#     path COMPONENT along the way is a symlink whose real target sits
+#     elsewhere, which is exactly what it fails to catch (RCR-blob-parent-
+#     symlink, RCR-blob-outside-abs below).
+#   - The subsequent `fs.lstatSync`/`fs.openSync(..., O_NOFOLLOW)` pair
+#     (~L2417-2438) only ever inspects/opens the FINAL path component for
+#     symlink-ness (standard POSIX lstat/O_NOFOLLOW semantics) -- a symlinked
+#     PARENT directory anywhere earlier in the path is transparently followed
+#     by the OS during resolution and produces no error at all, so a real,
+#     non-symlink regular file sitting behind a symlinked ancestor directory
+#     is read and published exactly as if it genuinely sat inside the
+#     worktree.
+#   - The categorical denylist (`BLOB_DENYLISTED_SEGMENTS`, ~L2373) and
+#     `isSafeRelativeEntryPath` itself (~L1695: `v.split('/')`) both split
+#     candidate segments on `/` ONLY -- neither treats `\` as a separator, so
+#     a segment that embeds a denylisted name behind an internal `\` is
+#     compared as one longer, non-matching string and is never caught
+#     (RCR-blob-backslash below).
+#
+# Distinct from Group C above (RCR-blob-1..9): those are WP1's own
+# `resolveContentRefOrThrow` cases, reached via `validate --kind consult-v2`
+# against an ALREADY-published blob. These Group F cases exercise
+# `publish-blob` ITSELF -- the WP2 entry point that decides whether a
+# caller-nominated on-disk file becomes a published blob in the first place --
+# per this dispatch's own explicit WP2/WP3 split. Also distinct from Group B's
+# `root-init`/`root-validate` root-confinement (WP3, RCR-confine-*): these are
+# `publish-blob`'s own, separate `--entry` confinement, not the coordination
+# root's.
+#
+# Every case below is a genuine RED reproduction: the current implementation
+# returns SUCCESS (rc0) and (for the symlink cases) genuinely reads/publishes
+# content sourced from outside the worktree, or (for the backslash case)
+# genuinely reads/publishes a real on-disk file whose name embeds a
+# denylisted-name lookalike -- not a fixture artifact. `publish-blob` needs no
+# `--fixed-ids`/`--fixed-clock`/test-capability seam (it mints no core-
+# generated id and stamps no timestamp of its own), so `_run_publish_blob`
+# sets `NODE_ENV=test`/`RUNTIME_CONSULTATION_TEST_CAPABILITY` only for
+# byte-for-byte consistency with every other invocation helper in this file.
+# ══════════════════════════════════════════════════════════════════════════
+
+# Invokes `publish-blob` directly (Frozen CLI ABI, PLAN.md ~L760, ~L777).
+_run_publish_blob() {
+  local bundle="$1" entry="$2"
+  run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    node "$IMPL" publish-blob --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+      --subject-bundle "$bundle" --entry "$entry"
+}
+
+@test "RCR-blob-parent-symlink FAIL (WP2 BLOB-AUTH PATH-01): a top-level in-worktree symlinked directory component lets publish-blob read and publish a file from OUTSIDE the worktree, past the lexical-only staging-root confinement check" {
+  EXTRA_TMP_DIR="$(mktemp -d)"
+  local outside_dir="$EXTRA_TMP_DIR/outside-secret-dir"
+  mkdir -p "$outside_dir"
+  local secret_content="RCR-blob-parent-symlink OUTSIDE-the-worktree secret content, must never be readable via publish-blob"
+  printf '%s' "$secret_content" > "$outside_dir/secret.txt"
+  local secret_digest secret_size
+  secret_digest="$(_sha256_file "$outside_dir/secret.txt")"
+  secret_size="$(wc -c < "$outside_dir/secret.txt" | tr -d ' ')"
+
+  # The ONLY thing crossing the worktree boundary is this one symlink -- every
+  # other path component ("parent-link", "secret.txt") is an ordinary name.
+  ln -s "$outside_dir" "$PROJ/parent-link"
+
+  local entry_rel="parent-link/secret.txt"
+  local bundle_file; bundle_file="$PROJ/.planning/coordination-subject-bundle-rcr-blob-parent-symlink.json"
+  _write_subject_bundle "$bundle_file" "$(printf '{"entries":[{"path":"%s","size":%s,"digest":"%s"}]}' "$entry_rel" "$secret_size" "$secret_digest")"
+
+  _run_publish_blob "$bundle_file" "$entry_rel"
+
+  # CURRENT (vulnerable) behavior: status 0, SUCCESS -- the symlink is silently
+  # followed and "$outside_dir/secret.txt" is read/published as if it were a
+  # genuine in-worktree file. Both assertions below are expected to fail RED
+  # against today's implementation for exactly that reason.
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "SECURITY_INVALID"
+
+  # Defense-in-depth: even independent of the exit code/detail_code above, no
+  # blob keyed by the OUTSIDE file's digest may ever land under this plan-root.
+  local blobdir; blobdir="$(_plan_root)/blobs"
+  [ ! -e "$blobdir/$secret_digest" ]
+}
+
+@test "RCR-blob-outside-abs FAIL (WP2 BLOB-AUTH PATH-06): a NESTED (non-top-level) symlinked directory component whose true realpath resolves outside the worktree is likewise accepted by the lexical-only confinement check" {
+  EXTRA_TMP_DIR="$(mktemp -d)"
+  local outside_dir="$EXTRA_TMP_DIR/deeper-outside-dir"
+  mkdir -p "$outside_dir"
+  local secret_content="RCR-blob-outside-abs OUTSIDE-the-worktree nested secret content, must never be readable via publish-blob"
+  printf '%s' "$secret_content" > "$outside_dir/nested-secret.bin"
+  local secret_digest secret_size
+  secret_digest="$(_sha256_file "$outside_dir/nested-secret.bin")"
+  secret_size="$(wc -c < "$outside_dir/nested-secret.bin" | tr -d ' ')"
+
+  mkdir -p "$PROJ/real-subdir"
+  ln -s "$outside_dir" "$PROJ/real-subdir/nested-link"
+
+  # Independent proof -- a REAL, symlink-following realpath resolution (`cd` +
+  # `pwd -P`, the same idiom this file's own _compute_repo_id/_compute_worktree_id
+  # helpers use), NOT the CLI's own lexical assumption under test -- that this
+  # entry's true target genuinely sits outside the worktree before publish-blob
+  # is ever invoked. A failure here would be a FIXTURE bug, not the vulnerability.
+  local true_resolved worktree_real
+  true_resolved="$(cd "$PROJ/real-subdir/nested-link" 2>/dev/null && pwd -P)"
+  worktree_real="$(cd "$PROJ" && pwd -P)"
+  [ -n "$true_resolved" ]
+  local truly_outside=true
+  case "$true_resolved" in
+    "$worktree_real"|"$worktree_real"/*) truly_outside=false ;;
+  esac
+  [ "$truly_outside" = "true" ]
+
+  local entry_rel="real-subdir/nested-link/nested-secret.bin"
+  local bundle_file; bundle_file="$PROJ/.planning/coordination-subject-bundle-rcr-blob-outside-abs.json"
+  _write_subject_bundle "$bundle_file" "$(printf '{"entries":[{"path":"%s","size":%s,"digest":"%s"}]}' "$entry_rel" "$secret_size" "$secret_digest")"
+
+  _run_publish_blob "$bundle_file" "$entry_rel"
+
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "SECURITY_INVALID"
+
+  local blobdir; blobdir="$(_plan_root)/blobs"
+  [ ! -e "$blobdir/$secret_digest" ]
+}
+
+@test "RCR-blob-backslash FAIL (WP2 BLOB-AUTH PATH-04): a backslash-joined path segment that embeds a denylisted name is missed by both the '/'-only categorical denylist and the '/'-only entry-path safety grammar" {
+  # Real, on-disk backing file (POSIX permits '\' as an ordinary filename byte)
+  # so this is a genuine end-to-end reproduction on THIS platform, not merely an
+  # assertion about Windows-only path semantics: a single literal path
+  # component whose NAME embeds a `\.ssh\`-shaped lookalike.
+  local actual_filename='innocuous\.ssh\config'
+  local blob_content="RCR-blob-backslash fixture content behind a backslash-embedded .ssh lookalike segment"
+  printf '%s' "$blob_content" > "$PROJ/$actual_filename"
+  local secret_digest secret_size
+  # Deliberately NOT `_sha256_file` here: GNU coreutils' sha256sum (this
+  # repo's canonical macOS bats PATH resolves `sha256sum` to GNU coreutils via
+  # ~/.local/gnubin-l0) prefixes its OUTPUT LINE with a literal '\' whenever
+  # the filename argument contains a backslash or newline -- its own
+  # documented digest-file round-trip escaping convention, verified directly:
+  # under that exact PATH, `sha256sum` on this file's name emits
+  # `\<hex>  name` (leading backslash before the hex), so `awk '{print $1}'`
+  # would capture the stray leading '\' as part of "field 1", corrupting the
+  # value into invalid JSON on the printf/_write_subject_bundle call below.
+  # Computed via node's own crypto/fs instead, which reads the raw path bytes
+  # directly with no such escaping convention -- a correct digest of this
+  # exact file regardless of what characters its name contains.
+  secret_digest="$(node -e 'process.stdout.write(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$PROJ/$actual_filename")"
+  secret_size="$(wc -c < "$PROJ/$actual_filename" | tr -d ' ')"
+
+  # JSON-escaped form of the SAME literal value (each real '\' becomes '\\' in
+  # the JSON text) -- decodes back to the exact `$actual_filename` bytes via
+  # _write_subject_bundle's own `node -e ... JSON.parse(...)`, so
+  # `manifest.entries[0].path === flags.entry` (both the raw `$actual_filename`)
+  # once parsed.
+  local entry_path_json_escaped='innocuous\\.ssh\\config'
+  local bundle_file; bundle_file="$PROJ/.planning/coordination-subject-bundle-rcr-blob-backslash.json"
+  _write_subject_bundle "$bundle_file" "$(printf '{"entries":[{"path":"%s","size":%s,"digest":"%s"}]}' "$entry_path_json_escaped" "$secret_size" "$secret_digest")"
+
+  _run_publish_blob "$bundle_file" "$actual_filename"
+
+  # CURRENT (vulnerable) behavior: both `isSafeRelativeEntryPath` and
+  # `BLOB_DENYLISTED_SEGMENTS` call `.split('/')` on this value, which contains
+  # no `/` at all -- the whole string is treated as ONE ordinary segment, never
+  # compared piecewise against '.ssh', so status 0/SUCCESS results and the file
+  # is published as a real blob.
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "SECURITY_INVALID"
+
+  local blobdir; blobdir="$(_plan_root)/blobs"
+  [ ! -e "$blobdir/$secret_digest" ]
 }
