@@ -1288,6 +1288,82 @@ _write_takeover() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# WP3 correction, AUTH-01/02/03: takeover authority is fabricatable
+# (PLAN.md ~L702: "otherwise invalid (STOP)"). readTakeoverIfValid previously
+# trusted a durable takeover.json on a SHAPE-ONLY check (schema + hex
+# new_attempt_id + integer new_lease_epoch) and any OTHER durable-but-wrong-shape
+# takeover silently fell through to `null` -- resolveAuthoritativeAttempt then
+# silently kept the STILL-INITIAL attempt authoritative, exactly the fabricated-
+# authority class AUTH-06/07 already closed for accepted-result. Each case below
+# is a REAL transaction (`_write_request`, matching claim/lease vehicle) with a
+# hand-fabricated, durable (nlink==1), shape-plausible-but-invalid takeover.json
+# -- `claim` is the simplest command reaching resolveAuthoritativeAttempt.
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "TAKEOVER-AUTH-1 FAIL: a durable takeover.json missing required fields (wrong-shape) STOPs -- never silently falls back to the initial attempt" {
+  local rid aid new_aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"; new_aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local to_f; to_f="$(_takeover_path "$rid")"
+  _write_takeover "$to_f" "$(printf '{"request_id":"%s","new_attempt_id":"%s","superseded_attempt_id":"%s","reason":"__OMIT__","eligibility_kind":"__OMIT__","eligibility_snapshot":"__OMIT__"}' "$rid" "$new_aid" "$aid")"
+  _run_cli claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+}
+
+@test "TAKEOVER-AUTH-2 FAIL: a durable, fully shape-valid takeover.json bound to a DIFFERENT (foreign) request_id STOPs (confused-deputy)" {
+  local rid aid new_aid foreign_rid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"; new_aid="$(_gen_hex_id)"; foreign_rid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local to_f; to_f="$(_takeover_path "$rid")"
+  _write_takeover "$to_f" "$(printf '{"request_id":"%s","new_attempt_id":"%s","superseded_attempt_id":"%s"}' "$foreign_rid" "$new_aid" "$aid")"
+  _run_cli claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "CORRELATION_INVALID"
+}
+
+@test "TAKEOVER-AUTH-3 FAIL: a durable, fully shape-valid takeover.json whose superseded_attempt_id does NOT match the request's real initial_attempt_id STOPs" {
+  local rid aid new_aid fake_superseded; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"; new_aid="$(_gen_hex_id)"; fake_superseded="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  [ "$fake_superseded" != "$aid" ]
+  local to_f; to_f="$(_takeover_path "$rid")"
+  _write_takeover "$to_f" "$(printf '{"request_id":"%s","new_attempt_id":"%s","superseded_attempt_id":"%s"}' "$rid" "$new_aid" "$fake_superseded")"
+  _run_cli claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "AUTHORITY_INVALID"
+}
+
+@test "TAKEOVER-AUTH-4 FAIL: a durable, fully shape-valid takeover.json whose new_lease_epoch is not EXACTLY the one legitimate successor epoch (initial+1) STOPs" {
+  local rid aid new_aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"; new_aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s","initial_lease_epoch":0}' "$rid" "$rid" "$aid")"
+  local to_f; to_f="$(_takeover_path "$rid")"
+  # Not a "greater than initial" laxity check -- there is exactly ONE legitimate
+  # takeover per transaction (computeTakeoverEligibility's own no-clobber existence
+  # check enforces this), so ONLY initial_lease_epoch+1 (here: 1) is correct; 99
+  # (still nominally "greater than 0") must be rejected too, not merely epoch<=0.
+  _write_takeover "$to_f" "$(printf '{"request_id":"%s","new_attempt_id":"%s","superseded_attempt_id":"%s","new_lease_epoch":99}' "$rid" "$new_aid" "$aid")"
+  _run_cli claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "AUTHORITY_INVALID"
+}
+
+@test "TAKEOVER-AUTH-5 FAIL: a durable, fully shape-valid takeover.json whose reason does not match its own eligibility_kind pairing STOPs" {
+  local rid aid new_aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"; new_aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local to_f; to_f="$(_takeover_path "$rid")"
+  # eligibility_kind=confirmed-failed-before-commit must pair with
+  # reason=confirmed-failed-before-commit (never lease-expired, the default) --
+  # cmdTakeover itself never produces this combination; only a fabrication would.
+  _write_takeover "$to_f" "$(printf '{"request_id":"%s","new_attempt_id":"%s","superseded_attempt_id":"%s","eligibility_kind":"confirmed-failed-before-commit"}' "$rid" "$new_aid" "$aid")"
+  _run_cli claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # Takeover eligibility (PLAN.md ~L700-704, ~L821, ~L1431 "TO-01..04")
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -3072,6 +3148,44 @@ _frozen_iso_plus_ms() {
   _run_cli await-result --coordination-root "$COORD_ROOT" --request "$req_path" --timeout 1
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" ""
+}
+
+@test "AUTH-06/07-ACK FAIL: transaction-ack --disposition accepted wrongly mints a legitimate-looking ack.json against a fully uncorrelated fabricated accepted-result.json (surface 2 of the same fabricatable-authority defect -- await-result was surface 1)" {
+  local expiry intent intent_b64
+  expiry="$(_frozen_iso_plus_ms 1800000)"
+  intent="$(printf '{"target_role":"arch-testing","question":"AUTH-06/07-ACK fabricated-accepted-result fixture question","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry")"
+  intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
+
+  local subject_bundle; subject_bundle="$PROJ/.planning/coordination-subject-bundle-auth06ack.json"
+  printf '{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}' > "$subject_bundle"
+
+  _run_cli publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    --subject-bundle "$subject_bundle" --intent "$intent_b64" --fixed-ids --fixed-clock
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+  local req_path; req_path="$(node -e 'console.log(JSON.parse(process.argv[1]).artifact_ref)' "$output")"
+  local txn_dir; txn_dir="$(dirname "$req_path")"
+  local real_req_digest; real_req_digest="$(_sha256_file "$req_path")"
+
+  local fake_req_digest fake_result_digest fake_attempt_id
+  fake_req_digest="$(printf '9%.0s' {1..64})"
+  fake_result_digest="$(printf '8%.0s' {1..64})"
+  fake_attempt_id="$(printf '7%.0s' {1..64})"
+  [ "$fake_req_digest" != "$real_req_digest" ]
+
+  local accepted_f; accepted_f="$txn_dir/accepted-result.json"
+  _write_accepted_result "$accepted_f" "$(printf '{"request_digest":"%s","candidate_result_path":"results/%s.json","result_digest":"%s","accepted_attempt_id":"%s","accepted_lease_epoch":99}' "$fake_req_digest" "$fake_attempt_id" "$fake_result_digest" "$fake_attempt_id")"
+  [ -f "$accepted_f" ]
+
+  # The correct/secure contract (PLAN.md ~L710) applies to EVERY authorizing
+  # surface, not only await-result: transaction-ack must independently re-run the
+  # same correlation check before minting a durable ack.json that permanently
+  # records "accepted". Genuinely RED right now: cmdTransactionAck only checks
+  # shape-valid PRESENCE (readJsonDurableOptional(...) !== null), never content.
+  _run_cli transaction-ack --coordination-root "$COORD_ROOT" --request "$req_path" --disposition accepted --fixed-ids
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" ""
+  [ ! -f "$txn_dir/ack.json" ]
 }
 
 @test "DUR-C-barrier1-fail-leaves-nondurable FAIL: a directory barrier-1 failure must leave the target at nlink==2 (a later idempotent retry rejects it DURABILITY_UNPROVEN) -- never nlink==1, which breaks the PLAN.md ~L681 invariant (nlink==1 IMPLIES barrier-1-durable) and lets a reader/retry launder an unproven barrier as SUCCESS" {

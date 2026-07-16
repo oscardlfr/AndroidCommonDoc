@@ -435,7 +435,11 @@ function writeRawResult(destPath, ctx, overrides) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 test('SUCCESS/rc0: root-init on a fresh coordination root', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcc-node-'));
+  // WP3 root-confinement (RCR-confine-*): root-init now requires
+  // --coordination-root to resolve inside a real git worktree, so this uses
+  // makeTempProject() (git-initialized) rather than a bare mkdtemp -- a plain
+  // non-git temp dir is now correctly rejected SECURITY_INVALID.
+  const dir = makeTempProject();
   try {
     const coordRoot = path.join(dir, 'coordination');
     const result = runTestCli(['root-init', '--coordination-root', coordRoot]);
@@ -701,7 +705,8 @@ test('determinism: the capability var alone (no NODE_ENV=test) does not satisfy 
 // ═══════════════════════════════════════════════════════════════════════════
 
 test('stdout is exactly one JSON object plus one trailing newline (no BOM); stderr never carries a bare JSON object', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcc-node-'));
+  // WP3 root-confinement: root-init now requires a git-worktree-confined root.
+  const dir = makeTempProject();
   try {
     const coordRoot = path.join(dir, 'coordination');
     const success = runTestCli(['root-init', '--coordination-root', coordRoot]);
@@ -1090,6 +1095,58 @@ test('Gap#1: RUNTIME_CONSULTATION_FORCE_PLATFORM is honored ONLY under the test 
   }
 });
 
+// ── WP3 W10b-equivalent: RUNTIME_CONSULTATION_ACL_PROBE wiring (PLAN.md ~L1506) ──
+// root-validate's win32 branch previously parsed/gated this env var (argv layer)
+// but never CONSULTED its value (a seam with no behavior). cmdRootValidate now
+// reads it under the SAME RUNTIME_CONSULTATION_FORCE_PLATFORM=win32 seam Gap#1
+// above uses, making the win32-only branch genuinely exercisable on any host --
+// not merely unverified dead code. Full icacls-based SID/ACL inspection (W09
+// baseline, W10a world-SID rejection) is NOT implemented (deliberately deferred:
+// no Windows access to develop/verify that safely) -- only the ACL_PROBE seam
+// itself is proven here.
+test('WP3 ACL_PROBE: root-validate under simulated win32 with RUNTIME_CONSULTATION_ACL_PROBE=unverifiable is rejected INVALID/SECURITY_INVALID (W10b: indeterminate ACL disables sibling mode fail-closed)', () => {
+  const dir = makeTempProject();
+  try {
+    const coordRoot = path.join(dir, 'coordination');
+    const initResult = runTestCli(['root-init', '--coordination-root', coordRoot]);
+    assertCliResult(initResult, { command: 'root-init', status: 'SUCCESS', detail_code: 'NONE' });
+
+    const validateResult = spawnCli(
+      ['root-validate', '--coordination-root', coordRoot],
+      {
+        NODE_ENV: 'test',
+        RUNTIME_CONSULTATION_TEST_CAPABILITY: TEST_CAPABILITY,
+        RUNTIME_CONSULTATION_FORCE_PLATFORM: 'win32',
+        RUNTIME_CONSULTATION_ACL_PROBE: 'unverifiable',
+      },
+    );
+    assertCliResult(validateResult, { command: 'root-validate', status: 'INVALID', detail_code: 'SECURITY_INVALID' });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('WP3 ACL_PROBE contrast: root-validate under simulated win32 WITHOUT the probe override currently succeeds (no real icacls/SID inspection exists yet -- honest PENDING_CI gap, not a false-secure claim)', () => {
+  const dir = makeTempProject();
+  try {
+    const coordRoot = path.join(dir, 'coordination');
+    const initResult = runTestCli(['root-init', '--coordination-root', coordRoot]);
+    assertCliResult(initResult, { command: 'root-init', status: 'SUCCESS', detail_code: 'NONE' });
+
+    const validateResult = spawnCli(
+      ['root-validate', '--coordination-root', coordRoot],
+      {
+        NODE_ENV: 'test',
+        RUNTIME_CONSULTATION_TEST_CAPABILITY: TEST_CAPABILITY,
+        RUNTIME_CONSULTATION_FORCE_PLATFORM: 'win32',
+      },
+    );
+    assertCliResult(validateResult, { command: 'root-validate', status: 'SUCCESS', detail_code: 'NONE' });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ── DUR-A: writeAllSync fail-closed on a stuck zero-progress write ───────────────
 // A blocking write to a regular file advances by >=1 byte or throws; a writeSync()
 // returning 0 with bytes still pending makes no progress. The pre-fix loop
@@ -1206,6 +1263,7 @@ test('AUDIT-raw-reads: every raw fs.readFileSync/readArtifactBytes call site is 
     'const bytes = readArtifactBytes(manifestPath);', // subject-bundle manifest (caller input, non-authoritative)
     "else if (kind === 'rewrite') fs.writeFileSync(artifactPath, fs.readFileSync(artifactPath)); // same inode+size, new ctime/mtime", // injectReadMutationFault test seam
     'fs.writeFileSync(other, fs.readFileSync(artifactPath), { mode: 0o600 });', // injectReadMutationFault test seam
+    "const ROUTING_POLICY_CONTENT = fs.readFileSync(path.join(__dirname, 'runtime-routing.json'));", // WP3: toolkit-owned fixed file (sibling of this module), never request/caller-controlled -- same category as planPath above, read once at module load
   ]);
   const offenders = src.split('\n')
     .map((raw, i) => ({ line: raw.trim(), n: i + 1 }))

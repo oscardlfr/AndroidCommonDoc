@@ -91,6 +91,15 @@ TEST_CAPABILITY="bats-runtime-consultation-windows-fixture-capability"
 
 setup() {
   PROJ="$(mktemp -d)"
+  # WP3 root-confinement (RCR-confine-*, runtime-consultation-roots.bats) requires
+  # `--coordination-root` to resolve inside a real git worktree -- mirrors
+  # runtime-consultation-roots.bats's own setup() so this file's root-init/
+  # root-validate fixtures reflect realistic usage, not an artifact of never
+  # having exercised the confinement check before it existed.
+  git -C "$PROJ" init -q 2>/dev/null
+  git -C "$PROJ" config user.email "bats@test.local"
+  git -C "$PROJ" config user.name "Bats Test"
+  git -C "$PROJ" commit -q --allow-empty -m init 2>/dev/null
 }
 
 teardown() {

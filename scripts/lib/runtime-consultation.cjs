@@ -398,6 +398,34 @@ function planRootFromArtifact(coordRoot, artifactPath) {
   return path.join(path.resolve(coordRoot), segments[0], segments[1], segments[2]);
 }
 
+/**
+ * Confines an EXISTING coordination root to its own enclosing git worktree
+ * (PLAN.md "Root/default: same-worktree uses <worktree>/.planning/coordination
+ * ... If confinement cannot be proven, sibling mode fails closed", WP3
+ * RCR-confine-*). Mirrors the precedented `publish-blob` staging-root pattern
+ * (`gitRevParse(coordRoot, ['rev-parse', '--show-toplevel'])`): worktree
+ * identity is derived FROM the root's own location, not the caller's
+ * `process.cwd()` (test harnesses and future callers may invoke this CLI from
+ * anywhere). `existingCoordRoot` must already exist -- `git -C` requires a
+ * real directory -- so `cmdRootInit` calls this AFTER `mkdirSync` (and rolls
+ * back the directory it just created on rejection), while `cmdRootValidate`
+ * calls it after already confirming the path exists and is a real directory.
+ */
+function assertRootConfinedToWorktree(existingCoordRoot) {
+  let worktreeToplevel;
+  try {
+    worktreeToplevel = gitRevParse(existingCoordRoot, ['rev-parse', '--show-toplevel']);
+  } catch (err) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root is not inside any git worktree: ' + existingCoordRoot);
+  }
+  const realWorktree = path.resolve(realpathOrSelf(worktreeToplevel));
+  const realCoordRoot = path.resolve(realpathOrSelf(existingCoordRoot));
+  const rel = path.relative(realWorktree, realCoordRoot);
+  if (rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel)) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root is not confined under its own worktree: ' + existingCoordRoot);
+  }
+}
+
 function transactionsDir(planRoot) {
   return path.join(planRoot, 'transactions');
 }
@@ -2423,7 +2451,7 @@ function readRequestForTxnOrCorrelationInvalid(txnDir) {
   }).obj;
 }
 
-function readTakeoverIfValid(txnDir) {
+function readTakeoverIfValid(txnDir, reqObj) {
   const takeoverPath = takeoverPathFor(txnDir);
   // DUR-J: fd-bound durable read. A genuinely ABSENT takeover (ENOENT) returns null
   // -> the initial attempt is authoritative (the one legitimate fallback). The
@@ -2434,17 +2462,15 @@ function readTakeoverIfValid(txnDir) {
   // longer masquerade as "no takeover" and let a superseded attempt keep authority.
   const to = readJsonDurableOptional(takeoverPath);
   if (to === null) return null;
-  if (
-    to && to.schema === 'coordination/takeover/v1'
-    && isHexId(to.new_attempt_id) && Number.isInteger(to.new_lease_epoch)
-  ) {
-    return to;
-  }
-  // Boundary (DUR-J point 8): a DURABLE, well-formed-JSON but WRONG-SHAPE takeover
-  // still falls through to null (initial attempt authoritative). Turning that into a
-  // hard STOP ("invalid takeover => STOP not fallback", PLAN.md ~L702) is AUTH
-  // attempt-authority LOGIC, deferred to the AUTH area; DUR-J only hardens the READ.
-  return null;
+  // AUTH-01/02/03 correction: a DURABLE takeover.json is no longer trusted on a
+  // partial shape-only check. The full binding validator (shared with the explicit
+  // `validate --kind takeover-v1` path) is called here and THROWS (STOP) on ANY
+  // mismatch -- wrong shape, cross-request, wrong superseded attempt/epoch, or an
+  // inconsistent reason/eligibility_kind pairing. PLAN.md ~L702 ("otherwise invalid
+  // (STOP)") is now the ACTUAL behavior, not merely a DUR-J-deferred boundary note:
+  // an invalid takeover can neither supersede the initial attempt NOR be silently
+  // ignored as if it never existed.
+  return validateTakeoverBinding(to, reqObj);
 }
 
 /**
@@ -2454,7 +2480,7 @@ function readTakeoverIfValid(txnDir) {
  * `initial_lease_epoch` are authoritative.
  */
 function resolveAuthoritativeAttempt(reqObj, txnDir) {
-  const to = readTakeoverIfValid(txnDir);
+  const to = readTakeoverIfValid(txnDir, reqObj);
   if (to) {
     return { attemptId: to.new_attempt_id, leaseEpoch: to.new_lease_epoch, takeover: to };
   }
@@ -2743,6 +2769,56 @@ function validateAcceptedResultV1(artifactPath) {
   return obj;
 }
 
+/**
+ * AUTH-06/07 correction: shape validity alone (above) proves the JSON is well-formed
+ * and durable, never that it CORRELATES to this specific transaction (PLAN.md ~L710:
+ * "only a validated correlated artifact completes"). This re-derives the exact same
+ * correlation chain `cmdAcceptResult` itself established at write-time and re-checks
+ * every claim against reality:
+ *   - `request_digest` must equal the REAL request.json bytes on disk right now.
+ *   - `routing_policy_digest` must equal the REAL request's own field.
+ *   - `accepted_attempt_id`/`accepted_lease_epoch` must equal the CURRENT authoritative
+ *     attempt/epoch (`resolveAuthoritativeAttempt`) -- not merely well-shaped hex/ints.
+ *   - `candidate_result_path` is NEVER opened as attacker-supplied I/O: the real
+ *     candidate is always re-located canonically via `resultPathFor(txnDir,
+ *     accepted_attempt_id)` (the same helper `cmdAcceptResult` used to construct this
+ *     field originally); the caller-supplied string is only ever STRING-COMPARED
+ *     against that canonical form, never joined/opened directly.
+ *   - `result_digest` must equal the real, independently-revalidated (`validateResultV2`)
+ *     candidate result's own digest.
+ * Throws AUTHORITY_INVALID on any mismatch; a caller that reaches this function already
+ * knows the accepted-result artifact is shape-valid and durable (DUR-J's job) -- this is
+ * strictly the AUTH-area authority/correlation layer DUR-J deliberately left to AUTH-06/07.
+ */
+function assertAcceptedResultCorrelates(acceptedObj, txnDir, reqObj, coordRoot) {
+  // fd-bound re-read (DUR-J item 6 / AUDIT-sha256File: sha256File itself is
+  // planPath-only -- every coordination-record digest must come from its own
+  // accredited fd-bound read, never a second raw by-path hash).
+  const reqRec = readCanonicalRequestRecord(path.join(txnDir, 'request.json'), path.basename(txnDir), {
+    absentDetail: 'CORRELATION_INVALID',
+    absentMessage: 'referenced request.json does not resolve',
+  });
+  if (acceptedObj.request_digest !== reqRec.digest) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'accepted-result request_digest does not match the real request.json bytes');
+  }
+  if (acceptedObj.routing_policy_digest !== reqObj.routing_policy_digest) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'accepted-result routing_policy_digest does not match the real request');
+  }
+  const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+  if (acceptedObj.accepted_attempt_id !== auth.attemptId || acceptedObj.accepted_lease_epoch !== auth.leaseEpoch) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'accepted-result accepted_attempt_id/accepted_lease_epoch is not the current authoritative pair');
+  }
+  const expectedCandidatePath = resultPathFor(txnDir, acceptedObj.accepted_attempt_id);
+  const expectedCandidateRelative = 'results/' + path.basename(expectedCandidatePath);
+  if (acceptedObj.candidate_result_path !== expectedCandidateRelative) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'accepted-result candidate_result_path is not the canonical path for its own accepted_attempt_id');
+  }
+  const { digest: candidateDigest } = validateResultV2(expectedCandidatePath, coordRoot);
+  if (acceptedObj.result_digest !== candidateDigest) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'accepted-result result_digest does not match the real candidate result bytes');
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // `ack` (record #8) -- field table PLAN.md ~L453-462
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2821,26 +2897,57 @@ const TAKEOVER_V1_FIELDS = {
   takeover_at: { check: isIsoTimestamp },
 };
 
-function validateTakeoverV1(artifactPath) {
-  const obj = readJsonDurable(artifactPath);
+/**
+ * Full takeover binding validation (PLAN.md ~L700-712, WP3 AUTH-01/02/03
+ * correction: "otherwise invalid (STOP)"). Shared by the explicit `validate
+ * --kind takeover-v1` entry point (validateTakeoverV1 below) AND the implicit
+ * authority-resolution trust path (readTakeoverIfValid) so neither can silently
+ * drift from the other's rules -- a durable-but-invalid takeover.json is REJECTED
+ * here, never downgraded to "no takeover" by either caller.
+ *
+ * Checks, in order: closed shape; request correlation; new_attempt_id differs
+ * from superseded_attempt_id; epoch strictly increases from the request-frozen
+ * baseline (SCHEMA_INVALID, pre-existing SCHEMA-TAKEOVER-01 contract, unchanged);
+ * THEN the AUTH-03/04 binding layer this correction adds -- superseded_attempt_id
+ * must be the request's OWN initial_attempt_id (not merely "a" prior attempt),
+ * and new_lease_epoch must be EXACTLY initial_lease_epoch+1, never merely
+ * "greater than" -- there is exactly one legitimate takeover per transaction
+ * (computeTakeoverEligibility's own no-clobber existence check enforces this),
+ * so no other epoch value is ever correct; finally reason/eligibility_kind must
+ * be an internally consistent pairing (cmdTakeover itself never produces any
+ * other combination).
+ */
+function validateTakeoverBinding(obj, reqObj) {
   assertClosedShape(obj, TAKEOVER_V1_FIELDS);
-  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
-  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
-  const txnDir = path.dirname(artifactPath);
-  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
-  if (obj.request_id !== path.basename(txnDir)) {
-    throw new CliError('INVALID', 'CORRELATION_INVALID', 'takeover request_id does not match containing transaction');
+  if (obj.request_id !== reqObj.request_id) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'takeover request_id does not match this transaction');
   }
   if (obj.new_attempt_id === obj.superseded_attempt_id) {
     throw new CliError('INVALID', 'SCHEMA_INVALID', 'new_attempt_id must differ from superseded_attempt_id');
   }
-  // Epoch strictly increases from the request-frozen initial_lease_epoch (there is
-  // exactly one permitted takeover, so the request's own frozen epoch is always the
-  // correct "superseded epoch" baseline -- PLAN.md ~L492-493, SCHEMA-TAKEOVER-01).
   if (!(obj.new_lease_epoch > reqObj.initial_lease_epoch)) {
     throw new CliError('INVALID', 'SCHEMA_INVALID', 'new_lease_epoch must be strictly greater than the superseded epoch');
   }
+  if (obj.superseded_attempt_id !== reqObj.initial_attempt_id) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', "takeover superseded_attempt_id does not match the request's own initial_attempt_id");
+  }
+  if (obj.new_lease_epoch !== reqObj.initial_lease_epoch + 1) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'takeover new_lease_epoch is not exactly the one legitimate successor epoch');
+  }
+  const expectedReason = obj.eligibility_kind === 'confirmed-failed-before-commit' ? 'confirmed-failed-before-commit' : 'lease-expired';
+  if (obj.reason !== expectedReason) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'takeover reason does not match its own eligibility_kind');
+  }
   return obj;
+}
+
+function validateTakeoverV1(artifactPath) {
+  const obj = readJsonDurable(artifactPath);
+  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
+  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
+  const txnDir = path.dirname(artifactPath);
+  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
+  return validateTakeoverBinding(obj, reqObj);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2943,10 +3050,36 @@ COMMANDS.validate = cmdValidate;
 function cmdRootInit(flags) {
   requireFlags(flags, ['coordination-root']);
   const coordRoot = resolveAbsolute(flags['coordination-root']);
+  // RCR-confine-5: reject a pre-existing symlink at the leaf BEFORE any
+  // mkdir/chmod. mkdirSync on an already-existing path is a no-op EVEN
+  // THROUGH a symlink, so without this guard chmodSync(0700) below would
+  // silently mutate whatever real directory the symlink points to.
+  try {
+    const lst = fs.lstatSync(coordRoot);
+    if (lst.isSymbolicLink()) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root path is a pre-existing symlink (rejected before follow): ' + coordRoot);
+    }
+  } catch (err) {
+    if (err instanceof CliError) throw err;
+    // ENOENT (does not exist yet, the normal case) or any other lstat error:
+    // fall through and let mkdirSync itself surface the real condition.
+  }
+  const preexisting = fs.existsSync(coordRoot);
   fs.mkdirSync(coordRoot, { recursive: true });
   try {
     fs.chmodSync(coordRoot, 0o700);
   } catch (err) { /* best effort -- Windows ACL init is a later WP */ }
+  try {
+    assertRootConfinedToWorktree(coordRoot);
+  } catch (err) {
+    // Fail-closed rollback: never leave a freshly-created, non-confined
+    // directory behind outside the worktree (best effort -- a directory that
+    // pre-existed before this call is left untouched either way).
+    if (!preexisting) {
+      try { fs.rmdirSync(coordRoot); } catch (cleanupErr) { /* best effort */ }
+    }
+    throw err;
+  }
   return { artifact_ref: coordRoot };
 }
 COMMANDS['root-init'] = cmdRootInit;
@@ -2956,7 +3089,9 @@ function cmdRootValidate(flags) {
   const coordRoot = resolveAbsolute(flags['coordination-root']);
   let stat;
   try {
-    stat = fs.statSync(coordRoot);
+    // lstat (not stat): the coordination root PATH ITSELF must not be a symlink
+    // (RCR-confine-3) -- checked below before anything follows it.
+    stat = fs.lstatSync(coordRoot, { bigint: true });
   } catch (err) {
     // A missing/wrong root path is bad input, not a transient unavailability --
     // matches this file's own consistent not-found convention (INVALID/
@@ -2964,8 +3099,55 @@ function cmdRootValidate(flags) {
     // rather than the lone UNAVAILABLE/NONE outlier this handler previously used.
     throw new CliError('INVALID', 'SCHEMA_INVALID', 'coordination root does not exist: ' + coordRoot);
   }
+  if (stat.isSymbolicLink()) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root path is a symlink (rejected before follow): ' + coordRoot);
+  }
   if (!stat.isDirectory()) {
     throw new CliError('INVALID', 'SCHEMA_INVALID', 'coordination root is not a directory: ' + coordRoot);
+  }
+  // resolveEffectivePlatform (not raw process.platform): honors
+  // RUNTIME_CONSULTATION_FORCE_PLATFORM under the test capability (same seam
+  // Gap#1's argv-cap check already uses) so the win32 ACL_PROBE branch below is
+  // genuinely exercisable, not merely unverified dead code, on any host.
+  const isPosix = resolveEffectivePlatform() !== 'win32';
+  // Owner check mirrors assertDurableTargetMatches's own POSIX-identity
+  // pattern (checked BEFORE mode, same order): a root owned by a different
+  // principal can never be trusted as owner-confined regardless of its mode bits.
+  if (isPosix && typeof process.getuid === 'function' && stat.uid !== BigInt(process.getuid())) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root is not owner-confined: ' + coordRoot);
+  }
+  if (isPosix && (stat.mode & 0o777n) !== 0o700n) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root mode is not owner-only 0700: ' + coordRoot);
+  }
+  // Windows ACL confinement (PLAN.md W09/W10a/W10b, ~L1504-1506) -- UNVERIFIED,
+  // no pwsh/Windows execution is available in this environment; this wires ONLY
+  // the RUNTIME_CONSULTATION_ACL_PROBE=unverifiable test seam (W10b: forces
+  // 'indeterminate' -> sibling/shared-root mode DISABLED fail-closed, without
+  // depending on the invoking principal's real filesystem permissions -- the
+  // argv layer already gates this env var to the test capability). Full
+  // icacls-based ACL/SID inspection (W09 baseline confinement, W10a world-SID
+  // rejection) is NOT implemented here -- deliberately deferred rather than
+  // shipping unverified Windows-specific SID-parsing security logic with zero
+  // ability to prove it correct; real Windows access is required to develop and
+  // verify it safely. Stays PENDING_CI.
+  if (!isPosix && process.env.RUNTIME_CONSULTATION_ACL_PROBE === 'unverifiable') {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root ACL confinement is indeterminate (RUNTIME_CONSULTATION_ACL_PROBE=unverifiable)');
+  }
+  // Confinement is proven via a `git` subprocess call (assertRootConfinedToWorktree),
+  // a measurably slower step than the pure in-process checks above -- widening the
+  // TOCTOU window for a same-uid attacker to swap the path out from under this
+  // validate call. Stable-identity re-check: re-lstat AFTER confinement and require
+  // the exact same inode/mode/owner as the first snapshot, mirroring
+  // classifyDurableRead's own before/after drift rejection for content artifacts.
+  assertRootConfinedToWorktree(coordRoot);
+  let stat2;
+  try {
+    stat2 = fs.lstatSync(coordRoot, { bigint: true });
+  } catch (err) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root vanished during validation: ' + coordRoot);
+  }
+  if (stat2.isSymbolicLink() || stat2.dev !== stat.dev || stat2.ino !== stat.ino || stat2.mode !== stat.mode || stat2.uid !== stat.uid || stat2.gid !== stat.gid) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root identity changed during validation (swap/tamper): ' + coordRoot);
   }
   return { artifact_ref: coordRoot };
 }
@@ -3067,12 +3249,26 @@ function main() {
 // `publish-request` (PLAN.md ~L761, Ordered Runtime Loop steps 1-5 ~L798-808)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// WP3 fix: this used to be an in-memory FABRICATED placeholder
+// ({schema,profile:'wp1-default'}) wholly disconnected from the real
+// scripts/lib/runtime-routing.json file on disk -- every request's
+// routing_policy_digest was a digest of that fake stub, never the real routing
+// table. PLAN.md's own Routing Registry section: "Every request uses its
+// immutable content-addressed snapshot" -- ROUTING_POLICY_CONTENT is now the
+// REAL file's exact on-disk bytes (read once at module load; `runtime-routing.json`
+// is a toolkit file loaded alongside this one, never request-controlled), and
+// ROUTING_POLICY_DIGEST is the raw SHA-256 of those exact bytes (no canonical
+// re-serialization -- a byte-for-byte hash, matching this file's own
+// raw-file-digest-equals-canonical-serialization-digest invariant elsewhere).
 const ROUTING_POLICY_VERSION = 'runtime-routing/v1';
-const ROUTING_POLICY_CONTENT = Buffer.from(
-  canonicalJSONStringify({ schema: 'runtime-routing/v1', profile: 'wp1-default' }) + '\n',
-  'utf8',
-);
+const ROUTING_POLICY_CONTENT = fs.readFileSync(path.join(__dirname, 'runtime-routing.json'));
 const ROUTING_POLICY_DIGEST = sha256Buffer(ROUTING_POLICY_CONTENT);
+const ROUTING_POLICY_TABLE = JSON.parse(ROUTING_POLICY_CONTENT.toString('utf8'));
+if (ROUTING_POLICY_TABLE.schema !== ROUTING_POLICY_VERSION || !ROUTING_POLICY_TABLE.routes || typeof ROUTING_POLICY_TABLE.routes !== 'object') {
+  // Fail fast at module load, not at first dispatch -- a malformed toolkit
+  // routing.json is a harness integrity defect, never a per-request condition.
+  throw new Error('scripts/lib/runtime-routing.json is malformed: schema must be ' + ROUTING_POLICY_VERSION + ' with a routes object');
+}
 const TARGET_ROLE_PROFILE_VERSION = '1.0.0';
 
 function targetRoleProfileDigestFor(role) {
@@ -3794,6 +3990,7 @@ function findResultWithStatus(txnDir, status) {
 
 function cmdTransactionAck(flags) {
   requireFlags(flags, ['coordination-root', 'request', 'disposition']);
+  const coordRoot = resolveAbsolute(flags['coordination-root']);
   const requestPath = resolveAbsolute(flags.request);
   const txnDir = path.dirname(requestPath);
   const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
@@ -3819,8 +4016,18 @@ function cmdTransactionAck(flags) {
   // DUR-J: the ack-accepted requirement reads the accepted-result fd-bound-durable --
   // a genuinely absent one stays CORRELATION_INVALID; an nlink==2 / symlink / foreign /
   // malformed accepted-result STOPs rather than being counted "present" by existsSync.
-  if (disposition === 'accepted' && readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) }) === null) {
-    throw new CliError('INVALID', 'CORRELATION_INVALID', 'no accepted-result.json exists to acknowledge');
+  // AUTH-06/07 correction (surface 2 of 2 -- await-result's DURABLE_PRESENT branch was
+  // surface 1): shape+durability alone is not authority. A fabricated-but-shape-valid
+  // accepted-result.json must not let a caller mint a legitimate-looking, durably
+  // published ack.json. Full correlation re-check BEFORE acknowledging, reusing the
+  // exact same validator await-result already requires -- one authority contract,
+  // enforced identically at every surface that treats accepted-result as authoritative.
+  if (disposition === 'accepted') {
+    const acceptedObj = readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) });
+    if (acceptedObj === null) {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'no accepted-result.json exists to acknowledge');
+    }
+    assertAcceptedResultCorrelates(acceptedObj, txnDir, reqObj, coordRoot);
   }
   const ackObj = {
     schema: 'coordination/ack/v1',
@@ -4015,6 +4222,11 @@ function cmdAwaitResult(flags) {
     let pendingObservedThisPass = false;
     const acc = classifyDurableRead(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) });
     if (acc.state === DURABLE_PRESENT) {
+      // AUTH-06/07: shape+durability alone (above) is not authority -- a hand-written,
+      // shape-valid, durable-but-uncorrelated accepted-result.json must not complete a
+      // real transaction. Re-derive and re-check the full correlation chain before
+      // trusting mere presence.
+      assertAcceptedResultCorrelates(acc.obj, txnDir, reqObj, coordRoot);
       return { request_id: reqObj.request_id, artifact_ref: acceptedResultPathFor(txnDir) };
     }
     if (acc.state === DURABLE_PENDING) pendingObservedThisPass = true;
@@ -4349,9 +4561,34 @@ function cmdDispatch(flags) {
   // nlink==2 / symlink / foreign-owner / malformed policy STOPs (readDurableBytesOptional
   // throws) instead of being mistaken for "absent" -- an in-flight or tampered policy
   // must never read as "no driver".
-  if (readDurableBytesOptional(routingPolicyPath) === null) {
+  const routingPolicyBytes = readDurableBytesOptional(routingPolicyPath);
+  if (routingPolicyBytes === null) {
     throw new CliError('UNAVAILABLE', 'DRIVER_UNAVAILABLE', 'no routing policy materialized for this plan-root; no driver available');
   }
+  // WP3 fix: real per-role route-table selection (PLAN.md Routing Registry:
+  // "runtime-routing.json chooses a connector for one consultation attempt").
+  // Uses the request's OWN pinned, content-addressed snapshot -- never the live
+  // scripts/lib/runtime-routing.json -- so a routing.json edit after publish
+  // can never silently change an in-flight request's route table. Full
+  // capability-based selection among the five non-noop drivers (a reachable
+  // retained Claude peer, Codex app-server, etc.) requires the
+  // RoleLifecycleController/runtime-bridge-codex.cjs capability-detection
+  // machinery that does not exist yet (WP3-in-progress) -- `noop` remains the
+  // only driver this dispatch can honestly select end-to-end, but it is now a
+  // REAL lookup against the pinned table (rejecting if the role is unknown to
+  // it or `noop` is not one of its allowed drivers), not an unconditional
+  // hardcode regardless of what the table says.
+  let routingPolicyObj;
+  try {
+    routingPolicyObj = JSON.parse(routingPolicyBytes.toString('utf8'));
+  } catch (err) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'materialized routing policy is not valid JSON: ' + routingPolicyPath);
+  }
+  const allowedDrivers = routingPolicyObj && routingPolicyObj.routes ? routingPolicyObj.routes[reqObj.target_role] : undefined;
+  if (!Array.isArray(allowedDrivers) || !allowedDrivers.includes('noop')) {
+    throw new CliError('UNAVAILABLE', 'DRIVER_UNAVAILABLE', 'no honestly-selectable driver for target_role ' + reqObj.target_role + ' in the pinned routing policy');
+  }
+  const selectedDriver = 'noop';
 
   const attemptId = reqObj.initial_attempt_id;
   const leaseEpoch = reqObj.initial_lease_epoch;
@@ -4367,7 +4604,7 @@ function cmdDispatch(flags) {
     target_role_profile_digest: reqObj.target_role_profile_digest,
     routing_policy_version: reqObj.routing_policy_version,
     routing_policy_digest: reqObj.routing_policy_digest,
-    selected_driver: 'noop',
+    selected_driver: selectedDriver,
     native_target_binding_id: null,
     native_spawn_action_id: null,
     created_at: now,

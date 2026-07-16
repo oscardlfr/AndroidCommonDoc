@@ -445,6 +445,37 @@ _assert_cli_result() {
   _assert_cli_result "INVALID" "SECURITY_INVALID"
 }
 
+@test "RCR-confine-5 FAIL: root-init on a path that is ITSELF a pre-existing symlink is rejected fail-closed BEFORE any mkdir/chmod, with zero mutation of the symlink's target" {
+  # A legitimate, pre-existing, owner-confined directory ELSEWHERE in the same
+  # worktree -- root-init must never chmod/mutate it just because a symlink
+  # happens to alias it at the requested --coordination-root path. mkdirSync on
+  # an existing path is a no-op EVEN THROUGH a symlink, so without a leaf-symlink
+  # guard, chmodSync(0700) would silently mutate this real target's mode.
+  local real_target="$COORD_ROOT/pre-existing-real-target"
+  mkdir -p "$real_target"
+  chmod 0755 "$real_target"
+  local mode_before; mode_before="$(_file_mode_octal "$real_target")"
+  [ "$mode_before" = "755" ]
+
+  local link_root="$COORD_ROOT/symlinked-init-target"
+  ln -s "$real_target" "$link_root"
+
+  _run_root_init "$link_root"
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SECURITY_INVALID"
+
+  # Zero mutation: the real target's mode is byte-for-byte unchanged, and it is
+  # still a plain directory (never replaced/relinked).
+  local mode_after; mode_after="$(_file_mode_octal "$real_target")"
+  [ "$mode_after" = "755" ]
+  [ -d "$real_target" ]
+  [ ! -L "$real_target" ]
+  # The symlink itself is untouched too (still a symlink, still pointing the same place).
+  [ -L "$link_root" ]
+  local link_target; link_target="$(readlink "$link_root")"
+  [ "$link_target" = "$real_target" ]
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # Group C -- content_ref resolution fd-safety / TOCTOU (PLAN.md ~L640), reached via
 # `validate --kind consult-v2` against a request carrying a content_ref (WP1-reachable;

@@ -66,8 +66,13 @@
 # cmdPublishRequest, cmdClaim, cmdPublishResult, or cmdAcceptResult REQUIRES
 # --coordination-root to sit inside a real git working tree (git walks up from
 # any subdirectory to find .git -- the coordination-root itself need not be the
-# repo toplevel). cmdCancel, cmdTransactionAck, cmdTakeover, cmdRootInit,
-# cmdRootValidate, cmdAwaitResult do NOT call git. This file mirrors
+# repo toplevel). cmdCancel, cmdTransactionAck, cmdTakeover, cmdAwaitResult do
+# NOT call git. UPDATED (WP3 root-confinement, RCR-confine-*): cmdRootInit and
+# cmdRootValidate NOW also call `git -C <coordination-root> rev-parse
+# --show-toplevel` to confine the root to its own enclosing worktree -- W01,
+# W03, W06's happy path, W08, and W09 below use New-GitFixtureRoot for exactly
+# this reason (a plain non-git temp dir is correctly rejected SECURITY_INVALID).
+# This file mirrors
 # runtime-consultation-cli.bats's own already-empirically-verified fixture
 # convention exactly: `git init -q` a FRESH throwaway directory per git-needing
 # test (never nested inside this repo's own checkout), so every fixture is
@@ -422,7 +427,11 @@ function Skip-Case {
 # ══════════════════════════════════════════════════════════════════════════
 
 Invoke-Case -Name 'W01 wrapper: root-init then root-validate succeed against a --coordination-root path containing spaces' -Body {
-  $rootWithSpaces = Join-Path $WorkRoot 'w01 coordination root with spaces'
+  # WP3 root-confinement (RCR-confine-*): root-init/root-validate now require
+  # --coordination-root to resolve inside a real git worktree, so this (like
+  # W02/W07a/W09/W12) uses New-GitFixtureRoot rather than a plain temp dir --
+  # the suffix itself still embeds the spaces this case exists to prove.
+  $rootWithSpaces = New-GitFixtureRoot -Suffix 'w01 coordination root with spaces'
   $r1 = Invoke-Wrapper -CliArgs @('root-init', '--coordination-root', $rootWithSpaces) -EnvVars (Get-DefaultCapabilityEnv)
   Assert-True ($r1.ExitCode -eq 0) "root-init exit code expected 0, got $($r1.ExitCode); stderr=$($r1.Stderr)"
   Assert-CliResult -Stdout $r1.Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE' | Out-Null
@@ -476,7 +485,8 @@ Invoke-Case -Name 'W02 wrapper: UTF-8 + JSON quote/backslash question round-trip
 # ══════════════════════════════════════════════════════════════════════════
 
 Invoke-Case -Name 'W03 wrapper: root-init prints exactly one JSON object plus one trailing LF on stdout, no prose/second-line/BOM' -Body {
-  $freshRoot = Join-Path $WorkRoot 'w03-coordination'
+  # WP3 root-confinement: root-init now requires a git-worktree-confined root.
+  $freshRoot = New-GitFixtureRoot -Suffix 'w03-coordination'
   $r = Invoke-Wrapper -CliArgs @('root-init', '--coordination-root', $freshRoot) -EnvVars (Get-DefaultCapabilityEnv)
   Assert-True ($r.ExitCode -eq 0) "root-init exit code expected 0, got $($r.ExitCode); stderr=$($r.Stderr)"
   Assert-CliResult -Stdout $r.Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE' | Out-Null
@@ -513,7 +523,8 @@ Invoke-Case -Name 'W05 wrapper: an unknown subcommand yields a nonzero exit code
 
 Invoke-Case -Name 'W06 wrapper: success/validation-error/timeout/unknown-subcommand exit codes are pairwise distinct' -Body {
   # (a) happy path -- SUCCESS/rc0
-  $freshRoot = Join-Path $WorkRoot 'w06-coordination'
+  # WP3 root-confinement: root-init now requires a git-worktree-confined root.
+  $freshRoot = New-GitFixtureRoot -Suffix 'w06-coordination'
   $rHappy = Invoke-Wrapper -CliArgs @('root-init', '--coordination-root', $freshRoot) -EnvVars (Get-DefaultCapabilityEnv)
   Assert-CliResult -Stdout $rHappy.Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE' | Out-Null
 
@@ -633,7 +644,10 @@ Invoke-Case -Name 'W07a wrapper: same-worktree publish->dispatch->claim->publish
 # ══════════════════════════════════════════════════════════════════════════
 
 Invoke-Case -Name 'W08 node vs sh-wrapper(bash) vs ps1-wrapper equivalence: root-init --fixed-ids --fixed-clock produces byte-identical cli-result/v1 stdout via all three entrypoints' -Body {
-  $sharedRoot = Join-Path $WorkRoot 'w08-coordination'
+  # WP3 root-confinement: root-init now requires a git-worktree-confined root
+  # (idempotent across all three entrypoints below, same as RCR-root-3 proves
+  # for the node CLI directly -- stdout shape is unaffected: {artifact_ref}).
+  $sharedRoot = New-GitFixtureRoot -Suffix 'w08-coordination'
   $capEnv = Get-DefaultCapabilityEnv
 
   $rNode = Invoke-NodeDirect -CliArgs @('root-init', '--coordination-root', $sharedRoot, '--fixed-ids', '--fixed-clock') -EnvVars $capEnv
@@ -674,7 +688,8 @@ Invoke-Case -Name 'W08 node vs sh-wrapper(bash) vs ps1-wrapper equivalence: root
 # ══════════════════════════════════════════════════════════════════════════
 
 Invoke-Case -Name 'W09 wrapper: root/registry owner-confined ACL contains only the frozen allowlisted SIDs' -Body {
-  $root = Join-Path $WorkRoot 'w09-coordination'
+  # WP3 root-confinement: root-init now requires a git-worktree-confined root.
+  $root = New-GitFixtureRoot -Suffix 'w09-coordination'
   $capEnv = Get-DefaultCapabilityEnv
   $rInit = Invoke-Wrapper -CliArgs @('root-init', '--coordination-root', $root) -EnvVars $capEnv
   Assert-True ($rInit.ExitCode -eq 0) "root-init failed: $($rInit.Stdout) $($rInit.Stderr)"
@@ -895,10 +910,10 @@ Skip-Case -Name 'W07b same-worktree deterministic app-server/mcp rendezvous (ses
   -Reason 'WP3: requires scripts/lib/runtime-bridge-codex.cjs (session-run/claude-mcp-launch subcommands). Confirmed by reading the full 2857-line scripts/lib/runtime-consultation.cjs: its COMMANDS registry has no session-run/claude-mcp-launch/mcp-serve/runtime-spawn/worker-cleanup/conformance handlers -- that is a separate bridge file this dispatch does not own. W07a above already proves the same-worktree publish->dispatch->claim->publish-result->await-result->accept-result->transaction-ack round trip entirely via the .ps1 wrapper; this sub-case is purely the WP3 deterministic backend-rendezvous mechanism layered on top of it.'
 
 Skip-Case -Name 'W10a ACL-insecure (world-SID icacls */S-1-1-0:(OI)(CI)F) rejected fail-closed' `
-  -Reason 'WP3: root-confinement ACL-rejection logic does not exist yet. Confirmed by reading cmdRootValidate in the current WP1/WP2 core: it only calls fs.statSync(coordRoot) and checks isDirectory() -- zero ACL/SID inspection. Constructing the world-SID icacls fixture now would only prove this test file''s OWN external Get-Acl probe (as W09 above already does for the confined-baseline case); it would not prove root-validate itself rejects an insecure ACL, since root-validate has no such check to exercise. Deferred to WP3 root-confinement work in cmdRootValidate.'
+  -Reason 'WP3: Windows ACL-rejection logic does not exist yet. UPDATED -- cmdRootValidate now confines the root to its git worktree, rejects a symlinked root path, and checks the POSIX mode is exactly 0700 (WP3 RCR-confine-1..4, cross-platform via git + fs.lstatSync), but performs zero Windows ACL/SID inspection (the mode check is explicitly isPosix-gated and no-ops on win32). Constructing the world-SID icacls fixture now would only prove this test file''s OWN external Get-Acl probe (as W09 above already does for the confined-baseline case); it would not prove root-validate itself rejects an insecure ACL, since root-validate has no such check to exercise. Deferred to WP3 Windows-ACL work in cmdRootValidate.'
 
 Skip-Case -Name 'W10b ACL-unverifiable (RUNTIME_CONSULTATION_ACL_PROBE=unverifiable) disables sibling shared-root mode fail-closed' `
-  -Reason 'WP3: RUNTIME_CONSULTATION_ACL_PROBE is gated in parseFlags() (rejected outside NODE_ENV=test + the harness test capability, mirroring --fixed-ids/--fixed-clock) but its VALUE is never read anywhere else in the source -- confirmed by reading the full 2857-line file: no ACL-confinement/indeterminate branch consults this variable. The seam exists and is guarded against production misuse; it is not yet wired to any actual behavior. Deferred to WP3 root-confinement.'
+  -Reason 'WP3 UPDATED: cmdRootValidate now reads RUNTIME_CONSULTATION_ACL_PROBE and rejects INVALID/SECURITY_INVALID when it equals "unverifiable" on a win32-effective platform (resolveEffectivePlatform(), the same RUNTIME_CONSULTATION_FORCE_PLATFORM seam Gap#1 uses). This exact wiring is verified on non-Windows via that seam (2 new node --test cases in runtime-consultation-cli.test.js: probe-set -> rejected, probe-unset -> currently succeeds since no real ACL check exists yet). Still skipped HERE because real pwsh/Windows execution remains unavailable in this environment -- the underlying Node logic is proven, the .ps1-level real-Windows proof (this case) is not. Un-skip once real Windows CI can run it.'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Summary + exit -- non-zero exit iff any REAL (non-skipped) case failed.
