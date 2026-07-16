@@ -5017,5 +5017,11 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { canonicalJSONStringify, sha256Buffer, sha256String, sha256File, writeAllSync, classifyDurableRead, isValidLockTokenFor, acquireLock, releaseLock, listResultFiles, findResultWithStatus, reconcileOneNoClobberTemp };
+module.exports = {
+  canonicalJSONStringify, sha256Buffer, sha256String, sha256File, writeAllSync, classifyDurableRead,
+  isValidLockTokenFor, acquireLock, releaseLock, listResultFiles, findResultWithStatus, reconcileOneNoClobberTemp,
+  // WP3: reused by runtime-role-lifecycle.cjs's host-private registry (same fd-bound
+  // durability primitives, never a second reimplementation of this security-critical logic).
+  DURABLE_ABSENT, DURABLE_PENDING, DURABLE_PRESENT, publishNoClobber, gitRevParse, realpathOrSelf,
+};
 
