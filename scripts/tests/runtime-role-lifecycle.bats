@@ -152,6 +152,41 @@ _run_lifecycle() {
     node "$IMPL" "$@"
 }
 
+# Point 1.1 (R4): every lifecycle command now requires a grant (PLAN.md
+# ~L150). This file's own header deliberately exercises the PRE-injection
+# caller grammar (no hook runs in a bats subprocess) -- most tests below
+# correctly assert the fail-closed-without-a-grant outcome directly. A
+# SMALL number of tests have a DIFFERENT own intent (envelope shape, policy
+# resolution, read-only status behavior) that needs a genuinely SUCCESSFUL,
+# grant-authorized call to observe; this helper mints a real
+# MainOrchestratorBinding + one-use lifecycle-command-grant, hook-injection
+# style, for exactly those cases -- it is never used to test grant
+# validation itself (that is runtime-role-lifecycle-handlers.test.js's job).
+# `role_json` is a JSON-encoded role value (`null`, `"arch-testing"`, or an
+# array); `action_id` defaults to null (only action-failed/ready/wait-ready
+# need a real one).
+_mint_lifecycle_grant() {
+  local role_json="$1" subcommand="$2" argv_digest="$3" action_id="${4:-null}"
+  NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$TEST_CAPABILITY" node -e '
+    const rll = require(process.argv[1]);
+    const crypto = require("crypto");
+    const projectRoot = process.argv[2];
+    const role = JSON.parse(process.argv[3]);
+    const subcommand = process.argv[4];
+    const argvDigest = process.argv[5];
+    const actionId = process.argv[6] === "null" ? null : process.argv[6];
+    const identity = { ok: true, provider: "claude-hook", runtime_session_key: "rll-bats-session-" + crypto.randomBytes(4).toString("hex") };
+    const worktreeId = rll.computeWorktreeId(projectRoot);
+    const planResult = rll.discoverPlan(projectRoot);
+    if (!planResult.ok) { process.stderr.write("no PLAN discovered"); process.exit(1); }
+    const bindingResult = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, planResult.planDigest, 120);
+    if (!bindingResult.ok) { process.stderr.write("binding mint failed: " + JSON.stringify(bindingResult)); process.exit(1); }
+    const grantResult = rll.mintLifecycleCommandGrant(projectRoot, bindingResult.binding, argvDigest, role, subcommand, "main-orchestrator", "orchestrator", "normal", actionId);
+    if (!grantResult.ok) { process.stderr.write("grant mint failed: " + JSON.stringify(grantResult)); process.exit(1); }
+    process.stdout.write(grantResult.grantId);
+  ' "$IMPL" "$PROJ" "$role_json" "$subcommand" "$argv_digest" "$action_id"
+}
+
 # ── Policy/routing fixture builders (runtime-collaboration-policy/v1, PLAN.md
 # ~L90-106; runtime-routing/v1, PLAN.md ~L1094-1110) ─────────────────────────
 # Each builder merges a small JSON "overrides" object over a fully-populated default
@@ -267,7 +302,8 @@ _assert_lifecycle_result() {
 # ══════════════════════════════════════════════════════════════════════════
 
 @test "LRL-probe-1 PASS: probe with only --project-root succeeds and prints exactly one closed-shape envelope on one stdout line" {
-  _run_lifecycle probe --project-root "$PROJ"
+  local grant_id; grant_id="$(_mint_lifecycle_grant null probe "$(_sha256_string probe)")"
+  _run_lifecycle probe --project-root "$PROJ" --lifecycle-binding "$grant_id"
   [ "$status" -eq 0 ]
   _assert_lifecycle_result "probe" "" ""
   local line_count; line_count="$(printf '%s\n' "$output" | wc -l | tr -d ' ')"
@@ -298,7 +334,8 @@ _assert_lifecycle_result() {
 # ══════════════════════════════════════════════════════════════════════════
 
 @test "LRL-policy-1 PASS: absent project policy falls back to the toolkit-owned policy/routing pair" {
-  _run_lifecycle probe --project-root "$PROJ"
+  local grant_id; grant_id="$(_mint_lifecycle_grant null probe "$(_sha256_string probe)")"
+  _run_lifecycle probe --project-root "$PROJ" --lifecycle-binding "$grant_id"
   [ "$status" -eq 0 ]
   _assert_lifecycle_result "probe" "" ""
 }
@@ -306,7 +343,8 @@ _assert_lifecycle_result() {
 @test "LRL-policy-2 PASS: project policy plus a valid sibling routing file both present and valid" {
   _write_policy '{}'
   _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
-  _run_lifecycle probe --project-root "$PROJ"
+  local grant_id; grant_id="$(_mint_lifecycle_grant null probe "$(_sha256_string probe)")"
+  _run_lifecycle probe --project-root "$PROJ" --lifecycle-binding "$grant_id"
   [ "$status" -eq 0 ]
   _assert_lifecycle_result "probe" "" ""
 }
@@ -446,10 +484,21 @@ _assert_lifecycle_result() {
 # ensure -- policy-mode behavior (PLAN.md ~L112-115, ~L167)
 # ══════════════════════════════════════════════════════════════════════════
 
-@test "LRL-ensure-ephemeral-1: under ephemeral mode, ensure reports EPHEMERAL_AVAILABLE with empty bindings/actions (Agent-Teams-disabled one-shot availability, no pre-spawn claim)" {
+@test "LRL-ensure-nogrant-1 FAIL: ensure without --lifecycle-binding is rejected as an authority failure regardless of policy mode (R4 round 2, point 1: no grantless success)" {
+  for mode in auto ephemeral persistent disk-only; do
+    _write_policy "{\"mode\":\"$mode\"}"
+    _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+    _run_lifecycle ensure --project-root "$PROJ" --role arch-testing
+    [ "$status" -eq 3 ]
+    _assert_lifecycle_result "ensure" "INVALID" "IDENTITY_MISMATCH"
+  done
+}
+
+@test "LRL-ensure-ephemeral-1: under ephemeral mode WITH a valid grant, ensure reports EPHEMERAL_AVAILABLE with empty bindings/actions (Agent-Teams-disabled one-shot availability, no pre-spawn claim)" {
   _write_policy '{"mode":"ephemeral"}'
   _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
-  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing
+  local grant_id; grant_id="$(_mint_lifecycle_grant '"arch-testing"' ensure "$(_sha256_string 'ensure:arch-testing')")"
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --lifecycle-binding "$grant_id"
   [ "$status" -eq 0 ]
   _assert_lifecycle_result "ensure" "EPHEMERAL_AVAILABLE" "NONE"
   node -e '
@@ -459,18 +508,20 @@ _assert_lifecycle_result() {
   ' "$output"
 }
 
-@test "LRL-ensure-diskonly-1 FAIL: under disk-only mode with no registered supervised consumer, ensure fails closed rather than fabricating readiness" {
+@test "LRL-ensure-diskonly-1 FAIL: under disk-only mode WITH a valid grant but no registered supervised consumer, ensure fails closed rather than fabricating readiness" {
   _write_policy '{"mode":"disk-only"}'
   _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
-  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing
+  local grant_id; grant_id="$(_mint_lifecycle_grant '"arch-testing"' ensure "$(_sha256_string 'ensure:arch-testing')")"
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --lifecycle-binding "$grant_id"
   [ "$status" -eq 4 ]
   _assert_lifecycle_result "ensure" "UNAVAILABLE" ""
 }
 
-@test "LRL-ensure-persistent-1 FAIL: under persistent mode with no proven connector capability, ensure reports the role UNAVAILABLE rather than silently omitting it" {
+@test "LRL-ensure-persistent-1 FAIL: under persistent mode WITH a valid grant but no proven connector capability, ensure reports the role UNAVAILABLE rather than silently omitting it" {
   _write_policy '{"mode":"persistent"}'
   _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
-  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing
+  local grant_id; grant_id="$(_mint_lifecycle_grant '"arch-testing"' ensure "$(_sha256_string 'ensure:arch-testing')")"
+  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --lifecycle-binding "$grant_id"
   [ "$status" -eq 4 ]
   _assert_lifecycle_result "ensure" "UNAVAILABLE" ""
 }
@@ -597,13 +648,15 @@ _assert_lifecycle_result() {
 # ══════════════════════════════════════════════════════════════════════════
 
 @test "LRL-status-1 PASS: status with only --project-root (whole-plane) succeeds and is read-only" {
-  _run_lifecycle status --project-root "$PROJ"
+  local grant_id; grant_id="$(_mint_lifecycle_grant null status "$(_sha256_string 'status:')")"
+  _run_lifecycle status --project-root "$PROJ" --lifecycle-binding "$grant_id"
   [ "$status" -eq 0 ]
   _assert_lifecycle_result "status" "" ""
 }
 
 @test "LRL-status-2 PASS: status with --project-root plus a single canonical --role succeeds" {
-  _run_lifecycle status --project-root "$PROJ" --role arch-testing
+  local grant_id; grant_id="$(_mint_lifecycle_grant '"arch-testing"' status "$(_sha256_string 'status:arch-testing')")"
+  _run_lifecycle status --project-root "$PROJ" --role arch-testing --lifecycle-binding "$grant_id"
   [ "$status" -eq 0 ]
   _assert_lifecycle_result "status" "" ""
 }
@@ -671,9 +724,15 @@ _assert_lifecycle_result() {
 # ══════════════════════════════════════════════════════════════════════════
 
 @test "LRL-nocaller-1 FAIL: probe with a caller-supplied --lifecycle-binding is rejected (the grant is hook-injected, never caller-supplied)" {
+  # Point 1.1 (R4): --lifecycle-binding is now a RECOGNIZED flag on probe's
+  # own argv (hook-injected in production), so a forged value is no longer
+  # rejected at the syntax/usage level (rc2) -- it is rejected at the
+  # authority level instead (rc3/IDENTITY_MISMATCH), since it never
+  # resolves to a real, validly-minted grant. The core intent (a forged
+  # reference can never succeed, regardless of who supplied it) is unchanged.
   _run_lifecycle probe --project-root "$PROJ" --lifecycle-binding "forged-grant-value"
-  [ "$status" -eq 2 ]
-  _assert_lifecycle_result "" "" ""
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "IDENTITY_MISMATCH"
 }
 
 @test "LRL-nocaller-2 FAIL: ensure with a caller-supplied --session-generation is rejected" {

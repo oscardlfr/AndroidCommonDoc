@@ -3084,9 +3084,21 @@ function cmdRootInit(flags) {
 }
 COMMANDS['root-init'] = cmdRootInit;
 
-function cmdRootValidate(flags) {
-  requireFlags(flags, ['coordination-root']);
-  const coordRoot = resolveAbsolute(flags['coordination-root']);
+/**
+ * Full coordination-root confinement primitive (RCR-confine-*): lstat
+ * not-a-symlink, real directory, POSIX owner+0700 mode, Windows ACL probe
+ * seam, git-worktree confinement, then a stable-identity re-check
+ * (dev/ino/mode/uid/gid unchanged) to close the TOCTOU window the
+ * measurably-slower `git` confinement subprocess call opens. Extracted from
+ * `cmdRootValidate` (unchanged behavior/order/errors) so any OTHER caller
+ * needing the SAME confined-root guarantee (e.g. the WP3 bridge's own
+ * rendezvous root) reuses this exact primitive instead of a second, weaker
+ * reimplementation.
+ * @param {string} coordRoot - absolute path, already resolved by the caller.
+ * @returns {string} coordRoot, unchanged, once every check passes.
+ * @throws {CliError}
+ */
+function validateRootConfinement(coordRoot) {
   let stat;
   try {
     // lstat (not stat): the coordination root PATH ITSELF must not be a symlink
@@ -3149,7 +3161,13 @@ function cmdRootValidate(flags) {
   if (stat2.isSymbolicLink() || stat2.dev !== stat.dev || stat2.ino !== stat.ino || stat2.mode !== stat.mode || stat2.uid !== stat.uid || stat2.gid !== stat.gid) {
     throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root identity changed during validation (swap/tamper): ' + coordRoot);
   }
-  return { artifact_ref: coordRoot };
+  return coordRoot;
+}
+
+function cmdRootValidate(flags) {
+  requireFlags(flags, ['coordination-root']);
+  const coordRoot = resolveAbsolute(flags['coordination-root']);
+  return { artifact_ref: validateRootConfinement(coordRoot) };
 }
 COMMANDS['root-validate'] = cmdRootValidate;
 
@@ -5023,5 +5041,8 @@ module.exports = {
   // WP3: reused by runtime-role-lifecycle.cjs's host-private registry (same fd-bound
   // durability primitives, never a second reimplementation of this security-critical logic).
   DURABLE_ABSENT, DURABLE_PENDING, DURABLE_PRESENT, publishNoClobber, gitRevParse, realpathOrSelf,
+  // WP3 item C: the bridge's own coordination-root check reuses this EXACT
+  // confinement primitive rather than a second, weaker one.
+  validateRootConfinement,
 };
 

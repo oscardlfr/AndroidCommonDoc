@@ -71,7 +71,7 @@ _mint_action() {
     const binding = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, planDigest, 120).binding;
     const sha256String = (s) => crypto.createHash("sha256").update(Buffer.from(s, "utf8")).digest("hex");
     const argvDigest = sha256String("ensure:" + role);
-    const grant = rll.mintLifecycleCommandGrant(projectRoot, binding, argvDigest, role, "ensure");
+    const grant = rll.mintLifecycleCommandGrant(projectRoot, binding, argvDigest, role, "ensure", "main-orchestrator", "orchestrator", "normal", null);
     const out = execFileSync("node", [process.argv[1], "ensure", "--project-root", projectRoot, "--role", role, "--lifecycle-binding", grant.grantId], {
       encoding: "utf8",
       env: Object.assign({}, process.env, { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: capability }),
