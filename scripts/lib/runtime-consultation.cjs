@@ -5031,6 +5031,159 @@ function cmdPublishResult(flags) {
 }
 COMMANDS['publish-result'] = cmdPublishResult;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WP3 item C2 (R7 stabilization): RuntimeTurnEnvelope/v1 -- single canonical
+// source (PLAN.md ~L932: "runtimeTurnEnvelopeSchema(...) in
+// runtime-consultation.cjs is the single object used by the local validator
+// and deep-equal turn/start.outputSchema"). Previously kept local to
+// runtime-bridge-codex.cjs as a deliberate, disclosed scope-boundary decision
+// (that file's own C2 history/evidence record); hoisted here per PLAN's own
+// literal naming -- runtime-bridge-codex.cjs now imports this surface under
+// its existing public export name instead of maintaining a second copy.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RUNTIME_TURN_ENVELOPE_BLOCKED_REASONS = Object.freeze([
+  'CONTENT_TOO_LARGE', 'INSUFFICIENT_CONTEXT', 'UNSUPPORTED_REQUEST', 'CONSULTATION_FAILED', 'POLICY_DENIED',
+]);
+const RUNTIME_TURN_ENVELOPE_RESULT_KIND_PATTERN = /^[A-Z][A-Z0-9_-]{0,63}$/;
+const RUNTIME_TURN_ENVELOPE_MAX_CONTENT_BYTES = 65536;
+const RUNTIME_TURN_ENVELOPE_MAX_QUESTION_BYTES = 8192;
+
+// Local, logic-identical copy of runtime-role-lifecycle.cjs's own
+// `hasExactKeys` -- deliberately NOT imported from there: that module itself
+// `require()`s this one (rll -> rc), so an rc -> rll import would be a
+// circular require. This is a tiny, generic array-comparison utility, not
+// business logic, so a small duplication here is safer than a cycle.
+function hasExactKeys(obj, sortedExpectedKeys) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+  const actual = Object.keys(obj).sort();
+  if (actual.length !== sortedExpectedKeys.length) return false;
+  return actual.every((k, i) => k === sortedExpectedKeys[i]);
+}
+
+/**
+ * Builds the exact `outputSchema` JSON Schema object sent as `turn/start`'s
+ * `outputSchema` field, and independently used as the local response
+ * validator (PLAN.md ~L930, ~L1018-1071 for the literal shape). When
+ * `allowedChildRoles` is empty (leaf role or exhausted consult budget), the
+ * entire consult `oneOf` branch is omitted (~L1018 "for a leaf or exhausted
+ * intent budget, omit the entire consult oneOf branch").
+ * @param {string} expectedResultKind
+ * @param {string[]} allowedChildRoles
+ */
+function runtimeTurnEnvelopeSchema(expectedResultKind, allowedChildRoles) {
+  const terminalBranch = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['schema', 'kind', 'result'],
+    properties: {
+      schema: { enum: ['coordination/runtime-turn-envelope/v1'] },
+      kind: { enum: ['terminal-result'] },
+      result: {
+        oneOf: [
+          {
+            type: 'object',
+            additionalProperties: false,
+            required: ['schema', 'status', 'result_kind', 'content'],
+            properties: {
+              schema: { enum: ['coordination/result-envelope/v1'] },
+              status: { enum: ['ANSWERED'] },
+              result_kind: { enum: [expectedResultKind] },
+              content: { type: 'string', minLength: 1, maxLength: RUNTIME_TURN_ENVELOPE_MAX_CONTENT_BYTES },
+            },
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            required: ['schema', 'status', 'result_kind', 'reason'],
+            properties: {
+              schema: { enum: ['coordination/result-envelope/v1'] },
+              status: { enum: ['BLOCKED'] },
+              result_kind: { enum: ['BLOCKED'] },
+              reason: { enum: RUNTIME_TURN_ENVELOPE_BLOCKED_REASONS.slice() },
+            },
+          },
+        ],
+      },
+    },
+  };
+  if (!Array.isArray(allowedChildRoles) || allowedChildRoles.length === 0) {
+    return { oneOf: [terminalBranch] };
+  }
+  const consultBranch = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['schema', 'kind', 'consult'],
+    properties: {
+      schema: { enum: ['coordination/runtime-turn-envelope/v1'] },
+      kind: { enum: ['consult-intent'] },
+      consult: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['target_role', 'question', 'expected_result_kind'],
+        properties: {
+          target_role: { enum: allowedChildRoles.slice() },
+          question: { type: 'string', minLength: 1, maxLength: RUNTIME_TURN_ENVELOPE_MAX_QUESTION_BYTES },
+          expected_result_kind: { type: 'string', pattern: '^[A-Z][A-Z0-9_-]{0,63}$' },
+        },
+      },
+    },
+  };
+  return { oneOf: [terminalBranch, consultBranch] };
+}
+
+/**
+ * Independent local validator for a parsed `RuntimeTurnEnvelope/v1` value
+ * (PLAN.md ~L997-1074) -- hand-checks the exact closed shapes (this
+ * codebase's established idiom; see `hasExactKeys` precedent in the sibling
+ * modules) rather than a generic JSON-Schema evaluator, and applies host
+ * UTF-8 byte caps IN ADDITION to the JSON-Schema's own character-length
+ * ceilings (PLAN.md ~L932: "JSON Schema character limits are backed by host
+ * UTF-8 byte checks"). Host additionally requires `answered result_kind ==
+ * request.expected_result_kind` (~L1074) -- enforced here, not deferred to a
+ * caller.
+ * @param {*} value
+ * @param {string} expectedResultKind
+ * @param {string[]} allowedChildRoles
+ * @returns {{ok:true}|{ok:false,reason:string}}
+ */
+function validateRuntimeTurnEnvelope(value, expectedResultKind, allowedChildRoles) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, reason: 'not-an-object' };
+  if (value.schema !== 'coordination/runtime-turn-envelope/v1') return { ok: false, reason: 'wrong-envelope-schema' };
+  if (value.kind === 'terminal-result') {
+    if (!hasExactKeys(value, ['kind', 'result', 'schema'])) return { ok: false, reason: 'terminal-envelope-extra-or-missing-key' };
+    const r = value.result;
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return { ok: false, reason: 'result-not-an-object' };
+    if (r.schema !== 'coordination/result-envelope/v1') return { ok: false, reason: 'wrong-result-schema' };
+    if (r.status === 'ANSWERED') {
+      if (!hasExactKeys(r, ['content', 'result_kind', 'schema', 'status'])) return { ok: false, reason: 'answered-extra-or-missing-key' };
+      if (r.result_kind !== expectedResultKind) return { ok: false, reason: 'answered-result-kind-mismatch' };
+      if (typeof r.content !== 'string' || r.content.length === 0) return { ok: false, reason: 'answered-content-empty' };
+      if (Buffer.byteLength(r.content, 'utf8') > RUNTIME_TURN_ENVELOPE_MAX_CONTENT_BYTES) return { ok: false, reason: 'answered-content-too-large' };
+      return { ok: true };
+    }
+    if (r.status === 'BLOCKED') {
+      if (!hasExactKeys(r, ['reason', 'result_kind', 'schema', 'status'])) return { ok: false, reason: 'blocked-extra-or-missing-key' };
+      if (r.result_kind !== 'BLOCKED') return { ok: false, reason: 'blocked-result-kind-not-blocked' };
+      if (!RUNTIME_TURN_ENVELOPE_BLOCKED_REASONS.includes(r.reason)) return { ok: false, reason: 'blocked-reason-not-enum' };
+      return { ok: true };
+    }
+    return { ok: false, reason: 'result-status-not-answered-or-blocked' };
+  }
+  if (value.kind === 'consult-intent') {
+    if (!Array.isArray(allowedChildRoles) || allowedChildRoles.length === 0) return { ok: false, reason: 'consult-intent-forbidden-leaf-or-exhausted-budget' };
+    if (!hasExactKeys(value, ['consult', 'kind', 'schema'])) return { ok: false, reason: 'consult-envelope-extra-or-missing-key' };
+    const c = value.consult;
+    if (!c || typeof c !== 'object' || Array.isArray(c)) return { ok: false, reason: 'consult-not-an-object' };
+    if (!hasExactKeys(c, ['expected_result_kind', 'question', 'target_role'])) return { ok: false, reason: 'consult-extra-or-missing-key' };
+    if (!allowedChildRoles.includes(c.target_role)) return { ok: false, reason: 'consult-target-role-not-allowed' };
+    if (typeof c.question !== 'string' || c.question.length === 0 || Buffer.byteLength(c.question, 'utf8') > RUNTIME_TURN_ENVELOPE_MAX_QUESTION_BYTES) return { ok: false, reason: 'consult-question-invalid' };
+    if (typeof c.expected_result_kind !== 'string' || !RUNTIME_TURN_ENVELOPE_RESULT_KIND_PATTERN.test(c.expected_result_kind)) return { ok: false, reason: 'consult-expected-result-kind-invalid' };
+    return { ok: true };
+  }
+  return { ok: false, reason: 'unknown-envelope-kind' };
+}
+
 if (require.main === module) {
   main();
 }
@@ -5044,5 +5197,7 @@ module.exports = {
   // WP3 item C: the bridge's own coordination-root check reuses this EXACT
   // confinement primitive rather than a second, weaker one.
   validateRootConfinement,
+  // WP3 item C2 (R7): single canonical RuntimeTurnEnvelope/v1 source (PLAN.md ~L932).
+  runtimeTurnEnvelopeSchema, validateRuntimeTurnEnvelope,
 };
 

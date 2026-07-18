@@ -1444,3 +1444,46 @@ _run_has_valid_v2_inbox_ref() {
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "CORRELATION_INVALID"
 }
+
+# ── R7 (WP3 item C2 stabilization): single canonical RuntimeTurnEnvelope/v1
+# source (PLAN.md ~L932 -- "runtimeTurnEnvelopeSchema(...) in
+# runtime-consultation.cjs is the single object used by the local validator
+# and deep-equal turn/start.outputSchema"). scripts/lib/runtime-bridge-codex.cjs
+# imports this surface (re-exported under its own existing public names) --
+# this file proves the canonical implementation itself, independent of the
+# bridge, genuinely lives here and behaves correctly (F1/F2). ──
+
+@test "RCP-envelope-1 PASS: runtimeTurnEnvelopeSchema/validateRuntimeTurnEnvelope are genuinely exported from runtime-consultation.cjs (F1)" {
+  run node -e '
+    const rc = require(process.argv[1]);
+    if (typeof rc.runtimeTurnEnvelopeSchema !== "function") { process.stderr.write("runtimeTurnEnvelopeSchema is not exported\n"); process.exit(1); }
+    if (typeof rc.validateRuntimeTurnEnvelope !== "function") { process.stderr.write("validateRuntimeTurnEnvelope is not exported\n"); process.exit(1); }
+  ' "$IMPL"
+  [ "$status" -eq 0 ]
+}
+
+@test "RCP-envelope-2 PASS: runtimeTurnEnvelopeSchema's leaf-role branch omits the consult oneOf entirely, called directly against runtime-consultation.cjs (F1/F5)" {
+  run node -e '
+    const rc = require(process.argv[1]);
+    const schema = rc.runtimeTurnEnvelopeSchema("ARCH_VERDICT", []);
+    if (!Array.isArray(schema.oneOf) || schema.oneOf.length !== 1) { process.stderr.write("expected exactly one oneOf branch for a leaf role: " + JSON.stringify(schema) + "\n"); process.exit(1); }
+    if (schema.oneOf[0].properties.kind.enum[0] !== "terminal-result") { process.stderr.write("wrong sole branch\n"); process.exit(1); }
+  ' "$IMPL"
+  [ "$status" -eq 0 ]
+}
+
+@test "RCP-envelope-3 FAIL: validateRuntimeTurnEnvelope enforces the host UTF-8 byte cap independently of the JSON-Schema character length, called directly against runtime-consultation.cjs (F2)" {
+  run node -e '
+    const rc = require(process.argv[1]);
+    // A single multi-byte character repeated so the STRING LENGTH (65536) is
+    // under any naive char-count ceiling, but the UTF-8 BYTE length is 3x
+    // over -- proves the host byte check is genuinely independent of a
+    // character-count-only guard.
+    const content = "é".repeat(65536); // U+00E9 is 2 UTF-8 bytes each.
+    const env = { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content } };
+    const res = rc.validateRuntimeTurnEnvelope(env, "K", []);
+    if (res.ok) { process.stderr.write("a byte-oversized (char-count-ok) content string was accepted\n"); process.exit(1); }
+    if (res.reason !== "answered-content-too-large") { process.stderr.write("wrong reason: " + res.reason + "\n"); process.exit(1); }
+  ' "$IMPL"
+  [ "$status" -eq 0 ]
+}
