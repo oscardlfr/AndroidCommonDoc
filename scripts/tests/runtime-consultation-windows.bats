@@ -31,13 +31,14 @@ bats_require_minimum_version 1.5.0
 # SC-17 = PENDING_CI and closes ONLY when that job passes at final PR HEAD --
 # this file's own green/red status never substitutes for it.
 #
-# STATUS at authoring time: RED BY DESIGN. Neither scripts/sh/runtime-
-# consultation.sh nor scripts/ps1/runtime-consultation.ps1 exists yet (confirmed
-# absent by directory listing at authoring time) -- every case invoking the .sh
-# wrapper fails as a genuine assertion (nonzero `run` status against a
-# "no such file" shell error), never a bats parse error. This suite becomes the
-# GREEN target once the toolkit lands both wrappers per the Frozen Production
-# CLI ABI note above.
+# STATUS (current, exact -- verify with `bats --count` rather than trusting
+# this comment): both scripts/sh/runtime-consultation.sh and scripts/ps1/
+# runtime-consultation.ps1 are now implemented; this file's original RED-by-
+# design status (neither wrapper existed yet) is history, not current state --
+# see git log, not this comment, for when they landed. 9 of this file's cases
+# remain `skip`'d (not RED) -- 3 deferred beyond this dispatch's own scope, 6
+# requiring windows-latest CI (SC-17, PENDING_CI, unaffected by this file's own
+# green status per the SCOPE note above).
 #
 # W0x -> @test crosswalk (PLAN.md ~L1490-1508). The PLAN's own Test column says
 # "same" for W02/W05/W06, meaning this bats file is a nominal co-owner alongside

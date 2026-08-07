@@ -14,10 +14,19 @@ bats_require_minimum_version 1.5.0
 # (setup/teardown shape, `_sha256_*`/`_gen_hex_id`, IMPL path, NODE_ENV=test +
 # RUNTIME_CONSULTATION_TEST_CAPABILITY invocation) rather than diverging.
 #
-# STATUS: RED. `scripts/lib/runtime-consultation.cjs` does not exist yet. Every
-# test below fails GENUINELY now: `node` reports the module missing (exit 1),
-# which trips the first exact-exit-code assertion (never a weak `-ne`) before
-# any later JSON-shape/structural assertion runs.
+# STATUS (current, exact -- verify with `bats --count` / `bats --formatter tap`
+# rather than trusting this comment, see this directory's own
+# MUTATION-LEDGER.md for the mutation-testing evidence behind every fix):
+# 155 pass + 1 skip (156 `ok` lines, 0
+# `not ok`). The skip is `FM-13b-conflict-genuinely-detected`, pending the same
+# open CONFLICT design question as runtime-consultation-cli.bats's own
+# `CLI-RESULT-08` (see that file's header) -- STOPPED, see
+# .planning/wave-portable-runtime-messaging-adapters/
+# CONFLICT-DESIGN-R12.1.md (supersedes R12: a HARD NO-GO found R12's own
+# scope too narrow). `scripts/lib/runtime-consultation.cjs`
+# is fully implemented; this file's original RED-before-implementation status
+# (the module did not exist) is history, not current state -- see git log, not
+# this comment, for when each verb landed.
 #
 # Interpretive decisions (undocumented-by-PLAN specifics; a future correction is
 # a small, obvious fix rather than a silent divergence -- mirrors protocol.bats's
@@ -37,10 +46,16 @@ bats_require_minimum_version 1.5.0
 #     ANSWERED/ACCEPTED path with no conflict artifact -- the observable
 #     contract "idempotent" implies -- rather than re-invoking an unknown
 #     publish-result grammar twice.
-#   - FM-13 (different candidate -> cancel+STOP) is exercised via the fully
-#     specified `cancel --reason conflict` resolution path against a
-#     pre-staged two-candidate disk state, since the upstream detection point
-#     lives inside the unread `publish-result` grammar.
+#   - FM-13 (different candidate -> cancel+STOP): `FM-13-conflict-cancel-stop`
+#     proves only that the `cancel --reason conflict` WRITE succeeds against a
+#     pre-staged two-candidate disk state -- it does NOT prove a conflict was
+#     genuinely detected/evidenced, since the upstream detection point lives
+#     inside `publish-result`'s own no-clobber race (unread at this file's
+#     authoring time, and confirmed during a later correction pass to still
+#     have no such detection today). `FM-13b-conflict-genuinely-detected`
+#     (skip'd) names that still-pending, mandatory requirement explicitly
+#     rather than letting FM-13's narrow, currently-passing assertion imply
+#     broader coverage than it has.
 #   - Boundary/liveness tests (TO-04, LEASE-CC-*) use REAL relative timestamps
 #     captured via `date -u` at test time (never `--fixed-clock`, whose baked
 #     reference instant is not spelled out in this file's read ranges) so the
@@ -137,6 +152,19 @@ _iso_plus_seconds() {
 # Portable node-based current-UTC ISO (no shell `date`); no-ms shape to match _iso_plus_seconds.
 _iso_now() {
   node -e 'process.stdout.write(new Date().toISOString().replace(/\.\d{3}Z$/, "Z"))'
+}
+
+# Portable node-based inode read (no shell `stat`). Same class of GNU/BSD divergence
+# as _iso_plus_seconds's `date` note above: the prior
+# `stat -f '%i' "$f" 2>/dev/null || stat -c '%i' "$f"` substitution was invalid under
+# the PLAN-mandated GNU userland, because GNU `stat -f` is --file-system, so BOTH
+# '%i' and "$f" are FILE operands -- it writes multi-line filesystem statistics for
+# "$f" to stdout, exits nonzero only on the bogus '%i' operand, and the `||` fallback
+# then appends the real inode. The capture therefore held varying filesystem stats
+# followed by an identical inode, so two reads compared unequal even though the
+# incumbent inode never changed. This helper reads the inode and nothing else.
+_inode_of() {
+  node -e 'process.stdout.write(require("fs").statSync(process.argv[1], { bigint: true }).ino.toString())' "$1"
 }
 
 # Codex NO-GO round 3 (blocker 2, cleanup item 6): a full recursive disk snapshot
@@ -1736,6 +1764,27 @@ _write_takeover() {
   done
 }
 
+@test "LOCK-10b publishReplace temp-to-target inode binding: a BYTE-IDENTICAL, DIFFERENT-INODE substitution of the renamed target between rename and post-rename revalidation is caught (SECURITY_INVALID, poisoned to DURABILITY_UNPROVEN) -- HARD NO-GO after round 17: publishReplace previously called assertDurableTargetMatches with no expectedIdentity at all (unlike publishNoClobber's own equivalent call, which binds back to its own temp's captured dev/ino), so a byte-identical foreign file at this exact path would have been silently accepted as the genuine, just-renamed target." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  local fresh_now; fresh_now="$(_iso_now)"
+  local fresh_req_expiry; fresh_req_expiry="$(_iso_plus_seconds "$fresh_now" 3600)"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s","created_at":"%s","expiry":"%s"}' "$rid" "$rid" "$aid" "$fresh_now" "$fresh_req_expiry")"
+  local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
+  _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
+  local claim_digest; claim_digest="$(_sha256_file "$claim_f")"
+  local lease_f; lease_f="$(_active_lease_path "$rid" "$aid")"
+  _write_active_lease "$lease_f" "$(printf '{"attempt_id":"%s","claim_digest":"%s","last_heartbeat_at":"%s","lease_expiry":"%s"}' "$aid" "$claim_digest" "$fresh_now" "$(_iso_plus_seconds "$fresh_now" 300)")"
+  local txndir; txndir="$(dirname "$req")"
+
+  run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    RUNTIME_CONSULTATION_FAULT_REPLACE_POSTRENAME=swap-same-bytes \
+    node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
+  [ "$status" -eq 3 ] || { echo "status=$status (expected 3)"; false; }
+  _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
+  [ -d "$txndir/.lock" ] || { echo ".lock was NOT retained (poison failed)"; false; }
+}
+
 @test "LOCK-11 clean-failure + release-failure: when fn fails cleanly (accepted-result already exists -> AUTHORITY_INVALID) AND the lock release then fails (rmdir fault), the PRIMARY result is the release's DURABILITY_UNPROVEN (original cause preserved internally)" {
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
@@ -2111,6 +2160,37 @@ _write_takeover() {
   [ "$mode" = "600" ]
 }
 
+@test "UMASK-0700-LOCK-01: acquireLock's own .lock directory is EXACT 0700 independent of umask (Codex NO-GO round 15: mkdirSync's own default mode is subject to umask, exactly the reason every FILE writer in this file forces exact 0600 via fchmod rather than trusting open()'s mode argument -- an explicit chmod immediately after .lock's own mkdirSync closes the same class of gap for the ONE directory acquireLock itself creates, so the baseline captured for later scope-identity comparisons is a KNOWN-SAFE value, not whatever umask happened to leave behind)." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local txndir; txndir="$(dirname "$req")"
+  # Pre-create claims/ (and active-leases/, cmdClaim's own second write) under
+  # the NORMAL umask -- see UMASK-0600-01's own comment: a brand-new directory
+  # minted WHILE a restrictive umask is active loses its own owner-write bit,
+  # breaking every later write inside it. This isolates exactly the ONE
+  # directory this test is scoped to: .lock itself, which acquireLock mints
+  # fresh on every invocation and cannot be pre-created the same way.
+  mkdir -p "$txndir/claims" "$txndir/active-leases"
+
+  local old_umask; old_umask="$(umask)"
+  umask 0277
+  ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+      RUNTIME_CONSULTATION_TEST_RENDEZVOUS=with-lock-post-acquire-pre-fn \
+      node "$IMPL" claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids >/dev/null 2>&1; ) &
+  local claim_pid=$!
+  umask "$old_umask"
+
+  _wait_for_rendezvous_ready "$txndir" with-lock-post-acquire-pre-fn
+
+  [ -d "$txndir/.lock" ]
+  local lock_mode; lock_mode="$(node -e 'process.stdout.write((require("fs").lstatSync(process.argv[1]).mode & 0o777).toString(8))' "$txndir/.lock")"
+  [ "$lock_mode" = "700" ]
+
+  touch "$txndir/.rendezvous-with-lock-post-acquire-pre-fn-go"
+  wait "$claim_pid"
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # Section 4: transactional boundaries -- six deterministic interleavings via
 # capability-gated rendezvous (RUNTIME_CONSULTATION_TEST_RENDEZVOUS), never
@@ -2159,6 +2239,105 @@ _write_takeover() {
   # published one for a takeover-superseded attempt.
   local lease_f; lease_f="$(_active_lease_path "$rid" "$aid")"
   [ ! -e "$lease_f" ]
+}
+
+@test "TAKEOVER-TOCTOU-01: takeover pauses (rendezvous) genuinely INSIDE its held lock, immediately before its in-lock re-read; a SECOND process swaps request.json's own requester_instance_id while it waits; on resume, takeover must STOP (SECURITY_INVALID), never adopt the swapped-in value, and must write no takeover.json (Codex NO-GO round 15: cmdTakeover previously used readRequestForTxnOrCorrelationInvalid with NO preflight/in-lock-reread/identity-match at all -- the exact TOCTOU class cmdCancel/cmdAcceptResult needed rounds 10-12 to close, per accreditCanonicalRequest's own doc comment naming takeover as sharing this asymmetry, deliberately left unfixed until now)." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  local requester_a; requester_a="$(printf '9%.0s' {1..64})"
+  local requester_b; requester_b="$(printf '8%.0s' {1..64})"
+  local now; now="$(_iso_now)"
+  local req_created; req_created="$(_iso_plus_seconds "$now" -600)"
+  local req_expiry; req_expiry="$(_iso_plus_seconds "$req_created" 3600)"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s","created_at":"%s","expiry":"%s","requester_instance_id":"%s"}' "$rid" "$rid" "$aid" "$req_created" "$req_expiry" "$requester_a")"
+  local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
+  _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
+  local stale_heartbeat; stale_heartbeat="$(_iso_plus_seconds "$now" -400)"
+  local stale_expiry; stale_expiry="$(_iso_plus_seconds "$now" -100)"
+  local lease_f; lease_f="$(_active_lease_path "$rid" "$aid")"
+  _write_active_lease "$lease_f" "$(printf '{"attempt_id":"%s","last_heartbeat_at":"%s","lease_expiry":"%s"}' "$aid" "$stale_heartbeat" "$stale_expiry")"
+  local txndir; txndir="$(dirname "$req")"
+
+  local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
+  ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+      RUNTIME_CONSULTATION_TEST_RENDEZVOUS=takeover-in-lock-pre-read \
+      node "$IMPL" takeover --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids >"$out" 2>&1; echo $? >"$rc_file" ) &
+  local takeover_pid=$!
+
+  _wait_for_rendezvous_ready "$txndir" takeover-in-lock-pre-read
+
+  # Swap requester_instance_id ONLY -- eligibility (initial_attempt_id/
+  # initial_lease_epoch/created_at/expiry) is untouched, so this isolates the
+  # identity check specifically, mirroring cmdCancel's own RCC-cancel-toctou
+  # technique exactly.
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s","created_at":"%s","expiry":"%s","requester_instance_id":"%s"}' "$rid" "$rid" "$aid" "$req_created" "$req_expiry" "$requester_b")"
+
+  touch "$txndir/.rendezvous-takeover-in-lock-pre-read-go"
+  wait "$takeover_pid"
+  local rc; rc="$(cat "$rc_file")"
+  [ "$rc" -eq 3 ] || { echo "expected rc=3 (INVALID), got $rc:"; cat "$out"; false; }
+  node -e '
+    const data = JSON.parse(process.argv[1]);
+    if (data.status !== "INVALID" || data.detail_code !== "SECURITY_INVALID") {
+      console.error("expected INVALID/SECURITY_INVALID (request.json changed since preflight), got: " + process.argv[1]);
+      process.exit(1);
+    }
+  ' "$(cat "$out")"
+
+  local to_f; to_f="$(_takeover_path "$rid")"
+  [ ! -e "$to_f" ]
+
+  rm -f "$out" "$rc_file"
+}
+
+@test "TAKEOVER-POST-PUBLISH-SUBSTITUTED-01: takeover's post-publish re-check detects takeover.json being SUBSTITUTED (a different, still schema-valid record differing only in takeover_at) AFTER publish, and POISONS the lock rather than reporting SUCCESS for a record it never actually wrote (Codex NO-GO round 15: takeover.json is a one-time immutable record and now gets the SAME post-publish discipline cmdCancel/cmdAcceptResult already have)." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  local now; now="$(_iso_now)"
+  local req_created; req_created="$(_iso_plus_seconds "$now" -600)"
+  local req_expiry; req_expiry="$(_iso_plus_seconds "$req_created" 3600)"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s","created_at":"%s","expiry":"%s"}' "$rid" "$rid" "$aid" "$req_created" "$req_expiry")"
+  local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
+  _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
+  local stale_heartbeat; stale_heartbeat="$(_iso_plus_seconds "$now" -400)"
+  local stale_expiry; stale_expiry="$(_iso_plus_seconds "$now" -100)"
+  local lease_f; lease_f="$(_active_lease_path "$rid" "$aid")"
+  _write_active_lease "$lease_f" "$(printf '{"attempt_id":"%s","last_heartbeat_at":"%s","lease_expiry":"%s"}' "$aid" "$stale_heartbeat" "$stale_expiry")"
+  local txndir; txndir="$(dirname "$req")"
+
+  local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
+  ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+      RUNTIME_CONSULTATION_TEST_RENDEZVOUS=takeover-post-publish-pre-recheck \
+      node "$IMPL" takeover --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids >"$out" 2>&1; echo $? >"$rc_file" ) &
+  local takeover_pid=$!
+
+  _wait_for_rendezvous_ready "$txndir" takeover-post-publish-pre-recheck
+
+  local to_f; to_f="$(_takeover_path "$rid")"
+  [ -e "$to_f" ]
+  node -e '
+    const fs = require("fs");
+    const p = process.argv[1];
+    const obj = JSON.parse(fs.readFileSync(p, "utf8"));
+    obj.takeover_at = "2099-01-01T00:00:00Z";
+    fs.writeFileSync(p, JSON.stringify(obj), { mode: 0o600 });
+  ' "$to_f"
+
+  touch "$txndir/.rendezvous-takeover-post-publish-pre-recheck-go"
+  wait "$takeover_pid"
+  local rc; rc="$(cat "$rc_file")"
+  [ "$rc" -ne 0 ] || { echo "expected a non-zero (failure) rc, got 0:"; cat "$out"; false; }
+  node -e '
+    const data = JSON.parse(process.argv[1]);
+    if (data.status !== "INVALID" || data.detail_code !== "AUTHORITY_INVALID") {
+      console.error("expected INVALID/AUTHORITY_INVALID (substituted takeover.json is not byte-identical to what was published), got: " + process.argv[1]);
+      process.exit(1);
+    }
+  ' "$(cat "$out")"
+
+  [ -d "$txndir/.lock" ]
+
+  rm -f "$out" "$rc_file"
 }
 
 @test "XACT-02 heartbeat refresh blocks a later takeover: heartbeat holds the lock and refreshes BEFORE expiry -- a later takeover observes the extended lease and is rejected (not yet expired)" {
@@ -2293,6 +2472,321 @@ _write_takeover() {
   ' "$(cat "$pr_out")"
 
   [ ! -e "$result_f" ]
+}
+
+@test "PUBLISH-RESULT-TERMINAL-01: publish-result is rejected when accepted-result.json already exists (Codex NO-GO round 16, P0: PLAN.md ~L443 requires 'absence of committed takeover/cancel/accept' as part of candidate publication's own mandatory contract -- this check was entirely missing from cmdPublishResult)." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
+  _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
+  local req_digest; req_digest="$(_sha256_file "$req")"
+  local other_aid; other_aid="$(_gen_hex_id)"
+  local other_result; other_result="$(_result_path "$rid" "$other_aid")"
+  _write_result "$other_result" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED"}' "$rid" "$req_digest" "$rid" "$other_aid")"
+  local other_result_digest; other_result_digest="$(_sha256_file "$other_result")"
+  local accepted_f; accepted_f="$(_accepted_result_path "$rid")"
+  _write_accepted_result "$accepted_f" "$(printf '{"request_digest":"%s","candidate_result_path":"results/%s.json","result_digest":"%s","accepted_attempt_id":"%s"}' "$req_digest" "$other_aid" "$other_result_digest" "$other_aid")"
+
+  local content_b64; content_b64="$(printf 'hello world' | _base64url_encode)"
+  local result_f; result_f="$(_result_path "$rid" "$aid")"
+  _run_cli publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64"
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "AUTHORITY_INVALID"
+  [ ! -e "$result_f" ]
+}
+
+@test "PUBLISH-RESULT-TERMINAL-FOREIGN-01: a schema-valid accepted-result.json whose own request_digest belongs to a COMPLETELY DIFFERENT, unrelated transaction is rejected AUTHORITY_INVALID via the SAME full correlator (assertAcceptedResultCorrelates) TERMINAL-01's own wrong-attempt_id case also fails, just at an earlier internal check (request_digest, not accepted_attempt_id) (HARD NO-GO after round 17, CORRECTED round 19: the terminal-exclusion gate previously trusted shape+durability alone; round 18's own fix used a narrower request-digest-only correlator and a distinct SECURITY_INVALID code for this exact case, reasoning TERMINAL-01's wrong-attempt_id fixture was a 'legitimate cross-attempt accept' the fuller correlator would have wrongly rejected -- round 19 found PLAN's own transition table (ACCEPTED ~L698 has no outgoing transition) makes that scenario impossible, so TERMINAL-01's fixture is not legitimate either, and both cases now go through the ONE correlator every other authoritative surface already uses)." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
+  _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
+  local foreign_digest; foreign_digest="$(printf '7%.0s' {1..64})"
+  local accepted_f; accepted_f="$(_accepted_result_path "$rid")"
+  _write_accepted_result "$accepted_f" "$(printf '{"request_digest":"%s","candidate_result_path":"results/%s.json","result_digest":"%s","accepted_attempt_id":"%s"}' "$foreign_digest" "$aid" "$(printf '8%.0s' {1..64})" "$aid")"
+
+  local content_b64; content_b64="$(printf 'hello world' | _base64url_encode)"
+  local result_f; result_f="$(_result_path "$rid" "$aid")"
+  _run_cli publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64"
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "AUTHORITY_INVALID"
+  [ ! -e "$result_f" ]
+}
+
+@test "CANCEL-TERMINAL-ACCEPTED-CORRELATION-01: cancel is rejected AUTHORITY_INVALID when accepted-result.json exists for a DIFFERENT, never-authoritative attempt_id sharing this transaction's own real request_digest (Codex NO-GO round 19, P0: cmdCancel's own terminal-exclusion gate previously trusted request_digest alone -- assertAcceptedResultCorrelates, the SAME full correlator cmdAcceptResult/cmdPublishResult/cmdAwaitResult/cmdTransactionAck already use, is now called here too)." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local req_digest; req_digest="$(_sha256_file "$req")"
+  local other_aid; other_aid="$(_gen_hex_id)"
+  local other_result; other_result="$(_result_path "$rid" "$other_aid")"
+  _write_result "$other_result" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED"}' "$rid" "$req_digest" "$rid" "$other_aid")"
+  local other_result_digest; other_result_digest="$(_sha256_file "$other_result")"
+  local accepted_f; accepted_f="$(_accepted_result_path "$rid")"
+  _write_accepted_result "$accepted_f" "$(printf '{"request_digest":"%s","candidate_result_path":"results/%s.json","result_digest":"%s","accepted_attempt_id":"%s"}' "$req_digest" "$other_aid" "$other_result_digest" "$other_aid")"
+
+  local cancel_f; cancel_f="$(_cancel_path "$rid")"
+  _run_cli cancel --coordination-root "$COORD_ROOT" --request "$req" --reason explicit --fixed-ids
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "AUTHORITY_INVALID"
+  [ ! -e "$cancel_f" ]
+}
+
+@test "ACCEPT-RESULT-TERMINAL-ACCEPTED-CORRELATION-01: accept-result is rejected AUTHORITY_INVALID when accepted-result.json exists for a DIFFERENT, never-authoritative attempt_id sharing this transaction's own real request_digest (Codex NO-GO round 19, P0: cmdAcceptResult's own terminal-exclusion gate previously trusted request_digest alone -- assertAcceptedResultCorrelates is now called here too)." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local req_digest; req_digest="$(_sha256_file "$req")"
+  local other_aid; other_aid="$(_gen_hex_id)"
+  local other_result; other_result="$(_result_path "$rid" "$other_aid")"
+  _write_result "$other_result" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED"}' "$rid" "$req_digest" "$rid" "$other_aid")"
+  local other_result_digest; other_result_digest="$(_sha256_file "$other_result")"
+  local accepted_f; accepted_f="$(_accepted_result_path "$rid")"
+  _write_accepted_result "$accepted_f" "$(printf '{"request_digest":"%s","candidate_result_path":"results/%s.json","result_digest":"%s","accepted_attempt_id":"%s"}' "$req_digest" "$other_aid" "$other_result_digest" "$other_aid")"
+
+  _run_cli accept-result --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "AUTHORITY_INVALID"
+}
+
+# The three tests below prove, via a DIFFERENT observable detail_code (not
+# merely "the same AUTHORITY_INVALID either way"), that each call site's
+# terminal-exclusion gate genuinely INVOKES assertAcceptedResultCorrelates
+# rather than coincidentally matching its outcome. Codex NO-GO round 19
+# (evidence gap): the frozen CLI ABI (PLAN.md ~L779-781) carries no message
+# field, so a fixture where existingAccepted!==null triggers the SAME
+# AUTHORITY_INVALID regardless of whether the correlator ran at all (the
+# unconditional throw right after the correlator call fires either way) is
+# NOT mutation-provable by detail_code alone -- CANCEL/ACCEPT-RESULT-
+# TERMINAL-ACCEPTED-CORRELATION-01 above are real, valid regression coverage
+# for the fixture shape the reviewer asked for, but neither one, by itself,
+# would go RED under a mutation that deleted the assertAcceptedResultCorrelates
+# call. This fixture (accepted_attempt_id IS the current authoritative
+# attempt, so the attempt/epoch check inside the correlator passes -- but no
+# result.json was ever actually published for it, an impossible history under
+# PLAN's own ANSWERED-then-ACCEPTED ordering) instead reaches
+# assertAcceptedResultCorrelates's OWN validateResultV2 call, whose absent-
+# candidate failure is SCHEMA_INVALID (absentDurableStop's default) --
+# genuinely different from the bare fallback's AUTHORITY_INVALID, and
+# confirmed (mutation-tested) to flip back to AUTHORITY_INVALID when the
+# correlator call is removed.
+@test "CANCEL-TERMINAL-ACCEPTED-UNPROVEN-CANDIDATE-01: cancel against a hand-planted accepted-result.json claiming the CURRENT authoritative attempt_id, whose own candidate result was never actually published, is rejected SCHEMA_INVALID -- proof the full correlator, not merely the bare existingAccepted!==null check, is genuinely invoked." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local req_digest; req_digest="$(_sha256_file "$req")"
+  local accepted_f; accepted_f="$(_accepted_result_path "$rid")"
+  _write_accepted_result "$accepted_f" "$(printf '{"request_digest":"%s","candidate_result_path":"results/%s.json","accepted_attempt_id":"%s"}' "$req_digest" "$aid" "$aid")"
+
+  local cancel_f; cancel_f="$(_cancel_path "$rid")"
+  _run_cli cancel --coordination-root "$COORD_ROOT" --request "$req" --reason explicit --fixed-ids
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+  [ ! -e "$cancel_f" ]
+}
+
+@test "ACCEPT-RESULT-TERMINAL-ACCEPTED-UNPROVEN-CANDIDATE-01: accept-result against a hand-planted accepted-result.json claiming the CURRENT authoritative attempt_id, whose own candidate result was never actually published, is rejected SCHEMA_INVALID -- proof the full correlator is genuinely invoked, matching CANCEL-TERMINAL-ACCEPTED-UNPROVEN-CANDIDATE-01's own rationale." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local req_digest; req_digest="$(_sha256_file "$req")"
+  local accepted_f; accepted_f="$(_accepted_result_path "$rid")"
+  _write_accepted_result "$accepted_f" "$(printf '{"request_digest":"%s","candidate_result_path":"results/%s.json","accepted_attempt_id":"%s"}' "$req_digest" "$aid" "$aid")"
+
+  _run_cli accept-result --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+}
+
+@test "PUBLISH-RESULT-TERMINAL-ACCEPTED-UNPROVEN-CANDIDATE-01: publish-result against a hand-planted accepted-result.json claiming the CURRENT authoritative attempt_id, whose own candidate result was never actually published, is rejected SCHEMA_INVALID -- proof the full correlator is genuinely invoked, matching CANCEL-TERMINAL-ACCEPTED-UNPROVEN-CANDIDATE-01's own rationale." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
+  _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
+  local req_digest; req_digest="$(_sha256_file "$req")"
+  local accepted_f; accepted_f="$(_accepted_result_path "$rid")"
+  _write_accepted_result "$accepted_f" "$(printf '{"request_digest":"%s","candidate_result_path":"results/%s.json","accepted_attempt_id":"%s"}' "$req_digest" "$aid" "$aid")"
+
+  local content_b64; content_b64="$(printf 'hello world' | _base64url_encode)"
+  local result_f; result_f="$(_result_path "$rid" "$aid")"
+  _run_cli publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64"
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+  [ ! -e "$result_f" ]
+}
+
+@test "PUBLISH-RESULT-TERMINAL-02: publish-result is rejected when cancel.json already exists (Codex NO-GO round 16, P0: same PLAN.md ~L443 terminal-exclusion gap as TERMINAL-01, the cancel.json half)." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
+  _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
+  local cancel_f; cancel_f="$(_cancel_path "$rid")"
+  local canceller; canceller="$(printf 'c%.0s' {1..64})"
+  _write_cancel "$cancel_f" "$(printf '{"request_id":"%s","reason":"explicit","cancelled_by":"%s"}' "$rid" "$canceller")"
+
+  local content_b64; content_b64="$(printf 'hello world' | _base64url_encode)"
+  local result_f; result_f="$(_result_path "$rid" "$aid")"
+  _run_cli publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64"
+  [ "$status" -ne 0 ]
+  _assert_cli_result "CANCELLED" "TRANSACTION_CANCELLED"
+  [ ! -e "$result_f" ]
+}
+
+@test "PUBLISH-RESULT-TERMINAL-RACE-01: publish-result, started WHILE a genuinely separate cancel invocation still holds the transition lock (forced to genuinely BLOCK in acquireLock's own mkdir-wait loop, not merely run after cancel has already fully exited), correctly observes the REAL, CLI-produced cancel.json once it finally acquires the lock -- CANCELLED/TRANSACTION_CANCELLED, never SUCCESS, and no result.json ever created (Codex NO-GO round 17: 'carreras terminales' requested; PUBLISH-RESULT-TERMINAL-02 only proves this against a hand-written fixture already on disk before publish-result even starts, never against two truly overlapping, independently-scheduled processes). NOTE: an earlier version of this test let both invocations race freely with no ordering control and merely checked status/disk-state SELF-consistency -- mutation-tested and found BLIND to this exact regression (disabling cmdPublishResult's own cancel.json check still passed 30/30, since 'publish-result won the lock race first' and 'publish-result ignored an already-durable cancel.json' produce an IDENTICAL final disk state, cancel.json+result.json both present, from the outside). Only forcing the ordering via rendezvous makes the outcome unambiguous." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
+  _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
+  local claim_digest; claim_digest="$(_sha256_file "$claim_f")"
+  local lease_f; lease_f="$(_active_lease_path "$rid" "$aid")"
+  _write_active_lease "$lease_f" "$(printf '{"attempt_id":"%s","claim_digest":"%s"}' "$aid" "$claim_digest")"
+  local txn_dir; txn_dir="$(dirname "$req")"
+  local cancel_f; cancel_f="$(_cancel_path "$rid")"
+  local result_f; result_f="$(_result_path "$rid" "$aid")"
+  local content_b64; content_b64="$(printf 'race content' | _base64url_encode)"
+
+  local cancel_out; cancel_out="$(mktemp)"
+  ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+      RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-post-publish-pre-recheck \
+      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req" --reason explicit --fixed-ids >"$cancel_out" 2>&1; echo $? >> "$cancel_out" ) &
+  local cancel_pid=$!
+
+  _wait_for_rendezvous_ready "$txn_dir" cancel-post-publish-pre-recheck
+
+  # cancel.json is ALREADY durable at this point (published, then paused
+  # before its own post-publish recheck) -- .lock is still genuinely held by
+  # cancel. Starting publish-result NOW forces it to genuinely BLOCK in
+  # acquireLock's own mkdir-wait loop until cancel releases -- a true
+  # cross-process, lock-mediated overlap, not a sequential "run after exit".
+  local pr_out; pr_out="$(mktemp)"
+  ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
+      node "$IMPL" publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64" --fixed-ids >"$pr_out" 2>&1; echo $? >> "$pr_out" ) &
+  local pr_pid=$!
+
+  # Direct, non-inferred proof that publish-result is GENUINELY still blocked
+  # (not somehow racing ahead) while cancel still holds the lock: give it a
+  # generous window to reach its own first mkdirSync attempt and confirm it
+  # has produced no output yet AND its process is still alive.
+  #
+  # Codex NO-GO round 19: "alive + no output" alone does not prove publish-
+  # result reached acquireLock's own EEXIST-retry loop specifically, as
+  # opposed to still being somewhere earlier in its own preflight reads.
+  # acquireLock now writes a test-capability-gated `.lock-contention-observed`
+  # marker the FIRST time it genuinely observes EEXIST on `.lock` -- asserting
+  # on that file directly proves this invocation entered the real contention
+  # branch, not merely that it hadn't finished yet.
+  sleep 0.3
+  [ -s "$pr_out" ] && { echo "publish-result already produced output before cancel released the lock -- it did not genuinely block:"; cat "$pr_out"; false; }
+  kill -0 "$pr_pid" 2>/dev/null || { echo "publish-result process already exited before cancel released the lock"; false; }
+  [ -e "$txn_dir/.lock-contention-observed" ] || { echo "publish-result never observed a genuine EEXIST on .lock -- cannot prove it is blocked IN acquireLock's own retry loop, as opposed to merely not yet having reached it"; false; }
+
+  touch "$txn_dir/.rendezvous-cancel-post-publish-pre-recheck-go"
+  wait "$cancel_pid"
+  wait "$pr_pid"
+  local cancel_body pr_body; cancel_body="$(head -n1 "$cancel_out")"; pr_body="$(head -n1 "$pr_out")"
+  rm -f "$cancel_out" "$pr_out"
+
+  [ -e "$cancel_f" ]
+  node -e '
+    const data = JSON.parse(process.argv[1]);
+    if (data.status !== "SUCCESS") { console.error("cancel: expected SUCCESS, got: " + process.argv[1]); process.exit(1); }
+  ' "$cancel_body"
+
+  # Deterministic: cancel.json was ALREADY durable before publish-result could
+  # possibly have acquired the lock (cancel held it throughout), so this is
+  # the ONE valid outcome -- never SUCCESS, never a result.json.
+  node -e '
+    const data = JSON.parse(process.argv[1]);
+    if (data.status !== "CANCELLED" || data.detail_code !== "TRANSACTION_CANCELLED") {
+      console.error("publish-result: expected CANCELLED/TRANSACTION_CANCELLED (a real, separately-produced cancel.json was already durable before this invocation could acquire the lock), got: " + process.argv[1]);
+      process.exit(1);
+    }
+  ' "$pr_body"
+  [ ! -e "$result_f" ]
+}
+
+@test "PUBLISH-RESULT-IDEMPOTENT-01: a retried publish-result call carrying byte-for-byte identical content to what is already durably published for this exact attempt succeeds as SUCCESS (idempotent), never AUTHORITY_INVALID (PLAN.md ~L704: 'same-digest duplicate candidates are idempotent' -- reused here via publishNoClobber's own existing allowIdenticalIdempotent mechanism, added this round)." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
+  _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
+  local claim_digest; claim_digest="$(_sha256_file "$claim_f")"
+  local lease_f; lease_f="$(_active_lease_path "$rid" "$aid")"
+  _write_active_lease "$lease_f" "$(printf '{"attempt_id":"%s","claim_digest":"%s"}' "$aid" "$claim_digest")"
+
+  local content_b64; content_b64="$(printf 'hello world' | _base64url_encode)"
+  local result_f; result_f="$(_result_path "$rid" "$aid")"
+  _run_cli publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64" --fixed-ids --fixed-clock
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+  [ -e "$result_f" ]
+  local first_ino; first_ino="$(_inode_of "$result_f")"
+
+  # Retry with the EXACT same argv. Codex NO-GO round 17 (P0, empirically
+  # reproduced on iteration 9/10 of a 10-run loop): --fixed-ids alone does
+  # NOT freeze created_at -- it only governs genId(). nowIso() is governed
+  # solely by --fixed-clock (line ~161); without it, created_at is real
+  # second-granularity wall-clock time, so two real CLI invocations that
+  # straddle a second boundary produce genuinely different candidate bytes,
+  # making this specific byte-for-byte-identical assertion flaky. Both flags
+  # are required here so the two candidate byte-streams are deterministically
+  # identical, not merely usually identical.
+  _run_cli publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64" --fixed-ids --fixed-clock
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+  local second_ino; second_ino="$(_inode_of "$result_f")"
+  [ "$first_ino" = "$second_ino" ]
+}
+
+@test "PUBLISH-RESULT-IDEMPOTENT-02: a real (non-fixed-clock) retry with logically-identical content that straddles a real wall-clock second boundary is rejected as AUTHORITY_INVALID under TODAY'S real, unchanged behavior, not silently accepted as idempotent (Codex NO-GO round 17: freezes the boundary PUBLISH-RESULT-IDEMPOTENT-01's --fixed-clock case cannot exercise -- PLAN.md ~L704's 'same-digest duplicate' rule is a literal byte-for-byte rule, not a caller-defined notion of 'same except the timestamp'). This documents CURRENT behavior only, not a settled design verdict: whether AUTHORITY_INVALID alone is the CORRECT final outcome here, or whether this too falls under PLAN ~L704's 'different otherwise-valid candidates... cause transaction cancellation plus harness STOP/report' clause, is EXPLICITLY UNRESOLVED -- see CONFLICT-DESIGN-R12.1.md's own widened scope (a HARD NO-GO on round 17's earlier claim that this specific case was 'correctly' AUTHORITY_INVALID, not merely unchanged)." {
+  local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
+  _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
+  local claim_digest; claim_digest="$(_sha256_file "$claim_f")"
+  local lease_f; lease_f="$(_active_lease_path "$rid" "$aid")"
+  _write_active_lease "$lease_f" "$(printf '{"attempt_id":"%s","claim_digest":"%s"}' "$aid" "$claim_digest")"
+
+  local content_b64; content_b64="$(printf 'hello world' | _base64url_encode)"
+  local result_f; result_f="$(_result_path "$rid" "$aid")"
+  # Deliberately real clock (no --fixed-clock) on both calls.
+  _run_cli publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64" --fixed-ids
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+  [ -e "$result_f" ]
+  local first_ino; first_ino="$(_inode_of "$result_f")"
+
+  # Deterministically force a real second-boundary crossing: nowIso() truncates
+  # to whole seconds, so waiting for `date +%s` to advance guarantees the
+  # second call's created_at differs from the first's. Codex NO-GO round 19:
+  # an earlier version bounded this with a raw 3,000,000-iteration counter --
+  # iteration count is not a real-time bound (each iteration forks `date`, so
+  # the WALL-CLOCK cost of "3,000,000" varies with system load: too slow a
+  # bound risks a multi-minute hang under load, too fast a bound risks a false
+  # timeout on a slow CI runner well under a real second of elapsed time).
+  # Bounded instead by bash's own `SECONDS` builtin (no extra subprocess, real
+  # wall-clock seconds) -- a real second boundary must arrive within 1s of any
+  # random start point, so 10s is a generous, genuinely time-based deadline.
+  local s0; s0="$(date +%s)"
+  local deadline=$((SECONDS + 10))
+  while [ "$(date +%s)" = "$s0" ]; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "second-boundary busy-wait exceeded its 10s real-time bound -- \`date +%s\` never advanced" >&2
+      false
+    fi
+  done
+
+  _run_cli publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64" --fixed-ids
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "AUTHORITY_INVALID"
+  local second_ino; second_ino="$(_inode_of "$result_f")"
+  [ "$first_ino" = "$second_ino" ]
 }
 
 @test "XACT-06 active-lease-v1 validate under an orphaned lock: a held .lock (writer crashed/hung mid-replace) makes the validator timeout+STOP -- it never trusts the visible nlink==1 bytes alone" {
@@ -2718,14 +3212,19 @@ _write_conflict() {
 # authority (PLAN.md ~L696, ~L706-710, ~L1460)
 # ══════════════════════════════════════════════════════════════════════════
 
-@test "FM-13-conflict-cancel-stop: different valid current results for a request are resolved via cancel --reason conflict" {
+@test "FM-13-conflict-cancel-stop: cancel --reason conflict succeeds (SUCCESS/rc0) as a WRITE against a pre-staged two-candidate disk state -- narrow cancel-mechanics only; does NOT prove a conflict was genuinely detected/evidenced (see FM-13b, skip'd, for that still-pending mandatory requirement)." {
   local rid aid1 aid2; rid="$(_gen_hex_id)"; aid1="$(_gen_hex_id)"; aid2="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
   _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid1")"
   local req_digest; req_digest="$(_sha256_file "$req")"
   # Two different, otherwise-valid-looking candidate results under two distinct
-  # attempt_ids for the same still-open request -- a conflict the system must
-  # resolve by cancelling rather than silently picking either one (no newest-wins).
+  # attempt_ids for the same still-open request. This proves the `cancel`
+  # WRITE succeeds in this pre-staged shape -- it is a narrow cancel-mechanics
+  # check, not proof that the system detected/evidenced a genuine conflict
+  # (nothing here reads either result back or checks they informed the
+  # cancellation at all; `cancel --reason conflict` succeeds identically even
+  # with zero staged results, per runtime-consultation-cli.bats's own
+  # RCC-conflict-accreditation-negative-style coverage).
   local result1; result1="$(_result_path "$rid" "$aid1")"
   _write_result "$result1" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED","content":"candidate one"}' "$rid" "$req_digest" "$rid" "$aid1")"
   local result2; result2="$(_result_path "$rid" "$aid2")"
@@ -2733,6 +3232,80 @@ _write_conflict() {
   _run_cli cancel --coordination-root "$COORD_ROOT" --request "$req" --reason conflict --fixed-ids
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
+}
+
+@test "FM-13c-conflict-diagnostic-symlinked-subdirectory-rejected: cancel --reason conflict against a pre-staged two-candidate disk state where 'conflict/' has been replaced with a symlink now fails closed (SECURITY_INVALID) instead of silently swallowing the error and reporting SUCCESS (Codex NO-GO round 15: writeConflictDiagnosticIfApplicable previously caught and discarded every error from its own publish, unconditionally -- cmdCancel would have reported overall SUCCESS even with a planted symlink at the diagnostic path)." {
+  local rid aid1 aid2; rid="$(_gen_hex_id)"; aid1="$(_gen_hex_id)"; aid2="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid1")"
+  local req_digest; req_digest="$(_sha256_file "$req")"
+  local result1; result1="$(_result_path "$rid" "$aid1")"
+  _write_result "$result1" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED","content":"candidate one"}' "$rid" "$req_digest" "$rid" "$aid1")"
+  local result2; result2="$(_result_path "$rid" "$aid2")"
+  _write_result "$result2" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED","content":"candidate two, genuinely different bytes"}' "$rid" "$req_digest" "$rid" "$aid2")"
+  local txndir; txndir="$(dirname "$req")"
+  local elsewhere; elsewhere="$(dirname "$txndir")/planted-conflict-target"
+  mkdir -p "$elsewhere"
+  ln -s "$elsewhere" "$txndir/conflict"
+
+  _run_cli cancel --coordination-root "$COORD_ROOT" --request "$req" --reason conflict --fixed-ids
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "SECURITY_INVALID"
+  # cancel.json ITSELF was already durably published before the conflict-
+  # diagnostic write is even attempted (confirmed by reading cmdCancel
+  # directly) -- what a real failure here must do is POISON the lock (retain
+  # .lock as a durable orphan) rather than silently reporting overall SUCCESS
+  # for a transaction whose conflict diagnostic was never actually written.
+  [ -d "$txndir/.lock" ]
+}
+
+@test "FM-13d-conflict-diagnostic-symlinked-results-dir-rejected: cancel --reason conflict against a disk state where 'results/' ITSELF (read FROM, not written to) has been replaced with a symlink fails closed (SECURITY_INVALID) instead of transparently enumerating whatever the symlink resolves to (Codex NO-GO round 16, P0: writeConflictDiagnosticIfApplicable confinement-checked 'conflict/' -- written to -- but never 'results/' itself, and fs.opendirSync follows a symlink transparently like any other directory open)." {
+  local rid aid1; rid="$(_gen_hex_id)"; aid1="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid1")"
+  local txndir; txndir="$(dirname "$req")"
+  local elsewhere; elsewhere="$(dirname "$txndir")/planted-results-target"
+  mkdir -p "$elsewhere"
+  ln -s "$elsewhere" "$txndir/results"
+
+  _run_cli cancel --coordination-root "$COORD_ROOT" --request "$req" --reason conflict --fixed-ids
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "SECURITY_INVALID"
+  [ -d "$txndir/.lock" ]
+}
+
+@test "FM-13e-conflict-diagnostic-wrong-pair-rejected: a durable, schema-valid conflict/v1 diagnostic already sitting at the EXACT expected conflict/<a>-<b>.json path, but whose own attempt_id/other_attempt_id fields describe a completely DIFFERENT attempt pair, is rejected SECURITY_INVALID rather than silently tolerated as 'someone else already wrote it' (Codex NO-GO round 17, P0: the AUTHORITY_INVALID-tolerance branch called validateConflictV1, which proves SHAPE only -- schema/field-types -- and never compared the existing diagnostic's own fields against the a/b pair THIS invocation actually computed)." {
+  local rid aid1 aid2; rid="$(_gen_hex_id)"; aid1="$(_gen_hex_id)"; aid2="$(_gen_hex_id)"
+  local req; req="$(_request_path "$rid")"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid1")"
+  local req_digest; req_digest="$(_sha256_file "$req")"
+  local result1; result1="$(_result_path "$rid" "$aid1")"
+  _write_result "$result1" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED","content":"candidate one"}' "$rid" "$req_digest" "$rid" "$aid1")"
+  local result2; result2="$(_result_path "$rid" "$aid2")"
+  _write_result "$result2" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED","content":"candidate two, genuinely different bytes"}' "$rid" "$req_digest" "$rid" "$aid2")"
+  local txndir; txndir="$(dirname "$req")"
+
+  # listResultFiles sorts lexicographically -- pre-compute the SAME (a, b)
+  # order writeConflictDiagnosticIfApplicable will itself derive, so the
+  # planted diagnostic lands at the EXACT path it is about to target.
+  local a b
+  if [[ "$aid1" < "$aid2" ]]; then a="$aid1"; b="$aid2"; else a="$aid2"; b="$aid1"; fi
+  local wrong_a wrong_b; wrong_a="$(_gen_hex_id)"; wrong_b="$(_gen_hex_id)"
+  local conflict_f; conflict_f="$txndir/conflict/${a}-${b}.json"
+  _write_conflict "$conflict_f" "$(printf '{"attempt_id":"%s","other_attempt_id":"%s"}' "$wrong_a" "$wrong_b")"
+
+  _run_cli cancel --coordination-root "$COORD_ROOT" --request "$req" --reason conflict --fixed-ids
+  [ "$status" -ne 0 ]
+  _assert_cli_result "INVALID" "SECURITY_INVALID"
+  [ -d "$txndir/.lock" ]
+  # The wrong-pair diagnostic already on disk must be left untouched -- never
+  # overwritten (publishNoClobber's own no-clobber contract) and never
+  # silently treated as this invocation's own successful write.
+  grep -q "$wrong_a" "$conflict_f"
+}
+
+@test "FM-13b-conflict-genuinely-detected: PENDING DESIGN -- a genuine conflict between two differing candidates for the SAME (attempt_id, lease_epoch) should be detected and evidenced at its true production race point (cmdPublishResult's own no-clobber write, under the transition lock), not merely accepted as a successful cancel --reason conflict WRITE against pre-staged, never-independently-verified disk state. No such detection exists today: a second, differing publish-result write for the current attempt/epoch loses the no-clobber race as a generic AUTHORITY_INVALID rejection, with no recorded evidence of what the losing candidate claimed. Companion to runtime-consultation-cli.bats's skip'd CLI-RESULT-08 -- same open design question, not implemented here." {
+  skip "DESIGN-BLOCKED: no production path yet records/evidences a genuine two-candidate conflict for the SAME (attempt_id, lease_epoch) pair; needs the same design decision CLI-RESULT-08 (runtime-consultation-cli.bats) is pending on"
 }
 
 @test "TERMINAL-NO-DELETE-01: cleanup never removes a terminal accepted-result.json" {
@@ -2952,18 +3525,17 @@ _write_conflict() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-# WP1 durability correction, pass 2 (RED): no-clobber directory-fsync fail-open
-# + nlink==2 accepted-as-idempotent-SUCCESS (PLAN.md ~L679-683 violation).
-# `publishNoClobber`'s two directory-fsync barriers (fsyncDir, runtime-
+# WP1 durability correction, pass 2: no-clobber directory-fsync fail-open +
+# nlink==2 accepted-as-idempotent-SUCCESS (PLAN.md ~L679-683 violation), now
+# fixed. `publishNoClobber`'s two directory-fsync barriers (fsyncDir, runtime-
 # consultation.cjs ~L527-547) are genuinely reachable-fault-injectable via
 # RUNTIME_CONSULTATION_FAULT_DIR_FSYNC=1 (test-capability-gated, PLAN.md
 # ~L752-753 -- same seam class as RUNTIME_CONSULTATION_FAKE_CLOCK/
-# RUNTIME_CONSULTATION_FORCE_PLATFORM). Both cases below are RED against the
-# CURRENT impl by construction, not by fixture mistake: fsyncDir's own catch{}
-# still swallows the injected failure (fail-open), and publishNoClobber's
-# allowIdenticalIdempotent byte-compare branch never re-checks the target's
-# nlink before accepting a re-publish as SUCCESS. The impl fix (fail-closed) is
-# a later, separate pass -- not made here.
+# RUNTIME_CONSULTATION_FORCE_PLATFORM). Both cases below were RED against an
+# earlier impl (fsyncDir's own catch{} swallowed the injected failure
+# fail-open, and publishNoClobber's allowIdenticalIdempotent byte-compare
+# branch never re-checked the target's nlink before accepting a re-publish as
+# SUCCESS) and are current, genuine GREEN now that both are fixed fail-closed.
 # ══════════════════════════════════════════════════════════════════════════
 
 # base64url-encodes stdin (verbatim convention from runtime-consultation-
@@ -2994,10 +3566,10 @@ _frozen_iso_plus_ms() {
 
   # Both publishNoClobber directory barriers (barrier 1 after link, barrier 2 after
   # unlink -- runtime-consultation.cjs ~L582/~L586) are forced to fail via the WP1
-  # fault-injection seam. The current impl's fsyncDir() swallows this into its
-  # existing fail-open catch{} and still returns SUCCESS -- the defect this RED
-  # case proves (PLAN.md ~L679 violation): a publish whose durability barriers
-  # never flushed must not claim success.
+  # fault-injection seam. Was RED against an earlier fsyncDir() that swallowed this
+  # into a fail-open catch{} and still returned SUCCESS (PLAN.md ~L679 violation:
+  # a publish whose durability barriers never flushed must not claim success);
+  # fsyncDir now fails closed and this assertion is genuine GREEN.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_DIR_FSYNC=1 \
     node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
@@ -3042,8 +3614,9 @@ _frozen_iso_plus_ms() {
   # and refreezes created_at to the same base, so this second invocation mints
   # byte-identical requestObj content and lands publishNoClobber's EEXIST/
   # allowIdenticalIdempotent byte-compare branch against the still-nlink==2
-  # target above -- the current impl accepts this as SUCCESS without ever
-  # re-checking nlink, which is the defect this RED case proves.
+  # target above. Was RED against an earlier impl that accepted this as SUCCESS
+  # without ever re-checking nlink; nlink is now re-checked and this assertion
+  # is genuine GREEN.
   _run_cli publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
     --subject-bundle "$subject_bundle" --intent "$intent_b64" --fixed-ids --fixed-clock
 
@@ -3052,20 +3625,21 @@ _frozen_iso_plus_ms() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-# WP1 correction pass, AUTH-06/07 (RED): accepted-result is fabricatable
-# authority (PLAN.md ~L710: "only a validated correlated artifact completes").
-# `validateAcceptedResultV1` (runtime-consultation.cjs ~L1407-1425) checks only
-# the closed field SHAPE (`ACCEPTED_RESULT_V1_FIELDS`) + `assertDurable`
-# (nlink==1) -- it never re-verifies `request_digest` against the real
-# request.json bytes, `result_digest`/`candidate_result_path` against a real
-# result, `accepted_attempt_id`/`accepted_lease_epoch` against
+# WP1 correction pass, AUTH-06/07: accepted-result was fabricatable authority
+# (PLAN.md ~L710: "only a validated correlated artifact completes"). An
+# earlier `validateAcceptedResultV1` checked only the closed field SHAPE
+# (`ACCEPTED_RESULT_V1_FIELDS`) + `assertDurable` (nlink==1) -- never
+# re-verifying `request_digest` against the real request.json bytes,
+# `result_digest`/`candidate_result_path` against a real result,
+# `accepted_attempt_id`/`accepted_lease_epoch` against
 # `resolveAuthoritativeAttempt`, or `routing_policy_digest`/
-# `requester_instance_id` against anything. Worse, `cmdAwaitResult`'s poll loop
-# (~L2446-2448) never even CALLS that already-weak validator: its very first
-# check is a bare `fs.existsSync(acceptedResultPathFor(txnDir))` that returns
-# SUCCESS the instant that path exists, regardless of content. A hand-written,
-# shape-valid, durable-but-UNCORRELATED accepted-result.json therefore makes
-# `await-result` wrongly report a real, still-open transaction complete.
+# `requester_instance_id` against anything. Worse, an earlier
+# `cmdAwaitResult`'s poll loop never even called that already-weak validator:
+# its very first check was a bare `fs.existsSync(acceptedResultPathFor(txnDir))`
+# that returned SUCCESS the instant that path existed, regardless of content.
+# Both are now fixed -- see `assertAcceptedResultCorrelates` in
+# runtime-consultation.cjs, called from both `cmdAwaitResult` and
+# `cmdTransactionAck` before either can treat an accepted-result.json as real.
 #
 # Genuinely RED by construction: the fabricated artifact below is published
 # under a REAL transaction (via the actual `publish-request` CLI, never a
@@ -3141,10 +3715,10 @@ _frozen_iso_plus_ms() {
   # artifact completes the transaction -- a fabricated, uncorrelated
   # accepted-result.json must be rejected (INVALID; the specific
   # correlation-vs-authority detail_code is left unpinned per this file's own
-  # convention for a not-yet-built correction where more than one closed value
-  # is plausible), never SUCCESS. Genuinely RED right now: the current impl's
-  # cmdAwaitResult returns SUCCESS/rc0 unconditionally on the mere existence of
-  # this fabricated file, without ever running a validation/correlation pass.
+  # convention, since more than one closed value is plausible), never SUCCESS.
+  # Was RED against an earlier cmdAwaitResult that returned SUCCESS/rc0
+  # unconditionally on the mere existence of this fabricated file; it now runs
+  # assertAcceptedResultCorrelates first and this assertion is genuine GREEN.
   _run_cli await-result --coordination-root "$COORD_ROOT" --request "$req_path" --timeout 1
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" ""
@@ -3180,8 +3754,10 @@ _frozen_iso_plus_ms() {
   # The correct/secure contract (PLAN.md ~L710) applies to EVERY authorizing
   # surface, not only await-result: transaction-ack must independently re-run the
   # same correlation check before minting a durable ack.json that permanently
-  # records "accepted". Genuinely RED right now: cmdTransactionAck only checks
-  # shape-valid PRESENCE (readJsonDurableOptional(...) !== null), never content.
+  # records "accepted". Was RED against an earlier cmdTransactionAck that only
+  # checked shape-valid PRESENCE (readJsonDurableOptional(...) !== null), never
+  # content; it now runs assertAcceptedResultCorrelates too and this assertion
+  # is genuine GREEN.
   _run_cli transaction-ack --coordination-root "$COORD_ROOT" --request "$req_path" --disposition accepted --fixed-ids
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" ""
@@ -3208,9 +3784,11 @@ _frozen_iso_plus_ms() {
 
   # Publish #2: byte-identical (same --fixed-ids/--fixed-clock), NO fault -> hits
   # the idempotent EEXIST path against #1's leftover. If #1 left it nlink==2
-  # (barrier-1 unproven), the retry must REJECT DURABILITY_UNPROVEN. CURRENTLY
-  # RED: #1 unlinks its temp on barrier-1 failure, leaving nlink==1, so this
-  # retry laundered a SUCCESS on an unproven barrier.
+  # (barrier-1 unproven), the retry must REJECT DURABILITY_UNPROVEN. Was RED
+  # against an earlier impl (#1 unlinked its temp on barrier-1 failure, leaving
+  # nlink==1, so this retry laundered a SUCCESS on an unproven barrier); #1 now
+  # leaves the target at nlink==2 on barrier-1 failure and this assertion is
+  # genuine GREEN.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64" --fixed-ids --fixed-clock
@@ -3252,8 +3830,9 @@ _frozen_iso_plus_ms() {
   # Directory barriers succeed; ONLY the post-barrier-1 temp-cleanup unlink is
   # forced to fail (seam). The target is then left hard-linked (nlink==2) --
   # assertDurable rejects it -- so returning SUCCESS is a non-durable success.
-  # Must fail closed DURABILITY_UNPROVEN. CURRENTLY RED: the unlink failure is
-  # swallowed best-effort and the publish returns SUCCESS.
+  # Must fail closed DURABILITY_UNPROVEN. Was RED against an earlier impl that
+  # swallowed the unlink failure best-effort and returned SUCCESS; the failure
+  # now propagates and this assertion is genuine GREEN.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_TEMP_UNLINK=1 \
     node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
@@ -3302,8 +3881,11 @@ _frozen_iso_plus_ms() {
   rm -f "$plan_ref"
   ln -s "$evil" "$plan_ref"
   # Publish #2 (identical) hits the plan_ref idempotent EEXIST path. It must NOT
-  # accept the symlinked target. CURRENTLY RED: readFileSync follows the symlink,
-  # byte-matches, and lstat(symlink).nlink===1 passes -> symlink accepted durable.
+  # accept the symlinked target. Was RED against an earlier impl whose
+  # readFileSync followed the symlink, byte-matched, and let
+  # lstat(symlink).nlink===1 pass -> symlink wrongly accepted as durable; the
+  # idempotent path now fd-binds with O_NOFOLLOW and this assertion is genuine
+  # GREEN.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64" --fixed-ids --fixed-clock
@@ -3330,12 +3912,13 @@ _frozen_iso_plus_ms() {
   printf 'x' > "$plan_ref"
   chmod 0600 "$plan_ref"
   # Publish #2 (identical intent -> hits the plan_ref idempotent EEXIST path) with the
-  # fstat2 post-open-comparator step ALSO faulted. CURRENTLY RED: the size mismatch is
-  # thrown immediately (byteMismatch-tagged), so fstat2 is never reached, and the
-  # caller remaps it to AUTHORITY_INVALID (race-loss) -- the fstat2 fault-injection seam
-  # (proof fstat2 actually ran) never fires. Fixed: the mismatch is recorded, fstat2
-  # STILL runs, its (non-byteMismatch-tagged) fault propagates raw and surfaces as
-  # INTERNAL, never laundered into a race-loss classification.
+  # fstat2 post-open-comparator step ALSO faulted. Was RED against an earlier impl
+  # that threw the size mismatch immediately (byteMismatch-tagged), so fstat2 was
+  # never reached and the caller remapped it to AUTHORITY_INVALID (race-loss) --
+  # the fstat2 fault-injection seam (proof fstat2 actually ran) never fired. Now
+  # the mismatch is recorded, fstat2 STILL runs, its (non-byteMismatch-tagged)
+  # fault propagates raw and surfaces as INTERNAL, never laundered into a
+  # race-loss classification -- this assertion is genuine GREEN.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_REPLACE_POSTRENAME=fstat2 \
     node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \

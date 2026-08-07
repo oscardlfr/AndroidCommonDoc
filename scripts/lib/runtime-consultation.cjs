@@ -399,6 +399,71 @@ function planRootFromArtifact(coordRoot, artifactPath) {
 }
 
 /**
+ * Codex NO-GO round 6: `planRootFromArtifact`'s own confinement check above is
+ * a MINIMUM-DEPTH check (>= 3 segments below `coordRoot`), not a genuine
+ * inside-vs-outside check -- an artifact under a wholly unrelated root
+ * (e.g. a completely different project's own, independently-confined
+ * coordination tree) can easily relativize to >= 3 segments once `..` climb-
+ * out segments are counted, and would pass unrejected. This is an
+ * ADDITIONAL, stricter check (never a replacement -- callers needing the
+ * derived plan-root still call `planRootFromArtifact` too) that rejects any
+ * relative path requiring an escape (`..`) or landing on a different
+ * absolute root entirely (e.g. a different drive on Windows, where
+ * `path.relative` returns the target unchanged as an absolute path). Scoped
+ * to this pass's own two new call sites (`cmdCancel`'s early request-path
+ * check, `accreditCancelRecord`'s cancel-path check) -- `planRootFromArtifact`
+ * itself and its other existing callers (`validateResultV2`, `validateConsultV2`,
+ * etc.) are unchanged; whether they share this same gap is out of this pass's
+ * named scope and is flagged, not fixed, here.
+ *
+ * Codex NO-GO round 8: `path.relative`/`path.resolve` are PURELY LEXICAL --
+ * they never touch the filesystem, so a genuinely-confined-LOOKING path whose
+ * ancestor directory is ACTUALLY a symlink resolving elsewhere on disk still
+ * lexically "relativizes" as confined. `fs.realpathSync` resolves symlinks;
+ * walking up to the DEEPEST EXISTING ancestor (rather than requiring the full
+ * artifact path to already exist) lets this run on a path that is ABOUT to be
+ * read/written, not only on one already durably present, while still
+ * resolving every symlink actually on disk along the way.
+ */
+function realpathDeepestExisting(p) {
+  let cur = path.resolve(p);
+  const tail = [];
+  for (;;) {
+    try {
+      return { real: fs.realpathSync(cur), tail: tail };
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+      const parent = path.dirname(cur);
+      if (parent === cur) throw err; // reached the filesystem root without resolving anything
+      tail.unshift(path.basename(cur));
+      cur = parent;
+    }
+  }
+}
+
+function assertGenuinelyConfinedUnderRoot(coordRoot, artifactPath) {
+  let realCoordRoot;
+  try {
+    realCoordRoot = fs.realpathSync(coordRoot);
+  } catch (err) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination_root does not resolve: ' + coordRoot);
+  }
+  const { real: realExistingAncestor, tail } = realpathDeepestExisting(artifactPath);
+  const fullReal = tail.length ? path.join(realExistingAncestor, ...tail) : realExistingAncestor;
+  const rel = path.relative(realCoordRoot, fullReal);
+  if (rel === '' || rel.startsWith('..' + path.sep) || rel === '..' || path.isAbsolute(rel)) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'artifact path is not confined under coordination_root once symlinks are resolved: ' + artifactPath);
+  }
+}
+
+/** `--request`/cancel.json callers must reference the artifact at its own literal, canonical filename -- never a differently-named sibling whose basename is silently discarded via `path.dirname`. */
+function assertCanonicalFilename(artifactPath, expectedBasename) {
+  if (path.basename(artifactPath) !== expectedBasename) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'artifact is not referenced at its own canonical filename (' + expectedBasename + '): ' + artifactPath);
+  }
+}
+
+/**
  * Confines an EXISTING coordination root to its own enclosing git worktree
  * (PLAN.md "Root/default: same-worktree uses <worktree>/.planning/coordination
  * ... If confinement cannot be proven, sibling mode fails closed", WP3
@@ -846,6 +911,18 @@ function hardenTempFdExact0600(fd, tempPath) {
  * `fsyncDir` cannot PROVE the flush, this throws CliError(INVALID,
  * DURABILITY_UNPROVEN, ...) instead of returning the target as SUCCESS
  * (DUR-01).
+ *
+ * `opts.revalidateBeforeLink`, if given, is called with no arguments as the
+ * LAST statement before the actual `linkSync` election below -- narrower
+ * callers (cmdClaim) use it to re-accredit the data a no-clobber write is
+ * ABOUT to durably commit as close to that commit as an ordinary JS callback
+ * can get. Codex HARD NO-GO (round 18->19, cmdClaim): a caller-side check run
+ * strictly BEFORE calling this function only closes the window up to this
+ * function's OWN entry -- everything below (mkdir, temp create/harden/write/
+ * fsync/fstat/close) still runs, unrevalidated, afterward. Placing the
+ * revalidation here instead closes the window down to the gap between this
+ * callback returning and `linkSync` actually executing -- the tightest
+ * achievable without a hypothetical atomic "compare-then-link" primitive.
  */
 function publishNoClobber(targetPath, bytes, opts) {
   const options = opts || {};
@@ -896,6 +973,9 @@ function publishNoClobber(targetPath, bytes, opts) {
     try { fs.unlinkSync(tempPath); } catch (e) { /* best-effort test setup */ }
     fs.writeFileSync(tempPath, buf, { mode: 0o600 });
   }
+  if (typeof options.revalidateBeforeLink === 'function') {
+    options.revalidateBeforeLink();
+  }
   try {
     fs.linkSync(tempPath, targetPath);
   } catch (err) {
@@ -943,15 +1023,29 @@ function publishNoClobber(targetPath, bytes, opts) {
           // idempotent no-op success; a genuine durable target with DIFFERENT bytes is a
           // no-clobber race-loss (a different publisher won); nlink==2 / symlink / wrong-mode /
           // identity drift propagate as their own SECURITY/DURABILITY failure.
+          let idempotentSt;
           try {
-            assertDurableTargetMatches(existingFd, targetPath, buf);
+            idempotentSt = assertDurableTargetMatches(existingFd, targetPath, buf);
           } catch (cmpErr) {
             if (cmpErr && cmpErr.byteMismatch) {
               throw new CliError('INVALID', options.raceDetailCode || 'AUTHORITY_INVALID', 'no-clobber race lost (existing durable target differs) for ' + targetPath);
             }
             throw cmpErr;
           }
-          return targetPath;
+          // Receipt built from the EXACT snapshot assertDurableTargetMatches
+          // itself already accredited (its own return value) -- never a
+          // separate, later fstat call on the same fd. Codex NO-GO round 17
+          // (P1): the prior round's own "never a fresh by-path fstat" fix
+          // still performed a fresh FD-BOUND fstat here, which is a narrower
+          // but still-real gap -- a mutation landing between the comparator's
+          // own internal proof (st/st2/lst all consistent) and this call would
+          // have been silently adopted as if it were the original snapshot.
+          return {
+            path: targetPath, dev: idempotentSt.dev, ino: idempotentSt.ino,
+            mode: idempotentSt.mode, uid: idempotentSt.uid, gid: idempotentSt.gid,
+            nlink: idempotentSt.nlink, ctimeNs: idempotentSt.ctimeNs, mtimeNs: idempotentSt.mtimeNs,
+            digest: sha256Buffer(buf),
+          };
         } finally {
           fs.closeSync(existingFd);
         }
@@ -1037,12 +1131,30 @@ function publishNoClobber(targetPath, bytes, opts) {
       }
       throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'published target vanished before post-publish revalidation: ' + targetPath + ' (' + (err && err.message) + ')');
     }
+    let publishedSt;
     try {
-      assertDurableTargetMatches(checkFd, targetPath, buf, { dev: tempIdentity.dev, ino: tempIdentity.ino });
+      // Codex NO-GO round 17 (P1): built directly from the comparator's OWN
+      // return value -- the exact snapshot it already triple-proved stable
+      // internally (st/st2/lst) -- rather than a separate, later fstat call
+      // on the same fd. Round 16's own "captured immediately after" fix was
+      // still a distinct, unvalidated re-read, reopening a fresh (if narrow)
+      // window between the comparator's own proof and this call's own read;
+      // see assertDurableTargetMatches's own matching comment.
+      publishedSt = assertDurableTargetMatches(checkFd, targetPath, buf, { dev: tempIdentity.dev, ino: tempIdentity.ino });
     } finally {
       try { fs.closeSync(checkFd); } catch (e) { /* best-effort cleanup */ }
     }
-    return targetPath; // COMPLETE: publish credited durable + fully revalidated.
+    // Receipt: dev/ino already fd-bound-proven above (tempIdentity, which now
+    // IS the target's own identity post-linkSync); digest is over `buf`, the
+    // exact bytes this call wrote -- never a re-read/re-serialization, so a
+    // caller holding this receipt can later compare fresh fd-bound bytes/
+    // identity against it directly, with no reconstruction step in between.
+    return {
+      path: targetPath, dev: tempIdentity.dev, ino: tempIdentity.ino,
+      mode: publishedSt.mode, uid: publishedSt.uid, gid: publishedSt.gid,
+      nlink: publishedSt.nlink, ctimeNs: publishedSt.ctimeNs, mtimeNs: publishedSt.mtimeNs,
+      digest: sha256Buffer(buf),
+    }; // COMPLETE: publish credited durable + fully revalidated.
   } catch (err) {
     const poisoned = new CliError('INVALID', 'DURABILITY_UNPROVEN', 'post-publish target not accredited durable (POST_LINK_UNPROVEN): ' + (err && err.message));
     poisoned.cause = err;
@@ -1124,6 +1236,28 @@ function assertDurableTargetMatches(fd, targetPath, expectedBytes, expectedIdent
     }
   }
 
+  // Codex NO-GO round 16 (P1): ONLY evaluated when the bytes above already
+  // matched -- if they didn't, mismatchErr (byteMismatch) already correctly
+  // identifies this as "a different record occupies this path", and this
+  // check must not steal that classification merely because an ordinary
+  // content difference also touches ctimeNs. This exists for the NARROWER
+  // case bytes alone can never catch: a rewrite-in-place (same inode)
+  // FOLLOWED BY an exact-bytes restoration, indistinguishable from "never
+  // touched" by content alone -- only comparing metadata against the
+  // ORIGINAL publish-time snapshot (not just this call's own internal
+  // st2/lst below, which only prove consistency across their OWN brief
+  // window) can. When the caller supplies the FULL original snapshot
+  // (mode/uid/gid/nlink/ctimeNs/mtimeNs, not just dev/ino --
+  // `publishNoClobber`'s own internal temp-identity binding still passes
+  // only dev/ino and is unaffected), a genuine rewrite changes at least
+  // ctimeNs even if the final bytes are restored to identical.
+  if (!mismatchErr && expectedIdentity && expectedIdentity.mode !== undefined && (
+    st.mode !== expectedIdentity.mode || st.uid !== expectedIdentity.uid || st.gid !== expectedIdentity.gid
+    || st.nlink !== expectedIdentity.nlink || st.ctimeNs !== expectedIdentity.ctimeNs || st.mtimeNs !== expectedIdentity.mtimeNs
+  )) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'target metadata does not match its own original publish-time snapshot (rewritten since, even though current bytes match): ' + targetPath);
+  }
+
   if (isReplacePostRenameFaultActive('fstat2')) throw new Error('injected fstat2 fault');
   const st2 = fs.fstatSync(fd, { bigint: true });
   if (st2.dev !== st.dev || st2.ino !== st.ino || st2.nlink !== st.nlink || st2.size !== st.size || st2.mode !== st.mode || st2.uid !== st.uid || st2.gid !== st.gid || st2.ctimeNs !== st.ctimeNs || st2.mtimeNs !== st.mtimeNs) {
@@ -1140,6 +1274,66 @@ function assertDurableTargetMatches(fd, targetPath, expectedBytes, expectedIdent
   // Identity/path proven STABLE throughout the read -- ONLY NOW may a genuine byte/size
   // mismatch be surfaced as a race-loss candidate.
   if (mismatchErr) throw mismatchErr;
+  // Codex NO-GO round 17 (P1): return the EXACT snapshot this call already
+  // triple-proved stable (st == st2 == lst, all just asserted above) so a
+  // caller building a receipt uses THIS accredited value directly, instead of
+  // performing its own separate, later fstat on the same fd -- which would
+  // reopen a fresh, unvalidated window between this function's own proof and
+  // that subsequent read (the exact class of gap this function exists to
+  // close in the first place).
+  return st;
+}
+
+/**
+ * Codex NO-GO round 15: post-publish re-verification that re-serializes a
+ * PARSED object and compares digests (round 14's own "byte-exact" claim)
+ * proves nothing about raw bytes OR inode identity -- two files with the
+ * same JSON VALUES but different whitespace/key-order canonicalize to the
+ * same string regardless, and a brand-new file carrying byte-identical
+ * content but a DIFFERENT inode is indistinguishable from the genuine one by
+ * digest alone. This reuses `assertDurableTargetMatches` -- the SAME
+ * fd-bound comparator `publishNoClobber` already trusts for its own
+ * post-link revalidation -- against a `receipt` `publishNoClobber` itself
+ * returned at publish time (`{path,dev,ino,digest}`), so the caller never
+ * reconstructs an "expected" value; it compares live fd-bound bytes and
+ * identity directly against what THIS invocation is proven to have written.
+ */
+function assertArtifactMatchesReceipt(artifactPath, receipt, expectedBytes) {
+  let fd;
+  try {
+    fd = fs.openSync(artifactPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  } catch (err) {
+    if (err && err.code === 'ELOOP') {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'artifact is a symlink (rejected at post-publish re-verification): ' + artifactPath);
+    }
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'artifact vanished before post-publish re-verification: ' + artifactPath + ' (' + (err && err.message) + ')');
+  }
+  try {
+    try {
+      // Codex NO-GO round 16 (P1): the FULL receipt is passed through (not
+      // just dev/ino) so assertDurableTargetMatches also proves mode/uid/gid/
+      // nlink/ctimeNs/mtimeNs are unchanged since the ORIGINAL publish moment
+      // -- catching a rewrite-then-restore-exact-bytes attack on the SAME
+      // inode that a dev/ino-only comparison would miss entirely.
+      assertDurableTargetMatches(fd, artifactPath, expectedBytes, receipt);
+    } catch (err) {
+      // assertDurableTargetMatches is shared with publishNoClobber's own
+      // idempotent-path revalidation and throws its OWN generic vocabulary
+      // (DURABILITY_UNPROVEN for a byte/size mismatch). This file's own
+      // established convention for "a different, otherwise-valid record
+      // occupies this path" is AUTHORITY_INVALID (matching every other
+      // substitution/mismatch check in cmdCancel/cmdAcceptResult/cmdClaim
+      // etc.) -- remap ONLY the byte-mismatch case; identity/mode/owner/nlink
+      // failures are already correctly SECURITY_INVALID/DURABILITY_UNPROVEN
+      // and propagate unchanged.
+      if (err && err.byteMismatch) {
+        throw new CliError('INVALID', 'AUTHORITY_INVALID', 'artifact at ' + artifactPath + ' is not byte-identical to what this invocation published');
+      }
+      throw err;
+    }
+  } finally {
+    try { fs.closeSync(fd); } catch (e) { /* best-effort cleanup */ }
+  }
 }
 
 function publishReplace(targetPath, bytes) {
@@ -1157,6 +1351,7 @@ function publishReplace(targetPath, bytes) {
   } catch (err) {
     throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'refresh temp could not be created exclusively: ' + (err && err.message));
   }
+  let tempIdentity;
   try {
     // Section 0.3: force exact 0600 via fchmod (never trust open()'s mode argument
     // alone, which is subject to the process umask) before any byte is written.
@@ -1168,6 +1363,15 @@ function publishReplace(targetPath, bytes) {
       throw injected;
     }
     fs.fsyncSync(tempFd);
+    // Codex NO-GO round 17 (P1): capture OUR OWN temp's identity while its fd
+    // is still open and trusted -- mirrors publishNoClobber's own tempIdentity
+    // discipline (line ~941) exactly. renameSync preserves the inode (dev/ino
+    // unchanged across a same-filesystem rename), so this lets the post-rename
+    // revalidation below bind the renamed target back to THIS SPECIFIC inode,
+    // never merely "some byte-matching regular file" -- without it, a swap of
+    // targetPath for a byte-identical foreign file between rename and
+    // revalidation would go completely undetected.
+    tempIdentity = fs.fstatSync(tempFd, { bigint: true });
   } catch (err) {
     try { fs.closeSync(tempFd); } catch (e) { /* already closed */ }
     try { fs.unlinkSync(tempPath); } catch (e) { /* best-effort cleanup */ }
@@ -1208,11 +1412,32 @@ function publishReplace(targetPath, bytes) {
     }
     // POST_DIR_FSYNC: revalidate the durable target with the shared fd-bound comparator (the
     // fstat1/read/fstat2/lstat fault seams live INSIDE the comparator, at the real steps).
+    if (isReplacePostRenameFaultActive('swap-same-bytes')) {
+      // Test-only (Codex HARD NO-GO post round 17, repro for the tempIdentity
+      // binding this same round added): simulate an attacker replacing the
+      // just-renamed target with a FRESH file carrying byte-identical
+      // content -- a different inode -- in the window between rename and
+      // this revalidation opening it. Isolates that the tempIdentity dev/ino
+      // binding (not merely a byte comparison) is what rejects the foreign
+      // inode.
+      try { fs.unlinkSync(targetPath); } catch (e) { /* best-effort test setup */ }
+      fs.writeFileSync(targetPath, bytes, { mode: 0o600 });
+    }
     if (isReplacePostRenameFaultActive('open')) throw new Error('injected post-rename open fault');
     const checkFd = fs.openSync(targetPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
     let revalErr = null;
+    let publishedSt = null;
     try {
-      assertDurableTargetMatches(checkFd, targetPath, bytes);
+      // Codex NO-GO round 17 (P1, two fixes): (1) bind back to the ORIGINAL
+      // temp's own captured inode (tempIdentity) -- previously omitted here
+      // entirely, unlike publishNoClobber's own equivalent call, so this
+      // revalidation could only prove "some byte-matching regular file exists
+      // at targetPath", never that it is the SPECIFIC inode renameSync just
+      // created. (2) use the comparator's OWN return value for the receipt
+      // instead of a separate, later fstat call on the same fd -- round 16's
+      // own "captured immediately after" fix was still a distinct,
+      // unvalidated re-read; see assertDurableTargetMatches's own comment.
+      publishedSt = assertDurableTargetMatches(checkFd, targetPath, bytes, { dev: tempIdentity.dev, ino: tempIdentity.ino });
     } catch (err) {
       revalErr = err;
     }
@@ -1245,7 +1470,12 @@ function publishReplace(targetPath, bytes) {
       throw revalErr;
     }
     if (closeErr) throw closeErr;
-    return targetPath; // COMPLETE: rename credited durable + fully revalidated.
+    return {
+      path: targetPath, dev: publishedSt.dev, ino: publishedSt.ino,
+      mode: publishedSt.mode, uid: publishedSt.uid, gid: publishedSt.gid,
+      nlink: publishedSt.nlink, ctimeNs: publishedSt.ctimeNs, mtimeNs: publishedSt.mtimeNs,
+      digest: sha256Buffer(bytes),
+    }; // COMPLETE: rename credited durable + fully revalidated.
   } catch (err) {
     // Residual: after the rename, the PRIMARY truth is that the newly-visible target was NOT
     // accredited durable -> ALWAYS a fresh poisoned DURABILITY_UNPROVEN, with the original
@@ -1429,7 +1659,26 @@ function classifyDurableRead(artifactPath, policy) {
       obj = parseJsonOrSchemaInvalid(bytes);
       if (policy.shape) policy.shape(obj, artifactPath);
     }
-    return { state: DURABLE_PRESENT, bytes: bytes, obj: obj };
+    // Codex NO-GO round 12: st1/st2 are already proven identical (the drift
+    // check above) and are fd-bound (fstatSync on an open, O_NOFOLLOW fd --
+    // never a path-based lstat a rename/replace could TOCTOU around). Surfaced
+    // here, additively, so a caller needing genuine fd-bound identity (not
+    // just content digest, which a byte-identical replacement would not
+    // change) can compare dev/ino across two separate reads of the same path.
+    //
+    // Codex NO-GO round 13: dev/ino alone still misses an IN-PLACE rewrite
+    // that restores the exact original bytes before a later check runs (same
+    // inode throughout, so dev/ino never differ, yet the file was genuinely
+    // mutated in between). The FULL snapshot this function already computes
+    // and compares (st1 vs st2, the drift check just above) is surfaced here
+    // too -- nlink/size/mode/uid/gid/ctimeNs/mtimeNs -- so a caller can freeze
+    // and later re-compare the SAME complete snapshot this reader already
+    // trusts, not a hand-picked subset of it.
+    return {
+      state: DURABLE_PRESENT, bytes: bytes, obj: obj,
+      dev: st1.dev, ino: st1.ino, nlink: st1.nlink, size: st1.size,
+      mode: st1.mode, uid: st1.uid, gid: st1.gid, ctimeNs: st1.ctimeNs, mtimeNs: st1.mtimeNs,
+    };
   } finally {
     try { fs.closeSync(fd); } catch (e) { /* already closed */ }
   }
@@ -1485,10 +1734,28 @@ function readJsonDurableOptional(artifactPath, policy) {
  * content digest from ONE read, so no caller ever re-hashes a coordination record by path
  * (`sha256File` on a record is a TOCTOU + a second unaccredited read). Absence and PENDING
  * (nlink==2) STOP exactly like readDurableBytes.
+ *
+ * Codex NO-GO round 12: calls classifyDurableRead directly (not through
+ * readDurableBytes, which discards it) so dev/ino -- the fd-bound identity a
+ * content digest alone cannot prove (a byte-identical replacement changes
+ * neither content nor digest) -- reaches every caller of this function
+ * additively, alongside the existing {bytes, obj, digest} shape.
+ *
+ * Codex NO-GO round 13: the FULL stat snapshot (nlink/size/mode/uid/gid/
+ * ctimeNs/mtimeNs), not just dev/ino, is surfaced the same way -- dev/ino
+ * alone misses an in-place rewrite that restores the original bytes before a
+ * later comparison runs (same inode throughout; ctimeNs/mtimeNs would still
+ * differ).
  */
 function readDurableRecord(artifactPath, policy) {
-  const bytes = readDurableBytes(artifactPath, policy);
-  return { bytes: bytes, obj: parseJsonOrSchemaInvalid(bytes), digest: sha256Buffer(bytes) };
+  policy = policy || {};
+  const r = classifyDurableRead(artifactPath, policy);
+  if (r.state === DURABLE_ABSENT) throw absentDurableStop(artifactPath, policy);
+  if (r.state === DURABLE_PENDING) throw pendingDurableStop(artifactPath);
+  return {
+    bytes: r.bytes, obj: parseJsonOrSchemaInvalid(r.bytes), digest: sha256Buffer(r.bytes),
+    dev: r.dev, ino: r.ino, nlink: r.nlink, size: r.size, mode: r.mode, uid: r.uid, gid: r.gid, ctimeNs: r.ctimeNs, mtimeNs: r.mtimeNs,
+  };
 }
 
 /**
@@ -1846,8 +2113,12 @@ function testRendezvous(txnDir, name) {
 // authority lives in this module-private WeakMap -- nothing is observable on the token, so
 // it cannot be forged (a plain/cloned object is simply absent from the map), mutated
 // (frozen, no metadata), or replayed after release (`active` flips false). The record binds
-// the canonical txnDir/lockDir plus the .lock directory's dev/ino at acquisition, so a
-// later use can prove the SAME directory still stands (a deleted+recreated .lock differs).
+// the canonical txnDir/lockDir STRINGS plus BOTH the .lock directory's own dev/ino AND (Codex
+// NO-GO round 11 P0(2)) txnDir's OWN dev/ino at acquisition -- a COHERENT before/after pair
+// (round 12), not merely stamped once after the fact -- so a later use can prove the SAME
+// directories still stand: a deleted+recreated .lock differs, and a renamed/rebound txnDir
+// itself differs, both checked together by assertLockedScopeIdentity (round 12; supersedes
+// the txnDir-only assertLockedTxnDirIdentity from round 11).
 const lockRegistry = new WeakMap();
 
 // DUR-J item 3: errors that POISON the lock (a publishReplace past the rename that could not
@@ -1875,13 +2146,87 @@ function isValidLockTokenFor(token, artifactPath) {
   const rec = lockRegistry.get(token);
   if (!rec || rec.active !== true) return false;
   if (!isPathWithin(rec.canonicalTxnDir, artifactPath)) return false;
+  // Codex NO-GO round 16 (P0): see assertLockedScopeIdentity's own matching
+  // comment -- txnDir's own identity survives a whole-subtree move, so the
+  // ancestor chain must be re-walked here too, not just once at acquisition.
+  try {
+    assertAncestorChainConfined(rec.coordRoot, rec.canonicalTxnDir);
+  } catch (err) {
+    return false;
+  }
   let st;
   try {
     st = fs.lstatSync(rec.canonicalLockDir, { bigint: true });
   } catch (err) {
     return false; // the .lock we hold is gone -> the token no longer proves exclusion.
   }
-  return st.isDirectory() && st.dev === rec.lockDev && st.ino === rec.lockIno;
+  // Codex NO-GO round 14: mode/uid/gid checked too, for the SAME reason
+  // assertLockedScopeIdentity checks them -- a permission/ownership change is
+  // genuine tampering even when dev/ino never move.
+  return st.isDirectory() && st.dev === rec.lockDev && st.ino === rec.lockIno
+    && st.mode === rec.lockMode && st.uid === rec.lockUid && st.gid === rec.lockGid;
+}
+
+/**
+ * Codex NO-GO round 12: assertLockedTxnDirIdentity (round 11) checked ONLY
+ * txnDir itself -- if `.lock` is deleted and recreated (a fresh, different
+ * inode) while txnDir itself is left UNCHANGED, that check alone would not
+ * catch it: another process could legitimately `mkdir` a NEW `.lock` in the
+ * gap and both processes would believe they hold the exclusive lock
+ * simultaneously. `isValidLockTokenFor` already re-verifies `.lock`'s own
+ * identity, but only at the ONE call site gating a mutable read
+ * (`immutablePath:false`) -- not at the general read/publish points inside
+ * `cmdCancel`/`cmdAcceptResult`. This merges both checks into the ONE thing
+ * every read/write under a held lock must pass: txnDir AND `.lock` are BOTH
+ * still the exact directories this token was minted for. Throws
+ * SECURITY_INVALID (an identity change) or DURABILITY_UNPROVEN (vanished/
+ * unstattable) -- never silently proceeds. Call immediately before reading
+ * and immediately before AND after publishing under a held lock, never once
+ * and reused.
+ */
+function assertLockedScopeIdentity(lockToken) {
+  const rec = (lockToken && typeof lockToken === 'object') ? lockRegistry.get(lockToken) : undefined;
+  if (!rec || rec.active !== true) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'assertLockedScopeIdentity called with a non-authentic or already-released transition-lock token');
+  }
+  // Codex NO-GO round 16 (P0, empirically reproduced): txnDir's own
+  // dev/ino/mode/uid/gid below stay UNCHANGED if the ENTIRE subtree is moved
+  // as a unit (rename preserves inode) and a symlink is planted at the
+  // ORIGINAL ancestor location pointing to the new location -- every check
+  // in this function would pass while the transaction has genuinely escaped
+  // coordRoot. Re-walking the ancestor chain on EVERY call (not just once at
+  // acquisition) is the only way to catch this for the full lifetime of the
+  // lock, not only its first instant.
+  assertAncestorChainConfined(rec.coordRoot, rec.canonicalTxnDir);
+  let txnSt;
+  try {
+    txnSt = fs.lstatSync(rec.canonicalTxnDir, { bigint: true });
+  } catch (err) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock parent directory vanished while the lock was held: ' + rec.canonicalTxnDir);
+  }
+  // Codex NO-GO round 13: mode/uid/gid checked too, alongside dev/ino --
+  // an ownership or permission change (e.g. made world-writable, chowned to
+  // a different user) is genuine tampering even when dev/ino never move.
+  // nlink/size/ctimeNs/mtimeNs are deliberately NOT compared here: a
+  // directory's own nlink/size/ctime legitimately change the moment a child
+  // is created or removed (e.g. .lock itself, inside txnDir) -- unlike
+  // assertRequestIdentityMatches's full-snapshot comparison for the regular
+  // FILE request.json (which has no such expected-child-mutation exception),
+  // comparing them here would misfire on this system's own normal operation.
+  if (!txnSt.isDirectory() || txnSt.dev !== rec.txnDirDev || txnSt.ino !== rec.txnDirIno
+      || txnSt.mode !== rec.txnDirMode || txnSt.uid !== rec.txnDirUid || txnSt.gid !== rec.txnDirGid) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock parent directory identity changed while the lock was held: ' + rec.canonicalTxnDir);
+  }
+  let lockSt;
+  try {
+    lockSt = fs.lstatSync(rec.canonicalLockDir, { bigint: true });
+  } catch (err) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', '.lock directory vanished while the lock was held: ' + rec.canonicalLockDir);
+  }
+  if (!lockSt.isDirectory() || lockSt.dev !== rec.lockDev || lockSt.ino !== rec.lockIno
+      || lockSt.mode !== rec.lockMode || lockSt.uid !== rec.lockUid || lockSt.gid !== rec.lockGid) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', '.lock directory identity changed while the lock was held (deleted/recreated, or its own ownership/permissions changed): ' + rec.canonicalLockDir);
+  }
 }
 
 /**
@@ -1892,42 +2237,255 @@ function isValidLockTokenFor(token, artifactPath) {
  * proven BEFORE a usable token is minted. If that barrier cannot be proven, the .lock is
  * LEFT in place as a durable/unproven orphan (a later actor times out + STOPs, never
  * silently reclaims it) and acquisition fails closed with DURABILITY_UNPROVEN.
+ *
+ * Codex NO-GO round 13: this function used to unconditionally
+ * `fs.mkdirSync(canonicalTxnDir, {recursive:true})` FIRST, before even its own
+ * baseline stat -- a mutating call that could create or traverse through a
+ * WRONG path (e.g. through a since-tampered ancestor) before any identity
+ * check ever ran, and the round-12 rendezvous fired only AFTER this mutation
+ * had already happened, so it never actually exercised this window. Verified
+ * this round, by tracing every one of this file's 7 withLock callers plus
+ * request.json's own first publish (cmdPublishRequest, which creates txnDir
+ * via its OWN publishNoClobber call -- never through withLock/acquireLock at
+ * all): NO legitimate caller ever needs acquireLock to create txnDir --
+ * every command operating under a lock does so on an ALREADY-EXISTING
+ * transaction. The mkdir is removed entirely; the first operation is now a
+ * pure, non-mutating stat that fails closed (never creates anything) if
+ * txnDir does not already exist -- closing this class of gap systemically
+ * for all 7 callers, not just the 2 with their own preflight.
  */
-function acquireLock(txnDir) {
+/**
+ * Codex NO-GO round 15: acquireLock's own before/after coherence check only
+ * ever proved txnDir's OWN identity was stable -- it never proved anything
+ * about the ANCESTOR directories between `root` and `txnDir` (e.g. the
+ * wave/plan-digest/transactions path segments). `path.resolve` is purely
+ * lexical; a symlinked ancestor is silently followed by every fs call this
+ * function and its caller make, never rejected. Mirrors cmdPublishBlob's own
+ * established per-component symlink-rejecting walk (a proven pattern in this
+ * file, not a new mechanism) -- unlike that walk's use for a staging root
+ * (whose leaf entries may not exist yet), every one of acquireLock's 7
+ * callers operates on an ALREADY-EXISTING transaction (created earlier by
+ * cmdPublishRequest's own, separate publishNoClobber call), so requiring
+ * every ancestor component to already exist is the correct precondition
+ * here, not an over-strict borrowed assumption.
+ */
+function assertAncestorChainConfined(root, targetDir) {
+  const resolvedRoot = path.resolve(root);
+  const resolvedTarget = path.resolve(targetDir);
+  const rel = path.relative(resolvedRoot, resolvedTarget);
+  if (rel === '' || rel === '.' || rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock directory is not lexically confined under its own coordination root: ' + resolvedTarget);
+  }
+  let lst;
+  try {
+    lst = fs.lstatSync(resolvedRoot);
+  } catch (err) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root does not exist or could not be stat-verified: ' + resolvedRoot);
+  }
+  if (lst.isSymbolicLink()) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root is a symlink (rejected): ' + resolvedRoot);
+  }
+  let walked = resolvedRoot;
+  for (const seg of rel.split(path.sep)) {
+    walked = path.join(walked, seg);
+    let segLst;
+    try {
+      segLst = fs.lstatSync(walked);
+    } catch (err) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock ancestor path component does not exist or could not be stat-verified: ' + walked);
+    }
+    if (segLst.isSymbolicLink()) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock ancestor path component is a symlink (rejected): ' + walked);
+    }
+  }
+}
+
+function acquireLock(txnDir, coordRoot) {
   const canonicalTxnDir = path.resolve(txnDir);
+  const canonicalCoordRoot = path.resolve(coordRoot);
   const lockDir = path.join(canonicalTxnDir, '.lock');
-  fs.mkdirSync(canonicalTxnDir, { recursive: true });
+  // Codex NO-GO round 15: the ancestor walk brackets the SAME acquisition
+  // window the existing txnDir-identity before/after check already does --
+  // once before the mkdir(.lock) loop starts polling, once after acquiring --
+  // so a symlink swapped into an ancestor DURING the wait is caught too, not
+  // only one observed before the wait began.
+  assertAncestorChainConfined(canonicalCoordRoot, canonicalTxnDir);
+  // Codex NO-GO round 12: a COHERENT snapshot of txnDir itself, taken BEFORE
+  // the mkdir(.lock) loop below starts polling (which can run for up to
+  // LOCK_MAX_WAIT_MS). A stat taken only AFTER acquiring -- round 11's own
+  // fix -- could already be observing a directory that was swapped WHILE
+  // this loop was waiting, silently treating the wrong directory as the one
+  // this acquisition genuinely began against. This is now the FIRST thing
+  // acquireLock ever does -- no mutation precedes it.
+  let txnStBefore;
+  try {
+    txnStBefore = fs.lstatSync(canonicalTxnDir, { bigint: true });
+  } catch (err) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock parent directory does not exist or could not be stat-verified before acquisition (acquireLock never creates it): ' + canonicalTxnDir);
+  }
+  if (!txnStBefore.isDirectory()) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock parent path is not a directory: ' + canonicalTxnDir);
+  }
+  // Deterministic test seam for the before/after coherence check itself (a
+  // fixed, generic name -- every acquireLock caller shares this one
+  // acquisition-time race, not a per-command concern like the read/publish
+  // seams elsewhere in this file). Now fires as the very first thing after
+  // the very first (non-mutating) operation -- genuinely exercising the
+  // full window this function's own docstring claims to protect.
+  testRendezvous(canonicalTxnDir, 'acquire-lock-before-mkdir-loop');
   const start = Date.now();
   for (;;) {
     try {
       fs.mkdirSync(lockDir);
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
+      // Codex NO-GO round 19 (evidence gap): a test that only observes "the
+      // contending process is alive and has produced no output yet" never
+      // proves it genuinely reached THIS branch, as opposed to still being
+      // somewhere earlier in its own preflight. Test-capability-gated,
+      // fixed-name marker (never touches production behavior) so a bats test
+      // can assert directly that this invocation observed a genuine EEXIST,
+      // not merely infer it from timing.
+      if (isTestCapability()) {
+        try { fs.writeFileSync(path.join(canonicalTxnDir, '.lock-contention-observed'), String(process.pid)); } catch (e) { /* best-effort test evidence only */ }
+      }
       if (Date.now() - start >= LOCK_MAX_WAIT_MS) {
         throw new CliError('TIMEOUT', 'DEADLINE_EXCEEDED', 'transition lock acquisition timed out: ' + lockDir);
       }
       sleepSync(LOCK_POLL_MS);
       continue;
     }
-    // mkdir succeeded -> prove the acquisition barrier (mkdir precedes fsync by construction).
-    if (!fsyncDir(canonicalTxnDir, 'lock-acquire')) {
-      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock acquisition barrier could not be proven durable; .lock retained as a durable orphan: ' + lockDir + fsyncDirCauseSuffix());
+    // Codex NO-GO round 16 (P0): a path-based chmodSync(lockDir, ...) here is
+    // its own TOCTOU -- between this mkdirSync succeeding and a chmod BY
+    // PATH, .lock could be replaced by a symlink and the chmod would silently
+    // affect whatever THAT resolves to, not the directory we just created;
+    // only a later lstat would catch the substitution, by which point the
+    // chmod already landed somewhere foreign. fd-bound open (O_NOFOLLOW,
+    // rejecting a symlink at open) + fchmod + fstat via that SAME fd binds
+    // every one of these operations to the EXACT inode mkdirSync just
+    // created, with no path re-resolution in between -- mirroring this
+    // file's own established discipline for every FILE writer (open once,
+    // fchmod via the fd, never trust a by-path chmod).
+    //
+    // Codex NO-GO round 17 (P1): O_NOFOLLOW only rejects a SYMLINK substitute
+    // -- it does nothing to stop a real directory or file planted at this
+    // exact path in the narrow gap between mkdirSync returning and the open
+    // call below; the open would simply succeed against that substitute, and
+    // fchmod/fstat would act on it. lockStAfterMkdir is captured as the very
+    // next statement after mkdirSync succeeds (the tightest binding
+    // achievable -- no primitive here returns an fd directly from mkdir) and
+    // is compared against the opened fd's own identity below, mirroring this
+    // SAME function's own txnStBefore/txnStAfter coherence-check pattern:
+    // shrink the window as far as possible, then PROVE across it rather than
+    // trusting whatever the subsequent open happens to see.
+    let lockStAfterMkdir;
+    try {
+      lockStAfterMkdir = fs.lstatSync(lockDir, { bigint: true });
+    } catch (err) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock directory could not be stat-verified immediately after this invocation\'s own mkdirSync: ' + lockDir);
+    }
+    if (lockStAfterMkdir.isSymbolicLink()) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock directory is a symlink immediately after this invocation\'s own mkdirSync: ' + lockDir);
+    }
+    // Codex NO-GO round 17 (P1): deterministic test seam for the
+    // lstat-to-open window, mirroring this file's other rendezvous points --
+    // lets a bats test genuinely pause a real, in-flight acquisition right
+    // after the genuine post-mkdir snapshot above and swap lockDir for a
+    // non-symlink substitute directory before the open+comparison below ever
+    // runs (placed AFTER lockStAfterMkdir, not before it, so the captured
+    // baseline is the genuine mkdir'd directory, not whatever a test's own
+    // tampering already put there).
+    testRendezvous(canonicalTxnDir, 'acquire-lock-post-mkdir-pre-verify');
+    let lockFd;
+    try {
+      lockFd = fs.openSync(lockDir, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    } catch (err) {
+      if (err && err.code === 'ELOOP') {
+        throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock directory is a symlink immediately after this invocation\'s own mkdirSync (rejected at open): ' + lockDir);
+      }
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock directory could not be opened immediately after acquisition: ' + lockDir);
     }
     let st;
     try {
-      st = fs.lstatSync(lockDir, { bigint: true });
-    } catch (err) {
-      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock directory could not be stat-verified after acquisition: ' + lockDir);
+      const openedSt = fs.fstatSync(lockFd, { bigint: true });
+      if (openedSt.dev !== lockStAfterMkdir.dev || openedSt.ino !== lockStAfterMkdir.ino) {
+        throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock directory was substituted between this invocation\'s own mkdirSync and its immediately-following open (dev/ino mismatch): ' + lockDir);
+      }
+      fs.fchmodSync(lockFd, 0o700);
+      st = fs.fstatSync(lockFd, { bigint: true });
+    } finally {
+      try { fs.closeSync(lockFd); } catch (e) { /* best-effort cleanup */ }
     }
     if (!st.isDirectory()) {
       throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock path is not a directory after acquisition: ' + lockDir);
     }
+    if (process.platform !== 'win32' && (st.mode & 0o777n) !== 0o700n) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock directory is not owner-only 0700 immediately after this invocation\'s own fd-bound fchmod: ' + lockDir);
+    }
+    // mkdir succeeded -> prove the acquisition barrier (mkdir precedes fsync by construction).
+    if (!fsyncDir(canonicalTxnDir, 'lock-acquire')) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock acquisition barrier could not be proven durable; .lock retained as a durable orphan: ' + lockDir + fsyncDirCauseSuffix());
+    }
+    let txnStAfter;
+    try {
+      txnStAfter = fs.lstatSync(canonicalTxnDir, { bigint: true });
+    } catch (err) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock parent directory could not be stat-verified after acquisition: ' + canonicalTxnDir);
+    }
+    if (!txnStAfter.isDirectory()) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock parent path is not a directory after acquisition: ' + canonicalTxnDir);
+    }
+    // Codex NO-GO round 15: re-verify the ancestor chain too, not just
+    // txnDir's own identity -- a symlink swapped into an ancestor DURING the
+    // mkdir(.lock) polling wait would otherwise go undetected by the
+    // before-only check above.
+    assertAncestorChainConfined(canonicalCoordRoot, canonicalTxnDir);
+    // Codex NO-GO round 12: the BEFORE/AFTER pair must be COHERENT -- if
+    // txnDir was swapped WHILE this loop polled for .lock, the .lock we just
+    // created lives inside a directory that is NOT the one this acquisition
+    // began against; the token would be meaningless for the caller's actual
+    // txnDir. `.lock` is deliberately LEFT in place here (this codebase's own
+    // established convention -- see the fsyncDir-failure case just above --
+    // is to never attempt automatic cleanup of a `.lock` that already exists
+    // on disk; a human resolves the orphan).
+    //
+    // Codex NO-GO round 14: this comparison used to check dev/ino only, while
+    // the token below stored txnStAfter's mode/uid/gid as the baseline
+    // going forward -- a permission/ownership change DURING this exact
+    // acquisition window (between txnStBefore and txnStAfter) would never be
+    // caught here, and would be SILENTLY ADOPTED as the new baseline for
+    // every later assertLockedScopeIdentity call, exactly the "adopt instead
+    // of reject" mistake already corrected twice this session for
+    // cmdCancel/cmdAcceptResult and cmdAwaitResult. Compares the SAME full
+    // field set the token will go on to store, so nothing captured below was
+    // ever adopted without first being checked against what came before it.
+    if (txnStAfter.dev !== txnStBefore.dev || txnStAfter.ino !== txnStBefore.ino
+        || txnStAfter.mode !== txnStBefore.mode || txnStAfter.uid !== txnStBefore.uid || txnStAfter.gid !== txnStBefore.gid) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock parent directory identity changed during acquisition (before/after snapshot mismatch): ' + canonicalTxnDir);
+    }
     const token = Object.freeze({});
+    // Codex NO-GO round 13: mode/uid/gid captured for BOTH directories too --
+    // see assertLockedScopeIdentity's own doc comment for why nlink/size/
+    // ctimeNs/mtimeNs are deliberately EXCLUDED for directories (unlike the
+    // full snapshot request.json's own identity check uses): a directory's
+    // nlink/size/ctime legitimately change the moment a child (e.g. .lock
+    // itself, inside txnDir) is created or removed -- comparing them would
+    // misfire on this function's own, expected behavior, not on tampering.
     lockRegistry.set(token, {
       canonicalTxnDir: canonicalTxnDir,
       canonicalLockDir: lockDir,
-      lockDev: st.dev, // BigInt
-      lockIno: st.ino, // BigInt
+      // Codex NO-GO round 16 (P0, empirically reproduced): stored so
+      // assertLockedScopeIdentity/isValidLockTokenFor/releaseLock can ALL
+      // re-verify the ancestor chain for the ENTIRE lifetime of the lock, not
+      // only once here at acquisition. txnDir's own dev/ino/mode/uid/gid stay
+      // UNCHANGED under a `mv` of the whole subtree (rename preserves inode)
+      // -- moving the tree outside coordRoot and planting a symlink at the
+      // original ancestor location back to it passes every existing identity
+      // check while genuinely escaping confinement; only re-walking the
+      // ancestor chain itself, every time, catches this.
+      coordRoot: canonicalCoordRoot,
+      lockDev: st.dev, lockIno: st.ino, lockMode: st.mode, lockUid: st.uid, lockGid: st.gid, // BigInt/BigInt/BigInt/BigInt/BigInt
+      txnDirDev: txnStAfter.dev, txnDirIno: txnStAfter.ino, txnDirMode: txnStAfter.mode, txnDirUid: txnStAfter.uid, txnDirGid: txnStAfter.gid,
       active: true,
     });
     return token;
@@ -1948,6 +2506,20 @@ function releaseLock(lockToken) {
   if (!rec || rec.active !== true) {
     throw new CliError('INVALID', 'AUTHORITY_INVALID', 'releaseLock called with a non-authentic or already-released transition-lock token (no filesystem change made)');
   }
+  // Codex NO-GO round 16 (P0): see assertLockedScopeIdentity's own matching
+  // comment -- a whole-subtree move preserves txnDir's own identity, so a
+  // release must re-walk the ancestor chain too, BEFORE any disk mutation
+  // (mirrors this function's own "authenticate before mutating" discipline).
+  // A compromised ancestor here means whatever this invocation just did
+  // happened against a transaction that has escaped coordRoot -- revoking
+  // and refusing the release (never rmdir) is the only safe response, not
+  // silently completing what LOOKS like ordinary cleanup.
+  try {
+    assertAncestorChainConfined(rec.coordRoot, rec.canonicalTxnDir);
+  } catch (err) {
+    rec.active = false;
+    throw isPoisoned(err) ? err : markPoisoned(err);
+  }
   // Prove the .lock we hold is still the SAME directory before removing it -- never rmdir a
   // directory that was deleted+recreated (a different inode) under us.
   let st;
@@ -1957,7 +2529,11 @@ function releaseLock(lockToken) {
     rec.active = false;
     throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock directory vanished before release: ' + rec.canonicalLockDir);
   }
-  if (!st.isDirectory() || st.dev !== rec.lockDev || st.ino !== rec.lockIno) {
+  // Codex NO-GO round 14: mode/uid/gid checked too, consistent with
+  // assertLockedScopeIdentity/isValidLockTokenFor -- one joint guarantee
+  // across every place this file authenticates a lock token's own .lock.
+  if (!st.isDirectory() || st.dev !== rec.lockDev || st.ino !== rec.lockIno
+      || st.mode !== rec.lockMode || st.uid !== rec.lockUid || st.gid !== rec.lockGid) {
     rec.active = false;
     throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'transition lock directory identity changed before release: ' + rec.canonicalLockDir);
   }
@@ -1989,17 +2565,50 @@ function releaseLock(lockToken) {
  * re-throws. A POISONED failure (`err.lockPoisoned` -- a publishReplace that reached
  * POST_RENAME_UNPROVEN) LEAVES the .lock as a durable orphan so every later actor times
  * out + STOPs and never accepts the half-replaced record (item 7).
+ *
+ * Codex NO-GO round 14: assertLockedScopeIdentity used to be something ONLY
+ * cmdCancel/cmdAcceptResult remembered to call manually -- `validateActiveLeaseV1`,
+ * cmdLeaseHeartbeat/cmdClaim/cmdTakeover/cmdPublishResult (the other 5 of this
+ * file's 7 withLock callers) had no equivalent protection at all. It is now
+ * called HERE, by withLock itself, at every exit path -- systemic for all 7
+ * callers without any of them needing to change. Callers may still call it
+ * again at their own narrower points (immediately before/after a specific
+ * publish) for a tighter window; this baseline means even a caller that does
+ * nothing extra is no longer unprotected.
  */
-function withLock(txnDir, fn) {
-  const lockToken = acquireLock(txnDir);
+function withLock(txnDir, coordRoot, fn) {
+  const lockToken = acquireLock(txnDir, coordRoot);
+  // Baseline check immediately after acquisition: if this somehow fails
+  // (acquireLock's own coherence check just passed moments ago, so this is
+  // near-redundant defense-in-depth, not the primary catch), fn never runs
+  // and no release is ever attempted -- .lock is left behind exactly as any
+  // other unresolved acquisition-time failure already is.
+  assertLockedScopeIdentity(lockToken);
+  // Deterministic test seam, generic to EVERY withLock caller (a fixed name,
+  // like acquireLock's own 'acquire-lock-before-mkdir-loop' seam) -- proves
+  // the systemic protection this round added applies uniformly, including to
+  // the 5 callers (validateActiveLeaseV1, cmdLeaseHeartbeat, cmdClaim,
+  // cmdTakeover, cmdPublishResult) that have no scope-identity call of their
+  // own.
+  testRendezvous(txnDir, 'with-lock-post-acquire-pre-fn');
   let result;
   try {
     result = fn(lockToken);
   } catch (err) {
     if (isPoisoned(err)) throw err; // POST_RENAME_UNPROVEN etc. -> retain .lock as a durable orphan.
-    // Clean failure: release the lock so the txn is not wedged. If release ALSO fails, its
-    // DURABILITY_UNPROVEN is primary (a stuck/unproven lock is the more urgent fact) and the
-    // original cause is preserved for diagnosis.
+    // Codex NO-GO round 14: check scope BEFORE attempting to release -- if fn
+    // failed cleanly but the scope has since been compromised, releasing
+    // could succeed against a DIFFERENT reality than the one just detected
+    // (e.g. .lock itself still matches while txnDir does not). Never attempt
+    // release in that case; poison and retain instead.
+    try {
+      assertLockedScopeIdentity(lockToken);
+    } catch (scopeErr) {
+      throw markPoisoned(scopeErr);
+    }
+    // Clean failure, scope still coherent: release the lock so the txn is not wedged.
+    // If release ALSO fails, its DURABILITY_UNPROVEN is primary (a stuck/unproven lock
+    // is the more urgent fact) and the original cause is preserved for diagnosis.
     try {
       releaseLock(lockToken);
     } catch (releaseErr) {
@@ -2007,6 +2616,15 @@ function withLock(txnDir, fn) {
       throw releaseErr;
     }
     throw err;
+  }
+  // Codex NO-GO round 14: same check before the SUCCESS-path release -- fn
+  // completed without throwing, but if scope was compromised DURING its run,
+  // nothing fn did can be trusted; poison rather than release into an
+  // unproven state.
+  try {
+    assertLockedScopeIdentity(lockToken);
+  } catch (scopeErr) {
+    throw markPoisoned(scopeErr);
   }
   releaseLock(lockToken);
   return result;
@@ -2262,6 +2880,25 @@ function readCanonicalRequestRecord(requestPath, expectedRequestId, policy) {
   return rec;
 }
 
+/**
+ * The graph/role-policy/content_ref half of the full consult-v2 pipeline,
+ * extracted (Codex NO-GO round 9) so a caller that needs the request's own
+ * digest alongside its validated `obj` (`accreditCanonicalRequest` below) can
+ * reuse this deep validation without a second fd-bound read of the same
+ * file -- `validateConsultV2` itself is unchanged below, a thin wrapper
+ * around one read plus this.
+ */
+function validateConsultV2Fields(obj, planRoot) {
+  if (obj.content_ref) {
+    resolveContentRefOrThrow(planRoot, obj.content_ref);
+  }
+  validateRequestGraph(obj, planRoot);
+  if (obj.depth > obj.max_depth) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'depth exceeds max_depth');
+  }
+  assertRolePolicy(obj.source_role, obj.target_role);
+}
+
 /** Full `validate --kind consult-v2` pipeline: shape -> durability -> graph -> role-policy -> content_ref. */
 function validateConsultV2(artifactPath, coordRoot) {
   const expectedRequestId = path.basename(path.dirname(artifactPath));
@@ -2269,16 +2906,7 @@ function validateConsultV2(artifactPath, coordRoot) {
   // DUR-J item 4: durability + fd-bound identity are proven inside readCanonicalRequestRecord
   // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
   const planRoot = planRootFromArtifact(coordRoot, artifactPath);
-
-  if (obj.content_ref) {
-    resolveContentRefOrThrow(planRoot, obj.content_ref);
-  }
-
-  validateRequestGraph(obj, planRoot);
-  if (obj.depth > obj.max_depth) {
-    throw new CliError('INVALID', 'CORRELATION_INVALID', 'depth exceeds max_depth');
-  }
-  assertRolePolicy(obj.source_role, obj.target_role);
+  validateConsultV2Fields(obj, planRoot);
   return obj;
 }
 
@@ -2550,9 +3178,18 @@ const ACTIVE_LEASE_V1_FIELDS = {
  * the lock still held as the honest "unproven" signal. This validator must
  * never read past that signal and accept the visible lease as durable.
  */
-function validateActiveLeaseV1(artifactPath) {
+function validateActiveLeaseV1(artifactPath, coordRoot) {
   const txnDir = path.dirname(path.dirname(artifactPath));
-  return withLock(txnDir, (lockToken) => {
+  return withLock(txnDir, coordRoot, (lockToken) => {
+    // Codex NO-GO round 15 ("el lector mutable de lease" / "los cinco callers
+    // del lock"): withLock's own entry/exit checks bracket this ENTIRE
+    // callback, which cannot catch an ABA -- txnDir swapped away, this read
+    // happening against the substitute, txnDir swapped back before withLock's
+    // own post-fn check runs. A fresh scope check immediately before the read
+    // shrinks that window to the minimum (the same discipline every other
+    // hardened caller in this file now applies at its own sensitive
+    // operation, not just at withLock's own bracket).
+    assertLockedScopeIdentity(lockToken);
     const rec = readClosedRecord(artifactPath, ACTIVE_LEASE_V1_FIELDS, { immutablePath: false, lockToken: lockToken });
     return rec.obj;
   });
@@ -2819,6 +3456,35 @@ function assertAcceptedResultCorrelates(acceptedObj, txnDir, reqObj, coordRoot) 
   }
 }
 
+/**
+ * HARD NO-GO (round 18, REVERSED round 19): a narrower, request-digest-only
+ * correlator briefly lived here (assertAcceptedResultTiedToTransaction),
+ * reasoning that assertAcceptedResultCorrelates's stricter
+ * accepted_attempt_id/accepted_lease_epoch check was "the wrong fit" because
+ * a legitimate accepted-result for a NOW-SUPERSEDED attempt could still make
+ * the transaction terminal (PLAN.md ~L704's "terminal records are never
+ * deleted" framing). That premise does not survive PLAN's own transition
+ * table: `ACCEPTED` (~L698) has no outgoing transition -- takeover is only
+ * ever legal from `PUBLISHED`/`CLAIMED` (~L696/~L700) -- and cmdAcceptResult
+ * itself only ever durably constructs accepted-result.json after validating
+ * the candidate against the CURRENT authoritative attempt/epoch under the
+ * SAME lock a takeover uses. No PLAN-legal history ever produces a durable
+ * accepted-result.json whose accepted_attempt_id later diverges from a
+ * fresh resolveAuthoritativeAttempt() re-resolution -- there is no
+ * legitimate cross-attempt case to protect. The round-18 test that motivated
+ * the narrower check (a hand-planted accepted-result for a fabricated
+ * `other_aid`, with no takeover.json ever making it authoritative) is not an
+ * instance of that hypothetical case -- it is indistinguishable from a
+ * forged artifact, and the narrower check let it (and any forgery copying
+ * only the public, non-secret request_digest while fabricating attempt_id/
+ * candidate_result_path/result_digest/routing_policy_digest) through as
+ * ordinary "already accepted" rather than a rejected correlation.
+ * cmdCancel/cmdAcceptResult/cmdPublishResult now call the SAME
+ * assertAcceptedResultCorrelates every other authoritative surface
+ * (cmdAwaitResult, cmdTransactionAck -- AUTH-06/07) already uses: one
+ * authority contract, not two.
+ */
+
 // ─────────────────────────────────────────────────────────────────────────────
 // `ack` (record #8) -- field table PLAN.md ~L453-462
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2850,12 +3516,255 @@ const CANCEL_V1_FIELDS = {
   cancelled_by: { check: isNonEmptyString },
 };
 
-function validateCancelV1(artifactPath) {
-  const obj = readJsonDurable(artifactPath);
-  assertClosedShape(obj, CANCEL_V1_FIELDS);
-  // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
-  // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
-  return obj;
+/**
+ * FULL canonical accreditation for an ALREADY durably-read, shape-valid
+ * cancel/v1 object. Codex NO-GO round 8 -- supersedes round 6's version,
+ * which itself was accepted as still partial: it confirmed *lexical*
+ * confinement + minimum depth (>=3 segments) and correlated only against
+ * `basename(dirname(cancelPath))`, never the FULL, EXACT canonical geometry
+ * `<repo_id>/<wave_slug>/<plan_digest>/transactions/<request_id>/cancel.json`
+ * cross-checked against the containing request's OWN embedded identity --
+ * a self-consistent request.json+cancel.json pair planted under an
+ * arbitrary `<coordRoot>/junk/<id>/` passed. It also used
+ * `readCanonicalRequestRecord` (shape+ID only) for the containing request,
+ * not the FULL `validateConsultV2` graph/role-policy/content_ref pipeline,
+ * and accepted the bare `reason==='expired'` value alone as proof of
+ * `cancelled_by:'timeout-authority'` authority -- the reason a caller/writer
+ * declares is not itself evidence anything actually expired.
+ *
+ * This version, in order:
+ *  1. Exact canonical filename (`cancel.json`).
+ *  2. Ancestor-symlink-safe confinement (`assertGenuinelyConfinedUnderRoot`,
+ *     itself upgraded this round to realpath-resolve every existing
+ *     ancestor, not merely lexical `path.relative`).
+ *  3. EXACT canonical namespace geometry: the cancel.json's realpath-resolved
+ *     location relative to `coordRoot` must be precisely 5 segments,
+ *     `<repo_id>/<wave_slug>/<plan_digest>/transactions/<request_id>`, with
+ *     the literal `transactions` segment in position 3 -- not merely "deep
+ *     enough."
+ *  4. The CONTAINING request.json genuinely exists and passes the FULL
+ *     `validate --kind consult-v2` pipeline (shape, durability, identity,
+ *     root/parent/depth graph, role-policy, content_ref) -- not the lighter
+ *     shape+ID-only check every OPERATIONAL request read
+ *     (`readRequestForTxnOrCorrelationInvalid`) uses for claim/lease/
+ *     takeover/record-delivery/worker-stop/await-result, which stays
+ *     unchanged and out of this pass's scope.
+ *  5. The namespace segments recovered in step 3 (repo_id/wave_slug/
+ *     plan_digest/request_id) match the CONTAINING REQUEST's own embedded
+ *     `repo_id`/`wave_slug`/`plan_digest`/`request_id` fields exactly --
+ *     closes the "self-consistent pair under an arbitrary junk/<id>/
+ *     directory" gap: the directory name alone is never sufficient, it must
+ *     equal what the request itself actually claims.
+ *  6. cancel.json's own `request_id` matches that confirmed request.
+ *  7. `cancelled_by` authority: `'timeout-authority'` is accepted ONLY when
+ *     `reason==='expired'` AND the record's own `cancelled_at` is at or
+ *     after the request's own `expiry` (data-embedded proof the deadline had
+ *     genuinely passed at the moment of cancellation -- not a live wall-
+ *     clock re-check at READ time, which would let a too-early cancel
+ *     become falsely acceptable merely because enough real time has since
+ *     elapsed); otherwise the ACTUAL requester's own `requester_instance_id`
+ *     from the confirmed containing request.
+ * Shared by every cancel.json reader via the three `readCanonicalCancelRecord*`
+ * wrappers below (the ONLY sanctioned way to read a cancel.json in this file --
+ * see their own doc comment and the CANCEL-AUDIT-01 source-audit test).
+ */
+/**
+ * EXACT canonical namespace geometry for a transaction directory: ancestor-
+ * symlink-safe (realpath, not lexical), and precisely 5 segments
+ * `<repo_id>/<wave_slug>/<plan_digest>/transactions/<request_id>` below
+ * `coordRoot` -- never a bare "deep enough" minimum-depth check. Shared by
+ * `accreditCanonicalRequest` below and (transitively, through it)
+ * `accreditCancelRecord` -- ONE geometry computation, not one per artifact
+ * type, since request.json and cancel.json always share this same directory.
+ */
+function assertExactCanonicalGeometry(coordRoot, txnDir) {
+  let realCoordRoot;
+  try {
+    realCoordRoot = fs.realpathSync(coordRoot);
+  } catch (err) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination_root does not resolve: ' + coordRoot);
+  }
+  // A genuinely never-published transaction (a caller-supplied --request that
+  // does not resolve at all) must still surface as CORRELATION_INVALID once
+  // this geometry check passes and the actual request read is attempted --
+  // never SECURITY_INVALID merely because txnDir itself does not YET exist.
+  // realpathDeepestExisting resolves symlinks in whatever ancestor chain
+  // ACTUALLY exists (proving no ancestor escape) and lexically appends the
+  // (necessarily non-existent, hence un-symlinked) tail, exactly mirroring
+  // assertGenuinelyConfinedUnderRoot's own graceful-absence handling.
+  const { real: realExistingAncestor, tail } = realpathDeepestExisting(txnDir);
+  const realTxnDir = tail.length ? path.join(realExistingAncestor, ...tail) : realExistingAncestor;
+  const rel = path.relative(realCoordRoot, realTxnDir);
+  const segments = rel.split(path.sep).filter(Boolean);
+  if (rel === '' || rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel) || segments.length !== 5 || segments[3] !== 'transactions') {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'artifact is not stored at its exact canonical namespace path once symlinks are resolved: ' + txnDir);
+  }
+  return { repoId: segments[0], waveSlug: segments[1], planDigest: segments[2], requestId: segments[4] };
+}
+
+/**
+ * THE canonical accreditor for a request.json -- used directly by
+ * `cmdCancel`/`cmdAcceptResult`/`cmdAwaitResult` for their own `--request`,
+ * and reused by `accreditCancelRecord` below for its containing-request
+ * check. Codex NO-GO round 9: those three commands each only checked
+ * filename + confinement + MINIMUM depth (`planRootFromArtifact`) + shape+ID
+ * (`readRequestForTxnOrCorrelationInvalid`) for their OWN `--request` --
+ * never the EXACT geometry or FULL `validateConsultV2` pipeline
+ * `accreditCancelRecord` already required for an EXISTING cancel.json. This
+ * let `cmdCancel` durably WRITE a cancel.json next to a request.json that
+ * this exact function (reached the moment ANY reader, including
+ * `accreditCancelRecord` itself, later looks at that cancel.json) would
+ * immediately reject -- a write reporting SUCCESS whose own artifact no
+ * reader ever accepts. NOTE: `claim`/`lease-heartbeat`/`takeover`/
+ * `record-delivery`/`worker-stop` still use the lighter
+ * `readRequestForTxnOrCorrelationInvalid` for their own `--request`; whether
+ * they share this same asymmetry is out of this pass's named scope
+ * (cancel/accept-result/await-result only) and is flagged, not fixed, here.
+ */
+function accreditCanonicalRequest(coordRoot, requestPath) {
+  assertCanonicalFilename(requestPath, 'request.json');
+  assertGenuinelyConfinedUnderRoot(coordRoot, requestPath);
+  const txnDir = path.dirname(requestPath);
+  const geo = assertExactCanonicalGeometry(coordRoot, txnDir);
+  // ONE fd-bound read (DUR-J item 6): readCanonicalRequestRecord already
+  // proves durability + shape + content/location-identity (request_id ==
+  // geo.requestId) and returns {obj, digest} in a single pass -- callers that
+  // need the digest (cmdAcceptResult) get it without a second, TOCTOU-risking
+  // read of the same file. validateConsultV2Fields reuses the SAME deep
+  // graph/role-policy/content_ref validation validateConsultV2's own
+  // standalone `validate --kind consult-v2` entry point uses.
+  const rec = readCanonicalRequestRecord(requestPath, geo.requestId, {
+    absentDetail: 'CORRELATION_INVALID',
+    absentMessage: 'referenced request.json does not resolve',
+  });
+  const reqObj = rec.obj;
+  if (reqObj.repo_id !== geo.repoId || reqObj.wave_slug !== geo.waveSlug || reqObj.plan_digest !== geo.planDigest) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', "request.json canonical path segments do not match its own embedded identity: " + requestPath);
+  }
+  const planRoot = planRootFromArtifact(coordRoot, requestPath);
+  validateConsultV2Fields(reqObj, planRoot);
+  // Codex NO-GO round 12/13: the full fd-bound stat snapshot (from the same
+  // read as digest -- see readDurableRecord's own doc comment) surfaced
+  // additively so a caller needing to prove request.json was never replaced
+  // OR in-place-rewritten-and-restored (either of which digest alone can
+  // miss) can compare the SAME complete snapshot across two separate calls.
+  return {
+    obj: reqObj, digest: rec.digest,
+    dev: rec.dev, ino: rec.ino, nlink: rec.nlink, size: rec.size, mode: rec.mode, uid: rec.uid, gid: rec.gid, ctimeNs: rec.ctimeNs, mtimeNs: rec.mtimeNs,
+  };
+}
+
+/**
+ * Codex NO-GO round 12: request.json is published exactly once and never
+ * rewritten (PLAN.md ~L813, "immutable"). cmdCancel/cmdAcceptResult's own
+ * round-11 fix re-accredited fresh INSIDE the lock but then TRUSTED whatever
+ * that fresh read found -- silently ADOPTING a mid-wait mutation instead of
+ * detecting and rejecting it, exactly the bug round 11 itself corrected for
+ * cmdAwaitResult but never applied symmetrically here. ANY divergence between
+ * a preflight accreditation and a later one is evidence of an illegal
+ * mutation, never a legitimate update to adopt.
+ *
+ * Codex NO-GO round 13: comparing only digest+dev+ino still misses an
+ * IN-PLACE rewrite that restores the exact original bytes before this check
+ * runs -- same inode throughout (dev/ino never differ), same final content
+ * (digest never differs), yet the file was genuinely mutated in between.
+ * Compares the FULL fd-bound snapshot classifyDurableRead itself already
+ * trusts (dev/ino/nlink/size/mode/uid/gid/ctimeNs/mtimeNs) plus digest -- any
+ * genuine mutation, even one whose final state is byte-identical, changes at
+ * least ctimeNs (and typically mtimeNs), so this is not a hand-picked subset
+ * that could miss the same class of gap a second time.
+ */
+function assertRequestIdentityMatches(preflightRec, laterRec, requestPath) {
+  if (laterRec.digest !== preflightRec.digest
+      || laterRec.dev !== preflightRec.dev || laterRec.ino !== preflightRec.ino
+      || laterRec.nlink !== preflightRec.nlink || laterRec.size !== preflightRec.size
+      || laterRec.mode !== preflightRec.mode || laterRec.uid !== preflightRec.uid || laterRec.gid !== preflightRec.gid
+      || laterRec.ctimeNs !== preflightRec.ctimeNs || laterRec.mtimeNs !== preflightRec.mtimeNs) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'request.json changed since preflight -- request.json is immutable per PLAN.md ~L813: ' + requestPath);
+  }
+}
+
+function accreditCancelRecord(cancelObj, cancelPath, coordRoot) {
+  assertCanonicalFilename(cancelPath, 'cancel.json');
+  assertGenuinelyConfinedUnderRoot(coordRoot, cancelPath);
+  const txnDir = path.dirname(cancelPath);
+  // Geometry of txnDir is fully proven inside accreditCanonicalRequest below
+  // (request.json lives in this exact same directory) -- recomputing it here
+  // too would be redundant, not stricter.
+  const reqObj = accreditCanonicalRequest(coordRoot, path.join(txnDir, 'request.json')).obj;
+
+  if (cancelObj.request_id !== reqObj.request_id) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'cancel.json content does not match its own canonical identity: ' + cancelPath);
+  }
+
+  // Codex NO-GO round 9 (PENDING_WP4): this cancelled_by check is
+  // CORRELATION -- the recorded identity matches a value already present in
+  // the request/schema -- never CRYPTOGRAPHIC or GRANT-BASED AUTHORITY. PLAN.md's
+  // `role-command-grant/v1` (~L580-592) is the actual authority mechanism
+  // ("the matching core atomically wins <grant_id>.used... revalidates
+  // schema/surface/binding/authority/profile/subcommand/PLAN/worktree/role/
+  // action... before any read or mutation") and is NOT implemented anywhere
+  // in this file -- PENDING_WP4, a future work package, not built here or
+  // claimed to be. This check only rejects an OBVIOUSLY wrong value (an
+  // arbitrary caller-invented string, or an unconnected fresh genId()) from
+  // passing as "the requester" or "timeout-authority" -- a floor, not the
+  // ceiling PLAN ultimately requires.
+  if (cancelObj.reason === 'expired') {
+    if (isoToMs(cancelObj.cancelled_at) < isoToMs(reqObj.expiry)) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', "cancel.json claims reason='expired' but its own cancelled_at precedes the request's own expiry: " + cancelPath);
+    }
+    // Codex NO-GO round 9: `cancelled_at >= expiry` ALONE lets a planted
+    // artifact claim an arbitrary FAR-FUTURE `cancelled_at` (e.g. year 2099)
+    // to "prove" expiry against ANY request, expired or not. `cancelled_at`
+    // must ALSO not implausibly exceed the current moment (respecting the
+    // `--fixed-clock` test seam via `currentClockMs()`) -- bounding it to the
+    // genuinely-elapsed window `[expiry, now]`, never an unconstrained future
+    // value. `nowIso()`'s own millisecond truncation only ever makes a
+    // genuine writer's stamped value earlier, never later, than real "now" --
+    // this bound cannot spuriously reject an honest writer.
+    if (isoToMs(cancelObj.cancelled_at) > currentClockMs()) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', "cancel.json claims reason='expired' with a cancelled_at implausibly in the future: " + cancelPath);
+    }
+    if (cancelObj.cancelled_by !== 'timeout-authority') {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'cancel.json cancelled_by does not match the expected identity for its own reason: ' + cancelPath);
+    }
+  } else if (cancelObj.cancelled_by !== reqObj.requester_instance_id) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'cancel.json cancelled_by does not match the expected identity for its own reason: ' + cancelPath);
+  }
+  return reqObj;
+}
+
+/**
+ * The THREE sanctioned entry points for reading a cancel.json in this file
+ * (Codex NO-GO round 8's "single choke point + source-audit" requirement).
+ * Each performs the durable read AND the full accreditation above as one
+ * inseparable step -- no caller can obtain a shape-checked-but-unaccredited
+ * object. CANCEL-AUDIT-01 (runtime-consultation-cli.bats) mechanically greps
+ * this file and asserts `CANCEL_V1_FIELDS` appears in exactly the field-table
+ * definition plus these three functions -- never inline at a command body.
+ */
+function readCanonicalCancelRecordOptional(cancelPath, coordRoot) {
+  const obj = readJsonDurableOptional(cancelPath, { shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) });
+  if (obj === null) return null;
+  const reqObj = accreditCancelRecord(obj, cancelPath, coordRoot);
+  return { obj: obj, reqObj: reqObj };
+}
+
+function readCanonicalCancelRecordRequired(cancelPath, coordRoot) {
+  const obj = readJsonDurable(cancelPath, { shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) });
+  const reqObj = accreditCancelRecord(obj, cancelPath, coordRoot);
+  return { obj: obj, reqObj: reqObj };
+}
+
+function classifyCanonicalCancelRecord(cancelPath, coordRoot) {
+  const r = classifyDurableRead(cancelPath, { shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) });
+  if (r.state !== DURABLE_PRESENT) return r;
+  const reqObj = accreditCancelRecord(r.obj, cancelPath, coordRoot);
+  return { state: r.state, obj: r.obj, reqObj: reqObj };
+}
+
+function validateCancelV1(artifactPath, coordRoot) {
+  return readCanonicalCancelRecordRequired(artifactPath, coordRoot).obj;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3002,6 +3911,1120 @@ const STOP_ACK_V1_FIELDS = {
   acked_at: { check: isIsoTimestamp },
 };
 
+// R33-STAGE1-AUDIT-SCOPE:BEGIN
+// Everything between this marker and its matching closing marker below is the
+// R33 stage-1 surface. `validate` is a NO-MUTATION command (PLAN.md ~L785), and
+// PLAN.md ~L2913 forbids overwrite, conversion, adoption, unlink, fallback and
+// retry outright while ~L2927-2928 makes a fresh R33 root the only rollout path
+// ("No existe in-place upgrade, downgrade o rollback"). Those are ABSENCE
+// properties: no test can prove them for a code path nobody thought to
+// exercise. `runtime-consultation-cli.test.js` therefore EXTRACTS exactly this
+// region by these two markers and asserts that no filesystem-mutating primitive
+// occurs INSIDE it. Asserting absence within an extracted scope is the point --
+// a hand-listed substring search over the whole file would be silently defeated
+// by any later edit outside the markers. Do not move, rename or duplicate these
+// marker strings, and do not introduce a write/rename/unlink/link/mkdir/lock
+// primitive between them. The audit MUST also assert that each marker occurs
+// EXACTLY ONCE in the file: a duplicated marker collapses the extracted region
+// and would make the whole audit vacuously pass. (That is not hypothetical --
+// the first draft of this very comment spelled the closing marker's literal
+// token, which reduced the extracted scope to two lines and passed.)
+// ─────────────────────────────────────────────────────────────────────────────
+// NON-AUTHORITATIVE R33 STATIC CONFORMANCE. Read this before anything below.
+//
+// Every function in this section is a CONFORMANCE CHECK. Together they can prove
+// closed schema, canonical byte encoding, confined paths, tuple correlation and
+// the A.5 digests -- and NOTHING ELSE. None of them establishes authority,
+// accreditation, liveness or the right to act, and none may be renamed, wrapped
+// or reported as though it did.
+//
+// What is deliberately NOT here, and why it cannot be:
+//  - the AUTHORITY tier. R3.3:2848-2851 makes receipt-level disagreement
+//    AUTHORITY_INVALID, and the final `BootstrapReceipt` is published under the
+//    runtime-owner root `R`.
+//    CORRECTION, recorded because an earlier revision of this banner asserted
+//    the opposite and it was propagated downstream: `R` IS derivable, and from
+//    `C` alone. R3.3:209-215 constructs it explicitly --
+//      runtime_slot_id = LOWERCASE_HEX(FIRST_16_BYTES(SHA256(
+//        UTF8("runtime/owner-root-slot/v1") || 0x00 || LP(UTF8(C)) )))
+//      runtime_owner_basename = ".acd-prm-r33-" || runtime_slot_id
+//      R = P || native_separator || runtime_owner_basename
+//    -- where the slot id is a hash OF `C` and `P` is C's parent. The earlier
+//    claim reasoned about `runtime_owner_root_id`, which is an IDENTITY digest
+//    (a verification mechanism for a path you already hold, R3.3:3733), and
+//    mistook the absence of an inversion for the absence of any construction.
+//    So locating `R` is NOT what blocks the authority tier here. What blocks it
+//    is the liveness reason immediately below, which is sufficient on its own.
+//  - temporal LIVENESS. R3.3:1460-1464 defines
+//    `valid(envelope,now,clock-capability)` as requiring
+//    `clock-capability.state == ACTIVE` and `issued <= now < expiry`. The
+//    capability is `RuntimeClockDomainCapabilityLiveV1` (R3.3:1469-1470), and
+//    `LiveV*` schemas are provider-owned, live-only and NON-SERIALIZABLE with no
+//    disk projection (R3.3:2379-2383); and `now` would have to be in the
+//    record's own monotonic domain, which R3.3:1465 forbids converting into.
+// Both therefore belong to the provider-owned IN-PROCESS composition
+// (PLAN.md ~L762: retained hosts "call the core in-process with
+// `HostBridgeCapability/v1`, never through a CLI suffix"), where a real
+// monotonic clock and a real retained receipt exist. Neither can be reconstructed
+// from disk records by a standalone reader, and NOTHING here may substitute a
+// path, boolean, digest or caller-supplied object for opaque live authority.
+//
+// Consequence, stated so it cannot be mistaken for an oversight: a caller that
+// runs any function in this section to completion has learned that some bytes
+// conform to a closed schema. It has NOT learned that a root, a session or a
+// profile is legitimate. Static conformance is a precondition for accreditation,
+// never a substitute for it.
+//
+// Bootstrap states this section must not collapse (R3.3:1115-1117 and step 17):
+// step 12 is root-profile conformance/readback ONLY; step 17 is provider-session
+// conformance/readback ONLY; step 18 -- `BootstrapReceipt` plus live capabilities
+// transitioning the session to ACTIVE -- is the FIRST authority-success point and
+// is not implemented here.
+// ─────────────────────────────────────────────────────────────────────────────
+// R33 static conformance surface -- PLAN §4.1 mandatory stage 1 of 6
+// (PLAN.md ~L2935). The closed schemas for the three-record tuple
+// `RuntimeProfileBindingV2 + RootProfileV3 + ProviderSessionV3`.
+//
+// SCOPE HONESTY (binding, do not weaken): this section delivers the closed
+// schemas that tuple accreditation will CONSUME. It does NOT implement PLAN
+// §3.1's tuple-first selection rule (PLAN.md ~L2676-2679: "El validator se
+// selecciona primero por el tuple acreditado ... Schema string, path, record
+// digest o profile literal aislado nunca seleccionan root/profile"). A
+// `validate --kind X --artifact Y` surface selects by an argv-ASSERTED kind,
+// one record at a time, and structurally cannot accredit a THREE-record tuple
+// from a SINGLE `--artifact`. What the tuple check in this section establishes
+// is that the three records CONFORM to their closed schemas and CORRELATE with
+// each other -- a precondition for accreditation, never accreditation itself.
+// Tuple-first selection needs the accredited tuple PLAN §3.1 names, which
+// requires the receipt chain and live capabilities this section cannot reach;
+// it belongs to the provider-owned composition. Nothing in this section may be
+// reported as "R33 root/profile/session accreditation: DONE".
+//
+// "dispatch dinámico a validator R32" (PLAN.md ~L2673, prohibited) holds here
+// BY CONSTRUCTION rather than by a guard: there is no RootProfileV2 /
+// ProviderSessionV2 validator anywhere in this file to dispatch TO. An R32
+// artifact simply fails the `schema`/`protocol_profile` literals below and is
+// SCHEMA_INVALID, and an occupied-but-wrong-profile path can never degrade to
+// ABSENT because absence is ENOENT-at-open only (classifyDurableRead) -- which
+// is exactly PLAN.md ~L2911's "una path ocupada por bytes del otro profile es
+// PRESENT_INVALID, nunca ABSENT". Do NOT add an R32 validator here: that would
+// create the very dispatch surface the rule forbids.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * P33 (PLAN.md ~L2647). Its sibling P32
+ * (`runtime-consultation/r32-csl-posix-local-v1`, ~L2646) is deliberately NOT
+ * defined as a constant here: it is not a value this file ever writes or
+ * accepts, only one the equality checks below must reject like any other wrong
+ * literal.
+ */
+const R33_PROTOCOL_PROFILE = 'runtime-consultation/r33-csl-posix-local-v1';
+
+// Literals shared by 2+ of the three tuple records -- ONE source each, never
+// independently-typed copies (the DRIVER_ENUM precedent above). Single-use
+// literals/enums stay inline in their own field table.
+const R33_CONTROL_PROTOCOL = 'transition-lock/provider-control/v3';
+const R33_HANDLE_PROTOCOL = 'transition-lock/provider-handle/v2';
+const R33_PROVIDER_ABI = 3;
+const TRANSITION_LOCK_PROVIDER_NAME = 'acd-transition-lock-posix';
+const PROVIDER_MANAGER_KIND_ENUM = [
+  'retained-native-host-owner', 'runtime-session-supervisor', 'registered-consumer-owner',
+];
+const PROVIDER_MANAGER_LIFETIME_PROFILE_ENUM = [
+  'retained-session', 'persistent-consumer', 'transaction-retained-consumer',
+];
+const COORDINATION_MODE_ENUM = ['auto', 'persistent', 'ephemeral', 'disk-only'];
+
+/**
+ * Canonical basenames of the ONLY two R33 contract records that live in the
+ * coordination root `C` (ARCHITECTURE-PROPOSAL-C-S-L-R3.3.md:1019-1022:
+ * "`C/root-profile.json` contiene exactamente RootProfileV3 y
+ * `C/.provider-session` exactamente ProviderSessionV3 ... Son records distintos
+ * y no se reemplazan"), plus their shared 4,096-byte cap from that same
+ * passage ("conservan cap 4,096").
+ *
+ * 4,096 is NOT the 16,384 "root/binding/endpoint/clock receipt" row of the caps
+ * table at :1049 -- that table governs objects under the runtime-owner root `R`
+ * (see its own preamble at :1042-1045), not these two `C` records. It is also
+ * not DEFAULT_MAX_DURABLE_ARTIFACT_BYTES (1 MiB), which is this file's generic
+ * coordination-record bound.
+ */
+const ROOT_PROFILE_V3_BASENAME = 'root-profile.json';
+const PROVIDER_SESSION_V3_BASENAME = '.provider-session';
+const C_RECORD_MAX_BYTES = 4096;
+
+// RuntimeProfileBindingV2 gets NO R33 contractual byte cap, deliberately. It has
+// no defined disk path or transport anywhere in the PLAN or R3.3, and it is
+// barred from `C` (:1037-1039), so R33 specifies no cap for it at all. An
+// earlier revision borrowed the 16,384-byte "root/binding/endpoint/clock
+// receipt" row from the caps table at :1049; that attribution is WITHDRAWN --
+// that row governs the durable `RuntimeOwnerCoordinationBindingReceiptV1`, a
+// different record, and borrowing it is exactly the reasoning PLAN.md:1395
+// forbids ("no implementation may derive an unlisted rule by similarity,
+// naming, schema adjacency, or profile analogy"). This kind therefore relies
+// only on this file's EXISTING generic bound
+// (DEFAULT_MAX_DURABLE_ARTIFACT_BYTES), which is operational parser/DoS
+// protection for any coordination record -- NOT an R33 cap for this one.
+
+// ── R33 scalar primitives (ARCHITECTURE-PROPOSAL-C-S-L-R3.2.md:150-152) ──────
+
+/**
+ * `Id128 = exactamente 32 ASCII lowercase hex` (R3.2:150). Reuses HEX128_RE,
+ * already this file's `stop_id` predicate. Deliberately NOT `isHexId`, whose
+ * HEX_ID_RE is `{32,128}` and would accept a 64-char Sha256 where an Id128 is
+ * required -- `Id128` and `HexId` are genuinely different types in the closed
+ * schemas below (e.g. `root_generation_id:Id128` vs `root_bootstrap_id:HexId`)
+ * and must not be collapsed.
+ */
+function isId128(v) { return typeof v === 'string' && HEX128_RE.test(v); }
+
+/**
+ * `Pid` is CITED at `ARCHITECTURE-PROPOSAL-C-S-L-R3.1.md:146`:
+ * `| Pid | integer 1..2147483647 |`. A JSON NUMBER (unlike MonoNs, which is a
+ * decimal string). PROVENANCE CHAIN: R3.3:2375 -> R3.2:150 -> R3.1:146.
+ *
+ * BOTH BOUNDS ARE ENFORCED. An earlier revision enforced only `>= 1`, so
+ * `owner_pid: 2147483648` and `owner_pid: 9007199254740991` both passed -- both
+ * reproduced before the fix. The omission came from an earlier comment asserting
+ * "no ceiling is specified anywhere in R3.2/R3.3, so none is invented here",
+ * which was wrong for the same reason as the `IsoUtc` and `DecimalU64`
+ * annotations above: the delegation chain was followed only as far as R3.2, one
+ * hop short of the scalar table that had the answer all along.
+ *
+ * `Number.isInteger` rather than `isSafeInteger`: the 2^31-1 ceiling is far below
+ * the safe-integer limit, so the safe-integer test would be redundant -- any
+ * value it would reject is already rejected by the ceiling.
+ */
+function isPid(v) { return Number.isInteger(v) && v >= 1 && v <= 2147483647; }
+
+/**
+ * `IsoUtc` is CITED, not derived: `ARCHITECTURE-PROPOSAL-C-S-L-R3.1.md:143` reads
+ * `| IsoUtc | UTC YYYY-MM-DDTHH:MM:SSZ, fecha válida y round-trip idéntico |` --
+ * i.e. exactly the three properties enforced below.
+ *
+ * PROVENANCE CHAIN, recorded because both a prior revision of this comment and a
+ * prior ruling stopped one hop short of it: R3.3:2375 says primitives "conservan
+ * R3.2"; R3.2:150 delegates onward to R3.1 by name; R3.1:143-146 is where the
+ * scalar table actually lives. An earlier revision called this grammar a
+ * "DERIVED, fail-closed reading" and admitted an optional `.mmm` fraction. Both
+ * were wrong -- the grammar was cited all along, and it forbids fractions.
+ * Do not "re-derive" this rule; it has a citation.
+ *
+ * Two checks are needed, and NEITHER is sufficient alone:
+ *  1. the regex fixes the exact encoding -- integral seconds only, literal `Z`,
+ *     no fraction, no offset, no date-only form, no surrounding whitespace;
+ *  2. the byte-identical round-trip rejects IMPOSSIBLE dates that the regex
+ *     cannot see and that `Date.parse` alone does NOT reject. Measured: for the
+ *     ISO string form, `Date.parse('2025-02-30T00:00:00Z')` returns
+ *     1740873600000 -- a NUMBER, not NaN -- because JS silently rolls the
+ *     overflowing day forward. A `!Number.isNaN(...)` guard therefore ACCEPTS
+ *     `2025-02-30`, `2025-04-31`, non-leap `2025-02-29`, and `T24:00:00`
+ *     (normalized to the next midnight). Re-serializing and comparing back to
+ *     the input catches every one of them, because the normalized form differs
+ *     from what was written. The real leap day `2024-02-29T00:00:00Z` round-
+ *     trips unchanged and is correctly accepted.
+ *
+ * Deliberately NOT `isIsoTimestamp` (which accepts anything `new Date()` can
+ * parse, including `'Jan 1, 2025'` and offset forms). The 8 existing
+ * `created_at: { check: isIsoTimestamp }` fields keep their looser predicate
+ * untouched -- that looseness is a pre-existing property of shipped kinds, out
+ * of this stage's scope. The blast radius is small by design: both new
+ * wall-clock fields are named `*_diagnostic_utc`, because R33 moved authority
+ * to the monotonic envelope and left wall clocks diagnostic-only.
+ */
+const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+function isIsoUtc(v) {
+  if (typeof v !== 'string') return false;
+  if (!ISO_UTC_RE.test(v)) return false;
+  const ms = Date.parse(v);
+  if (Number.isNaN(ms)) return false;
+  return new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z') === v;
+}
+
+/**
+ * `MonoNs = alias exacto de DecimalU64 (canonical decimal string)`
+ * (ARCHITECTURE-PROPOSAL-C-S-L-R3.3.md:1441) -- a JSON **string**, never a JSON
+ * number. The signed `-9223372036854775808..9223372036854775807` range on the
+ * adjacent :1443-1444 belongs to `UnixNs`, a DIFFERENT type; attributing it to
+ * MonoNs (as an earlier reading of this stage's contract did) would make these
+ * three fields numbers and silently lose precision above 2^53.
+ *
+ * Grammar is the canonical-decimal one R3.2:151-152 establishes for the sibling
+ * scalars (`DecimalU32`, `DecimalI64`: "decimal canónico ... sin '+', leading
+ * zero ni '-0'"), i.e. digits only, no sign, no leading zeros, no whitespace --
+ * required by R3.3:1466 ("overflow/underflow/noncanonical decimal → INVALID
+ * before allocation/write"), a rule that only makes sense for a string
+ * representation.
+ *
+ * `DecimalU64` is CITED at `ARCHITECTURE-PROPOSAL-C-S-L-R3.1.md:145`:
+ * `| DecimalU64 | string decimal canónico 0..18446744073709551615 |`. So the
+ * bound below is the cited range, and "string decimal canónico" is the cited
+ * grammar -- neither is an inference from the `U64` type name.
+ *
+ * PROVENANCE CHAIN (R3.3:2375 -> R3.2:150 -> R3.1:145). An earlier revision of
+ * this comment claimed the bound was undefined anywhere and therefore DERIVED;
+ * that was wrong for the same reason the `IsoUtc` annotation above was wrong --
+ * the delegation chain was followed only as far as R3.2.
+ */
+const CANONICAL_DECIMAL_U64_RE = /^(0|[1-9][0-9]*)$/;
+const MAX_DECIMAL_U64 = 18446744073709551615n;
+function isMonoNs(v) {
+  return typeof v === 'string' && CANONICAL_DECIMAL_U64_RE.test(v) && BigInt(v) <= MAX_DECIMAL_U64;
+}
+
+/**
+ * A field whose value is a single FIXED LITERAL. The literal is DECLARED as
+ * data, so exactly one declaration drives BOTH the shape predicate and the
+ * correlation-set derivation below -- they cannot drift apart.
+ *
+ * This exists because the 17-key R33 tuple correlation set is defined by
+ * SUBTRACTING the keys that are a fixed literal in BOTH records (contract §8b:
+ * such a key agrees by construction, and any deviation is already SCHEMA_INVALID
+ * at shape time, so a correlation guard over it could never fire). A `check`
+ * closure is opaque -- nothing can ask it "are you an equality test against a
+ * literal?" -- so without this the subtraction would need a hand-maintained
+ * second list of literal key names, which is precisely the hand-transcription
+ * §8b says not to trust.
+ *
+ * Behaviourally inert: `check` is exactly the `(v) => v === value` it replaces.
+ * `assertClosedShape` reads only `def.required` and `def.check` and never
+ * enumerates a definition's own keys, so the extra `literal` property is
+ * invisible to validation. Applied ONLY to the three R33 tuple tables -- the
+ * other field tables in this file are deliberately left untouched.
+ */
+function lit(value) {
+  return { literal: value, check: (v) => v === value };
+}
+
+/** True iff `table`'s field `key` was declared via `lit()`, i.e. is a single fixed literal. */
+function isLiteralField(table, key) {
+  return Object.prototype.hasOwnProperty.call(table, key)
+    && Object.prototype.hasOwnProperty.call(table[key], 'literal');
+}
+
+// ── A.1 `RuntimeProfileBindingV2` [6] (R3.3:2388-2395) ──────────────────────
+
+/**
+ * Six FIXED LITERALS, no free-form field at all: five exact strings plus the
+ * integer `3`. Any other value is SCHEMA_INVALID.
+ *
+ * CONFORMANCE CHECK, NOT AN IDENTITY BINDING. Because all six values are fixed
+ * literals, this record carries NO `coordination_root_id`, no
+ * `root_generation_id`, and no digest of anything -- there is no field by which
+ * a binding is tied to a PARTICULAR root or session (contract §8c confirms the
+ * only keys it shares with RootProfileV3 are those same fixed literals). So ANY
+ * conforming binding satisfies the tuple: the record is effectively a constant,
+ * and producing it evidences nothing beyond the caller being able to reproduce a
+ * constant. The R33 tuple's actual force therefore comes from the two `C`
+ * records plus their 17-key and digest correlation, NOT from this leg. A later
+ * stage must NOT claim this record contributes identity or actor authority.
+ * This is a property of the contract's own design at this stage, not a gap in
+ * the validator.
+ *
+ * NAMED LIMITATION (flagged, deliberately not fixed here): `subject_manifest`
+ * is the frozen literal `coordination/subject-bundle-manifest/v2` (R3.3:2394),
+ * but the only manifest implemented in this file is
+ * `coordination/subject-bundle-manifest/v1` (SUBJECT_BUNDLE_MANIFEST_V1_FIELDS
+ * below). A conformant R33 binding therefore asserts a manifest version
+ * `publish-blob`/`publish-request` cannot currently produce. That is a real
+ * cross-contract divergence belonging to a later stage; the literal is NOT
+ * weakened to v1 to make the two line up.
+ */
+const RUNTIME_PROFILE_BINDING_V2_FIELDS = {
+  schema: lit('runtime/csl-profile-binding/v2'),
+  protocol_profile: lit(R33_PROTOCOL_PROFILE),
+  control_protocol: lit(R33_CONTROL_PROTOCOL),
+  provider_abi: lit(R33_PROVIDER_ABI),
+  handle_protocol: lit(R33_HANDLE_PROTOCOL),
+  subject_manifest: lit('coordination/subject-bundle-manifest/v2'),
+};
+
+// ── A.3 `RootProfileV3` [28] (R3.3:3651 REPLACE over R3.2:2087-2098) ────────
+
+/**
+ * `REPLACE(RootProfileV2[24], "coordination/root-profile/v3", REMOVE(5),
+ * ADD(9))` = 28 keys, matching the row's own authoritative `Keys` column.
+ * REMOVE = schema, protocol_profile, control_protocol, provider_abi,
+ * created_at. Retained keys keep exactly the type/nullability of their R3.2
+ * base (R3.3:3638), so the two groups below are listed in their SOURCES' own
+ * orders -- the 9 ADD keys in R3.3:3651's order, then the 19 retained keys in
+ * RootProfileV2's order at R3.2:2087-2098 -- to stay diffable against both
+ * citations in one pass.
+ *
+ * Note `provider_abi` is REMOVEd and re-ADDed with the new literal `3` (was `2`
+ * in V2), `control_protocol` moves /v2 -> /v3, and `protocol_profile` moves
+ * P32 -> P33; but `lock_profile` is RETAINED UNCHANGED at
+ * `transition-lock/file-posix/v2` and must not be "fixed" to v3.
+ */
+const ROOT_PROFILE_V3_FIELDS = {
+  schema: lit('coordination/root-profile/v3'),
+  protocol_profile: lit(R33_PROTOCOL_PROFILE),
+  control_protocol: lit(R33_CONTROL_PROTOCOL),
+  provider_abi: lit(R33_PROVIDER_ABI),
+  handle_protocol: lit(R33_HANDLE_PROTOCOL),
+  runtime_owner_root_id: { check: isHex64 },
+  clock_domain_id: { check: isId128 },
+  clock_domain_receipt_digest: { check: isHex64 },
+  created_at_diagnostic_utc: { check: isIsoUtc },
+  lock_profile: lit('transition-lock/file-posix/v2'),
+  coordination_root_id: { check: isHex64 },
+  physical_root_id: { check: isHex64 },
+  coordination_root_identity_security_digest: { check: isHex64 },
+  canonical_root_path_digest: { check: isHex64 },
+  mount_projection_digest: { check: isHex64 },
+  root_generation_id: { check: isId128 },
+  root_bootstrap_id: { check: isHexId },
+  provider_session_id: { check: isId128 },
+  local_filesystem_profile: lit('local-posix/v2'),
+  local_filesystem_capability_digest: { check: isHex64 },
+  mount_generation_digest: { check: isHex64 },
+  provider_name: lit(TRANSITION_LOCK_PROVIDER_NAME),
+  provider_build_digest: { check: isHex64 },
+  platform: { check: isEnum(['linux', 'darwin']) },
+  architecture: { check: isEnum(['x64', 'arm64']) },
+  provider_manager_kind: { check: isEnum(PROVIDER_MANAGER_KIND_ENUM) },
+  provider_manager_lifetime_profile: { check: isEnum(PROVIDER_MANAGER_LIFETIME_PROFILE_ENUM) },
+  coordination_mode: { check: isEnum(COORDINATION_MODE_ENUM) },
+};
+
+// ── A.2 `TemporalAuthorityEnvelopeV1` [4] (R3.3:1446-1451) ──────────────────
+
+const TEMPORAL_AUTHORITY_ENVELOPE_V1_FIELDS = {
+  clock_domain_id: { check: isId128 },
+  issued_monotonic_ns: { check: isMonoNs },
+  not_before_monotonic_ns: { check: isMonoNs },
+  expiry_monotonic_ns: { check: isMonoNs },
+};
+
+/**
+ * NOTE ON THE NAME: the word "Authority" here is the R3.3 RECORD's own name
+ * (`TemporalAuthorityEnvelopeV1`, R3.3:1446), NOT a claim that this function
+ * establishes authority. It proves the envelope's static shape and ordering
+ * invariants only. Liveness -- `clock-capability.state == ACTIVE` and
+ * `issued <= now < expiry` (R3.3:1460-1464) -- is NOT checked here and cannot be,
+ * for the reasons in the section banner. The name is kept deliberately so the
+ * mapping to the R3.3 schema stays greppable; renaming it would obscure the
+ * citation.
+ *
+ * The nested envelope's own closed shape PLUS its ordering invariants
+ * (R3.3:1456-1458): `issued <= not_before < expiry` and `not_before == issued`
+ * ("R3.3 no delayed activation"). Applied at the whole-object level rather than
+ * as a per-field predicate, mirroring `assertResultContentXor`/
+ * `assertStopCorrelationTriple` -- cross-field rules get their own precise
+ * SCHEMA_INVALID messages instead of a generic "invalid field: temporal".
+ *
+ * NO COERCION, mechanically: every operand is BigInt-parsed from a value
+ * `isMonoNs` has ALREADY proven to be a canonical unsigned decimal string
+ * within range, so `BigInt()` is an exact, total parse of a validated string --
+ * not a coercion of arbitrary input. There is no `Number()`, `parseInt`, unary
+ * `+`, `==`, or relational comparison on mixed/unvalidated types anywhere here.
+ * Both alternatives are actively wrong and were checked empirically:
+ *   - `Number` collapses `9007199254740993` onto 2^53, so an envelope whose
+ *     `not_before` genuinely DIFFERS from `issued` (delayed activation, which
+ *     R3.3 forbids) compares EQUAL and would be ACCEPTED;
+ *   - string relational comparison misorders different-length decimals
+ *     (`'9' < '10'` is false).
+ * `lifetime = expiry - issued` (:1459, "checked integer arithmetic") needs no
+ * separate guard: BigInt subtraction cannot overflow, and each operand is
+ * already range-bounded. No lifetime ceiling is invented -- `DurationNs`
+ * (0..86400000000000, :1442) is a different type this envelope does not use.
+ */
+function assertTemporalAuthorityEnvelopeV1(envelope) {
+  assertClosedShape(envelope, TEMPORAL_AUTHORITY_ENVELOPE_V1_FIELDS);
+  const issued = BigInt(envelope.issued_monotonic_ns);
+  const notBefore = BigInt(envelope.not_before_monotonic_ns);
+  const expiry = BigInt(envelope.expiry_monotonic_ns);
+  // Implied by the equality immediately below, but asserted separately and
+  // first (R3.3 states both) so a future relaxation of the equality can never
+  // silently drop the ordering rule with it.
+  if (!(issued <= notBefore)) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'temporal issued_monotonic_ns must be <= not_before_monotonic_ns');
+  }
+  if (notBefore !== issued) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'temporal not_before_monotonic_ns must equal issued_monotonic_ns (R3.3 forbids delayed activation)');
+  }
+  if (!(notBefore < expiry)) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'temporal expiry_monotonic_ns must be strictly greater than not_before_monotonic_ns');
+  }
+}
+
+// ── A.3 `ProviderSessionV3` [28] (R3.3:3652 REPLACE over R3.2:2100-2110) ────
+
+/**
+ * `REPLACE(ProviderSessionV2[24], "coordination/provider-session/v3",
+ * REMOVE(5), ADD(9))` = 28 keys. REMOVE = schema, provider_abi,
+ * control_protocol, started_at, session_expiry. Same two-group ordering
+ * convention as ROOT_PROFILE_V3_FIELDS above (ADD in R3.3:3652's order, then
+ * retained in R3.2:2100-2110's order).
+ *
+ * CRITICAL ASYMMETRY -- do NOT "fix" this: `ProviderSessionV3` has NO
+ * `protocol_profile` key and no `handle_protocol` key. That is INHERITED, not
+ * an R33 invention -- `ProviderSessionV2` [24] (R3.2:2100-2110) never had
+ * either. The session binds to the profile TRANSITIVELY, via
+ * `root_profile_digest` and `runtime_binding_receipt_digest`. Adding
+ * `protocol_profile` here is SCHEMA_INVALID via the closed key set, and a test
+ * asserting `ProviderSessionV3.protocol_profile === P33` is asserting against a
+ * key that must never exist.
+ */
+const PROVIDER_SESSION_V3_FIELDS = {
+  schema: lit('coordination/provider-session/v3'),
+  provider_abi: lit(R33_PROVIDER_ABI),
+  control_protocol: lit(R33_CONTROL_PROTOCOL),
+  runtime_owner_root_id: { check: isHex64 },
+  runtime_binding_receipt_digest: { check: isHex64 },
+  clock_domain_id: { check: isId128 },
+  clock_domain_receipt_digest: { check: isHex64 },
+  // Nested TemporalAuthorityEnvelopeV1 [4]. Only its object-ness is checked
+  // here; its closed shape and ordering invariants are enforced by
+  // assertTemporalAuthorityEnvelopeV1, called from the sole conformance checker below.
+  temporal: { check: isPlainObject },
+  started_at_diagnostic_utc: { check: isIsoUtc },
+  coordination_root_id: { check: isHex64 },
+  physical_root_id: { check: isHex64 },
+  coordination_root_identity_security_digest: { check: isHex64 },
+  canonical_root_path_digest: { check: isHex64 },
+  mount_projection_digest: { check: isHex64 },
+  root_generation_id: { check: isId128 },
+  root_bootstrap_id: { check: isHexId },
+  root_profile_digest: { check: isHex64 },
+  local_filesystem_capability_digest: { check: isHex64 },
+  mount_generation_digest: { check: isHex64 },
+  provider_name: lit(TRANSITION_LOCK_PROVIDER_NAME),
+  provider_build_digest: { check: isHex64 },
+  provider_session_id: { check: isId128 },
+  control_endpoint_id: { check: isId128 },
+  provider_manager_instance_id: { check: isHexId },
+  provider_manager_kind: { check: isEnum(PROVIDER_MANAGER_KIND_ENUM) },
+  provider_manager_lifetime_profile: { check: isEnum(PROVIDER_MANAGER_LIFETIME_PROFILE_ENUM) },
+  coordination_mode: { check: isEnum(COORDINATION_MODE_ENUM) },
+  owner_pid: { check: isPid },
+};
+
+// ── Encoding + path conformance for the two `C` contract records ───────────
+
+/**
+ * Canonical-encoding conformance, from the governing preamble of R3.3's
+ * Apéndice A (:2373-2374): "Todos los objetos son `additionalProperties:false`,
+ * sin duplicate keys, canonical sorted compact JSON. Disk records: UTF-8
+ * estricto + un LF".
+ *
+ * `assertClosedShape` runs AFTER `JSON.parse` and is structurally blind to four
+ * things this one byte comparison catches:
+ *  1. DUPLICATE KEYS -- the decisive one. `{"provider_abi":2,"provider_abi":3}`
+ *     parses to `3` and would otherwise pass conformance. First-wins vs
+ *     last-wins differs across parsers, so ONE artifact can be ACCEPTED as R33
+ *     here and read as R32 elsewhere: an R32->R33 profile-smuggling vector, which
+ *     is exactly what PLAN §3.6's mixed-profile matrix (PLAN.md ~L2888-2894)
+ *     exists to prevent.
+ *  2. `3.0` / `3e0` -- IEEE-identical to `3`, so `v === 3` cannot reject them.
+ *  3. non-sorted or pretty-printed bytes.
+ *  4. a missing, extra, or non-LF trailing byte.
+ * It also makes the A.5 digests below unambiguous: once the bytes are proven
+ * canonical, hashing `canonicalJSONStringify(obj)` and hashing the file's own
+ * bytes-minus-LF provably coincide, so no caller can be surprised by which one
+ * a formula meant.
+ *
+ * The 4,096-byte cap itself is enforced upstream by `classifyDurableRead`'s own
+ * `maxSize` bound, which rejects on the fstat size BEFORE reading and then
+ * reads `size + 1` -- i.e. R3.3:2374's "Readers leen `cap+1`" semantics, with
+ * no silent truncation at exactly the cap. No second, weaker size check here.
+ */
+function assertCanonicalDiskRecordBytes(bytes, obj, artifactPath) {
+  if (!bytes.equals(Buffer.from(canonicalJSONStringify(obj) + '\n', 'utf8'))) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'artifact bytes are not the canonical sorted compact JSON + single-LF encoding of their own parsed content (duplicate keys, non-canonical number form, unsorted keys, or wrong trailing bytes): ' + artifactPath);
+  }
+}
+
+/**
+ * The two R33 contract records live DIRECTLY at the coordination-root leaf --
+ * `C/root-profile.json` and `C/.provider-session` (R3.3:1019-1022) -- not under
+ * the `<repo_id>/<wave_slug>/<plan_digest>/transactions/...` geometry every
+ * other record in this file uses. `planRootFromArtifact` and
+ * `assertExactCanonicalGeometry` are therefore both the WRONG primitives here
+ * (the latter demands exactly 5 segments with a literal `transactions` at index
+ * 3) and are deliberately not called.
+ *
+ * Checks, in order: exact canonical filename; ancestor-symlink-safe confinement
+ * under `C`; then EXACTLY one path segment below `C`. The final depth check
+ * resolves symlinks first (`realpathDeepestExisting`, the same primitive
+ * `assertExactCanonicalGeometry` uses) rather than comparing lexically --
+ * `path.relative`/`path.resolve` never touch the filesystem, so a nested path
+ * whose ancestor is actually a symlink back to `C` would otherwise "relativize"
+ * to depth 1 and pass a purely lexical check.
+ */
+function assertDirectlyAtCoordinationRoot(coordRoot, artifactPath, expectedBasename) {
+  assertCanonicalFilename(artifactPath, expectedBasename);
+  assertGenuinelyConfinedUnderRoot(coordRoot, artifactPath);
+  let realCoordRoot;
+  try {
+    realCoordRoot = fs.realpathSync(coordRoot);
+  } catch (err) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination_root does not resolve: ' + coordRoot);
+  }
+  const { real: realExistingAncestor, tail } = realpathDeepestExisting(artifactPath);
+  const realArtifact = tail.length ? path.join(realExistingAncestor, ...tail) : realExistingAncestor;
+  const segments = path.relative(realCoordRoot, realArtifact).split(path.sep).filter(Boolean);
+  if (segments.length !== 1 || segments[0] !== expectedBasename) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'artifact does not sit directly at the coordination-root leaf ' + expectedBasename + ' once symlinks are resolved: ' + artifactPath);
+  }
+}
+
+// ── The three sole conformance checkers for the R33 records ────────────
+
+/**
+ * SOLE sanctioned reader of a `C/root-profile.json`. Mirrors
+ * `readCanonicalRequestRecord`'s own choke-point discipline: path checking,
+ * fd-bound durable read, closed shape and canonical encoding are ONE
+ * inseparable step, so no caller can obtain a partially-checked
+ * object. MECHANICAL RULE: no other `assertClosedShape(...,
+ * ROOT_PROFILE_V3_FIELDS)` call may exist anywhere in this file.
+ * Returns the full `{obj, bytes, digest, dev, ino, ...}` record so the
+ * correlation slice can bind identity without a second, TOCTOU-risking read.
+ */
+function checkRootProfileV3Conformance(artifactPath, coordRoot) {
+  // Phase 0: confinement-check `C` ITSELF before trusting anything inside it. Independent
+  // of the tuple path because R3.3:1115-1117 step 12 calls this one on its own,
+  // when `.provider-session` does not yet exist.
+  const snapshot = snapshotCoordinationRootIdentity(coordRoot);
+  assertDirectlyAtCoordinationRoot(coordRoot, artifactPath, ROOT_PROFILE_V3_BASENAME);
+  const rec = readClosedRecord(artifactPath, ROOT_PROFILE_V3_FIELDS, { maxSize: C_RECORD_MAX_BYTES });
+  assertCanonicalDiskRecordBytes(rec.bytes, rec.obj, artifactPath);
+  assertCoordinationRootSnapshotUnchanged(coordRoot, snapshot, 'root-profile read');
+  return rec;
+}
+
+/**
+ * PER-RECORD DIAGNOSTIC ONLY -- NO ROOT-LEVEL AUTHORITY. Applies to BOTH
+ * `checkRootProfileV3Conformance` above and `checkProviderSessionV3Conformance`
+ * below. Both were formerly reachable as `validate --kind` entries; those kinds
+ * were REMOVED in this pass, because a conformance check that returns a public
+ * SUCCESS presents as a certifying surface it is not.
+ *
+ * Each checks exactly ONE record and deliberately never reads its sibling.
+ * The concrete consequence, measured, not theorised: under a MIXED root (an R32
+ * `coordination/root-profile/v2` at `C/root-profile.json` beside a perfectly
+ * valid R33 `.provider-session`), a single-record conformance check on the
+ * session SUCCEEDS, and symmetrically for the other pairing.
+ *
+ * THE MISUSE THIS FORBIDS: a caller that runs either single-record check to
+ * completion and concludes "this coordination root is R33" is WRONG. Neither
+ * function observes the sibling record, so neither can decide the
+ * `unknown/mixed root` row of the mixed-profile matrix (PLAN.md ~L2894).
+ * `checkR33ProfileTupleConformance` is the only function here that reads all
+ * three records -- and per the section banner even IT establishes conformance
+ * only, never authority. PLAN §3.1's tuple-first selection rule
+ * (PLAN.md ~L2676-2679) is satisfied by the provider-owned in-process
+ * composition, not by anything in this section.
+ *
+ * WHY THE SINGLE-RECORD SPLIT IS REQUIRED BY THE CONTRACT, not merely
+ * convenient, and why it must not be "fixed" into a sibling requirement:
+ * R3.3:1115-1117 step 12 publishes AND READS BACK `RootProfileV3` while
+ * explicitly "no publicar aún ProviderSessionV3"; only step 17 publishes the
+ * session. The contract therefore mandates an intermediate state in which
+ * `C/root-profile.json` must be read back while `C/.provider-session` does not
+ * yet exist. A function that demanded the sibling would make that mandated
+ * readback impossible -- it would violate the bootstrap sequence, not merely
+ * complicate it.
+ *
+ * CONTRACT-MANDATED CALLERS: step 12 calls the root-profile check, step 17 calls
+ * the provider-session check. Those callers live in the provider-owned in-process
+ * composition and DO NOT EXIST YET, so these functions are currently caller-less
+ * production code awaiting their consumer. Any CLI exposure of them is a
+ * diagnostic convenience and never an authority surface; step 18 --
+ * `BootstrapReceipt` plus live capabilities -- is the first authority-success
+ * point and is not implemented here.
+ *
+ * ABSENT vs PRESENT-BUT-WRONG-PROFILE IS NOT ABI-OBSERVABLE. PLAN.md ~L2911
+ * requires that a `C` path occupied by the other profile's bytes be
+ * PRESENT_INVALID and "nunca ABSENT". That holds BY CONSTRUCTION:
+ * `classifyDurableRead` returns ABSENT only on ENOENT at open, so a present file
+ * carrying R32 bytes structurally cannot take the absent branch -- it is read,
+ * then fails shape.
+ *
+ * But it is NOT observable through the CLI AT ALL. `PRESENT_INVALID` is not one
+ * of the 16 frozen `detail_code` values (PLAN.md ~L791), so it can never be
+ * emitted, and both outcomes are BYTE-IDENTICAL on stdout AND stderr -- measured,
+ * not inferred: same `status:"INVALID"`, same `detail_code:"SCHEMA_INVALID"`,
+ * same nulls, and stderr empty in both cases. The `CliError` message is never
+ * emitted anywhere, because `main()` writes to stderr only for NON-`CliError`
+ * throws and the frozen envelope (PLAN.md ~L789) has no message field. So the
+ * message is NOT a discriminator either -- an earlier revision of this comment
+ * claimed it was, which was wrong.
+ *
+ * The property is therefore provable ONLY at the library boundary, via the
+ * exported `classifyDurableRead`, which is the exact function where the
+ * distinction lives: R32 bytes at this path return `state === DURABLE_PRESENT`,
+ * a missing path returns `state === DURABLE_ABSENT`. That is a mechanism-level
+ * test rather than a diagnostic-string test, so it cannot rot when a message is
+ * reworded.
+ *
+ * `absentDetail` is deliberately NOT given a distinct code: no frozen code
+ * denotes absence, so inventing one would mean repurposing a frozen value or
+ * breaking this file's own documented not-found convention (see cjs:4017-4018).
+ */
+
+/**
+ * SOLE sanctioned reader of a `C/.provider-session`, same discipline as
+ * `checkRootProfileV3Conformance` plus the nested temporal envelope's closed shape and
+ * ordering invariants. MECHANICAL RULE: no other `assertClosedShape(...,
+ * PROVIDER_SESSION_V3_FIELDS)` call may exist anywhere in this file -- the
+ * `temporal` field's own table entry checks object-ness ONLY, so a bypassing
+ * caller would silently skip every invariant in
+ * `assertTemporalAuthorityEnvelopeV1`.
+ */
+function checkProviderSessionV3Conformance(artifactPath, coordRoot) {
+  // Phase 0, as above -- step 17 calls this one on its own.
+  const snapshot = snapshotCoordinationRootIdentity(coordRoot);
+  assertDirectlyAtCoordinationRoot(coordRoot, artifactPath, PROVIDER_SESSION_V3_BASENAME);
+  const rec = readClosedRecord(artifactPath, PROVIDER_SESSION_V3_FIELDS, { maxSize: C_RECORD_MAX_BYTES });
+  assertCanonicalDiskRecordBytes(rec.bytes, rec.obj, artifactPath);
+  assertTemporalAuthorityEnvelopeV1(rec.obj.temporal);
+  assertCoordinationRootSnapshotUnchanged(coordRoot, snapshot, 'provider-session read');
+  return rec;
+}
+
+/**
+ * `RuntimeProfileBindingV2` is barred from `C` (R3.3:1037-1039: "Fuera de los
+ * dos contract records obligatorios `root-profile.json` y `.provider-session`
+ * ya enumerados, ningún runtime-owner/provider evidence R33 se escribe en `C`").
+ * That is a TWO-SIDED must: `C` holds exactly those two records, so an artifact
+ * resolving INSIDE `C` must not pass conformance as a binding, however
+ * well-formed its bytes are.
+ *
+ * Realpath-resolved, never lexical, for the same reason `assertGenuinelyConfined
+ * UnderRoot` and `assertDirectlyAtCoordinationRoot` resolve first (cjs:419-426:
+ * `path.relative`/`path.resolve` never touch the filesystem, so a path whose
+ * ancestor is actually a symlink into `C` would otherwise "relativize" as
+ * outside and slip past a lexical check).
+ *
+ * This is a NEGATIVE location constraint only. It grants its caller no path
+ * authority whatsoever -- it proves where the artifact is NOT, never where it
+ * legitimately lives, because R33 defines no such place.
+ */
+function assertNotInsideCoordinationRoot(coordRoot, artifactPath) {
+  let realCoordRoot;
+  try {
+    realCoordRoot = fs.realpathSync(coordRoot);
+  } catch (err) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination_root does not resolve: ' + coordRoot);
+  }
+  const { real: realExistingAncestor, tail } = realpathDeepestExisting(artifactPath);
+  const realArtifact = tail.length ? path.join(realExistingAncestor, ...tail) : realExistingAncestor;
+  const rel = path.relative(realCoordRoot, realArtifact);
+  const escapes = rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel);
+  if (!escapes) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'a RuntimeProfileBindingV2 must not live inside the coordination root, which holds exactly root-profile.json and .provider-session (R3.3:1037-1039): ' + artifactPath);
+  }
+}
+
+/**
+ * Coordination-root confinement check, phase 0 of every entry point in this section.
+ * Reuses `validateRootConfinement` -- the SAME primitive `root-validate` uses,
+ * never a second weaker check -- which proves in one call that `C` is not a
+ * symlink, is a real directory, is owner-confined, is EXACTLY mode 0700, and is
+ * confined to its own git worktree.
+ *
+ * This closes a gap that let a caller mint a coordination root wholly outside
+ * Git, at mode 0777, or behind a symlink, and have three self-consistent records
+ * inside it pass every check in this section. Confining the ARTIFACT to `C`
+ * (`assertDirectlyAtCoordinationRoot`) never proved anything about `C` ITSELF.
+ *
+ * Returns a NON-AUTHORITATIVE SNAPSHOT of the root's `dev/ino/mode/uid/gid`.
+ *
+ * IT IS A SNAPSHOT, NOT A WITNESS, AND IT DOES NOT CLOSE THE TOCTOU. An earlier
+ * revision of this comment claimed a re-checked snapshot proves ONE accredited
+ * identity was used throughout. That was WRONG and is withdrawn. Every check
+ * here is a PATH-BASED `lstat` sample, so all it can establish is that the
+ * identity matched AT EACH SAMPLING POINT. Three gaps survive:
+ *  1. substitution between `validateRootConfinement` and the first `lstat`;
+ *  2. an ABA cycle -- swap `C`, serve a different record, restore before the
+ *     next sample -- which is invisible to path-based sampling by construction;
+ *  3. worst and clearest: the record reads themselves re-resolve
+ *     `path.join(coordRoot, basename)` AT READ TIME, so a swap DURING a read is
+ *     served from the substitute while both surrounding samples see the
+ *     original. No amount of sampling around a read can fix a read that
+ *     re-resolves its own path.
+ *
+ * Closing this needs a retained `C_fd` (openat-equivalent) with SAME-FD reads,
+ * so the records are read THROUGH the accredited directory handle rather than
+ * re-resolved by name. That is provider-owned retained-handle work and belongs
+ * to Phase B; it is deliberately not attempted here, and this snapshot must not
+ * be presented as a substitute for it.
+ *
+ * What it is still worth: it catches the non-adversarial cases -- a root
+ * renamed, chmod'd or chown'd mid-sequence -- and it makes the checked
+ * identity OBSERVABLE to the caller, which is the only reason a test can check
+ * which root a result came from at all.
+ *
+ * @param {string} coordRoot - absolute coordination root `C`.
+ * @returns {{dev: bigint, ino: bigint, mode: bigint, uid: bigint, gid: bigint}}
+ */
+function snapshotCoordinationRootIdentity(coordRoot) {
+  validateRootConfinement(coordRoot);
+  const st = fs.lstatSync(coordRoot, { bigint: true });
+  return { dev: st.dev, ino: st.ino, mode: st.mode, uid: st.uid, gid: st.gid };
+}
+
+/**
+ * Re-proves the coordination root is still the SAME directory, unchanged, as the
+ * one snapshotted at phase 0. A fresh `lstat` on the path, compared field by
+ * field against the snapshot: a rename/replace changes dev or ino, a chmod
+ * changes mode, a chown changes uid/gid. Called after each record read.
+ *
+ * Bounded claim: this detects a change that is STILL VISIBLE at the moment of
+ * sampling. It does not detect an ABA cycle that restores the original before
+ * this runs, and it cannot speak for what the read itself resolved -- see the
+ * three surviving gaps on `snapshotCoordinationRootIdentity` above.
+ */
+function assertCoordinationRootSnapshotUnchanged(coordRoot, snapshot, afterWhat) {
+  let st;
+  try {
+    st = fs.lstatSync(coordRoot, { bigint: true });
+  } catch (err) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root vanished during conformance checking (after ' + afterWhat + '): ' + coordRoot);
+  }
+  if (st.dev !== snapshot.dev || st.ino !== snapshot.ino || st.mode !== snapshot.mode
+      || st.uid !== snapshot.uid || st.gid !== snapshot.gid) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root identity changed during conformance checking (rebound/chmod/chown after ' + afterWhat + '): ' + coordRoot);
+  }
+}
+
+/**
+ * The binding's PATHLESS DIAGNOSTIC CARRIER admits EXACTLY TWO byte forms and no
+ * others: the canonical payload, or that same payload followed by EXACTLY ONE
+ * LF. Both are exact whole-buffer comparisons -- deliberately NOT an `endsWith`
+ * test and NOT a trim, either of which would let CRLF, two-or-more LFs, or
+ * surrounding whitespace through.
+ *
+ * Why a tolerance exists here at all, when the two `C` records require exactly
+ * one LF: R3.3:2374 distinguishes "Disk records: UTF-8 estricto + un LF" from
+ * "frames: sin LF", and `RuntimeProfileBindingV2` has NO defined disk path and
+ * NO defined transport, so the source does not say which side of that line it
+ * falls on. The resolution is to be strictly closed on every axis R3.3 DOES
+ * specify for all closed objects (canonical sorted compact JSON, no duplicate
+ * keys, no `3.0`-style numerics -- R3.3:2373) and permissive ONLY on the single
+ * axis it leaves unstated for this record.
+ *
+ * DERIVED DECISION, with a condition attached: if `RuntimeProfileBindingV2` ever
+ * gains a defined disk path or transport, this MUST be tightened to that form's
+ * rule -- for a disk record, exactly one LF, i.e. `assertCanonicalDiskRecordBytes`.
+ * The tolerance belongs exclusively to this pathless diagnostic carrier and
+ * grants no path or transport authority.
+ *
+ * Note this closes the duplicate-key R32->R33 smuggling vector on the ONE record
+ * whose whole purpose is carrying the P33 literal: without it,
+ * `{"protocol_profile":P32, ..., "protocol_profile":P33}` parses last-wins to
+ * P33 and is ACCEPTED here while a first-wins parser elsewhere reads P32.
+ */
+function assertBindingCarrierBytes(bytes, obj, artifactPath) {
+  const canonical = Buffer.from(canonicalJSONStringify(obj), 'utf8');
+  if (bytes.equals(canonical)) return;
+  if (bytes.equals(Buffer.concat([canonical, Buffer.from('\n', 'utf8')]))) return;
+  throw new CliError('INVALID', 'SCHEMA_INVALID', 'RuntimeProfileBindingV2 carrier bytes are neither the canonical payload nor the canonical payload plus exactly one LF (CRLF, repeated LFs, surrounding whitespace, pretty-printing, unsorted keys, duplicate keys and non-canonical numerics are all rejected): ' + artifactPath);
+}
+
+/**
+ * SHAPE + CARRIER-ENCODING conformance for a `RuntimeProfileBindingV2`, plus the
+ * negative "not inside `C`" location constraint. No CLI surface (see the tuple
+ * function's note on why the `validate --kind` exposure was removed).
+ *
+ * It carries NO POSITIVE PATH AUTHORITY WHATSOEVER -- R33 defines no legitimate
+ * location for this record, so a later stage must not read a location guarantee
+ * into this function that it does not make. And because all six fields are fixed
+ * literals, passing this check means only that the caller reproduced a constant:
+ * it is conformance, never identity.
+ *
+ * DIGEST OPERAND (stated here so a later stage cannot get it wrong): any digest
+ * or correlation over this record MUST use the canonical payload,
+ * `canonicalJSONStringify(obj)`, NEVER the carrier's raw bytes -- the carrier
+ * may legally carry a trailing LF that is not part of the payload, so hashing
+ * `rec.bytes` would yield two different digests for one logically identical
+ * binding. There is no binding digest formula in this stage; this note exists so
+ * the one that arrives later starts from the payload.
+ */
+function checkRuntimeProfileBindingV2Conformance(artifactPath, coordRoot) {
+  assertNotInsideCoordinationRoot(coordRoot, artifactPath);
+  // No `maxSize` override: the generic DEFAULT_MAX_DURABLE_ARTIFACT_BYTES bound
+  // applies as operational parser protection, not as an R33 contractual cap
+  // (see the withdrawal note above).
+  const rec = readDurableRecord(artifactPath);
+  assertClosedShape(rec.obj, RUNTIME_PROFILE_BINDING_V2_FIELDS);
+  assertBindingCarrierBytes(rec.bytes, rec.obj, artifactPath);
+  return rec.obj;
+}
+
+
+// ── A.5 domain-separated digests (R3.3:3716-3729) ──────────────────────────
+
+/**
+ * `SHA256(UTF8(domain) || 0x00 || UTF8(canonical(record)))`.
+ *
+ * The domain is passed EXPLICITLY and is never derived from `record.schema`:
+ * the temporal envelope has no `schema` key at all, and its domain
+ * (`runtime/temporal-authority-envelope/v1`) is not any record's schema literal.
+ *
+ * Over the FULL canonical record -- NO field exclusion. Deliberately unlike the
+ * sibling formulas at :3666-3669 and :3711-3713 (`canonical(binding without
+ * binding_digest)`), which DO exclude their own self-digest field. These three
+ * records carry no self-digest field, so there is nothing to exclude and adding
+ * an exclusion would silently change every value.
+ *
+ * Hashes `canonicalJSONStringify(record)`, NOT the artifact's raw file bytes
+ * and NOT `readDurableRecord`'s own `.digest`: a disk record carries a trailing
+ * LF (R3.3:2374) that is not part of `canonical(record)`, so a raw-bytes digest
+ * is a DIFFERENT value and would break
+ * `ProviderSessionV3.root_profile_digest == rootProfileDigestV3(RootProfileV3)`
+ * (:3734-3735). With `assertCanonicalDiskRecordBytes` proving the bytes are
+ * exactly `canonical(obj) + LF`, the two differ by precisely that one byte and
+ * nothing else.
+ *
+ * PLAN.md ~L2768-2769: these apply ONLY AFTER shape/profile/root accreditation.
+ * A digest is never computed to DECIDE a profile.
+ * @param {string} domain - the exact domain-separation string.
+ * @param {object} record - an already shape-checked record.
+ * @returns {string} lowercase hex sha256.
+ */
+function domainSeparatedRecordDigest(domain, record) {
+  return sha256Buffer(Buffer.concat([
+    Buffer.from(domain, 'utf8'),
+    Buffer.from([0x00]),
+    Buffer.from(canonicalJSONStringify(record), 'utf8'),
+  ]));
+}
+
+/**
+ * `rootProfileDigestV3(profile)` (R3.3:3716-3719).
+ * @param {object} profile - a conformant RootProfileV3.
+ * @returns {string} lowercase hex sha256.
+ */
+function rootProfileDigestV3(profile) {
+  return domainSeparatedRecordDigest('coordination/root-profile/v3', profile);
+}
+
+/**
+ * `providerSessionDigestV3(session)` (R3.3:3721-3724).
+ * @param {object} session - a conformant ProviderSessionV3.
+ * @returns {string} lowercase hex sha256.
+ */
+function providerSessionDigestV3(session) {
+  return domainSeparatedRecordDigest('coordination/provider-session/v3', session);
+}
+
+/**
+ * `temporalEnvelopeDigestV1(envelope)` (R3.3:3726-3729). Note the domain is
+ * `runtime/temporal-authority-envelope/v1`, which is NOT a key of the envelope
+ * -- TemporalAuthorityEnvelopeV1 [4] carries no `schema` field.
+ * @param {object} envelope - a conformant TemporalAuthorityEnvelopeV1.
+ * @returns {string} lowercase hex sha256.
+ */
+function temporalEnvelopeDigestV1(envelope) {
+  return domainSeparatedRecordDigest('runtime/temporal-authority-envelope/v1', envelope);
+}
+
+// ── R33 tuple-first selection + correlation (PLAN §3.1, PLAN.md ~L2676-2679) ──
+
+/**
+ * The R33 tuple correlation set, DERIVED at module load from the two field
+ * tables themselves -- never hand-transcribed (contract §8b: "Re-derive the
+ * intersection programmatically; do not hand-trust either list").
+ *
+ *   correlation_set = (keys(RootProfileV3) ∩ keys(ProviderSessionV3))
+ *                     minus keys that are a FIXED LITERAL in BOTH
+ *
+ * The subtraction is not an optimization: a key that is the same fixed literal
+ * in both records agrees BY CONSTRUCTION, and any deviation is already rejected
+ * as SCHEMA_INVALID at shape time, so a correlation guard over it could never
+ * fire -- and a guard that cannot fail is worse than no guard, because it reads
+ * as coverage. `isLiteralField` reads the `lit()` declaration, so this stays in
+ * lockstep with the tables by construction.
+ *
+ * Measured: raw intersection 21, fixed-literal-in-both 4 (`schema`,
+ * `provider_abi`, `control_protocol`, `provider_name`), derived set 17.
+ *
+ * The three enum-valued keys (`coordination_mode`, `provider_manager_kind`,
+ * `provider_manager_lifetime_profile`) are correctly RETAINED: they are closed
+ * ENUMS, not single literals, so two individually-shape-valid records can
+ * legitimately disagree and that disagreement is a genuine correlation failure.
+ *
+ * The count is asserted here rather than trusted. A drifted table is a toolkit
+ * integrity defect, not a per-request condition, so it fails at module load --
+ * the same discipline `ROUTING_POLICY_TABLE` uses below ("Fail fast at module
+ * load, not at first dispatch").
+ */
+const R33_TUPLE_CORRELATION_KEYS = (() => {
+  const shared = Object.keys(ROOT_PROFILE_V3_FIELDS).filter(
+    (k) => Object.prototype.hasOwnProperty.call(PROVIDER_SESSION_V3_FIELDS, k),
+  );
+  const derived = shared.filter(
+    (k) => !(isLiteralField(ROOT_PROFILE_V3_FIELDS, k) && isLiteralField(PROVIDER_SESSION_V3_FIELDS, k)),
+  );
+  if (derived.length !== 17) {
+    throw new Error(
+      'R33 tuple correlation set derived ' + derived.length + ' keys from the field tables; '
+      + 'contract §8b requires exactly 17 (raw intersection 21 minus 4 fixed-literal-in-both). '
+      + 'A field table changed -- re-derive deliberately rather than adjusting this number.',
+    );
+  }
+  return Object.freeze(derived.slice().sort());
+})();
+
+/**
+ * Three-record STATIC CONFORMANCE over the R33 tuple. NOT accreditation, and NOT
+ * PLAN §3.1's selection rule -- see the section banner. §3.1 (PLAN.md ~L2676-2679)
+ * requires that "El validator se selecciona primero por el tuple acreditado
+ * `RuntimeProfileBindingV2 + RootProfileV3 + ProviderSessionV3`", and the word
+ * doing the work there is *acreditado*: an accredited tuple, which needs the
+ * receipt chain and live capabilities this section cannot reach. What this
+ * function establishes is the CONFORMANCE PRECONDITION for that rule -- it proves
+ * the three records are individually well-formed and mutually correlated, and
+ * nothing about whether any of them is legitimate.
+ *
+ * It has NO CLI SURFACE. The `validate --kind` exposure was removed: a kind that
+ * returned public SUCCESS while establishing no authority was reporting coverage
+ * it did not have. The binding path is a parameter because it is the only one of
+ * the three with no contract-defined location; both `C` records are DERIVED from
+ * `coordRoot`, which is what lets one call cover all three.
+ *
+ * ONE THING IT STILL DOES NOT PROVE, deliberately: the binding leg is a
+ * conformance check, not an identity binding. All six `RuntimeProfileBindingV2`
+ * fields are fixed literals and no field ties a binding to a particular root, so
+ * ANY conforming binding satisfies it. The tuple's force comes from the two `C`
+ * records plus the 17-key and digest correlation below.
+ *
+ * PRECEDENCE IS STRUCTURAL, not incidental (PLAN.md ~L2896-2907). It holds by
+ * CONTROL FLOW ACROSS PHASES, not by the order of checks inside any one
+ * function: every record's shape is fully checked in phase 1 before the first
+ * phase-2 statement is reachable, so a tuple carrying BOTH a shape defect and a
+ * correlation defect can only ever report SCHEMA_INVALID.
+ *
+ *   phase 0  location/trust  -> SECURITY_INVALID / DURABILITY_UNPROVEN
+ *   phase 1  shape+literal+encoding (all three, incl. temporal invariants)
+ *                            -> SCHEMA_INVALID
+ *   phase 2  correlation     -> CORRELATION_INVALID
+ *   phase 3  authority       -> NOT IMPLEMENTED, see below
+ *
+ * Phase 0 preceding the entire ladder is DERIVED, not cited: PLAN.md ~L2896-2907
+ * ranks only SCHEMA -> CORRELATION -> AUTHORITY and never places
+ * SECURITY_INVALID or DURABILITY_UNPROVEN. The reasoning is that you cannot
+ * trust bytes you have not proven you can trust. Concrete consequence, stated
+ * so it is not a surprise: a `.provider-session` that is BOTH a symlink AND
+ * correlation-defective reports SECURITY_INVALID, not CORRELATION_INVALID.
+ *
+ * NO AUTHORITY TIER. R3.3:2848-2851 makes receipt-level disagreement
+ * AUTHORITY_INVALID, but there is no `BootstrapReceipt` record anywhere in this
+ * codebase to compare against, so that tier is deliberately absent rather than
+ * faked. Note for whoever adds it: `root_bootstrap_id` will then carry TWO
+ * comparisons at TWO tiers -- record-vs-record here (CORRELATION_INVALID) and
+ * record-vs-receipt there (AUTHORITY_INVALID). That is INTENTIONAL, not a
+ * duplicate to be deduplicated.
+ *
+ * NO BINDING-vs-ROOT CORRELATION CHECK, deliberately (contract §8c). The only
+ * keys `RuntimeProfileBindingV2` shares with `RootProfileV3` are
+ * `protocol_profile`, `control_protocol`, `provider_abi` and `handle_protocol`,
+ * and all four are the SAME fixed literal in both tables -- so a conforming pair
+ * agrees by construction and any disagreement is already SCHEMA_INVALID in phase
+ * 1. Adding the check would be exactly the vacuous guard the correlation-set
+ * subtraction above rejects. Do not "restore" it.
+ *
+ * ZERO SIDE EFFECTS: `validate` is a no-mutation surface (PLAN.md ~L785), and
+ * this path calls only read primitives plus pure comparisons -- no publish, no
+ * lock, no unlink, no temp file. That is what discharges "reject BEFORE
+ * reservation/cut" (PLAN.md ~L2914).
+ *
+ * @param {string} bindingPath - absolute path to the RuntimeProfileBindingV2.
+ * @param {string} coordRoot - absolute coordination root `C`.
+ * @returns {object} the CONFORMANT RootProfileV3 -- bytes proven to match a
+ * closed schema, never an accredited root.
+ */
+function checkR33ProfileTupleConformance(bindingPath, coordRoot) {
+  // ---- phase 1: shape, literals and encoding for ALL THREE, before any
+  // correlation. Each check also performs its own phase-0 location/trust
+  // checks. Ordered binding-first so a P32 binding fails the whole tuple even
+  // when both `C` records are perfectly valid R33 -- no record is ever treated
+  // as authoritative on its own.
+  // ---- phase 0: confinement-check `C` ITSELF, and freeze a NON-AUTHORITATIVE
+  // snapshot of its identity. The three reads below are three separate windows
+  // in which `C` could be renamed, chmod'd or replaced; the snapshot is
+  // re-sampled after each. This narrows those windows -- it does NOT close them,
+  // because the reads re-resolve their own paths and an ABA cycle is invisible
+  // to path-based sampling. See `snapshotCoordinationRootIdentity`.
+  const rootSnapshot = snapshotCoordinationRootIdentity(coordRoot);
+
+  const binding = checkRuntimeProfileBindingV2Conformance(bindingPath, coordRoot);
+  assertCoordinationRootSnapshotUnchanged(coordRoot, rootSnapshot, 'binding read');
+  const rootRec = checkRootProfileV3Conformance(path.join(coordRoot, ROOT_PROFILE_V3_BASENAME), coordRoot);
+  assertCoordinationRootSnapshotUnchanged(coordRoot, rootSnapshot, 'root-profile read');
+  const sessionRec = checkProviderSessionV3Conformance(path.join(coordRoot, PROVIDER_SESSION_V3_BASENAME), coordRoot);
+  assertCoordinationRootSnapshotUnchanged(coordRoot, rootSnapshot, 'provider-session read');
+  const root = rootRec.obj;
+  const session = sessionRec.obj;
+
+  // ---- phase 2: correlation. Every rule here is CORRELATION_INVALID; the
+  // order among them is an implementation detail, NOT a contract -- the source
+  // does not rank same-tier rules, so only status+detail_code are specified,
+  // never which message a multi-defect tuple surfaces. Cheapest first: field
+  // comparisons before a SHA-256.
+  for (const key of R33_TUPLE_CORRELATION_KEYS) {
+    if (root[key] !== session[key]) {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'root-profile.' + key + ' does not equal provider-session.' + key);
+    }
+  }
+
+  // Temporal domain agreement (contract §8d, DERIVED from R3.3:1465 "different
+  // domain values are incomparable, never converted" plus R3.3:1475-1476 "Si un
+  // outer object tiene `clock_domain_id`, debe ser byte-identical a
+  // `temporal.clock_domain_id`"). Checked against BOTH records -- the 17-key
+  // rule above already proved the two top-level values agree, so this binds the
+  // nested envelope to that same single domain.
+  if (session.temporal.clock_domain_id !== session.clock_domain_id) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'provider-session.temporal.clock_domain_id does not equal its own top-level clock_domain_id');
+  }
+  if (session.temporal.clock_domain_id !== root.clock_domain_id) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'provider-session.temporal.clock_domain_id does not equal root-profile.clock_domain_id');
+  }
+
+  // The CITED digest chain (R3.3:3734-3735): "`ProviderSessionV3.
+  // root_profile_digest` y binding `root_profile_digest` son
+  // `rootProfileDigestV3(RootProfileV3)`". Operand is the canonical PAYLOAD via
+  // rootProfileDigestV3, never the file's raw bytes -- the record carries a
+  // trailing LF that is not part of `canonical(record)`.
+  const expectedRootDigest = rootProfileDigestV3(root);
+  if (session.root_profile_digest !== expectedRootDigest) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'provider-session.root_profile_digest does not equal rootProfileDigestV3(root-profile)');
+  }
+
+  // `coordRootIdentitySnapshot` is part of the RESULT, not a test affordance:
+  // `rootRec`/`sessionRec` carry dev/ino for the two record FILES, so without
+  // this nothing in the return value identifies `C` itself and no caller could
+  // tell which root a result came from. That opacity is where the
+  // outside-worktree/0777/symlink defects hid.
+  //
+  // BOUNDED CLAIM. An earlier revision of this comment said exposing it "proves
+  // ONE accredited identity was used throughout" and was "strictly stronger"
+  // than racing a swap. Both are WITHDRAWN. It reports the identity observed at
+  // the sampling points, nothing more; a mid-read swap is served from the
+  // substitute while every sample still matches. Do not build an authority
+  // argument on this field -- that needs a retained `C_fd` with same-FD reads,
+  // which is Phase B.
+  return {
+    binding: binding, root: root, session: session,
+    rootRec: rootRec, sessionRec: sessionRec,
+    coordRootIdentitySnapshot: rootSnapshot,
+  };
+}
+
+// R33-STAGE1-AUDIT-SCOPE:END
+//
+// CONSTRAINT FOR WHOEVER IMPLEMENTS THE PROVIDER-OWNED AUTHORITY COMPOSITION:
+// put it OUTSIDE the markers above. The region they delimit is asserted to
+// contain no filesystem-mutating primitive, and the bootstrap sequence's step 18
+// -- `BootstrapReceipt` plus live capabilities transitioning the session to
+// ACTIVE, the first authority-success point -- necessarily WRITES. Placing that
+// code inside the markers would break the absence audit, and the tempting repair
+// would be to weaken the audit rather than move the code. That is the same
+// failure family as a marker duplicated into its own describing comment: a guard
+// that cannot fail still reads as coverage. Move the code, never the assertion.
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Command dispatch registry -- populated incrementally as each cmd* is defined
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3017,12 +5040,12 @@ const VALIDATE_KIND_DISPATCH = {
   'inbox-ref-v1': (artifact, coordRoot) => validateInboxRefV1(artifact, coordRoot),
   'result-v2': (artifact, coordRoot) => validateResultV2(artifact, coordRoot).obj,
   'claim-v1': (artifact, coordRoot) => validateClaimV1(artifact, coordRoot),
-  'active-lease-v1': (artifact) => validateActiveLeaseV1(artifact),
+  'active-lease-v1': (artifact, coordRoot) => validateActiveLeaseV1(artifact, coordRoot),
   'activation-intent-v1': (artifact) => validateActivationIntentV1(artifact),
   'delivery-v1': (artifact) => validateDeliveryV1(artifact),
   'accepted-result-v1': (artifact) => validateAcceptedResultV1(artifact),
   'ack-v1': (artifact) => validateAckV1(artifact),
-  'cancel-v1': (artifact) => validateCancelV1(artifact),
+  'cancel-v1': (artifact, coordRoot) => validateCancelV1(artifact, coordRoot),
   'conflict-v1': (artifact) => validateConflictV1(artifact),
   'takeover-v1': (artifact) => validateTakeoverV1(artifact),
 };
@@ -3088,8 +5111,20 @@ COMMANDS['root-init'] = cmdRootInit;
  * Full coordination-root confinement primitive (RCR-confine-*): lstat
  * not-a-symlink, real directory, POSIX owner+0700 mode, Windows ACL probe
  * seam, git-worktree confinement, then a stable-identity re-check
- * (dev/ino/mode/uid/gid unchanged) to close the TOCTOU window the
- * measurably-slower `git` confinement subprocess call opens. Extracted from
+ * (dev/ino/mode/uid/gid unchanged) across the measurably-slower `git`
+ * confinement subprocess call.
+ *
+ * BOUNDED CLAIM, narrowed from "closes the TOCTOU window": the re-check DETECTS
+ * a change that PERSISTS across that subprocess window. It does not close the
+ * window, and it cannot: an ABA cycle -- swap the root, let the check run,
+ * restore before the re-check -- leaves every sampled field identical. Nor does
+ * the guarantee outlive the call: the caller resolves the path again afterwards,
+ * and anything it then reads by name is re-resolved at that moment. Closing it
+ * needs a retained directory fd with same-fd reads, which this function does not
+ * provide. Wording narrowed after the same overclaim was withdrawn from the R33
+ * snapshot helper; path-based sampling cannot establish continuity anywhere.
+ *
+ * Extracted from
  * `cmdRootValidate` (unchanged behavior/order/errors) so any OTHER caller
  * needing the SAME confined-root guarantee (e.g. the WP3 bridge's own
  * rendezvous root) reuses this exact primitive instead of a second, weaker
@@ -3577,8 +5612,24 @@ function cmdClaim(flags) {
   const coordRoot = resolveAbsolute(flags['coordination-root']);
   const requestPath = resolveAbsolute(flags.request);
   const txnDir = path.dirname(requestPath);
-  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
+  // Codex NO-GO round 17 (P0): this preflight used to be
+  // readRequestForTxnOrCorrelationInvalid(txnDir) (no coordRoot confinement/
+  // geometry check, and no in-lock identity re-check against it at all) --
+  // accreditCanonicalRequest's own doc comment already named claim as sharing
+  // this exact asymmetry with the pre-round-10/11 cmdCancel/cmdAcceptResult,
+  // deliberately left unfixed until now. A request.json substitution that
+  // preserves initial_attempt_id/initial_lease_epoch (so auth/auth2 still
+  // match) but changes another field -- expiry, target_role_profile_digest --
+  // would previously go undetected: the claim's own target_role_profile_digest
+  // is baked in from this pre-lock read, and leaseObj's own lease_expiry is
+  // derived from the in-lock re-read, with nothing ever proving the two reads
+  // saw the identical, unmutated file. Aligned here with cmdCancel/
+  // cmdAcceptResult/cmdTakeover's own established pattern: preflight, then
+  // in-lock re-read + assertRequestIdentityMatches before trusting any field.
+  const preflight = accreditCanonicalRequest(coordRoot, requestPath);
+  const reqObj = preflight.obj;
   const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+  testRendezvous(txnDir, 'claim-preflight-pre-election');
 
   // claim/v1 remains the no-clobber ELECTION, outside .lock (PLAN-frozen first-writer-
   // wins semantics -- the lock is not needed to WIN the claim, only to safely publish
@@ -3597,17 +5648,51 @@ function cmdClaim(flags) {
     created_at: nowIso(),
   };
   const claimPath = claimPathFor(txnDir, auth.attemptId);
-  publishNoClobber(claimPath, Buffer.from(canonicalJSONStringify(claimObj), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
+  const claimBytes = Buffer.from(canonicalJSONStringify(claimObj), 'utf8');
+  // Codex HARD NO-GO (round 17 -> 18 -> 19): the election publish below is a
+  // no-clobber, first-writer-wins WRITE -- once it durably lands, a
+  // SUBSEQUENT, legitimate claimant racing against the CURRENT (possibly
+  // different) request.json can never overwrite it; they only ever observe
+  // EEXIST/AUTHORITY_INVALID, regardless of whose data was actually correct.
+  // Round 18 re-accredited request.json immediately before CALLING
+  // publishNoClobber, and claimed that closed the window "to the tightest
+  // achievable" -- Codex HARD NO-GO (round 19): it did not. publishNoClobber's
+  // OWN internal sequence (mkdir, temp create/harden/write/fsync/fstat/close)
+  // still ran entirely unrevalidated between that check and the actual
+  // linkSync election, and fsync in particular is not instantaneous.
+  // `revalidateBeforeLink` (see publishNoClobber's own doc comment) runs this
+  // SAME check as the LAST statement before linkSync itself, closing that
+  // remaining window too -- down to the gap between the callback returning
+  // and linkSync executing, the tightest achievable without a hypothetical
+  // atomic compare-then-link primitive.
+  const claimReceipt = publishNoClobber(claimPath, claimBytes, {
+    raceDetailCode: 'AUTHORITY_INVALID',
+    revalidateBeforeLink: () => {
+      testRendezvous(txnDir, 'claim-pre-link-revalidate');
+      assertRequestIdentityMatches(preflight, accreditCanonicalRequest(coordRoot, requestPath), requestPath);
+    },
+  });
 
   // Section 4: the initial active-lease publish moves INSIDE the transition lock -- a
   // takeover racing between the claim election above and lock acquisition must be
   // re-checked under the SAME durable lock a heartbeat/takeover itself uses, never
   // assumed still current just because we won the election.
   testRendezvous(txnDir, 'claim-pre-lock');
-  return withLock(txnDir, () => {
+  return withLock(txnDir, coordRoot, (lockToken) => {
+    // Codex NO-GO round 16: a fresh scope check as the FIRST thing inside
+    // this callback -- withLock's own pre-fn check happens once, before fn
+    // starts; every read fn itself performs afterward (reqObj2 below,
+    // claimRec further down) had no check of its own closer to it.
+    assertLockedScopeIdentity(lockToken);
     // Re-read/revalidate the request and CURRENT attempt/epoch UNDER the lock -- a
     // takeover could have committed between the election above and lock acquisition.
-    const reqObj2 = readRequestForTxnOrCorrelationInvalid(txnDir);
+    // Codex NO-GO round 17 (P0): re-accredit the FULL request identity (not
+    // just the narrower attempt/epoch projection resolveAuthoritativeAttempt
+    // derives from it) and reject any divergence from the preflight -- see
+    // this function's own preflight comment above.
+    const inLock = accreditCanonicalRequest(coordRoot, requestPath);
+    assertRequestIdentityMatches(preflight, inLock, requestPath);
+    const reqObj2 = inLock.obj;
     const auth2 = resolveAuthoritativeAttempt(reqObj2, txnDir);
     if (auth2.attemptId !== auth.attemptId || auth2.leaseEpoch !== auth.leaseEpoch) {
       // A takeover committed before lock acquisition: our claim was for the NOW-
@@ -3625,6 +5710,15 @@ function cmdClaim(flags) {
     if (claimRec.obj.attempt_id !== auth2.attemptId || claimRec.obj.lease_epoch !== auth2.leaseEpoch) {
       throw new CliError('INVALID', 'AUTHORITY_INVALID', 'claim attempt/epoch is not the current authoritative pair');
     }
+    // Codex NO-GO round 16 (P0): the checks above prove SOME valid claim for
+    // the current attempt/epoch resolves at claimPath -- never that it is
+    // the EXACT bytes THIS invocation's own election published (a
+    // substituted-but-still-attempt/epoch-matching claim, e.g. a different
+    // claimant_role/claimant_instance_id/driver, would pass them). Reuse the
+    // SAME fd-bound comparator every other hardened write in this file
+    // trusts, against the receipt THIS invocation's own election publish
+    // returned.
+    assertArtifactMatchesReceipt(claimPath, claimReceipt, claimBytes);
 
     const now = nowIso();
     const leaseObj = {
@@ -3642,7 +5736,30 @@ function cmdClaim(flags) {
       created_at: now,
     };
     const leasePath = activeLeasePathFor(txnDir, auth2.attemptId);
-    publishNoClobber(leasePath, Buffer.from(canonicalJSONStringify(leaseObj), 'utf8'), { allowIdenticalIdempotent: true });
+    const leaseBytes = Buffer.from(canonicalJSONStringify(leaseObj), 'utf8');
+    // Codex NO-GO round 15 ("los cinco callers del lock"): withLock's own
+    // entry/exit checks bracket this ENTIRE callback, but cannot catch a
+    // txnDir/.lock swap that happens THEN GETS SWAPPED BACK before withLock's
+    // own post-fn check runs (empirically confirmed this session via
+    // RCC-claim-withlock-systemic-txndir-swap-detected: the write still lands
+    // in a swapped substitute even with that systemic check active). A fresh
+    // scope check immediately before AND after this specific write shrinks
+    // that window to the minimum, mirroring cmdCancel/cmdAcceptResult/
+    // cmdTakeover's own established pattern.
+    assertLockedScopeIdentity(lockToken);
+    const leaseReceipt = publishNoClobber(leasePath, leaseBytes, { allowIdenticalIdempotent: true });
+    testRendezvous(txnDir, 'claim-post-lease-publish-pre-recheck');
+    try {
+      assertLockedScopeIdentity(lockToken);
+      // Codex NO-GO round 17 (P0): mirrors cmdTakeover's own post-publish
+      // request-identity recheck -- proves request.json is STILL the exact
+      // preflight bytes at the moment this invocation is about to report
+      // SUCCESS, not merely at lock entry several reads/writes earlier.
+      assertRequestIdentityMatches(preflight, accreditCanonicalRequest(coordRoot, requestPath), requestPath);
+      assertArtifactMatchesReceipt(leasePath, leaseReceipt, leaseBytes);
+    } catch (err) {
+      throw isPoisoned(err) ? err : markPoisoned(err);
+    }
 
     return { request_id: reqObj2.request_id, artifact_ref: claimPath };
   });
@@ -3658,12 +5775,21 @@ function cmdLeaseHeartbeat(flags) {
   // Outside the lock: parse argv and derive canonical paths ONLY (Section 4). Every
   // durable read, the authority resolution, and the expiry decision happen INSIDE the
   // one withLock below -- a heartbeat is a REFRESH transaction, not a lock-free lookup.
+  // Codex NO-GO round 15: coordRoot was previously required by requireFlags
+  // above but never actually resolved/used anywhere in this function -- now
+  // threaded into withLock/acquireLock for the ancestor-confinement check.
+  const coordRoot = resolveAbsolute(flags['coordination-root']);
   const requestPath = resolveAbsolute(flags.request);
   const txnDir = path.dirname(requestPath);
   const claimPath = resolveAbsolute(flags.claim);
 
   testRendezvous(txnDir, 'heartbeat-pre-lock');
-  return withLock(txnDir, (lockToken) => {
+  return withLock(txnDir, coordRoot, (lockToken) => {
+    // Codex NO-GO round 16: a fresh scope check as the FIRST thing inside
+    // this callback -- withLock's own pre-fn check happens once, before fn
+    // starts; every read below (reqObj, claimRec, existingRec) had no check
+    // of its own closer to it.
+    assertLockedScopeIdentity(lockToken);
     const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
     const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
 
@@ -3723,7 +5849,28 @@ function cmdLeaseHeartbeat(flags) {
       last_heartbeat_at: now,
       lease_expiry: minIso(isoPlusSeconds(now, existing.ttl_seconds), reqObj.expiry),
     });
-    publishReplace(leasePath, Buffer.from(canonicalJSONStringify(merged), 'utf8'));
+    // Codex NO-GO round 15 ("los cinco callers del lock"): a fresh scope check
+    // immediately before this write, mirroring cmdClaim/cmdCancel/
+    // cmdAcceptResult/cmdTakeover's own established pattern.
+    //
+    // Codex NO-GO round 16 (P0): round 15's own justification for skipping a
+    // byte-exact check here ("a legitimate concurrent heartbeat is expected
+    // to change its content") was WRONG -- only ONE process can ever hold
+    // this lock at a time; a second heartbeat call BLOCKS in acquireLock's
+    // own mkdir-wait loop until this one releases, so nothing legitimate can
+    // race THIS invocation's own write while it holds the lock. A byte-exact
+    // receipt check is exactly as meaningful here as for any other hardened
+    // write in this file.
+    assertLockedScopeIdentity(lockToken);
+    const leaseBytes = Buffer.from(canonicalJSONStringify(merged), 'utf8');
+    const leaseReceipt = publishReplace(leasePath, leaseBytes);
+    testRendezvous(txnDir, 'heartbeat-post-publish-pre-recheck');
+    try {
+      assertLockedScopeIdentity(lockToken);
+      assertArtifactMatchesReceipt(leasePath, leaseReceipt, leaseBytes);
+    } catch (err) {
+      throw isPoisoned(err) ? err : markPoisoned(err);
+    }
     return { request_id: reqObj.request_id, artifact_ref: leasePath };
   });
 }
@@ -3830,11 +5977,27 @@ function computeTakeoverEligibility(reqObj, txnDir, nowMs, lockToken) {
 
 function cmdTakeover(flags) {
   requireFlags(flags, ['coordination-root', 'request']);
+  const coordRoot = resolveAbsolute(flags['coordination-root']);
   const requestPath = resolveAbsolute(flags.request);
   const txnDir = path.dirname(requestPath);
-  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
+  // Codex NO-GO round 15: this preflight used to be readRequestForTxnOrCorrelationInvalid(txnDir)
+  // (no coordRoot confinement/geometry check at all) with NO in-lock re-read or
+  // identity-match against it -- the SAME TOCTOU class cmdCancel/cmdAcceptResult
+  // needed rounds 10-12 to close (accredit once before the lock, then TRUST a
+  // fresh in-lock read unconditionally, silently adopting a mid-wait
+  // request.json mutation instead of rejecting it). accreditCanonicalRequest's
+  // own doc comment already named takeover as sharing this exact asymmetry,
+  // deliberately left unfixed by that earlier round. Aligned here with
+  // cmdCancel's own established pattern: preflight, then in-lock re-read +
+  // assertRequestIdentityMatches before trusting any field.
+  const preflight = accreditCanonicalRequest(coordRoot, requestPath);
 
-  return withLock(txnDir, (lockToken) => {
+  return withLock(txnDir, coordRoot, (lockToken) => {
+    testRendezvous(txnDir, 'takeover-in-lock-pre-read');
+    assertLockedScopeIdentity(lockToken);
+    const inLock = accreditCanonicalRequest(coordRoot, requestPath);
+    assertRequestIdentityMatches(preflight, inLock, requestPath);
+    const reqObj = inLock.obj;
     // DUR-J item 6/Takeover: the lease read used for eligibility AND the takeover
     // transition below occur under the SAME durable exclusion -- the authentic lockToken
     // is threaded into computeTakeoverEligibility so its immutablePath:false lease read is
@@ -3855,7 +6018,21 @@ function cmdTakeover(flags) {
       takeover_at: nowStr,
     };
     const takeoverPath = takeoverPathFor(txnDir);
-    publishNoClobber(takeoverPath, Buffer.from(canonicalJSONStringify(takeoverObj), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
+    const takeoverBytes = Buffer.from(canonicalJSONStringify(takeoverObj), 'utf8');
+    assertLockedScopeIdentity(lockToken);
+    const takeoverReceipt = publishNoClobber(takeoverPath, takeoverBytes, { raceDetailCode: 'AUTHORITY_INVALID' });
+    // Codex NO-GO round 15: takeover.json is a one-time immutable record (like
+    // cancel.json/accepted-result.json) -- gets the SAME post-publish
+    // discipline: fresh scope + request-identity re-check, plus a byte+identity
+    // re-verification against the receipt publishNoClobber itself returned.
+    testRendezvous(txnDir, 'takeover-post-publish-pre-recheck');
+    try {
+      assertLockedScopeIdentity(lockToken);
+      assertRequestIdentityMatches(preflight, accreditCanonicalRequest(coordRoot, requestPath), requestPath);
+      assertArtifactMatchesReceipt(takeoverPath, takeoverReceipt, takeoverBytes);
+    } catch (err) {
+      throw isPoisoned(err) ? err : markPoisoned(err);
+    }
     return { request_id: reqObj.request_id, artifact_ref: takeoverPath };
   });
 }
@@ -3909,35 +6086,166 @@ function listResultFiles(txnDir) {
   return kept.map(([name]) => name);
 }
 
-function writeConflictDiagnosticIfApplicable(txnDir) {
-  let entries;
+/**
+ * Codex NO-GO round 15: confines a subdirectory the caller is ABOUT TO join
+ * an attempt-pair/attempt-id filename onto. Deliberately tolerates absence
+ * (returns without error) rather than requiring pre-existence like
+ * cmdPublishBlob's own per-component symlink walk (a different precondition
+ * -- that walk assumes a fully-materialized staging root; this one is called
+ * for subdirectories, like `conflict/`, that are lazily created by whichever
+ * publishNoClobber call first targets them). Rejects an EXISTING symlink
+ * outright.
+ *
+ * Codex NO-GO round 16 (P0): previously tolerated ANY lstat error as
+ * "absent", not only ENOENT -- an EACCES or EIO (a real, reportable
+ * problem) would have been silently treated the same as "doesn't exist
+ * yet", masking a genuine failure instead of propagating it.
+ */
+function assertConfinedSubdirectory(txnDir, subdirName) {
+  const candidate = path.join(txnDir, subdirName);
+  let lst;
   try {
-    entries = listResultFiles(txnDir);
+    lst = fs.lstatSync(candidate);
   } catch (err) {
-    return; // diagnostic only -- never blocks the terminal cancel (mirrors the publish catch below)
+    if (err && err.code === 'ENOENT') return;
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', subdirName + ' could not be stat-verified (' + (err && err.code) + '): ' + candidate);
   }
+  if (lst.isSymbolicLink()) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', subdirName + ' is a symlink (rejected): ' + candidate);
+  }
+  if (!lst.isDirectory()) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', subdirName + ' is not a directory: ' + candidate);
+  }
+}
+
+/**
+ * Codex NO-GO round 15: this function used to swallow EVERY error from BOTH
+ * of its own operations unconditionally (`catch (err) { return; }` /
+ * `catch (err) { /* diagnostic only *\/ }`) -- a genuine SECURITY_INVALID (a
+ * planted symlink at the conflict-diagnostic path) or DURABILITY_UNPROVEN
+ * would have been completely invisible, with cmdCancel still reporting
+ * overall SUCCESS. `listResultFiles` itself already correctly distinguishes
+ * ENOENT (returns `[]`) from a genuine enumeration failure (throws
+ * DURABILITY_UNPROVEN) -- the removed try/catch around it was wrongly
+ * swallowing that already-correct throw too.
+ *
+ * Codex NO-GO round 16 (P0), on top of round 15's own fix: `results/` itself
+ * (read from) was never confinement-checked, only `conflict/` (written to)
+ * -- `fs.opendirSync` follows a symlink at `results/` transparently, same as
+ * any other directory open. The names `listResultFiles` returns were never
+ * validated as genuine hex attempt IDs before being joined into a path/
+ * schema field. Tolerating a race-lost AUTHORITY_INVALID (a different
+ * diagnostic already exists for this exact pair) never validated that
+ * EXISTING, WINNING diagnostic at all -- an attacker-plantable
+ * schema-invalid file at that exact path would have been silently accepted
+ * as "good enough, someone else already wrote it".
+ */
+function writeConflictDiagnosticIfApplicable(txnDir) {
+  assertConfinedSubdirectory(txnDir, 'results');
+  const entries = listResultFiles(txnDir);
   if (entries.length < 2) return;
   const a = path.basename(entries[0], '.json');
   const b = path.basename(entries[1], '.json');
+  if (!isHexId(a) || !isHexId(b)) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'results/ entry name is not a well-formed attempt_id: ' + txnDir);
+  }
   const conflictObj = { schema: 'coordination/conflict/v1', attempt_id: a, other_attempt_id: b, detected_at: nowIso() };
+  assertClosedShape(conflictObj, CONFLICT_V1_FIELDS);
+  const conflictBytes = Buffer.from(canonicalJSONStringify(conflictObj), 'utf8');
+  assertConfinedSubdirectory(txnDir, 'conflict');
+  const conflictPath = path.join(txnDir, 'conflict', a + '-' + b + '.json');
+  let receipt;
   try {
-    publishNoClobber(
-      path.join(txnDir, 'conflict', a + '-' + b + '.json'),
-      Buffer.from(canonicalJSONStringify(conflictObj), 'utf8'),
-      { allowIdenticalIdempotent: true },
-    );
-  } catch (err) { /* diagnostic only -- never blocks the terminal cancel */ }
+    receipt = publishNoClobber(conflictPath, conflictBytes, { allowIdenticalIdempotent: true });
+  } catch (err) {
+    // A DIFFERENT diagnostic already durably exists for this exact
+    // attempt-pair (a race loss allowIdenticalIdempotent did not accept as
+    // byte-identical) -- diagnostic only, and whichever writer landed first
+    // is definitive; tolerated, but ONLY once that existing, WINNING
+    // diagnostic is itself fully re-validated (fd-bound durable + closed
+    // shape), never blindly trusted merely because "some file already
+    // exists at this path". Any OTHER failure (SECURITY_INVALID,
+    // DURABILITY_UNPROVEN) is a real problem and must propagate.
+    //
+    // Codex NO-GO round 17 (P0): validateConflictV1 proves SHAPE only
+    // (schema/field-types) -- it never confirmed the existing diagnostic's
+    // OWN attempt_id/other_attempt_id equal THIS invocation's specific a/b
+    // pair, nor that they are in the expected order. A durable, well-formed
+    // conflict/v1 diagnostic belonging to a COMPLETELY DIFFERENT attempt pair
+    // (e.g. a stray left by an unrelated bug, or planted) would previously
+    // have been silently accepted as "good enough". conflictPath's own
+    // filename already encodes (a, b); the CONTENT must match it exactly.
+    if (err instanceof CliError && err.detailCode === 'AUTHORITY_INVALID') {
+      const existing = validateConflictV1(conflictPath);
+      if (existing.attempt_id !== a || existing.other_attempt_id !== b) {
+        throw new CliError('INVALID', 'SECURITY_INVALID', 'existing conflict diagnostic at ' + conflictPath + ' does not correlate with the expected attempt pair (' + a + ', ' + b + ')');
+      }
+      return;
+    }
+    throw err;
+  }
+  // Re-confirm conflict/ itself is still a genuine, non-symlinked directory
+  // -- publishNoClobber's own internal mkdirSync(dir,{recursive:true}) does
+  // not reject a symlink planted between the check above and this write, so
+  // this closes as much of that window as re-verification after the fact
+  // can (the same "shrink, don't claim to eliminate" honesty this file
+  // already applies to other TOCTOU windows it cannot fully close).
+  assertConfinedSubdirectory(txnDir, 'conflict');
+  assertArtifactMatchesReceipt(conflictPath, receipt, conflictBytes);
 }
 
 function cmdCancel(flags) {
   requireFlags(flags, ['coordination-root', 'request', 'reason']);
+  const coordRoot = resolveAbsolute(flags['coordination-root']);
   const requestPath = resolveAbsolute(flags.request);
-  const txnDir = path.dirname(requestPath);
-  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
   if (!CANCEL_REASON_ENUM.includes(flags.reason)) {
     throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', 'invalid --reason: ' + flags.reason);
   }
-  return withLock(txnDir, () => {
+  // Codex NO-GO round 6/8/9: `--coordination-root`/`--request` confinement,
+  // canonical filename, exact geometry, and full validateConsultV2 pipeline.
+  // Codex NO-GO round 10 (empirically reproduced): accrediting ONLY before
+  // acquiring the lock is a genuine TOCTOU -- block .lock, start cancel (it
+  // accredits request A, then blocks in acquireLock's poll), swap
+  // request.json to an equally-valid request B, release the lock: cancel
+  // returns SUCCESS using stale A, and the cancel.json it wrote is
+  // immediately rejected by any reader checking it against the now-current B.
+  //
+  // Codex NO-GO round 11 P0(1) (empirically reproduced): removing the
+  // pre-lock accreditation entirely traded the TOCTOU for a WORSE bug --
+  // acquireLock's own fs.mkdirSync(txnDir, {recursive:true}) unconditionally
+  // creates the ENTIRE directory tree for whatever `--request` names, BEFORE
+  // any confinement/geometry check ever runs. An out-of-root/garbage
+  // `--request` was reproduced returning SECURITY_INVALID correctly, while
+  // still leaving a created, 0755 directory tree behind on disk -- fail-CLOSED
+  // in status, but not in effect.
+  //
+  // Codex NO-GO round 12 (both empirically reproduced): round 11's fix
+  // discarded this preflight's result and let the FRESH, in-lock read simply
+  // be trusted -- silently ADOPTING a mid-wait request.json mutation instead
+  // of detecting and rejecting it. request.json is IMMUTABLE (PLAN.md ~L813);
+  // a legitimate authority change requires takeover.json, never a rewrite of
+  // this path -- exactly the principle round 11 already applied to
+  // cmdAwaitResult but never carried over here. This preflight's result is
+  // now KEPT as the frozen baseline: the in-lock read below must match it
+  // (digest AND fd-bound dev/ino -- a byte-identical replacement changes
+  // neither digest nor content, only the underlying file) or this STOPs,
+  // never adopts.
+  const preflight = accreditCanonicalRequest(coordRoot, requestPath);
+  const txnDir = path.dirname(requestPath);
+  return withLock(txnDir, coordRoot, (lockToken) => {
+    // Codex NO-GO round 11: moved from before withLock to here -- a rendezvous
+    // firing before withLock only proves a swap happened before the lock was
+    // even entered, not that the read below genuinely happens while holding
+    // it. Firing here (after acquireLock has already returned) makes that
+    // unambiguous.
+    testRendezvous(txnDir, 'cancel-in-lock-pre-read');
+    // Codex NO-GO round 12: assertLockedScopeIdentity supersedes round 11's
+    // txnDir-only check -- txnDir AND .lock must BOTH still be the exact
+    // directories this token was minted for.
+    assertLockedScopeIdentity(lockToken);
+    const inLock = accreditCanonicalRequest(coordRoot, requestPath);
+    assertRequestIdentityMatches(preflight, inLock, requestPath);
+    const reqObj = inLock.obj;
     // Terminal mutual exclusion (PLAN.md ~L474/~L690): accepted-result.json and
     // cancel.json are mutually exclusive terminal records. `cmdAcceptResult` already
     // rejects when a cancel exists (symmetric check); this is the other half.
@@ -3945,27 +6253,111 @@ function cmdCancel(flags) {
     // a genuinely absent one lets the cancel proceed; an nlink==2 / symlink / malformed
     // terminal STOPs (readJsonDurableOptional throws) rather than being counted by mere
     // existsSync presence.
-    if (readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) }) !== null) {
+    //
+    // HARD NO-GO (post round 17, corrected round 19): shape+durability alone
+    // previously let a planted/foreign schema-valid accepted-result.json
+    // permanently block this transaction. Round 18's fix used a narrower,
+    // request-digest-only correlator, reasoning the fuller
+    // assertAcceptedResultCorrelates would incorrectly reject a legitimate
+    // cross-attempt terminal accept -- round 19 found that scenario cannot
+    // occur under PLAN's own transition table (see
+    // assertAcceptedResultCorrelates's own doc comment, and the removed
+    // function's former doc comment left in place above as history), so this
+    // now calls the SAME full correlator every other authoritative surface
+    // uses.
+    const existingAccepted = readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) });
+    if (existingAccepted !== null) {
+      assertAcceptedResultCorrelates(existingAccepted, txnDir, reqObj, coordRoot);
       throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction already has an accepted-result.json');
     }
-    if (readJsonDurableOptional(cancelPathFor(txnDir), { shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) }) !== null) {
+    // Codex NO-GO round 8: single choke point -- see readCanonicalCancelRecordOptional's
+    // own doc comment (the CANCEL-AUDIT-01 source-audit test enforces this mechanically).
+    const existing = readCanonicalCancelRecordOptional(cancelPathFor(txnDir), coordRoot);
+    if (existing !== null) {
       // A second cancel (matching or different --reason) observes the SAME
       // terminal CANCELLED disposition as accept-result-after-cancel (PLAN.md
       // ~L781 rc6 rule) -- not RESULT_CONFLICT (reserved for differing RESULT
       // candidates, record #10 ~L476-484), and not a generic AUTHORITY_INVALID.
       throw new CliError('CANCELLED', 'TRANSACTION_CANCELLED', 'transaction was already cancelled');
     }
+    // Codex NO-GO round 6 (PLAN.md record #9, ~L480: "requester instance id,
+    // or timeout-authority"): a fresh, unconnected genId() was neither -- it
+    // matched no real identity at all. 'expired' is the one system/deadline-
+    // driven reason with no live requester decision behind it; every other
+    // reason is a requester-initiated action and must carry the ACTUAL
+    // requester's own identity from the request it is cancelling, mirrored by
+    // accreditCancelRecord's own read-side check.
+    //
+    // Codex NO-GO round 8: the bare `--reason expired` VALUE is a caller
+    // claim, never proof -- a caller could declare `expired` for a request
+    // whose deadline never passed. `cancelled_at` (the timestamp this write
+    // is ABOUT to stamp) must itself be at or after the request's own
+    // `expiry` before `timeout-authority` is accepted, mirroring exactly the
+    // read-side re-proof `accreditCancelRecord` now performs on any EXISTING
+    // cancel.json (same comparison, same fields, so a genuine expiry at
+    // write time always survives a later re-read). `cancelledAt` is stamped
+    // via `nowIso()`/`currentClockMs()` -- unlike a planted artifact, this
+    // writer cannot itself claim an implausible future value.
+    //
+    // Codex NO-GO round 9 (PENDING_WP4): `cancelled_by` here is CORRELATION
+    // (an identity already recorded in the request), never CRYPTOGRAPHIC or
+    // GRANT-BASED AUTHORITY that this CALLER is entitled to invoke `cancel` at
+    // all -- see `accreditCancelRecord`'s own matching doc comment for the
+    // PLAN.md `role-command-grant/v1` (~L580-592) reference and why that
+    // remains unimplemented and unclaimed here.
+    const cancelledAt = nowIso();
+    if (flags.reason === 'expired' && isoToMs(cancelledAt) < isoToMs(reqObj.expiry)) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', "--reason expired requires the request's own expiry to have genuinely passed");
+    }
+    const cancelledBy = flags.reason === 'expired' ? 'timeout-authority' : reqObj.requester_instance_id;
     const cancelObj = {
       schema: 'coordination/cancel/v1',
       request_id: reqObj.request_id,
       reason: flags.reason,
-      cancelled_at: nowIso(),
-      cancelled_by: flags.reason === 'expired' ? 'timeout-authority' : genId(),
+      cancelled_at: cancelledAt,
+      cancelled_by: cancelledBy,
     };
     const cancelPath = cancelPathFor(txnDir);
-    publishNoClobber(cancelPath, Buffer.from(canonicalJSONStringify(cancelObj), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
-    if (flags.reason === 'conflict') {
-      writeConflictDiagnosticIfApplicable(txnDir);
+    const cancelBytes = Buffer.from(canonicalJSONStringify(cancelObj), 'utf8');
+    // Codex NO-GO round 11 P0(2)/round 12: re-verify immediately before
+    // publish too -- the read above and this write are not atomic with each
+    // other; closing the window at only one of the two ends would leave the
+    // other exposed.
+    assertLockedScopeIdentity(lockToken);
+    const cancelReceipt = publishNoClobber(cancelPath, cancelBytes, { raceDetailCode: 'AUTHORITY_INVALID' });
+    // Codex NO-GO round 12: a single pre-publish lstat does not cover the
+    // write itself -- publishNoClobber's own temp-write/fsync/link/unlink
+    // sequence takes real time, during which the SAME class of swap could
+    // still happen. Re-verify ONE more time immediately after; if identity
+    // was lost DURING the publish, we can no longer trust what was actually
+    // written or where -- POISON (retain the lock) rather than release into
+    // an unproven state, exactly the same principle DUR-J already applies to
+    // a POST_RENAME_UNPROVEN publishReplace failure.
+    testRendezvous(txnDir, 'cancel-post-publish-pre-recheck');
+    try {
+      assertLockedScopeIdentity(lockToken);
+      assertRequestIdentityMatches(preflight, accreditCanonicalRequest(coordRoot, requestPath), requestPath);
+      // Codex NO-GO round 15: round 14's own "byte-exact" check parsed
+      // cancelPath, re-serialized the PARSED object, and compared digests --
+      // proving only that the re-read VALUES canonicalize the same way, never
+      // that the on-disk bytes or inode are what this invocation actually
+      // published (a same-value-different-whitespace file, or a brand-new
+      // byte-identical file at a DIFFERENT inode, both would have passed).
+      // Reuse the SAME fd-bound comparator publishNoClobber trusts for its
+      // own revalidation, against the receipt IT returned at publish time --
+      // real bytes, real identity, no reconstruction step.
+      assertArtifactMatchesReceipt(cancelPath, cancelReceipt, cancelBytes);
+      // Codex NO-GO round 13: moved inside this same protected region, with
+      // its OWN fresh scope re-check immediately before it -- being inside
+      // the same try block does not make it atomic with the checks above;
+      // a swap could still happen in the narrow window between the last
+      // accreditation and this specific write.
+      if (flags.reason === 'conflict') {
+        assertLockedScopeIdentity(lockToken);
+        writeConflictDiagnosticIfApplicable(txnDir);
+      }
+    } catch (err) {
+      throw isPoisoned(err) ? err : markPoisoned(err);
     }
     return { request_id: reqObj.request_id, artifact_ref: cancelPath };
   });
@@ -4067,23 +6459,55 @@ function cmdAcceptResult(flags) {
   requireFlags(flags, ['coordination-root', 'request']);
   const coordRoot = resolveAbsolute(flags['coordination-root']);
   const requestPath = resolveAbsolute(flags.request);
+  // Codex NO-GO round 8/9: confinement, canonical filename, exact geometry,
+  // full validateConsultV2 pipeline. Codex NO-GO round 10 (same empirically-
+  // reproduced TOCTOU as cmdCancel): accrediting ONLY before the lock lets a
+  // request.json swap during the lock-acquisition wait go unnoticed.
+  //
+  // Codex NO-GO round 11 P0(1) (same empirically-reproduced mkdir-before-
+  // validate gap as cmdCancel): a preliminary accreditation runs here, before
+  // the lock, so acquireLock's own recursive mkdir never runs for an
+  // invalid/out-of-root --request in the first place.
+  //
+  // Codex NO-GO round 12 (same bug as cmdCancel -- see its own matching
+  // comment for the full reproduction): round 11 discarded this preflight and
+  // let the fresh in-lock read be trusted outright, silently ADOPTING a
+  // mid-wait mutation instead of rejecting it. request.json is IMMUTABLE
+  // (PLAN.md ~L813) -- this preflight's result is now KEPT as the frozen
+  // baseline every later read (digest AND fd-bound dev/ino) must match, or
+  // this STOPs, never adopts.
+  const preflight = accreditCanonicalRequest(coordRoot, requestPath);
   const txnDir = path.dirname(requestPath);
-  // DUR-J item 6: read the request fd-bound-durable ONCE -> reuse its accredited digest for
-  // accepted-result.request_digest (never re-hash the request by path).
-  // Codex NO-GO round 3 (blocker 1): routed through readCanonicalRequestRecord -- the
-  // request's OWN embedded request_id must equal `path.basename(txnDir)`.
-  const reqRec = readCanonicalRequestRecord(path.join(txnDir, 'request.json'), path.basename(txnDir), { absentDetail: 'CORRELATION_INVALID', absentMessage: 'referenced request.json does not resolve' });
-  const reqObj = reqRec.obj;
-
-  return withLock(txnDir, () => {
+  return withLock(txnDir, coordRoot, (lockToken) => {
+    // Codex NO-GO round 11: moved from before withLock -- see cmdCancel's
+    // matching comment for why firing here (genuinely inside the lock) is the
+    // only placement that unambiguously proves what this rendezvous claims to.
+    testRendezvous(txnDir, 'accept-result-in-lock-pre-read');
+    // Codex NO-GO round 12: assertLockedScopeIdentity supersedes round 11's
+    // txnDir-only check -- txnDir AND .lock must BOTH still be the exact
+    // directories this token was minted for.
+    assertLockedScopeIdentity(lockToken);
+    const reqRec = accreditCanonicalRequest(coordRoot, requestPath);
+    assertRequestIdentityMatches(preflight, reqRec, requestPath);
+    const reqObj = reqRec.obj;
     // DUR-J: terminal mutual exclusion reads each terminal fd-bound-durable -- a durable
     // accepted-result/cancel blocks as before; a genuinely absent one lets accept
     // proceed; an nlink==2 / symlink / malformed terminal STOPs rather than being
     // counted by mere existsSync presence.
-    if (readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) }) !== null) {
+    //
+    // HARD NO-GO (post round 17, corrected round 19): see cmdCancel's
+    // matching call for the full rationale -- this now uses the SAME full
+    // correlator (assertAcceptedResultCorrelates), not the reversed,
+    // narrower assertAcceptedResultTiedToTransaction.
+    const existingAccepted = readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) });
+    if (existingAccepted !== null) {
+      assertAcceptedResultCorrelates(existingAccepted, txnDir, reqObj, coordRoot);
       throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction already has an accepted-result.json');
     }
-    if (readJsonDurableOptional(cancelPathFor(txnDir), { shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) }) !== null) {
+    // Codex NO-GO round 8: single choke point -- see readCanonicalCancelRecordOptional's
+    // own doc comment (the CANCEL-AUDIT-01 source-audit test enforces this mechanically).
+    const existingCancel = readCanonicalCancelRecordOptional(cancelPathFor(txnDir), coordRoot);
+    if (existingCancel !== null) {
       // CLI-RESULT-07: a terminal cancelled outcome maps to the frozen CANCELLED/rc6
       // status (PLAN.md ~L781: "rc6-> the observed terminal BLOCKED|CANCELLED|CONFLICT"),
       // not INVALID/rc3 -- detail_code stays TRANSACTION_CANCELLED.
@@ -4130,10 +6554,35 @@ function cmdAcceptResult(flags) {
       schema_version: 1,
     };
     const acceptedPath = acceptedResultPathFor(txnDir);
+    const acceptedBytes = Buffer.from(canonicalJSONStringify(acceptedObj), 'utf8');
+    // Codex NO-GO round 11 P0(2)/round 12: re-verify immediately before
+    // publish too -- the reads above and this write are not atomic with each
+    // other.
+    assertLockedScopeIdentity(lockToken);
     // A double-accept no-clobber race lost here is a RACE (another accept won
     // first), not a cancellation -- matches cmdClaim's own claim-race labeling
     // (AUTHORITY_INVALID), not the unrelated TRANSACTION_CANCELLED detail code.
-    publishNoClobber(acceptedPath, Buffer.from(canonicalJSONStringify(acceptedObj), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
+    const acceptedReceipt = publishNoClobber(acceptedPath, acceptedBytes, { raceDetailCode: 'AUTHORITY_INVALID' });
+    // Codex NO-GO round 12: re-verify ONE more time immediately after --
+    // publishNoClobber's own multi-step sequence takes real time, during
+    // which the same class of swap could still happen. A mismatch here means
+    // we can no longer trust what was actually written or where -- POISON
+    // rather than release into an unproven state.
+    testRendezvous(txnDir, 'accept-result-post-publish-pre-recheck');
+    try {
+      assertLockedScopeIdentity(lockToken);
+      const postReqRec = accreditCanonicalRequest(coordRoot, requestPath);
+      assertRequestIdentityMatches(preflight, postReqRec, requestPath);
+      // Codex NO-GO round 15: round 13/14's own checks (assertAcceptedResultCorrelates
+      // plus a reserialize-then-hash digest compare) proved the re-read record
+      // correlates and canonicalizes to the same VALUE -- never that the on-disk
+      // bytes or inode are what this invocation actually published. Reuse the
+      // SAME fd-bound comparator publishNoClobber trusts for its own
+      // revalidation, against the receipt IT returned at publish time.
+      assertArtifactMatchesReceipt(acceptedPath, acceptedReceipt, acceptedBytes);
+    } catch (err) {
+      throw isPoisoned(err) ? err : markPoisoned(err);
+    }
     return { request_id: reqObj.request_id, artifact_ref: acceptedPath };
   });
 }
@@ -4213,7 +6662,54 @@ function cmdAwaitResult(flags) {
   if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 3600) {
     throw new CliError('USAGE_ERROR', 'INVALID_ARGUMENT', '--timeout must be an integer in 1..3600');
   }
-  const reqObj = readRequestForTxnOrCorrelationInvalid(txnDir);
+  // Codex NO-GO round 8: `--request` had NO confinement check at all in this
+  // command. Codex NO-GO round 9: even after that fix, only MINIMUM depth +
+  // shape+ID -- never the EXACT geometry or FULL validateConsultV2 pipeline.
+  // accreditCanonicalRequest is the ONE canonical accreditor shared with
+  // cmdCancel/cmdAcceptResult/accreditCancelRecord -- see its own doc
+  // comment. Positioned after --timeout's own argv-grammar check, preserving
+  // this command's existing "argv-grammar problems fail before any content
+  // read" ordering.
+  //
+  // Codex NO-GO round 10: unlike cmdCancel/cmdAcceptResult (a single write
+  // under one lock hold, where re-accrediting once INSIDE withLock closes the
+  // TOCTOU), this command polls across MANY iterations and deliberately never
+  // holds the lock continuously (other processes must be free to publish a
+  // result/accept/cancel between polls). Accrediting reqObj only ONCE before
+  // the loop and reusing it for every iteration has the same class of gap:
+  // a stale accreditation could act on outdated information. accreditCanonicalRequest
+  // now runs fresh at the top of EVERY iteration -- the same full accreditation,
+  // paid once per poll cycle (already dominated by the
+  // classifyDurableRead/validateResultV2 work each iteration already does)
+  // rather than once for the whole wait.
+  //
+  // Codex NO-GO round 11 P0(3): round 10's fix ADOPTED whatever request.json
+  // said on each fresh re-read -- but PLAN.md ~L813 declares request.json
+  // IMMUTABLE (published once via temp fsync -> link -> unlink temp -> flush;
+  // never rewritten), and a legitimate change of which attempt is
+  // authoritative goes through takeover.json, never a mutation of this path.
+  // Silently adopting a new `initial_attempt_id` on a later poll is
+  // substituting authority without takeover.json -- exactly the kind of
+  // unaccredited authority change this whole file exists to reject elsewhere.
+  // The fix is not "reject every re-read" (a single, once-only accreditation
+  // would resurrect round 10's own staleness gap) but "freeze the IDENTITY
+  // observed on the very first read, and require every later read -- each
+  // iteration, AND immediately before completing -- to still match it
+  // exactly; any divergence STOPs (fail-closed), it is never adopted."
+  //
+  // Codex NO-GO round 12: comparing DIGEST alone missed a byte-identical
+  // REPLACEMENT between iterations (delete + rewrite the exact same bytes) --
+  // same content, same digest, but a genuinely different underlying file.
+  // Codex NO-GO round 13: dev/ino alone still missed an IN-PLACE rewrite that
+  // restores the original bytes before a later check runs. Rather than
+  // hand-tracking an ever-growing subset of fields a second time, this now
+  // freezes the FULL initial record and reuses assertRequestIdentityMatches
+  // (the same comprehensive, single-sourced comparison cmdCancel/
+  // cmdAcceptResult's own preflight-vs-in-lock check already uses) directly.
+  let initialReqRec = null;
+  function assertRequestIdentityUnchanged(freshRec) {
+    assertRequestIdentityMatches(initialReqRec, freshRec, requestPath);
+  }
   // W06 fixed-clock deadline seam: the deadline ANCHOR is computed from the
   // UNADVANCED base while the live loop check (below) reads the ADVANCED
   // value -- these are deliberately DIFFERENT quantities under fixed-clock
@@ -4230,6 +6726,18 @@ function cmdAwaitResult(flags) {
   let resultEverPending = false;
 
   for (;;) {
+    // Codex NO-GO round 10: fresh, full accreditation every iteration -- see
+    // this function's own header comment above for why a single pre-loop
+    // accreditation is unsafe across a long, multi-iteration poll. Codex
+    // NO-GO round 11 P0(3): the freshly-read digest is now compared against
+    // the FROZEN first-read digest, never adopted -- see the header comment.
+    const reqRec = accreditCanonicalRequest(coordRoot, requestPath);
+    if (initialReqRec === null) {
+      initialReqRec = reqRec;
+    } else {
+      assertRequestIdentityUnchanged(reqRec);
+    }
+    const reqObj = reqRec.obj;
     // DUR-J: await completes/cancels only on a DURABLY-committed, shape-valid terminal.
     // Each terminal is classified EXPLICITLY -- PRESENT completes; PENDING (the one
     // recognized nlink==2 in-flight window) keeps waiting; ABSENT keeps waiting; ANY
@@ -4245,13 +6753,39 @@ function cmdAwaitResult(flags) {
       // real transaction. Re-derive and re-check the full correlation chain before
       // trusting mere presence.
       assertAcceptedResultCorrelates(acc.obj, txnDir, reqObj, coordRoot);
+      // Codex NO-GO round 11 P0(3): one more, freshest-possible re-check
+      // immediately before completing -- shrinks the window between "this
+      // iteration's own top-of-loop read" and the actual return to as close
+      // to zero as a synchronous re-read allows.
+      assertRequestIdentityUnchanged(accreditCanonicalRequest(coordRoot, requestPath));
       return { request_id: reqObj.request_id, artifact_ref: acceptedResultPathFor(txnDir) };
     }
     if (acc.state === DURABLE_PENDING) pendingObservedThisPass = true;
-    const can = classifyDurableRead(cancelPathFor(txnDir), { shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) });
+    // Codex NO-GO round 8: single choke point -- see classifyCanonicalCancelRecord's
+    // own doc comment (the CANCEL-AUDIT-01 source-audit test enforces this mechanically).
+    const can = classifyCanonicalCancelRecord(cancelPathFor(txnDir), coordRoot);
     if (can.state === DURABLE_PRESENT) {
+      // CLI-RESULT-08 / CONFLICT-vs-CANCELLED: DESIGN-BLOCKED (see this file's
+      // history for the rejected prior attempts and why). Not yet settled:
+      // WHERE a genuine conflict is legitimately detected. `cmdPublishResult`
+      // publishes to the single `results/<attempt_id>.json` path for the one
+      // current `(attempt_id, lease_epoch)`; a second, differing write today
+      // just loses the no-clobber race as a generic rejection, with no
+      // recorded evidence of what the losing candidate claimed. The existing
+      // `conflict/v1` schema has two separate attempt-identifying fields
+      // (`attempt_id`, `other_attempt_id`) sized for two DIFFERENT ATTEMPTS --
+      // it does not fit "one attempt, two competing byte-streams for the SAME
+      // (attempt_id, lease_epoch)", which is what the PLAN's own text actually
+      // names. (This schema does not itself require `attempt_id !==
+      // other_attempt_id` as a rule -- whether the reconciled design keeps two
+      // attempt fields, moves to two digest fields, or something else is an
+      // open design question, not assumed here.) Until that is designed and,
+      // if needed, the PLAN/schema is amended and authorized, this observer
+      // deliberately does NOT attempt to distinguish CONFLICT from CANCELLED.
       // rc6 terminal (PLAN.md ~L781), mirroring cmdCancel's/cmdAcceptResult's own
       // CANCELLED/TRANSACTION_CANCELLED terminal-cancel status -- not INVALID/rc3.
+      // Codex NO-GO round 11 P0(3): re-check immediately before this terminal too.
+      assertRequestIdentityUnchanged(accreditCanonicalRequest(coordRoot, requestPath));
       throw new CliError('CANCELLED', 'TRANSACTION_CANCELLED', 'transaction was cancelled');
     }
     if (can.state === DURABLE_PENDING) pendingObservedThisPass = true;
@@ -4287,6 +6821,9 @@ function cmdAwaitResult(flags) {
         if (!isAwaitPollableCandidateError(err)) throw err;
       }
       if (validated) {
+        // Codex NO-GO round 11 P0(3): re-check immediately before either
+        // terminal below -- both reference reqObj's identity in their output.
+        assertRequestIdentityUnchanged(accreditCanonicalRequest(coordRoot, requestPath));
         if (validated.obj.status === 'BLOCKED') {
           // CLI-RESULT-06: a protocol-valid BLOCKED candidate is a terminal state
           // (PLAN.md ~L768: "or terminal state"; ~L781 rc6), never silent success.
@@ -4297,6 +6834,11 @@ function cmdAwaitResult(flags) {
     }
 
     if (currentClockMs() >= deadlineMs) {
+      // Codex NO-GO round 12: rechecked immediately before EITHER exit below
+      // too -- the claim "no mutation occurred during this entire wait" must
+      // hold for every possible exit from this loop, not only the ones that
+      // happen to echo reqObj fields in their own JSON output.
+      assertRequestIdentityUnchanged(accreditCanonicalRequest(coordRoot, requestPath));
       if (pendingObservedThisPass) {
         // DUR-J + Section 8: a terminal was still in the recognized nlink==2 in-flight
         // window at the deadline -- report the durability truth (DURABILITY_UNPROVEN),
@@ -4308,6 +6850,16 @@ function cmdAwaitResult(flags) {
       // failure names the specific literal DEADLINE_EXCEEDED.
       throw new CliError('TIMEOUT', 'DEADLINE_EXCEEDED', 'await-result timed out with no valid current candidate');
     }
+    // Codex NO-GO round 11: this command's poll interval previously had no
+    // rendezvous seam at all (a plain timing sleep was the only way to test
+    // it), which the reviewer correctly flagged as not proving a test
+    // genuinely observed the OLD state before a mid-poll mutation. Firing
+    // here -- after a full iteration has completed (including its own
+    // top-of-loop accreditation) and found no terminal yet -- lets a test
+    // deterministically prove "at least one full read of the ORIGINAL
+    // request.json already happened" before it mutates the file out from
+    // under this loop.
+    testRendezvous(txnDir, 'await-result-post-iteration');
     sleepSync(100);
   }
 }
@@ -4946,7 +7498,13 @@ function cmdPublishResult(flags) {
   }
 
   testRendezvous(txnDir, 'publish-result-pre-lock');
-  return withLock(txnDir, () => {
+  return withLock(txnDir, coordRoot, (lockToken) => {
+    // Codex NO-GO round 16: a fresh scope check as the FIRST thing inside
+    // this callback -- withLock's own pre-fn check happens once, before fn
+    // starts; every read fn itself performs afterward (reqRec, claimRec
+    // below, and every authority field resultObj is built from) had no
+    // check of its own closer to it.
+    assertLockedScopeIdentity(lockToken);
     // Section 4: re-read/revalidate the request and CURRENT authority INSIDE the lock
     // -- a takeover racing before lock acquisition must be observed here, never
     // trusted from a pre-lock snapshot. Codex NO-GO round 3 (blocker 1): routed
@@ -4958,6 +7516,29 @@ function cmdPublishResult(flags) {
     });
     const reqObj = reqRec.obj;
     const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+
+    // Codex NO-GO round 16 (P0): PLAN.md ~L443 makes "absence of committed
+    // takeover/cancel/accept" part of candidate publication's OWN mandatory
+    // contract, not an optional hardening pass -- this was missing entirely.
+    // Absence of a committed takeover is already structurally enforced above
+    // (resolveAuthoritativeAttempt itself resolves to the POST-takeover
+    // attempt/epoch; a claim for the superseded attempt already fails the
+    // attempt/epoch check just below). accepted-result.json/cancel.json are
+    // NOT otherwise checked anywhere in this function -- mirrors cmdCancel's/
+    // cmdAcceptResult's own already-established terminal-exclusion pattern.
+    //
+    // HARD NO-GO (post round 17, corrected round 19): see cmdCancel's
+    // matching call for the full rationale -- this now uses the SAME full
+    // correlator (assertAcceptedResultCorrelates), not the reversed,
+    // narrower assertAcceptedResultTiedToTransaction.
+    const existingAccepted = readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) });
+    if (existingAccepted !== null) {
+      assertAcceptedResultCorrelates(existingAccepted, txnDir, reqObj, coordRoot);
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction already has an accepted-result.json');
+    }
+    if (readCanonicalCancelRecordOptional(cancelPathFor(txnDir), coordRoot) !== null) {
+      throw new CliError('CANCELLED', 'TRANSACTION_CANCELLED', 'transaction was already cancelled');
+    }
 
     // The canonical claim for the CURRENT authoritative attempt: self-consistency
     // (own canonical path for its own attempt_id) then authority (current
@@ -5025,7 +7606,36 @@ function cmdPublishResult(flags) {
     // a takeover that won before lock acquisition was already rejected there, so
     // this publish is never reached for a superseded attempt.
     const resultPath = resultPathFor(txnDir, auth.attemptId);
-    publishNoClobber(resultPath, Buffer.from(canonicalJSONStringify(resultObj), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
+    const resultBytes = Buffer.from(canonicalJSONStringify(resultObj), 'utf8');
+    // Codex NO-GO round 15 ("los cinco callers del lock"): a fresh scope check
+    // immediately before this write, mirroring every other hardened caller in
+    // this file.
+    //
+    // Codex NO-GO round 16: PLAN.md ~L704's own frozen rule -- "same-digest
+    // duplicate candidates are idempotent" -- is REUSED here via
+    // publishNoClobber's own existing, already-proven allowIdenticalIdempotent
+    // mechanism (fd-bound, byte-for-byte, never a field-excluding
+    // reconstruction of "logical" identity) rather than any new invention;
+    // R10's own canonicalRetryComparisonDigest (excluding created_at) is
+    // retracted -- see CONFLICT-DESIGN-R11.md. A genuinely DIFFERENT
+    // candidate for the same (attempt_id, lease_epoch) remains AUTHORITY_INVALID,
+    // unchanged from today's real behavior -- publish-result holds only
+    // TARGET authority (PLAN.md ~L580-592), so it must never itself write
+    // cancel.json/conflict/*.json (REQUESTER-only artifacts); see R11 for why
+    // no CONFLICT/RESULT_CONFLICT reporting belongs here either.
+    assertLockedScopeIdentity(lockToken);
+    const resultReceipt = publishNoClobber(resultPath, resultBytes, { allowIdenticalIdempotent: true, raceDetailCode: 'AUTHORITY_INVALID' });
+    // publishNoClobber succeeded OUTRIGHT (no EEXIST) -- SUCCESS-path scope+
+    // receipt re-verification, mirroring cmdClaim/cmdCancel/cmdAcceptResult/
+    // cmdTakeover's own established pattern. A thrown EEXIST/race-loss above
+    // never reaches this point at all -- unchanged, pre-existing behavior.
+    testRendezvous(txnDir, 'publish-result-post-publish-pre-recheck');
+    try {
+      assertLockedScopeIdentity(lockToken);
+      assertArtifactMatchesReceipt(resultPath, resultReceipt, resultBytes);
+    } catch (err) {
+      throw isPoisoned(err) ? err : markPoisoned(err);
+    }
     return { request_id: reqObj.request_id, artifact_ref: resultPath };
   });
 }
@@ -5200,4 +7810,60 @@ module.exports = {
   // WP3 item C2 (R7): single canonical RuntimeTurnEnvelope/v1 source (PLAN.md ~L932).
   runtimeTurnEnvelopeSchema, validateRuntimeTurnEnvelope,
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// R33 static conformance surface -- TEST-CAPABILITY-GATED, NOT a production export.
+//
+// The entire R33 surface is currently reachable ONLY by tests, and this gate says
+// exactly that. An UNCONDITIONAL export is a shipped surface no matter what the
+// comment above it claims, and an earlier revision shipped these unconditionally
+// on the reasoning that R3.3:1115-1117 names their eventual in-process callers
+// (step 12 the root-profile check, step 17 the provider-session check). That
+// justified their EXISTENCE as contract implementation awaiting its consumer; it
+// never justified a public surface. Those callers belong to the provider-owned
+// composition and DO NOT EXIST YET.
+//
+// Gated behind the same `isTestCapability()` seam as `--fixed-ids`/`--fixed-clock`
+// (NODE_ENV=test PLUS a harness-created RUNTIME_CONSULTATION_TEST_CAPABILITY,
+// cjs:207). Resolved ONCE at require time, so a production `require` of this
+// module observes none of these names.
+//
+// WHEN PHASE B LANDS, the production export is the complete authoritative
+// composition -- never these partial parsers. They stay behind this gate as its
+// internals. Do not promote one of them to production reach because a caller
+// finds it convenient: a conformance check that escapes into production is the
+// public-SUCCESS mistake in a different costume.
+//
+// What they are, restated so the gate is not mistaken for mere test plumbing:
+// they prove closed schema, canonical bytes, confined paths, tuple correlation
+// and the A.5 digests. They establish NO authority, accreditation or liveness. A
+// caller that runs any of them to completion has learned that bytes conform to a
+// closed schema -- not that a root, session or profile is legitimate.
+//
+// The field tables remain unexported even under the gate: tests must not
+// introspect internals. Key counts are pinned by the module-load count assertion
+// plus golden vectors. `R33_TUPLE_CORRELATION_KEYS` is the deliberate exception --
+// it is a DERIVED CONTRACT ARTIFACT, not a harness, and the 17x1 mutation matrix
+// must iterate the PRODUCTION table; a hardcoded list of 17 names would let a
+// disabled comparison and a deleted test row both stay green, which is exactly
+// how the missing per-key coverage went unnoticed.
+// ─────────────────────────────────────────────────────────────────────────────
+if (isTestCapability()) {
+  Object.assign(module.exports, {
+    // A.5 digest formulas (R3.3:3716-3729) -- a test uses the PRODUCTION formula
+    // rather than reimplementing it, since a reimplementation either drifts from
+    // production or fails for the wrong reason; a golden vector then pins it so a
+    // production change cannot silently pass.
+    rootProfileDigestV3,
+    providerSessionDigestV3,
+    temporalEnvelopeDigestV1,
+    // Non-authoritative conformance checks.
+    checkRootProfileV3Conformance,
+    checkProviderSessionV3Conformance,
+    checkRuntimeProfileBindingV2Conformance,
+    checkR33ProfileTupleConformance,
+    // Derived contract artifact (see above).
+    R33_TUPLE_CORRELATION_KEYS,
+  });
+}
 

@@ -20,12 +20,13 @@ bats_require_minimum_version 1.5.0
 # rehydration, restart invalidation, Agent-Teams-disabled one-shot availability,
 # ambiguous-owner rejection" and the ~L169 coverage summary.
 #
-# STATUS: RED. `scripts/lib/runtime-role-lifecycle.cjs` does not exist yet (WP1 has
-# not landed). Every test below is expected to FAIL now -- `node` reports the module
-# missing and exits non-zero, which trips the very first `[ "$status" -eq ... ]`
-# assertion in each test before any later JSON-shape assertion runs, exactly like
-# `runtime-consultation-protocol.bats`'s own documented RED precedent. These tests are
-# written against the frozen contract so they become the GREEN target once WP1 lands.
+# STATUS (current, exact -- verify with `bats --count` / `bats --formatter tap`
+# rather than trusting this comment): 56 pass, 0 skip, 0 `not ok`.
+# `scripts/lib/runtime-role-lifecycle.cjs` is fully implemented; this file's
+# original RED-before-WP1-landing status (the module did not exist) is
+# history, not current state -- see git log, not this comment, for when WP1
+# landed. These tests were written against the frozen contract and remain so
+# now that it is the current, passing state.
 #
 # Scope boundary (mirrors protocol.bats's own scoping discipline): this file is scoped
 # to the protocol/schema/policy/argv-validation layer of `runtime-role-lifecycle.cjs`

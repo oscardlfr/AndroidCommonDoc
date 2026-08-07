@@ -22,11 +22,13 @@ bats_require_minimum_version 1.5.0
 # above for the CLI surface itself; it is an adjacent, manifest-directed addition, not a
 # scope rewrite.
 #
-# STATUS: RED. `scripts/lib/runtime-consultation.cjs` does not exist yet (WP1 has not
-# landed). Every test below is expected to FAIL now -- `node` will report the module
-# missing and exit non-zero, which trips the very first `[ "$status" -eq ... ]` assertion
-# in each test before any later JSON-shape assertion runs. These tests are written
-# against the EXACT frozen contract so they become the GREEN target once WP1 lands.
+# STATUS (current, exact -- verify with `bats --count` / `bats --formatter tap`
+# rather than trusting this comment): 53 pass, 0 skip, 0 `not ok`.
+# `scripts/lib/runtime-consultation.cjs` is fully implemented; this file's
+# original RED-before-WP1-landing status (the module did not exist) is
+# history, not current state -- see git log, not this comment, for when WP1
+# landed. These tests were written against the EXACT frozen contract and
+# remain so now that it is the current, passing state.
 #
 # Key interpretive decisions (documented so a future correction is a small, obvious
 # fix rather than a silent divergence -- mirrors coordination-artifact-validation.bats's
@@ -98,9 +100,9 @@ setup() {
 
   _ID_COUNTER=0
 
-  # Best-effort root init; swallowed on failure since the implementation does not exist
-  # yet (RED phase) -- every @test below independently proves its own RED failure via
-  # its own exit-code/JSON-shape assertions, not via setup() succeeding.
+  # Best-effort root init; failure here is swallowed since several tests below
+  # re-init their own fresh root anyway -- every @test independently asserts
+  # its own exit-code/JSON-shape expectations, not via setup() succeeding.
   NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     node "$IMPL" root-init --coordination-root "$COORD_ROOT" >/dev/null 2>&1 || true
 }
