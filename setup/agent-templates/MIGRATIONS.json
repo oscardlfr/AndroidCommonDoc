@@ -124,6 +124,12 @@
       }
     },
     "planner": {
+      "1.20.0": {
+        "date": "2026-08-22",
+        "breaking": false,
+        "summary": "Wave 1 WP5: bounded two-pass planner bootstrap -- Pass A writes a brief-derived STATUS: DRAFT-CONTEXT-PENDING draft (Write-only, no lifecycle claim); orchestrator ensures the persistent support plane; Pass B rehydrates and runs the real branch-aware CP-targeted consult/v2 transaction before finalizing. Replaces the historical single-pass 'SendMessage(to=\"context-provider\") then plan' flow. Per-Session Gate section rewritten to describe the transaction-gated first-Bash-call model instead of a pre-existing-live-response requirement.",
+        "migration_hint": "Planner is now dispatched twice per non-trivial task (same subagent_type='planner', no team_name, in both passes) -- orchestrators must implement the two-pass sequence in tl-session-start.md, not a single spawn. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-28",
         "breaking": false,
@@ -221,6 +227,12 @@
       }
     },
     "quality-gater": {
+      "2.25.0": {
+        "date": "2026-08-22",
+        "breaking": false,
+        "summary": "Wave 1 WP5: added Runtime Messaging Adapters pointer at end of template, after Distinction from quality-gate-orchestrator.",
+        "migration_hint": "Additive pointer only; no behavioral change. Re-sync the deployed template."
+      },
       "2.19.0": {
         "date": "2026-06-20",
         "breaking": false,
@@ -373,6 +385,12 @@
       }
     },
     "arch-testing": {
+      "1.40.0": {
+        "date": "2026-08-22",
+        "breaking": false,
+        "summary": "Wave 1 WP5: added Runtime Messaging Adapters pointer after Message Topic Discipline, matching the established ### <Topic> / See [slug] pointer-cluster pattern already used in this template.",
+        "migration_hint": "Additive pointer only; no behavioral change. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -541,6 +559,12 @@
       }
     },
     "arch-platform": {
+      "1.35.0": {
+        "date": "2026-08-22",
+        "breaking": false,
+        "summary": "Wave 1 WP5: added Runtime Messaging Adapters pointer after Message Topic Discipline, matching the established ### <Topic> / See [slug] pointer-cluster pattern already used in this template.",
+        "migration_hint": "Additive pointer only; no behavioral change. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -689,6 +713,12 @@
       }
     },
     "arch-integration": {
+      "1.31.0": {
+        "date": "2026-08-22",
+        "breaking": false,
+        "summary": "Wave 1 WP5: added Runtime Messaging Adapters pointer after Message Topic Discipline, matching the established ### <Topic> / See [slug] pointer-cluster pattern already used in this template.",
+        "migration_hint": "Additive pointer only; no behavioral change. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-03-26",
         "breaking": false,
@@ -822,6 +852,12 @@
       }
     },
     "context-provider": {
+      "3.8.0": {
+        "date": "2026-08-22",
+        "breaking": false,
+        "summary": "Wave 1 WP5: added Runtime Messaging Adapters pointer after write_bundle, noting CP's narrow result-publication capability for an active nested consultation it is answering -- read-only boundary otherwise unchanged.",
+        "migration_hint": "Additive pointer only; oracle/cache role and read-only ABI boundary unchanged. Re-sync the deployed template."
+      },
       "3.7.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -901,6 +937,12 @@
       }
     },
     "doc-updater": {
+      "2.12.0": {
+        "date": "2026-08-22",
+        "breaking": false,
+        "summary": "Wave 1 WP5: converts mandatory-SendMessage wording (When Invoked, pre-write CP consultation, Rejection Protocol, ingestion handler) to shared role-lifecycle-manager (ensureRoles/notify) language with SendMessage as an optional accelerator; adds the T-BUG-015/BL-W35-06 Read-gate branch (previously undocumented) to the Per-Session Gate section. Write/Edit/MCP responsibilities, the explicit user-approval gate, and all rejection cases remain intact.",
+        "migration_hint": "Guidance/transport reframe; Write/Edit responsibilities and the ingestion approval gate are unchanged. Re-sync the deployed template."
+      },
       "2.11.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -1115,6 +1157,12 @@
       }
     },
     "test-specialist": {
+      "1.32.0": {
+        "date": "2026-08-22",
+        "breaking": false,
+        "summary": "Wave 1 WP5: added Runtime Messaging Adapters pointer after Owned Files. Also repairs pre-existing double-encoded mojibake in the template body (corrupted em-dashes and arrows, unrelated to Wave 1 -- found and fixed in the same file touch); content unchanged, encoding only.",
+        "migration_hint": "Additive pointer + an encoding repair (no content change from the repair). Re-sync the deployed template."
+      },
       "1.31.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -1667,6 +1715,12 @@
       }
     },
     "quality-gate-orchestrator": {
+      "1.2.0": {
+        "date": "2026-08-22",
+        "breaking": false,
+        "summary": "Wave 1 WP5: one-line addition to the intro noting Gate 3 (Template Sync)/hook-manifest.md cross-checks may now also touch the runtime-messaging-adapters hub's rows.",
+        "migration_hint": "Additive, one line; no behavioral change. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
@@ -1729,6 +1783,12 @@
       }
     },
     "verifier": {
+      "1.2.0": {
+        "date": "2026-08-22",
+        "breaking": false,
+        "summary": "Wave 1 WP5: added a Runtime Messaging Adapters section between MCP Tools and Rules, noting verifier holds no SendMessage tool and is dispatched per-task rather than part of the persistent support plane -- informational cross-reference only.",
+        "migration_hint": "Additive, informational only; no behavioral change. Re-sync the deployed template."
+      },
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
@@ -1741,6 +1801,12 @@
       }
     },
     "toolkit-specialist": {
+      "1.9.0": {
+        "date": "2026-08-22",
+        "breaking": false,
+        "summary": "Wave 1 WP5: added Runtime Messaging Adapters pointer after Owned Files, relevant when a task touches scripts/lib/runtime-consultation.cjs, scripts/lib/runtime-role-lifecycle.cjs, or .claude/hooks/coordination-artifact.js.",
+        "migration_hint": "Additive pointer only; no behavioral change. Re-sync the deployed template."
+      },
       "1.8.0": {
         "date": "2026-06-18",
         "breaking": false,

@@ -70,15 +70,48 @@ bats_require_minimum_version 1.5.0
 # Invocation: scripts/sh/run-bats.sh --project-root "$(pwd)" scripts/tests/runtime-consultation-state.bats
 
 IMPL="$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
+RLL_IMPL="$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs"
+# M7/WP4 Phase B.3 regression fixture (dispatch arch-testing-20260809T092330Z):
+# see runtime-consultation-cli.bats's own matching comment -- identical
+# mechanism, mirrored verbatim here.
+GRANT_WRAPPER="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
 WAVE_SLUG="rcs-test-wave"
 TEST_CAPABILITY="bats-runtime-consultation-state-fixture-capability"
 
+_assert_isolated_runtime_tmp() {
+  local dir="$1"
+  local real_dir real_bats
+  real_dir="$(cd "$dir" 2>/dev/null && pwd -P)" || return 1
+  real_bats="$(cd "$BATS_TEST_TMPDIR" && pwd -P)" || return 1
+  case "$real_dir" in
+    "$real_bats"|"$real_bats"/*) ;;
+    *) echo "# runtime-tmp escaped BATS_TEST_TMPDIR: $real_dir not under $real_bats" >&2; return 1 ;;
+  esac
+  node -e '
+    const fs = require("fs");
+    let st;
+    try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
+    if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
+    if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
+    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+  ' "$dir"
+}
+
 setup() {
+  RUNTIME_TMP="$BATS_TEST_TMPDIR/runtime-tmp"
+  mkdir -p "$RUNTIME_TMP"
+  chmod 0700 "$RUNTIME_TMP"
+  _assert_isolated_runtime_tmp "$RUNTIME_TMP"
+  export TMPDIR="$RUNTIME_TMP"
+
   PROJ="$(mktemp -d)"
+  export RCC_GRANT_PROJECT_ROOT="$PROJ"
   git -C "$PROJ" init -q 2>/dev/null
   git -C "$PROJ" config user.email "bats@test.local"
   git -C "$PROJ" config user.name "Bats Test"
   git -C "$PROJ" commit -q --allow-empty -m init 2>/dev/null
+  PROJ_REGISTRY_DIR="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.registryRepoDir(process.argv[2]));' "$RLL_IMPL" "$PROJ")"
 
   COORD_ROOT="$PROJ/.planning/coordination"
   mkdir -p "$COORD_ROOT"
@@ -96,10 +129,21 @@ setup() {
   _ID_COUNTER=0
 
   NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" root-init --coordination-root "$COORD_ROOT" >/dev/null 2>&1 || true
+    node "$GRANT_WRAPPER" root-init --coordination-root "$COORD_ROOT" >/dev/null 2>&1 || true
 }
 
 teardown() {
+  if [ -n "$RUNTIME_TMP" ] && _assert_isolated_runtime_tmp "$RUNTIME_TMP" >/dev/null 2>&1; then
+    # M6+M7 SIXTEENTH Phase 2B follow-up: some fixtures materialize a
+    # deliberately read-only projection under here (e.g. a role-read-view,
+    # part of the production isolation model's own security posture) --
+    # restore owner write+traverse on every path THIS test created before
+    # sweeping, or a bare rm -rf leaves permission-denied debris behind
+    # (which then also makes bats' own outer per-test tmpdir cleanup fail
+    # non-silently).
+    chmod -R u+rwX "$RUNTIME_TMP" 2>/dev/null || true
+    rm -rf "$RUNTIME_TMP"
+  fi
   rm -rf "$PROJ"
 }
 
@@ -215,11 +259,81 @@ _result_path() { printf '%s' "$(_plan_root)/transactions/$1/results/$2.json"; }
 # ── JSON fixture builders (merge small overrides over a fully-populated default,
 # "__OMIT__" deletes a key -- same idiom as protocol.bats's builders) ──────────
 
+# M6+M7 requester-authority closure (Group G fix): mints (or idempotently
+# reuses, via createRequesterBinding's own lookup-or-create semantics) the
+# EXACT tuple {session:"rcc-grant-wrapper-session", agent:
+# "runtime-consultation-grant-wrapper-agent", role, worktree_id, plan_digest}
+# GRANT_WRAPPER's own tryMintGrant will mint/reuse for its DEFAULT identity
+# (RCC_GRANT_SESSION/RCC_GRANT_AGENT_ID/RCC_GRANT_ROLE all unset in this
+# file) -- so a request fixture's source_role/requester_instance_id set from
+# THIS call genuinely correlates with whatever grant the wrapper mints later
+# for the same tuple. Mirrors runtime-consultation-cli.bats's own
+# _known_requester_identity helper verbatim (same wrapper, same convergence
+# mechanism, proven there first).
+_known_requester_identity() {
+  local role="${1:-arch-testing}"
+  node -e '
+    const rll = require(process.argv[1]);
+    const projectRoot = process.argv[2];
+    const role = process.argv[3];
+    const worktreeId = process.argv[4];
+    const planDigest = process.argv[5];
+    // M6+M7 FULL CLOSURE (2026-08-11): must stay in lockstep with
+    // GRANT_WRAPPER own RCC_GRANT_PROVIDER default (codex-supervisor) -- a
+    // different provider here would mint a DIFFERENT actor_instance_id
+    // (session-generation is keyed by (provider, session)), breaking the
+    // whole-point convergence this helper exists for. No apostrophes in this
+    // comment block -- bash single-quoted node -e block, no escape mechanism.
+    const identity = { ok: true, provider: process.env.RCC_GRANT_PROVIDER || "codex-supervisor", runtime_session_key: "rcc-grant-wrapper-session" };
+    const bindingResult = rll.createRequesterBinding(projectRoot, identity, "runtime-consultation-grant-wrapper-agent", role, worktreeId, planDigest, 3600);
+    if (!bindingResult.ok) {
+      process.stderr.write("_known_requester_identity: binding mint failed: " + JSON.stringify(bindingResult));
+      process.exit(1);
+    }
+    process.stdout.write(bindingResult.binding.actor_instance_id);
+  ' "$RLL_IMPL" "$PROJ" "$role" "$WORKTREE_ID" "$PLAN_DIGEST"
+}
+
+# M6+M7 requester-authority closure (Group G fix): for the handful of tests
+# that deliberately choose their OWN arbitrary requester_instance_id and need
+# the CLI call to genuinely reach THAT identity downstream. Mirrors
+# runtime-consultation-cli.bats's own _force_requester_binding_identity
+# helper verbatim.
+_force_requester_binding_identity() {
+  local custom_instance_id="$1" role="${2:-arch-testing}"
+  node -e '
+    const rll = require(process.argv[1]);
+    const fs = require("fs");
+    const projectRoot = process.argv[2];
+    const role = process.argv[3];
+    const worktreeId = process.argv[4];
+    const planDigest = process.argv[5];
+    const customInstanceId = process.argv[6];
+    // M6+M7 FULL CLOSURE (2026-08-11): mirrors _known_requester_identity own
+    // matching comment -- must stay in lockstep with GRANT_WRAPPER default.
+    // No apostrophes in this comment block -- bash single-quoted node -e
+    // block, no escape mechanism.
+    const identity = { ok: true, provider: process.env.RCC_GRANT_PROVIDER || "codex-supervisor", runtime_session_key: "rcc-grant-wrapper-session" };
+    const bindingResult = rll.createRequesterBinding(projectRoot, identity, "runtime-consultation-grant-wrapper-agent", role, worktreeId, planDigest, 3600);
+    if (!bindingResult.ok) {
+      process.stderr.write("_force_requester_binding_identity: binding mint failed: " + JSON.stringify(bindingResult));
+      process.exit(1);
+    }
+    const recordPath = rll.requesterBindingPathFor(projectRoot, bindingResult.binding.binding_id);
+    const raw = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+    raw.actor_instance_id = customInstanceId;
+    fs.writeFileSync(recordPath, JSON.stringify(raw), { mode: 0o600 });
+    fs.chmodSync(recordPath, 0o600);
+  ' "$RLL_IMPL" "$PROJ" "$role" "$WORKTREE_ID" "$PLAN_DIGEST" "$custom_instance_id"
+}
+
 _write_request() {
   local out="$1" overrides="$2"
   mkdir -p "$(dirname "$out")"
+  local known_requester_instance_id; known_requester_instance_id="$(_known_requester_identity arch-testing)"
   RCS_REPO_ID="$REPO_ID" RCS_WAVE_SLUG="$WAVE_SLUG" RCS_PLAN_DIGEST="$PLAN_DIGEST" \
   RCS_COORD_ROOT_ID="$COORD_ROOT_ID" RCS_WORKTREE_ID="$WORKTREE_ID" RCS_SUBJECT_HEAD="$SUBJECT_HEAD" \
+  RCS_KNOWN_REQUESTER_INSTANCE_ID="$known_requester_instance_id" \
   node -e '
     const fs = require("fs");
     const overrides = JSON.parse(process.argv[1]);
@@ -232,12 +346,18 @@ _write_request() {
       parent_request_id: null,
       depth: 0,
       max_depth: 2,
-      source_role: "test-specialist",
+      // M6+M7 requester-authority closure (Group G fix): must match
+      // GRANT_WRAPPER own default minted role (RCC_GRANT_ROLE unset in this
+      // file -- defaults to "arch-testing").
+      source_role: "arch-testing",
       target_role: "arch-testing",
       target_role_profile_version: "1.0.0",
       target_role_profile_digest: "b".repeat(64),
       requester_worktree_id: e.RCS_WORKTREE_ID,
-      requester_instance_id: "c".repeat(64),
+      // M6+M7 requester-authority closure (Group G fix): a REAL, wrapper-
+      // convergent actor_instance_id -- never a fabricated placeholder no
+      // real grant can match.
+      requester_instance_id: e.RCS_KNOWN_REQUESTER_INSTANCE_ID,
       repo_id: e.RCS_REPO_ID,
       wave_slug: e.RCS_WAVE_SLUG,
       protocol_profile: "runtime-consultation/v1",
@@ -262,6 +382,86 @@ _write_request() {
     fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
     fs.chmodSync(outPath, 0o600);
   ' "$overrides" "$out"
+}
+
+# M6+M7 SIXTEENTH CODEX ACCEPTANCE Correction E: same canonical fixture as
+# runtime-consultation-cli.bats' own helper of the same name -- see that
+# file's header comment for the full mechanism/rationale
+# (cmdClaim's resolveActivationForRequestPath requires a pre-existing
+# activation/v1 record; only real `dispatch` durably creates one; the temp
+# fixture project honestly falls through to noop, which is a prerequisite
+# for these tests, never itself a Sixteenth delivery proof).
+_write_activated_request() {
+  local out="$1" overrides="$2"
+  local routing_src="$BATS_TEST_DIRNAME/../lib/runtime-routing.json"
+  local routing_digest; routing_digest="$(_sha256_file "$routing_src")"
+  # M6/M7 terminal functional closure correction round 1: _write_request's
+  # own default target_role_profile_digest is the placeholder "b"x64 -- fine
+  # for tests that never resolve a REAL activation back, but this helper
+  # drives a genuine `dispatch`, whose own activation/v1 record carries the
+  # REAL roleProfileDigestFor(target_role) value. resolveActivationForRequestPath's
+  # own correlation check (a.target_role_profile_digest !== reqObj.target_role_profile_digest)
+  # then always sees a decorrelated activation for the placeholder -- {ok:false},
+  # cascading to claim's own AUTHORITY_INVALID -- confirmed empirically. Injects
+  # the REAL digest for whichever target_role ends up in effect (an explicit
+  # override, or _write_request's own "arch-testing" default), exactly
+  # mirroring the existing routing_policy_digest injection just below.
+  local merged_overrides; merged_overrides="$(node -e '
+    const rll = require(process.argv[3]);
+    const overrides = JSON.parse(process.argv[1]);
+    overrides.routing_policy_digest = process.argv[2];
+    const targetRole = overrides.target_role || "arch-testing";
+    overrides.target_role_profile_digest = rll.roleProfileDigestFor(targetRole);
+    process.stdout.write(JSON.stringify(overrides));
+  ' "$overrides" "$routing_digest" "$RLL_IMPL")"
+  _write_request "$out" "$merged_overrides"
+
+  local routing_dest_dir; routing_dest_dir="$(_plan_root)/routing-policies"
+  mkdir -p "$routing_dest_dir"
+  cp "$routing_src" "$routing_dest_dir/$routing_digest.json"
+  chmod 0600 "$routing_dest_dir/$routing_digest.json"
+
+  # M6/M7 terminal functional closure correction round 1: activationLivenessDeadline
+  # anchors to the REQUEST's own created_at (this fixture's fixed 2025-01-01
+  # default) regardless of when dispatch itself actually runs -- a REAL
+  # (non-fixed) dispatch clock stamps the activation's own created_at with
+  # the real wall clock (2026+), which is already past that fixed 2025+300s
+  # deadline the moment it is written (createdAtMs > expiryMs), and every
+  # later reader (claim, etc.) sees it as permanently expired regardless of
+  # how quickly it follows -- confirmed empirically. --fixed-clock's own
+  # documented base is exactly this fixture's created_at, keeping the whole
+  # written record internally consistent.
+  _run_cli dispatch --coordination-root "$COORD_ROOT" --request "$out" --fixed-clock
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+
+  local activation_path; activation_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$output")"
+  [ -f "$activation_path" ]
+  local target_role request_id attempt_id
+  node -e '
+    const fs = require("fs");
+    const activation = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const req = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+    if (activation.selected_driver !== "noop") {
+      process.stderr.write("expected the temp fixture project to honestly fall through to noop, got: " + activation.selected_driver); process.exit(1);
+    }
+    if (activation.request_id !== req.request_id || activation.attempt_id !== req.initial_attempt_id) {
+      process.stderr.write("activation does not correlate to the request just written"); process.exit(1);
+    }
+    process.stdout.write([req.target_role, req.request_id, req.initial_attempt_id].join(" ") + "\n");
+  ' "$activation_path" "$out" > "$BATS_TEST_TMPDIR/.activated-request-fields"
+  read -r target_role request_id attempt_id < "$BATS_TEST_TMPDIR/.activated-request-fields"
+  rm -f "$BATS_TEST_TMPDIR/.activated-request-fields"
+
+  local delivery_path; delivery_path="$(dirname "$out")/delivery/$attempt_id.json"
+  [ -f "$delivery_path" ]
+  node -e '
+    const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    if (d.driver !== "noop" || d.delivered !== false) { process.stderr.write("expected an honest noop non-delivery record: " + JSON.stringify(d)); process.exit(1); }
+  ' "$delivery_path"
+
+  local inbox_path; inbox_path="$(_plan_root)/inbox/$target_role/$request_id.json"
+  [ -f "$inbox_path" ]
 }
 
 _write_claim() {
@@ -353,7 +553,9 @@ _write_result() {
       target_role_profile_version: "1.0.0",
       target_role_profile_digest: "b".repeat(64),
       from_role: "arch-testing",
-      to_role: "test-specialist",
+      // M6+M7 requester-authority closure (Group G fix): must match
+      // _write_request own now-fixed source_role default ("arch-testing").
+      to_role: "arch-testing",
       result_kind: "TEST_RESULT",
       status: "ANSWERED",
       reason: null,
@@ -365,7 +567,8 @@ _write_result() {
       consultation_dependencies: [],
       producer_worktree_id: e.RCS_WORKTREE_ID,
       producer_head: e.RCS_SUBJECT_HEAD,
-      created_at: "2025-01-01T00:05:00Z"
+      created_at: "2025-01-01T00:05:00Z",
+      pattern_evidence_dependency: null
     };
     const merged = Object.assign({}, defaults, overrides);
     for (const k of Object.keys(merged)) { if (merged[k] === "__OMIT__") delete merged[k]; }
@@ -378,7 +581,7 @@ _write_result() {
 
 _run_cli() {
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" "$@"
+    node "$GRANT_WRAPPER" "$@"
 }
 
 _run_validate() {
@@ -439,8 +642,8 @@ _assert_cli_result() {
 @test "STATE-01 PASS: claim succeeds against the advertised initial_attempt_id (PUBLISHED -> CLAIMED)" {
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
-  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
-  _run_cli claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids
+  _write_activated_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  _run_cli claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids --fixed-clock
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
 }
@@ -931,17 +1134,23 @@ _write_takeover() {
   _assert_cli_result "INVALID" "SECURITY_INVALID"
 }
 
-@test "DUR-J-cleanup-confused-deputy-display: cleanup's own request_id DISPLAY value for a transaction A whose request.json is durable/closed-shape but internally embeds request_id:B must be null, never the fabricated B, and must not mutate disk" {
+@test "DUR-J-cleanup-confused-deputy-display: cleanup rejects a transaction A whose request.json is durable/closed-shape but internally embeds request_id:B (confused deputy) -- SECURITY_INVALID, never a tolerant display fallback, and must not mutate disk" {
   # Codex NO-GO round 4 (fixed) / round 5 (persistent regression test added): a
   # request.json stored at transaction A's own canonical path but internally
   # embedding a DIFFERENT request_id (B) -- the same confused-deputy shape as the
-  # round-3 blocker-1 finding, applied here to cleanup's own response envelope rather
-  # than an authoritative reader. cmdCleanup now reuses readCanonicalRequestRecord
-  # (the same canonical validation every other authoritative reader uses) for this
-  # DISPLAY-only field; on identity mismatch the response omits the id (null) rather
-  # than echoing the unearned foreign identity. Reconciliation (the actual work
-  # cleanup performs) is entirely unaffected -- there is nothing to reconcile in this
-  # fixture (no temp siblings), so cleanup still returns rc0/SUCCESS overall.
+  # round-3 blocker-1 finding. M6+M7 requester-authority closure
+  # (team-lead-relayed decision, 2026-08-11): the OLD expectation here (cleanup
+  # tolerates the mismatch, displaying request_id:null but still returning
+  # SUCCESS overall) predates the role-command-grant/v1 requester gate and is
+  # now obsolete, not a regression to preserve. cleanup is a transactional
+  # requester operation -- PLAN.md §15b requires accrediting request/actor/
+  # attempt/epoch before any read or mutation; a request.json at path A
+  # claiming to be B cannot demonstrate authority over A. Grant-scope
+  # resolution (resolveRequesterGrantScope, which funnels through
+  # readCanonicalRequestRecord -- the SOLE canonical request.json reader,
+  # this file's own "MECHANICAL RULE" doc comment) now correctly rejects this
+  # BEFORE cmdCleanup's own handler -- including its old tolerant
+  # display-fallback logic -- is ever reached.
   local id_a; id_a="$(_gen_hex_id)"
   local id_b; id_b="$(_gen_hex_id)"
   local aid; aid="$(_gen_hex_id)"
@@ -952,10 +1161,13 @@ _write_takeover() {
   local before; before="$(_snapshot_tree "$COORD_ROOT")"
 
   _run_cli cleanup --coordination-root "$COORD_ROOT" --request "$req_a" --fixed-ids
-  [ "$status" -eq 0 ]
-  _assert_cli_result "SUCCESS" "NONE"
-  local got_request_id; got_request_id="$(node -e 'console.log(JSON.parse(process.argv[1]).request_id)' "$output")"
-  [ "$got_request_id" = "null" ]
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "SECURITY_INVALID"
+  node -e '
+    const data = JSON.parse(process.argv[1]);
+    if (data.request_id !== null) { console.error("expected request_id:null, got: " + JSON.stringify(data.request_id)); process.exit(1); }
+    if (data.artifact_ref !== null) { console.error("expected artifact_ref:null, got: " + JSON.stringify(data.artifact_ref)); process.exit(1); }
+  ' "$output"
 
   local after; after="$(_snapshot_tree "$COORD_ROOT")"
   [ "$before" = "$after" ]
@@ -1110,7 +1322,7 @@ _write_takeover() {
   ln "$result_f" "$temp_f"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_READ_MUTATE=grow \
-    node "$IMPL" cleanup --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids
+    node "$GRANT_WRAPPER" cleanup --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids
   # Codex P1-3: a mid-recovery byte/metadata drift is 'ambiguous'/'drift' -- cleanup
   # itself now reports DURABILITY_UNPROVEN even though the pair is correctly LEFT a
   # durable orphan (the drift was caught before any barrier/unlink).
@@ -1150,7 +1362,7 @@ _write_takeover() {
   ln "$result_f" "$temp_f"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_RECONCILE_TEMP_FSTAT=1 \
-    node "$IMPL" cleanup --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids
+    node "$GRANT_WRAPPER" cleanup --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
   # Neither the temp nor the target was touched -- the fstat failure happened before
@@ -1603,7 +1815,7 @@ _write_takeover() {
   # durable (PLAN.md ~L677); it must surface DURABILITY_UNPROVEN, not SUCCESS.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_DIR_FSYNC=replace \
-    node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
+    node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
 }
@@ -1621,7 +1833,7 @@ _write_takeover() {
   local txndir; txndir="$(dirname "$req")"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_DIR_FSYNC=lock-acquire \
-    node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
+    node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
   [ -d "$txndir/.lock" ]
@@ -1636,7 +1848,7 @@ _write_takeover() {
   local txndir; txndir="$(dirname "$req")"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_DIR_FSYNC=lock-release \
-    node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
+    node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
   [ ! -e "$txndir/.lock" ]
@@ -1651,7 +1863,7 @@ _write_takeover() {
   local txndir; txndir="$(dirname "$req")"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_LOCK_RMDIR=1 \
-    node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
+    node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
   [ -d "$txndir/.lock" ]
@@ -1671,7 +1883,7 @@ _write_takeover() {
   local txndir; txndir="$(dirname "$req")"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_TEMP_FSYNC=1 \
-    node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
+    node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
   [ ! -e "$txndir/.lock" ]
@@ -1694,7 +1906,7 @@ _write_takeover() {
   local txndir; txndir="$(dirname "$req")"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_DIR_FSYNC=replace \
-    node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
+    node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
   [ -d "$txndir/.lock" ]
@@ -1757,7 +1969,7 @@ _write_takeover() {
     local txndir; txndir="$(dirname "$req")"
     run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_FAULT_REPLACE_POSTRENAME="$step" \
-      node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
+      node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
     [ "$status" -eq 3 ] || { echo "step=$step status=$status (expected 3)"; false; }
     _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
     [ -d "$txndir/.lock" ] || { echo "step=$step: .lock was NOT retained (poison failed)"; false; }
@@ -1779,7 +1991,7 @@ _write_takeover() {
 
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_REPLACE_POSTRENAME=swap-same-bytes \
-    node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
+    node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
   [ "$status" -eq 3 ] || { echo "status=$status (expected 3)"; false; }
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
   [ -d "$txndir/.lock" ] || { echo ".lock was NOT retained (poison failed)"; false; }
@@ -1793,7 +2005,7 @@ _write_takeover() {
   _write_accepted_result "$ar" "{}"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_LOCK_RMDIR=1 \
-    node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req" --reason expired --fixed-ids
+    node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req" --reason expired --fixed-ids
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
 }
@@ -1809,7 +2021,7 @@ _write_takeover() {
     _write_result "$result_f" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED"}' "$rid" "$req_digest" "$rid" "$aid")"
     run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_FAULT_READ_MUTATE="$kind" \
-      node "$IMPL" validate --coordination-root "$COORD_ROOT" --kind result-v2 --artifact "$result_f"
+      node "$GRANT_WRAPPER" validate --coordination-root "$COORD_ROOT" --kind result-v2 --artifact "$result_f"
     [ "$status" -eq 3 ] || { echo "kind=$kind status=$status (expected 3)"; false; }
     _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
   done
@@ -1856,7 +2068,7 @@ _write_takeover() {
       printf '{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}' > "$subject_bundle"
       run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
         RUNTIME_CONSULTATION_FAULT_DIR_CLOSE="$label" \
-        node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+        node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
           --subject-bundle "$subject_bundle" --intent "$intent_b64"
     else
       local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
@@ -1866,7 +2078,7 @@ _write_takeover() {
       _write_active_lease "$lease_f" "$(printf '{"attempt_id":"%s","claim_digest":"%s","last_heartbeat_at":"%s","lease_expiry":"%s"}' "$aid" "$claim_digest" "$(_iso_now)" "$(_iso_plus_seconds "$(_iso_now)" 300)")"
       run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
         RUNTIME_CONSULTATION_FAULT_DIR_CLOSE="$label" \
-        node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
+        node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
     fi
     [ "$status" -eq 3 ] || { echo "label=$label status=$status (expected 3)"; false; }
     _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -1899,7 +2111,7 @@ _write_takeover() {
   chmod 0600 "$(_plan_root)/plan_ref"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_LOSER_UNLINK=1 \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -1916,7 +2128,7 @@ _write_takeover() {
   chmod 0600 "$(_plan_root)/plan_ref"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_DIR_FSYNC=loser-cleanup \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -1932,7 +2144,7 @@ _write_takeover() {
   cp "$PLAN_FILE" "$(_plan_root)/plan_ref"
   chmod 0600 "$(_plan_root)/plan_ref"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
@@ -1964,7 +2176,7 @@ _write_takeover() {
   printf '{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}' > "$subject_bundle"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_NOCLOBBER_PRELINK=swap \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -1988,7 +2200,7 @@ _write_takeover() {
   printf '{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}' > "$subject_bundle"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_NOCLOBBER_PRELINK=swap-same-bytes \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -2004,7 +2216,7 @@ _write_takeover() {
   printf '{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}' > "$subject_bundle"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_NOCLOBBER_PREVALIDATE=delete \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -2022,7 +2234,7 @@ _write_takeover() {
   printf '{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}' > "$subject_bundle"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_NOCLOBBER_PREVALIDATE=hardlink \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -2067,7 +2279,7 @@ _write_takeover() {
   # directory is created while the restrictive umask is active.
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
-  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  _write_activated_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
   local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
   local lease_f; lease_f="$(_active_lease_path "$rid" "$aid")"
   mkdir -p "$(dirname "$claim_f")" "$(dirname "$lease_f")"
@@ -2075,7 +2287,7 @@ _write_takeover() {
   local old_umask; old_umask="$(umask)"
   umask 0277
   run env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids
+    node "$GRANT_WRAPPER" claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids --fixed-clock
   umask "$old_umask"
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
@@ -2101,7 +2313,7 @@ _write_takeover() {
   printf '{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}' > "$subject_bundle"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_TEMP_HARDEN=fchmod \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -2117,7 +2329,7 @@ _write_takeover() {
   printf '{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}' > "$subject_bundle"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_TEMP_HARDEN=fstat \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -2139,7 +2351,7 @@ _write_takeover() {
 
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_TEMP_HARDEN=fchmod \
-    node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
+    node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
   _run_validate active-lease-v1 "$lease_f"
@@ -2152,7 +2364,7 @@ _write_takeover() {
   local old_umask; old_umask="$(umask)"
   umask 0277
   run env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
+    node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --fixed-ids
   umask "$old_umask"
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
@@ -2163,7 +2375,7 @@ _write_takeover() {
 @test "UMASK-0700-LOCK-01: acquireLock's own .lock directory is EXACT 0700 independent of umask (Codex NO-GO round 15: mkdirSync's own default mode is subject to umask, exactly the reason every FILE writer in this file forces exact 0600 via fchmod rather than trusting open()'s mode argument -- an explicit chmod immediately after .lock's own mkdirSync closes the same class of gap for the ONE directory acquireLock itself creates, so the baseline captured for later scope-identity comparisons is a KNOWN-SAFE value, not whatever umask happened to leave behind)." {
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
-  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  _write_activated_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
   local txndir; txndir="$(dirname "$req")"
   # Pre-create claims/ (and active-leases/, cmdClaim's own second write) under
   # the NORMAL umask -- see UMASK-0600-01's own comment: a brand-new directory
@@ -2177,7 +2389,7 @@ _write_takeover() {
   umask 0277
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=with-lock-post-acquire-pre-fn \
-      node "$IMPL" claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids >/dev/null 2>&1; ) &
+      node "$GRANT_WRAPPER" claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids --fixed-clock >/dev/null 2>&1; ) &
   local claim_pid=$!
   umask "$old_umask"
 
@@ -2201,13 +2413,13 @@ _write_takeover() {
 @test "XACT-01 claim/takeover interleaving: claim publishes claim -> pauses before its lock -> an eligible takeover commits -> claim resumes -> no initial lease for the now-superseded attempt" {
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
-  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  _write_activated_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
   local txndir; txndir="$(dirname "$req")"
 
   local claim_out claim_rc_file; claim_out="$(mktemp)"; claim_rc_file="$(mktemp)"
   ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=claim-pre-lock \
-      node "$IMPL" claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids >"$claim_out" 2>&1; echo $? >"$claim_rc_file" ) &
+      node "$GRANT_WRAPPER" claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --fixed-ids --fixed-clock >"$claim_out" 2>&1; echo $? >"$claim_rc_file" ) &
   local claim_pid=$!
 
   _wait_for_rendezvous_ready "$txndir" claim-pre-lock
@@ -2250,6 +2462,7 @@ _write_takeover() {
   local req_created; req_created="$(_iso_plus_seconds "$now" -600)"
   local req_expiry; req_expiry="$(_iso_plus_seconds "$req_created" 3600)"
   _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s","created_at":"%s","expiry":"%s","requester_instance_id":"%s"}' "$rid" "$rid" "$aid" "$req_created" "$req_expiry" "$requester_a")"
+  _force_requester_binding_identity "$requester_a" arch-testing
   local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
   _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
   local stale_heartbeat; stale_heartbeat="$(_iso_plus_seconds "$now" -400)"
@@ -2261,7 +2474,7 @@ _write_takeover() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=takeover-in-lock-pre-read \
-      node "$IMPL" takeover --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" takeover --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids >"$out" 2>&1; echo $? >"$rc_file" ) &
   local takeover_pid=$!
 
   _wait_for_rendezvous_ready "$txndir" takeover-in-lock-pre-read
@@ -2308,7 +2521,7 @@ _write_takeover() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=takeover-post-publish-pre-recheck \
-      node "$IMPL" takeover --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" takeover --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids >"$out" 2>&1; echo $? >"$rc_file" ) &
   local takeover_pid=$!
 
   _wait_for_rendezvous_ready "$txndir" takeover-post-publish-pre-recheck
@@ -2387,7 +2600,7 @@ _write_takeover() {
   local hb_out hb_rc_file; hb_out="$(mktemp)"; hb_rc_file="$(mktemp)"
   ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=heartbeat-pre-lock \
-      node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" >"$hb_out" 2>&1; echo $? >"$hb_rc_file" ) &
+      node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" >"$hb_out" 2>&1; echo $? >"$hb_rc_file" ) &
   local hb_pid=$!
 
   _wait_for_rendezvous_ready "$txndir" heartbeat-pre-lock
@@ -2453,7 +2666,7 @@ _write_takeover() {
   local pr_out pr_rc_file; pr_out="$(mktemp)"; pr_rc_file="$(mktemp)"
   ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=publish-result-pre-lock \
-      node "$IMPL" publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64" >"$pr_out" 2>&1; echo $? >"$pr_rc_file" ) &
+      node "$GRANT_WRAPPER" publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64" >"$pr_out" 2>&1; echo $? >"$pr_rc_file" ) &
   local pr_pid=$!
 
   _wait_for_rendezvous_ready "$txndir" publish-result-pre-lock
@@ -2624,7 +2837,14 @@ _write_takeover() {
   local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
   _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
   local cancel_f; cancel_f="$(_cancel_path "$rid")"
-  local canceller; canceller="$(printf 'c%.0s' {1..64})"
+  # M6+M7 requester-authority closure (Group G fix): cancelled_by must match
+  # EITHER the request's own real requester_instance_id OR the literal
+  # "timeout-authority" (accreditCancelRecord) -- a fabricated, uncorrelated
+  # value is now rejected SECURITY_INVALID before cmdPublishResult ever
+  # observes cancel.json exists at all, masking this test's own intended
+  # CANCELLED/TRANSACTION_CANCELLED assertion. Reuses _write_request's own
+  # idempotently-minted identity (same tuple, same binding).
+  local canceller; canceller="$(_known_requester_identity arch-testing)"
   _write_cancel "$cancel_f" "$(printf '{"request_id":"%s","reason":"explicit","cancelled_by":"%s"}' "$rid" "$canceller")"
 
   local content_b64; content_b64="$(printf 'hello world' | _base64url_encode)"
@@ -2652,7 +2872,7 @@ _write_takeover() {
   local cancel_out; cancel_out="$(mktemp)"
   ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-post-publish-pre-recheck \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req" --reason explicit --fixed-ids >"$cancel_out" 2>&1; echo $? >> "$cancel_out" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req" --reason explicit --fixed-ids >"$cancel_out" 2>&1; echo $? >> "$cancel_out" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" cancel-post-publish-pre-recheck
@@ -2664,7 +2884,7 @@ _write_takeover() {
   # cross-process, lock-mediated overlap, not a sequential "run after exit".
   local pr_out; pr_out="$(mktemp)"
   ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-      node "$IMPL" publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64" --fixed-ids >"$pr_out" 2>&1; echo $? >> "$pr_out" ) &
+      node "$GRANT_WRAPPER" publish-result --coordination-root "$COORD_ROOT" --request "$req" --claim "$claim_f" --content "$content_b64" --fixed-ids >"$pr_out" 2>&1; echo $? >> "$pr_out" ) &
   local pr_pid=$!
 
   # Direct, non-inferred proof that publish-result is GENUINELY still blocked
@@ -2743,7 +2963,7 @@ _write_takeover() {
   [ "$first_ino" = "$second_ino" ]
 }
 
-@test "PUBLISH-RESULT-IDEMPOTENT-02: a real (non-fixed-clock) retry with logically-identical content that straddles a real wall-clock second boundary is rejected as AUTHORITY_INVALID under TODAY'S real, unchanged behavior, not silently accepted as idempotent (Codex NO-GO round 17: freezes the boundary PUBLISH-RESULT-IDEMPOTENT-01's --fixed-clock case cannot exercise -- PLAN.md ~L704's 'same-digest duplicate' rule is a literal byte-for-byte rule, not a caller-defined notion of 'same except the timestamp'). This documents CURRENT behavior only, not a settled design verdict: whether AUTHORITY_INVALID alone is the CORRECT final outcome here, or whether this too falls under PLAN ~L704's 'different otherwise-valid candidates... cause transaction cancellation plus harness STOP/report' clause, is EXPLICITLY UNRESOLVED -- see CONFLICT-DESIGN-R12.1.md's own widened scope (a HARD NO-GO on round 17's earlier claim that this specific case was 'correctly' AUTHORITY_INVALID, not merely unchanged)." {
+@test "PUBLISH-RESULT-IDEMPOTENT-02: a real (non-fixed-clock) retry with logically-identical content that straddles a wall-clock second boundary is rejected as AUTHORITY_INVALID under the current unchanged behavior, not silently accepted as byte-identical. This preserves the observable boundary while the separate PLAN-required conflict terminalization is handled by the functional stabilization ledger." {
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
   _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
@@ -2915,11 +3135,11 @@ _write_takeover() {
 @test "ACT-01: two sequential claimers for the same advertised attempt/epoch -- exactly one wins, no flaky retry" {
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
-  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
-  _run_cli claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --worker-session first-racer --fixed-ids
+  _write_activated_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  _run_cli claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --worker-session first-racer --fixed-ids --fixed-clock
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
-  _run_cli claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --worker-session second-racer --fixed-ids
+  _run_cli claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --worker-session second-racer --fixed-ids --fixed-clock
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" ""
 }
@@ -2927,13 +3147,13 @@ _write_takeover() {
 @test "DX-noconcurrent-01: two truly concurrent claim invocations for the same attempt -- exactly one succeeds" {
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
-  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  _write_activated_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
   local out1 out2; out1="$(mktemp)"; out2="$(mktemp)"
   ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-      node "$IMPL" claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --worker-session racer-a --fixed-ids >"$out1" 2>&1; echo $? >> "$out1" ) &
+      node "$GRANT_WRAPPER" claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --worker-session racer-a --fixed-ids --fixed-clock >"$out1" 2>&1; echo $? >> "$out1" ) &
   local pid1=$!
   ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-      node "$IMPL" claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --worker-session racer-b --fixed-ids >"$out2" 2>&1; echo $? >> "$out2" ) &
+      node "$GRANT_WRAPPER" claim --coordination-root "$COORD_ROOT" --request "$req" --role arch-testing --worker-session racer-b --fixed-ids --fixed-clock >"$out2" 2>&1; echo $? >> "$out2" ) &
   local pid2=$!
   wait "$pid1" || true
   wait "$pid2" || true
@@ -2956,10 +3176,10 @@ _write_takeover() {
   _write_result "$result_f" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED"}' "$rid" "$req_digest" "$rid" "$aid")"
   local out1 out2; out1="$(mktemp)"; out2="$(mktemp)"
   ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-      node "$IMPL" accept-result --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids >"$out1" 2>&1; echo $? >> "$out1" ) &
+      node "$GRANT_WRAPPER" accept-result --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids >"$out1" 2>&1; echo $? >> "$out1" ) &
   local pid1=$!
   ( set +e; NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-      node "$IMPL" accept-result --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids >"$out2" 2>&1; echo $? >> "$out2" ) &
+      node "$GRANT_WRAPPER" accept-result --coordination-root "$COORD_ROOT" --request "$req" --fixed-ids >"$out2" 2>&1; echo $? >> "$out2" ) &
   local pid2=$!
   wait "$pid1" || true
   wait "$pid2" || true
@@ -3572,7 +3792,7 @@ _frozen_iso_plus_ms() {
   # fsyncDir now fails closed and this assertion is genuine GREEN.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_DIR_FSYNC=1 \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
 
   [ "$status" -eq 3 ]
@@ -3777,7 +3997,7 @@ _frozen_iso_plus_ms() {
   # target (nlink==2), barrier 1 fails -- the target must be LEFT at nlink==2.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_DIR_FSYNC=barrier1 \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64" --fixed-ids --fixed-clock
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -3790,7 +4010,7 @@ _frozen_iso_plus_ms() {
   # leaves the target at nlink==2 on barrier-1 failure and this assertion is
   # genuine GREEN.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64" --fixed-ids --fixed-clock
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -3813,7 +4033,7 @@ _frozen_iso_plus_ms() {
   # the temp-unlink ALL succeed for real -- only the barrier-2 flush itself is faulted.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_DIR_FSYNC=barrier2 \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -3835,7 +4055,7 @@ _frozen_iso_plus_ms() {
   # now propagates and this assertion is genuine GREEN.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_TEMP_UNLINK=1 \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "DURABILITY_UNPROVEN"
@@ -3852,7 +4072,7 @@ _frozen_iso_plus_ms() {
   # any umask below 0o066; the required owner-only 0o600 never is.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_TEMP_UNLINK=1 \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64"
   [ "$status" -eq 3 ]
   local tmp; tmp="$(ls "$(_plan_root)"/.plan_ref.*.tmp-owner 2>/dev/null | head -1)"
@@ -3870,7 +4090,7 @@ _frozen_iso_plus_ms() {
   printf '{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}' > "$subject_bundle"
   # Publish #1 -> real plan_ref (the first idempotent-eligible target).
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64" --fixed-ids --fixed-clock
   [ "$status" -eq 0 ]
   local plan_ref; plan_ref="$(_plan_root)/plan_ref"
@@ -3887,7 +4107,7 @@ _frozen_iso_plus_ms() {
   # idempotent path now fd-binds with O_NOFOLLOW and this assertion is genuine
   # GREEN.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64" --fixed-ids --fixed-clock
   [ "$status" -ne 0 ]
   _assert_cli_result "INVALID" "SECURITY_INVALID"
@@ -3902,7 +4122,7 @@ _frozen_iso_plus_ms() {
   printf '{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}' > "$subject_bundle"
   # Publish #1 -> real plan_ref.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64" --fixed-ids --fixed-clock
   [ "$status" -eq 0 ]
   local plan_ref; plan_ref="$(_plan_root)/plan_ref"
@@ -3921,7 +4141,7 @@ _frozen_iso_plus_ms() {
   # race-loss classification -- this assertion is genuine GREEN.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_REPLACE_POSTRENAME=fstat2 \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64" --fixed-ids --fixed-clock
   [ "$status" -eq 7 ]
   _assert_cli_result "INTERNAL" "INTERNAL_ERROR"
@@ -3936,7 +4156,7 @@ _frozen_iso_plus_ms() {
   printf '{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}' > "$subject_bundle"
   # Publish #1 -> real plan_ref.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64" --fixed-ids --fixed-clock
   [ "$status" -eq 0 ]
   local plan_ref; plan_ref="$(_plan_root)/plan_ref"
@@ -3953,7 +4173,7 @@ _frozen_iso_plus_ms() {
   # instead of INTERNAL, and the lstat fault-injection seam would never fire.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
     RUNTIME_CONSULTATION_FAULT_REPLACE_POSTRENAME=lstat \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$subject_bundle" --intent "$intent_b64" --fixed-ids --fixed-clock
   [ "$status" -eq 7 ]
   _assert_cli_result "INTERNAL" "INTERNAL_ERROR"

@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [verify, spec, criteria, goal, check]
 token_budget: 2000
-template_version: "1.1.0"
+template_version: "1.2.0"
 skills:
   - verify
   - test
@@ -62,6 +62,10 @@ If no criteria provided, derive them from the goal.
 - `validate-all` — comprehensive validation suite
 - `code-metrics` — measure complexity and health
 - `find-pattern` — search for architectural violations
+
+## Runtime Messaging Adapters
+
+You are dispatched per verification task, not part of the persistent support plane (`arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, `doc-updater`), and you hold no `SendMessage` tool — this section applies only if a future dispatch mode adds one. See [runtime-messaging-adapters](../../docs/agents/runtime-messaging-adapters.md) for the portable consultation protocol other roles use to reach `context-provider`.
 
 ## Rules
 

@@ -19,8 +19,8 @@ bats_require_minimum_version 1.5.0
 # already shipped) is the sole consumer of the one-use LAUNCH-authorization
 # marker; this suite never re-tests that hook (see `bash-cli-spawn-gate.bats`).
 #
-# C1 does NOT yet spawn any app-server child (C2's job); no process
-# enumeration exists anywhere in this file.
+# The completed C2/M6 path spawns only the exact child it owns; it never
+# enumerates, attaches to, or signals a pre-existing Codex process.
 #
 # Real fixture actions are minted through the ACTUAL `runtime-role-lifecycle.cjs`
 # `ensure` CLI (fake single-driver capability), mirroring `bash-cli-spawn-gate.bats`'s
@@ -30,16 +30,57 @@ bats_require_minimum_version 1.5.0
 
 BRIDGE="$BATS_TEST_DIRNAME/../lib/runtime-bridge-codex.cjs"
 RLL="$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs"
+PROJECT_CONFIG="$BATS_TEST_DIRNAME/../../.planning/wave-portable-runtime-messaging-adapters/prep/phase-a/project-config.py"
 WAVE_SLUG="bridge-test-wave"
 LC_CAPABILITY="bats-runtime-consultation-bridge-lc-fixture"
 EXEC_CAPABILITY="bats-runtime-consultation-bridge-exec-fixture"
 
+_assert_isolated_runtime_tmp() {
+  local dir="$1"
+  local real_dir real_bats
+  real_dir="$(cd "$dir" 2>/dev/null && pwd -P)" || return 1
+  real_bats="$(cd "$BATS_TEST_TMPDIR" && pwd -P)" || return 1
+  case "$real_dir" in
+    "$real_bats"|"$real_bats"/*) ;;
+    *) echo "# runtime-tmp escaped BATS_TEST_TMPDIR: $real_dir not under $real_bats" >&2; return 1 ;;
+  esac
+  node -e '
+    const fs = require("fs");
+    let st;
+    try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
+    if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
+    if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
+    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+  ' "$dir"
+}
+
 setup() {
+  # M6+M7 SIXTEENTH Phase 2B: this whole file's host-private registry
+  # (registryBaseDir() in runtime-role-lifecycle.cjs resolves purely from
+  # $TMPDIR + this OS user's uid, PLAN.md ~L86-119) is isolated under bats'
+  # own per-test tmpdir, NEVER the real shared canonical registry -- exported
+  # before ANY node/hook/bridge/CLI process starts, so every subprocess this
+  # test spawns inherits it. A crashed/killed run can then only ever leave
+  # debris under $BATS_TEST_TMPDIR (bats-owned, swept independently of this
+  # suite), never in the canonical uid-scoped tree other sessions/production
+  # share.
+  RUNTIME_TMP="$BATS_TEST_TMPDIR/runtime-tmp"
+  mkdir -p "$RUNTIME_TMP"
+  chmod 0700 "$RUNTIME_TMP"
+  _assert_isolated_runtime_tmp "$RUNTIME_TMP"
+  export TMPDIR="$RUNTIME_TMP"
+
   PROJ="$(mktemp -d)"
   git -C "$PROJ" init -q 2>/dev/null
   git -C "$PROJ" config user.email "bats@test.local"
   git -C "$PROJ" config user.name "Bats Test"
   git -C "$PROJ" commit -q --allow-empty -m init 2>/dev/null
+  # Captured immediately after git init, while .git is known-good -- never
+  # recomputed later from a $PROJ some later test step may have corrupted
+  # (a handful of tests in this file deliberately damage .git to test
+  # topology fail-closed behavior).
+  PROJ_REGISTRY_DIR="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.registryRepoDir(process.argv[2]));' "$RLL" "$PROJ")"
   mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
   printf '# Fixture PLAN for runtime-consultation-bridge.bats\n' > "$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
   # session-run's own root-confinement check (point D) requires this to
@@ -57,10 +98,241 @@ setup() {
   mkdir -p "$PROJ/scripts"
   cp -R "$BATS_TEST_DIRNAME/../lib" "$PROJ/scripts/lib"
   PROJ_BRIDGE="$PROJ/scripts/lib/runtime-bridge-codex.cjs"
+  # roleProfileDigestFor(role) (runtime-role-lifecycle.cjs) resolves
+  # setup/agent-templates/<role>.md via path.join(__dirname, '..', '..',
+  # 'setup', 'agent-templates', role + '.md') -- from the COPY above,
+  # __dirname is $PROJ/scripts/lib, so it resolves to
+  # $PROJ/setup/agent-templates/<role>.md. session-run's own
+  # validateBindingsPendThisAction calls roleProfileDigestFor during role-owner
+  # acquisition, so this scratch tree needs the SAME repo-root-relative
+  # setup/agent-templates/ sibling, mirroring the scripts/lib copy above --
+  # without it every role-owner-acquisition test ENOENTs before ever reaching
+  # its own assertions. The authenticated path also proves canonical mirror
+  # parity against .claude/agents/<role>.md, so copy that authoritative mirror
+  # into the hermetic project as well.
+  mkdir -p "$PROJ/setup"
+  cp -R "$BATS_TEST_DIRNAME/../../setup/agent-templates" "$PROJ/setup/agent-templates"
+  mkdir -p "$PROJ/.claude"
+  cp -R "$BATS_TEST_DIRNAME/../../.claude/agents" "$PROJ/.claude/agents"
+
+  # M6+M7 SIXTEENTH CIERRE DEFINITIVO Phase 2C: context-provider's real
+  # serving path (runContextProviderInternalSearch) now spawns the real
+  # mcp-server over stdio and resolves '@modelcontextprotocol/sdk' relative
+  # to $PROJ/mcp-server/package.json for EVERY context-provider turn, not
+  # only Context7/pattern-gap ones -- this fixture project did not provision
+  # that tree at all, so any test that reaches a real context-provider turn
+  # (e.g. M6-CD-02, which never touches Context7) ENOENTs inside the
+  # internal search step before ever reaching its own assertions. Verbatim
+  # copy of runtime-consultation-role-gate.bats's own
+  # _s16e2e_bootstrap_project precedent: symlink the real checkout's
+  # already-built output + node_modules (100MB+, never copied) so resolution
+  # succeeds for real instead of stubbing the internal MCP boundary. No
+  # docs/ exists under $PROJ, so searches legitimately return zero matches.
+  mkdir -p "$PROJ/mcp-server"
+  ln -s "$BATS_TEST_DIRNAME/../../mcp-server/node_modules" "$PROJ/mcp-server/node_modules"
+  ln -s "$BATS_TEST_DIRNAME/../../mcp-server/build" "$PROJ/mcp-server/build"
+  cp "$BATS_TEST_DIRNAME/../../mcp-server/package.json" "$PROJ/mcp-server/package.json"
+
+  # Hermetic host credential source. session-run reads the fixed
+  # ~/.codex/auth.json path before consuming the one-use execution claim;
+  # every bridge test therefore uses this retained test HOME rather than the
+  # developer's live login. The JWT signature is deliberately irrelevant to
+  # this parser; only its future exp claim is consumed.
+  TEST_HOME="$PROJ/test-home"
+  mkdir -p "$TEST_HOME/.codex"
+  node -e '
+    const fs = require("fs");
+    const enc = (v) => Buffer.from(JSON.stringify(v)).toString("base64url");
+    const accessToken = enc({ alg: "none", typ: "JWT" }) + "." + enc({ exp: Math.floor(Date.now() / 1000) + 3600 }) + ".fixture";
+    fs.writeFileSync(process.argv[1], JSON.stringify({ tokens: { access_token: accessToken, account_id: "bridge-test-account", id_token: accessToken } }), { mode: 0o600 });
+  ' "$TEST_HOME/.codex/auth.json"
+  chmod 0600 "$TEST_HOME/.codex/auth.json"
   BG_PID=""
   BG_PID2=""
   BG_OUT="$(mktemp)"
   BG_OUT2="$(mktemp)"
+  # M6: RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN (runtime-bridge-codex.cjs's
+  # resolveAppServerSpawnCommand) lets a test point cmdSessionRun's app-server
+  # spawn at a disk-backed fake executable instead of the real `codex` binary,
+  # which this environment cannot reach (ISOLATED_PATH_POSIX is a fixed,
+  # deliberately-never-caller-overridable isolation PATH, not this shell's
+  # own). Gated behind isTestCapability(), never production-substitutable.
+  # The fake is a real JSONL protocol peer for the entire mandatory path:
+  # initialize -> login+account/updated -> thread/start -> turn/start. It
+  # remains alive after bootstrap, matching a retained app-server process.
+  # Optional modes let the existing shutdown tests use the same protocol peer
+  # while changing only SIGTERM behavior.
+  FAKE_CODEX="$PROJ/fake-codex-app-server.cjs"
+  cat > "$FAKE_CODEX" <<'STUBEOF'
+#!/usr/bin/env node
+'use strict';
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+const readline = require('node:readline');
+const mode = process.argv[2] || 'cooperative';
+const pidFile = process.argv[3] || '';
+const eventFile = process.argv[4] || '';
+if (pidFile) fs.writeFileSync(pidFile, String(process.pid));
+if (mode === 'ignore-term') process.on('SIGTERM', () => {});
+if (mode === 'close-transport-on-usr1') process.on('SIGUSR1', () => { process.stdout.end(); });
+if (mode === 'signal-parent-on-start') setImmediate(() => {
+  try { process.kill(process.ppid, 'SIGTERM'); } catch (err) { /* parent test observes failure */ }
+});
+if (mode === 'signal-parent-on-start') setInterval(() => {}, 1000);
+let threadOrdinal = 0;
+let turnOrdinal = 0;
+const threadRecords = new Map();
+function containsKey(value, key) {
+  if (!value || typeof value !== 'object') return false;
+  if (Object.prototype.hasOwnProperty.call(value, key)) return true;
+  return Array.isArray(value)
+    ? value.some((item) => containsKey(item, key))
+    : Object.values(value).some((item) => containsKey(item, key));
+}
+function send(frame) { process.stdout.write(JSON.stringify(frame) + '\n'); }
+function record(event) {
+  if (eventFile) fs.appendFileSync(eventFile, JSON.stringify(event) + '\n');
+}
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  let frame;
+  try { frame = JSON.parse(line); } catch { process.exit(2); }
+  if (frame.method === 'initialize') {
+    send({ id: frame.id, result: { codexHome: '/tmp/fake-codex-home', platformFamily: 'unix', platformOs: 'macos', userAgent: 'fake-codex-stub/1.0.0' } });
+    return;
+  }
+  if (frame.method === 'account/login/start') {
+    send({ id: frame.id, result: { type: 'chatgptAuthTokens' } });
+    send({ method: 'account/updated', params: { authMode: 'chatgptAuthTokens', planType: null } });
+    return;
+  }
+  if (frame.method === 'thread/start') {
+    threadOrdinal += 1;
+    const id = 'fixture-thread-' + threadOrdinal;
+    const cwd = frame.params.cwd;
+    const developerInstructions = frame.params.developerInstructions || '';
+    record({
+      event: 'thread-start', thread_id: id, pid: process.pid,
+      cwd,
+      developer_instructions_sha256: crypto.createHash('sha256').update(Buffer.from(developerInstructions, 'utf8')).digest('hex'),
+      developer_instructions_bytes: Buffer.byteLength(developerInstructions, 'utf8'),
+    });
+    const nowSec = Math.floor(Date.now() / 1000);
+    const thread = { id, sessionId: 'fixture-session-' + threadOrdinal, forkedFromId: null, parentThreadId: null, preview: '', ephemeral: false, modelProvider: 'openai', createdAt: nowSec, updatedAt: nowSec, recencyAt: null, status: { type: 'idle' }, path: null, cwd, cliVersion: '0.145.0-alpha.18', source: 'cli', threadSource: null, agentNickname: null, agentRole: null, gitInfo: null, name: null, turns: [] };
+    threadRecords.set(id, thread);
+    send({ id: frame.id, result: {
+      thread,
+      approvalPolicy: 'never', approvalsReviewer: 'user', cwd, instructionSources: [], model: 'gpt-5', modelProvider: 'openai', sandbox: { type: 'readOnly', networkAccess: false }, serviceTier: null, reasoningEffort: null,
+    } });
+    return;
+  }
+  if (frame.method === 'turn/start') {
+    if (containsKey(frame.params && frame.params.outputSchema, 'oneOf')) {
+      send({ id: frame.id, error: { code: -32602, message: "Invalid schema for response_format 'codex_output_schema': 'oneOf' is not permitted." } });
+      return;
+    }
+    turnOrdinal += 1;
+    const turnId = 'fixture-turn-' + turnOrdinal;
+    send({ id: frame.id, result: { turn: { id: turnId, status: 'inProgress', items: [], itemsView: 'full' } } });
+    const wireEnvelope = frame.params && frame.params.outputSchema
+      && frame.params.outputSchema.properties
+      && frame.params.outputSchema.properties.envelope;
+    const terminalBranch = wireEnvelope && Array.isArray(wireEnvelope.anyOf)
+      ? wireEnvelope.anyOf[0] : wireEnvelope;
+    const resultBranches = terminalBranch && terminalBranch.properties
+      && terminalBranch.properties.result && Array.isArray(terminalBranch.properties.result.anyOf)
+      ? terminalBranch.properties.result.anyOf : [terminalBranch && terminalBranch.properties && terminalBranch.properties.result];
+    const answeredBranch = resultBranches.find((branch) => branch && branch.properties && branch.properties.result_kind);
+    const expectedKind = answeredBranch && answeredBranch.properties.result_kind
+      && Array.isArray(answeredBranch.properties.result_kind.enum)
+      ? answeredBranch.properties.result_kind.enum[0] : 'UNKNOWN';
+    const inputText = frame.params && Array.isArray(frame.params.input)
+      && frame.params.input[0] && frame.params.input[0].text || '';
+    record({ event: 'turn-start', thread_id: frame.params.threadId, turn_id: turnId, expected_result_kind: expectedKind, input_text: inputText, pid: process.pid });
+    const envelope = (
+      expectedKind === 'NESTED_PARENT'
+      && !inputText.includes('Resume the same canonical')
+    ) ? {
+      schema: 'coordination/runtime-turn-envelope/v1',
+      kind: 'consult-intent',
+      consult: {
+        target_role: 'context-provider',
+        question: 'Return the host-accredited nested dependency.',
+        expected_result_kind: 'NESTED_CHILD',
+      },
+    } : {
+      schema: 'coordination/runtime-turn-envelope/v1',
+      kind: 'terminal-result',
+      result: {
+        schema: 'coordination/result-envelope/v1',
+        status: 'ANSWERED',
+        result_kind: expectedKind,
+        content: expectedKind === 'role-bootstrap'
+          ? (mode === 'bootstrap-not-ready' ? 'NOT_READY' : 'READY')
+          : 'fake-codex-answer:' + expectedKind,
+      },
+    };
+    const completeTurn = () => {
+      const completedTurn = {
+        id: turnId,
+        status: 'completed',
+        itemsView: 'full',
+        items: [{
+          type: 'agentMessage', id: 'fixture-agent-message-' + turnOrdinal,
+          phase: 'final_answer', text: JSON.stringify({ envelope }), memoryCitation: null,
+        }],
+      };
+      const thread = threadRecords.get(frame.params.threadId);
+      if (thread) thread.turns.push(completedTurn);
+      record({ event: 'turn-completed', thread_id: frame.params.threadId, turn_id: turnId, expected_result_kind: expectedKind, pid: process.pid });
+      send({
+        method: 'turn/completed',
+        params: {
+          threadId: frame.params.threadId,
+          turn: mode === 'hydrate-not-loaded'
+            ? { id: turnId, status: 'completed', itemsView: 'notLoaded', items: [] }
+            : completedTurn,
+        },
+      });
+    };
+    if (mode === 'bootstrap-delay' && expectedKind === 'role-bootstrap') setTimeout(completeTurn, 5000);
+    else if (expectedKind === 'CD_SOURCE_TAMPER') {
+      // M6+M7 SIXTEENTH Phase 2D: deterministic barrier, never a fixed
+      // delay. The test's own blob mutation must happen-before this turn
+      // completes -- a race against a 3000ms timer can never guarantee
+      // that ordering, only make it likely. Wait for a test-only release
+      // file (derived from eventFile, never a production path) instead;
+      // the test creates it only after mutating the blob.
+      const releasePath = eventFile ? eventFile + '.cd-source-tamper-release' : null;
+      const waitForRelease = () => {
+        if (releasePath && fs.existsSync(releasePath)) { completeTurn(); return; }
+        setTimeout(waitForRelease, 20);
+      };
+      waitForRelease();
+    }
+    else if (expectedKind === 'CD_DELAYED') setTimeout(completeTurn, 3000);
+    else setImmediate(completeTurn);
+    return;
+  }
+  if (frame.method === 'thread/read') {
+    record({ event: 'thread-read', thread_id: frame.params.threadId, include_turns: frame.params.includeTurns, pid: process.pid });
+    const thread = threadRecords.get(frame.params.threadId);
+    if (!thread) {
+      send({ id: frame.id, error: { code: -32000, message: 'thread not found' } });
+      return;
+    }
+    send({ id: frame.id, result: { thread: { ...thread, turns: frame.params.includeTurns ? thread.turns : [] } } });
+    return;
+  }
+  if (frame.method === 'thread/archive') {
+    record({ event: 'thread-archive', thread_id: frame.params.threadId, pid: process.pid });
+    send({ id: frame.id, result: {} });
+    return;
+  }
+});
+STUBEOF
+  chmod +x "$FAKE_CODEX"
+  FAKE_APP_SERVER_EVENTS="$PROJ/fake-codex-events.jsonl"
+  FAKE_APP_SERVER_SPAWN_JSON="$(node -e 'process.stdout.write(JSON.stringify({command:process.execPath,args:[process.argv[1],"cooperative","",process.argv[2]]}))' "$FAKE_CODEX" "$FAKE_APP_SERVER_EVENTS")"
 }
 
 teardown() {
@@ -72,10 +344,24 @@ teardown() {
     fi
   done
   rm -f "$BG_OUT" "$BG_OUT2"
-  node -e '
-    const rll = require(process.argv[1]);
-    try { require("fs").rmSync(rll.registryRepoDir(process.argv[2]), { recursive: true, force: true }); } catch (e) { /* best effort */ }
-  ' "$RLL" "$PROJ" 2>/dev/null || true
+  # M6+M7 SIXTEENTH Phase 2B: re-verify isolation held for the entire test
+  # (TMPDIR/runtime-tmp still real, still under BATS_TEST_TMPDIR, still not a
+  # symlink) BEFORE sweeping -- refuses to delete anything at all if that
+  # ever fails, rather than risk touching the canonical registry. This
+  # deletes ONLY this test's own isolated registry tree + PROJ; the
+  # canonical uid-scoped registry and the archived quarantine directory are
+  # never referenced anywhere in this file and so can never be touched here.
+  if [ -n "$RUNTIME_TMP" ] && _assert_isolated_runtime_tmp "$RUNTIME_TMP" >/dev/null 2>&1; then
+    # M6+M7 SIXTEENTH Phase 2B follow-up: some fixtures materialize a
+    # deliberately read-only projection under here (e.g. a role-read-view,
+    # part of the production isolation model's own security posture) --
+    # restore owner write+traverse on every path THIS test created before
+    # sweeping, or a bare rm -rf leaves permission-denied debris behind
+    # (which then also makes bats' own outer per-test tmpdir cleanup fail
+    # non-silently).
+    chmod -R u+rwX "$RUNTIME_TMP" 2>/dev/null || true
+    rm -rf "$RUNTIME_TMP"
+  fi
   rm -rf "$PROJ"
 }
 
@@ -85,16 +371,18 @@ teardown() {
 # `<action_json>\t<binding_id>` on stdout.
 _mint_raw_action() {
   local roles_csv="$1" # comma-separated, e.g. "verifier" or "quality-gater,verifier"
+  local session_key="${2:-}"
+  local binding_ttl_seconds="${3:-600}"
   NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$LC_CAPABILITY" node -e '
     const rll = require(process.argv[1]);
     const crypto = require("crypto");
     const { execFileSync } = require("child_process");
     const projectRoot = process.argv[2];
     const roles = process.argv[3].split(",");
-    const identity = { ok: true, provider: "claude-hook", runtime_session_key: "bridge-bats-session-" + crypto.randomBytes(4).toString("hex") };
+    const identity = { ok: true, provider: "claude-hook", runtime_session_key: process.argv[4] || ("bridge-bats-session-" + crypto.randomBytes(4).toString("hex")) };
     const worktreeId = rll.computeWorktreeId(projectRoot);
     const planDigest = rll.discoverPlan(projectRoot).planDigest;
-    const binding = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, planDigest, 120).binding;
+    const binding = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, planDigest, Number(process.argv[5])).binding;
     const sha256String = (s) => crypto.createHash("sha256").update(Buffer.from(s, "utf8")).digest("hex");
     const sortedRoles = roles.slice().sort();
     const roleKey = sortedRoles.length === 1 ? sortedRoles[0] : sortedRoles; // PLAN.md ~L576: string for single-role, sorted array for multi-role
@@ -111,7 +399,7 @@ _mint_raw_action() {
     const action = result.actions.find((a) => a.kind === "supervisor-start");
     if (!action) { process.stderr.write("no supervisor-start action minted: " + out); process.exit(1); }
     process.stdout.write(JSON.stringify(action) + "\t" + binding.binding_id);
-  ' "$RLL" "$PROJ" "$roles_csv"
+  ' "$RLL" "$PROJ" "$roles_csv" "$session_key" "$binding_ttl_seconds"
 }
 
 # Point B.1 hardening deliberately closes the exact loophole _mint_raw_action
@@ -146,7 +434,7 @@ _mint_raw_action_independent() {
     const identity = { ok: true, provider: "claude-hook", runtime_session_key: "bridge-bats-independent-" + crypto.randomBytes(4).toString("hex") };
     const worktreeId = rll.computeWorktreeId(projectRoot);
     const planDigest = rll.discoverPlan(projectRoot).planDigest;
-    const binding = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, planDigest, 120).binding;
+    const binding = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, planDigest, 600).binding;
     const gen = rll.resolveSessionGeneration(projectRoot, identity);
     if (!gen.ok) { process.stderr.write("session generation resolve failed"); process.exit(1); }
     const pair = rll.resolvePolicyPair(projectRoot);
@@ -189,6 +477,53 @@ _mint_execution_claim() {
   ' "$RLL" "$action_json" "$binding_id" "$PROJ"
 }
 
+# R2-C (M6-M7-R2C-TEST-SEAM-CLOSURE-20260820) seam, mirrors
+# runtime-consultation-role-gate.bats' own _s16e2e_arm_test_routing_seam and
+# claude-one-shot-binding-red.bats' own _cosb_g4_arm_test_routing_seam.
+# M6-CD correction round 1: this file's own _mint_ready_action/_mint_raw_action
+# mints a genuine, real MainOrchestratorBinding as a normal side effect of
+# driving the retained worker up through the real `ensure` CLI -- so
+# claude-agent's own (already-correct) eligibility check legitimately finds a
+# live top-level-host proof here, same as it would in production. The real
+# production routing.json lists claude-agent before codex-app-server for
+# every role (confirmed by direct read), so an unpinned dispatch in this
+# fixture would legitimately select claude-agent -- correct per the real
+# routing priority, but not what M6-CD-* is testing (the retained
+# codex-app-server worker specifically). Pins the routing candidate set to
+# exactly what each M6-CD scenario needs, never touching production
+# eligibility logic. $RUNTIME_TMP is this file's own setup()-exported TMPDIR
+# (mode 0700), the seam's own containment check target.
+_arm_test_routing_seam() {
+  local target_role="$1"; shift
+  local override_path="$RUNTIME_TMP/m6cd-routing-policy.json"
+  # Also always routes context-provider (codex-app-server, noop) -- M6-CD-02's
+  # own child-consult publishes and (internally) dispatches a context-provider
+  # request under this SAME materialized policy; a route entry present only
+  # for target_role left routes['context-provider'] undefined, which
+  # DRIVER_UNAVAILABLE'd the child before it could ever answer, independent of
+  # the (already-correct) parent driver selection this seam exists to pin.
+  node -e '
+    const fs = require("fs");
+    const rc = require(process.argv[1]);
+    const outPath = process.argv[2];
+    const targetRole = process.argv[3];
+    const drivers = process.argv.slice(4);
+    const routes = { [targetRole]: drivers };
+    if (targetRole !== "context-provider") routes["context-provider"] = ["codex-app-server", "noop"];
+    const policyObj = { schema: "runtime-routing/v1", routes };
+    fs.writeFileSync(outPath, rc.canonicalJSONStringify(policyObj), { mode: 0o600 });
+  ' "$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs" "$override_path" "$target_role" "$@"
+  chmod 0600 "$override_path"
+  export RUNTIME_CONSULTATION_TEST_ROUTING_POLICY_PATH="$(cd "$(dirname "$override_path")" && pwd -P)/$(basename "$override_path")"
+  export NODE_ENV=test
+  export RUNTIME_CONSULTATION_TEST_CAPABILITY="m6cd-routing-seam-capability"
+}
+
+_disarm_test_routing_seam() {
+  unset RUNTIME_CONSULTATION_TEST_ROUTING_POLICY_PATH
+  unset RUNTIME_CONSULTATION_TEST_CAPABILITY
+}
+
 # The standard "fully valid, ready to run" fixture: mints the action AND its
 # execution claim. Prints the action JSON.
 _mint_ready_action() {
@@ -199,6 +534,76 @@ _mint_ready_action() {
   binding_id="${minted##*$'\t'}"
   _mint_execution_claim "$action_json" "$binding_id" >/dev/null
   echo "$action_json"
+}
+
+# Runs a fresh, authority-granted ensure for the same role set using an
+# already-live MainOrchestratorBinding. This is deliberately separate from
+# _mint_raw_action: retained-supervisor reuse must be observed without
+# minting a second main binding or changing the session identity.
+_ensure_again_with_binding() {
+  local roles_csv="$1" binding_id="$2" birth_observation="${3:-}"
+  NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$LC_CAPABILITY" node -e '
+    const rll = require(process.argv[1]);
+    const crypto = require("crypto");
+    const { spawnSync } = require("child_process");
+    const projectRoot = process.argv[2];
+    const roles = process.argv[3].split(",");
+    const bindingId = process.argv[4];
+    const bindingRead = rll.readRegistryRecord(rll.mainOrchestratorBindingPathFor(projectRoot, bindingId));
+    if (!bindingRead.ok || bindingRead.absent) { process.stderr.write("binding unavailable"); process.exit(1); }
+    const binding = bindingRead.obj;
+    const sortedRoles = roles.slice().sort();
+    const roleKey = sortedRoles.length === 1 ? sortedRoles[0] : sortedRoles;
+    const digest = crypto.createHash("sha256").update(Buffer.from("ensure:" + sortedRoles.join(","), "utf8")).digest("hex");
+    const grant = rll.mintLifecycleCommandGrant(projectRoot, binding, digest, roleKey, "ensure", "main-orchestrator", "orchestrator", "normal", null);
+    if (!grant.ok) { process.stderr.write("grant mint failed: " + JSON.stringify(grant)); process.exit(1); }
+    const args = [process.argv[1], "ensure", "--project-root", projectRoot];
+    for (const role of roles) args.push("--role", role);
+    args.push("--lifecycle-binding", grant.grantId);
+    const childEnv = Object.assign({}, process.env, {
+      RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(["codex-app-server"]),
+    });
+    if (process.argv[5]) {
+      childEnv.RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY = "x";
+      childEnv.RUNTIME_BRIDGE_CODEX_FAKE_PROCESS_BIRTH_OBSERVATION = process.argv[5];
+    }
+    const call = spawnSync("node", args, { encoding: "utf8", env: childEnv });
+    const out = call.stdout || "";
+    if (!out.trim()) { process.stderr.write("ensure produced no JSON: " + (call.stderr || "")); process.exit(1); }
+    process.stdout.write(out.trim().split("\n").pop());
+  ' "$RLL" "$PROJ" "$roles_csv" "$binding_id" "$birth_observation"
+}
+
+# Same-session fresh-binding variant used only after the retained authority
+# itself expires. It proves that an unexpired SessionGeneration cannot turn a
+# true retained-session expiry into an in-generation respawn loop merely by
+# minting another MainOrchestratorBinding.
+_ensure_with_fresh_binding_for_session() {
+  local roles_csv="$1" session_key="$2"
+  NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$LC_CAPABILITY" node -e '
+    const rll = require(process.argv[1]);
+    const crypto = require("crypto");
+    const { spawnSync } = require("child_process");
+    const projectRoot = process.argv[2];
+    const roles = process.argv[3].split(",");
+    const identity = { ok: true, provider: "claude-hook", runtime_session_key: process.argv[4] };
+    const worktreeId = rll.computeWorktreeId(projectRoot);
+    const planDigest = rll.discoverPlan(projectRoot).planDigest;
+    const bindingResult = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, planDigest, 600);
+    if (!bindingResult.ok) { process.stderr.write("fresh binding mint failed: " + JSON.stringify(bindingResult)); process.exit(1); }
+    const sortedRoles = roles.slice().sort();
+    const roleKey = sortedRoles.length === 1 ? sortedRoles[0] : sortedRoles;
+    const digest = crypto.createHash("sha256").update(Buffer.from("ensure:" + sortedRoles.join(","), "utf8")).digest("hex");
+    const grant = rll.mintLifecycleCommandGrant(projectRoot, bindingResult.binding, digest, roleKey, "ensure", "main-orchestrator", "orchestrator", "normal", null);
+    if (!grant.ok) { process.stderr.write("grant mint failed: " + JSON.stringify(grant)); process.exit(1); }
+    const args = [process.argv[1], "ensure", "--project-root", projectRoot];
+    for (const role of roles) args.push("--role", role);
+    args.push("--lifecycle-binding", grant.grantId);
+    const call = spawnSync("node", args, { encoding: "utf8", env: Object.assign({}, process.env, { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(["codex-app-server"]) }) });
+    const out = call.stdout || "";
+    if (!out.trim()) { process.stderr.write("ensure produced no JSON: " + (call.stderr || "")); process.exit(1); }
+    process.stdout.write(out.trim().split("\n").pop());
+  ' "$RLL" "$PROJ" "$roles_csv" "$session_key"
 }
 
 _action_field() {
@@ -269,7 +674,16 @@ _run_bridge_argv_json() {
   local argv_json="$1"
   local args=()
   while IFS= read -r line; do args+=("$line"); done < <(_args_from_json "$argv_json")
-  run --separate-stderr node "$PROJ_BRIDGE" session-run "${args[@]}"
+  # M6: unconditionally test-capability-gated so every session-run invocation
+  # through this helper reaches a genuinely BORN, INITIALIZED app-server
+  # child via the fake stub above -- harmless to enable broadly, since every
+  # OTHER test-only behavior this same isTestCapability() gate also guards
+  # (acquisition delay, pre-claim delay, fake process identity, platform
+  # override) stays individually off unless ITS OWN specific env var is also
+  # set. "x" mirrors this file's own existing RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY
+  # convention (see the export/unset pairs elsewhere in this file) -- only
+  # non-emptiness is ever checked, never a specific value.
+  run --separate-stderr env HOME="$TEST_HOME" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$FAKE_APP_SERVER_SPAWN_JSON" node "$PROJ_BRIDGE" session-run "${args[@]}"
 }
 
 _owner_file() {
@@ -284,12 +698,37 @@ _wait_for_owner_file() {
     if [ -n "$f" ] && [ -f "$f" ]; then echo "$f"; return 0; fi
     sleep 0.1
   done
+  if [ -f "$BG_OUT" ]; then sed 's/^/# bridge: /' "$BG_OUT" >&2; fi
+  return 1
+}
+
+_binding_state_json() {
+  local role="$1" action_json="$2"
+  node -e '
+    const rll = require(process.argv[1]);
+    const action = JSON.parse(process.argv[2]);
+    const role = process.argv[3];
+    const state = rll.readRoleBindingState(process.argv[4], action.worktree_id, action.plan_digest, rll.roleProfileDigestFor(role), action.session_generation_id, role);
+    process.stdout.write(JSON.stringify(state));
+  ' "$RLL" "$action_json" "$role" "$PROJ"
+}
+
+_wait_for_role_state() {
+  local role="$1" action_json="$2" wanted="$3"
+  local observed=""
+  for _ in $(seq 1 100); do
+    observed="$(_binding_state_json "$role" "$action_json")"
+    [[ "$observed" == *'"state":"'"$wanted"'"'* ]] && { printf '%s' "$observed"; return 0; }
+    sleep 0.1
+  done
+  printf '# last binding: %s\n' "$observed" >&2
+  if [ -f "$BG_OUT" ]; then sed 's/^/# bridge: /' "$BG_OUT" >&2; fi
   return 1
 }
 
 _wait_for_pid_exit() {
   local pid="$1"
-  for _ in $(seq 1 50); do
+  for _ in $(seq 1 100); do
     kill -0 "$pid" 2>/dev/null || return 0
     sleep 0.1
   done
@@ -300,17 +739,45 @@ _start_bridge_bg() {
   local argv_json="$1" out_var="$2"
   local args=()
   while IFS= read -r line; do args+=("$line"); done < <(_args_from_json "$argv_json")
+  # M6: same fake-app-server wiring as _run_bridge_argv_json above -- see its
+  # own comment for the full rationale.
   if [ "$out_var" = "BG_OUT2" ]; then
-    node "$PROJ_BRIDGE" session-run "${args[@]}" >"$BG_OUT2" 2>&1 &
+    env HOME="$TEST_HOME" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$FAKE_APP_SERVER_SPAWN_JSON" node "$PROJ_BRIDGE" session-run "${args[@]}" >"$BG_OUT2" 2>&1 &
     BG_PID2=$!
   else
-    node "$PROJ_BRIDGE" session-run "${args[@]}" >"$BG_OUT" 2>&1 &
+    env HOME="$TEST_HOME" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$FAKE_APP_SERVER_SPAWN_JSON" node "$PROJ_BRIDGE" session-run "${args[@]}" >"$BG_OUT" 2>&1 &
     BG_PID=$!
   fi
 }
 
+_prepare_projection_subject_bundle() {
+  local bundle_path="$1" plan_path="$2" fixture_session="$3"
+  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+  mkdir -p "$PROJ/docs" "$PROJ/scratch"
+  printf '%s' 'committed projection bytes' > "$PROJ/docs/projected-committed.txt"
+  git -C "$PROJ" add docs/projected-committed.txt
+  git -C "$PROJ" commit -q -m 'projection fixture'
+  printf '%s' 'uncommitted projection bytes' > "$PROJ/scratch/projected-uncommitted.txt"
+  node -e '
+    const fs=require("fs"),crypto=require("crypto");
+    const entry=(relative,file)=>{const b=fs.readFileSync(file);return {path:relative,size:b.length,digest:crypto.createHash("sha256").update(b).digest("hex")};};
+    fs.writeFileSync(process.argv[1],JSON.stringify({schema:"coordination/subject-bundle-manifest/v1",entries:[
+      entry("docs/projected-committed.txt",process.argv[2]),entry("scratch/projected-uncommitted.txt",process.argv[3]),
+    ]}));
+  ' "$bundle_path" "$PROJ/docs/projected-committed.txt" "$PROJ/scratch/projected-uncommitted.txt"
+  env RCC_GRANT_PROJECT_ROOT="$PROJ" RCC_GRANT_PROVIDER=codex-supervisor \
+    RCC_GRANT_SESSION="$fixture_session" RCC_GRANT_AGENT_ID=m6-cd-projection-agent RCC_GRANT_ROLE=quality-gater \
+    node "$grant_wrapper" publish-blob --coordination-root "$PROJ/.planning/coordination" \
+    --plan "$plan_path" --subject-bundle "$bundle_path" --entry scratch/projected-uncommitted.txt >/dev/null
+}
+
 _future_iso() {
   node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1])).toISOString().replace(/\.\d{3}Z$/, "Z"))' "$1"
+}
+
+_wait_until_after_iso() {
+  local iso="$1" margin_ms="${2:-250}"
+  node -e 'setTimeout(() => {}, Math.max(0, Date.parse(process.argv[1]) - Date.now() + Number(process.argv[2])))' "$iso" "$margin_ms"
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -407,6 +874,34 @@ _future_iso() {
     const identity = { ok: true, provider: "claude-hook", runtime_session_key: "x" + crypto.randomBytes(4).toString("hex") };
     const worktreeId = rll.computeWorktreeId(projectRoot);
     const planDigest = rll.discoverPlan(projectRoot).planDigest;
+    const repoId = rll.computeRepoId(projectRoot);
+    const generation = rll.resolveSessionGeneration(projectRoot, identity);
+    if (!generation.ok) throw new Error("BRIDGE-ACT-02 generation failed: " + JSON.stringify(generation));
+    const proofRole = "context-provider";
+    const proofExpiry = new Date(Date.now() + 600000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const proofDigest = (label) => crypto.createHash("sha256").update("bridge-act02-id01:" + label).digest("hex");
+    function mintProofAction(label) {
+      const actionId = rll.generateActionId();
+      const minted = rll.mintRoleLifecycleAction(
+        projectRoot, actionId, "role-spawn", "claude-native", repoId, worktreeId,
+        planDigest, proofDigest(label), generation.generationId, proofRole,
+        rll.buildRoleSpawnPayload("claude-id01-probe", proofRole, proofRole, "fixture", "fixture"),
+        proofExpiry,
+      );
+      if (!minted.ok) throw new Error("BRIDGE-ACT-02 proof action failed: " + JSON.stringify(minted));
+      return actionId;
+    }
+    const proofPrimary = mintProofAction("primary");
+    const proofPeer = mintProofAction("peer");
+    const proofAgent = "bridge-act02-primary";
+    rll.recordClaudeId01SubagentStartObservation(projectRoot, { sessionId: identity.runtime_session_key, agentId: proofAgent, agentType: proofRole, actionId: proofPrimary });
+    rll.recordClaudeId01PreToolUseObservation(projectRoot, { sessionId: identity.runtime_session_key, agentId: proofAgent, agentType: proofRole, toolUseId: "bridge-act02-before-1" });
+    rll.recordClaudeId01PreToolUseObservation(projectRoot, { sessionId: identity.runtime_session_key, agentId: proofAgent, agentType: proofRole, toolUseId: "bridge-act02-before-2" });
+    rll.recordClaudeId01SubagentStartObservation(projectRoot, { sessionId: identity.runtime_session_key, agentId: proofAgent, agentType: proofRole, actionId: proofPrimary });
+    rll.recordClaudeId01PreToolUseObservation(projectRoot, { sessionId: identity.runtime_session_key, agentId: proofAgent, agentType: proofRole, toolUseId: "bridge-act02-after-1" });
+    rll.recordClaudeId01SubagentStartObservation(projectRoot, { sessionId: identity.runtime_session_key, agentId: proofAgent + "-peer", agentType: proofRole, actionId: proofPeer });
+    const proof = rll.checkClaudeId01RuntimeCapability(projectRoot, identity.runtime_session_key, worktreeId, planDigest);
+    if (!proof.ok) throw new Error("BRIDGE-ACT-02 CLAUDE-ID-01 capability failed: " + JSON.stringify(proof));
     const binding = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, planDigest, 120).binding;
     const sha256String = (s) => crypto.createHash("sha256").update(Buffer.from(s, "utf8")).digest("hex");
     const argvDigest = sha256String("ensure:arch-testing");
@@ -607,6 +1102,37 @@ _future_iso() {
   [ "$status" -eq 4 ]
 }
 
+# Populates the (isolated, per M6+M7 SIXTEENTH Phase 2B) registry base dir
+# with N sibling repo-id-shaped directories (64-hex names, disjoint from
+# $PROJ's own real repoId) -- pure volume, never a real match for whatever
+# action_id this test is looking up.
+_inject_action_scan_decoys() {
+  local count="$1"
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const crypto = require("crypto");
+    const rll = require(process.argv[1]);
+    const base = rll.registryBaseDir();
+    fs.mkdirSync(base, { recursive: true, mode: 0o700 });
+    const count = Number(process.argv[2]);
+    for (let i = 0; i < count; i += 1) {
+      const decoyId = crypto.randomBytes(32).toString("hex");
+      fs.mkdirSync(path.join(base, decoyId, "actions"), { recursive: true, mode: 0o700 });
+    }
+  ' "$RLL" "$count"
+}
+
+@test "BRIDGE-ACT-SCAN-01: session-run still resolves its own action via direct lookup with MORE than MAX_ACTION_REPO_SCAN_ENTRIES sibling repo-id directories in the registry (M6+M7 SIXTEENTH Phase 2A: revalidateSupervisorStartAction uses findActionDirect(projectRoot, ...), never findActionAcrossRepos's bounded scan -- a regression back to the scan would fail this closed with action-repo-scan-cap-exceeded at this volume)" {
+  local action_json owner_file
+  action_json="$(_mint_ready_action verifier)"
+  _inject_action_scan_decoys 1025
+  _start_bridge_bg "$(_argv_from_action "$action_json")" BG_OUT
+  owner_file="$(_wait_for_owner_file verifier)"
+  [ -n "$owner_file" ]
+  kill -TERM "$BG_PID"; wait "$BG_PID" 2>/dev/null; BG_PID=""
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # BRIDGE-CLAIM — SupervisorExecutionClaim/v1 (point B: distinct authority)
 # ══════════════════════════════════════════════════════════════════════════
@@ -716,6 +1242,39 @@ _future_iso() {
   [[ "$output" == *'fake-executor-capability-absent'* ]]
 }
 
+@test "M6 BRIDGE-CREDENTIAL-01 FAIL: absent host credentials reject before execution-claim consumption, owner acquisition, or READY mutation" {
+  local action_json argv_json action_id repo_id claim_path consumed_path empty_home binding_json
+  action_json="$(_mint_ready_action verifier)"
+  argv_json="$(_argv_from_action "$action_json")"
+  action_id="$(_action_field "$action_json" action_id)"
+  repo_id="$(_action_field "$action_json" repo_id)"
+  claim_path="$(_execution_claim_path "$action_id" "$repo_id")"
+  consumed_path="${claim_path%.json}.consumed"
+  empty_home="$PROJ/home-without-codex-auth"
+  mkdir -p "$empty_home"
+
+  [ -f "$claim_path" ]
+  [ ! -e "$consumed_path" ]
+  binding_json="$(_binding_state_json verifier "$action_json")"
+  [[ "$binding_json" == *'"state":"STARTING"'* ]]
+  [[ "$binding_json" == *'"pending_action_id":"'"$action_id"'"'* ]]
+
+  local args=()
+  while IFS= read -r line; do args+=("$line"); done < <(_args_from_json "$argv_json")
+  run --separate-stderr env HOME="$empty_home" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$FAKE_APP_SERVER_SPAWN_JSON" node "$PROJ_BRIDGE" session-run "${args[@]}"
+  [ "$status" -eq 4 ]
+  [[ "$stderr" == *'credential-source-unavailable:'* ]]
+
+  # The claim remains genuinely reusable after login: the immutable ISSUED
+  # record still exists and the one-use .consumed marker was never written.
+  [ -f "$claim_path" ]
+  [ ! -e "$consumed_path" ]
+  [ -z "$(_owner_file verifier)" ]
+  binding_json="$(_binding_state_json verifier "$action_json")"
+  [[ "$binding_json" == *'"state":"STARTING"'* ]]
+  [[ "$binding_json" == *'"pending_action_id":"'"$action_id"'"'* ]]
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # BRIDGE-ROOT — coordination-root confinement (point D, reused primitive)
 # ══════════════════════════════════════════════════════════════════════════
@@ -814,6 +1373,43 @@ _future_iso() {
   grep -q '"schema":"coordination/bridge-result' "$BG_OUT"
   grep -q '"ok":true' "$BG_OUT"
   [ -z "$(_owner_file verifier)" ]
+}
+
+@test "SUP-RDV-READY-01 PASS: a real session-run reaches READY only after the authenticated bootstrap chain and worker-presence publication complete" {
+  local action_json argv_json owner_file action_id
+  action_json="$(_mint_ready_action verifier)"
+  action_id="$(_action_field "$action_json" action_id)"
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  owner_file="$(_wait_for_owner_file verifier)"
+  [ -n "$owner_file" ]
+  [ -f "$owner_file" ]
+
+  local ready_state
+  ready_state="$(_wait_for_role_state verifier "$action_json" READY)"
+  [[ "$ready_state" == *'"state":"READY"'* ]]
+
+  kill -TERM "$BG_PID"; wait "$BG_PID" 2>/dev/null; BG_PID=""
+}
+
+@test "SUP-RDV-READY-02 PASS: a canonical but non-READY bootstrap completion is rejected by the independent session-run postcondition" {
+  local action_json argv_json nonready_spawn_json unavailable_state
+  action_json="$(_mint_ready_action verifier)"
+  argv_json="$(_argv_from_action "$action_json")"
+  nonready_spawn_json="$(node -e 'process.stdout.write(JSON.stringify({command:process.execPath,args:[process.argv[1],"bootstrap-not-ready","",process.argv[2]]}))' "$FAKE_CODEX" "$FAKE_APP_SERVER_EVENTS")"
+  FAKE_APP_SERVER_SPAWN_JSON="$nonready_spawn_json"
+
+  _start_bridge_bg "$argv_json" BG_OUT
+  unavailable_state="$(_wait_for_role_state verifier "$action_json" UNAVAILABLE)"
+  [[ "$unavailable_state" == *'"state":"UNAVAILABLE"'* ]]
+  [[ "$unavailable_state" == *'"failure_reason":"native-tool-error"'* ]]
+  _wait_for_pid_exit "$BG_PID"
+  wait "$BG_PID" 2>/dev/null
+  local exit_code=$?
+  BG_PID=""
+  [ "$exit_code" -eq 0 ]
+  grep -q '"signal":"APP_SERVER_BOOTSTRAP_COMPLETION_INVALID"' "$BG_OUT"
+  ! grep -q '"state":"READY"' <<<"$unavailable_state"
 }
 
 @test "CLEANUP-05 PASS: a genuine, correctly-correlated cleanup TOMBSTONES the owner record (durable non-destructive rename), never destructively deletes it (point 4)" {
@@ -974,27 +1570,31 @@ _future_iso() {
   [ -z "$(_owner_file verifier)" ]
 }
 
-@test "SUP-RDV-08 PASS: SIGTERM delivered MID-acquisition (before the second role is claimed) still rolls back whatever was already claimed" {
+@test "SUP-RDV-08 PASS: conflict on the second role during acquisition rolls back the first role already claimed" {
   # Roles are claimed in ARGV order, which parseSessionRunArgv requires to be
   # plain alphabetical (roles-not-sorted usage error otherwise) -- for
   # "quality-gater,verifier" that means quality-gater is attempted FIRST,
   # verifier SECOND. Pre-occupy verifier's slot so the loop genuinely claims
   # quality-gater first, THEN hits the occupied second role and must roll the
   # first one back -- proves real rollback, not just "refuses to claim
-  # anything when the very first role is already occupied" (point C.5:
-  # shutdown handling installed before acquisition begins covers this exact
-  # partial-claim window, exercised here via the ordinary rejection path
-  # since deterministically racing a real SIGTERM mid-loop is not reproducible
-  # from a black-box bats test).
+  # anything when the very first role is already occupied". No signal is
+  # involved: this is the deterministic role-owner conflict path.
   local action_json argv_json
   action_json="$(_mint_ready_action "quality-gater,verifier")"
   argv_json="$(_argv_from_action "$action_json")"
 
   # Occupy verifier's slot first via an unrelated single-role run.
-  local occupy_json occupy_argv
+  local occupy_json occupy_argv occupy_spawn_json prior_spawn_json
   occupy_json="$(_mint_ready_action_independent verifier)"
   occupy_argv="$(_argv_from_action "$occupy_json")"
+  # Keep the lifecycle-unowned occupant deterministically inside its
+  # role-bootstrap turn after its role-owner record exists, so it cannot race
+  # ahead to the Fifteenth RETAINED-owner gate before the conflicting run.
+  occupy_spawn_json="$(node -e 'process.stdout.write(JSON.stringify({command:process.execPath,args:[process.argv[1],"bootstrap-delay","",process.argv[2]]}))' "$FAKE_CODEX" "$FAKE_APP_SERVER_EVENTS")"
+  prior_spawn_json="$FAKE_APP_SERVER_SPAWN_JSON"
+  FAKE_APP_SERVER_SPAWN_JSON="$occupy_spawn_json"
   _start_bridge_bg "$occupy_argv" BG_OUT
+  FAKE_APP_SERVER_SPAWN_JSON="$prior_spawn_json"
   local occ_owner
   occ_owner="$(_wait_for_owner_file verifier)"
   [ -n "$occ_owner" ]
@@ -1005,37 +1605,26 @@ _future_iso() {
   # slot) must have been rolled back, never left dangling.
   [ -z "$(_owner_file quality-gater)" ]
 
-  kill -TERM "$BG_PID"; wait "$BG_PID" 2>/dev/null; BG_PID=""
+  # This deliberately lifecycle-unowned defense-in-depth fixture is allowed
+  # to self-close once the production HostBridge proof reaches that missing
+  # owner.  Its owner record has already served the exact conflict assertion
+  # above, so teardown must not require the fixture to masquerade as a fully
+  # retained production worker.
+  if kill -0 "$BG_PID" 2>/dev/null; then kill -TERM "$BG_PID" 2>/dev/null || true; fi
+  wait "$BG_PID" 2>/dev/null || true
+  BG_PID=""
 }
 
 @test "SUP-RDV-09 PASS: expiry-driven owned shutdown fires without any external signal" {
-  # Normal minting always uses the fixed ACTION_TTL_SECONDS=120s -- too long
-  # for a bats test to wait out. Mutate the minted action's own
-  # --session-expiry to ~1.5s from now (regenerating bridge_command so the
-  # round-trip check still passes) BEFORE minting the execution claim, so the
-  # claim's own canonical_argv_digest is computed over the SAME mutated argv
-  # this test actually runs -- a legitimate fixture technique, not a
-  # production code path.
-  local minted action_json action_id binding_id p new_expiry
-  minted="$(_mint_raw_action verifier)"
+  # Fifteenth contract: a short, policy-bounded action deadline is distinct
+  # from a genuinely authority-derived retained-service expiry. This fixture
+  # never mutates the two timestamps back into the deprecated equal shape.
+  _set_ready_timeout_seconds 10
+  local minted action_json binding_id service_expiry
+  minted="$(_mint_raw_action verifier "sup-rdv-09-session" 18)"
   action_json="${minted%$'\t'*}"
   binding_id="${minted##*$'\t'}"
-  action_id="$(_action_field "$action_json" action_id)"
-  p="$(_action_path "$action_id")"
-  new_expiry="$(_future_iso 1500)"
-  node -e '
-    const rll = require(process.argv[1]);
-    const fs = require("fs");
-    const o = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-    const argv = o.payload.bridge_argv;
-    argv[argv.indexOf("--session-expiry") + 1] = process.argv[3];
-    o.payload.bridge_command = rll.renderPosixDirect(argv);
-    // The action'"'"'s own top-level expires_at must correlate with the
-    // argv-embedded --session-expiry (point E cross-check) -- mutate both.
-    o.expires_at = process.argv[3];
-    fs.writeFileSync(process.argv[2], JSON.stringify(o));
-  ' "$RLL" "$p" "$new_expiry"
-  action_json="$(node -e 'process.stdout.write(require("fs").readFileSync(process.argv[1], "utf8"))' "$p")"
+  service_expiry="$(node -e 'const a=JSON.parse(process.argv[1]),v=a.payload.bridge_argv;process.stdout.write(v[v.indexOf("--session-expiry")+1])' "$action_json")"
   _mint_execution_claim "$action_json" "$binding_id" >/dev/null
 
   local argv_json owner_file
@@ -1044,64 +1633,46 @@ _future_iso() {
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
 
-  # No SIGTERM sent -- the process's OWN scheduled expiry timer must fire.
+  # No SIGTERM sent: the process must survive action expiry, then its OWN
+  # retained-service timer fires at the distinct service expiry.
+  _wait_until_after_iso "$(_action_field "$action_json" expires_at)" 200
+  kill -0 "$BG_PID" 2>/dev/null
+  _wait_until_after_iso "$service_expiry" 100
   _wait_for_pid_exit "$BG_PID"
   wait "$BG_PID" 2>/dev/null
   local exit_code=$?
   BG_PID=""
   [ "$exit_code" -eq 0 ]
   grep -q '"reason":"owned-shutdown"' "$BG_OUT"
-  grep -q '"signal":"EXPIRY"' "$BG_OUT"
+  grep -q '"signal":"EXPIRY"' "$BG_OUT" || { printf '# supervisor output: %s\n' "$(cat "$BG_OUT")" >&3; false; }
   [ -z "$(_owner_file verifier)" ]
 
-  # Point D.1: EXPIRY terminalizes the role-binding with failure_reason
-  # "deadline" -- never the generic "native-tool-error" every signal used to
-  # be hardcoded to, regardless of what actually triggered the shutdown.
+  # Fifteenth contract: true retained-session expiry is terminal and
+  # non-reusable -- STOPPED/session-expiry, never a recoverable failure.
   run node -e '
     const rll = require(process.argv[1]);
     const action = JSON.parse(process.argv[2]);
     const profileDigest = rll.roleProfileDigestFor("verifier");
     const state = rll.readRoleBindingState(process.argv[3], action.worktree_id, action.plan_digest, profileDigest, action.session_generation_id, "verifier");
-    process.exit(state.ok && state.state === "UNAVAILABLE" && state.record.failure_reason === "deadline" ? 0 : 1);
+    process.exit(state.ok && state.state === "STOPPED" && state.record.stop_reason === "session-expiry" ? 0 : 1);
   ' "$RLL" "$action_json" "$PROJ"
   [ "$status" -eq 0 ]
 }
 
 @test "SUP-RDV-16 FAIL: expiry crossed DURING the inter-role await is caught immediately after it, never a stale pre-await snapshot -- the second role is never claimed past the deadline (point D.1)" {
   # Roles claim in ARGV order (alphabetical): quality-gater FIRST, verifier
-  # SECOND -- see SUP-RDV-08. session-expiry is mutated to ~1s from now;
-  # the inter-role delay (~1.5s) crosses it WHILE role 1 is already
-  # claimed and role 2's claim is pending -- a pre-await expiry snapshot
-  # would already have passed by the time role 2's write is attempted.
-  local minted action_json action_id binding_id p new_expiry
-  minted="$(_mint_raw_action "quality-gater,verifier")"
+  # SECOND. The inter-role delay crosses action.expires_at while the separate
+  # retained-service expiry remains live; no timestamp is hand-mutated.
+  _set_ready_timeout_seconds 10
+  local minted action_json binding_id
+  minted="$(_mint_raw_action "quality-gater,verifier" "sup-rdv-16-session" 600)"
   action_json="${minted%$'\t'*}"
   binding_id="${minted##*$'\t'}"
-  action_id="$(_action_field "$action_json" action_id)"
-  p="$(_action_path "$action_id")"
-  # 2.5s (not SUP-RDV-09's 1.5s): this fixture does STRICTLY more sequential
-  # node-subprocess setup work (two roles, plus the extra mutate/reread
-  # round-trip) before the claim is even minted, and the claim's own TTL is
-  # computed from THIS expiry at mint time -- too tight a margin here fails
-  # the fixture itself (no-positive-ttl-remaining) under load, before
-  # session-run ever runs, rather than exercising the behavior under test.
-  new_expiry="$(_future_iso 2500)"
-  node -e '
-    const rll = require(process.argv[1]);
-    const fs = require("fs");
-    const o = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-    const argv = o.payload.bridge_argv;
-    argv[argv.indexOf("--session-expiry") + 1] = process.argv[3];
-    o.payload.bridge_command = rll.renderPosixDirect(argv);
-    o.expires_at = process.argv[3];
-    fs.writeFileSync(process.argv[2], JSON.stringify(o));
-  ' "$RLL" "$p" "$new_expiry"
-  action_json="$(node -e 'process.stdout.write(require("fs").readFileSync(process.argv[1], "utf8"))' "$p")"
   _mint_execution_claim "$action_json" "$binding_id" >/dev/null
 
   local argv_json
   argv_json="$(_argv_from_action "$action_json")"
-  export NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_TEST_ACQUISITION_DELAY_MS=3000
+  export NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_TEST_ACQUISITION_DELAY_MS=11000
   _run_bridge_argv_json "$argv_json"
   unset RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY RUNTIME_BRIDGE_CODEX_TEST_ACQUISITION_DELAY_MS
   [ "$status" -eq 4 ]
@@ -1412,17 +1983,24 @@ _future_iso() {
   claim_path="$(_execution_claim_path "$action_id" "$(_action_field "$action_json" repo_id)")"
   argv_json="$(_argv_from_action "$action_json")"
 
-  export NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_TEST_PRE_CLAIM_DELAY_MS=2000
+  local pre_claim_ready="$BATS_TEST_TMPDIR/sup-rdv-15-pre-claim-ready"
+  export NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_TEST_PRE_CLAIM_DELAY_MS=2000 \
+    RUNTIME_BRIDGE_CODEX_TEST_PRE_CLAIM_READY_FILE="$pre_claim_ready"
   _start_bridge_bg "$argv_json" BG_OUT
-  unset RUNTIME_BRIDGE_CODEX_TEST_PRE_CLAIM_DELAY_MS RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY
+  unset RUNTIME_BRIDGE_CODEX_TEST_PRE_CLAIM_DELAY_MS RUNTIME_BRIDGE_CODEX_TEST_PRE_CLAIM_READY_FILE RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY
 
   # No owner file can exist yet (nothing was ever claimed) -- so unlike the
-  # other SIGTERM tests, there is nothing to poll for; the fixed pause below
-  # gives the background process ample time to complete every fast
-  # synchronous pre-claim step (argv parse, identity, revalidation,
-  # bindings-pend check, root confinement, singleton check) and land inside
-  # the deliberate real (event-loop-yielding) pre-claim delay.
-  sleep 0.3
+  # other SIGTERM tests, there is no owner file to poll. Use the test-only
+  # rendezvous published after handlers + every read-only pre-check and
+  # immediately before the event-loop-yielding PRE_CLAIM delay. A bounded
+  # poll proves the signal cannot race process startup.
+  local ready_tries=0
+  while [ ! -f "$pre_claim_ready" ]; do
+    ready_tries=$((ready_tries + 1))
+    [ "$ready_tries" -le 300 ] || { echo "PRE_CLAIM rendezvous was never published" >&2; false; }
+    kill -0 "$BG_PID" 2>/dev/null || { echo "bridge exited before PRE_CLAIM rendezvous" >&2; false; }
+    sleep 0.02
+  done
 
   kill -TERM "$BG_PID"
   wait "$BG_PID" 2>/dev/null
@@ -1677,7 +2255,7 @@ _set_ready_timeout_seconds() {
   ' "$PROJ" "$seconds"
 }
 
-@test "TTL-01 PASS: policy ready_timeout_seconds=10 bounds the action's own expiry, its embedded --session-expiry, AND the execution claim's expiry to <=10s from mint -- never the old flat 120s" {
+@test "EXPIRY-SPLIT-01: ready_timeout bounds action/claim only; --session-expiry is the exact later min(MainOrchestratorBinding.expiry, SessionGeneration.expires_at)" {
   # 10s, not 1s: _mint_ready_action's OWN fixture overhead is two SEPARATE
   # real subprocess spawns (ensure, then fakeHostExecutorExecute) -- under a
   # loaded machine (e.g. running as part of the full suite) that combined
@@ -1687,26 +2265,450 @@ _set_ready_timeout_seconds() {
   # keeps comfortable headroom while still being dramatically tighter than
   # the old flat 120s (12x, not "coincidentally under the ceiling").
   _set_ready_timeout_seconds 10
-  local action_json action_id claim_path
-  action_json="$(_mint_ready_action verifier)"
+  local minted action_json binding_id action_id claim_path
+  minted="$(_mint_raw_action verifier "" 600)"
+  action_json="${minted%$'\t'*}"
+  binding_id="${minted##*$'\t'}"
+  _mint_execution_claim "$action_json" "$binding_id" >/dev/null
   action_id="$(_action_field "$action_json" action_id)"
   claim_path="$(_execution_claim_path "$action_id" "$(_action_field "$action_json" repo_id)")"
 
   run node -e '
     const action = JSON.parse(process.argv[1]);
     const claim = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
+    const rll = require(process.argv[3]);
+    const projectRoot = process.argv[4];
+    const bindingId = process.argv[5];
+    const fs = require("fs");
+    const path = require("path");
     const argv = action.payload.bridge_argv;
     const sessionExpiry = argv[argv.indexOf("--session-expiry") + 1];
-    // The action, its embedded --session-expiry, and the claim must all be
-    // the EXACT SAME instant (point 4: never two independent now()s) --
-    // and that instant must be tightly bounded by the 10s policy, with a
-    // generous but finite tolerance for real mint-time elapsed wall clock
-    // (never anywhere close to the old flat 120s).
-    if (action.expires_at !== sessionExpiry) { process.stderr.write("action.expires_at != --session-expiry: " + action.expires_at + " vs " + sessionExpiry); process.exit(1); }
+    const binding = JSON.parse(fs.readFileSync(rll.mainOrchestratorBindingPathFor(projectRoot, bindingId), "utf8"));
+    const sessionsDir = path.join(rll.registryRepoDir(projectRoot), "sessions");
+    const generations = fs.readdirSync(sessionsDir).filter((n) => n.endsWith(".json")).map((n) => JSON.parse(fs.readFileSync(path.join(sessionsDir, n), "utf8")));
+    const matches = generations.filter((g) => g.generation_id === action.session_generation_id);
+    if (matches.length !== 1) { process.stderr.write("expected exactly one matching SessionGeneration, got " + matches.length); process.exit(1); }
+    const expectedServiceExpiry = new Date(Math.min(Date.parse(binding.expiry), Date.parse(matches[0].expires_at))).toISOString().replace(/\.\d{3}Z$/, "Z");
+    // Fifteenth reconciliation: launch authority is short-lived, retained
+    // service authority is independently bounded by its two live parents.
+    if (sessionExpiry !== expectedServiceExpiry) { process.stderr.write("--session-expiry is not exact authority min: " + JSON.stringify({ sessionExpiry, expectedServiceExpiry, bindingExpiry: binding.expiry, generationExpiry: matches[0].expires_at })); process.exit(1); }
+    if (!(Date.parse(sessionExpiry) > Date.parse(action.expires_at))) { process.stderr.write("retained service expiry is not strictly later than action deadline: " + JSON.stringify({ action: action.expires_at, sessionExpiry })); process.exit(1); }
     const boundMs = Date.parse(action.expires_at) - Date.parse(claim.created_at);
     if (!(boundMs <= 15000)) { process.stderr.write("claim expiry " + boundMs + "ms after its own created_at -- not bounded by the 10s policy"); process.exit(1); }
+    if (Date.parse(claim.expiry) > Date.parse(action.expires_at)) { process.stderr.write("claim outlives action deadline"); process.exit(1); }
     process.exit(0);
-  ' "$action_json" "$claim_path"
+  ' "$action_json" "$claim_path" "$RLL" "$PROJ" "$binding_id"
+  [ "$status" -eq 0 ] || { printf '# EXPIRY-SPLIT-01 witness: %s\n' "$output" >&3; false; }
+}
+
+@test "START-DEADLINE-01: pre-READY acquisition crossing action.expires_at fails deadline even while the retained --session-expiry remains live" {
+  _set_ready_timeout_seconds 10
+  local minted action_json binding_id action_id action_path claim_path service_expiry argv_json started_ms ended_ms elapsed_ms
+  minted="$(_mint_raw_action "quality-gater,verifier" "start-deadline-session" 600)"
+  action_json="${minted%$'\t'*}"
+  binding_id="${minted##*$'\t'}"
+  action_id="$(_action_field "$action_json" action_id)"
+  action_path="$(_action_path "$action_id")"
+  _mint_execution_claim "$action_json" "$binding_id" >/dev/null
+  claim_path="$(_execution_claim_path "$action_id" "$(_action_field "$action_json" repo_id)")"
+
+  # Convert the legacy-equal fixture into the exact split shape the new
+  # contract admits. The claim stays bounded by action.expires_at; only its
+  # canonical argv digest changes because the service deadline is later.
+  service_expiry="$(node -e '
+    const fs=require("fs"),path=require("path"),rll=require(process.argv[1]);
+    const action=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
+    const binding=JSON.parse(fs.readFileSync(rll.mainOrchestratorBindingPathFor(process.argv[3],process.argv[4]),"utf8"));
+    const records=fs.readdirSync(path.join(rll.registryRepoDir(process.argv[3]),"sessions")).filter(n=>n.endsWith(".json")).map(n=>JSON.parse(fs.readFileSync(path.join(rll.registryRepoDir(process.argv[3]),"sessions",n),"utf8")));
+    const generation=records.filter(g=>g.generation_id===action.session_generation_id);
+    if(generation.length!==1)process.exit(2);
+    process.stdout.write(new Date(Math.min(Date.parse(binding.expiry),Date.parse(generation[0].expires_at))).toISOString().replace(/\.\d{3}Z$/,"Z"));
+  ' "$RLL" "$action_path" "$PROJ" "$binding_id")"
+  node -e '
+    const fs=require("fs"),crypto=require("crypto"),rll=require(process.argv[1]);
+    const action=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
+    const argv=action.payload.bridge_argv;
+    argv[argv.indexOf("--session-expiry")+1]=process.argv[4];
+    action.payload.bridge_command=rll.renderPosixDirect(argv);
+    fs.writeFileSync(process.argv[2],JSON.stringify(action));
+    const claim=JSON.parse(fs.readFileSync(process.argv[3],"utf8"));
+    claim.canonical_argv_digest=crypto.createHash("sha256").update(Buffer.from(JSON.stringify(argv),"utf8")).digest("hex");
+    fs.writeFileSync(process.argv[3],JSON.stringify(claim));
+  ' "$RLL" "$action_path" "$claim_path" "$service_expiry"
+  action_json="$(node -e 'process.stdout.write(require("fs").readFileSync(process.argv[1],"utf8"))' "$action_path")"
+  argv_json="$(_argv_from_action "$action_json")"
+
+  local args=()
+  while IFS= read -r line; do args+=("$line"); done < <(_args_from_json "$argv_json")
+  started_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
+  run --separate-stderr env HOME="$TEST_HOME" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_TEST_ACQUISITION_DELAY_MS=11000 RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$FAKE_APP_SERVER_SPAWN_JSON" node "$PROJ_BRIDGE" session-run "${args[@]}"
+  ended_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
+  elapsed_ms=$((ended_ms - started_ms))
+  [ "$status" -eq 4 ]
+  [ "$elapsed_ms" -ge 8000 ] || { printf '# START-DEADLINE-01 returned before exercising the action deadline: %sms\n' "$elapsed_ms" >&3; false; }
+  [[ "$output" == *'"signal":"EXPIRY"'* ]] || { printf '# START-DEADLINE-01 output: %s\n' "$output" >&3; false; }
+  for role in quality-gater verifier; do
+    run node -e '
+      const rll=require(process.argv[1]),action=JSON.parse(process.argv[2]),role=process.argv[3];
+      const state=rll.readRoleBindingState(process.argv[4],action.worktree_id,action.plan_digest,rll.roleProfileDigestFor(role),action.session_generation_id,role);
+      process.exit(state.ok&&state.state==="UNAVAILABLE"&&state.record.failure_reason==="deadline"?0:1);
+    ' "$RLL" "$action_json" "$role" "$PROJ"
+    [ "$status" -eq 0 ]
+  done
+}
+
+@test "START-OWNERSHIP-01: a signal in the pre-BORN window stops the synchronously adopted child and leaves no owner" {
+  _set_ready_timeout_seconds 10
+  local minted action_json binding_id argv_json child_pid_file child_pid signal_spawn_json previous_spawn_json
+  minted="$(_mint_raw_action "verifier" "start-ownership-session" 600)"
+  action_json="${minted%$'\t'*}"
+  binding_id="${minted##*$'\t'}"
+  _mint_execution_claim "$action_json" "$binding_id" >/dev/null
+  argv_json="$(_argv_from_action "$action_json")"
+  child_pid_file="$PROJ/pre-born-child.pid"
+  signal_spawn_json="$(node -e 'process.stdout.write(JSON.stringify({command:process.execPath,args:[process.argv[1],"signal-parent-on-start",process.argv[2],process.argv[3]]}))' "$FAKE_CODEX" "$child_pid_file" "$FAKE_APP_SERVER_EVENTS")"
+  previous_spawn_json="$FAKE_APP_SERVER_SPAWN_JSON"
+  FAKE_APP_SERVER_SPAWN_JSON="$signal_spawn_json"
+  _start_bridge_bg "$argv_json" BG_OUT
+  FAKE_APP_SERVER_SPAWN_JSON="$previous_spawn_json"
+
+  for _ in $(seq 1 100); do [ -s "$child_pid_file" ] && break; sleep 0.05; done
+  [ -s "$child_pid_file" ]
+  child_pid="$(cat "$child_pid_file")"
+  _wait_for_pid_exit "$BG_PID"
+  wait "$BG_PID"
+  BG_PID=""
+  if ! _wait_for_pid_exit "$child_pid"; then
+    kill -KILL "$child_pid" 2>/dev/null || true
+    false
+  fi
+  [ -z "$(_owner_file verifier)" ]
+  run node -e '
+    const rll=require(process.argv[1]),action=JSON.parse(process.argv[2]);
+    const state=rll.readRoleBindingState(process.argv[3],action.worktree_id,action.plan_digest,rll.roleProfileDigestFor("verifier"),action.session_generation_id,"verifier");
+    if(!state.ok||state.state!=="UNAVAILABLE")process.exit(1);
+  ' "$RLL" "$action_json" "$PROJ"
+  [ "$status" -eq 0 ]
+}
+
+@test "RETAIN-REUSE-01: five-role READY survives action expiry and a fresh granted ensure reuses the exact binding IDs with zero replacement action" {
+  _set_ready_timeout_seconds 10
+  local roles_csv="arch-integration,arch-platform,arch-testing,context-provider,doc-updater"
+  local minted action_json binding_id argv_json expected_ids ensure_json subset_json owner_path owner_sha_before owner_sha_after action_count_before action_count_after
+  minted="$(_mint_raw_action "$roles_csv" "retain-reuse-session" 600)"
+  action_json="${minted%$'\t'*}"
+  binding_id="${minted##*$'\t'}"
+  _mint_execution_claim "$action_json" "$binding_id" >/dev/null
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  for role in ${roles_csv//,/ }; do _wait_for_role_state "$role" "$action_json" READY >/dev/null; done
+
+  expected_ids="$(node -e '
+    const rll=require(process.argv[1]),action=JSON.parse(process.argv[2]),roles=process.argv[3].split(",");
+    const ids=roles.map(role=>{const s=rll.readRoleBindingState(process.argv[4],action.worktree_id,action.plan_digest,rll.roleProfileDigestFor(role),action.session_generation_id,role);if(!s.ok||s.state!=="READY")process.exit(2);return s.record.binding_id;}).sort();
+    process.stdout.write(JSON.stringify(ids));
+  ' "$RLL" "$action_json" "$roles_csv" "$PROJ")"
+  owner_path="$(node -e 'const r=require(process.argv[1]);process.stdout.write(r.supervisorLifecycleOwnerPathFor(process.argv[2],r.computeCoordinationRootId(process.argv[2])))' "$RLL" "$PROJ")"
+  owner_sha_before="$(shasum -a 256 "$owner_path")"
+  action_count_before="$(node -e 'const fs=require("fs"),path=require("path"),r=require(process.argv[1]);const d=path.join(r.registryRepoDir(process.argv[2]),"actions");process.stdout.write(String(fs.readdirSync(d).filter(n=>n.endsWith(".json")).length))' "$RLL" "$PROJ")"
+
+  _wait_until_after_iso "$(_action_field "$action_json" expires_at)" 500
+  kill -0 "$BG_PID" 2>/dev/null || { printf '# RETAIN-REUSE-01 supervisor died at action expiry; output: %s\n' "$(cat "$BG_OUT")" >&3; false; }
+
+  ensure_json="$(_ensure_again_with_binding "$roles_csv" "$binding_id")"
+  run node -e '
+    const result=JSON.parse(process.argv[1]),expected=JSON.parse(process.argv[2]);
+    const observed=(result.bindings||[]).map(b=>b.binding_id).sort();
+    if(result.status!=="READY"||(result.actions||[]).length!==0||JSON.stringify(observed)!==JSON.stringify(expected)){
+      process.stderr.write("retained reuse mismatch: "+JSON.stringify({status:result.status,actions:result.actions,expected,observed}));process.exit(1);
+    }
+  ' "$ensure_json" "$expected_ids"
+  [ "$status" -eq 0 ] || { printf '# RETAIN-REUSE-01 witness: %s\n' "$output" >&3; false; }
+
+  # A healthy retained support plane may be queried for any role it owns;
+  # only dead-owner recovery requires the complete original five-role set.
+  subset_json="$(_ensure_again_with_binding "arch-platform" "$binding_id")"
+  run node -e '
+    const result=JSON.parse(process.argv[1]);
+    if(result.status!=="READY"||(result.actions||[]).length!==0||(result.bindings||[]).length!==1||result.bindings[0].role!=="arch-platform"){
+      process.stderr.write("retained subset reuse mismatch: "+JSON.stringify(result));process.exit(1);
+    }
+  ' "$subset_json"
+  [ "$status" -eq 0 ] || { printf '# RETAIN-REUSE-01 subset witness: %s\n' "$output" >&3; false; }
+  kill -0 "$BG_PID" 2>/dev/null
+  owner_sha_after="$(shasum -a 256 "$owner_path")"
+  action_count_after="$(node -e 'const fs=require("fs"),path=require("path"),r=require(process.argv[1]);const d=path.join(r.registryRepoDir(process.argv[2]),"actions");process.stdout.write(String(fs.readdirSync(d).filter(n=>n.endsWith(".json")).length))' "$RLL" "$PROJ")"
+  [ "$owner_sha_after" = "$owner_sha_before" ]
+  [ "$action_count_after" -eq "$action_count_before" ]
+
+  kill -TERM "$BG_PID" 2>/dev/null || true
+  wait "$BG_PID" 2>/dev/null || true
+  BG_PID=""
+}
+
+@test "RETAIN-PRESENCE-01: a live retained PID without fresh worker presence cannot satisfy repeated ensure or mint a replacement" {
+  _set_ready_timeout_seconds 10
+  local roles_csv="verifier"
+  local minted action_json binding_id argv_json owner_path owner_sha_before owner_sha_after presence_path action_count_before action_count_after ensure_json
+  minted="$(_mint_raw_action "$roles_csv" "retain-presence-session" 600)"
+  action_json="${minted%$'\t'*}"
+  binding_id="${minted##*$'\t'}"
+  _mint_execution_claim "$action_json" "$binding_id" >/dev/null
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
+
+  owner_path="$(node -e 'const r=require(process.argv[1]);process.stdout.write(r.supervisorLifecycleOwnerPathFor(process.argv[2],r.computeCoordinationRootId(process.argv[2])))' "$RLL" "$PROJ")"
+  owner_sha_before="$(shasum -a 256 "$owner_path")"
+  action_count_before="$(node -e 'const fs=require("fs"),path=require("path"),r=require(process.argv[1]);const d=path.join(r.registryRepoDir(process.argv[2]),"actions");process.stdout.write(String(fs.readdirSync(d).filter(n=>n.endsWith(".json")).length))' "$RLL" "$PROJ")"
+  presence_path="$(find "$(node -e 'const r=require(process.argv[1]);process.stdout.write(r.registryRepoDir(process.argv[2]))' "$RLL" "$PROJ")/workers/verifier" -name presence.json -type f | head -1)"
+  [ -n "$presence_path" ]
+
+  # Freeze the real retained process so it cannot heartbeat/recreate the
+  # deliberately removed presence between the cut and repeated ensure.
+  kill -STOP "$BG_PID"
+  rm -f "$presence_path"
+  ensure_json="$(_ensure_again_with_binding "$roles_csv" "$binding_id")"
+  run node -e '
+    const result=JSON.parse(process.argv[1]);
+    if(result.status!=="UNAVAILABLE"||result.detail_code!=="CAPABILITY_UNAVAILABLE"||(result.actions||[]).length!==0||(result.bindings||[]).length!==0){
+      process.stderr.write("missing-presence ensure did not fail closed: "+JSON.stringify(result));process.exit(1);
+    }
+  ' "$ensure_json"
+  [ "$status" -eq 0 ] || { printf '# RETAIN-PRESENCE-01 witness: %s\n' "$output" >&3; false; }
+
+  kill -0 "$BG_PID" 2>/dev/null
+  owner_sha_after="$(shasum -a 256 "$owner_path")"
+  action_count_after="$(node -e 'const fs=require("fs"),path=require("path"),r=require(process.argv[1]);const d=path.join(r.registryRepoDir(process.argv[2]),"actions");process.stdout.write(String(fs.readdirSync(d).filter(n=>n.endsWith(".json")).length))' "$RLL" "$PROJ")"
+  [ "$owner_sha_after" = "$owner_sha_before" ]
+  [ "$action_count_after" -eq "$action_count_before" ]
+
+  kill -CONT "$BG_PID" 2>/dev/null || true
+  kill -TERM "$BG_PID" 2>/dev/null || true
+  wait "$BG_PID" 2>/dev/null || true
+  BG_PID=""
+}
+
+@test "RETAIN-TRANSPORT-LOSS-01: post-READY transport loss closes the full batch and permits one complete same-driver rehydrate" {
+  _set_ready_timeout_seconds 10
+  local roles_csv="arch-integration,arch-platform,arch-testing,context-provider,doc-updater"
+  local minted action_json binding_id argv_json close_spawn_json previous_spawn_json child_pids victim_pid ensure_json action2_json
+  minted="$(_mint_raw_action "$roles_csv" "retain-child-loss-session" 600)"
+  action_json="${minted%$'\t'*}"
+  binding_id="${minted##*$'\t'}"
+  _mint_execution_claim "$action_json" "$binding_id" >/dev/null
+  argv_json="$(_argv_from_action "$action_json")"
+  close_spawn_json="$(node -e 'process.stdout.write(JSON.stringify({command:process.execPath,args:[process.argv[1],"close-transport-on-usr1","",process.argv[2]]}))' "$FAKE_CODEX" "$FAKE_APP_SERVER_EVENTS")"
+  previous_spawn_json="$FAKE_APP_SERVER_SPAWN_JSON"
+  FAKE_APP_SERVER_SPAWN_JSON="$close_spawn_json"
+  _start_bridge_bg "$argv_json" BG_OUT
+  FAKE_APP_SERVER_SPAWN_JSON="$previous_spawn_json"
+  for role in ${roles_csv//,/ }; do _wait_for_role_state "$role" "$action_json" READY >/dev/null; done
+
+  child_pids="$(node -e '
+    const fs=require("fs"),seen=new Set();
+    for(const line of fs.readFileSync(process.argv[1],"utf8").trim().split(/\n+/)){const e=JSON.parse(line);if(e.event==="thread-start")seen.add(e.pid);}
+    process.stdout.write(Array.from(seen).join("\n"));
+  ' "$FAKE_APP_SERVER_EVENTS")"
+  [ "$(printf '%s\n' "$child_pids" | grep -c .)" -eq 5 ]
+  victim_pid="$(printf '%s\n' "$child_pids" | head -1)"
+  kill -USR1 "$victim_pid"
+  _wait_for_pid_exit "$BG_PID"
+  wait "$BG_PID"
+  BG_PID=""
+  while IFS= read -r pid; do [ -z "$pid" ] || _wait_for_pid_exit "$pid"; done <<< "$child_pids"
+  for role in ${roles_csv//,/ }; do _wait_for_role_state "$role" "$action_json" DEAD >/dev/null; done
+
+  ensure_json="$(_ensure_again_with_binding "$roles_csv" "$binding_id")"
+  action2_json="$(node -e 'const r=JSON.parse(process.argv[1]);if(r.status!=="ACTION_REQUIRED"||r.actions.length!==1||r.actions[0].kind!=="supervisor-start")process.exit(2);process.stdout.write(JSON.stringify(r.actions[0]))' "$ensure_json")"
+  run node -e '
+    const rll=require(process.argv[1]),action=JSON.parse(process.argv[2]),roles=process.argv[3].split(",");
+    const actionRoles=action.payload.bridge_argv.filter((v,i,a)=>a[i-1]==="--role");
+    if(JSON.stringify(actionRoles)!==JSON.stringify(roles.slice().sort()))process.exit(1);
+    for(const role of roles){const s=rll.readRoleBindingState(process.argv[4],action.worktree_id,action.plan_digest,rll.roleProfileDigestFor(role),action.session_generation_id,role);if(!s.ok||s.state!=="REHYDRATING"||s.record.driver!=="codex-app-server"||s.record.respawn_count!==1)process.exit(1);}
+  ' "$RLL" "$action2_json" "$roles_csv" "$PROJ"
+  [ "$status" -eq 0 ] || { printf '# RETAIN-TRANSPORT-LOSS-01 witness: %s\n' "$output" >&3; false; }
+}
+
+@test "RETAIN-CHILD-EXIT-01: post-READY child death is observed and closes the full batch before one same-driver rehydrate" {
+  _set_ready_timeout_seconds 10
+  local roles_csv="arch-integration,arch-platform,arch-testing,context-provider,doc-updater"
+  local minted action_json binding_id argv_json child_pids victim_pid ensure_json action2_json
+  minted="$(_mint_raw_action "$roles_csv" "retain-child-exit-session" 600)"
+  action_json="${minted%$'\t'*}"
+  binding_id="${minted##*$'\t'}"
+  _mint_execution_claim "$action_json" "$binding_id" >/dev/null
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  for role in ${roles_csv//,/ }; do _wait_for_role_state "$role" "$action_json" READY >/dev/null; done
+
+  child_pids="$(node -e '
+    const fs=require("fs"),seen=new Set();
+    for(const line of fs.readFileSync(process.argv[1],"utf8").trim().split(/\n+/)){const e=JSON.parse(line);if(e.event==="thread-start")seen.add(e.pid);}
+    process.stdout.write(Array.from(seen).join("\n"));
+  ' "$FAKE_APP_SERVER_EVENTS")"
+  [ "$(printf '%s\n' "$child_pids" | grep -c .)" -eq 5 ]
+  victim_pid="$(printf '%s\n' "$child_pids" | head -1)"
+  kill -KILL "$victim_pid"
+  _wait_for_pid_exit "$BG_PID"
+  wait "$BG_PID"
+  BG_PID=""
+  while IFS= read -r pid; do [ -z "$pid" ] || _wait_for_pid_exit "$pid"; done <<< "$child_pids"
+  for role in ${roles_csv//,/ }; do _wait_for_role_state "$role" "$action_json" DEAD >/dev/null; done
+
+  ensure_json="$(_ensure_again_with_binding "$roles_csv" "$binding_id")"
+  action2_json="$(node -e 'const r=JSON.parse(process.argv[1]);if(r.status!=="ACTION_REQUIRED"||r.actions.length!==1||r.actions[0].kind!=="supervisor-start")process.exit(2);process.stdout.write(JSON.stringify(r.actions[0]))' "$ensure_json")"
+  run node -e '
+    const rll=require(process.argv[1]),action=JSON.parse(process.argv[2]),roles=process.argv[3].split(",");
+    const actionRoles=action.payload.bridge_argv.filter((v,i,a)=>a[i-1]==="--role");
+    if(JSON.stringify(actionRoles)!==JSON.stringify(roles.slice().sort()))process.exit(1);
+    for(const role of roles){const s=rll.readRoleBindingState(process.argv[4],action.worktree_id,action.plan_digest,rll.roleProfileDigestFor(role),action.session_generation_id,role);if(!s.ok||s.state!=="REHYDRATING"||s.record.driver!=="codex-app-server"||s.record.respawn_count!==1)process.exit(1);}
+  ' "$RLL" "$action2_json" "$roles_csv" "$PROJ"
+  [ "$status" -eq 0 ] || { printf '# RETAIN-CHILD-EXIT-01 witness: %s\n' "$output" >&3; false; }
+}
+
+@test "RETAIN-INDETERMINATE-01: an unavailable PID-birth observation fails closed with byte-identical retained authority and zero replacement" {
+  _set_ready_timeout_seconds 10
+  local roles_csv="arch-integration,arch-platform,arch-testing,context-provider,doc-updater"
+  local minted action_json binding_id argv_json owner_path owner_sha_before owner_sha_after role_owner_sha_before="" role_owner_sha_after="" action_count_before action_count_after ensure_json
+  minted="$(_mint_raw_action "$roles_csv" "retain-indeterminate-session" 600)"
+  action_json="${minted%$'\t'*}"
+  binding_id="${minted##*$'\t'}"
+  _mint_execution_claim "$action_json" "$binding_id" >/dev/null
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  for role in ${roles_csv//,/ }; do _wait_for_role_state "$role" "$action_json" READY >/dev/null; done
+
+  owner_path="$(node -e 'const r=require(process.argv[1]);process.stdout.write(r.supervisorLifecycleOwnerPathFor(process.argv[2],r.computeCoordinationRootId(process.argv[2])))' "$RLL" "$PROJ")"
+  owner_sha_before="$(shasum -a 256 "$owner_path")"
+  for role in ${roles_csv//,/ }; do role_owner_sha_before+="$(shasum -a 256 "$(_owner_file "$role")")"; done
+  action_count_before="$(node -e 'const fs=require("fs"),path=require("path"),r=require(process.argv[1]);const d=path.join(r.registryRepoDir(process.argv[2]),"actions");process.stdout.write(String(fs.readdirSync(d).filter(n=>n.endsWith(".json")).length))' "$RLL" "$PROJ")"
+
+  ensure_json="$(_ensure_again_with_binding "$roles_csv" "$binding_id" '{"status":"UNAVAILABLE"}')"
+  run node -e '
+    const result=JSON.parse(process.argv[1]);
+    if(result.status!=="INVALID"||result.detail_code!=="INTERNAL_ERROR"||(result.actions||[]).length!==0){process.stderr.write(JSON.stringify(result));process.exit(1);}
+  ' "$ensure_json"
+  [ "$status" -eq 0 ] || { printf '# RETAIN-INDETERMINATE-01 witness: %s\n' "$output" >&3; false; }
+
+  kill -0 "$BG_PID" 2>/dev/null
+  owner_sha_after="$(shasum -a 256 "$owner_path")"
+  for role in ${roles_csv//,/ }; do role_owner_sha_after+="$(shasum -a 256 "$(_owner_file "$role")")"; done
+  action_count_after="$(node -e 'const fs=require("fs"),path=require("path"),r=require(process.argv[1]);const d=path.join(r.registryRepoDir(process.argv[2]),"actions");process.stdout.write(String(fs.readdirSync(d).filter(n=>n.endsWith(".json")).length))' "$RLL" "$PROJ")"
+  [ "$owner_sha_after" = "$owner_sha_before" ]
+  [ "$role_owner_sha_after" = "$role_owner_sha_before" ]
+  [ "$action_count_after" -eq "$action_count_before" ]
+  for role in ${roles_csv//,/ }; do _wait_for_role_state "$role" "$action_json" READY >/dev/null; done
+
+  kill -TERM "$BG_PID" 2>/dev/null || true
+  wait "$BG_PID" 2>/dev/null || true
+  BG_PID=""
+}
+
+@test "SESSION-EXPIRY-01: retained authority expiry performs owned shutdown and a fresh binding in the same generation cannot respawn" {
+  _set_ready_timeout_seconds 10
+  local session_key="session-expiry-no-respawn" roles_csv="verifier"
+  local minted action_json binding_id argv_json service_expiry action_count_before action_count_after ensure_json
+  minted="$(_mint_raw_action "$roles_csv" "$session_key" 18)"
+  action_json="${minted%$'\t'*}"
+  binding_id="${minted##*$'\t'}"
+  _mint_execution_claim "$action_json" "$binding_id" >/dev/null
+  argv_json="$(_argv_from_action "$action_json")"
+  service_expiry="$(node -e 'const a=JSON.parse(process.argv[1]),v=a.payload.bridge_argv;process.stdout.write(v[v.indexOf("--session-expiry")+1])' "$action_json")"
+  run node -e '
+    const action=JSON.parse(process.argv[1]),service=process.argv[2];
+    if(!(Date.parse(service)>Date.parse(action.expires_at))){process.stderr.write("retained expiry is not later than action deadline: "+JSON.stringify({action:action.expires_at,service}));process.exit(1);}
+  ' "$action_json" "$service_expiry"
+  [ "$status" -eq 0 ] || { printf '# SESSION-EXPIRY-01 split witness: %s\n' "$output" >&3; false; }
+  action_count_before="$(node -e 'const fs=require("fs"),path=require("path"),rll=require(process.argv[1]);const d=path.join(rll.registryRepoDir(process.argv[2]),"actions");process.stdout.write(String(fs.existsSync(d)?fs.readdirSync(d).filter(n=>n.endsWith(".json")).length:0))' "$RLL" "$PROJ")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
+
+  _wait_until_after_iso "$(_action_field "$action_json" expires_at)" 300
+  kill -0 "$BG_PID" 2>/dev/null || { printf '# SESSION-EXPIRY-01 supervisor died at action deadline instead of retained expiry; output: %s\n' "$(cat "$BG_OUT")" >&3; false; }
+  _wait_until_after_iso "$service_expiry" 100
+  _wait_for_pid_exit "$BG_PID"
+  wait "$BG_PID" 2>/dev/null
+  local exit_code=$?
+  BG_PID=""
+  [ "$exit_code" -eq 0 ]
+  grep -q '"signal":"EXPIRY"' "$BG_OUT" || { printf '# SESSION-EXPIRY-01 output: %s\n' "$(cat "$BG_OUT")" >&3; false; }
+
+  ensure_json="$(_ensure_with_fresh_binding_for_session "$roles_csv" "$session_key")"
+  run node -e '
+    const result=JSON.parse(process.argv[1]);
+    if((result.actions||[]).length!==0){process.stderr.write("true session expiry respawned: "+JSON.stringify(result));process.exit(1);}
+  ' "$ensure_json"
+  [ "$status" -eq 0 ] || { printf '# SESSION-EXPIRY-01 witness: %s\n' "$output" >&3; false; }
+  action_count_after="$(node -e 'const fs=require("fs"),path=require("path"),rll=require(process.argv[1]);const d=path.join(rll.registryRepoDir(process.argv[2]),"actions");process.stdout.write(String(fs.existsSync(d)?fs.readdirSync(d).filter(n=>n.endsWith(".json")).length:0))' "$RLL" "$PROJ")"
+  [ "$action_count_after" -eq "$action_count_before" ]
+}
+
+@test "IN-GENERATION-RECOVERY-01: abrupt post-READY SIGKILL yields one same-driver five-role REHYDRATING batch; second abrupt death quarantines without a loop" {
+  _set_ready_timeout_seconds 10
+  local roles_csv="arch-integration,arch-platform,arch-testing,context-provider,doc-updater"
+  local minted action_json binding_id argv_json ensure_json action2_json argv2_json terminal_json torn_owner torn_tombstone torn_tombstone_sha child_pids
+  minted="$(_mint_raw_action "$roles_csv" "in-generation-recovery-session" 600)"
+  action_json="${minted%$'\t'*}"
+  binding_id="${minted##*$'\t'}"
+  _mint_execution_claim "$action_json" "$binding_id" >/dev/null
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  for role in ${roles_csv//,/ }; do _wait_for_role_state "$role" "$action_json" READY >/dev/null; done
+
+  # Exact crash cut after durable tombstone publication but before unlink:
+  # preplant one byte-identical canonical tombstone while its live owner is
+  # still present. Recovery must credit it and resume the unlink, not wedge.
+  torn_owner="$(_owner_file arch-integration)"
+  torn_tombstone="$(node -e '
+    const fs=require("fs"),path=require("path"),ownerPath=process.argv[1];
+    const owner=JSON.parse(fs.readFileSync(ownerPath,"utf8"));
+    const dir=path.join(path.dirname(ownerPath),".tombstone");
+    fs.mkdirSync(dir,{recursive:true,mode:0o700});fs.chmodSync(dir,0o700);
+    const target=path.join(dir,path.basename(ownerPath)+"."+owner.supervisor_instance_id);
+    fs.copyFileSync(ownerPath,target);fs.chmodSync(target,0o600);process.stdout.write(target);
+  ' "$torn_owner")"
+  torn_tombstone_sha="$(shasum -a 256 "$torn_tombstone")"
+  child_pids="$(node -e '
+    const fs=require("fs"),seen=new Set();
+    for(const line of fs.readFileSync(process.argv[1],"utf8").trim().split(/\n+/)){const e=JSON.parse(line);if(e.event==="thread-start")seen.add(e.pid);}
+    process.stdout.write(Array.from(seen).join("\n"));
+  ' "$FAKE_APP_SERVER_EVENTS")"
+  [ "$(printf '%s\n' "$child_pids" | grep -c .)" -eq 5 ]
+  kill -KILL "$BG_PID"; wait "$BG_PID" 2>/dev/null || true; BG_PID=""
+  while IFS= read -r pid; do [ -z "$pid" ] || _wait_for_pid_exit "$pid"; done <<< "$child_pids"
+
+  ensure_json="$(_ensure_again_with_binding "$roles_csv" "$binding_id")"
+  action2_json="$(node -e 'const r=JSON.parse(process.argv[1]);if(r.status!=="ACTION_REQUIRED"||r.actions.length!==1||r.actions[0].kind!=="supervisor-start")process.exit(2);process.stdout.write(JSON.stringify(r.actions[0]))' "$ensure_json")"
+  run node -e '
+    const rll=require(process.argv[1]),action=JSON.parse(process.argv[2]),roles=process.argv[3].split(",");
+    const argvRoles=action.payload.bridge_argv.filter((v,i,a)=>a[i-1]==="--role");
+    if(JSON.stringify(argvRoles)!==JSON.stringify(roles.slice().sort()))process.exit(1);
+    for(const role of roles){const s=rll.readRoleBindingState(process.argv[4],action.worktree_id,action.plan_digest,rll.roleProfileDigestFor(role),action.session_generation_id,role);if(!s.ok||s.state!=="REHYDRATING"||s.record.respawn_count!==1||s.record.driver!=="codex-app-server")process.exit(1);}
+  ' "$RLL" "$action2_json" "$roles_csv" "$PROJ"
+  [ "$status" -eq 0 ] || { printf '# IN-GENERATION-RECOVERY-01 first-death witness: %s\n' "$output" >&3; false; }
+  for role in ${roles_csv//,/ }; do [ -z "$(_owner_file "$role")" ]; done
+  [ ! -e "$torn_owner" ]
+  [ "$(shasum -a 256 "$torn_tombstone")" = "$torn_tombstone_sha" ]
+
+  _mint_execution_claim "$action2_json" "$binding_id" >/dev/null
+  argv2_json="$(_argv_from_action "$action2_json")"
+  _start_bridge_bg "$argv2_json" BG_OUT
+  for role in ${roles_csv//,/ }; do _wait_for_role_state "$role" "$action2_json" READY >/dev/null; done
+  child_pids="$(node -e '
+    const fs=require("fs"),seen=new Set();
+    for(const line of fs.readFileSync(process.argv[1],"utf8").trim().split(/\n+/)){const e=JSON.parse(line);if(e.event==="thread-start")seen.add(e.pid);}
+    process.stdout.write(Array.from(seen).join("\n"));
+  ' "$FAKE_APP_SERVER_EVENTS")"
+  [ "$(printf '%s\n' "$child_pids" | grep -c .)" -eq 10 ]
+  kill -KILL "$BG_PID"; wait "$BG_PID" 2>/dev/null || true; BG_PID=""
+  while IFS= read -r pid; do [ -z "$pid" ] || _wait_for_pid_exit "$pid"; done <<< "$child_pids"
+  terminal_json="$(_ensure_again_with_binding "$roles_csv" "$binding_id")"
+  run node -e '
+    const rll=require(process.argv[1]),action=JSON.parse(process.argv[2]),roles=process.argv[3].split(","),result=JSON.parse(process.argv[5]);
+    if((result.actions||[]).length!==0)process.exit(1);
+    for(const role of roles){const s=rll.readRoleBindingState(process.argv[4],action.worktree_id,action.plan_digest,rll.roleProfileDigestFor(role),action.session_generation_id,role);if(!s.ok||s.state!=="QUARANTINED"||s.record.respawn_count!==1)process.exit(1);}
+  ' "$RLL" "$action2_json" "$roles_csv" "$PROJ" "$terminal_json"
   [ "$status" -eq 0 ]
 }
 
@@ -1853,19 +2855,21 @@ _set_ready_timeout_seconds() {
 }
 
 @test "CLEANUP-04 PASS: the owner path rebound to a DIFFERENT inode (same well-formed, correlated content) between read and the pre-unlink recheck is never touched -- quarantine/STOP instead (point D.2 TOCTOU-safe removal)" {
-  local action_json argv_json owner_file
+  local action_json argv_json owner_file delay_marker="$PROJ/cleanup-04-delay.marker"
   action_json="$(_mint_ready_action verifier)"
   argv_json="$(_argv_from_action "$action_json")"
 
-  export NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_TEST_PRE_UNLINK_DELAY_MS=1500
+  export NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_TEST_PRE_UNLINK_DELAY_MS=1500 RUNTIME_BRIDGE_CODEX_TEST_CLEANUP_DELAY_MARKER="$delay_marker"
   _start_bridge_bg "$argv_json" BG_OUT
-  unset RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY RUNTIME_BRIDGE_CODEX_TEST_PRE_UNLINK_DELAY_MS
+  unset RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY RUNTIME_BRIDGE_CODEX_TEST_PRE_UNLINK_DELAY_MS RUNTIME_BRIDGE_CODEX_TEST_CLEANUP_DELAY_MARKER
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
   local original_ino
   original_ino="$(node -e 'process.stdout.write(String(require("fs").statSync(process.argv[1]).ino))' "$owner_file")"
 
   kill -TERM "$BG_PID"
+  for _ in $(seq 1 200); do [ -f "$delay_marker" ] && break; sleep 0.01; done
+  [ "$(cat "$delay_marker")" = "pre-unlink-delay" ]
   # While the signal handler's cleanup is deliberately paused (the test-only
   # delay above), rebind the path: unlink the original and recreate a
   # BYTE-IDENTICAL file at the SAME path -- a real fs.rename/replace would
@@ -1900,13 +2904,13 @@ _set_ready_timeout_seconds() {
 }
 
 @test "CLEANUP-06 PASS: a rebind BEFORE the final pre-unlink identity check (strictly AFTER the tombstone copy is ALREADY durable) is caught by that check; the rebound file is left COMPLETELY untouched (never moved/restored, since it was never touched to begin with), and OUR OWN data already survives safely in the tombstone regardless. HONESTY NOTE (R4 round 3, round 4 correction, finding 3): this proves a rebind BEFORE the check, not the genuinely irreducible lstat->unlink gap itself (a few CPU instructions, with no POSIX atomic-unlink-iff-identity-matches primitive) -- that narrower gap is covered by the cooperative lock contract (withRegistryLock), not by any check-based mechanism, and is not what this test exercises (R4 round 2, point 6)" {
-  local action_json argv_json owner_file
+  local action_json argv_json owner_file delay_marker="$PROJ/cleanup-06-delay.marker"
   action_json="$(_mint_ready_action verifier)"
   argv_json="$(_argv_from_action "$action_json")"
 
-  export NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_TEST_POST_STAT_PRE_RENAME_DELAY_MS=1500
+  export NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_TEST_POST_STAT_PRE_RENAME_DELAY_MS=1500 RUNTIME_BRIDGE_CODEX_TEST_CLEANUP_DELAY_MARKER="$delay_marker"
   _start_bridge_bg "$argv_json" BG_OUT
-  unset RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY RUNTIME_BRIDGE_CODEX_TEST_POST_STAT_PRE_RENAME_DELAY_MS
+  unset RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY RUNTIME_BRIDGE_CODEX_TEST_POST_STAT_PRE_RENAME_DELAY_MS RUNTIME_BRIDGE_CODEX_TEST_CLEANUP_DELAY_MARKER
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
   local original_ino original_bytes original_supervisor_id
@@ -1915,6 +2919,8 @@ _set_ready_timeout_seconds() {
   original_supervisor_id="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).supervisor_instance_id)' "$owner_file")"
 
   kill -TERM "$BG_PID"
+  for _ in $(seq 1 200); do [ -f "$delay_marker" ] && break; sleep 0.01; done
+  [ "$(cat "$delay_marker")" = "post-tombstone-pre-unlink-delay" ]
   # By the time THIS delay is reached, the tombstone copy of OUR OWN
   # original bytes is ALREADY durable (publishNoClobber already returned
   # success). The delay fires BEFORE fs.lstatSync is even called, so this
@@ -2061,14 +3067,49 @@ _set_ready_timeout_seconds() {
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
 
+  # Capture the ORIGINAL claim's own bytes + supervisor_instance_id BEFORE
+  # any shutdown signal, so the tombstone-durability wait below has a known
+  # target to confirm against (roleOwnerTombstonePathFor: dirname(ownerPath)/
+  # .tombstone/basename(ownerPath).<supervisor_instance_id>).
+  local orig_supervisor_id orig_bytes tombstone_dir tombstone_file
+  orig_supervisor_id="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).supervisor_instance_id)' "$owner_file")"
+  orig_bytes="$(cat "$owner_file")"
+  tombstone_dir="$(dirname "$owner_file")/.tombstone"
+  tombstone_file="${tombstone_dir}/$(basename "$owner_file").${orig_supervisor_id}"
+
   kill -TERM "$BG_PID"
-  # By the time this delay is reached, the tombstone copy of the ORIGINAL
-  # claim's bytes is already durable. Now simulate a genuinely NEW,
-  # unrelated supervisor legitimately claiming this exact role path in the
-  # interim (fresh instance ids, fresh pid_identity, otherwise well-formed)
-  # -- distinct from CLEANUP-04/06's same-content rebind, this proves the
-  # safety property holds even when the content is a real, different,
-  # well-formed claim, not just a new inode.
+
+  # cmdSessionRun's shutdown sequence confirms the owned child is dead
+  # BEFORE cleanup/release even begins (runtime-bridge-codex.cjs child-stop
+  # at ~L1139, cleanup only starting after at ~L1158) -- genuinely WAIT for
+  # the ORIGINAL claim's tombstone to become durable (never assume a fixed
+  # elapsed time is "surely enough" -- that assumption is exactly what made
+  # this test stop synchronizing with what it claims to test), and verify
+  # the tombstone's bytes are genuinely the ORIGINAL claim's before rebinding
+  # ownerPath. This is what makes the 1500ms
+  # RUNTIME_BRIDGE_CODEX_TEST_POST_STAT_PRE_RENAME_DELAY_MS window (set on
+  # the child above) meaningful: the rebind below now reliably lands inside
+  # the narrow, deliberately-widened gap between "tombstone already durable"
+  # and "pre-unlink identity recheck" -- exactly the window this test exists
+  # to prove is still safe, never before the tombstone write has even
+  # happened (which would corrupt the setup itself rather than exercise
+  # that gap).
+  local tombstone_seen=""
+  for _ in $(seq 1 500); do
+    if [ -f "$tombstone_file" ]; then tombstone_seen=1; break; fi
+    sleep 0.01
+  done
+  [ -n "$tombstone_seen" ]
+  local tombstone_bytes
+  tombstone_bytes="$(cat "$tombstone_file")"
+  [ "$tombstone_bytes" = "$orig_bytes" ]
+
+  # Now simulate a genuinely NEW, unrelated supervisor legitimately claiming
+  # this exact role path in the interim (fresh instance ids, fresh
+  # pid_identity, otherwise well-formed) -- distinct from CLEANUP-04/06's
+  # same-content rebind, this proves the safety property holds even when
+  # the content is a real, different, well-formed claim, not just a new
+  # inode.
   local new_supervisor_id new_bytes
   new_supervisor_id="$(node -e '
     const fs = require("fs");
@@ -2782,31 +3823,35 @@ _set_ready_timeout_seconds() {
 # two rows, neither of which is the sibling -- kept local to avoid touching
 # a file this item does not own.
 
-@test "C2-SCHEMA-01 PASS: buildRuntimeTurnEnvelopeOutputSchema with no allowed child roles omits the consult oneOf branch entirely (leaf/exhausted-budget case)" {
+@test "C2-SCHEMA-01 PASS: Codex wire schema is an exact envelope wrapper with one terminal anyOf branch for a leaf" {
   run node -e '
     const bridge = require(process.argv[1]);
     const schema = bridge.buildRuntimeTurnEnvelopeOutputSchema("ARCH_VERDICT", []);
-    if (!Array.isArray(schema.oneOf) || schema.oneOf.length !== 1) { process.stderr.write("expected exactly one oneOf branch, got " + JSON.stringify(schema.oneOf && schema.oneOf.length) + "\n"); process.exit(1); }
-    if (schema.oneOf[0].properties.kind.enum[0] !== "terminal-result") { process.stderr.write("wrong sole branch\n"); process.exit(1); }
+    if (schema.type !== "object" || schema.additionalProperties !== false || JSON.stringify(schema.required) !== JSON.stringify(["envelope"])) { process.stderr.write("bad exact wrapper\n"); process.exit(1); }
+    if (!schema.properties.envelope || !Array.isArray(schema.properties.envelope.anyOf) || schema.properties.envelope.anyOf.length !== 1) { process.stderr.write("expected exactly one envelope anyOf branch\n"); process.exit(1); }
+    if (schema.properties.envelope.anyOf[0].properties.kind.enum[0] !== "terminal-result") { process.stderr.write("wrong sole branch\n"); process.exit(1); }
+    if (JSON.stringify(schema).includes("oneOf")) { process.stderr.write("oneOf remains on the Codex wire\n"); process.exit(1); }
   ' "$BRIDGE"
   [ "$status" -eq 0 ]
 }
 
-@test "C2-SCHEMA-02 PASS: buildRuntimeTurnEnvelopeOutputSchema with allowed child roles includes both the terminal and consult-intent oneOf branches, deep-matching PLAN.md ~L1018" {
+@test "C2-SCHEMA-02 PASS: Codex wire schema mechanically projects both canonical branches with nested anyOf and no oneOf" {
   run node -e '
     const bridge = require(process.argv[1]);
     const schema = bridge.buildRuntimeTurnEnvelopeOutputSchema("ARCH_VERDICT", ["arch-platform", "arch-testing"]);
-    if (schema.oneOf.length !== 2) { process.stderr.write("expected two branches\n"); process.exit(1); }
-    const terminal = schema.oneOf[0];
+    const branches = schema.properties.envelope.anyOf;
+    if (branches.length !== 2) { process.stderr.write("expected two branches\n"); process.exit(1); }
+    const terminal = branches[0];
     if (terminal.additionalProperties !== false || JSON.stringify(terminal.required) !== JSON.stringify(["schema", "kind", "result"])) { process.stderr.write("bad terminal branch shape\n"); process.exit(1); }
-    const answered = terminal.properties.result.oneOf[0];
+    const answered = terminal.properties.result.anyOf[0];
     if (JSON.stringify(answered.required) !== JSON.stringify(["schema", "status", "result_kind", "content"])) { process.stderr.write("bad ANSWERED required set\n"); process.exit(1); }
     if (answered.properties.result_kind.enum[0] !== "ARCH_VERDICT") { process.stderr.write("result_kind not narrowed to expected value\n"); process.exit(1); }
-    const blocked = terminal.properties.result.oneOf[1];
+    const blocked = terminal.properties.result.anyOf[1];
     if (JSON.stringify(blocked.properties.reason.enum) !== JSON.stringify(["CONTENT_TOO_LARGE","INSUFFICIENT_CONTEXT","UNSUPPORTED_REQUEST","CONSULTATION_FAILED","POLICY_DENIED"])) { process.stderr.write("bad BLOCKED reason enum\n"); process.exit(1); }
-    const consult = schema.oneOf[1];
+    const consult = branches[1];
     if (consult.properties.kind.enum[0] !== "consult-intent") { process.stderr.write("bad consult branch\n"); process.exit(1); }
     if (JSON.stringify(consult.properties.consult.properties.target_role.enum) !== JSON.stringify(["arch-platform","arch-testing"])) { process.stderr.write("target_role enum not narrowed to allowed child roles\n"); process.exit(1); }
+    if (JSON.stringify(schema).includes("oneOf")) { process.stderr.write("oneOf remains on the Codex wire\n"); process.exit(1); }
   ' "$BRIDGE"
   [ "$status" -eq 0 ]
 }
@@ -3775,7 +4820,7 @@ _set_ready_timeout_seconds() {
         fromChild.write(JSON.stringify({ id: turnReq.id, result: { turn: { id: "turn-y", status: "inProgress", items: [], itemsView: "full" } } }) + "\n");
       });
       conn.onTurnCompleted("thread-x", "turn-y", "ARCH_VERDICT", [], (res) => results.push(res));
-      const envelope = { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "ARCH_VERDICT", content: "the verdict" } };
+      const envelope = { envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "ARCH_VERDICT", content: "the verdict" } } };
       // Real TurnCompletedNotification/ThreadItem shape (prep/phase-a/codex-schema/ts-run1/v2/{TurnCompletedNotification,ThreadItem}.ts): exactly {threadId, turn: Turn}, and the agentMessage variant requires id/text/phase/memoryCitation all present (R7, C8).
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: JSON.stringify(envelope), memoryCitation: null }] } } }) + "\n");
       setImmediate(() => {
@@ -3926,7 +4971,7 @@ _set_ready_timeout_seconds() {
         fromChild.write(JSON.stringify({ id: turnReq.id, result: { turn: { id: "turn-y", status: "inProgress", items: [], itemsView: "full" } } }) + "\n");
       });
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const okEnv = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" } });
+      const okEnv = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: okEnv, memoryCitation: null }, { type: "agentMessage", id: "am-2", phase: "final_answer", text: okEnv, memoryCitation: null }] } } }) + "\n");
       setImmediate(() => { if (results.length !== 1 || results[0].ok) { process.stderr.write("ambiguous duplicate accepted\n"); process.exit(1); } process.exit(0); });
     }).catch((err) => { process.stderr.write("preamble threw: " + err + "\n"); process.exit(1); });
@@ -3934,7 +4979,7 @@ _set_ready_timeout_seconds() {
   [ "$status" -eq 0 ]
 }
 
-@test "C2-TURN-07 FAIL: turn/completed with itemsView other than full (e.g. summary) is rejected, never treated as a complete item list" {
+@test "C2-TURN-07 PASS: summary is never treated as complete; it requires one thread/read and a failed read delivers one bounded failure" {
   run node -e '
     const bridge = require(process.argv[1]);
     const { PassThrough } = require("stream");
@@ -3977,8 +5022,14 @@ _set_ready_timeout_seconds() {
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "summary", items: [] } } }) + "\n");
       setImmediate(() => {
-        if (results.length !== 1 || results[0].ok || results[0].reason.indexOf("items-view-not-full") === -1) { process.stderr.write("summary itemsView was accepted: " + JSON.stringify(results) + "\n"); process.exit(1); }
-        process.exit(0);
+        if (results.length !== 0) { process.stderr.write("summary itemsView delivered directly: " + JSON.stringify(results) + "\n"); process.exit(1); }
+        const readReqs = sent.filter((f) => f.method === "thread/read");
+        if (readReqs.length !== 1 || JSON.stringify(readReqs[0].params) !== JSON.stringify({ threadId: "thread-x", includeTurns: true })) { process.stderr.write("expected one exact thread/read: " + JSON.stringify(readReqs) + "\n"); process.exit(1); }
+        fromChild.write(JSON.stringify({ id: readReqs[0].id, error: { code: -32000, message: "read failed" } }) + "\n");
+        setImmediate(() => {
+          if (results.length !== 1 || results[0].ok || results[0].reason.indexOf("thread-read-failed:") !== 0) { process.stderr.write("thread/read failure was not delivered exactly once: " + JSON.stringify(results) + "\n"); process.exit(1); }
+          process.exit(0);
+        });
       });
     }).catch((err) => { process.stderr.write("preamble threw: " + err + "\n"); process.exit(1); });
   ' "$BRIDGE"
@@ -4023,7 +5074,7 @@ _set_ready_timeout_seconds() {
       // The turn/start response is deliberately withheld until AFTER the duplicates below, proving delivery never happens even once it finally arrives.
       conn.turnStart({ threadId: "thread-x", inputText: "x", expectedResultKind: "K", allowedChildRoles: [], cwd: "/c" });
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" }  }});
       const frame = JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n";
       fromChild.write(frame);
       fromChild.write(frame);
@@ -4196,7 +5247,7 @@ _set_ready_timeout_seconds() {
         // Deliver the turn'"'"'s actual completion now -- tracking must be fully intact, proving nothing was erased by the refused archive.
         const results = [];
         conn.onTurnCompleted("thread-x", turnRes.turnId, "K", [], (res) => results.push(res));
-        const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "still-alive" } });
+        const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "still-alive" }  }});
         fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: turnRes.turnId, status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
         return new Promise((resolve) => setImmediate(() => {
           if (results.length !== 1 || !results[0].ok || results[0].envelope.result.content !== "still-alive") { process.stderr.write("turn did not deliver normally after the refused archive: " + JSON.stringify(results) + "\n"); process.exit(1); }
@@ -4307,7 +5358,7 @@ _set_ready_timeout_seconds() {
       // No onTurnCompleted registered yet -- the completion below will be buffered, not delivered, keeping the turn NOT-yet-fully-delivered when the late turn/started arrives.
       conn.turnStart({ threadId: "thread-x", inputText: "x", expectedResultKind: "K", allowedChildRoles: [], cwd: "/c" });
       setImmediate(() => {
-        const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" } });
+        const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" }  }});
         fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-1", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
         setImmediate(() => {
           if (conn.isStopped()) { process.stderr.write("connection stopped after the completion notification -- should still be alive (buffered, not yet delivered)\n"); process.exit(1); }
@@ -4415,7 +5466,7 @@ _set_ready_timeout_seconds() {
       const delivered = new Promise((resolve) => {
         conn.onTurnCompleted("thread-x", turnRes.turnId, "K", [], (res) => resolve(res));
       });
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "first" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "first" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-1", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
       return delivered;
     }).then((firstResult) => {
@@ -4472,7 +5523,7 @@ _set_ready_timeout_seconds() {
         if (!turnRes.ok) { process.stderr.write("turnStart rejected at iteration " + i + ": " + JSON.stringify(turnRes) + "\n"); process.exit(1); }
         let handlerFired = false, handlerResult = null;
         conn.onTurnCompleted("thread-x", turnRes.turnId, "K", [], (res) => { handlerFired = true; handlerResult = res; });
-        const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "c" + i } });
+        const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "c" + i }  }});
         fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: turnId, status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-" + i, phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
         await waitTick();
         if (conn.isStopped()) {
@@ -4514,7 +5565,7 @@ _set_ready_timeout_seconds() {
     const conn = bridge.createAppServerConnection({ stdin: toChild, stdout: fromChild });
     const results = [];
     conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-    const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" } });
+    const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" }  }});
     const completedFrame = JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } });
     // Both lines delivered in ONE chunk -- the malformed line comes first.
     fromChild.write("not-json-at-all\n" + completedFrame + "\n");
@@ -5136,7 +6187,7 @@ _set_ready_timeout_seconds() {
         fromChild.write(JSON.stringify({ id: turnReq.id, result: { turn: { id: "turn-y", status: "inProgress", items: [], itemsView: "full" } } }) + "\n");
       });
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" }  }});
       // itemsView key deliberately omitted entirely -- not null, genuinely absent.
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
       setImmediate(() => {
@@ -5185,7 +6236,7 @@ _set_ready_timeout_seconds() {
       if (!startRes.ok) { process.stderr.write("preamble threadStart failed: " + JSON.stringify(startRes) + "\n"); process.exit(1); }
       conn.turnStart({ threadId: "thread-x", inputText: "x", expectedResultKind: "K", allowedChildRoles: [], cwd: "/c" });
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
       setImmediate(() => {
         // R10: the malformed agentMessage (missing its required id) is now
@@ -5475,11 +6526,11 @@ _set_ready_timeout_seconds() {
 
 # ── C2-ENVSRC: single canonical RuntimeTurnEnvelope/v1 source (bucket F, PLAN.md ~L932) ──
 
-@test "C2-ENVSRC-01 PASS: runtime-bridge-codex.cjs's exported envelope schema builder and validator are the SAME function references as runtime-consultation.cjs's, not a second copy (F1/F3)" {
+@test "C2-ENVSRC-01 PASS: bridge wire builder and canonical local validator are the exact sibling exports, not second copies" {
   run node -e '
     const bridge = require(process.argv[1]);
     const rc = require(process.argv[2]);
-    if (bridge.buildRuntimeTurnEnvelopeOutputSchema !== rc.runtimeTurnEnvelopeSchema) { process.stderr.write("bridge schema builder is not the SAME function reference as rc.runtimeTurnEnvelopeSchema\n"); process.exit(1); }
+    if (bridge.buildRuntimeTurnEnvelopeOutputSchema !== rc.codexStructuredRuntimeTurnEnvelopeSchema) { process.stderr.write("bridge wire builder is not the SAME function reference as rc.codexStructuredRuntimeTurnEnvelopeSchema\n"); process.exit(1); }
     if (bridge.validateRuntimeTurnEnvelope !== rc.validateRuntimeTurnEnvelope) { process.stderr.write("bridge validator is not the SAME function reference as rc.validateRuntimeTurnEnvelope\n"); process.exit(1); }
   ' "$BRIDGE" "$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
   [ "$status" -eq 0 ]
@@ -5553,7 +6604,7 @@ _set_ready_timeout_seconds() {
         const turnReq = sent.find((f) => f.method === "turn/start");
         fromChild.write(JSON.stringify({ id: turnReq.id, result: { turn: { id: "turn-y", status: "inProgress", items: [], itemsView: "full" } } }) + "\n");
       });
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "raced" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "raced" }  }});
       // The notification arrives FIRST -- onTurnCompleted has not been called yet (the genuine wire race item 4 exists to handle).
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
       setImmediate(() => {
@@ -5898,7 +6949,7 @@ _set_ready_timeout_seconds() {
     const conn = bridge.createAppServerConnection({ stdin: toChild, stdout: fromChild });
     const results = [];
     conn.onTurnCompleted("never-authed-thread", "invented-turn", "K", [], (res) => results.push(res));
-    const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "FORGED" } });
+    const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "FORGED" }  }});
     fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "never-authed-thread", turn: { id: "invented-turn", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
     setImmediate(() => {
       if (results.length !== 0) { process.stderr.write("a forged completion was delivered with zero prior authority: " + JSON.stringify(results) + "\n"); process.exit(1); }
@@ -6066,7 +7117,7 @@ _set_ready_timeout_seconds() {
     }).then((startRes) => {
       conn.turnStart({ threadId: "thread-x", inputText: "x", expectedResultKind: "K", allowedChildRoles: [], cwd: "/c" });
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "hijacked" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "hijacked" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: { bogus: true } }] } } }) + "\n");
       setImmediate(() => {
         // R10: caught EARLIER now, by correlateTurnNotification'"'"'s
@@ -6118,7 +7169,7 @@ _set_ready_timeout_seconds() {
         fromChild.write(JSON.stringify({ id: turnReq.id, result: { turn: { id: "turn-y", status: "inProgress", items: [], itemsView: "full" } } }) + "\n");
       });
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "defaults-omitted" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "defaults-omitted" }  }});
       // Neither `memoryCitation` nor `phase` is present at all -- both carry a real `default: null` in the pinned ThreadItem schema.
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", text: envelope }] } } }) + "\n");
       setImmediate(() => {
@@ -6235,7 +7286,7 @@ _set_ready_timeout_seconds() {
       const turnP = conn.turnStart({ threadId: "thread-x", inputText: "x", expectedResultKind: "K", allowedChildRoles: [], cwd: "/c" });
       setImmediate(() => {
         const turnReq = sent.find((f) => f.method === "turn/start");
-        const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "fast" } });
+        const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "fast" }  }});
         // The completion notification arrives BEFORE the turn/start RPC response.
         fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
         setImmediate(() => {
@@ -6292,7 +7343,7 @@ _set_ready_timeout_seconds() {
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], () => {});
       setImmediate(() => {
         const turnReq = sent.find((f) => f.method === "turn/start");
-        const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "fast" } });
+        const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "fast" }  }});
         fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
         setImmediate(() => {
           fromChild.write(JSON.stringify({ id: turnReq.id, result: { turn: { id: "turn-y", status: "inProgress", items: [], itemsView: "full" } } }) + "\n");
@@ -6419,7 +7470,7 @@ _set_ready_timeout_seconds() {
     }).then((startRes) => {
       conn.turnStart({ threadId: "thread-x", inputText: "x", expectedResultKind: "K", allowedChildRoles: [], cwd: "/c" });
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "a" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "sleep", id: "s1", durationMs: -1 }, { type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
       setImmediate(() => {
         if (results.length !== 0) { process.stderr.write("handler fired despite a negative sleep.durationMs sibling item: " + JSON.stringify(results) + "\n"); process.exit(1); }
@@ -6464,7 +7515,7 @@ _set_ready_timeout_seconds() {
     }).then((startRes) => {
       conn.turnStart({ threadId: "thread-x", inputText: "x", expectedResultKind: "K", allowedChildRoles: [], cwd: "/c" });
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "hijacked-via-sibling" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "hijacked-via-sibling" }  }});
       // A "plan" item missing its own required `text`, alongside an otherwise-perfectly-valid final agentMessage.
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "plan", id: "p1" }, { type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
       setImmediate(() => {
@@ -7250,7 +8301,7 @@ _set_ready_timeout_seconds() {
       fromChild.write(JSON.stringify({ id: 3, method: "account/chatgptAuthTokens/refresh", params: { reason: "unauthorized" } }) + "\n");
       setImmediate(() => {
         if (!deferredRefreshFlush) { process.stderr.write("refresh flush was not deferred as expected\n"); process.exit(1); }
-        const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "during-refresh" } });
+        const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "during-refresh" }  }});
         // The completion becomes ready to deliver WHILE the refresh is still in flight.
         fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
         setImmediate(() => {
@@ -7408,8 +8459,8 @@ _set_ready_timeout_seconds() {
       // turnStart left deliberately pending -- onTurnCompleted is NEVER
       // called, so BOTH completions below arrive as "early" (buffered).
       conn.turnStart({ threadId: "thread-x", inputText: "x", expectedResultKind: "K", allowedChildRoles: [], cwd: "/c" });
-      const envelopeFirst = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "FIRST" } });
-      const envelopeSecond = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "SECOND" } });
+      const envelopeFirst = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "FIRST" }  }});
+      const envelopeSecond = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "SECOND" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelopeFirst, memoryCitation: null }] } } }) + "\n");
       setImmediate(() => {
         // A SECOND, conflicting completion for the SAME turn id, still before any handler was ever registered.
@@ -7604,7 +8655,7 @@ _set_ready_timeout_seconds() {
       // The turnStart RPC response is deliberately withheld here -- this is the exact scenario under test.
       conn.turnStart({ threadId: "thread-x", inputText: "x", expectedResultKind: "K", allowedChildRoles: [], cwd: "/c" });
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "early" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "early" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
       return new Promise((resolve) => setImmediate(resolve)).then(() => {
         if (results.length !== 0) { process.stderr.write("delivered without the turnStart own RPC response ever arriving: " + JSON.stringify(results) + "\n"); process.exit(1); }
@@ -7653,7 +8704,7 @@ _set_ready_timeout_seconds() {
       await tick();
       const turnReq = sent.find((f) => f.method === "turn/start");
       const contentTag = "order-" + order.join("-");
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: contentTag } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: contentTag }  }});
       const steps = {
         response: () => fromChild.write(JSON.stringify({ id: turnReq.id, result: { turn: { id: "turn-y", status: "inProgress", items: [], itemsView: "full" } } }) + "\n"),
         completion: () => fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n"),
@@ -7794,7 +8845,7 @@ _set_ready_timeout_seconds() {
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
       fromChild.write(JSON.stringify({ id: 3, method: "account/chatgptAuthTokens/refresh", params: { reason: "unauthorized" } }) + "\n");
       setImmediate(() => {
-        const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "deferred-then-retired" } });
+        const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "deferred-then-retired" }  }});
         fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
         setImmediate(() => {
           if (results.length !== 0) { process.stderr.write("delivered while the refresh was still in flight\n"); process.exit(1); }
@@ -7938,12 +8989,12 @@ _set_ready_timeout_seconds() {
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
       fromChild.write(JSON.stringify({ id: 3, method: "account/chatgptAuthTokens/refresh", params: { reason: "unauthorized" } }) + "\n");
       setImmediate(() => {
-        const envelopeFirst = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "first" } });
+        const envelopeFirst = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "first" }  }});
         fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelopeFirst, memoryCitation: null }] } } }) + "\n");
         setImmediate(() => {
           if (!deferredRefreshFlush) { process.stderr.write("refresh flush was not deferred as expected\n"); process.exit(1); }
           // The turn is now genuinely DEFERRED_FOR_REFRESH (all three prerequisites met, blocked only by the in-flight refresh). A second, DIFFERENT completion arrives now.
-          const envelopeSecond = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "second" } });
+          const envelopeSecond = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "second" }  }});
           fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-2", phase: "final_answer", text: envelopeSecond, memoryCitation: null }] } } }) + "\n");
           setImmediate(() => {
             if (!conn.isStopped()) { process.stderr.write("expected STOP for a second completion during DEFERRED_FOR_REFRESH, connection still operative\n"); process.exit(1); }
@@ -7998,13 +9049,13 @@ _set_ready_timeout_seconds() {
         fromChild.write(JSON.stringify({ id: turnReq.id, result: { turn: { id: "turn-y", status: "inProgress", items: [], itemsView: "full" } } }) + "\n");
       });
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "first" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "first" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
       return new Promise((resolve) => setImmediate(resolve));
     }).then(() => {
       if (results.length !== 1 || !results[0].ok) { process.stderr.write("preamble delivery failed: " + JSON.stringify(results) + "\n"); process.exit(1); }
       if (conn.isStopped()) { process.stderr.write("connection incorrectly STOPped after clean delivery\n"); process.exit(1); }
-      const envelopeSecond = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "second" } });
+      const envelopeSecond = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "second" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-2", phase: "final_answer", text: envelopeSecond, memoryCitation: null }] } } }) + "\n");
       return new Promise((resolve) => setImmediate(resolve));
     }).then(() => {
@@ -8053,7 +9104,7 @@ _set_ready_timeout_seconds() {
         fromChild.write(JSON.stringify({ id: turnReq.id, result: { turn: { id: "turn-y", status: "inProgress", items: [], itemsView: "full" } } }) + "\n");
       });
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "first" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "first" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
       return new Promise((resolve) => setImmediate(resolve));
     }).then(() => {
@@ -8118,7 +9169,7 @@ _set_ready_timeout_seconds() {
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
       fromChild.write(JSON.stringify({ id: 3, method: "account/chatgptAuthTokens/refresh", params: { reason: "unauthorized" } }) + "\n");
       setImmediate(() => {
-        const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "first" } });
+        const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "first" }  }});
         fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
         setImmediate(() => {
           if (!deferredRefreshFlush) { process.stderr.write("refresh flush was not deferred as expected\n"); process.exit(1); }
@@ -8170,7 +9221,7 @@ _set_ready_timeout_seconds() {
         fromChild.write(JSON.stringify({ id: turnReq.id, result: { turn: { id: "shared-id", status: "inProgress", items: [], itemsView: "full" } } }) + "\n");
       });
       conn.onTurnCompleted("thread-x", "shared-id", "K", [], (res) => results.push(res));
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "delivered-on-thread-x" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "delivered-on-thread-x" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "shared-id", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
       return new Promise((resolve) => setImmediate(resolve));
     }).then(() => {
@@ -8324,7 +9375,7 @@ _set_ready_timeout_seconds() {
     }).then((turnRes) => {
       // Interrupt dispatched but ITS OWN response is deliberately never answered -- state stays INTERRUPT_PENDING.
       conn.turnInterrupt("thread-x", "turn-y", { timeoutMs: 5000 });
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "during-interrupt-pending" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "during-interrupt-pending" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
       return new Promise((resolve) => setImmediate(resolve));
     }).then(() => {
@@ -8554,7 +9605,7 @@ _set_ready_timeout_seconds() {
     }).then((interruptRes) => {
       if (!interruptRes.ok) { process.stderr.write("preamble interrupt failed: " + JSON.stringify(interruptRes) + "\n"); process.exit(1); }
       // A late completion for the SAME (now-interrupted) turn arrives after the interrupt already succeeded.
-      const envelope = JSON.stringify({ schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "late-after-interrupt-success" } });
+      const envelope = JSON.stringify({ envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "late-after-interrupt-success" }  }});
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: envelope, memoryCitation: null }] } } }) + "\n");
       return new Promise((resolve) => setImmediate(resolve));
     }).then(() => {
@@ -8669,7 +9720,7 @@ _set_ready_timeout_seconds() {
     }).then((turnRes) => {
       if (turnRes.ok) { process.stderr.write("turnStart incorrectly resolved ok:true once its own response was duplicated\n"); process.exit(1); }
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const envelope = { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "the verdict" } };
+      const envelope = { envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "the verdict" } } };
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: JSON.stringify(envelope), memoryCitation: null }] } } }) + "\n");
       setImmediate(() => {
         if (!conn.isStopped() || conn.stopReason() !== "duplicate-rpc-response") { process.stderr.write("expected STOP duplicate-rpc-response, got: " + conn.stopReason() + "\n"); process.exit(1); }
@@ -8723,7 +9774,7 @@ _set_ready_timeout_seconds() {
     }).then((turnRes) => {
       if (turnRes.ok) { process.stderr.write("turnStart incorrectly resolved ok:true once a conflicting response for its id arrived\n"); process.exit(1); }
       conn.onTurnCompleted("thread-x", "turn-y", "K", [], (res) => results.push(res));
-      const envelope = { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "the verdict" } };
+      const envelope = { envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "the verdict" } } };
       fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: JSON.stringify(envelope), memoryCitation: null }] } } }) + "\n");
       setImmediate(() => {
         if (!conn.isStopped() || conn.stopReason() !== "duplicate-rpc-response") { process.stderr.write("expected STOP duplicate-rpc-response, got: " + conn.stopReason() + "\n"); process.exit(1); }
@@ -8781,7 +9832,7 @@ _set_ready_timeout_seconds() {
         fromChild.write(JSON.stringify({ id: turnReqId(), result: { turn: { id: "turn-DIFFERENT", status: "inProgress", items: [], itemsView: "full" } } }) + "\n");
         setImmediate(() => {
           if (!conn.isStopped() || conn.stopReason() !== "duplicate-rpc-response") { process.stderr.write("expected STOP duplicate-rpc-response immediately after the later conflicting response, got: " + conn.stopReason() + "\n"); process.exit(1); }
-          const envelope = { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "the verdict" } };
+          const envelope = { envelope: { schema: "coordination/runtime-turn-envelope/v1", kind: "terminal-result", result: { schema: "coordination/result-envelope/v1", status: "ANSWERED", result_kind: "K", content: "the verdict" } } };
           fromChild.write(JSON.stringify({ method: "turn/completed", params: { threadId: "thread-x", turn: { id: "turn-y", status: "completed", itemsView: "full", items: [{ type: "agentMessage", id: "am-1", phase: "final_answer", text: JSON.stringify(envelope), memoryCitation: null }] } } }) + "\n");
           setImmediate(() => {
             if (results.length !== 0) { process.stderr.write("a later-chunk conflicting response still allowed delivery: " + JSON.stringify(results) + "\n"); process.exit(1); }
@@ -8928,14 +9979,14 @@ _set_ready_timeout_seconds() {
   [ "$status" -eq 0 ]
 }
 
-@test "C2-B-COVERAGE FAIL: every INBOUND_RUNTIME root genuinely consumed by C2 -- derived from the bundle itself, exactly 24 -- is referenced via generated.roots[...], and the 4 frame-level JSONRPC wrappers additionally carry dedicated behavioral choke-point proof" {
+@test "C2-B-COVERAGE FAIL: every INBOUND_RUNTIME root genuinely consumed by C2 -- derived from the bundle itself, exactly 25 -- is referenced via generated.roots[...], and the 4 frame-level JSONRPC wrappers additionally carry dedicated behavioral choke-point proof" {
   run node -e '
     const fs = require("fs");
     const source = fs.readFileSync(process.argv[1], "utf8");
     const bundle = require(process.argv[2]);
     const testSource = fs.readFileSync(process.argv[3], "utf8");
     const inboundRoots = Object.keys(bundle.roots).filter((k) => Array.isArray(bundle.roots[k].directions) && bundle.roots[k].directions.includes("INBOUND_RUNTIME"));
-    if (inboundRoots.length !== 24) { process.stderr.write("expected exactly 24 INBOUND_RUNTIME roots in the bundle, found " + inboundRoots.length + ": " + JSON.stringify(inboundRoots.sort()) + "\n"); process.exit(1); }
+    if (inboundRoots.length !== 25) { process.stderr.write("expected exactly 25 INBOUND_RUNTIME roots in the bundle, found " + inboundRoots.length + ": " + JSON.stringify(inboundRoots.sort()) + "\n"); process.exit(1); }
     if (!source.includes("generated.roots[")) { process.stderr.write("runtime-bridge-codex.cjs no longer references generated.roots[...] at all\n"); process.exit(1); }
     const missingFromWiring = inboundRoots.filter((k) => !source.includes("'"'"'" + k + "'"'"'"));
     if (missingFromWiring.length !== 0) { process.stderr.write("INBOUND_RUNTIME roots left solely on hand-rolled validation (no generated-validator reference found in source): " + JSON.stringify(missingFromWiring) + "\n"); process.exit(1); }
@@ -8949,4 +10000,2054 @@ _set_ready_timeout_seconds() {
     process.exit(0);
   ' "$BRIDGE" "$BATS_TEST_DIRNAME/../lib/schema/c2-schema-bundle.json" "$BATS_TEST_DIRNAME/runtime-consultation-bridge.bats"
   [ "$status" -eq 0 ]
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# M6 (production lifecycle + canonical-role activation): session-run to
+# app-server wiring + supervisor/child readiness correlation. This file's own
+# header documents the retained child ownership boundary. Reuses the SAME
+# _mint_ready_action/_argv_from_action/_wait_for_owner_file/_wait_for_pid_exit
+# fixture primitives every BRIDGE-RUN/SUP-RDV test above already relies on --
+# never a new/invented harness.
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "M6 BRIDGE-APPSERVER-01 PASS: session-run genuinely attempts to spawn/connect after owner claim, and an unavailable pinned app-server fails visibly instead of hanging" {
+  local action; action="$(_mint_ready_action verifier)"
+  local argv_json; argv_json="$(_argv_from_action "$action")"
+  local args=()
+  while IFS= read -r line; do args+=("$line"); done < <(_args_from_json "$argv_json")
+
+  # Outside test-capability mode, resolveAppServerSpawnCommand() first reads
+  # the protected ~/.codex/config.toml pin and uses CODEX_CLI_PATH only as a
+  # compatibility fallback when that config is absent. This hermetic HOME has
+  # no config.toml and this invocation explicitly removes the fallback, so it
+  # deterministically models an unresolved app-server command without relying
+  # on PATH. The OUTER node invocation still uses node's absolute path.
+  local node_bin; node_bin="$(command -v node)"
+
+  # Verified live (not assumed): with CODEX_CLI_PATH unresolved, session-run
+  # reaches owned-shutdown in well under a second, and the owner-claim file
+  # is observably written then removed again inside a single-digit-hundred-
+  # ms window -- narrower than this file's shared _wait_for_owner_file can
+  # reliably catch, since each of ITS checks also pays a fresh node-
+  # subprocess-spawn cost on top of its own 0.1s/iteration sleep. Computing
+  # the (process-independent) role-owners directory ONCE up front and then
+  # polling it with a plain bash glob -- never a new subprocess per check --
+  # gives this test the resolution the narrow window needs, without
+  # touching the shared helper the other BRIDGE-RUN/SUP-RDV tests still
+  # rely on for longer-lived owner records.
+  local owner_owners_dir; owner_owners_dir="$(node -e '
+    const rll = require(process.argv[1]);
+    process.stdout.write(rll.registryRepoDir(process.argv[2]));
+  ' "$RLL" "$PROJ")/rendezvous/role-owners"
+
+  env -u CODEX_CLI_PATH HOME="$TEST_HOME" "$node_bin" "$PROJ_BRIDGE" session-run "${args[@]}" >"$BG_OUT" 2>&1 &
+  BG_PID=$!
+
+  local owner_file="" f
+  for _ in $(seq 1 1000); do
+    for f in "$owner_owners_dir"/*/verifier.json; do
+      if [ -f "$f" ]; then owner_file="$f"; break; fi
+    done
+    [ -n "$owner_file" ] && break
+    sleep 0.01
+  done
+  [ -n "$owner_file" ]
+
+  # A genuine bounded window (the SAME _wait_for_pid_exit primitive every
+  # other clean-termination test in this file already relies on) for the
+  # unresolved-spawn-command path to fail visibly and exit.
+  _wait_for_pid_exit "$BG_PID"
+  local exited=$?
+
+  # Regression contract: reaching owner-claim READY with no resolvable
+  # app-server spawn command must fail visibly and the process must exit --
+  # it must never hang forever as though nothing had been tried.
+  [ "$exited" -eq 0 ]
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# M6 CORRECTION PASS (P1-2, independent Codex audit): BRIDGE-APPSERVER-01
+# above already proves session-run genuinely ATTEMPTS to spawn. P0-4's
+# ordered credential/initialization/READY chain is covered by the structural
+# and behavioral tests in runtime-bridge-credential-isolation.test.js. The
+# P1-2 tests below reuse the SAME _mint_ready_action/_argv_from_action/
+# _wait_for_owner_file/_wait_for_pid_exit/_start_bridge_bg fixture primitives
+# every BRIDGE-RUN/SUP-RDV/BRIDGE-APPSERVER test in this file already relies on.
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "M6 BRIDGE-STOP-01 PASS (P1-2): a SIGTERM-ignoring owned child is boundedly escalated and confirmed gone; the terminal reason differs from cooperative shutdown" {
+  local CHILD_PID_FILE="$PROJ/trap-child.pid"
+  local trap_spawn_json
+  trap_spawn_json="$(node -e 'process.stdout.write(JSON.stringify({command:process.execPath,args:[process.argv[1],"ignore-term",process.argv[2]]}))' "$FAKE_CODEX" "$CHILD_PID_FILE")"
+
+  local action; action="$(_mint_ready_action verifier)"
+  local argv_json; argv_json="$(_argv_from_action "$action")"
+  local args=()
+  while IFS= read -r line; do args+=("$line"); done < <(_args_from_json "$argv_json")
+  env HOME="$TEST_HOME" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$trap_spawn_json" node "$PROJ_BRIDGE" session-run "${args[@]}" >"$BG_OUT" 2>&1 &
+  BG_PID=$!
+
+  local owner_file; owner_file="$(_wait_for_owner_file verifier)"
+  [ -n "$owner_file" ] && [ -f "$owner_file" ]
+
+  local waited=0
+  while [ ! -f "$CHILD_PID_FILE" ] && [ "$waited" -lt 50 ]; do sleep 0.1; waited=$((waited + 1)); done
+  [ -f "$CHILD_PID_FILE" ]
+  local child_pid; child_pid="$(cat "$CHILD_PID_FILE")"
+  kill -0 "$child_pid" 2>/dev/null
+  [ "$?" -eq 0 ]   # fixture sanity: the child is genuinely alive before the supervisor is ever signaled.
+
+  kill -TERM "$BG_PID" 2>/dev/null || true
+  _wait_for_pid_exit "$BG_PID"
+  local supervisor_exited="$?"
+  [ "$supervisor_exited" -eq 0 ]   # the supervisor itself does eventually exit.
+
+  local orphaned="false"
+  if kill -0 "$child_pid" 2>/dev/null; then orphaned="true"; fi
+
+  # The terminal bridge-result envelope on stdout (the LAST JSON line) must
+  # NEVER report the same clean 'owned-shutdown' reason a genuinely
+  # cooperative stop would.
+  local reason
+  reason="$(node -e '
+    const fs = require("fs");
+    const lines = fs.readFileSync(process.argv[1], "utf8").trim().split("\n");
+    try { process.stdout.write(JSON.parse(lines[lines.length - 1]).reason || ""); } catch (e) { process.stdout.write(""); }
+  ' "$BG_OUT")"
+
+  if [ "$orphaned" = "true" ]; then kill -KILL "$child_pid" 2>/dev/null || true; fi
+  BG_PID=""
+
+  [ "$orphaned" = "false" ]
+  [ "$reason" != "owned-shutdown" ]
+}
+
+@test "M6 BRIDGE-STOP-01 negative control (P1-2): the SAME orphaned-detection technique above correctly reports orphaned=false for a COOPERATIVE child (one that does NOT trap SIGTERM) -- proving the technique is genuinely discriminating, never an 'always true' false positive" {
+  local CHILD_PID_FILE="$PROJ/coop-child.pid"
+  local coop_spawn_json
+  coop_spawn_json="$(node -e 'process.stdout.write(JSON.stringify({command:process.execPath,args:[process.argv[1],"cooperative",process.argv[2]]}))' "$FAKE_CODEX" "$CHILD_PID_FILE")"
+
+  local action; action="$(_mint_ready_action verifier)"
+  local argv_json; argv_json="$(_argv_from_action "$action")"
+  local args=()
+  while IFS= read -r line; do args+=("$line"); done < <(_args_from_json "$argv_json")
+  env HOME="$TEST_HOME" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$coop_spawn_json" node "$PROJ_BRIDGE" session-run "${args[@]}" >"$BG_OUT" 2>&1 &
+  BG_PID=$!
+
+  local owner_file; owner_file="$(_wait_for_owner_file verifier)"
+  [ -n "$owner_file" ] && [ -f "$owner_file" ]
+
+  local waited=0
+  while [ ! -f "$CHILD_PID_FILE" ] && [ "$waited" -lt 50 ]; do sleep 0.1; waited=$((waited + 1)); done
+  [ -f "$CHILD_PID_FILE" ]
+  local child_pid; child_pid="$(cat "$CHILD_PID_FILE")"
+  kill -0 "$child_pid" 2>/dev/null
+  [ "$?" -eq 0 ]   # fixture sanity: alive before signaling.
+
+  kill -TERM "$BG_PID" 2>/dev/null || true
+  _wait_for_pid_exit "$BG_PID"
+  local supervisor_exited="$?"
+  [ "$supervisor_exited" -eq 0 ]
+
+  # A bounded grace window for the cooperative child.kill('SIGTERM')
+  # to actually take effect against a child that -- unlike BRIDGE-STOP-01's
+  # own fixture -- does NOT trap the signal, so the default terminate
+  # disposition genuinely applies.
+  local child_gone_waited=0
+  local child_gone="false"
+  while [ "$child_gone_waited" -lt 50 ]; do
+    if ! kill -0 "$child_pid" 2>/dev/null; then child_gone="true"; break; fi
+    sleep 0.1
+    child_gone_waited=$((child_gone_waited + 1))
+  done
+
+  if [ "$child_gone" != "true" ]; then kill -KILL "$child_pid" 2>/dev/null || true; fi
+  BG_PID=""
+
+  [ "$child_gone" = "true" ]
+}
+
+@test "M6 BRIDGE-ROOTPROV-01 PASS (P1-2): a successful BORN+INITIALIZED app-server spawn publishes an IsolationProvider root-provisioning completion record" {
+  local action; action="$(_mint_ready_action verifier)"
+  local argv_json; argv_json="$(_argv_from_action "$action")"
+  _start_bridge_bg "$argv_json" BG_OUT
+
+  local owner_file; owner_file="$(_wait_for_owner_file verifier)"
+  [ -n "$owner_file" ] && [ -f "$owner_file" ]
+  sleep 1   # bounded settle window for the (fake, near-instant) initialize handshake to complete.
+
+  local complete_count
+  complete_count="$(node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const rll = require(process.argv[1]);
+    const action = JSON.parse(process.argv[2]);
+    const dir = path.join(rll.registryRepoDir({ repoId: action.repo_id }), "root-provisioning");
+    let files = [];
+    try { files = fs.readdirSync(dir).filter((f) => f.endsWith(".complete.json")); } catch (e) { /* directory may not even exist -- also fine, count is 0 */ }
+    process.stdout.write(String(files.length));
+  ' "$RLL" "$action")"
+
+  kill -TERM "$BG_PID" 2>/dev/null || true; wait "$BG_PID" 2>/dev/null; BG_PID=""
+
+  [ "$complete_count" -gt 0 ]
+}
+
+# C+D production closure: one retained role child must be selected by real
+# dispatch capability evidence, poll the canonical disk inbox, own
+# claim/lease/WAL/delivery/result publication, archive the root thread, and
+# serve a second request after idle without spawning a second child or reusing
+# the first root thread.
+@test "M6-CD-01 PASS: retained codex-app-server worker serves two disk requests across idle with one child, distinct archived root threads, authoritative delivery/result, and idle presence" {
+  local action_json action_id argv_json
+  action_json="$(_mint_ready_action arch-integration)"
+  action_id="$(_action_field "$action_json" action_id)"
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  _wait_for_role_state arch-integration "$action_json" READY >/dev/null
+  _arm_test_routing_seam arch-integration codex-app-server noop
+
+  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+  local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
+  local bundle_path="$PROJ/subject-bundle.json"
+  _prepare_projection_subject_bundle "$bundle_path" "$plan_path" m6-cd-requester-session
+
+  local first_thread="" second_thread="" first_pid="" second_pid=""
+  for ordinal in 1 2; do
+    local kind="CD_RESULT_$ordinal"
+    local intent publish_json request_path dispatch_json activation_path selected_driver
+    intent="$(node -e '
+      const value={target_role:"arch-integration",question:"Return the bounded retained-worker answer for request "+process.argv[1],expected_result_kind:process.argv[2],expiry:new Date(Date.now()+600000).toISOString()};
+      process.stdout.write(Buffer.from(JSON.stringify(value),"utf8").toString("base64url"));
+    ' "$ordinal" "$kind")"
+    run env \
+      RCC_GRANT_PROJECT_ROOT="$PROJ" \
+      RCC_GRANT_PROVIDER=codex-supervisor \
+      RCC_GRANT_SESSION=m6-cd-requester-session \
+      RCC_GRANT_AGENT_ID=m6-cd-requester-agent \
+      RCC_GRANT_ROLE=quality-gater \
+      node "$grant_wrapper" publish-request \
+        --coordination-root "$PROJ/.planning/coordination" \
+        --plan "$plan_path" \
+        --subject-bundle "$bundle_path" \
+        --intent "$intent"
+    [ "$status" -eq 0 ]
+    publish_json="$output"
+    request_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$publish_json")"
+
+    run env \
+      RCC_GRANT_PROJECT_ROOT="$PROJ" \
+      RCC_GRANT_PROVIDER=codex-supervisor \
+      RCC_GRANT_SESSION=m6-cd-requester-session \
+      RCC_GRANT_AGENT_ID=m6-cd-requester-agent \
+      RCC_GRANT_ROLE=quality-gater \
+      node "$grant_wrapper" dispatch \
+        --coordination-root "$PROJ/.planning/coordination" \
+        --request "$request_path"
+    [ "$status" -eq 0 ]
+    dispatch_json="$output"
+    activation_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$dispatch_json")"
+    selected_driver="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).selected_driver)' "$activation_path")"
+    [ "$selected_driver" = "codex-app-server" ]
+
+    local result_path="$(dirname "$request_path")/results/$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).initial_attempt_id+".json")' "$request_path")"
+    for _ in $(seq 1 120); do
+      [ -f "$result_path" ] && break
+      sleep 0.1
+    done
+    [ -f "$result_path" ]
+    run node -e '
+      const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+      if(r.driver!=="codex-app-server"||r.status!=="ANSWERED"||r.result_kind!==process.argv[2]||r.content!=="fake-codex-answer:"+process.argv[2]) process.exit(1);
+    ' "$result_path" "$kind"
+    [ "$status" -eq 0 ]
+
+    run env \
+      RCC_GRANT_PROJECT_ROOT="$PROJ" \
+      RCC_GRANT_PROVIDER=codex-supervisor \
+      RCC_GRANT_SESSION=m6-cd-requester-session \
+      RCC_GRANT_AGENT_ID=m6-cd-requester-agent \
+      RCC_GRANT_ROLE=quality-gater \
+      node "$grant_wrapper" accept-result \
+        --coordination-root "$PROJ/.planning/coordination" \
+        --request "$request_path"
+    [ "$status" -eq 0 ]
+
+    for _ in $(seq 1 120); do
+      local active_count
+      active_count="$(node -e '
+        const fs=require("fs"); const lines=fs.existsSync(process.argv[1])?fs.readFileSync(process.argv[1],"utf8").trim().split(/\n+/).filter(Boolean).map(JSON.parse):[];
+        const matches=lines.filter((e)=>e.event==="turn-start"&&e.expected_result_kind===process.argv[2]);
+        process.stdout.write(String(matches.length));
+      ' "$FAKE_APP_SERVER_EVENTS" "$kind")"
+      [ "$active_count" -eq 1 ] && break
+      sleep 0.1
+    done
+    local event_tuple
+    event_tuple="$(node -e '
+      const fs=require("fs"); const lines=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n+/).filter(Boolean).map(JSON.parse);
+      const e=lines.find((x)=>x.event==="turn-start"&&x.expected_result_kind===process.argv[2]);
+      if(!e) process.exit(1); process.stdout.write(e.thread_id+"\t"+e.pid);
+    ' "$FAKE_APP_SERVER_EVENTS" "$kind")"
+    if [ "$ordinal" -eq 1 ]; then
+      first_thread="${event_tuple%$'\t'*}"
+      first_pid="${event_tuple##*$'\t'}"
+    else
+      second_thread="${event_tuple%$'\t'*}"
+      second_pid="${event_tuple##*$'\t'}"
+    fi
+  done
+
+  [ "$first_pid" = "$second_pid" ]
+  [ "$first_thread" != "$second_thread" ]
+  run node -e '
+    const fs=require("fs"); const lines=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n+/).filter(Boolean).map(JSON.parse);
+    const real=lines.filter((e)=>e.event==="turn-start"&&/^CD_RESULT_/.test(e.expected_result_kind));
+    const archived=new Set(lines.filter((e)=>e.event==="thread-archive").map((e)=>e.thread_id));
+    if(real.length!==2||!real.every((e)=>archived.has(e.thread_id))) process.exit(1);
+  ' "$FAKE_APP_SERVER_EVENTS"
+  [ "$status" -eq 0 ]
+
+  # Fourteenth bootstrap/profile compatibility: the disposable health-check
+  # thread receives only the fixed host bootstrap contract; both real work
+  # threads receive the exact canonical profile and an executable activation
+  # header pointing at their confined PLAN projection.
+  run node -e '
+    const fs=require("fs"), crypto=require("crypto");
+    const events=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n+/).filter(Boolean).map(JSON.parse);
+    const digest=(v)=>crypto.createHash("sha256").update(Buffer.from(v,"utf8")).digest("hex");
+    const bootstrapContract="Host-owned Codex transport bootstrap only. Do not execute role duties or tools. Return only the exact structured READY envelope requested by the current turn; this disposable thread will be archived before any role work begins.";
+    const canonicalProfile=fs.readFileSync(process.argv[2],"utf8");
+    const starts=events.filter((e)=>e.event==="thread-start");
+    if(starts.length!==3) process.exit(1);
+    if(starts[0].developer_instructions_sha256!==digest(bootstrapContract)) process.exit(1);
+    if(starts[0].developer_instructions_bytes!==Buffer.byteLength(bootstrapContract,"utf8")) process.exit(1);
+    if(!starts.slice(1).every((e)=>e.developer_instructions_sha256===digest(canonicalProfile))) process.exit(1);
+    const turns=events.filter((e)=>e.event==="turn-start"&&/^CD_RESULT_/.test(e.expected_result_kind));
+    if(turns.length!==2) process.exit(1);
+    for(const turn of turns){
+      const lines=turn.input_text.split("\n");
+      const owningThread=starts.find((e)=>e.thread_id===turn.thread_id);
+      if(!owningThread) process.exit(1);
+      const exactPlanPath=require("path").join(require("path").dirname(owningThread.cwd),"role-read-view","current","plan","PLAN.md");
+      if(lines[0]!=="scope_doc_path: "+exactPlanPath) process.exit(1);
+      if(lines[1]!=="mode: EXECUTE") process.exit(1);
+      if(lines[2]!=="wave: "+process.argv[3]) process.exit(1);
+    }
+  ' "$FAKE_APP_SERVER_EVENTS" "$PROJ/setup/agent-templates/arch-integration.md" "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+
+  local presence_path
+  presence_path="$(find "$(node -e 'const r=require(process.argv[1]);process.stdout.write(r.registryRepoDir(process.argv[2]))' "$RLL" "$PROJ")/workers/arch-integration" -name presence.json -type f | head -1)"
+  [ -n "$presence_path" ]
+  for _ in $(seq 1 100); do
+    local idle_thread
+    idle_thread="$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(p.thread_id===null?"idle":"active")' "$presence_path")"
+    [ "$idle_thread" = idle ] && break
+    sleep 0.02
+  done
+  run node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(p.thread_id!==null) process.exit(1)' "$presence_path"
+  [ "$status" -eq 0 ]
+
+  if kill -0 "$BG_PID" 2>/dev/null; then
+    kill -TERM "$BG_PID"
+    _wait_for_pid_exit "$BG_PID"
+  fi
+  BG_PID=""
+  _disarm_test_routing_seam
+}
+
+# The parent architect must pause on a validated consult-intent, publish a
+# canonical child request to the retained context-provider worker, accept the
+# child result under host authority, resume the SAME parent thread, and publish
+# only the host-derived dependency digests in the parent result.
+@test "M6-CD-02 PASS: retained architect consults context-provider and resumes the same thread with one authoritative dependency" {
+  local action_json action_id argv_json
+  # Armed BEFORE the retained worker process is spawned: routing_policy_digest
+  # is a module-load-time constant (ROUTING_POLICY_CONTENT/DIGEST) computed
+  # once per process. This test's child (context-provider) request is
+  # published FROM INSIDE the already-running retained worker, not the test's
+  # own shell -- arming the seam only after _start_bridge_bg would leave the
+  # worker process running with the REAL production routing.json baked in,
+  # producing a child routing_policy_digest that could never correlate with
+  # the (seam-armed) parent's, tripping resolveRootEvidenceAuthority's own
+  # root<->descendant cross-check (CORRELATION_INVALID) and crashing the
+  # whole retained worker -- confirmed empirically via the exact
+  # "descendant does not correlate with its root" signal before this fix.
+  _arm_test_routing_seam arch-integration codex-app-server noop
+  action_json="$(_mint_ready_action arch-integration,context-provider)"
+  action_id="$(_action_field "$action_json" action_id)"
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  _wait_for_role_state arch-integration "$action_json" READY >/dev/null
+  _wait_for_role_state context-provider "$action_json" READY >/dev/null
+
+  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+  local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
+  local bundle_path="$PROJ/subject-bundle.json"
+  node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({schema:"coordination/subject-bundle-manifest/v1",entries:[]}))' "$bundle_path"
+
+  local intent publish_json parent_request_path dispatch_json parent_result_path
+  intent="$(node -e '
+    const value={target_role:"arch-integration",question:"Answer only after one context-provider consultation.",expected_result_kind:"NESTED_PARENT",expiry:new Date(Date.now()+600000).toISOString()};
+    process.stdout.write(Buffer.from(JSON.stringify(value),"utf8").toString("base64url"));
+  ')"
+  run env \
+    RCC_GRANT_PROJECT_ROOT="$PROJ" \
+    RCC_GRANT_PROVIDER=codex-supervisor \
+    RCC_GRANT_SESSION=m6-cd-nested-requester-session \
+    RCC_GRANT_AGENT_ID=m6-cd-nested-requester-agent \
+    RCC_GRANT_ROLE=quality-gater \
+    node "$grant_wrapper" publish-request \
+      --coordination-root "$PROJ/.planning/coordination" \
+      --plan "$plan_path" \
+      --subject-bundle "$bundle_path" \
+      --intent "$intent"
+  [ "$status" -eq 0 ]
+  publish_json="$output"
+  parent_request_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$publish_json")"
+
+  run env \
+    RCC_GRANT_PROJECT_ROOT="$PROJ" \
+    RCC_GRANT_PROVIDER=codex-supervisor \
+    RCC_GRANT_SESSION=m6-cd-nested-requester-session \
+    RCC_GRANT_AGENT_ID=m6-cd-nested-requester-agent \
+    RCC_GRANT_ROLE=quality-gater \
+    node "$grant_wrapper" dispatch \
+      --coordination-root "$PROJ/.planning/coordination" \
+      --request "$parent_request_path"
+  [ "$status" -eq 0 ]
+  dispatch_json="$output"
+  run node -e '
+    const a=JSON.parse(require("fs").readFileSync(JSON.parse(process.argv[1]).artifact_ref,"utf8"));
+    if(a.selected_driver!=="codex-app-server") process.exit(1);
+  ' "$dispatch_json"
+  [ "$status" -eq 0 ]
+
+  parent_result_path="$(dirname "$parent_request_path")/results/$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).initial_attempt_id+".json")' "$parent_request_path")"
+  for _ in $(seq 1 200); do
+    [ -f "$parent_result_path" ] && break
+    sleep 0.1
+  done
+  [ -f "$parent_result_path" ]
+
+  run node -e '
+    const fs=require("fs"), path=require("path"), crypto=require("crypto");
+    const parentRequestPath=process.argv[1], parentResultPath=process.argv[2];
+    const parent=JSON.parse(fs.readFileSync(parentRequestPath,"utf8"));
+    const parentResult=JSON.parse(fs.readFileSync(parentResultPath,"utf8"));
+    const transactionsDir=path.dirname(path.dirname(parentRequestPath));
+    const children=fs.readdirSync(transactionsDir).filter((name)=>/^[a-f0-9]{64}$/.test(name)).map((name)=>{
+      const requestPath=path.join(transactionsDir,name,"request.json");
+      return fs.existsSync(requestPath)?{requestPath,request:JSON.parse(fs.readFileSync(requestPath,"utf8"))}:null;
+    }).filter((entry)=>entry&&entry.request.parent_request_id===parent.request_id);
+    if(children.length!==1) process.exit(1);
+    const child=children[0];
+    if(child.request.source_role!=="arch-integration"||child.request.target_role!=="context-provider"||child.request.depth!==1) process.exit(1);
+    const childTxn=path.dirname(child.requestPath);
+    const childResultPath=path.join(childTxn,"results",child.request.initial_attempt_id+".json");
+    const acceptedPath=path.join(childTxn,"accepted-result.json");
+    if(!fs.existsSync(childResultPath)||!fs.existsSync(acceptedPath)) process.exit(1);
+    const childResult=JSON.parse(fs.readFileSync(childResultPath,"utf8"));
+    if(childResult.driver!=="codex-app-server"||childResult.status!=="ANSWERED"||childResult.result_kind!=="NESTED_CHILD") process.exit(1);
+    if(parentResult.driver!=="codex-app-server"||parentResult.status!=="ANSWERED"||parentResult.result_kind!=="NESTED_PARENT") process.exit(1);
+    if(!Array.isArray(parentResult.consultation_dependencies)||parentResult.consultation_dependencies.length!==1) process.exit(1);
+    const dep=parentResult.consultation_dependencies[0];
+    const digest=(p)=>crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");
+    if(dep.request_id!==child.request.request_id||dep.from_role!=="context-provider"||dep.result_digest!==digest(childResultPath)||dep.accepted_result_digest!==digest(acceptedPath)) process.exit(1);
+  ' "$parent_request_path" "$parent_result_path"
+  [ "$status" -eq 0 ]
+
+  run node -e '
+    const fs=require("fs"); const events=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n+/).filter(Boolean).map(JSON.parse);
+    const parent=events.filter((e)=>e.event==="turn-start"&&e.expected_result_kind==="NESTED_PARENT");
+    const child=events.filter((e)=>e.event==="turn-start"&&e.expected_result_kind==="NESTED_CHILD");
+    const archived=new Set(events.filter((e)=>e.event==="thread-archive").map((e)=>e.pid+":"+e.thread_id));
+    if(parent.length!==2||child.length!==1) process.exit(1);
+    if(parent[0].thread_id!==parent[1].thread_id||parent[0].pid!==parent[1].pid) process.exit(1);
+    if(child[0].pid===parent[0].pid) process.exit(1);
+    if(!archived.has(parent[0].pid+":"+parent[0].thread_id)||!archived.has(child[0].pid+":"+child[0].thread_id)) process.exit(1);
+  ' "$FAKE_APP_SERVER_EVENTS"
+  [ "$status" -eq 0 ]
+
+  kill -TERM "$BG_PID"
+  _wait_for_pid_exit "$BG_PID"
+  BG_PID=""
+  _disarm_test_routing_seam
+}
+
+# A turn/start response is the delivery commit point.  The first deliberately
+# slow model completion keeps a second request queued so the test can prove
+# both pre-completion delivery and FIFO/non-overlap on one retained role.
+@test "M6-CD-03 PASS: delivery commits before completion and the retained per-role scheduler serves queued work FIFO" {
+  local action_json argv_json
+  action_json="$(_mint_ready_action arch-integration)"
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  _wait_for_role_state arch-integration "$action_json" READY >/dev/null
+  _arm_test_routing_seam arch-integration codex-app-server noop
+
+  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+  local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
+  local bundle_path="$PROJ/subject-bundle.json"
+  _prepare_projection_subject_bundle "$bundle_path" "$plan_path" m6-cd-fifo-session
+
+  local request_paths=() result_paths=()
+  for kind in CD_DELAYED CD_QUEUED; do
+    local intent publish_json request_path dispatch_json result_path
+    intent="$(node -e '
+      const value={target_role:"arch-integration",question:"Serve "+process.argv[1]+" in scheduler order.",expected_result_kind:process.argv[1],expiry:new Date(Date.now()+600000).toISOString()};
+      process.stdout.write(Buffer.from(JSON.stringify(value),"utf8").toString("base64url"));
+    ' "$kind")"
+    run env RCC_GRANT_PROJECT_ROOT="$PROJ" RCC_GRANT_PROVIDER=codex-supervisor \
+      RCC_GRANT_SESSION=m6-cd-fifo-session RCC_GRANT_AGENT_ID=m6-cd-fifo-agent RCC_GRANT_ROLE=quality-gater \
+      node "$grant_wrapper" publish-request --coordination-root "$PROJ/.planning/coordination" \
+      --plan "$plan_path" --subject-bundle "$bundle_path" --intent "$intent"
+    [ "$status" -eq 0 ]
+    publish_json="$output"
+    request_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$publish_json")"
+    run env RCC_GRANT_PROJECT_ROOT="$PROJ" RCC_GRANT_PROVIDER=codex-supervisor \
+      RCC_GRANT_SESSION=m6-cd-fifo-session RCC_GRANT_AGENT_ID=m6-cd-fifo-agent RCC_GRANT_ROLE=quality-gater \
+      node "$grant_wrapper" dispatch --coordination-root "$PROJ/.planning/coordination" --request "$request_path"
+    [ "$status" -eq 0 ]
+    dispatch_json="$output"
+    run node -e 'const a=JSON.parse(require("fs").readFileSync(JSON.parse(process.argv[1]).artifact_ref,"utf8"));if(a.selected_driver!=="codex-app-server")process.exit(1)' "$dispatch_json"
+    [ "$status" -eq 0 ]
+    result_path="$(dirname "$request_path")/results/$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).initial_attempt_id+".json")' "$request_path")"
+    request_paths+=("$request_path")
+    result_paths+=("$result_path")
+  done
+
+  local first_request="${request_paths[0]}" first_result="${result_paths[0]}"
+  local first_attempt delivery_path
+  first_attempt="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).initial_attempt_id)' "$first_request")"
+  delivery_path="$(dirname "$first_request")/delivery/$first_attempt.json"
+  for _ in $(seq 1 200); do
+    local started
+    started="$(node -e '
+      const fs=require("fs"); const events=fs.existsSync(process.argv[1])?fs.readFileSync(process.argv[1],"utf8").trim().split(/\n+/).filter(Boolean).map(JSON.parse):[];
+      process.stdout.write(String(events.some((e)=>e.event==="turn-start"&&e.expected_result_kind==="CD_DELAYED")));
+    ' "$FAKE_APP_SERVER_EVENTS")"
+    [ "$started" = true ] && break
+    sleep 0.05
+  done
+  [ "$started" = true ] || { printf '# events: %s\n# bridge output: %s\n' "$(cat "$FAKE_APP_SERVER_EVENTS" 2>/dev/null)" "$(cat "$BG_OUT")" >&3; false; }
+  for _ in $(seq 1 100); do
+    [ -f "$delivery_path" ] && break
+    sleep 0.02
+  done
+  [ -f "$delivery_path" ] || { printf '# bridge output: %s\n' "$(cat "$BG_OUT")" >&3; false; }
+  [ ! -f "$first_result" ]
+  run node -e '
+    const fs=require("fs"); const events=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n+/).filter(Boolean).map(JSON.parse);
+    if(events.some((e)=>e.event==="turn-completed"&&e.expected_result_kind==="CD_DELAYED")) process.exit(1);
+  ' "$FAKE_APP_SERVER_EVENTS"
+  [ "$status" -eq 0 ]
+  run node -e '
+    const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    if(d.driver!=="codex-app-server"||d.delivered!==true||d.commit_point!=="turn-start-accepted"||d.outcome!=="possibly-delivered") process.exit(1);
+  ' "$delivery_path"
+  [ "$status" -eq 0 ]
+
+  local registry projection_manifest
+  registry="$(node -e 'const r=require(process.argv[1]);process.stdout.write(r.registryRepoDir(process.argv[2]))' "$RLL" "$PROJ")"
+  projection_manifest="$(find "$registry/isolation-roots" -path '*/role-read-view/current/manifest.json' -type f | head -1)"
+  [ -n "$projection_manifest" ]
+  run node -e '
+    const fs=require("fs"),path=require("path"),crypto=require("crypto");
+    const manifestPath=process.argv[1], requestId=process.argv[2];
+    const current=path.dirname(manifestPath), root=path.dirname(current);
+    const manifest=JSON.parse(fs.readFileSync(manifestPath,"utf8"));
+    const required=new Set(["plan","role-profile","request","activation","claim","subject"]);
+    const sourceKinds=new Set();
+    if(manifest.schema!=="coordination/turn-read-projection/v1"||manifest.request_id!==requestId||manifest.role!=="arch-integration") process.exit(1);
+    for(const entry of manifest.entries){
+      required.delete(entry.kind);
+      if(entry.kind==="subject") sourceKinds.add(entry.source_ref.split(":",1)[0]);
+      if(entry.projected_path===null) continue;
+      const file=path.join(current,...entry.projected_path.split("/"));
+      const st=fs.lstatSync(file), bytes=fs.readFileSync(file);
+      if(!st.isFile()||st.isSymbolicLink()||(st.mode&0o777)!==0o400||bytes.length!==entry.size) process.exit(1);
+      if(crypto.createHash("sha256").update(bytes).digest("hex")!==entry.digest) process.exit(1);
+    }
+    const diagnostics={required:[...required],sourceKinds:[...sourceKinds],manifestMode:fs.lstatSync(manifestPath).mode&0o777,currentMode:fs.lstatSync(current).mode&0o777,rootMode:fs.lstatSync(root).mode&0o777};
+    if(required.size!==0||!sourceKinds.has("git")||!sourceKinds.has("blob")||diagnostics.manifestMode!==0o400||diagnostics.currentMode!==0o500||diagnostics.rootMode!==0o500){console.error(JSON.stringify(diagnostics));process.exit(1);}
+    if(fs.readFileSync(path.join(current,"subject/docs/projected-committed.txt"),"utf8")!=="committed projection bytes"){console.error("committed-content-mismatch");process.exit(1);}
+    if(fs.readFileSync(path.join(current,"subject/scratch/projected-uncommitted.txt"),"utf8")!=="uncommitted projection bytes"){console.error("uncommitted-content-mismatch");process.exit(1);}
+  ' "$projection_manifest" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).request_id)' "$first_request")"
+  [ "$status" -eq 0 ] || { printf '# projection manifest: %s\n# projection check: %s\n' "$(cat "$projection_manifest")" "$output" >&3; false; }
+
+  for result_path in "${result_paths[@]}"; do
+    for _ in $(seq 1 200); do
+      [ -f "$result_path" ] && break
+      sleep 0.1
+    done
+    [ -f "$result_path" ]
+  done
+  for _ in $(seq 1 100); do
+    [ -z "$(find "$registry/isolation-roots" -path '*/role-read-view/current' -type d -print -quit)" ] && break
+    sleep 0.02
+  done
+  [ -z "$(find "$registry/isolation-roots" -path '*/role-read-view/current' -type d -print -quit)" ]
+
+  run node -e '
+    const fs=require("fs"); const events=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n+/).filter(Boolean).map(JSON.parse);
+    const find=(event,kind)=>events.findIndex((e)=>e.event===event&&e.expected_result_kind===kind);
+    const firstStart=find("turn-start","CD_DELAYED"), firstDone=find("turn-completed","CD_DELAYED");
+    const secondStart=find("turn-start","CD_QUEUED"), secondDone=find("turn-completed","CD_QUEUED");
+    if(firstStart<0||firstDone<0||secondStart<0||secondDone<0||!(firstStart<firstDone&&firstDone<secondStart&&secondStart<secondDone)) process.exit(1);
+    const starts=events.filter((e)=>e.event==="turn-start"&&(e.expected_result_kind==="CD_DELAYED"||e.expected_result_kind==="CD_QUEUED"));
+    if(starts.length!==2||starts[0].pid!==starts[1].pid||starts[0].thread_id===starts[1].thread_id) process.exit(1);
+  ' "$FAKE_APP_SERVER_EVENTS"
+  [ "$status" -eq 0 ]
+
+  kill -TERM "$BG_PID"
+  _wait_for_pid_exit "$BG_PID"
+  BG_PID=""
+  _disarm_test_routing_seam
+}
+
+@test "M6-CD-04 PASS: stale retained-worker presence cannot select codex-app-server" {
+  local action_json argv_json
+  action_json="$(_mint_ready_action arch-integration)"
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  _wait_for_role_state arch-integration "$action_json" READY >/dev/null
+  # Excludes claude-agent so this test genuinely exercises the stale-presence
+  # rejection of codex-app-server (the point of this test) rather than
+  # claude-agent's own, unrelated, already-live-orchestrator-binding
+  # eligibility winning the priority race before codex-app-server is ever
+  # even considered.
+  _arm_test_routing_seam arch-integration codex-app-server noop
+
+  local registry presence_path
+  registry="$(node -e 'const r=require(process.argv[1]);process.stdout.write(r.registryRepoDir(process.argv[2]))' "$RLL" "$PROJ")"
+  presence_path="$(find "$registry/workers/arch-integration" -name presence.json -type f | head -1)"
+  [ -n "$presence_path" ]
+  node -e '
+    const fs=require("fs"), p=process.argv[1], rec=JSON.parse(fs.readFileSync(p,"utf8"));
+    rec.heartbeat_at=new Date(Date.now()-300000).toISOString();
+    rec.lease_expiry=new Date(Date.now()-180000).toISOString();
+    fs.writeFileSync(p,JSON.stringify(rec));
+  ' "$presence_path"
+
+  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+  local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md" bundle_path="$PROJ/subject-bundle.json"
+  node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({schema:"coordination/subject-bundle-manifest/v1",entries:[]}))' "$bundle_path"
+  local intent publish_json request_path dispatch_json
+  intent="$(node -e 'const v={target_role:"arch-integration",question:"Do not route to stale worker.",expected_result_kind:"STALE_WORKER",expiry:new Date(Date.now()+600000).toISOString()};process.stdout.write(Buffer.from(JSON.stringify(v)).toString("base64url"))')"
+  run env RCC_GRANT_PROJECT_ROOT="$PROJ" RCC_GRANT_PROVIDER=codex-supervisor \
+    RCC_GRANT_SESSION=m6-cd-stale-session RCC_GRANT_AGENT_ID=m6-cd-stale-agent RCC_GRANT_ROLE=quality-gater \
+    node "$grant_wrapper" publish-request --coordination-root "$PROJ/.planning/coordination" \
+    --plan "$plan_path" --subject-bundle "$bundle_path" --intent "$intent"
+  [ "$status" -eq 0 ]
+  publish_json="$output"
+  request_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$publish_json")"
+  run env RCC_GRANT_PROJECT_ROOT="$PROJ" RCC_GRANT_PROVIDER=codex-supervisor \
+    RCC_GRANT_SESSION=m6-cd-stale-session RCC_GRANT_AGENT_ID=m6-cd-stale-agent RCC_GRANT_ROLE=quality-gater \
+    node "$grant_wrapper" dispatch --coordination-root "$PROJ/.planning/coordination" --request "$request_path"
+  [ "$status" -eq 0 ]
+  dispatch_json="$output"
+  run node -e '
+    const a=JSON.parse(require("fs").readFileSync(JSON.parse(process.argv[1]).artifact_ref,"utf8"));
+    if(a.selected_driver!=="noop") process.exit(1);
+  ' "$dispatch_json"
+  [ "$status" -eq 0 ]
+
+  if kill -0 "$BG_PID" 2>/dev/null; then
+    kill -TERM "$BG_PID"
+    _wait_for_pid_exit "$BG_PID"
+  fi
+  BG_PID=""
+  _disarm_test_routing_seam
+}
+
+@test "M6-CD-05 PASS: an unrelated Node process cannot mint HostBridge authority from public live-worker scope" {
+  local action_json argv_json
+  action_json="$(_mint_ready_action arch-integration)"
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  _wait_for_role_state arch-integration "$action_json" READY >/dev/null
+
+  run node -e '
+    const crypto=require("crypto");
+    const bridge=require(process.argv[1]);
+    const consultation=require(process.argv[2]);
+    const projectRoot=process.argv[3];
+    const live=bridge.resolveLiveCodexAppServerWorker(projectRoot,"arch-integration");
+    if(!live||live.ok!==true||live.available!==true||!live.worker) process.exit(2);
+    const w=live.worker;
+    const attempted=consultation.createHostBridgeCapability({
+      projectRoot,
+      supervisorInstanceId:w.supervisorInstanceId,
+      workerSessionId:w.workerSessionId,
+      actorInstanceId:crypto.randomBytes(16).toString("hex"),
+      role:w.role,
+      worktreeId:w.worktreeId,
+      planDigest:w.planDigest,
+      expiresAt:new Date(Date.now()+120000).toISOString(),
+    });
+    if(attempted.ok!==false||attempted.reason!=="host-bridge-worker-process-mismatch") {
+      process.stderr.write(JSON.stringify(attempted));
+      process.exit(1);
+    }
+  ' "$PROJ_BRIDGE" "$PROJ/scripts/lib/runtime-consultation.cjs" "$PROJ"
+  [ "$status" -eq 0 ] || { printf '# forge probe: %s\n' "$output" >&3; false; }
+
+  kill -TERM "$BG_PID"
+  _wait_for_pid_exit "$BG_PID"
+  BG_PID=""
+}
+
+@test "M6-CD-06 FAIL: authoritative source drift after turn/start prevents result publication and closes the owned supervisor" {
+  local action_json argv_json
+  _arm_test_routing_seam arch-integration codex-app-server noop
+  action_json="$(_mint_ready_action arch-integration)"
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  _wait_for_role_state arch-integration "$action_json" READY >/dev/null
+
+  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+  local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
+  local bundle_path="$PROJ/subject-bundle.json"
+  _prepare_projection_subject_bundle "$bundle_path" "$plan_path" m6-cd-source-tamper-session
+
+  local intent publish_json request_path dispatch_json result_path
+  intent="$(node -e '
+    const value={target_role:"arch-integration",question:"Reject a source changed after the accepted turn.",expected_result_kind:"CD_SOURCE_TAMPER",expiry:new Date(Date.now()+600000).toISOString()};
+    process.stdout.write(Buffer.from(JSON.stringify(value),"utf8").toString("base64url"));
+  ')"
+  run env RCC_GRANT_PROJECT_ROOT="$PROJ" RCC_GRANT_PROVIDER=codex-supervisor \
+    RCC_GRANT_SESSION=m6-cd-source-tamper-session RCC_GRANT_AGENT_ID=m6-cd-source-tamper-agent RCC_GRANT_ROLE=quality-gater \
+    node "$grant_wrapper" publish-request --coordination-root "$PROJ/.planning/coordination" \
+    --plan "$plan_path" --subject-bundle "$bundle_path" --intent "$intent"
+  [ "$status" -eq 0 ]
+  publish_json="$output"
+  request_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$publish_json")"
+  run env RCC_GRANT_PROJECT_ROOT="$PROJ" RCC_GRANT_PROVIDER=codex-supervisor \
+    RCC_GRANT_SESSION=m6-cd-source-tamper-session RCC_GRANT_AGENT_ID=m6-cd-source-tamper-agent RCC_GRANT_ROLE=quality-gater \
+    node "$grant_wrapper" dispatch --coordination-root "$PROJ/.planning/coordination" --request "$request_path"
+  [ "$status" -eq 0 ]
+  dispatch_json="$output"
+  run node -e 'const a=JSON.parse(require("fs").readFileSync(JSON.parse(process.argv[1]).artifact_ref,"utf8"));if(a.selected_driver!=="codex-app-server")process.exit(1)' "$dispatch_json"
+  [ "$status" -eq 0 ]
+
+  # M6+M7 SIXTEENTH Phase 2D: deterministic barrier -- the fake app-server
+  # (for this exact expected_result_kind only) now blocks turn/completed on
+  # a test-only release file instead of racing a fixed 3000ms timer, so this
+  # whole critical section runs inside a subshell with its own EXIT trap
+  # (never RETURN -- conflicts with bats' internal RETURN-trap use inside
+  # `run`, same UMASK-0600-01 precedent this file already relies on
+  # elsewhere) that ALWAYS creates the release file and kills the fake if
+  # the test fails before reaching its own happy-path release+wait, so a
+  # failing assertion can never leave the fake app-server (or its
+  # session-run parent) hung waiting forever.
+  local attempt_id delivery_path blob_digest blob_path
+  attempt_id="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).initial_attempt_id)' "$request_path")"
+  delivery_path="$(dirname "$request_path")/delivery/$attempt_id.json"
+  result_path="$(dirname "$request_path")/results/$attempt_id.json"
+  local release_path="$FAKE_APP_SERVER_EVENTS.cd-source-tamper-release"
+  (
+    trap '__cd06_rc=$?; [ -f "$release_path" ] || : > "$release_path"; if kill -0 "$BG_PID" 2>/dev/null; then kill -TERM "$BG_PID" 2>/dev/null; fi; exit "$__cd06_rc"' EXIT
+
+    # Waits for BOTH the fake server's own recorded turn-start event (proves
+    # the app-server genuinely received turn/start for THIS expected_result_
+    # kind) AND the durable delivery WAL record -- a generous deadline now
+    # that nothing races a fixed completion timer.
+    local tries=0
+    while [ "$tries" -lt 500 ]; do
+      if [ -f "$FAKE_APP_SERVER_EVENTS" ] && [ -f "$delivery_path" ] \
+        && grep -qF '"event":"turn-start"' "$FAKE_APP_SERVER_EVENTS" 2>/dev/null \
+        && grep -qF '"expected_result_kind":"CD_SOURCE_TAMPER"' "$FAKE_APP_SERVER_EVENTS" 2>/dev/null; then
+        break
+      fi
+      tries=$((tries + 1))
+      sleep 0.02
+    done
+    if [ "$tries" -ge 500 ]; then
+      echo "DEBUG: never observed both the fake server's turn-start event and the delivery WAL" >&2
+      tail -80 "$BG_OUT" >&2
+      exit 1
+    fi
+    [ ! -f "$result_path" ]
+
+    blob_digest="$(node -e 'const fs=require("fs"),c=require("crypto");process.stdout.write(c.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"))' "$PROJ/scratch/projected-uncommitted.txt")"
+    blob_path="$(find "$PROJ/.planning/coordination" -path "*/blobs/$blob_digest" -type f | head -1)"
+    [ -n "$blob_path" ]
+    chmod 0600 "$blob_path"
+    node -e 'const fs=require("fs");const p=process.argv[1],b=fs.readFileSync(p);b[0]^=1;fs.writeFileSync(p,b)' "$blob_path"
+    chmod 0400 "$blob_path"
+
+    # Release the fake -- ONLY now, after the mutation above is durably on
+    # disk, may it ever complete this turn.
+    : > "$release_path"
+
+    _wait_for_pid_exit "$BG_PID"
+    node -e '
+      const fs = require("fs");
+      const lines = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").filter(Boolean);
+      let last = null;
+      for (const line of lines) {
+        let obj;
+        try { obj = JSON.parse(line); } catch (err) { continue; }
+        if (obj && obj.schema === "coordination/bridge-result/v1") last = obj;
+      }
+      const expected = "APP_SERVER_WORKER_LOOP_FAILED:turn-read-projection-source-validation-failed:projection-authoritative-source-drift";
+      if (!last) { process.stderr.write("no coordination/bridge-result/v1 line found in bridge output"); process.exit(1); }
+      if (last.signal !== expected) {
+        process.stderr.write("expected signal exactly " + JSON.stringify(expected) + ", got " + JSON.stringify(last.signal) + " (full record: " + JSON.stringify(last) + ")");
+        process.exit(1);
+      }
+    ' "$BG_OUT"
+    [ ! -f "$result_path" ]
+  )
+  local subshell_status=$?
+  [ "$subshell_status" -eq 0 ]
+
+  _wait_for_pid_exit "$BG_PID"
+  [ ! -f "$result_path" ]
+  local registry
+  registry="$(node -e 'const r=require(process.argv[1]);process.stdout.write(r.registryRepoDir(process.argv[2]))' "$RLL" "$PROJ")"
+  [ -z "$(find "$registry/isolation-roots" -path '*/role-read-view/current' -type d -print -quit)" ]
+  [ -z "$(find "$registry/isolation-roots" \( -path '*/role-read-view/.staging-*' -o -path '*/role-read-view/.retired-*' \) -type d -print -quit)" ]
+  BG_PID=""
+  _disarm_test_routing_seam
+}
+
+@test "CFG-META-02 externally-managed codex config ignores replacement metadata but preserves projected policy" {
+  local cfg_home cfg_root baseline replacement
+  cfg_home="$PROJ/config-home"
+  cfg_root="$PROJ/config-project"
+  baseline="$PROJ/config-baseline.json"
+  replacement="$cfg_home/.codex/config.toml.next"
+  mkdir -p "$cfg_home/.codex" "$cfg_root"
+  printf '%s\n' 'approval_policy = "never"' > "$cfg_home/.codex/config.toml"
+  chmod 0600 "$cfg_home/.codex/config.toml"
+
+  cd "$cfg_root"
+  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --emit
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" > "$baseline"
+
+  cp "$cfg_home/.codex/config.toml" "$replacement"
+  chmod 0600 "$replacement"
+  mv "$replacement" "$cfg_home/.codex/config.toml"
+  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --compare "$baseline"
+  [ "$status" -eq 0 ]
+  run node -e 'const v=JSON.parse(process.argv[1]);if(v.status!=="CLEAN"||v.changed_labels.length!==0)process.exit(1)' "$output"
+  [ "$status" -eq 0 ]
+  run node -e '
+    const doc=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    const row=doc.records.find((item)=>item.label==="codex-config.toml");
+    if(!row||row.identity_policy!=="managed-projected-file") process.exit(1);
+    if(JSON.stringify(Object.keys(row.identity).sort())!==JSON.stringify(["mode","nlink","uid"])) process.exit(2);
+  ' "$baseline"
+  [ "$status" -eq 0 ]
+}
+
+@test "CFG-META-03 codex config projected topology drift remains SC-4" {
+  local cfg_home cfg_root baseline
+  cfg_home="$PROJ/config-home"
+  cfg_root="$PROJ/config-project"
+  baseline="$PROJ/config-baseline.json"
+  mkdir -p "$cfg_home/.codex" "$cfg_root"
+  printf '%s\n' 'approval_policy = "never"' > "$cfg_home/.codex/config.toml"
+  chmod 0600 "$cfg_home/.codex/config.toml"
+
+  cd "$cfg_root"
+  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --emit
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" > "$baseline"
+  printf '%s\n' 'approval_policy = "on-request"' > "$cfg_home/.codex/config.toml"
+  chmod 0600 "$cfg_home/.codex/config.toml"
+  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --compare "$baseline"
+  [ "$status" -eq 5 ]
+  run node -e '
+    const v=JSON.parse(process.argv[1]);
+    const row=v.files.find((item)=>item.label==="codex-config.toml");
+    if(v.status!=="DRIFT_PROTECTED_TOPOLOGY"||!v.changed_labels.includes("codex-config.toml")) process.exit(1);
+    if(!row||row.topology_match!==false) process.exit(2);
+  ' "$output"
+  [ "$status" -eq 0 ]
+}
+
+@test "CFG-META-04 codex config permission drift remains SC-4" {
+  local cfg_home cfg_root baseline
+  cfg_home="$PROJ/config-home"
+  cfg_root="$PROJ/config-project"
+  baseline="$PROJ/config-baseline.json"
+  mkdir -p "$cfg_home/.codex" "$cfg_root"
+  printf '%s\n' 'approval_policy = "never"' > "$cfg_home/.codex/config.toml"
+  chmod 0600 "$cfg_home/.codex/config.toml"
+
+  cd "$cfg_root"
+  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --emit
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" > "$baseline"
+  chmod 0644 "$cfg_home/.codex/config.toml"
+  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --compare "$baseline"
+  [ "$status" -eq 5 ]
+  run node -e '
+    const v=JSON.parse(process.argv[1]);
+    const row=v.files.find((item)=>item.label==="codex-config.toml");
+    if(!row||row.identity_match!==false||row.topology_match!==true) process.exit(1);
+  ' "$output"
+  [ "$status" -eq 0 ]
+}
+
+@test "CFG-META-05 ordinary stable files still reject metadata-only replacement" {
+  local cfg_home cfg_root baseline replacement
+  cfg_home="$PROJ/config-home"
+  cfg_root="$PROJ/config-project"
+  baseline="$PROJ/config-baseline.json"
+  replacement="$cfg_home/.claude/settings.json.next"
+  mkdir -p "$cfg_home/.claude" "$cfg_root"
+  printf '%s\n' '{}' > "$cfg_home/.claude/settings.json"
+  chmod 0600 "$cfg_home/.claude/settings.json"
+
+  cd "$cfg_root"
+  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --emit
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" > "$baseline"
+  cp "$cfg_home/.claude/settings.json" "$replacement"
+  chmod 0600 "$replacement"
+  mv "$replacement" "$cfg_home/.claude/settings.json"
+  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --compare "$baseline"
+  [ "$status" -eq 5 ]
+  run node -e '
+    const v=JSON.parse(process.argv[1]);
+    const row=v.files.find((item)=>item.label==="claude-settings.json");
+    if(!row||row.identity_match!==false||row.topology_match!==true) process.exit(1);
+  ' "$output"
+  [ "$status" -eq 0 ]
+}
+
+@test "CFG-FD-02 managed codex config retains no-follow and single-link enforcement" {
+  local cfg_home cfg_root linked
+  cfg_home="$PROJ/config-home"
+  cfg_root="$PROJ/config-project"
+  linked="$PROJ/config-hardlink"
+  mkdir -p "$cfg_home/.codex" "$cfg_root"
+  printf '%s\n' 'approval_policy = "never"' > "$cfg_home/.codex/config.toml"
+  chmod 0600 "$cfg_home/.codex/config.toml"
+  ln "$cfg_home/.codex/config.toml" "$linked"
+
+  cd "$cfg_root"
+  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --emit
+  [ "$status" -eq 5 ]
+  run node -e '
+    const doc=JSON.parse(process.argv[1]);
+    const row=doc.records.find((item)=>item.label==="codex-config.toml");
+    if(!row||row.projection_ok!==false||row.error!=="FILE_LINKS"||row.identity!==null) process.exit(1);
+  ' "$output"
+  [ "$status" -eq 0 ]
+
+  rm "$linked" "$cfg_home/.codex/config.toml"
+  printf '%s\n' 'approval_policy = "never"' > "$PROJ/config-target.toml"
+  chmod 0600 "$PROJ/config-target.toml"
+  ln -s "$PROJ/config-target.toml" "$cfg_home/.codex/config.toml"
+  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --emit
+  [ "$status" -eq 5 ]
+  run node -e '
+    const doc=JSON.parse(process.argv[1]);
+    const row=doc.records.find((item)=>item.label==="codex-config.toml");
+    if(!row||row.projection_ok!==false||row.error!=="FILE_TYPE"||row.identity!==null) process.exit(1);
+  ' "$output"
+  [ "$status" -eq 0 ]
+}
+
+# Fourteenth correction: exact Codex wire projection and persisted-turn
+# hydration.  One in-process PassThrough peer keeps every focused case on the
+# real createAppServerConnection path without inventing production seams.
+_run_codex_turn_transport_case() {
+  local case_name="$1"
+  local bridge_under_test="${RUNTIME_TURN_BRIDGE_UNDER_TEST:-$BRIDGE}"
+  node - "$bridge_under_test" "$case_name" <<'NODE'
+"use strict";
+const assert = require("node:assert");
+const path = require("node:path");
+const { PassThrough } = require("node:stream");
+const bridgePath = process.argv[2];
+const scenario = process.argv[3];
+const bridge = require(bridgePath);
+const consultation = require(path.join(path.dirname(bridgePath), "runtime-consultation.cjs"));
+
+const envelope = (kind = "K", content = "answer") => ({
+  schema: "coordination/runtime-turn-envelope/v1",
+  kind: "terminal-result",
+  result: {
+    schema: "coordination/result-envelope/v1",
+    status: "ANSWERED",
+    result_kind: kind,
+    content,
+  },
+});
+const blockedEnvelope = () => ({
+  schema: "coordination/runtime-turn-envelope/v1",
+  kind: "terminal-result",
+  result: {
+    schema: "coordination/result-envelope/v1",
+    status: "BLOCKED",
+    result_kind: "BLOCKED",
+    reason: "INSUFFICIENT_CONTEXT",
+  },
+});
+const wrapped = (value) => ({ envelope: value });
+const containsKey = (value, key) => {
+  if (!value || typeof value !== "object") return false;
+  if (Object.prototype.hasOwnProperty.call(value, key)) return true;
+  return Array.isArray(value)
+    ? value.some((item) => containsKey(item, key))
+    : Object.values(value).some((item) => containsKey(item, key));
+};
+const delay = (ms = 10) => new Promise((resolve) => setTimeout(resolve, ms));
+async function waitFor(predicate, label, timeoutMs = 1500) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const value = predicate();
+    if (value) return value;
+    await delay(2);
+  }
+  throw new Error("timed out waiting for " + label);
+}
+
+function createPeer() {
+  const toChild = new PassThrough();
+  const fromChild = new PassThrough();
+  const sent = [];
+  let buffer = "";
+  toChild.on("data", (chunk) => {
+    buffer += chunk.toString("utf8");
+    for (;;) {
+      const newline = buffer.indexOf("\n");
+      if (newline < 0) break;
+      const line = buffer.slice(0, newline);
+      buffer = buffer.slice(newline + 1);
+      if (line.length > 0) sent.push(JSON.parse(line));
+    }
+  });
+  return {
+    conn: bridge.createAppServerConnection({ stdin: toChild, stdout: fromChild }),
+    sent,
+    send(frame) { fromChild.write(JSON.stringify(frame) + "\n"); },
+    request(method, ordinal = 0) {
+      return waitFor(
+        () => sent.filter((frame) => frame.method === method)[ordinal],
+        method + " request #" + ordinal,
+      );
+    },
+    count(method) { return sent.filter((frame) => frame.method === method).length; },
+  };
+}
+
+function threadRecord(id, turns) {
+  return {
+    id,
+    sessionId: "session-x",
+    forkedFromId: null,
+    parentThreadId: null,
+    preview: "",
+    ephemeral: false,
+    modelProvider: "openai",
+    createdAt: 1700000000,
+    updatedAt: 1700000000,
+    recencyAt: null,
+    status: { type: "idle" },
+    path: null,
+    cwd: "/c",
+    cliVersion: "0.145.0-alpha.18",
+    source: "cli",
+    threadSource: null,
+    agentNickname: null,
+    agentRole: null,
+    gitInfo: null,
+    name: null,
+    turns,
+  };
+}
+
+function agentItem(value, id = "agent-message-x") {
+  return {
+    type: "agentMessage",
+    id,
+    phase: "final_answer",
+    text: JSON.stringify(wrapped(value)),
+    memoryCitation: null,
+  };
+}
+
+function completedTurn(turnId, value = envelope(), itemsView = "full") {
+  return {
+    id: turnId,
+    status: "completed",
+    itemsView,
+    items: itemsView === "full" ? [agentItem(value)] : [],
+  };
+}
+
+async function openTurn(options = {}) {
+  const peer = createPeer();
+  const initPromise = peer.conn.initialize({ timeoutMs: 1000 });
+  const init = await peer.request("initialize");
+  peer.send({
+    id: init.id,
+    result: {
+      userAgent: "fixture",
+      codexHome: "/h",
+      platformFamily: "unix",
+      platformOs: "macos",
+    },
+  });
+  assert.strictEqual((await initPromise).ok, true);
+
+  const loginPromise = peer.conn.login(
+    { accessToken: "token", chatgptAccountId: "account", chatgptPlanType: "plus" },
+    { timeoutMs: 1000 },
+  );
+  const login = await peer.request("account/login/start");
+  peer.send({ id: login.id, result: { type: "chatgptAuthTokens" } });
+  peer.send({
+    method: "account/updated",
+    params: { authMode: "chatgptAuthTokens", planType: "plus" },
+  });
+  assert.strictEqual((await loginPromise).ok, true);
+
+  const threadPromise = peer.conn.threadStart({
+    role: "r",
+    developerInstructions: "d",
+    baseInstructions: "b",
+    cwd: "/c",
+  });
+  const threadStart = await peer.request("thread/start");
+  peer.send({
+    id: threadStart.id,
+    result: {
+      thread: threadRecord("thread-x", []),
+      approvalPolicy: "never",
+      approvalsReviewer: "user",
+      cwd: "/c",
+      instructionSources: [],
+      model: "gpt-5",
+      modelProvider: "openai",
+      sandbox: { type: "readOnly", networkAccess: false },
+      serviceTier: null,
+      reasoningEffort: null,
+    },
+  });
+  assert.strictEqual((await threadPromise).ok, true);
+
+  const deadline = options.backendDeadlineMs === undefined
+    ? Date.now() + 3000 : options.backendDeadlineMs;
+  const turnPromise = peer.conn.turnStart({
+    threadId: "thread-x",
+    inputText: "x",
+    expectedResultKind: options.kind || "K",
+    allowedChildRoles: options.allowedChildRoles || [],
+    cwd: "/c",
+    ...(options.purpose ? { purpose: options.purpose } : {}),
+  }, { backendDeadlineMs: deadline });
+  const turnStart = await peer.request("turn/start");
+  peer.send({
+    id: turnStart.id,
+    result: { turn: { id: "turn-y", status: "inProgress", items: [], itemsView: "full" } },
+  });
+  assert.strictEqual((await turnPromise).ok, true);
+  const results = [];
+  peer.conn.onTurnCompleted(
+    "thread-x", "turn-y", options.kind || "K", options.allowedChildRoles || [],
+    (result) => results.push(result),
+  );
+  return { ...peer, results, deadline, turnStart };
+}
+
+function sendCompletion(ctx, itemsView, value = envelope(), overrides = {}) {
+  const turn = {
+    id: "turn-y",
+    status: "completed",
+    items: itemsView === "full" || itemsView === undefined ? [agentItem(value)] : [],
+    ...overrides,
+  };
+  if (itemsView !== undefined) turn.itemsView = itemsView;
+  ctx.send({ method: "turn/completed", params: { threadId: "thread-x", turn } });
+}
+
+async function waitResult(ctx) {
+  return waitFor(() => ctx.results.length > 0 && ctx.results[0], "completion result");
+}
+
+async function wireSubset() {
+  const schema = bridge.buildRuntimeTurnEnvelopeOutputSchema("K", ["context-provider"], "normal");
+  assert.deepStrictEqual(Object.keys(schema).sort(), ["additionalProperties", "properties", "required", "type"]);
+  assert.strictEqual(schema.type, "object");
+  assert.strictEqual(schema.additionalProperties, false);
+  assert.deepStrictEqual(schema.required, ["envelope"]);
+  assert.deepStrictEqual(Object.keys(schema.properties), ["envelope"]);
+  assert.strictEqual(containsKey(schema, "oneOf"), false);
+  assert.ok(Array.isArray(schema.properties.envelope.anyOf));
+  assert.strictEqual(schema.properties.envelope.anyOf.length, 2);
+  const terminal = schema.properties.envelope.anyOf[0];
+  assert.ok(Array.isArray(terminal.properties.result.anyOf));
+  assert.strictEqual(terminal.properties.result.anyOf.length, 2);
+}
+
+async function wireRootLocal() {
+  const canonical = envelope();
+  const unwrap = consultation.unwrapAndValidateCodexStructuredRuntimeTurnEnvelope;
+  assert.strictEqual(typeof unwrap, "function");
+  const accepted = unwrap(wrapped(canonical), "K", [], "normal");
+  assert.strictEqual(accepted.ok, true);
+  assert.deepStrictEqual(accepted.envelope, canonical);
+  for (const invalid of [canonical, {}, { envelope: canonical, extra: true }]) {
+    assert.strictEqual(unwrap(invalid, "K", [], "normal").ok, false);
+  }
+  const locallyInvalid = envelope("K", "");
+  const rejected = unwrap(wrapped(locallyInvalid), "K", [], "normal");
+  assert.strictEqual(rejected.ok, false);
+  assert.match(rejected.reason, /canonical-envelope-invalid/);
+}
+
+async function bootstrapSchemaPost() {
+  const schema = bridge.buildRuntimeTurnEnvelopeOutputSchema(
+    "role-bootstrap", [], "bootstrap-ready",
+  );
+  assert.deepStrictEqual(Object.keys(schema).sort(), ["additionalProperties", "properties", "required", "type"]);
+  assert.strictEqual(schema.additionalProperties, false);
+  assert.deepStrictEqual(schema.required, ["envelope"]);
+  assert.strictEqual(containsKey(schema, "oneOf"), false);
+  assert.strictEqual(containsKey(schema, "anyOf"), false);
+  const result = schema.properties.envelope.properties.result;
+  assert.deepStrictEqual(result.properties.status.enum, ["ANSWERED"]);
+  assert.deepStrictEqual(result.properties.result_kind.enum, ["role-bootstrap"]);
+  assert.deepStrictEqual(result.properties.content.enum, ["READY"]);
+  const unwrap = consultation.unwrapAndValidateCodexStructuredRuntimeTurnEnvelope;
+  assert.strictEqual(
+    unwrap(wrapped(envelope("role-bootstrap", "READY")), "role-bootstrap", [], "bootstrap-ready").ok,
+    true,
+  );
+  // The wire projection itself is the backend-facing exact READY filter.
+  // Once a candidate reaches the host, exact-key unwrap intentionally runs
+  // the unchanged canonical local validator; session-run owns an additional
+  // independent READY postcondition, exercised by SUP-RDV-READY-02.
+  assert.strictEqual(
+    unwrap(wrapped(envelope("role-bootstrap", "NOT_READY")), "role-bootstrap", [], "bootstrap-ready").ok,
+    true,
+  );
+  assert.strictEqual(
+    unwrap(wrapped(blockedEnvelope()), "role-bootstrap", [], "bootstrap-ready").ok,
+    true,
+  );
+}
+
+async function hydrationSuccess() {
+  for (const initialView of ["notLoaded", "summary"]) {
+    const ctx = await openTurn();
+    const canonical = envelope();
+    sendCompletion(ctx, initialView, canonical);
+    const read = await ctx.request("thread/read");
+    assert.deepStrictEqual(read.params, { threadId: "thread-x", includeTurns: true });
+    assert.strictEqual(ctx.count("thread/read"), 1);
+    ctx.send({
+      id: read.id,
+      result: { thread: threadRecord("thread-x", [completedTurn("turn-y", canonical)]) },
+    });
+    const result = await waitResult(ctx);
+    assert.strictEqual(result.ok, true);
+    assert.deepStrictEqual(result.envelope, canonical);
+    assert.strictEqual(ctx.results.length, 1);
+    assert.strictEqual(ctx.count("thread/read"), 1);
+  }
+}
+
+async function hydrationNegatives() {
+  const cases = [
+    ["wrong-thread", "thread-read-thread-id-mismatch", (ctx) => ({
+      result: { thread: threadRecord("thread-other", [completedTurn("turn-y")]) },
+    })],
+    ["zero-match", "thread-read-active-turn-missing", (ctx) => ({
+      result: { thread: threadRecord("thread-x", []) },
+    })],
+    ["duplicate-match", "thread-read-active-turn-duplicate", (ctx) => ({
+      result: { thread: threadRecord("thread-x", [completedTurn("turn-y"), completedTurn("turn-y")]) },
+    })],
+    ["still-summary", "thread-read-active-turn-items-view-not-full:summary", (ctx) => ({
+      result: { thread: threadRecord("thread-x", [completedTurn("turn-y", envelope(), "summary")]) },
+    })],
+    ["still-notLoaded", "thread-read-active-turn-items-view-not-full:notLoaded", (ctx) => ({
+      result: { thread: threadRecord("thread-x", [completedTurn("turn-y", envelope(), "notLoaded")]) },
+    })],
+    ["absent-view", "thread-read-active-turn-items-view-not-full:undefined", () => {
+      const turn = completedTurn("turn-y");
+      delete turn.itemsView;
+      return { result: { thread: threadRecord("thread-x", [turn]) } };
+    }],
+    ["malformed", "thread-read-response-schema-invalid", (ctx) => ({
+      result: { thread: { id: "thread-x" } },
+    })],
+    ["error", "thread-read-failed:", (ctx) => ({
+      error: { code: -32000, message: "boom" },
+    })],
+    ["older-plausible-nonmatching", "thread-read-active-turn-missing", (ctx) => ({
+      result: { thread: threadRecord("thread-x", [completedTurn("turn-old", envelope())]) },
+    })],
+  ];
+  for (const [label, reason, responseFor] of cases) {
+    const ctx = await openTurn();
+    sendCompletion(ctx, "notLoaded");
+    const read = await ctx.request("thread/read");
+    ctx.send({ id: read.id, ...responseFor(ctx) });
+    const result = await waitResult(ctx);
+    assert.strictEqual(result.ok, false, label);
+    assert.ok(result.reason.startsWith(reason), label + ": " + result.reason);
+    assert.strictEqual(ctx.results.length, 1, label);
+    assert.strictEqual(ctx.count("thread/read"), 1, label);
+  }
+}
+
+async function hydrationEventual() {
+  const ctx = await openTurn();
+  const canonical = envelope();
+  sendCompletion(ctx, "notLoaded");
+  const firstRead = await ctx.request("thread/read", 0);
+  ctx.send({
+    id: firstRead.id,
+    result: { thread: threadRecord("thread-x", [{ id: "turn-y", status: "inProgress", itemsView: "full", items: [] }]) },
+  });
+  const secondRead = await ctx.request("thread/read", 1);
+  assert.deepStrictEqual(secondRead.params, { threadId: "thread-x", includeTurns: true });
+  ctx.send({
+    id: secondRead.id,
+    result: { thread: threadRecord("thread-x", [completedTurn("turn-y", canonical)]) },
+  });
+  const result = await waitResult(ctx);
+  assert.strictEqual(result.ok, true);
+  assert.deepStrictEqual(result.envelope, canonical);
+  assert.strictEqual(ctx.results.length, 1);
+  assert.strictEqual(ctx.count("thread/read"), 2);
+}
+
+async function hydrationDeadline() {
+  const ctx = await openTurn({ backendDeadlineMs: Date.now() + 400 });
+  sendCompletion(ctx, "notLoaded");
+  const answered = new Set();
+  const overallDeadline = Date.now() + 3000;
+  while (ctx.results.length === 0 && Date.now() < overallDeadline) {
+    for (const read of ctx.sent.filter((f) => f.method === "thread/read" && !answered.has(f.id))) {
+      answered.add(read.id);
+      ctx.send({
+        id: read.id,
+        result: { thread: threadRecord("thread-x", [{ id: "turn-y", status: "inProgress", itemsView: "full", items: [] }]) },
+      });
+    }
+    await delay(5);
+  }
+  const result = await waitResult(ctx);
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.reason, "thread-read-active-turn-deadline-exhausted");
+  assert.strictEqual(ctx.results.length, 1);
+  assert.ok(answered.size >= 2, "expected at least one retry before the deadline: got " + answered.size);
+  // Genuinely bounded: settled well inside the 3s overall test ceiling, not
+  // by that ceiling itself -- proves the original 400ms turn deadline (never
+  // extended) governed, not an unbounded retry loop.
+  assert.ok(Date.now() < overallDeadline, "hydration retry loop did not settle before the generous test ceiling");
+}
+
+async function hydrationTerminalNonCompleted() {
+  for (const status of ["failed", "interrupted"]) {
+    const ctx = await openTurn();
+    sendCompletion(ctx, "notLoaded");
+    const read = await ctx.request("thread/read");
+    ctx.send({
+      id: read.id,
+      result: { thread: threadRecord("thread-x", [{ id: "turn-y", status, itemsView: "full", items: [] }]) },
+    });
+    const result = await waitResult(ctx);
+    assert.strictEqual(result.ok, false, status);
+    assert.strictEqual(result.reason, "thread-read-active-turn-terminal-status:" + status, status);
+    assert.strictEqual(ctx.results.length, 1, status);
+    assert.strictEqual(ctx.count("thread/read"), 1, status);
+  }
+}
+
+async function hydrationTerminalError() {
+  const cases = [
+    ["interrupted-unchanged", { id: "turn-y", status: "interrupted", itemsView: "full", items: [] }, (reason) => {
+      assert.strictEqual(reason, "thread-read-active-turn-terminal-status:interrupted");
+    }],
+    ["failed-error-bounded", {
+      id: "turn-y", status: "failed", itemsView: "full", items: [],
+      error: { message: "x".repeat(500), codexErrorInfo: null, additionalDetails: null },
+    }, (reason) => {
+      assert.ok(reason.length < 300, "expected bounded reason, got length " + reason.length);
+    }],
+    ["failed-error-surfaced", {
+      id: "turn-y", status: "failed", itemsView: "full", items: [],
+      error: {
+        message: "context window exceeded during Ktor documentation retrieval, please retry with a narrower scope",
+        codexErrorInfo: "contextWindowExceeded",
+        additionalDetails: null,
+      },
+    }, (reason) => {
+      assert.ok(reason.startsWith("thread-read-active-turn-terminal-status:failed"), reason);
+      assert.ok(reason.includes("codexErrorInfo=contextWindowExceeded"), reason);
+      const msg = "context window exceeded during Ktor documentation retrieval, please retry with a narrower scope";
+      assert.ok(reason.includes("messageLength=" + msg.length), reason);
+      assert.ok(/messageSha256=[0-9a-f]{16}\b/.test(reason), reason);
+      assert.ok(!reason.includes(msg), "raw message text must never be echoed verbatim: " + reason);
+    }],
+    ["failed-error-secret-never-echoed", {
+      id: "turn-y", status: "failed", itemsView: "full", items: [],
+      error: {
+        message: "Bearer sk-live-FAKESECRETVALUE1234567890\r\nAuthorization: Bearer sk-live-FAKESECRETVALUE1234567890;drop table x;",
+        codexErrorInfo: "internalServerError",
+        additionalDetails: "also-should-never-appear-anywhere",
+      },
+    }, (reason) => {
+      assert.ok(reason.includes("codexErrorInfo=internalServerError"), reason);
+      assert.ok(!reason.includes("FAKESECRETVALUE"), "secret-shaped substring must never appear: " + reason);
+      assert.ok(!reason.includes("Bearer"), "must never echo the raw message: " + reason);
+      assert.ok(!reason.includes("also-should-never-appear-anywhere"), "additionalDetails must never appear: " + reason);
+      assert.ok(!reason.includes("\r") && !reason.includes("\n"), "must never contain raw CR/LF: " + reason);
+    }],
+  ];
+  for (const [label, turn, verify] of cases) {
+    const ctx = await openTurn();
+    sendCompletion(ctx, "notLoaded");
+    const read = await ctx.request("thread/read");
+    ctx.send({ id: read.id, result: { thread: threadRecord("thread-x", [turn]) } });
+    const result = await waitResult(ctx);
+    assert.strictEqual(result.ok, false, label);
+    verify(result.reason);
+    assert.strictEqual(ctx.results.length, 1, label);
+    assert.strictEqual(ctx.count("thread/read"), 1, label);
+  }
+}
+
+async function directControls() {
+  for (const view of ["full", undefined]) {
+    const ctx = await openTurn();
+    const canonical = envelope();
+    sendCompletion(ctx, view, canonical);
+    const result = await waitResult(ctx);
+    assert.strictEqual(result.ok, true);
+    assert.deepStrictEqual(result.envelope, canonical);
+    assert.strictEqual(ctx.count("thread/read"), 0);
+  }
+}
+
+async function lifecycle() {
+  {
+    const ctx = await openTurn();
+    sendCompletion(ctx, "notLoaded");
+    const read = await ctx.request("thread/read");
+    sendCompletion(ctx, "notLoaded");
+    await waitFor(() => ctx.conn.isStopped(), "duplicate completion STOP");
+    assert.strictEqual(ctx.results.length, 0);
+    ctx.send({
+      id: read.id,
+      result: { thread: threadRecord("thread-x", [completedTurn("turn-y")]) },
+    });
+    await delay(20);
+    assert.strictEqual(ctx.results.length, 0);
+    assert.strictEqual(ctx.count("thread/read"), 1);
+  }
+  {
+    const ctx = await openTurn();
+    sendCompletion(ctx, "notLoaded");
+    const read = await ctx.request("thread/read");
+    const interruptedPromise = ctx.conn.turnInterrupt("thread-x", "turn-y");
+    const interrupted = await ctx.request("turn/interrupt");
+    ctx.send({ id: interrupted.id, result: {} });
+    assert.strictEqual((await interruptedPromise).ok, true);
+    ctx.send({
+      id: read.id,
+      result: { thread: threadRecord("thread-x", [completedTurn("turn-y")]) },
+    });
+    await delay(20);
+    assert.strictEqual(ctx.results.length, 0);
+    assert.strictEqual(ctx.count("thread/read"), 1);
+  }
+  {
+    const ctx = await openTurn({ backendDeadlineMs: Date.now() + 500 });
+    sendCompletion(ctx, "notLoaded");
+    await ctx.request("thread/read");
+    const result = await waitResult(ctx);
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(result.reason, "thread-read-failed:timeout-possibly-delivered");
+    assert.strictEqual(ctx.count("thread/read"), 1);
+  }
+}
+
+const scenarios = {
+  "wire-subset": wireSubset,
+  "wire-root-local": wireRootLocal,
+  "bootstrap-schema-post": bootstrapSchemaPost,
+  "hydrate-success": hydrationSuccess,
+  "hydrate-negatives": hydrationNegatives,
+  "hydrate-eventual": hydrationEventual,
+  "hydrate-deadline": hydrationDeadline,
+  "hydrate-terminal-noncompleted": hydrationTerminalNonCompleted,
+  "hydrate-terminal-error": hydrationTerminalError,
+  "direct-controls": directControls,
+  "hydrate-lifecycle": lifecycle,
+};
+(async () => {
+  assert.strictEqual(typeof scenarios[scenario], "function", "unknown scenario " + scenario);
+  await scenarios[scenario]();
+  process.exit(0);
+})().catch((error) => {
+  process.stderr.write((error && error.stack) || String(error));
+  process.stderr.write("\n");
+  process.exit(1);
+});
+NODE
+}
+
+@test "C2-WIRE-SUBSET-01 PASS: Codex output schema is an exact closed envelope wrapper with no oneOf recursively and nested anyOf unions" {
+  run _run_codex_turn_transport_case wire-subset
+  [ "$status" -eq 0 ]
+}
+
+@test "C2-WIRE-ROOT-LOCAL-01 PASS: only the exact wrapper unwraps and the unchanged local canonical validator controls roundtrip authority" {
+  run _run_codex_turn_transport_case wire-root-local
+  [ "$status" -eq 0 ]
+}
+
+@test "M6-BOOTSTRAP-SCHEMA-POST-01 PASS: bootstrap wire schema is exact READY while canonical local validation remains unchanged" {
+  run _run_codex_turn_transport_case bootstrap-schema-post
+  [ "$status" -eq 0 ]
+}
+
+@test "C2-HYDRATE-SUCCESS-01 PASS: notLoaded and summary each perform one exact thread/read and one full exact-turn canonical delivery" {
+  run _run_codex_turn_transport_case hydrate-success
+  [ "$status" -eq 0 ]
+}
+
+@test "C2-HYDRATE-NEGATIVES-01 PASS: wrong thread, match cardinality, view, malformed/error, and older answer all fail closed" {
+  run _run_codex_turn_transport_case hydrate-negatives
+  [ "$status" -eq 0 ]
+}
+
+@test "BRIDGE-HYDRATION-EVENTUAL-01 PASS: a first thread/read still showing the exact turn inProgress does not fail closed -- it remains HYDRATION_PENDING and retries thread/read, delivering the canonical answer once the second read shows the same turn completed/full" {
+  run _run_codex_turn_transport_case hydrate-eventual
+  [ "$status" -eq 0 ]
+}
+
+@test "BRIDGE-HYDRATION-DEADLINE-01 PASS: an exact turn that stays inProgress across every retry fails semantically once the original backend deadline is reached, with no fabricated answer and no deadline reset" {
+  run _run_codex_turn_transport_case hydrate-deadline
+  [ "$status" -eq 0 ]
+}
+
+@test "BRIDGE-HYDRATION-TERMINAL-NONCOMPLETED-01 PASS: failed and interrupted each fail closed after exactly one thread/read with a distinct thread-read-active-turn-terminal-status:<status> reason -- zero retry sleeps, no deadline check needed, unlike inProgress" {
+  run _run_codex_turn_transport_case hydrate-terminal-noncompleted
+  [ "$status" -eq 0 ]
+}
+
+@test "BRIDGE-HYDRATION-TERMINAL-ERROR-01 PASS: a failed turn's codexErrorInfo plus a length+SHA-256-digest of error.message (never the raw message) are surfaced in the terminal-status reason, while interrupted (no error field, per schema) stays byte-identical to the unchanged prior reason" {
+  run _run_codex_turn_transport_case hydrate-terminal-error
+  [ "$status" -eq 0 ]
+}
+
+@test "C2-HYDRATE-DIRECT-CONTROLS-01 PASS: full and absent completion views deliver the wrapped canonical answer with zero thread/read requests" {
+  run _run_codex_turn_transport_case direct-controls
+  [ "$status" -eq 0 ]
+}
+
+@test "C2-HYDRATE-LIFECYCLE-01 PASS: pending duplicate, late STOP/interrupt response, deadline, and second-read paths cannot resurrect authority" {
+  run _run_codex_turn_transport_case hydrate-lifecycle
+  [ "$status" -eq 0 ]
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Sixteenth correction §16c RED controls.  These deliberately exercise only
+# host-owned boundaries: the checkout-local SDK's real cross-spawn call, one
+# injected recorder at the direct-HTTPS boundary, and the single canonical
+# RuntimeTurnEnvelope validator.  No model/tool prose or preplanted evidence is
+# accepted as a substitute for any of those boundaries.
+# ═══════════════════════════════════════════════════════════════════════════
+
+_run_s16_cp_mcp_spawn_confinement_posix() {
+  NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=s16-cp-mcp-boundary node - "$BRIDGE" "$BATS_TEST_DIRNAME/../.." "$PROJ/s16-mcp-home" <<'NODE'
+'use strict';
+const assert = require('node:assert');
+const { EventEmitter } = require('node:events');
+const { PassThrough } = require('node:stream');
+const { createRequire } = require('node:module');
+const path = require('node:path');
+
+const bridgePath = process.argv[2];
+const projectRoot = path.resolve(process.argv[3]);
+const isolatedHome = path.resolve(process.argv[4]);
+const mcpRequire = createRequire(path.join(projectRoot, 'mcp-server', 'package.json'));
+const crossSpawnPath = mcpRequire.resolve('cross-spawn');
+const captured = [];
+const rpcMethods = [];
+
+const searchDescriptor = {
+  name: 'search-docs',
+  title: 'Search Docs',
+  description: 'Search pattern docs by keyword across frontmatter and content. Returns scored results ranked by relevance.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Search query — matched against slug, description, scope, targets, and content' },
+      category: { type: 'string', description: "Filter to a specific doc category (e.g., 'testing', 'architecture', 'security')" },
+    },
+    required: ['query'],
+    additionalProperties: false,
+    $schema: 'http://json-schema.org/draft-07/schema#',
+  },
+  execution: { taskSupport: 'forbidden' },
+};
+
+function fakeCrossSpawn(command, args, options) {
+  captured.push({ command, args, options });
+  const child = new EventEmitter();
+  child.stdin = new PassThrough();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.pid = 424242;
+  child.exitCode = null;
+  child.signalCode = null;
+  let input = '';
+  let closed = false;
+  function close(code, signal) {
+    if (closed) return;
+    closed = true;
+    child.exitCode = code;
+    child.signalCode = signal;
+    setImmediate(() => {
+      child.emit('exit', code, signal);
+      child.emit('close', code, signal);
+    });
+  }
+  function reply(id, result) {
+    child.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n');
+  }
+  child.stdin.on('data', (chunk) => {
+    input += chunk.toString('utf8');
+    for (;;) {
+      const newline = input.indexOf('\n');
+      if (newline < 0) break;
+      const line = input.slice(0, newline);
+      input = input.slice(newline + 1);
+      if (!line.trim()) continue;
+      const frame = JSON.parse(line);
+      rpcMethods.push(frame.method);
+      if (frame.method === 'initialize') {
+        assert.strictEqual(frame.params.protocolVersion, '2025-11-25');
+        reply(frame.id, {
+          protocolVersion: '2025-11-25', capabilities: { tools: {} },
+          serverInfo: { name: 'androidcommondoc', version: '1.0.0' },
+        });
+      } else if (frame.method === 'tools/list') {
+        reply(frame.id, { tools: [searchDescriptor] });
+      } else if (frame.method === 'tools/call') {
+        assert.deepStrictEqual(frame.params, {
+          name: 'search-docs', arguments: { query: 'How should structuredClone copy a Map?' },
+        });
+        reply(frame.id, { content: [{ type: 'text', text: JSON.stringify({
+          query: 'How should structuredClone copy a Map?',
+          matches: [{ slug: 'testing-patterns', title: 'Testing Patterns', score: 1, uri: 'docs://androidcommondoc/testing-patterns' }],
+          total: 1,
+        }) }] });
+      }
+    }
+  });
+  child.stdin.once('finish', () => close(0, null));
+  child.kill = (signal) => { close(null, signal); return true; };
+  process.nextTick(() => child.emit('spawn'));
+  return child;
+}
+
+require.cache[crossSpawnPath] = {
+  id: crossSpawnPath, filename: crossSpawnPath, loaded: true,
+  exports: fakeCrossSpawn, children: [], paths: [],
+};
+
+process.env.AWS_SECRET_ACCESS_KEY = 'S16_SENTINEL_AWS';
+process.env.CLAUDE_CODE_OAUTH_TOKEN = 'S16_SENTINEL_CLAUDE';
+process.env.CODEX_HOME = 'S16_SENTINEL_CODEX_HOME';
+process.env.OPENAI_API_KEY = 'S16_SENTINEL_OPENAI';
+
+const bridge = require(bridgePath);
+assert.strictEqual(
+  typeof bridge.__testOnlyRunContextProviderInternalSearch,
+  'function',
+  'Sixteenth RED: bridge must expose the double-gated real-SDK internal-search runner',
+);
+
+(async () => {
+  const result = await bridge.__testOnlyRunContextProviderInternalSearch({
+    projectRoot,
+    isolatedHome,
+    question: 'How should structuredClone copy a Map?',
+    requestExpiry: new Date(Date.now() + 60_000).toISOString(),
+  });
+  assert.strictEqual(result && result.ok, true, JSON.stringify(result));
+  assert.strictEqual(captured.length, 1, 'exactly one MCP child may be spawned');
+  const call = captured[0];
+  assert.strictEqual(call.command, process.execPath);
+  assert.deepStrictEqual(call.args, [path.join(projectRoot, 'mcp-server', 'build', 'index.js')]);
+  assert.strictEqual(call.options.cwd, projectRoot);
+  assert.strictEqual(call.options.shell, false);
+  assert.deepStrictEqual(call.options.stdio, ['pipe', 'pipe', 'pipe']);
+  assert.deepStrictEqual(call.options.env, {
+    ANDROID_COMMON_DOC: projectRoot,
+    HOME: isolatedHome,
+    LOGNAME: 'runtime',
+    PATH: '',
+    SHELL: '',
+    TERM: 'dumb',
+    USER: 'runtime',
+    HTTP_PROXY: '',
+    HTTPS_PROXY: '',
+    ALL_PROXY: '',
+    NO_PROXY: '*',
+  });
+  for (const key of ['AWS_SECRET_ACCESS_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'CODEX_HOME', 'OPENAI_API_KEY']) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(call.options.env, key), false, key + ' leaked into MCP child');
+  }
+  assert.strictEqual(rpcMethods.filter((m) => m === 'initialize').length, 1);
+  assert.strictEqual(rpcMethods.filter((m) => m === 'notifications/initialized').length, 1);
+  assert.strictEqual(rpcMethods.filter((m) => m === 'tools/list').length, 1);
+  assert.strictEqual(rpcMethods.filter((m) => m === 'tools/call').length, 1);
+})().catch((error) => {
+  process.stderr.write((error && error.stack) || String(error));
+  process.stderr.write('\n');
+  process.exit(1);
+});
+NODE
+}
+
+@test "S16-CP-MCP-SPAWN-CONFINEMENT-POSIX-01 RED: real checkout-local SDK spawn is process.execPath plus sole build/index.js argv with closed cwd/shell/stdio/env and zero inherited sentinel" {
+  run _run_s16_cp_mcp_spawn_confinement_posix
+  [ "$status" -eq 0 ]
+}
+
+# M6+M7 SIXTEENTH CIERRE DEFINITIVO Phase 2B: the prior version of this
+# helper injected a `requestExecutor` callback into
+# __testOnlyExecuteContext7Sequence's options object -- but executeContext7Sequence
+# (the real function that alias exports) only ever destructures { gap,
+# requestExpiry }, so requestExecutor was silently dropped and the call fell
+# through to the REAL network path. Empirically confirmed (2026-08-15): this
+# made an actual outbound HTTPS request to context7.com and returned genuine
+# third-party content, while every assertion below still referenced the
+# never-populated `observed` array -- a non-hermetic test that could only
+# ever fail (nothing ever pushed to `observed`), never a false green. This
+# version uses the SAME real HTTPS socket-boundary fixture
+# runtime-consultation-role-gate.bats's own CP-EVIDENCE-E2E family already
+# established (resolveTestContext7SocketAgent's env-var-driven loopback
+# redirect): a real local TLS server answers from a fixture queue, and every
+# assertion reads back what that server itself actually received over the
+# real socket -- never a client-side pre-flight log.
+_run_s16_cp_context7_supplied_id_zero_search() {
+  local fixture_dir; fixture_dir="$(mktemp -d)"
+  local cert_path="$fixture_dir/cert.pem" key_path="$fixture_dir/key.pem"
+  local responses_path="$fixture_dir/responses.json"
+  local port_file="$fixture_dir/port"
+  local request_log="$fixture_dir/requests.jsonl"
+  local conn_log="$fixture_dir/conns.jsonl"
+  local server_script="$fixture_dir/fake-context7-server.cjs"
+
+  openssl req -x509 -newkey rsa:2048 -nodes \
+    -keyout "$key_path" -out "$cert_path" \
+    -days 1 -subj "/CN=androidcommondoc-context7-test-fixture" >/dev/null 2>&1
+
+  node -e '
+    const fs = require("fs");
+    fs.writeFileSync(process.argv[1], JSON.stringify([{
+      statusCode: 200,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+      bodyBase64: Buffer.from("Context7 supplied-id fixture bytes.", "utf8").toString("base64"),
+    }]));
+  ' "$responses_path"
+
+  # Verbatim copy of runtime-consultation-role-gate.bats's own
+  # _s16e2e_bootstrap_project fake-context7-server.cjs -- same fixture
+  # shape/behavior, never a second, independently-typed reimplementation.
+  cat > "$server_script" <<'CTX7EOF'
+#!/usr/bin/env node
+'use strict';
+const https = require('node:https');
+const fs = require('node:fs');
+const [, , certPath, keyPath, responsesPath, portFilePath, requestLogPath] = process.argv;
+let queue = [];
+try { queue = JSON.parse(fs.readFileSync(responsesPath, 'utf8')); } catch { queue = []; }
+const server = https.createServer({
+  cert: fs.readFileSync(certPath),
+  key: fs.readFileSync(keyPath),
+}, (req, res) => {
+  if (requestLogPath) {
+    try {
+      fs.appendFileSync(requestLogPath, JSON.stringify({
+        method: req.method,
+        url: req.url,
+        httpVersion: req.httpVersion,
+        headers: req.headers,
+        servername: req.socket.servername || null,
+      }) + '\n');
+    } catch { /* diagnostic only; must never block the response below */ }
+  }
+  const next = queue.shift();
+  if (!next || next.hang === true) return;
+  res.writeHead(next.statusCode, next.headers || {});
+  res.end(Buffer.from(next.bodyBase64 || '', 'base64'));
+});
+server.listen(0, '127.0.0.1', () => {
+  fs.writeFileSync(portFilePath, String(server.address().port));
+});
+CTX7EOF
+
+  node "$server_script" "$cert_path" "$key_path" "$responses_path" "$port_file" "$request_log" &
+  local server_pid=$!
+
+  local tries=0
+  while [ ! -s "$port_file" ] && [ "$tries" -lt 100 ]; do
+    sleep 0.05
+    tries=$((tries + 1))
+  done
+  if [ ! -s "$port_file" ]; then
+    kill -KILL "$server_pid" 2>/dev/null || true
+    echo "fake context7 server never wrote its port file" >&2
+    return 1
+  fi
+  local port; port="$(cat "$port_file")"
+
+  NODE_ENV=test \
+  RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=s16-context7-recorder \
+  RUNTIME_BRIDGE_CODEX_FAKE_CONTEXT7_SERVER_PORT="$port" \
+  RUNTIME_BRIDGE_CODEX_FAKE_CONTEXT7_CONN_LOG="$conn_log" \
+  node - "$BRIDGE" <<'NODE'
+'use strict';
+const assert = require('node:assert');
+const bridge = require(process.argv[2]);
+(async () => {
+  const result = await bridge.__testOnlyExecuteContext7Sequence({
+    gap: {
+      provider: 'context7', library_name: 'Node.js', library_id: '/nodejs/node',
+      query: 'structuredClone deep-copy semantics for Map',
+    },
+    requestExpiry: new Date(Date.now() + 60_000).toISOString(),
+  });
+  assert.strictEqual(result && result.ok, true, JSON.stringify(result));
+  assert.strictEqual(result.library_id, '/nodejs/node');
+  assert.strictEqual(result.resolution_ref, null);
+  assert.strictEqual(result.resolution_digest, null);
+  const contentBytes = Buffer.isBuffer(result.content_bytes) ? result.content_bytes : Buffer.from((result.content_bytes && result.content_bytes.data) || []);
+  assert.strictEqual(contentBytes.toString('utf8'), 'Context7 supplied-id fixture bytes.');
+})().catch((error) => {
+  process.stderr.write((error && error.stack) || String(error));
+  process.stderr.write('\n');
+  process.exit(1);
+});
+NODE
+  local node_status=$?
+
+  kill -TERM "$server_pid" 2>/dev/null || true
+  wait "$server_pid" 2>/dev/null || true
+
+  if [ "$node_status" -ne 0 ]; then return 1; fi
+
+  # Real recorder assertions, read back from what the local TLS server
+  # itself actually received -- exactly one call total (so, by construction,
+  # zero calls to /api/v2/libs/search) with the exact query/headers/Host/SNI,
+  # and the real pre-loopback-redirect connection options this call genuinely
+  # carried.
+  local call_count; call_count="$(wc -l < "$request_log" 2>/dev/null | tr -d ' ')"
+  if [ "$call_count" != "1" ]; then echo "expected exactly 1 recorded Context7 call, got $call_count" >&2; return 1; fi
+  local conn_count; conn_count="$(wc -l < "$conn_log" 2>/dev/null | tr -d ' ')"
+  if [ "$conn_count" != "1" ]; then echo "expected exactly 1 recorded Context7 connection, got $conn_count" >&2; return 1; fi
+
+  node -e '
+    const fs = require("fs");
+    const req = JSON.parse(fs.readFileSync(process.argv[1], "utf8").trim());
+    const conn = JSON.parse(fs.readFileSync(process.argv[2], "utf8").trim());
+    const expectedPath = "/api/v2/context?libraryId=%2Fnodejs%2Fnode&query=structuredClone%20deep-copy%20semantics%20for%20Map";
+    if (req.method !== "GET") { process.stderr.write("expected GET, got " + req.method); process.exit(1); }
+    if (req.url !== expectedPath) { process.stderr.write("expected url " + expectedPath + ", got " + req.url); process.exit(1); }
+    if (req.servername !== "context7.com") { process.stderr.write("expected SNI context7.com, got " + req.servername); process.exit(1); }
+    if (!req.headers || req.headers.host !== "context7.com") { process.stderr.write("expected Host context7.com, got " + JSON.stringify(req.headers)); process.exit(1); }
+    if (req.headers.accept !== "text/plain") { process.stderr.write("unexpected Accept: " + req.headers.accept); process.exit(1); }
+    if (req.headers["user-agent"] !== "AndroidCommonDoc-runtime/1") { process.stderr.write("unexpected User-Agent: " + req.headers["user-agent"]); process.exit(1); }
+    if (conn.host !== "context7.com" || conn.port !== 443 || conn.servername !== "context7.com") {
+      process.stderr.write("unexpected real connection options: " + JSON.stringify(conn)); process.exit(1);
+    }
+  ' "$request_log" "$conn_log"
+}
+
+@test "S16-CP-CONTEXT7-SUPPLIED-ID-ZERO-SEARCH-01 RED: supplied canonical library id performs zero search and one ordered direct context GET with null resolution refs" {
+  run _run_s16_cp_context7_supplied_id_zero_search
+  [ "$status" -eq 0 ]
+}
+
+_run_s16_pattern_gap_cp_only() {
+  NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY=s16-pattern-gap node - "$BRIDGE" <<'NODE'
+'use strict';
+const assert = require('node:assert');
+const bridge = require(process.argv[2]);
+const gapEnvelope = {
+  schema: 'coordination/runtime-turn-envelope/v1',
+  kind: 'pattern-gap',
+  gap: {
+    provider: 'context7', library_name: 'Node.js', library_id: '/nodejs/node',
+    query: 'structuredClone deep-copy semantics for Map',
+  },
+};
+const cpFirst = { executingRole: 'context-provider', patternGapAllowed: true };
+const cpAfterGap = { executingRole: 'context-provider', patternGapAllowed: false };
+const architect = { executingRole: 'arch-platform', patternGapAllowed: true };
+assert.deepStrictEqual(
+  bridge.validateRuntimeTurnEnvelope(gapEnvelope, 'PATTERN_RESULT', [], cpFirst),
+  { ok: true },
+  'the one CP/no-prior-gap branch must be accepted',
+);
+assert.strictEqual(
+  bridge.validateRuntimeTurnEnvelope(gapEnvelope, 'PATTERN_RESULT', [], cpAfterGap).ok,
+  false,
+  'a second gap on the same CP request must fail closed',
+);
+assert.strictEqual(
+  bridge.validateRuntimeTurnEnvelope(gapEnvelope, 'PATTERN_RESULT', [], architect).ok,
+  false,
+  'a non-context-provider role must never emit pattern-gap',
+);
+const wire = bridge.buildRuntimeTurnEnvelopeOutputSchema('PATTERN_RESULT', [], 'normal', cpFirst);
+const branches = wire && wire.properties && wire.properties.envelope && wire.properties.envelope.anyOf;
+assert.ok(Array.isArray(branches));
+assert.strictEqual(branches.filter((branch) => (
+  branch && branch.properties && branch.properties.kind
+  && Array.isArray(branch.properties.kind.enum)
+  && branch.properties.kind.enum.length === 1
+  && branch.properties.kind.enum[0] === 'pattern-gap'
+)).length, 1, 'the CP/no-prior-gap Codex projection must contain exactly one closed pattern-gap branch');
+NODE
+}
+
+@test "S16-PATTERN-GAP-CP-ONLY-01 RED: the canonical envelope admits one Context7 gap only for context-provider before any prior gap" {
+  run _run_s16_pattern_gap_cp_only
+  [ "$status" -eq 0 ]
+}
+
+_mint_s16_lifecycle_grant() {
+  local binding_id="$1" role="$2" subcommand="$3" value="$4"
+  NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$LC_CAPABILITY" node - "$RLL" "$PROJ" "$binding_id" "$role" "$subcommand" "$value" <<'NODE'
+'use strict';
+const rll = require(process.argv[2]);
+const crypto = require('node:crypto');
+const projectRoot = process.argv[3];
+const bindingId = process.argv[4];
+const role = process.argv[5];
+const subcommand = process.argv[6];
+const value = process.argv[7];
+const bindingRead = rll.readRegistryRecord(rll.mainOrchestratorBindingPathFor(projectRoot, bindingId));
+if (!bindingRead.ok || bindingRead.absent || !bindingRead.obj) throw new Error('main binding unavailable');
+const argvDigest = crypto.createHash('sha256').update(Buffer.from(subcommand + ':' + value, 'utf8')).digest('hex');
+const minted = rll.mintLifecycleCommandGrant(
+  projectRoot, bindingRead.obj, argvDigest, role, subcommand,
+  'main-orchestrator', 'orchestrator', 'normal', null,
+);
+if (!minted.ok) throw new Error('grant mint failed: ' + JSON.stringify(minted));
+process.stdout.write(minted.grantId);
+NODE
+}
+
+@test "S16-ROOT-RETAINED-TARGET-LOSS-NO-NOOP-01 RED: target loss after a real retained-root intent becomes BLOCKED with zero noop, delivery, result, evidence, or completion" {
+  local minted action_json binding_id argv_json
+  minted="$(_mint_raw_action arch-integration,context-provider s16-retained-loss-session 600)"
+  action_json="${minted%$'\t'*}"
+  binding_id="${minted##*$'\t'}"
+  _mint_execution_claim "$action_json" "$binding_id" >/dev/null
+  argv_json="$(_argv_from_action "$action_json")"
+  _start_bridge_bg "$argv_json" BG_OUT
+  _wait_for_role_state arch-integration "$action_json" READY >/dev/null
+  _wait_for_role_state context-provider "$action_json" READY >/dev/null
+
+  # Freeze the genuine retained supervisor before intent publication.  Its
+  # PID and both fresh READY presences still satisfy consult-root's immutable
+  # precondition, but it cannot race the fixture by consuming the intent.
+  kill -STOP "$BG_PID"
+
+  local intent grant_id created_json intent_id registry target_presence
+  intent="$(node - "$PROJ/scripts/lib/runtime-consultation.cjs" <<'NODE'
+const rc = require(process.argv[2]);
+const value = {
+  requester_role: 'arch-integration',
+  target_role: 'context-provider',
+  question: 'Prove that post-intent target loss cannot fall back to noop.',
+  expected_result_kind: 'S16_TARGET_LOSS',
+  evidence_policy: 'none',
+};
+process.stdout.write(Buffer.from(rc.canonicalJSONStringify(value), 'utf8').toString('base64url'));
+NODE
+)"
+  grant_id="$(_mint_s16_lifecycle_grant "$binding_id" arch-integration consult-root "$intent")"
+  run --separate-stderr env HOME="$TEST_HOME" NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$LC_CAPABILITY" \
+    node "$RLL" consult-root --project-root "$PROJ" --intent "$intent" --lifecycle-binding "$grant_id"
+  [ "$status" -eq 0 ]
+  created_json="$output"
+  intent_id="$(node -e '
+    const value=JSON.parse(process.argv[1]);
+    if(value.status!=="WAITING"||!value.operation||value.operation.kind!=="root-consult"||value.operation.state!=="WAITING") process.exit(1);
+    if(!/^[a-f0-9]{32}$/.test(value.operation.operation_id||"")) process.exit(1);
+    process.stdout.write(value.operation.operation_id);
+  ' "$created_json")"
+  [ -n "$intent_id" ]
+
+  registry="$(node -e 'const rll=require(process.argv[1]);process.stdout.write(rll.registryRepoDir(process.argv[2]))' "$RLL" "$PROJ")"
+  target_presence="$(find "$registry/workers/context-provider" -name presence.json -type f -print -quit)"
+  [ -n "$target_presence" ] && [ -f "$target_presence" ]
+  rm "$target_presence"
+
+  grant_id="$(_mint_s16_lifecycle_grant "$binding_id" arch-integration consult-root-status "$intent_id")"
+  run --separate-stderr env HOME="$TEST_HOME" NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$LC_CAPABILITY" \
+    node "$RLL" consult-root-status --project-root "$PROJ" --intent-id "$intent_id" --lifecycle-binding "$grant_id"
+  [ "$status" -eq 0 ]
+  run node -e '
+    const value=JSON.parse(process.argv[1]);
+    if(value.status!=="BLOCKED"||value.detail_code!=="NONE") process.exit(1);
+    if(!value.operation||value.operation.kind!=="root-consult"||value.operation.state!=="BLOCKED") process.exit(1);
+    if(value.operation.operation_id!==process.argv[2]) process.exit(1);
+  ' "$output" "$intent_id"
+  [ "$status" -eq 0 ]
+
+  run node - "$registry" "$PROJ/.planning/coordination" "$intent_id" <<'NODE'
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const registry = process.argv[2];
+const coordination = process.argv[3];
+const intentId = process.argv[4];
+let sawIntent = false;
+const forbiddenPaths = [];
+const forbiddenSchemas = [];
+function walk(root) {
+  if (!fs.existsSync(root)) return;
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const file = path.join(root, entry.name);
+    if (entry.isDirectory()) { walk(file); continue; }
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const normalized = file.split(path.sep).join('/');
+    if (/\/(delivery|results|evidence)\//.test(normalized) || /\/(accepted-result|transaction-ack)\.json$/.test(normalized)) {
+      forbiddenPaths.push(file);
+    }
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (value.schema === 'runtime/root-consult-intent/v1' && value.intent_id === intentId) sawIntent = true;
+    if (value.schema === 'runtime/root-consult-completion/v1') forbiddenSchemas.push(file);
+    if (value.selected_driver === 'noop') forbiddenSchemas.push(file);
+  }
+}
+walk(registry);
+walk(coordination);
+if (!sawIntent) throw new Error('fixture never observed the durable root-consult intent');
+if (forbiddenPaths.length || forbiddenSchemas.length) {
+  throw new Error('post-intent target loss created forbidden artifacts: ' + JSON.stringify({ forbiddenPaths, forbiddenSchemas }));
+}
+NODE
+  [ "$status" -eq 0 ]
+
+  kill -CONT "$BG_PID" 2>/dev/null || true
+  kill -TERM "$BG_PID" 2>/dev/null || true
+  _wait_for_pid_exit "$BG_PID"
+  BG_PID=""
 }

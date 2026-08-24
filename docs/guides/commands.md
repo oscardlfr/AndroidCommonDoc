@@ -27,9 +27,9 @@ description: "Full list of /pre-pr, /readme-audit, /full-audit and all other L0 
 - `/note` — zero-friction idea capture to memory
 - `/review-pr` — code review of a PR with structured suggestions
 - `/benchmark` — run benchmark suites (JVM/Android)
-- `/work` — smart task routing to agents/skills (extensible via frontmatter intent)
-- `/init-session` — show project context and available tools
-- `/resume-work` — CEO/CTO dashboard with department status from last session
+- `/work` — smart task routing to agents/skills (extensible via frontmatter intent); ensures the persistent support plane via the shared role-lifecycle manager before routing to the orchestrator
+- `/init-session` — show project context and available tools; `--orchestrate <slug>` ensures the persistent support plane (never `quality-gater`) before rendering the dashboard
+- `/resume-work` — CEO/CTO dashboard with department status from last session; discovers active-wave runtime presence and reuses or respawns+rehydrates the support plane, not just Memory
 - `/doc-integrity` — unified doc audit (kdoc-coverage → check-doc-patterns → API freshness → audit-docs)
 - `/eval-agents` — run promptfoo evaluations against agent prompt templates before merging
 - `/metrics` — unified dashboard: runtime tool usage, skill usage, MCP rates, CP bypass count

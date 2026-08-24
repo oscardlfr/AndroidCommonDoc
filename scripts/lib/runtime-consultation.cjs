@@ -17,6 +17,7 @@
  */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
@@ -44,6 +45,10 @@ const DETAIL_CODES = new Set([
   'INVALID_ARGUMENT', 'SCHEMA_INVALID', 'CORRELATION_INVALID', 'AUTHORITY_INVALID',
   'SECURITY_INVALID', 'DRIVER_UNAVAILABLE', 'DEADLINE_EXCEEDED', 'RESULT_BLOCKED',
   'TRANSACTION_CANCELLED', 'RESULT_CONFLICT', 'DURABILITY_UNPROVEN', 'INTERNAL_ERROR',
+  // M67 await-result liveness awareness: a dead/unclaimed worker or an expired
+  // request must be reported promptly (see assessAwaitResultLiveness), never
+  // laundered as a generic DEADLINE_EXCEEDED after the full --timeout elapses.
+  'WORKER_LEASE_EXPIRED', 'WORKER_LEASE_MISSING', 'WORKER_NOT_CLAIMED', 'REQUEST_EXPIRED',
 ]);
 
 /**
@@ -365,6 +370,286 @@ function computeWorktreeId(cwd) {
   return sha256String(realpathOrSelf(toplevel));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// M6+M7 SIXTEENTH Phase 2C: sealed git-topology cache. `projectGitFactsOnce`/
+// `projectRealOnceForScope`/`gitDerivedSensitiveRootsCache` (runtime-bridge-
+// codex.cjs, runtime-consultation.cjs) each memoize a `git rev-parse`-derived
+// identity ONCE per distinct projectRoot string, for the life of the process
+// -- a real, measured perf necessity (a real `git` subprocess spawn per call,
+// re-run on every one of hundreds of authority decisions across a retained
+// supervisor's lifetime, previously caused a genuine multi-minute busy-loop
+// hang under the real five-role plane). But "worktree toplevel / git common
+// dir cannot change for the life of THIS process" is only true absent a
+// hostile or buggy actor mutating `.git`/the worktree's gitdir pointer out
+// from under it mid-session -- a plain memo has no way to ever notice that.
+// This seals the concrete on-disk facts a git-topology swap would have to
+// change (the `.git` entry's own identity, its content if it's a linked-
+// worktree gitdir pointer file, the resolved gitdir target's identity, and
+// the git-common-dir's identity), and re-proves them CHEAPLY (lstat/readlink/
+// one small file read -- never a second git spawn) before every reuse of a
+// cached derivation. A mismatch fails closed; it is NEVER treated as "just
+// recompute and accept the new topology" -- a cache entry, once sealed, is
+// either still valid or the call fails, exactly like any other durable-read
+// identity check this codebase already uses (classifyDurableRead's own
+// path-identity-across-the-read discipline, applied here across CALLS
+// instead of within one read).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function statIdentityOrNull(p) {
+  try {
+    const st = fs.lstatSync(p);
+    return {
+      dev: st.dev, ino: st.ino, mode: st.mode, uid: st.uid, nlink: st.nlink,
+      isDirectory: st.isDirectory(), isFile: st.isFile(), isSymbolicLink: st.isSymbolicLink(),
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+function readlinkOrNull(p) {
+  try {
+    return fs.readlinkSync(p);
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * fd-bound whole-file read (AUDIT-raw-reads' own discipline, never a raw
+ * by-path read): open no-follow, fstat-confirm identity against the
+ * just-taken lstat before trusting the fd at all, read, fstat again after --
+ * a swap landing exactly inside this narrow window is caught here rather
+ * than only on the NEXT seal comparison. Returns null (never throws) on any
+ * absence/type-mismatch/identity-drift/read failure.
+ * @param {string} p
+ * @param {object} priorStat - result of statIdentityOrNull(p), already known non-null/isFile.
+ * @returns {Buffer|null}
+ */
+function readFdBoundFileOrNull(p, priorStat) {
+  let bytes = null;
+  let fd;
+  try {
+    fd = fs.openSync(p, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    const opened = fs.fstatSync(fd);
+    if (opened.isFile() && opened.dev === priorStat.dev && opened.ino === priorStat.ino) {
+      const chunks = [];
+      const buf = Buffer.alloc(65536);
+      let read;
+      while ((read = fs.readSync(fd, buf, 0, buf.length, null)) > 0) chunks.push(Buffer.from(buf.subarray(0, read)));
+      const afterStat = fs.fstatSync(fd);
+      if (afterStat.dev === opened.dev && afterStat.ino === opened.ino && afterStat.size === opened.size) {
+        bytes = Buffer.concat(chunks);
+      }
+    }
+  } catch (err) {
+    bytes = null;
+  } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch (err) { /* best effort */ } }
+  }
+  return bytes;
+}
+
+/**
+ * Captures the concrete, tamper-evident on-disk facts behind one resolved
+ * `(projectReal, gitCommonDirReal)` pair. `.git` may be a real directory
+ * (normal repo) or a file containing a `gitdir: <path>` pointer (linked
+ * worktree, PLAN.md's own R33/WP3-ABI carrier shape) -- both arms are sealed;
+ * an unexpected third shape (neither, e.g. `.git` deleted or replaced with
+ * something else entirely) seals as a null gitdir target, which
+ * `gitTopologySealsMatch` still compares exactly (a later swap back to a
+ * directory would then correctly mismatch too).
+ *
+ * Correction (Codex review, post-Phase-2C): a linked worktree's OWN gitdir
+ * target (`.../worktrees/<name>/`) contains a SEPARATE `commondir` file --
+ * the thing `git rev-parse --git-common-dir` itself reads to resolve
+ * `gitCommonDirReal`. The original seal only lstat'd the STRING
+ * `gitCommonDirReal` (a snapshot from the one git spawn at derive time) --
+ * never `commondir`'s own bytes -- so a later in-place rewrite of
+ * `commondir` (repointing it elsewhere, without touching the gitdir target
+ * directory's own dev/ino, or the OLD common-dir path's own dev/ino) went
+ * completely unnoticed on reseal: the cache kept validating a `gitCommonDirReal`
+ * string git itself would no longer produce. `commondir` is now sealed
+ * directly (fd-bound, same discipline as the `.git`-pointer-file arm above)
+ * whenever this is the linked-worktree shape, so its OWN byte-identity is
+ * part of what every reseal re-proves, not just the derived string's stat.
+ * @returns {object} plain, JSON-safe, directly comparable via deepStrictEqual-style field checks.
+ */
+function sealGitIdentityFor(projectReal, gitCommonDirReal) {
+  const gitEntryPath = path.join(projectReal, '.git');
+  const gitEntryStat = statIdentityOrNull(gitEntryPath);
+  const gitEntrySymlinkTarget = gitEntryStat && gitEntryStat.isSymbolicLink ? readlinkOrNull(gitEntryPath) : null;
+  const resolvedGitEntry = realpathOrSelf(gitEntryPath);
+  const resolvedGitEntryStat = statIdentityOrNull(resolvedGitEntry);
+  let gitdirFileSha256 = null;
+  let gitdirTargetReal = null;
+  let isLinkedWorktree = false;
+  if (resolvedGitEntryStat && resolvedGitEntryStat.isFile) {
+    isLinkedWorktree = true;
+    const bytes = readFdBoundFileOrNull(resolvedGitEntry, resolvedGitEntryStat);
+    if (bytes) {
+      gitdirFileSha256 = sha256Buffer(bytes);
+      const match = bytes.toString('utf8').match(/^gitdir:\s*(.+?)\s*$/m);
+      const rawTarget = match ? match[1] : null;
+      gitdirTargetReal = rawTarget
+        ? realpathOrSelf(path.isAbsolute(rawTarget) ? rawTarget : path.resolve(projectReal, rawTarget))
+        : null;
+    }
+  } else if (resolvedGitEntryStat && resolvedGitEntryStat.isDirectory) {
+    gitdirTargetReal = resolvedGitEntry;
+  }
+
+  // <gitdirTargetReal>/commondir -- only meaningful (and only ever present)
+  // for the linked-worktree shape; a normal repo's own .git directory IS
+  // its common dir, with no separate indirection file. Sealed the SAME way
+  // regardless of whether it currently exists: absence is itself part of
+  // the sealed state, so a LATER appearance (or disappearance) of this file
+  // is exactly as much a mismatch as a content change.
+  let commondirStat = null;
+  let commondirSymlinkTarget = null;
+  let commondirSha256 = null;
+  let commondirTargetReal = null;
+  if (isLinkedWorktree && gitdirTargetReal) {
+    const commondirPath = path.join(gitdirTargetReal, 'commondir');
+    commondirStat = statIdentityOrNull(commondirPath);
+    commondirSymlinkTarget = commondirStat && commondirStat.isSymbolicLink ? readlinkOrNull(commondirPath) : null;
+    if (commondirStat && commondirStat.isFile) {
+      const bytes = readFdBoundFileOrNull(commondirPath, commondirStat);
+      if (bytes) {
+        commondirSha256 = sha256Buffer(bytes);
+        const raw = bytes.toString('utf8').replace(/\r?\n+$/, '');
+        commondirTargetReal = raw
+          ? realpathOrSelf(path.isAbsolute(raw) ? raw : path.resolve(gitdirTargetReal, raw))
+          : null;
+      }
+    }
+  }
+
+  return {
+    projectRealStat: statIdentityOrNull(projectReal),
+    gitEntryStat,
+    gitEntrySymlinkTarget,
+    resolvedGitEntry,
+    resolvedGitEntryStat,
+    gitdirFileSha256,
+    gitdirTargetReal,
+    gitdirTargetStat: gitdirTargetReal ? statIdentityOrNull(gitdirTargetReal) : null,
+    isLinkedWorktree,
+    commondirStat,
+    commondirSymlinkTarget,
+    commondirSha256,
+    commondirTargetReal,
+    gitCommonDirReal,
+    gitCommonDirStat: statIdentityOrNull(gitCommonDirReal),
+  };
+}
+
+function statIdentityEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  // M6+M7 SIXTEENTH Phase 2C correction (empirically forced): nlink is
+  // deliberately EXCLUDED from this comparison. For a directory it is a
+  // subdirectory reference COUNT (2 + one per immediate child dir), not an
+  // identity property -- it legitimately changes every time any ordinary
+  // sibling directory is created/removed anywhere under projectReal, .git,
+  // the gitdir target, or the common-dir, all of which are actively-used
+  // working directories during a real session (measured: a live retained
+  // supervisor's own pollRetainedWorkers loop hit this as a false-positive
+  // seal mismatch on ordinary repo activity, threw, and self-shut-down the
+  // whole retained plane -- reproduced 100% of the time against a real
+  // fixture, M6-CD-02's own regression). dev+ino is already the complete,
+  // sufficient, and this codebase's own established "same underlying file"
+  // proof (classifyDurableRead, readProtectedHostCodexPin); mode+uid add
+  // genuine tamper signal (permission/ownership swap) without nlink's
+  // volatility.
+  return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.uid === b.uid
+    && a.isDirectory === b.isDirectory && a.isFile === b.isFile
+    && a.isSymbolicLink === b.isSymbolicLink;
+}
+
+/** Exact field-by-field comparison -- never a JSON.stringify shortcut (key-order-fragile). */
+function gitTopologySealsMatch(a, b) {
+  if (!a || !b) return false;
+  return statIdentityEqual(a.projectRealStat, b.projectRealStat)
+    && statIdentityEqual(a.gitEntryStat, b.gitEntryStat)
+    && a.gitEntrySymlinkTarget === b.gitEntrySymlinkTarget
+    && a.resolvedGitEntry === b.resolvedGitEntry
+    && statIdentityEqual(a.resolvedGitEntryStat, b.resolvedGitEntryStat)
+    && a.gitdirFileSha256 === b.gitdirFileSha256
+    && a.gitdirTargetReal === b.gitdirTargetReal
+    && statIdentityEqual(a.gitdirTargetStat, b.gitdirTargetStat)
+    && a.isLinkedWorktree === b.isLinkedWorktree
+    && statIdentityEqual(a.commondirStat, b.commondirStat)
+    && a.commondirSymlinkTarget === b.commondirSymlinkTarget
+    && a.commondirSha256 === b.commondirSha256
+    && a.commondirTargetReal === b.commondirTargetReal
+    && a.gitCommonDirReal === b.gitCommonDirReal
+    && statIdentityEqual(a.gitCommonDirStat, b.gitCommonDirStat);
+}
+
+/**
+ * Self-consistency gate, distinct from before/after seal comparison: does
+ * `commondir`'s OWN on-disk content (as just read into this seal) actually
+ * resolve to the SAME real path as `gitCommonDirReal` (the string git itself
+ * produced via `rev-parse --git-common-dir` at derive time)? Required by
+ * review: a divergence here -- even one that has existed since the very
+ * first derive (so there is no "before" seal to diff against) -- must fail
+ * closed rather than silently trusting whichever of the two sources looked
+ * more convenient. Non-worktree repos (no commondir file at all) trivially
+ * pass: there is nothing to correlate.
+ * @returns {boolean}
+ */
+function sealCorrelatesWithGitCommonDir(seal, gitCommonDirReal) {
+  if (!seal) return false;
+  if (!seal.isLinkedWorktree) return true;
+  if (!seal.commondirTargetReal) return false;
+  return seal.commondirTargetReal === gitCommonDirReal;
+}
+
+/**
+ * Generic sealed-cache wrapper for a per-projectRoot git-topology derivation.
+ * `deriveFn(projectRoot)` runs the real (expensive, git-spawning) derivation
+ * exactly once per distinct projectRoot for the life of this process -- same
+ * memoization shape as before -- and must return
+ * `{ok:true, projectReal, gitCommonDirReal, ...}` (extra fields pass through
+ * untouched) or `{ok:false, reason}`. Every call (including the very first)
+ * is sealed via `sealGitIdentityFor`; every REUSE of a cached entry first
+ * cheaply reproves the seal still matches (lstat/readlink/read only, never a
+ * second git spawn) before returning the cached derivation -- a mismatch
+ * fails closed with `git-topology-seal-mismatch` rather than silently
+ * recomputing and accepting a new topology under the same cache key.
+ * @param {Map} cacheMap - private to ONE call site; never shared across sites with different derived shapes.
+ * @param {string} projectRoot
+ * @param {(projectRoot: string) => ({ok:true,projectReal:string,gitCommonDirReal:string}|{ok:false,reason:string})} deriveFn
+ * @returns {{ok:true,derived:object}|{ok:false,reason:string}}
+ */
+function resolveSealedGitCache(cacheMap, projectRoot, deriveFn) {
+  const existing = cacheMap.get(projectRoot);
+  if (existing) {
+    const freshSeal = sealGitIdentityFor(existing.derived.projectReal, existing.derived.gitCommonDirReal);
+    if (!gitTopologySealsMatch(existing.seal, freshSeal)) {
+      return { ok: false, reason: 'git-topology-seal-mismatch' };
+    }
+    if (!sealCorrelatesWithGitCommonDir(freshSeal, existing.derived.gitCommonDirReal)) {
+      return { ok: false, reason: 'git-topology-commondir-correlation-mismatch' };
+    }
+    return { ok: true, derived: existing.derived };
+  }
+  let result;
+  try {
+    result = deriveFn(projectRoot);
+  } catch (err) {
+    return { ok: false, reason: 'git-topology-unresolvable' };
+  }
+  if (!result.ok) return result;
+  const seal = sealGitIdentityFor(result.projectReal, result.gitCommonDirReal);
+  if (!sealCorrelatesWithGitCommonDir(seal, result.gitCommonDirReal)) {
+    return { ok: false, reason: 'git-topology-commondir-correlation-mismatch' };
+  }
+  cacheMap.set(projectRoot, { derived: result, seal });
+  return { ok: true, derived: result };
+}
+
 function computeSubjectHead(cwd) {
   return gitRevParse(cwd, ['rev-parse', 'HEAD']);
 }
@@ -550,6 +835,11 @@ function inboxPathFor(planRoot, role, requestId) {
 
 function blobPathFor(planRoot, digest) {
   return path.join(planRoot, 'blobs', digest);
+}
+
+/** Sixteenth §16c: the sole canonical location for Context7 pattern evidence. */
+function patternEvidencePathFor(txnDir) {
+  return path.join(txnDir, 'evidence', 'context7.json');
 }
 
 /**
@@ -793,21 +1083,28 @@ function injectReadMutationFault(artifactPath) {
  * flush/close failure -- that decision belongs one level up, to each caller
  * (`publishNoClobber` fails closed on a `false` return; `publishReplace` does
  * not check it -- see its own comment, out of scope for this pass).
+ *
+ * `suppressFaultInjection` (M7 completeness, mirrors `publishNoClobber`'s own
+ * `suppressInternalFaultInjection` -- see that option's doc comment): when
+ * true, skips BOTH `isDirFsyncFaultActive`/`isDirCloseFaultActive` checks
+ * below. Passed `true` ONLY by `publishNoClobber`'s own internal calls, and
+ * ONLY when ITS caller opted in; `publishReplace`'s own call site never
+ * passes this argument, so its behavior is completely unchanged.
  */
-function fsyncDir(dirPath, barrierLabel) {
+function fsyncDir(dirPath, barrierLabel, suppressFaultInjection) {
   let fd;
   let proven = false;
   let primaryClosed = false;
   try {
     fd = fs.openSync(dirPath, 'r');
-    if (isDirFsyncFaultActive(barrierLabel)) {
+    if (!suppressFaultInjection && isDirFsyncFaultActive(barrierLabel)) {
       dirFsyncFaultInjectedCount += 1;
       const injected = new Error('simulated directory-fsync failure (RUNTIME_CONSULTATION_FAULT_DIR_FSYNC)');
       injected.code = 'EIO';
       throw injected;
     }
     fs.fsyncSync(fd);
-    if (isDirCloseFaultActive(barrierLabel)) {
+    if (!suppressFaultInjection && isDirCloseFaultActive(barrierLabel)) {
       dirCloseFaultInjectedCount += 1;
       const injected = new Error('simulated directory-close failure (RUNTIME_CONSULTATION_FAULT_DIR_CLOSE)');
       injected.code = 'EIO';
@@ -859,11 +1156,16 @@ function writeAllSync(fd, buffer) {
  * identity, or the WP1 fault-injection seam (`isTempHardenFaultActive`) firing
  * -- the caller is responsible for closing/unlinking the temp on this throw, as
  * it already does for every other pre-durability temp-setup failure.
+ *
+ * `suppressFaultInjection` (M7 completeness): when true, skips both
+ * `isTempHardenFaultActive` checks below -- see `publishNoClobber`'s own
+ * `suppressInternalFaultInjection` doc comment. `publishReplace`'s own call
+ * site never passes this argument.
  */
-function hardenTempFdExact0600(fd, tempPath) {
+function hardenTempFdExact0600(fd, tempPath, suppressFaultInjection) {
   if (process.platform === 'win32') return; // POSIX-mode discipline only; Windows ACL confinement is PENDING_CI.
   try {
-    if (isTempHardenFaultActive('fchmod')) {
+    if (!suppressFaultInjection && isTempHardenFaultActive('fchmod')) {
       const injected = new Error('injected temp-harden fchmod failure (RUNTIME_CONSULTATION_FAULT_TEMP_HARDEN=fchmod)');
       injected.code = 'EIO';
       throw injected;
@@ -874,7 +1176,7 @@ function hardenTempFdExact0600(fd, tempPath) {
   }
   let st;
   try {
-    if (isTempHardenFaultActive('fstat')) {
+    if (!suppressFaultInjection && isTempHardenFaultActive('fstat')) {
       const injected = new Error('injected temp-harden fstat failure (RUNTIME_CONSULTATION_FAULT_TEMP_HARDEN=fstat)');
       injected.code = 'EIO';
       throw injected;
@@ -923,6 +1225,35 @@ function hardenTempFdExact0600(fd, tempPath) {
  * revalidation here instead closes the window down to the gap between this
  * callback returning and `linkSync` actually executing -- the tightest
  * achievable without a hypothetical atomic "compare-then-link" primitive.
+ *
+ * `opts.suppressReplacePostRenameFaultInjection` (M7/WP4 Phase B.3): forwarded
+ * verbatim to every internal `assertDurableTargetMatches` call -- see that
+ * function's own doc comment for why this exists (a test-only fault seam
+ * authored for `publishReplace` was leaking into `publishNoClobber`'s shared
+ * comparator). Test-instrumentation-scope only; every real durability/replay/
+ * security check this function performs is completely unaffected.
+ *
+ * `opts.suppressInternalFaultInjection` (M7 completeness, sibling fix to the
+ * one directly above): the SAME leak class, for every OTHER test-only fault
+ * seam this function itself checks directly (as opposed to inside the shared
+ * `assertDurableTargetMatches` comparator) -- `isTempHardenFaultActive`
+ * (`hardenTempFdExact0600`), `isNoclobberPrelinkFaultActive`,
+ * `isLoserUnlinkFaultActive`, `isDirFsyncFaultActive`/`isDirCloseFaultActive`
+ * (all three `fsyncDir` calls below: loser-cleanup, barrier1, barrier2), and
+ * `isTempUnlinkFaultActive`/`isNoclobberPrevalidateFaultActive`. Confirmed
+ * (M7 completeness pass, `consumeValidatedRoleCommandGrantOrThrow`'s grant-
+ * consumption marker write) that a test fault var targeting one of THESE
+ * families on a LATER, unrelated call could equally be "stolen" by this
+ * earlier internal write, exactly like the REPLACE_POSTRENAME case above --
+ * every fault check this function can reach is test-instrumentation-scope
+ * only, so suppressing all of them together for one caller's own internal
+ * write is the complete fix, not a per-fault-type patchwork that would need
+ * re-discovering one fault family at a time. Passed `true` ONLY by
+ * `consumeValidatedRoleCommandGrantOrThrow`; every other `publishNoClobber` caller's
+ * behavior is completely unchanged. Deliberately a SEPARATE option from
+ * `suppressReplacePostRenameFaultInjection` above (never merged/renamed) --
+ * that one is already shipped/verified and governs the comparator only; this
+ * one governs everything else `publishNoClobber` itself checks.
  */
 function publishNoClobber(targetPath, bytes, opts) {
   const options = opts || {};
@@ -947,7 +1278,7 @@ function publishNoClobber(targetPath, bytes, opts) {
   try {
     // Section 0.3: force exact 0600 via fchmod (never trust open()'s mode argument
     // alone, which is subject to the process umask) before any byte is written.
-    hardenTempFdExact0600(tempFd, tempPath);
+    hardenTempFdExact0600(tempFd, tempPath, options.suppressInternalFaultInjection);
     writeAllSync(tempFd, buf);
     fs.fsyncSync(tempFd);
     // Codex P1-1: capture OUR OWN temp's identity (dev/ino) while its fd is still open
@@ -959,12 +1290,12 @@ function publishNoClobber(targetPath, bytes, opts) {
   } finally {
     fs.closeSync(tempFd);
   }
-  if (isNoclobberPrelinkFaultActive('swap')) {
+  if (!options.suppressInternalFaultInjection && isNoclobberPrelinkFaultActive('swap')) {
     // Test-only (Codex P1-1 repro): simulate an attacker swapping the temp's content
     // between our own fsync+identity-capture and our linkSync below.
     try { fs.unlinkSync(tempPath); } catch (e) { /* best-effort test setup */ }
     fs.writeFileSync(tempPath, Buffer.from('RUNTIME_CONSULTATION_TEST_ATTACKER_SWAP_CONTENT'), { mode: 0o600 });
-  } else if (isNoclobberPrelinkFaultActive('swap-same-bytes')) {
+  } else if (!options.suppressInternalFaultInjection && isNoclobberPrelinkFaultActive('swap-same-bytes')) {
     // Test-only (Codex NO-GO round 2, missing-evidence item 3): swap to a FRESH file
     // carrying the EXACT SAME bytes we just wrote (`buf`) -- a different inode, but
     // byte-identical content. Isolates that the post-link revalidation's identity
@@ -974,7 +1305,17 @@ function publishNoClobber(targetPath, bytes, opts) {
     fs.writeFileSync(tempPath, buf, { mode: 0o600 });
   }
   if (typeof options.revalidateBeforeLink === 'function') {
-    options.revalidateBeforeLink();
+    try {
+      options.revalidateBeforeLink();
+    } catch (err) {
+      // M7 GREEN section 4.6: a revalidateBeforeLink rejection (e.g. a
+      // freshly-observed terminal) must leave ZERO observable mutation --
+      // the temp-owner file already created/fsynced above is best-effort
+      // cleaned up here too, mirroring the identical non-EEXIST linkSync
+      // failure cleanup below. Never masks the original rejection reason.
+      try { fs.unlinkSync(tempPath); } catch (cleanupErr) { /* best effort */ }
+      throw err;
+    }
   }
   try {
     fs.linkSync(tempPath, targetPath);
@@ -987,7 +1328,7 @@ function publishNoClobber(targetPath, bytes, opts) {
       // -- never an idempotent SUCCESS (even against a byte-identical target) and never a
       // silent best-effort swallow that leaves a false completion claim.
       try {
-        if (isLoserUnlinkFaultActive()) {
+        if (!options.suppressInternalFaultInjection && isLoserUnlinkFaultActive()) {
           const injected = new Error('injected loser-cleanup unlink failure (RUNTIME_CONSULTATION_FAULT_LOSER_UNLINK)');
           injected.code = 'EIO';
           throw injected;
@@ -996,7 +1337,7 @@ function publishNoClobber(targetPath, bytes, opts) {
       } catch (unlinkErr) {
         throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'no-clobber loser could not durably remove its own temp: ' + tempPath + ' (' + (unlinkErr && unlinkErr.message) + ')');
       }
-      if (!fsyncDir(dir, 'loser-cleanup')) {
+      if (!fsyncDir(dir, 'loser-cleanup', options.suppressInternalFaultInjection)) {
         throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'no-clobber loser temp cleanup could not be flushed durable for ' + dir + fsyncDirCauseSuffix());
       }
       if (options.allowIdenticalIdempotent) {
@@ -1025,7 +1366,7 @@ function publishNoClobber(targetPath, bytes, opts) {
           // identity drift propagate as their own SECURITY/DURABILITY failure.
           let idempotentSt;
           try {
-            idempotentSt = assertDurableTargetMatches(existingFd, targetPath, buf);
+            idempotentSt = assertDurableTargetMatches(existingFd, targetPath, buf, undefined, options.suppressReplacePostRenameFaultInjection);
           } catch (cmpErr) {
             if (cmpErr && cmpErr.byteMismatch) {
               throw new CliError('INVALID', options.raceDetailCode || 'AUTHORITY_INVALID', 'no-clobber race lost (existing durable target differs) for ' + targetPath);
@@ -1063,7 +1404,7 @@ function publishNoClobber(targetPath, bytes, opts) {
   // crash (a reader's assertDurable correctly rejects nlink==2 as
   // DURABILITY_UNPROVEN) -- fail closed: the writer itself must never claim
   // SUCCESS on an unproven durability barrier.
-  if (!fsyncDir(dir, 'barrier1')) {
+  if (!fsyncDir(dir, 'barrier1', options.suppressInternalFaultInjection)) {
     // Fail closed and deliberately LEAVE the target at nlink==2 (the owner-tagged
     // temp stays hard-linked): barrier 1 was never proven, so unlinking the temp
     // here would drop the target to nlink==1 and break the PLAN.md ~L681 invariant
@@ -1077,7 +1418,7 @@ function publishNoClobber(targetPath, bytes, opts) {
     throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'directory-fsync barrier 1 not proven for ' + dir + fsyncDirCauseSuffix());
   }
   try {
-    if (isTempUnlinkFaultActive()) {
+    if (!options.suppressInternalFaultInjection && isTempUnlinkFaultActive()) {
       const injected = new Error('injected temp-unlink failure (RUNTIME_CONSULTATION_FAULT_TEMP_UNLINK)');
       injected.code = 'EIO';
       throw injected;
@@ -1097,7 +1438,7 @@ function publishNoClobber(targetPath, bytes, opts) {
   // barrier 2") is stricter than what a reader can currently observe here, so
   // an unproven barrier 2 still fails the publish closed rather than
   // returning SUCCESS.
-  if (!fsyncDir(dir, 'barrier2')) {
+  if (!fsyncDir(dir, 'barrier2', options.suppressInternalFaultInjection)) {
     throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'directory-fsync barrier 2 not proven for ' + dir + fsyncDirCauseSuffix());
   }
   // Codex P1-1: the writer's own SUCCESS claim must be PROVEN, not merely inferred from
@@ -1112,11 +1453,11 @@ function publishNoClobber(targetPath, bytes, opts) {
   // as a durable orphan for later reconciliation rather than silently releasing over a
   // compromised or vanished target.
   try {
-    if (isNoclobberPrevalidateFaultActive('delete')) {
+    if (!options.suppressInternalFaultInjection && isNoclobberPrevalidateFaultActive('delete')) {
       // Test-only (Codex P1-1 repro): simulate an attacker deleting the just-published
       // target after barrier 2 but before this revalidation observes it.
       try { fs.unlinkSync(targetPath); } catch (e) { /* best-effort test setup */ }
-    } else if (isNoclobberPrevalidateFaultActive('hardlink')) {
+    } else if (!options.suppressInternalFaultInjection && isNoclobberPrevalidateFaultActive('hardlink')) {
       // Test-only (Codex P1-1 repro): simulate an attacker adding a second hardlink to
       // the just-published target after barrier 2 but before this revalidation observes
       // it -- the shared comparator's nlink==1 check must reject it.
@@ -1140,7 +1481,7 @@ function publishNoClobber(targetPath, bytes, opts) {
       // still a distinct, unvalidated re-read, reopening a fresh (if narrow)
       // window between the comparator's own proof and this call's own read;
       // see assertDurableTargetMatches's own matching comment.
-      publishedSt = assertDurableTargetMatches(checkFd, targetPath, buf, { dev: tempIdentity.dev, ino: tempIdentity.ino });
+      publishedSt = assertDurableTargetMatches(checkFd, targetPath, buf, { dev: tempIdentity.dev, ino: tempIdentity.ino }, options.suppressReplacePostRenameFaultInjection);
     } finally {
       try { fs.closeSync(checkFd); } catch (e) { /* best-effort cleanup */ }
     }
@@ -1207,9 +1548,30 @@ function readAllFromFd(fd, cap) {
  * publishNoClobber's own just-written temp) rather than accepting any regular, owner-
  * confined, byte-matching file as sufficient proof. Omitted by both publishReplace's and the
  * EEXIST-loser's callers, which have no single inode of their own to bind against.
+ *
+ * `suppressReplacePostRenameFaultInjection` (M7/WP4 Phase B.3, test-scope-leak fix):
+ * `RUNTIME_CONSULTATION_FAULT_REPLACE_POSTRENAME` (`isReplacePostRenameFaultActive`,
+ * test-capability-gated, zero effect in production regardless) was authored to
+ * test `publishReplace`'s OWN post-rename revalidation specifically -- but this
+ * comparator is SHARED with `publishNoClobber`'s own post-link revalidation, so
+ * the SAME env var was incidentally also intercepting `publishNoClobber`'s
+ * unrelated callers. Concretely: `consumeValidatedRoleCommandGrantOrThrow`'s
+ * `publishNoClobber` write (the role-command-grant `.consumed` marker) now
+ * legitimately runs BEFORE `cmdLeaseHeartbeat` ever acquires its lock (PLAN.md
+ * ~L604: grant consumption happens "before any read or mutation"), so a fault
+ * env var a test set to target `cmdLeaseHeartbeat`'s OWN later `publishReplace`
+ * call was instead being consumed by this earlier, unrelated write -- never
+ * reaching the `publishReplace` call the test actually targets. Passed `true`
+ * ONLY by `publishNoClobber`, and ONLY when ITS OWN caller opts in via
+ * `options.suppressReplacePostRenameFaultInjection` (currently only
+ * `consumeValidatedRoleCommandGrantOrThrow`) -- `publishReplace`'s own call site never
+ * passes this argument, so its behavior, and every other publishNoClobber
+ * caller's, is completely unchanged. This affects ONLY which test-only fault
+ * seam a call is subject to; every real replay/EEXIST/argv-digest/binding
+ * check is untouched.
  */
-function assertDurableTargetMatches(fd, targetPath, expectedBytes, expectedIdentity) {
-  if (isReplacePostRenameFaultActive('fstat1')) throw new Error('injected fstat1 fault');
+function assertDurableTargetMatches(fd, targetPath, expectedBytes, expectedIdentity, suppressReplacePostRenameFaultInjection) {
+  if (!suppressReplacePostRenameFaultInjection && isReplacePostRenameFaultActive('fstat1')) throw new Error('injected fstat1 fault');
   const st = fs.fstatSync(fd, { bigint: true });
   if (!statIsRegularFile(st)) throw new CliError('INVALID', 'SECURITY_INVALID', 'target is not a regular file: ' + targetPath);
   const isPosix = process.platform !== 'win32';
@@ -1226,7 +1588,7 @@ function assertDurableTargetMatches(fd, targetPath, expectedBytes, expectedIdent
     mismatchErr = new CliError('INVALID', 'DURABILITY_UNPROVEN', 'target size does not match the payload: ' + targetPath);
     mismatchErr.byteMismatch = true;
   } else {
-    if (isReplacePostRenameFaultActive('read')) throw new Error('injected read fault');
+    if (!suppressReplacePostRenameFaultInjection && isReplacePostRenameFaultActive('read')) throw new Error('injected read fault');
     const readback = readAllFromFd(fd, Number(st.size) + 1);
     if (Buffer.compare(readback, expectedBytes) !== 0) {
       // A genuine, durable target that simply carries DIFFERENT bytes is flagged distinctly so
@@ -1258,12 +1620,12 @@ function assertDurableTargetMatches(fd, targetPath, expectedBytes, expectedIdent
     throw new CliError('INVALID', 'SECURITY_INVALID', 'target metadata does not match its own original publish-time snapshot (rewritten since, even though current bytes match): ' + targetPath);
   }
 
-  if (isReplacePostRenameFaultActive('fstat2')) throw new Error('injected fstat2 fault');
+  if (!suppressReplacePostRenameFaultInjection && isReplacePostRenameFaultActive('fstat2')) throw new Error('injected fstat2 fault');
   const st2 = fs.fstatSync(fd, { bigint: true });
   if (st2.dev !== st.dev || st2.ino !== st.ino || st2.nlink !== st.nlink || st2.size !== st.size || st2.mode !== st.mode || st2.uid !== st.uid || st2.gid !== st.gid || st2.ctimeNs !== st.ctimeNs || st2.mtimeNs !== st.mtimeNs) {
     throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'target identity changed during read (rewrite/chmod/hardlink/growth): ' + targetPath);
   }
-  if (isReplacePostRenameFaultActive('lstat')) throw new Error('injected lstat fault');
+  if (!suppressReplacePostRenameFaultInjection && isReplacePostRenameFaultActive('lstat')) throw new Error('injected lstat fault');
   const lst = fs.lstatSync(targetPath, { bigint: true });
   // PRESENT requires the LAST snapshot still be a single-link (nlink==1) inode with ALL
   // invariants -- including ctimeNs/mtimeNs -- unchanged from the stable fstat snapshot.
@@ -1686,7 +2048,14 @@ function classifyDurableRead(artifactPath, policy) {
 
 /** One-shot STOP for the nlink==2 in-flight window (a caller with no wait budget). */
 function pendingDurableStop(artifactPath) {
-  return new CliError('INVALID', 'DURABILITY_UNPROVEN', 'artifact in the nlink==2 in-flight window, not yet durable: ' + artifactPath);
+  const e = new CliError('INVALID', 'DURABILITY_UNPROVEN', 'artifact in the nlink==2 in-flight window, not yet durable: ' + artifactPath);
+  // Mirrors absentDurableStop's own durableAbsent flag below: a downstream
+  // caller that polls (e.g. assessAwaitResultLiveness) needs to tell "still
+  // being durably written this instant" apart from every OTHER
+  // DURABILITY_UNPROVEN cause (identity drift, path rebound, ...), which must
+  // stay a hard STOP, never a swallowed "keep waiting".
+  e.durablePending = true;
+  return e;
 }
 function absentDurableStop(artifactPath, policy) {
   const e = new CliError('INVALID', policy.absentDetail || 'SCHEMA_INVALID', policy.absentMessage || ('artifact not found: ' + artifactPath));
@@ -2103,6 +2472,158 @@ function testRendezvous(txnDir, name) {
       throw new Error('test rendezvous "' + name + '" timed out waiting for the -go sentinel');
     }
     sleepSync(RENDEZVOUS_POLL_MS);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// M7 §10.1: deterministic test-rendezvous seams (Fase 0 prerequisite -- these
+// exact producers do not exist in the baseline; this is inert
+// test-instrumentation plumbing only, never authority/schema behavior).
+// Mirrors testRendezvous's own capability+name-gate/sleepSync-poll shape
+// immediately above, but stricter per the contract: no-clobber (never a
+// clobbering writeFileSync), explicit mode 0600, exact bytes (never a PID
+// string), and a caller-supplied directory (never a fixed txnDir) that must
+// realpath beneath the process's own tmpdir (the suite's private test root)
+// and outside this repo's registry/coordination roots. Gated on BOTH this
+// file's own RUNTIME_CONSULTATION_TEST_CAPABILITY (isTestCapability()) and
+// the shared RUNTIME_M7_TEST_STAGE/RUNTIME_M7_TEST_RENDEZVOUS_DIR pair --
+// production and tests without every gate perform ZERO filesystem I/O (no
+// stat, no read) before returning. No sentinel is an authority artifact.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RUNTIME_M7_RENDEZVOUS_MAX_WAIT_MS = 5000;
+const RUNTIME_M7_RENDEZVOUS_POLL_MS = 20;
+const RUNTIME_M7_READY_BYTES = Buffer.from('ready\n', 'utf8');
+const RUNTIME_M7_GO_BYTES = Buffer.from('go\n', 'utf8');
+// registryBaseDir()'s own fixed literal parent (runtime-role-lifecycle.cjs:
+// path.join(os.tmpdir(), 'android-common-doc-runtime', computePrincipalId())),
+// reproduced here ONLY as this fixed prefix (never the principal-id suffix)
+// so this file can prove "outside the runtime registry root" without a
+// lazy-require of its sibling module for a pure test-instrumentation safety
+// check -- mirrors scripts/tests/lib/private-registry-tmpdir-preload.cjs's
+// own documented "prefix check" strategy for the identical purpose.
+const M7_REGISTRY_BASE_DIR_LITERAL = 'android-common-doc-runtime';
+
+/**
+ * Realpath-validates `dirRaw` beneath the process's own tmpdir (the suite's
+ * private test root) and outside this repo's registry/coordination roots --
+ * returns the resolved real path, or null on ANY failure (never throws; the
+ * caller must skip the rendezvous, never fail production behavior, per M7
+ * §10.1's "fail closed / skip... do not throw into production behavior").
+ * @param {string} dirRaw
+ * @param {string} [coordRoot]
+ * @returns {string|null}
+ */
+function resolveSafeM7RendezvousDir(dirRaw, coordRoot) {
+  if (typeof dirRaw !== 'string' || dirRaw.length === 0 || !path.isAbsolute(dirRaw)) return null;
+  let real;
+  try {
+    real = fs.realpathSync(dirRaw);
+  } catch {
+    return null;
+  }
+  let tmpReal;
+  try {
+    tmpReal = fs.realpathSync(os.tmpdir());
+  } catch {
+    return null;
+  }
+  if (real !== tmpReal && !real.startsWith(tmpReal + path.sep)) return null;
+  const registryParent = path.join(tmpReal, M7_REGISTRY_BASE_DIR_LITERAL);
+  if (real === registryParent || real.startsWith(registryParent + path.sep)) return null;
+  if (typeof coordRoot === 'string' && coordRoot.length > 0) {
+    let coordReal;
+    try {
+      coordReal = fs.realpathSync(coordRoot);
+    } catch {
+      coordReal = null;
+    }
+    if (coordReal !== null && (real === coordReal || real.startsWith(coordReal + path.sep))) return null;
+  }
+  return real;
+}
+
+/**
+ * M7 §10.1 deterministic rendezvous producer. No-op (zero I/O) unless
+ * NODE_ENV=test, a non-empty RUNTIME_CONSULTATION_TEST_CAPABILITY, AND both
+ * RUNTIME_M7_TEST_STAGE===stage and a safely-scoped
+ * RUNTIME_M7_TEST_RENDEZVOUS_DIR are present. When armed: no-clobber writes
+ * regular mode-0600 "<stage>.ready" with exact bytes "ready\n", then polls
+ * (bounded 5000ms) for regular mode-0600 "<stage>.go" with exact bytes "go\n"
+ * before returning. Throws (never hangs) if the bound is exceeded once armed
+ * -- a hung rendezvous must fail loud, never hang the test suite.
+ * @param {string} stage
+ * @param {string} [coordRoot]
+ */
+function testM7Rendezvous(stage, coordRoot) {
+  if (!isTestCapability()) return;
+  if (process.env.RUNTIME_M7_TEST_STAGE !== stage) return;
+  const dirRaw = process.env.RUNTIME_M7_TEST_RENDEZVOUS_DIR;
+  if (typeof dirRaw !== 'string' || dirRaw.length === 0) return;
+  const safeDir = resolveSafeM7RendezvousDir(dirRaw, coordRoot);
+  if (!safeDir) return;
+  const readyPath = path.join(safeDir, stage + '.ready');
+  const goPath = path.join(safeDir, stage + '.go');
+  fs.writeFileSync(readyPath, RUNTIME_M7_READY_BYTES, { mode: 0o600, flag: 'wx' });
+  try { fs.chmodSync(readyPath, 0o600); } catch { /* best-effort hardening, umask already yields 0600 */ }
+  // M7 defect 12: a monotonic clock (never Date.now(), which a wall-clock
+  // adjustment could move backward mid-poll) bounds the wait.
+  const startNs = process.hrtime.bigint();
+  while (true) {
+    // M7 GREEN section 4.11 (R14, TOCTOU fix) / M7 CORRECTION round 1 (C10):
+    // never validate one inode and read another path. lstat records
+    // pre-open identity (dev/ino) and rejects an obvious symlink/wrong-mode
+    // entry -- genuinely ENOENT is the ordinary "not written yet" case
+    // (kept polling below); ANY OTHER existing-but-invalid case (symlink,
+    // wrong mode, non-regular, or an identity drift between lstat and the
+    // open) throws IMMEDIATELY with a message containing the stable literal
+    // M7_RENDEZVOUS_INVALID_GO_SENTINEL, never silently retried as if it
+    // simply were not ready yet and never falling through to the generic
+    // timeout below. O_NOFOLLOW on the open itself is the REAL symlink
+    // protection (throws ELOOP on a symlink planted between the lstat and
+    // the open); fstat on the ALREADY-OPEN fd re-proves regular-file/
+    // exact-0600 and (when the platform exposes numeric dev/ino) correlates
+    // back to the pre-open identity, so a same-path swap to a different
+    // inode is caught too; the bytes are then read from that SAME held fd,
+    // never a fresh path lookup, and the fd is always closed.
+    let preLstat;
+    try {
+      preLstat = fs.lstatSync(goPath);
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') {
+        throw new Error('M7_RENDEZVOUS_INVALID_GO_SENTINEL: .go sentinel could not be stat-verified (' + ((err && err.code) || 'unknown') + ')');
+      }
+      preLstat = null;
+    }
+    if (preLstat !== null) {
+      if (preLstat.isSymbolicLink() || !preLstat.isFile() || (preLstat.mode & 0o777) !== 0o600) {
+        throw new Error('M7_RENDEZVOUS_INVALID_GO_SENTINEL: .go sentinel is not a genuine owner-only regular file');
+      }
+      let fd;
+      try {
+        fd = fs.openSync(goPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+      } catch (err) {
+        throw new Error('M7_RENDEZVOUS_INVALID_GO_SENTINEL: .go sentinel could not be opened (' + ((err && err.code) || 'unknown') + ')');
+      }
+      let goBytes;
+      try {
+        const st = fs.fstatSync(fd);
+        const identityStable = typeof preLstat.dev !== 'number' || typeof preLstat.ino !== 'number'
+          || (st.dev === preLstat.dev && st.ino === preLstat.ino);
+        if (!st.isFile() || (st.mode & 0o777) !== 0o600 || !identityStable) {
+          throw new Error('M7_RENDEZVOUS_INVALID_GO_SENTINEL: .go sentinel identity/shape changed between lstat and open');
+        }
+        goBytes = fs.readFileSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+      if (goBytes.equals(RUNTIME_M7_GO_BYTES)) return;
+    }
+    const elapsedMs = Number(process.hrtime.bigint() - startNs) / 1e6;
+    if (elapsedMs >= RUNTIME_M7_RENDEZVOUS_MAX_WAIT_MS) {
+      throw new Error('M7 test rendezvous "' + stage + '" timed out waiting for the go sentinel');
+    }
+    sleepSync(RUNTIME_M7_RENDEZVOUS_POLL_MS);
   }
 }
 
@@ -3278,10 +3799,133 @@ const RESULT_V2_FIELDS = {
   subject_head: { check: isNonEmptyString },
   subject_scope_digest: { check: isNonEmptyString },
   consultation_dependencies: { check: (v) => Array.isArray(v) },
+  pattern_evidence_dependency: {
+    check: (v) => v === null || isPatternEvidenceDependencyShape(v),
+  },
   producer_worktree_id: { check: isNonEmptyString },
   producer_head: { check: isNonEmptyString },
   created_at: { check: isIsoTimestamp },
 };
+
+const PATTERN_EVIDENCE_DEPENDENCY_KEYS = Object.freeze([
+  'evidence_digest', 'evidence_ref', 'gap_digest', 'internal_search_digest',
+  'library_id', 'provider', 'query_digest', 'resolution_digest',
+].sort());
+const PATTERN_EVIDENCE_V1_FIELDS = {
+  schema: { check: (v) => v === 'coordination/pattern-evidence/v1' },
+  request_id: { check: isHexId },
+  request_digest: { check: isHex64 },
+  attempt_id: { check: isHexId },
+  lease_epoch: { check: isNonNegativeInteger },
+  turn_id: { check: isNonEmptyString },
+  provider: { check: (v) => v === 'context7' },
+  internal_search_digest: { check: isHex64 },
+  gap_digest: { check: isHex64 },
+  library_id: { check: isCanonicalContext7LibraryId },
+  query_digest: { check: isHex64 },
+  resolution_ref: { check: (v) => v === null || isContentRefHandle(v) },
+  resolution_digest: { check: orNull(isHex64) },
+  source_uri: { check: (v) => v === 'https://context7.com/api/v2/context' },
+  content_ref: { check: isContentRefHandle },
+  created_at: { check: isIsoTimestamp },
+};
+
+function isPatternEvidenceDependencyShape(value) {
+  if (!hasExactKeys(value, PATTERN_EVIDENCE_DEPENDENCY_KEYS)) return false;
+  return (
+    isNonEmptyString(value.evidence_ref) && isHex64(value.evidence_digest)
+    && value.provider === 'context7' && isHex64(value.internal_search_digest)
+    && isHex64(value.gap_digest) && isCanonicalContext7LibraryId(value.library_id)
+    && isHex64(value.query_digest) && (value.resolution_digest === null || isHex64(value.resolution_digest))
+  );
+}
+
+function evidenceRelativeRefFor(requestId) {
+  return path.posix.join('transactions', requestId, 'evidence', 'context7.json');
+}
+
+function readAndValidatePatternEvidenceRecord(resultObj, reqRec, txnDir, planRoot, classified) {
+  const evidencePath = patternEvidencePathFor(txnDir);
+  let evidenceRec;
+  if (classified && classified.state === DURABLE_PRESENT) {
+    assertClosedShape(classified.obj, PATTERN_EVIDENCE_V1_FIELDS);
+    evidenceRec = {
+      obj: classified.obj,
+      bytes: classified.bytes,
+      digest: sha256Buffer(classified.bytes),
+      path: evidencePath,
+    };
+  } else {
+    evidenceRec = readClosedRecord(evidencePath, PATTERN_EVIDENCE_V1_FIELDS, {
+      absentDetail: 'CORRELATION_INVALID', absentMessage: 'pattern evidence does not resolve',
+    });
+  }
+  const evidence = evidenceRec.obj;
+  const auth = resolveAuthoritativeAttempt(reqRec.obj, txnDir);
+  if (
+    evidence.request_id !== resultObj.in_reply_to
+    || evidence.request_digest !== reqRec.digest
+    || evidence.attempt_id !== resultObj.attempt_id || evidence.attempt_id !== auth.attemptId
+    || evidence.lease_epoch !== resultObj.lease_epoch || evidence.lease_epoch !== auth.leaseEpoch
+  ) throw new CliError('INVALID', 'CORRELATION_INVALID', 'pattern evidence does not match the current transaction');
+  if (isoToMs(evidence.created_at) >= isoToMs(reqRec.obj.expiry)) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'pattern evidence was created at/after request expiry');
+  }
+  resolveContentRefOrThrow(planRoot, evidence.content_ref);
+  if ((evidence.resolution_ref === null) !== (evidence.resolution_digest === null)) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'pattern evidence resolution ref/digest nullability mismatch');
+  }
+  if (evidence.resolution_ref !== null) {
+    if (evidence.resolution_ref.digest !== evidence.resolution_digest || evidence.resolution_ref.blob !== evidence.resolution_digest) {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'pattern evidence resolution digest does not match its blob handle');
+    }
+    resolveContentRefOrThrow(planRoot, evidence.resolution_ref);
+  }
+  return evidenceRec;
+}
+
+function validatePatternEvidenceForResult(dependency, resultObj, reqRec, txnDir, planRoot) {
+  const evidencePath = patternEvidencePathFor(txnDir);
+  if (dependency === null) {
+    const classified = classifyDurableRead(evidencePath, { parse: true });
+    if (classified.state === DURABLE_PENDING) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'pattern evidence is pending while result declares no dependency');
+    }
+    if (classified.state === DURABLE_PRESENT && resultObj.status !== 'BLOCKED') {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'result omits its existing pattern evidence dependency');
+    }
+    // Sixteenth explicitly makes the dependency nullable for every BLOCKED
+    // result, including a CP that emits BLOCKED on its second, evidence-fed
+    // turn.  The durable evidence is still fully reopened and correlated; it
+    // simply is not represented as an answer dependency.
+    if (classified.state === DURABLE_PRESENT) {
+      return readAndValidatePatternEvidenceRecord(resultObj, reqRec, txnDir, planRoot, classified);
+    }
+    return null;
+  }
+  if (resultObj.status === 'BLOCKED' || resultObj.from_role !== 'context-provider') {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'pattern evidence dependency is forbidden for this result');
+  }
+  if (!isPatternEvidenceDependencyShape(dependency)) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'pattern evidence dependency shape invalid');
+  }
+  const expectedRef = evidenceRelativeRefFor(resultObj.in_reply_to);
+  if (dependency.evidence_ref !== expectedRef) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'pattern evidence dependency ref is not canonical');
+  }
+  const evidenceRec = readAndValidatePatternEvidenceRecord(resultObj, reqRec, txnDir, planRoot);
+  const evidence = evidenceRec.obj;
+  if (
+    evidenceRec.digest !== dependency.evidence_digest
+    || evidence.provider !== dependency.provider
+    || evidence.internal_search_digest !== dependency.internal_search_digest
+    || evidence.gap_digest !== dependency.gap_digest
+    || evidence.library_id !== dependency.library_id
+    || evidence.query_digest !== dependency.query_digest
+    || evidence.resolution_digest !== dependency.resolution_digest
+  ) throw new CliError('INVALID', 'CORRELATION_INVALID', 'pattern evidence dependency does not match its evidence record/current transaction');
+  return { obj: evidence, bytes: evidenceRec.bytes, digest: evidenceRec.digest, path: evidencePath };
+}
 
 /**
  * Fields the result/v2 record must mirror verbatim from its request/v2 (PLAN.md
@@ -3377,6 +4021,27 @@ function validateResultV2(artifactPath, coordRoot) {
   if (obj.attempt_id !== auth.attemptId || obj.lease_epoch !== auth.leaseEpoch) {
     throw new CliError('INVALID', 'AUTHORITY_INVALID', 'result attempt/epoch is not the current authoritative pair');
   }
+
+  validatePatternEvidenceForResult(obj.pattern_evidence_dependency, obj, reqRec, txnDir, planRoot);
+  const evidenceAuthority = resolveRootEvidenceAuthority(reqObj, reqRec.digest, coordRoot);
+  const evidencePolicy = evidenceAuthority.policy;
+  if (
+    obj.status === 'ANSWERED' && obj.from_role === 'context-provider'
+    && evidencePolicy === 'context7-required'
+    && obj.pattern_evidence_dependency === null
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'context7-required root result has no pattern evidence dependency');
+  if (
+    obj.status === 'ANSWERED' && obj.from_role === 'context-provider'
+    && (evidencePolicy === 'context7-required' || evidencePolicy === 'context7-preferred') && evidenceAuthority.libraryId !== null
+    && obj.pattern_evidence_dependency !== null
+    && obj.pattern_evidence_dependency.library_id !== evidenceAuthority.libraryId
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'context-provider pattern evidence library_id does not match the approved directive');
+
+  // M6/M7 terminal functional closure, point F: every reopen of a
+  // result/v2 re-validates its consultation_dependencies through the same
+  // canonical validator publish-time used -- never a lighter shape-only
+  // re-check.
+  validateConsultationDependencySet(obj.consultation_dependencies, reqObj, planRoot, coordRoot, evidenceAuthority);
 
   return { obj, bytes: rec.bytes, digest: rec.digest, reqObj, txnDir, planRoot, requestId };
 }
@@ -3502,6 +4167,99 @@ function validateAckV1(artifactPath) {
   // DUR-J item 4: durability + fd-bound identity are proven inside readJsonDurable(artifactPath)
   // above; the old path-based `assertDurable` after a by-path read was a TOCTOU and is gone.
   return obj;
+}
+
+const CONSULTATION_DEPENDENCY_KEYS = Object.freeze(
+  ['accepted_result_digest', 'from_role', 'request_id', 'result_digest'].sort(),
+);
+
+/**
+ * M6/M7 terminal functional closure, point F: the ONE canonical
+ * consultation_dependencies validator, reused both immediately before a
+ * terminal result publishes (hostBridgePublishTerminalResult) and every time
+ * validateResultV2 reopens an already-published result. Structural/shape
+ * checks (<=2 entries, exact key set) always run first; each entry is then
+ * fully reopened -- child request, its accepted-result (which itself
+ * re-derives and cross-checks the authoritative candidate result via
+ * assertAcceptedResultCorrelates), and its ack -- never trusted from the
+ * caller-supplied digests alone. Fails closed (throws) on any mismatch,
+ * missing/foreign artifact, wrong from_role, duplicate dependency, or a
+ * disposition other than 'accepted'.
+ *
+ * `evidenceAuthority` (optional; the same { policy, libraryId } resolveRootEvidenceAuthority
+ * returns), when supplied and `policy === 'context7-required'` and
+ * `reqObj.target_role !== 'context-provider'` (i.e. reqObj is the reporting
+ * architect's own result, not the context-provider child's), additionally
+ * enforces the architect-side half of point F: exactly one dependency,
+ * sourced from context-provider, whose child question is byte-identical to
+ * the parent's own required question (preserving any embedded
+ * APPROVED_CONTEXT7_LIBRARY_ID line end to end).
+ */
+function validateConsultationDependencySet(dependencies, reqObj, planRoot, coordRoot, evidenceAuthority) {
+  if (!Array.isArray(dependencies) || dependencies.length > 2) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'consultation dependency set is invalid');
+  }
+  const seenRequestIds = new Set();
+  const childReqObjs = [];
+  for (const dep of dependencies) {
+    if (
+      !dep || typeof dep !== 'object' || Array.isArray(dep) || !hasExactKeys(dep, CONSULTATION_DEPENDENCY_KEYS)
+      || !isHexId(dep.request_id) || !isHex64(dep.accepted_result_digest) || !isHex64(dep.result_digest)
+      || !isNonEmptyString(dep.from_role)
+    ) throw new CliError('INVALID', 'SCHEMA_INVALID', 'consultation dependency shape invalid');
+    if (seenRequestIds.has(dep.request_id)) {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'consultation dependency request_id is duplicated');
+    }
+    seenRequestIds.add(dep.request_id);
+
+    const childRequestPath = requestPathFor(planRoot, dep.request_id);
+    const childReqRec = readCanonicalRequestRecord(childRequestPath, dep.request_id, {
+      absentDetail: 'CORRELATION_INVALID', absentMessage: 'consultation dependency child request does not resolve',
+    });
+    const childReqObj = childReqRec.obj;
+    if (
+      childReqObj.parent_request_id !== reqObj.request_id || childReqObj.root_request_id !== reqObj.root_request_id
+      || childReqObj.depth !== reqObj.depth + 1 || childReqObj.source_role !== reqObj.target_role
+      || childReqObj.target_role !== dep.from_role
+      || childReqObj.plan_digest !== reqObj.plan_digest || childReqObj.subject_scope_digest !== reqObj.subject_scope_digest
+      || childReqObj.subject_repo_id !== reqObj.subject_repo_id || childReqObj.subject_worktree_id !== reqObj.subject_worktree_id
+      || childReqObj.subject_head !== reqObj.subject_head
+      || childReqObj.routing_policy_version !== reqObj.routing_policy_version
+      || childReqObj.routing_policy_digest !== reqObj.routing_policy_digest
+    ) throw new CliError('INVALID', 'CORRELATION_INVALID', 'consultation dependency child request does not correlate to its parent');
+    childReqObjs.push(childReqObj);
+
+    const childTxnDir = path.dirname(childRequestPath);
+    const childAcceptedPath = acceptedResultPathFor(childTxnDir);
+    const childAcceptedRec = readClosedRecord(childAcceptedPath, ACCEPTED_RESULT_V1_FIELDS, {
+      absentDetail: 'CORRELATION_INVALID', absentMessage: 'consultation dependency accepted-result does not resolve',
+    });
+    assertAcceptedResultCorrelates(childAcceptedRec.obj, childTxnDir, childReqObj, coordRoot);
+    if (
+      childAcceptedRec.digest !== dep.accepted_result_digest
+      || childAcceptedRec.obj.result_digest !== dep.result_digest
+    ) throw new CliError('INVALID', 'CORRELATION_INVALID', 'consultation dependency accepted-result does not match its declared digests');
+
+    const childAckPath = ackPathFor(childTxnDir);
+    const childAckRec = readClosedRecord(childAckPath, ACK_V1_FIELDS, {
+      absentDetail: 'CORRELATION_INVALID', absentMessage: 'consultation dependency ack does not resolve',
+    });
+    if (
+      childAckRec.obj.disposition !== 'accepted'
+      || childAckRec.obj.in_reply_to_attempt_id !== childAcceptedRec.obj.accepted_attempt_id
+    ) throw new CliError('INVALID', 'CORRELATION_INVALID', 'consultation dependency ack is not an accepted disposition for the current attempt');
+  }
+  if (
+    evidenceAuthority && (evidenceAuthority.policy === 'context7-required' || evidenceAuthority.policy === 'context7-preferred')
+    && reqObj.target_role !== 'context-provider'
+  ) {
+    if (dependencies.length !== 1 || dependencies[0].from_role !== 'context-provider') {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'context7-required architect result must have exactly one context-provider consultation dependency');
+    }
+    if (childReqObjs[0].question !== reqObj.question) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'context7-required child question does not preserve the required question');
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3750,17 +4508,46 @@ function readCanonicalCancelRecordOptional(cancelPath, coordRoot) {
   return { obj: obj, reqObj: reqObj };
 }
 
+// M6+M7 SIXTEENTH CODEX ACCEPTANCE Correction C: returns {obj, bytes, digest,
+// reqObj} from the ONE fd-bound read, not just {obj, reqObj} --
+// readRootSourceTerminalArtifacts previously needed a SECOND, separate
+// readDurableRecord(cancelPath) call purely to obtain a digest this same
+// read already computed, a real (if narrow, cancel.json being no-clobber-
+// immutable) TOCTOU window. Inlines readJsonDurable's own absent/pending
+// handling (rather than calling it) specifically so `r.bytes` -- which
+// readJsonDurable's own return contract discards, keeping only `.obj` --
+// stays reachable from this ONE classifyDurableRead call; this also keeps
+// CANCEL-AUDIT-01's own sanctioned shape-check call intact, textually
+// unchanged, still one of its exactly-three counted occurrences (a
+// LITERAL-quoted restatement of that exact call right here in this comment
+// would itself be a fourth occurrence and self-sabotage that audit -- see
+// this same file's own CANCEL_V1_FIELDS export comment for the identical
+// lesson already learned once this session). Existing callers
+// (validateCancelV1) only ever destructure `.obj`, so the additive fields
+// are invisible to them.
 function readCanonicalCancelRecordRequired(cancelPath, coordRoot) {
-  const obj = readJsonDurable(cancelPath, { shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) });
-  const reqObj = accreditCancelRecord(obj, cancelPath, coordRoot);
-  return { obj: obj, reqObj: reqObj };
+  const r = classifyDurableRead(cancelPath, { parse: true, shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) });
+  if (r.state === DURABLE_ABSENT) throw absentDurableStop(cancelPath, {});
+  if (r.state === DURABLE_PENDING) throw pendingDurableStop(cancelPath);
+  const reqObj = accreditCancelRecord(r.obj, cancelPath, coordRoot);
+  return { obj: r.obj, bytes: r.bytes, digest: sha256Buffer(r.bytes), reqObj: reqObj };
 }
 
+// M7 GREEN correction round 2, R3: also returns {bytes, digest} from the
+// SAME ONE fd-bound read when present -- mirrors readCanonicalCancelRecordRequired's
+// own {obj, bytes, digest, reqObj} extension (M6+M7 SIXTEENTH CODEX
+// ACCEPTANCE Correction C, see that function's own doc comment) so a
+// caller needing a cancel digest (readRootSourceTerminalArtifacts) can use
+// THIS single-read classifier instead of first calling this function for
+// shape-free presence and then separately calling
+// readCanonicalCancelRecordRequired to reopen the same file purely to get
+// its digest. Purely additive: the one pre-existing caller (cmdCancel's own
+// pre-write pass) only ever destructures `.state`.
 function classifyCanonicalCancelRecord(cancelPath, coordRoot) {
-  const r = classifyDurableRead(cancelPath, { shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) });
+  const r = classifyDurableRead(cancelPath, { parse: true, shape: (o) => assertClosedShape(o, CANCEL_V1_FIELDS) });
   if (r.state !== DURABLE_PRESENT) return r;
   const reqObj = accreditCancelRecord(r.obj, cancelPath, coordRoot);
-  return { state: r.state, obj: r.obj, reqObj: reqObj };
+  return { state: r.state, obj: r.obj, bytes: r.bytes, digest: sha256Buffer(r.bytes), reqObj: reqObj };
 }
 
 function validateCancelV1(artifactPath, coordRoot) {
@@ -5207,6 +5994,2523 @@ function cmdRootValidate(flags) {
 COMMANDS['root-validate'] = cmdRootValidate;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// M7/WP4 second-pass correction (PLAN.md §15b, ~L592/~L604): role-command-
+// grant/v1 -- CONSUME side. context-provider-gate.js mints REQUESTER grants
+// (via a RequesterBinding); runtime-consultation-target-gate.js mints
+// TARGET grants (via an existing RoleActorBinding); this file -- the CLI
+// both hooks inject into -- atomically one-time-consumes and fully
+// validates the referenced grant BEFORE any read or mutation, wired
+// generically into main() below (see ROLE_COMMAND_GRANT_AUTHORITY_FOR_COMMAND).
+//
+// This file cannot `require('./runtime-role-lifecycle.cjs')`: that module
+// ALREADY requires THIS one (`const rc = require('./runtime-consultation.cjs');`
+// near its own top), so an rc -> rll require would be circular. The small
+// set of host-private registry primitives this section needs (registry
+// base/repo-dir path formula, secure directory creation, the
+// RequesterBinding/RoleActorBinding closed-shape validators) are therefore
+// a small, LOGIC-IDENTICAL local copy of runtime-role-lifecycle.cjs's own --
+// mirrors this file's existing `hasExactKeys` duplication precedent (see its
+// own doc comment above) rather than a weaker reimplementation. A grant file
+// is a security boundary; nothing here trades rigor for brevity.
+//
+// SCOPE: M7 completeness pass (2026-08-09) extends grant-gating to the full
+// PLAN.md §15b 18-command matrix -- 14 requester (root-init, root-validate,
+// publish-blob, publish-request, dispatch, record-delivery, takeover,
+// await-result, accept-result, transaction-ack, cancel, worker-stop,
+// cleanup, validate) and 4 target (claim, lease-heartbeat, publish-result,
+// worker-stop-ack). See context-provider-gate.js's own
+// REQUESTER_ADMIN_SUBCOMMANDS comment for the requester-side injection
+// wiring (the mint/injection mechanism itself is fully generic across every
+// requester subcommand -- extending its scope needed no new logic, only
+// this data change).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ROLE_COMMAND_GRANT_SCHEMA = 'runtime/role-command-grant/v1';
+const ROLE_COMMAND_GRANT_TTL_SECONDS = 30; // PLAN.md §15b: "<=30s ceiling".
+const ROLE_COMMAND_GRANT_KEYS = [
+  'actor_instance_id', 'attempt_id', 'authority', 'binding_id',
+  'canonical_argv_digest', 'created_at', 'expiry', 'grant_id', 'lease_epoch',
+  'plan_digest', 'request_id', 'role', 'schema', 'subcommand', 'worktree_id',
+].sort();
+const REQUESTER_BINDING_SCHEMA = 'coordination/requester-binding/v1';
+const REQUESTER_BINDING_KEYS = [
+  'actor_instance_id', 'agent_key', 'binding_id', 'created_at', 'expiry',
+  'plan_digest', 'role', 'runtime', 'runtime_session_key', 'schema', 'worktree_id',
+].sort();
+const ROOT_SOURCE_BINDING_SCHEMA_LOCAL = 'runtime/root-source-binding/v1';
+// M7 completeness: the v2 sibling of ROOT_SOURCE_BINDING_SCHEMA_LOCAL/
+// CLAUDE_ONE_SHOT_BINDING_SCHEMA below, mirroring runtime-role-lifecycle.cjs's
+// own ROOT_SOURCE_BINDING_SCHEMA_V2/CLAUDE_ONE_SHOT_BINDING_SCHEMA_V2 literal
+// values exactly. A fresh v2-migrated binding's grantContext.bindingSchema
+// (derived from bindingResult.binding.schema, itself now sourced from the
+// real v1/v2-aware runtime-role-lifecycle.cjs validators) must be recognized
+// by every routing/security check below, not just the pre-migration v1 value.
+const ROOT_SOURCE_BINDING_SCHEMA_V2 = 'runtime/root-source-binding/v2';
+// M6-M7-ROOT-SOURCE-CONTINUATION-CLOSURE-20260820: the ONE private predicate
+// for "this authenticated grantContext is backed by a root-source binding"
+// (accepted v1 or v2 schema). Shared by main()'s publish-request
+// serialization branch and by cmdDispatch's routing constraint -- never two
+// divergent schema checks. A missing/undefined grantContext (a command that
+// is not grant-gated, or an in-process caller such as the host bridge) is
+// never root-source.
+function isRootSourceGrantContext(grantContext) {
+  return Boolean(grantContext)
+    && (grantContext.bindingSchema === ROOT_SOURCE_BINDING_SCHEMA_LOCAL
+      || grantContext.bindingSchema === ROOT_SOURCE_BINDING_SCHEMA_V2);
+}
+const ROOT_SOURCE_PRE_INGRESS_COMMANDS = new Set([
+  'root-init', 'root-validate', 'validate', 'publish-blob', 'publish-request',
+]);
+const ROOT_SOURCE_POST_INGRESS_COMMANDS = new Set([
+  'dispatch', 'await-result', 'accept-result', 'transaction-ack', 'cancel',
+  'cleanup', 'record-delivery',
+]);
+const CLAUDE_ONE_SHOT_BINDING_SCHEMA = 'runtime/claude-one-shot-binding/v1';
+const CLAUDE_ONE_SHOT_BINDING_SCHEMA_V2 = 'runtime/claude-one-shot-binding/v2';
+// Logic-identical local copy of runtime-role-lifecycle.cjs's own
+// CANONICAL_ROLES/IDENTITY_PROVIDER_ENUM (same circular-import constraint).
+const GRANT_CANONICAL_ROLES = [
+  'arch-platform', 'arch-testing', 'arch-integration', 'context-provider',
+  'doc-updater', 'toolkit-specialist', 'test-specialist', 'verifier',
+  'quality-gater', 'planner',
+];
+const GRANT_IDENTITY_PROVIDER_ENUM = ['claude-hook', 'codex-supervisor'];
+const HEX_CSPRNG_32_RE = /^[0-9a-f]{32}$/;
+
+// authority -> the bare (no leading "--") flag name carrying the grant id on
+// the executed command. M7 completeness (2026-08-09): extended to the FULL
+// PLAN.md §15b matrix -- all 14 requester subcommands ("Requester authority
+// covers root-init, root-validate, publish-blob, publish-request, dispatch,
+// requester-owned record-delivery, takeover, await-result, accept-result,
+// transaction-ack, cancel, worker-stop, cleanup, and validate") plus the 4
+// target subcommands ("Target authority covers native/external claim,
+// lease-heartbeat, publish-result, and worker-stop-ack"). This is a pure
+// data extension: main()'s own validateAndConsumeRoleCommandGrantForCommand
+// call, the COMMAND_FLAGS-extension loop below, and the split grant-validation/
+// consumption pipeline
+// were all already generic (keyed off this map's own entries, never a
+// hardcoded subcommand list) -- see RCG-REQ12-*-NOGRANT in
+// runtime-consultation-role-gate.bats.
+const ROLE_COMMAND_GRANT_AUTHORITY_FOR_COMMAND = Object.freeze({
+  'root-init': 'requester',
+  'root-validate': 'requester',
+  'publish-blob': 'requester',
+  'publish-request': 'requester',
+  dispatch: 'requester',
+  'record-delivery': 'requester',
+  takeover: 'requester',
+  'await-result': 'requester',
+  'accept-result': 'requester',
+  'transaction-ack': 'requester',
+  cancel: 'requester',
+  'worker-stop': 'requester',
+  cleanup: 'requester',
+  validate: 'requester',
+  claim: 'target',
+  'lease-heartbeat': 'target',
+  'publish-result': 'target',
+  'worker-stop-ack': 'target',
+});
+const ROLE_COMMAND_GRANT_FLAG_FOR_AUTHORITY = Object.freeze({ requester: 'requester-binding', target: 'target-binding' });
+for (const grantCmdName of Object.keys(ROLE_COMMAND_GRANT_AUTHORITY_FOR_COMMAND)) {
+  const grantAuthority = ROLE_COMMAND_GRANT_AUTHORITY_FOR_COMMAND[grantCmdName];
+  COMMAND_FLAGS[grantCmdName] = COMMAND_FLAGS[grantCmdName].concat([ROLE_COMMAND_GRANT_FLAG_FOR_AUTHORITY[grantAuthority]]);
+}
+
+function localComputePrincipalId() {
+  if (typeof process.getuid === 'function') return 'uid-' + process.getuid();
+  return 'user-' + sha256String(os.userInfo().username);
+}
+function localRegistryRepoDir(repoId) {
+  return path.join(os.tmpdir(), 'android-common-doc-runtime', localComputePrincipalId(), repoId);
+}
+function roleCommandGrantPathFor(repoId, grantId) {
+  return path.join(localRegistryRepoDir(repoId), 'role-command-grants', grantId + '.json');
+}
+function roleCommandGrantConsumedMarkerPathFor(repoId, grantId) {
+  return path.join(localRegistryRepoDir(repoId), 'role-command-grants', grantId + '.consumed');
+}
+// M7 completeness: requesterBindingPathForLocal/roleActorBindingPathForLocal/
+// claudeOneShotBindingPathForLocal/claudeOneShotBindingRetiredMarkerPathForLocal
+// are REMOVED -- every caller now uses runtime-role-lifecycle.cjs's own
+// requesterBindingPathFor/roleActorBindingPathFor/claudeOneShotBindingPathFor/
+// claudeOneShotBindingRetiredMarkerPathFor directly (lazy-required, same
+// circular-load-safe pattern already established throughout this file).
+
+/** Logic-identical local copy of runtime-role-lifecycle.cjs's own ensureSecureRegistryDir. */
+function localEnsureSecureRegistryDir(dirPath) {
+  try {
+    const lst = fs.lstatSync(dirPath);
+    if (lst.isSymbolicLink()) return { ok: false, reason: 'symlink' };
+  } catch (err) {
+    // ENOENT (does not exist yet) is the normal, expected case -- proceed.
+  }
+  try {
+    fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
+    fs.chmodSync(dirPath, 0o700);
+  } catch (err) {
+    return { ok: false, reason: 'mkdir-failed' };
+  }
+  if (process.platform !== 'win32') {
+    let st;
+    try {
+      st = fs.lstatSync(dirPath, { bigint: true });
+    } catch (err) {
+      return { ok: false, reason: 'stat-failed' };
+    }
+    if (st.isSymbolicLink()) return { ok: false, reason: 'symlink' };
+    if (typeof process.getuid === 'function' && st.uid !== BigInt(process.getuid())) {
+      return { ok: false, reason: 'wrong-owner' };
+    }
+    if ((st.mode & 0o777n) !== 0o700n) return { ok: false, reason: 'wrong-mode' };
+  }
+  return { ok: true };
+}
+
+// M7 completeness: this file's former local-copy RoleActorBinding validator
+// is REMOVED -- validateRoleCommandGrantOrThrow now calls
+// runtime-role-lifecycle.cjs's own validateRoleActorBindingFor directly
+// (lazy-required), which is already v1/v2+fence-aware. The ISO-8601-
+// canonical-form checker and low-level registry-record reader just above
+// this comment are NOT removed: validateRoleCommandGrantOrThrow also uses
+// them to read/validate the grant file itself, a separate concern with no
+// runtime-role-lifecycle.cjs equivalent.
+
+// M7 completeness: this file's former local-copy Claude-one-shot-binding
+// validator is REMOVED -- validateRoleCommandGrantOrThrow now calls
+// runtime-role-lifecycle.cjs's own validateClaudeOneShotBindingFor directly
+// (lazy-required), already v1/v2+fence-aware.
+
+// M7 section 4/8.5: this file's former local-copy one-shot-family live-
+// bindings scanner and its retirement writer are REMOVED along with their
+// sole caller (cmdCancel's retirement-wiring branch, below) -- no new
+// retirement artifact is written for a Claude one-shot binding; cancellation
+// of a one-shot target is cut by canonical cancel.json directly, not a
+// marker on the binding.
+
+// M6+M7 FINAL AUTHORITY CORRECTION (agent_id binding closure) + HARD NO-GO
+// correction (items 1/2/3), M7 completeness: claudeId01LookupKeyLocal/
+// claudeId01RecordPathForLocal/sessionLookupKeyLocal/
+// sessionGenerationPathForLocal/peekSessionGenerationLocal/
+// isClaudeId01AttestationWellFormedLocal/checkClaudeId01ProofCompleteLocal/
+// validateRequesterBindingForLocal/validateRootSourceBindingForLocal are
+// REMOVED. The last two were already pure circular-load-safe delegations to
+// runtime-role-lifecycle.cjs's own validateRequesterBindingFor/
+// validateRootSourceBindingFor; every remaining caller now lazy-requires
+// runtime-role-lifecycle.cjs and calls those directly, the same pattern
+// already established throughout this file.
+
+// M7 defect 9 (section 6): this file's former dual-family-probe helper pair
+// (deciding whether a family's own binding directory genuinely holds
+// nothing at a given id, used to disambiguate a "try both validators" grant
+// backing lookup) is removed -- validateRoleCommandGrantOrThrow now
+// discriminates the backing namespace directly via one fd-bound presence
+// read per family, before ever calling either validator.
+
+// M7 section 4/8.5: retireExpiredRootSourceBindingOrThrow is REMOVED --
+// expiry is a read-only cut (validateRootSourceBindingFor's own fresh-read
+// expiry check), never a retirement-artifact write. The caller above already
+// throws AUTHORITY_INVALID for an expired root-source binding regardless.
+
+// Genuinely still needed (not part of the deleted binding-validation Local
+// family): validateRoleCommandGrantOrThrow reads/validates the
+// role-command-grant/v1 file itself, which has no runtime-role-lifecycle.cjs
+// equivalent -- grants are this file's own concept, not a binding.
+function isCanonicalIsoUtcLocal(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value)) return false;
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) return false;
+  return new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z') === value;
+}
+
+/**
+ * Fd-bound secure read for this section's own local registry records
+ * (role-command-grant/v1) -- mirrors runtime-role-lifecycle.cjs's own
+ * readRegistryRecord exactly (the SAME classifyDurableRead primitive already
+ * used throughout this file for every OTHER coordination-adjacent record,
+ * same immutablePath:true default). Never a raw fs.readFileSync: a grant
+ * file is a security boundary and must get the same fd-bound, no-follow,
+ * owner/mode-checked, TOCTOU-resistant read every other record in this file
+ * receives.
+ */
+function readLocalRegistryRecord(recordPath) {
+  const classified = classifyDurableRead(recordPath, { parse: true });
+  if (classified.state === DURABLE_ABSENT) return { ok: true, absent: true };
+  if (classified.state === DURABLE_PENDING) return { ok: false, reason: 'pending' };
+  return { ok: true, obj: classified.obj };
+}
+
+/**
+ * Fully validates a role-command-grant/v1 without mutating its consumption
+ * state (PLAN.md
+ * §15b, ~L592; ~L604's revalidation list: schema/binding/authority/
+ * subcommand/argv digest, then the backing binding's own scope). Every
+ * check is independent and fails closed. Consumption is a no-clobber marker
+ * create (EEXIST == replay), mirroring
+ * validateAndConsumeLifecycleCommandGrant's own established discipline in
+ * the sibling module.
+ */
+function validateRoleCommandGrantOrThrow(repoId, grantId, argvDigest, expectedAuthority, expectedSubcommand) {
+  if (!HEX_CSPRNG_32_RE.test(grantId)) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'malformed role-command-grant id');
+  }
+  const grantPath = roleCommandGrantPathFor(repoId, grantId);
+  const grantRead = readLocalRegistryRecord(grantPath);
+  if (!grantRead.ok) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant not yet durable: ' + grantRead.reason);
+  }
+  if (grantRead.absent) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant absent');
+  }
+  const grant = grantRead.obj;
+  if (!grant || !hasExactKeys(grant, ROLE_COMMAND_GRANT_KEYS)) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant shape invalid');
+  }
+  if (grant.grant_id !== grantId) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant id/path mismatch');
+  if (grant.schema !== ROLE_COMMAND_GRANT_SCHEMA) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant schema invalid');
+  if (grant.authority !== expectedAuthority) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant authority mismatch');
+  if (grant.subcommand !== expectedSubcommand) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant subcommand mismatch');
+  if (grant.canonical_argv_digest !== argvDigest) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant argv digest mismatch (tampered argv)');
+  if (!isHexId(grant.binding_id) || !isHexId(grant.actor_instance_id)) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant id-shape invalid');
+  }
+  if (!isHex64(grant.worktree_id) || !isHex64(grant.plan_digest)) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant scope-id-shape invalid');
+  }
+  if (grant.role !== null && !GRANT_CANONICAL_ROLES.includes(grant.role)) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant role-shape invalid');
+  }
+  if (grant.request_id !== null && (typeof grant.request_id !== 'string' || grant.request_id.length === 0)) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant request_id-shape invalid');
+  }
+  if (grant.attempt_id !== null && (typeof grant.attempt_id !== 'string' || grant.attempt_id.length === 0)) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant attempt_id-shape invalid');
+  }
+  if (grant.lease_epoch !== null && !(Number.isInteger(grant.lease_epoch) && grant.lease_epoch >= 0)) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant lease_epoch-shape invalid');
+  }
+  if (!isCanonicalIsoUtcLocal(grant.created_at) || !isCanonicalIsoUtcLocal(grant.expiry)) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant timestamp-shape invalid');
+  }
+  const createdAtMs = Date.parse(grant.created_at);
+  const expiryMs = Date.parse(grant.expiry);
+  if (createdAtMs > expiryMs) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant timestamp invalid');
+  if (expiryMs - createdAtMs > ROLE_COMMAND_GRANT_TTL_SECONDS * 1000) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant TTL exceeds the 30s ceiling');
+  }
+  const nowMs = currentClockMs();
+  if (createdAtMs > nowMs) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant created in the future');
+  if (nowMs >= expiryMs) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant expired');
+
+  // M7 completeness Part C follow-up: a 'target'-authority grant may be
+  // backed by EITHER RoleActorBinding/v1 (the pre-existing, unchanged
+  // persistent path) OR ClaudeOneShotBinding/v1 (point 4) -- the two types'
+  // binding_id CSPRNG namespaces are structurally disjoint (independently
+  // minted, stored under different registry subdirectories), so trying
+  // RoleActorBinding first and ClaudeOneShotBinding only if that fails is a
+  // safe, unambiguous "which of two disjoint namespaces does this specific
+  // id live in" lookup -- never the kind of driver-selection ambiguity the
+  // "never fallback/probe-both" guidance addresses (that guidance governs
+  // the MINT-side choice of which type to back a NEW grant with, made
+  // deterministically by runtime-consultation-target-gate.js itself).
+  // M7 completeness: the whole Local family of binding validators this
+  // branch used to call (validateRequesterBindingForLocal/
+  // validateRootSourceBindingForLocal/validateRoleActorBindingForLocal/
+  // validateClaudeOneShotBindingForLocal) reimplemented v1-only shape/schema
+  // checks -- a v2-backed binding failed EVERY one of them, so grant
+  // CONSUMPTION (as opposed to minting, already v1/v2-aware) silently could
+  // not succeed for any v2 binding. The stale circular-import justification
+  // for that duplication no longer holds: ~19 other call sites in this same
+  // file already safely `require('./runtime-role-lifecycle.cjs')` lazily,
+  // inside a function body, well after both modules have finished loading.
+  // Consuming the real, already v1/v2+fence-aware runtime-role-lifecycle.cjs
+  // validators directly closes that gap.
+  // M7 defect 9 (section 6): clean namespace discrimination -- exactly one
+  // of the two disjoint registry subdirectories may hold a record at this
+  // binding_id (each family's own binding_id is independently minted, never
+  // reused across families); malformed or both-present is denied by the
+  // SAME cardinality check, never a dual-family-probe fallback that tries
+  // both validators and disambiguates after the fact.
+  const rll = require('./runtime-role-lifecycle.cjs');
+  let bindingResult;
+  if (expectedAuthority === 'requester') {
+    const stablePresence = rll.readRegistryRecord(rll.requesterBindingPathFor({ repoId }, grant.binding_id));
+    if (!stablePresence.ok) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'stable requester binding namespace read failed: ' + stablePresence.reason);
+    }
+    const rootSourcePresence = rll.readRegistryRecord(rll.rootSourceBindingPathFor({ repoId }, grant.binding_id));
+    if (!rootSourcePresence.ok) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-source requester binding namespace read failed: ' + rootSourcePresence.reason);
+    }
+    const stableHasRecord = !stablePresence.absent;
+    const rootSourceHasRecord = !rootSourcePresence.absent;
+    if (stableHasRecord === rootSourceHasRecord) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'requester grant backing binding namespace cardinality must equal exactly one');
+    }
+    bindingResult = stableHasRecord
+      ? rll.validateRequesterBindingFor({ repoId }, grant.binding_id, grant.role, grant.worktree_id, grant.plan_digest)
+      : rll.validateRootSourceBindingFor({ repoId }, grant.binding_id, grant.role, grant.worktree_id, grant.plan_digest);
+  } else {
+    const roleActorPresence = rll.readRegistryRecord(rll.roleActorBindingPathFor({ repoId }, grant.binding_id));
+    if (!roleActorPresence.ok) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'target role-actor binding namespace read failed: ' + roleActorPresence.reason);
+    }
+    const oneShotPresence = rll.readRegistryRecord(rll.claudeOneShotBindingPathFor({ repoId }, grant.binding_id));
+    if (!oneShotPresence.ok) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'target one-shot binding namespace read failed: ' + oneShotPresence.reason);
+    }
+    const roleActorHasRecord = !roleActorPresence.absent;
+    const oneShotHasRecord = !oneShotPresence.absent;
+    if (roleActorHasRecord === oneShotHasRecord) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'target grant backing binding namespace cardinality must equal exactly one');
+    }
+    // The one-shot side's own full validator (never a bare namespace check
+    // alone) additionally proves the Claude-domain fence/generation cuts --
+    // the discrimination above only decides WHICH validator to consult.
+    bindingResult = roleActorHasRecord
+      ? rll.validateRoleActorBindingFor({ repoId }, grant.binding_id, grant.role, grant.worktree_id, grant.plan_digest)
+      : rll.validateClaudeOneShotBindingFor({ repoId }, grant.binding_id, {
+        requestId: grant.request_id, attemptId: grant.attempt_id, leaseEpoch: grant.lease_epoch,
+        role: grant.role, worktreeId: grant.worktree_id, planDigest: grant.plan_digest,
+      });
+  }
+  if (!bindingResult.ok) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant backing binding invalid: ' + bindingResult.reason);
+  }
+  if (bindingResult.binding.actor_instance_id !== grant.actor_instance_id) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant actor_instance_id does not match its own backing binding');
+  }
+
+  return {
+    repoId,
+    bindingSchema: bindingResult.binding.schema,
+    bindingId: grant.binding_id,
+    requestId: grant.request_id,
+    attemptId: grant.attempt_id,
+    leaseEpoch: grant.lease_epoch,
+    role: grant.role,
+    actorInstanceId: grant.actor_instance_id,
+    binding: bindingResult.binding,
+    // M7 GREEN section 4.4: the durable GRANT's own expiry, internal/
+    // non-wire -- consume-grant admission must bind its deadline to this
+    // (the grant's own <=30s TTL), never the backing binding's own
+    // (potentially much longer-lived) expiry.
+    grantExpiry: grant.expiry,
+  };
+}
+
+/**
+ * Commits one-time role-command-grant consumption after every independent
+ * grant, binding and transaction-scope check has passed. This is the first
+ * mutation in the authority path; invalid transaction scope therefore leaves
+ * no `.consumed` marker behind.
+ */
+function consumeValidatedRoleCommandGrantOrThrow(repoId, grantId) {
+  // Atomic one-time consumption: no-clobber marker create. EEXIST == replay.
+  const consumedPath = roleCommandGrantConsumedMarkerPathFor(repoId, grantId);
+  const dirResult = localEnsureSecureRegistryDir(path.dirname(consumedPath));
+  if (!dirResult.ok) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'unable to prepare role-command-grant consumption directory');
+  }
+  try {
+    // suppressReplacePostRenameFaultInjection + suppressInternalFaultInjection
+    // (M7 completeness, sibling fix): this write runs after independent
+    // transaction accreditation but before any handler/business-logic lock,
+    // so it must never be the one to "eat" a
+    // RUNTIME_CONSULTATION_FAULT_REPLACE_POSTRENAME/TEMP_HARDEN/
+    // NOCLOBBER_PRELINK/LOSER_UNLINK/DIR_FSYNC/DIR_CLOSE/TEMP_UNLINK/
+    // NOCLOBBER_PREVALIDATE env var a test set to target a LATER, unrelated
+    // publishReplace/publishNoClobber call inside the actual command handler
+    // (e.g. cmdLeaseHeartbeat's own active-lease refresh, or
+    // cmdPublishRequest's own plan_ref/routing-policy/subject-bundle/
+    // request.json writes) -- see publishNoClobber's own doc comment for both
+    // options. Test-instrumentation-scope only; zero effect in production
+    // (every underlying isXFaultActive predicate is itself
+    // isTestCapability()-gated regardless of either flag) -- every real
+    // durability/replay/security check this write performs is completely
+    // unaffected.
+    publishNoClobber(consumedPath, Buffer.from(canonicalJSONStringify({ consumed_at: nowIso() }), 'utf8'), {
+      suppressReplacePostRenameFaultInjection: true,
+      suppressInternalFaultInjection: true,
+    });
+  } catch (err) {
+    // publishNoClobber (called here with no allowIdenticalIdempotent/raceDetailCode
+    // option) throws CliError(INVALID, AUTHORITY_INVALID, 'no-clobber race lost for
+    // ...') ONLY for a genuine EEXIST collision whose own loser-cleanup succeeded --
+    // i.e. exactly a replay of an already-consumed grant. Every OTHER failure mode it
+    // can throw for this call shape -- DURABILITY_UNPROVEN (barrier/temp-harden/
+    // post-publish-revalidation faults, including the shared assertDurableTargetMatches
+    // fault-injection seams used by LOCK-10/UMASK-0600-03), SECURITY_INVALID (symlink/
+    // tamper), or a raw non-CliError fs error -- is NOT a replay and must propagate
+    // with its own real classification, never be relabeled as one (confirmed by
+    // reading publishNoClobber's complete body: AUTHORITY_INVALID is unreachable from
+    // any other branch when allowIdenticalIdempotent is unset, as it always is here).
+    if (err instanceof CliError && err.detailCode === 'AUTHORITY_INVALID') {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant already consumed (replay)');
+    }
+    throw err;
+  }
+}
+
+// M6+M7 requester-authority closure (Group B): the closed null/non-null
+// requester-grant-scope table (PLAN.md ~L592). Administrative/pre-request
+// subcommands and a session-shutdown worker-stop carry no transaction scope
+// at all; every other requester subcommand binds the exact request and its
+// CURRENT authoritative attempt/epoch.
+const REQUESTER_GRANT_NULL_SCOPE_SUBCOMMANDS = new Set([
+  'root-init', 'root-validate', 'validate', 'publish-blob', 'publish-request',
+]);
+const REQUESTER_GRANT_TRANSACTIONAL_SUBCOMMANDS = new Set([
+  'dispatch', 'takeover', 'await-result', 'accept-result', 'transaction-ack',
+  'cancel', 'cleanup', 'record-delivery', 'worker-stop',
+]);
+
+// M7 GREEN section 4.10: the consultation-local shape table + duplicate
+// correlation logic this used to be is superseded and removed -- delegates
+// entirely to the ONE canonical rll.validateRootSourceIngressRecord instead
+// (M7 section 6/12: every duplicated per-family shape-checker is superseded
+// by the shared validator).
+function readRootSourceIngressOrThrow(validated) {
+  let rll;
+  try { rll = require('./runtime-role-lifecycle.cjs'); }
+  catch (err) { throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-source lifecycle unavailable'); }
+  const ingressPath = rll.rootSourceIngressPathFor({ repoId: validated.repoId }, validated.bindingId);
+  const read = rll.readRegistryRecord(ingressPath);
+  if (!read || read.ok !== true) throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'root-source ingress read failed');
+  if (read.absent) return null;
+  const binding = validated.binding;
+  const checked = rll.validateRootSourceIngressRecord(read.obj, {
+    binding_id: binding.binding_id, action_id: binding.action_id,
+    source_role: binding.role, requester_instance_id: binding.actor_instance_id,
+    subject_scope_digest: binding.subject_scope_digest, request_expiry: binding.request_expiry,
+    worktree_id: binding.worktree_id, plan_digest: binding.plan_digest,
+  });
+  if (!checked.ok) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-source ingress does not correlate to its binding');
+  return checked.record;
+}
+
+function enforceRootSourceGrantBoundary(validated, command, flags, expectedScope) {
+  if (validated.bindingSchema !== ROOT_SOURCE_BINDING_SCHEMA_LOCAL && validated.bindingSchema !== ROOT_SOURCE_BINDING_SCHEMA_V2) return;
+  const ingress = readRootSourceIngressOrThrow(validated);
+  if (ingress === null) {
+    if (!ROOT_SOURCE_PRE_INGRESS_COMMANDS.has(command)) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-source command is not admitted before ingress');
+    }
+    if (validated.requestId !== null || validated.attemptId !== null || validated.leaseEpoch !== null) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'pre-ingress root-source grant must have null transaction scope');
+    }
+    if (command === 'publish-request') {
+      const intent = decodeIntentOrThrow(flags.intent);
+      let lifecycleIntent;
+      try {
+        const rll = require('./runtime-role-lifecycle.cjs');
+        lifecycleIntent = rll.decodeRootSourceBootstrapIntentForBinding(
+          { repoId: validated.repoId }, validated.binding,
+        );
+      } catch (err) {
+        lifecycleIntent = { ok: false, reason: 'root-source-bootstrap-decoder-unavailable' };
+      }
+      if (!lifecycleIntent || lifecycleIntent.ok !== true || !lifecycleIntent.intent) {
+        throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-source bootstrap intent is not host-accredited');
+      }
+      const expectedIntent = lifecycleIntent.intent;
+      if (
+        intent.target_role !== 'arch-platform' || intent.target_role !== expectedIntent.target_role
+        || intent.parent_request_id !== undefined || intent.content_ref !== undefined
+        || intent.question !== expectedIntent.question
+        || intent.expected_result_kind !== expectedIntent.expected_result_kind
+        || intent.expiry !== expectedIntent.expiry
+        || intent.expiry !== validated.binding.request_expiry
+      ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-source publish intent violates its exact root topology/target/expiry');
+      const planPath = resolveAbsolute(flags.plan);
+      // S16-ROOT-SOURCE-E2E finding: subject_bundle_ref is a coordination-
+      // root-RELATIVE ref (s16CoordinationRelativeRef's own output, mirrored
+      // by every other reader of a *_ref field in this file, e.g.
+      // requestPathFor(planRoot, ...) below) -- resolveAbsolute() alone
+      // resolves it against the CLI process's cwd, not the coordination
+      // root, so it could never equal the caller's own absolute
+      // --subject-bundle path for any cwd other than the coordination root
+      // itself. Join it against the same --coordination-root every other
+      // check in this function already trusts.
+      const coordRootForScope = resolveAbsolute(flags['coordination-root']);
+      if (
+        resolveAbsolute(flags['subject-bundle']) !== path.join(coordRootForScope, validated.binding.subject_bundle_ref)
+        || sha256File(planPath) !== validated.binding.plan_digest
+      ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-source publish intent violates its PLAN/subject scope');
+    }
+    return;
+  }
+  if (!ROOT_SOURCE_POST_INGRESS_COMMANDS.has(command)) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-source command is not admitted after ingress');
+  }
+  if (
+    expectedScope.requestId !== ingress.request_id
+    || expectedScope.sourceRole !== ingress.source_role
+    || expectedScope.requesterInstanceId !== ingress.requester_instance_id
+    || validated.requestId !== ingress.request_id
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-source post-ingress grant does not match its sole transaction');
+
+  // M7 defect (task #30, symmetric to validateAndConsumeRoleCommandGrantForCommand's
+  // own one-shot terminal recheck a few dozen lines below in the same file):
+  // a root-source-backed requester grant minted while its transaction was
+  // still live becomes stale the instant a terminal (ack or cancel) lands
+  // afterward -- re-checked here, immediately before this function returns
+  // control for consumption. Mirrors readRootSourceTerminalArtifacts's own
+  // ack/cancel pair (never "result", a different concept at the root-source
+  // layer). ackPathFor has no audited call-site count (unlike
+  // cancelPathFor/CANCEL-AUDIT-02) so a direct presence-only
+  // classifyDurableRead is used, symmetric with the one-shot fix's own
+  // unaudited resultState check; cancelPathFor still goes through the one
+  // sanctioned choke point. flags.request/--coordination-root are already
+  // proven resolvable -- resolveRequesterGrantScope (this function's own
+  // caller, immediately above) required both to reach expectedScope.ok.
+  const requesterTxnDir = path.dirname(resolveAbsolute(flags.request));
+  const ackState = classifyDurableRead(ackPathFor(requesterTxnDir), { parse: true });
+  if (ackState.state === DURABLE_PENDING) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', command + ': root-source ack terminal is pending, durability unproven');
+  }
+  const cancelPresent = readCanonicalCancelRecordOptional(cancelPathFor(requesterTxnDir), resolveAbsolute(flags['coordination-root'])) !== null;
+  if (ackState.state !== DURABLE_ABSENT || cancelPresent) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', command + ': role-command-grant backing root-source transaction already has a terminal (ack or cancel)');
+  }
+}
+
+/**
+ * M6+M7 requester-authority closure (Group B): the SINGLE shared resolver
+ * for a requester subcommand's exact required request_id/attempt_id/
+ * lease_epoch scope, plus (when a request already exists) its own
+ * source_role/requester_instance_id -- used BOTH by the hook (to mint a
+ * grant bound to the correct scope) and by this file's own main() (to
+ * re-derive and cross-check the SAME scope before consuming a presented
+ * grant, never trusting the grant's own claimed fields alone). Reuses the
+ * existing accredited-request-read primitive and resolveAuthoritativeAttempt
+ * -- never a second, weaker ad hoc parse. `record-delivery`'s own additional
+ * "argv attempt/epoch must equal both the grant and current transaction"
+ * requirement is satisfied by composition: this resolver already binds the
+ * grant to the current authoritative attempt/epoch, and cmdRecordDelivery's
+ * own existing, independent business logic already requires its
+ * --attempt/--epoch argv to equal that SAME current authoritative pair.
+ * @param {string} subcommand
+ * @param {object} flags - parseFlags()-shaped (or an equivalent plain
+ *   object carrying the SAME bare-flag-name keys a hook constructs from its
+ *   own parsed argv).
+ * @returns {{ok:true,requestId:string|null,attemptId:string|null,leaseEpoch:number|null,sourceRole:string|null,requesterInstanceId:string|null}|{ok:false,reason:string}}
+ */
+function resolveRequesterGrantScope(subcommand, flags) {
+  if (REQUESTER_GRANT_NULL_SCOPE_SUBCOMMANDS.has(subcommand)) {
+    return { ok: true, requestId: null, attemptId: null, leaseEpoch: null, sourceRole: null, requesterInstanceId: null };
+  }
+  if (subcommand === 'worker-stop' && flags && flags.kind === 'session-shutdown') {
+    return { ok: true, requestId: null, attemptId: null, leaseEpoch: null, sourceRole: null, requesterInstanceId: null };
+  }
+  if (!REQUESTER_GRANT_TRANSACTIONAL_SUBCOMMANDS.has(subcommand)) {
+    return { ok: false, reason: 'unrecognized-requester-subcommand' };
+  }
+  if (!flags || typeof flags.request !== 'string' || flags.request.length === 0) {
+    return { ok: false, reason: 'missing-request-flag' };
+  }
+  if (typeof flags['coordination-root'] !== 'string' || flags['coordination-root'].length === 0) {
+    return { ok: false, reason: 'missing-coordination-root-flag' };
+  }
+  let coordRoot;
+  let requestPath;
+  try {
+    coordRoot = resolveAbsolute(flags['coordination-root']);
+    requestPath = resolveAbsolute(flags.request);
+  } catch (err) {
+    return { ok: false, reason: 'invalid-scope-path' };
+  }
+  let preflight;
+  try {
+    preflight = accreditCanonicalRequest(coordRoot, requestPath);
+  } catch (err) {
+    // Preserve the specific accreditation failure (e.g. SECURITY_INVALID for
+    // a path-segment mismatch, CORRELATION_INVALID for an unresolvable
+    // request) so the caller below can surface it instead of a generic
+    // AUTHORITY_INVALID -- only for the well-known CliError shape; any other
+    // throw keeps the existing generic-only reason (fail safe, never assume
+    // an unverified shape).
+    if (err instanceof CliError) {
+      return { ok: false, reason: 'request-not-accredited', status: err.status, detailCode: err.detailCode, message: err.message };
+    }
+    return { ok: false, reason: 'request-not-accredited' };
+  }
+  const reqObj = preflight.obj;
+  const txnDir = path.dirname(requestPath);
+  let auth;
+  try {
+    auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+  } catch (err) {
+    return { ok: false, reason: 'attempt-not-resolvable' };
+  }
+  return {
+    ok: true,
+    requestId: reqObj.request_id,
+    attemptId: auth.attemptId,
+    leaseEpoch: auth.leaseEpoch,
+    sourceRole: reqObj.source_role,
+    requesterInstanceId: reqObj.requester_instance_id,
+  };
+}
+
+/**
+ * Generic entry point called from main() BEFORE the command handler runs
+ * (PLAN.md ~L604: "before any read or mutation"). No-op for any command
+ * outside ROLE_COMMAND_GRANT_AUTHORITY_FOR_COMMAND's deliberately narrow
+ * scope. `rawArgv` is the exact pre-parseFlags flag-token array (argv.slice(1)
+ * in main()) -- the grant flag+value pair is located and stripped from it
+ * here, and the remainder, in original relative order, is re-hashed and
+ * compared against the grant's own canonical_argv_digest (PLAN.md ~L604:
+ * "strips only its own injected flag, recomputes the exact pre-injection
+ * argv digest").
+ */
+function validateAndConsumeRoleCommandGrantForCommand(command, flags, rawArgv) {
+  const authority = ROLE_COMMAND_GRANT_AUTHORITY_FOR_COMMAND[command];
+  if (!authority) return undefined; // not grant-gated in this pass's scope.
+  const grantFlagBare = ROLE_COMMAND_GRANT_FLAG_FOR_AUTHORITY[authority];
+  const grantFlagToken = '--' + grantFlagBare;
+
+  const idx = rawArgv.indexOf(grantFlagToken);
+  if (idx === -1 || idx + 1 >= rawArgv.length) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'missing required --' + grantFlagBare + ' for ' + command);
+  }
+  if (rawArgv.indexOf(grantFlagToken, idx + 1) !== -1) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'duplicate --' + grantFlagBare);
+  }
+  const grantId = rawArgv[idx + 1];
+  const preInjectionArgv = rawArgv.slice(0, idx).concat(rawArgv.slice(idx + 2));
+  const argvDigest = sha256String(canonicalJSONStringify(preInjectionArgv));
+
+  const coordRootRaw = flags['coordination-root'];
+  if (typeof coordRootRaw !== 'string' || coordRootRaw.length === 0) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', command + ' requires --coordination-root to resolve grant scope');
+  }
+  const coordRoot = resolveAbsolute(coordRootRaw);
+
+  let repoId;
+  try {
+    const { real } = realpathDeepestExisting(coordRoot);
+    repoId = computeRepoId(real);
+  } catch (err) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'unable to resolve role-command-grant registry scope for ' + command);
+  }
+
+  // Validate the durable grant and its backing binding without mutating the
+  // one-shot consumption state. Requester transaction scope is independently
+  // re-derived below before the consumption marker is allowed to exist.
+  const validated = validateRoleCommandGrantOrThrow(repoId, grantId, argvDigest, authority, command);
+
+  // M6+M7 requester-authority closure (Group B): the grant's own scope
+  // fields are re-derived HERE, independently, from the CURRENT transaction
+  // state -- never merely trusted as whatever was embedded at mint time.
+  // Only 'requester' authority carries this exact scope contract; 'target'
+  // authority is a disjoint schema this file does not mint.
+  if (authority === 'requester') {
+    const expectedScope = resolveRequesterGrantScope(command, flags);
+    if (!expectedScope.ok) {
+      // Re-surface the specific underlying accreditation failure when one is
+      // available (see resolveRequesterGrantScope's own catch block) rather
+      // than collapsing every failure reason to a generic AUTHORITY_INVALID.
+      // The other resolveRequesterGrantScope failure reasons (missing-request
+      // -flag, missing-coordination-root-flag, invalid-scope-path,
+      // attempt-not-resolvable, unrecognized-requester-subcommand) never set
+      // detailCode -- those are genuinely grant-scope-level problems, not the
+      // underlying request's own validity, so they keep the generic behavior.
+      if (expectedScope.detailCode) {
+        throw new CliError(expectedScope.status, expectedScope.detailCode, expectedScope.message || ('unable to re-derive requester grant scope for ' + command));
+      }
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'unable to re-derive requester grant scope for ' + command + ': ' + expectedScope.reason);
+    }
+    if (
+      validated.requestId !== expectedScope.requestId
+      || validated.attemptId !== expectedScope.attemptId
+      || validated.leaseEpoch !== expectedScope.leaseEpoch
+    ) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant request/attempt/epoch does not match the current authoritative transaction');
+    }
+    if (expectedScope.sourceRole !== null && expectedScope.sourceRole !== validated.role) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant role does not match the request\'s own source_role');
+    }
+    if (expectedScope.requesterInstanceId !== null && expectedScope.requesterInstanceId !== validated.actorInstanceId) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant actor does not match the request\'s own requester_instance_id');
+    }
+    enforceRootSourceGrantBoundary(validated, command, flags, expectedScope);
+  }
+
+  // M7 defect 5 (section 7): "validateAndConsumeRoleCommandGrantForCommand
+  // obtains and consumes a consume-grant capability immediately before its
+  // existing one-use grant marker, then returns it only to that in-process
+  // handler invocation." Only a Claude v2-backed grant (requester/
+  // root-source/one-shot, and for requester only when its own backing runs
+  // on the claude-hook provider -- defect 11) goes through the classifier
+  // pass; RoleActor/Codex-supervisor-backed grants keep their existing,
+  // unchanged consumption path. The schema literals below are this file's
+  // own frozen M7 v2 schema strings (section 4.1/4.2/4.3) -- runtime-role-
+  // lifecycle.cjs does not export these as constants, only `bindingSchema`
+  // (a plain string already returned by validateRoleCommandGrantOrThrow).
+  const rllForConsumeGrant = require('./runtime-role-lifecycle.cjs');
+  const claudeAuthorityFamily = (
+    validated.bindingSchema === 'runtime/root-source-binding/v2' ? 'root-source'
+      : validated.bindingSchema === 'runtime/claude-one-shot-binding/v2' ? 'one-shot'
+        : validated.bindingSchema === 'coordination/requester-binding/v2' ? 'requester'
+          : null
+  );
+  const isClaudeAuthorityV2Backing = (
+    claudeAuthorityFamily === 'root-source' || claudeAuthorityFamily === 'one-shot'
+    || (claudeAuthorityFamily === 'requester' && validated.binding.runtime === 'claude-hook')
+  );
+
+  let consumeCapability = null;
+  if (isClaudeAuthorityV2Backing) {
+    // M7 CORRECTION C2 (Codex final ruling, frozen contract SHA
+    // 3341aff5c7ce1e7953bc82084542750241274807ee2ed36e0365095c7249e6a6):
+    // resolve canonical PROJECT scope and prove --coordination-root really
+    // is the canonical coordination root for it -- admission must receive
+    // project scope only, never a bare {repoId} descriptor or any
+    // caller-selected path/terminal summary.
+    let projectRoot;
+    let coordRootExistingAncestor;
+    let coordRootTail;
+    try {
+      // coordRoot itself may not exist yet (e.g. root-init's own job is to
+      // create it) -- resolve against the deepest EXISTING ancestor, exactly
+      // like the repoId derivation above, never `git -C` on a possibly-
+      // nonexistent leaf.
+      const resolved = realpathDeepestExisting(coordRoot);
+      coordRootExistingAncestor = resolved.real;
+      coordRootTail = resolved.tail;
+      projectRoot = gitRevParse(coordRootExistingAncestor, ['rev-parse', '--show-toplevel']);
+    } catch (err) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', command + ': unable to resolve project scope from --coordination-root');
+    }
+    let canonicalCoordRoot;
+    try {
+      canonicalCoordRoot = rllForConsumeGrant.coordinationRootPathFor(projectRoot);
+    } catch (err) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', command + ': unable to resolve canonical coordination root for its own project');
+    }
+    // coordRoot itself may not exist yet (root-init's own job is to create
+    // it), so a naive realpathOrSelf(coordRoot) silently skips desymlinking
+    // whenever ANY path segment is still missing -- on a platform where a
+    // temp-dir prefix is itself a symlink (e.g. macOS /var -> /private/var),
+    // that wrongly rejected a genuinely-canonical --coordination-root as
+    // non-canonical, because canonicalCoordRoot's own deepest-existing-
+    // ancestor resolution (coordinationRootPathFor) DOES desymlink that
+    // exact prefix. Reconstruct coordRoot's own fully-resolved-as-far-as-
+    // possible form the SAME way (mirrors assertGenuinelyConfinedUnderRoot's
+    // own fullReal pattern, this file) before comparing.
+    const coordRootFullyResolved = coordRootTail.length
+      ? path.join(coordRootExistingAncestor, ...coordRootTail)
+      : coordRootExistingAncestor;
+    if (realpathOrSelf(canonicalCoordRoot) !== coordRootFullyResolved) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', command + ': --coordination-root is not the canonical coordination root for its own project');
+    }
+
+    // M7 CORRECTION C2: fd-accredit --request (when present -- worker-
+    // stop-ack and the null-scope requester admin subcommands never carry
+    // it) and correlate its OWN embedded scope against the validated grant
+    // + backing binding BEFORE admission. Closes the confirmed argv-digest
+    // decoupling exploit: mintRoleCommandGrant's argvDigest parameter is
+    // caller-supplied and fully decoupled from its own requestId/attemptId/
+    // leaseEpoch parameters, so a grant can be minted with requestId=A
+    // (real) but an argv whose --request names an unrelated decoy
+    // transaction B; a real CLI call using --request B then passes
+    // validateRoleCommandGrantOrThrow cleanly (digest matches B), yet
+    // nothing else ever proved THIS invocation's own --request is the SAME
+    // transaction the grant's stored requestId names.
+    if (typeof flags.request === 'string' && flags.request.length > 0) {
+      let accreditedRequest;
+      let requestPathForAccreditation;
+      try {
+        requestPathForAccreditation = resolveAbsolute(flags.request);
+        accreditedRequest = accreditCanonicalRequest(coordRoot, requestPathForAccreditation);
+      } catch (err) {
+        throw new CliError('INVALID', 'AUTHORITY_INVALID', command + ': unable to accredit --request');
+      }
+      const accreditedReqObj = accreditedRequest.obj;
+      const accreditedTxnDir = path.dirname(requestPathForAccreditation);
+      let accreditedAuth;
+      try {
+        accreditedAuth = resolveAuthoritativeAttempt(accreditedReqObj, accreditedTxnDir);
+      } catch (err) {
+        throw new CliError('INVALID', 'AUTHORITY_INVALID', command + ": --request's authoritative attempt is not resolvable");
+      }
+      const expectedRoleField = authority === 'requester' ? accreditedReqObj.source_role : accreditedReqObj.target_role;
+      // M7 GREEN correction round 2, R2: the classifier itself deliberately
+      // does not filter candidates by worktree (a current unexpired v2
+      // record is a candidate "even when its PLAN/worktree/role differs"),
+      // so THIS Phase A correlation is the only layer that can reject a
+      // cross-worktree replay -- confirmed by direct read that this block
+      // previously checked repo_id/plan_digest/request_id/attempt_id/
+      // lease_epoch/role but never worktree_id at all. Triple-correlates the
+      // binding's own worktree_id, the accredited request's own worktree
+      // field (subject_worktree_id for target authority,
+      // requester_worktree_id for requester authority), and the CURRENT
+      // project's own live worktree -- never merely two of the three.
+      const expectedWorktreeField = authority === 'requester' ? accreditedReqObj.requester_worktree_id : accreditedReqObj.subject_worktree_id;
+      if (
+        accreditedReqObj.repo_id !== repoId || accreditedReqObj.plan_digest !== validated.binding.plan_digest
+        || accreditedReqObj.request_id !== validated.requestId
+        || accreditedAuth.attemptId !== validated.attemptId || accreditedAuth.leaseEpoch !== validated.leaseEpoch
+        || expectedRoleField !== validated.role
+        || expectedWorktreeField !== validated.binding.worktree_id
+        || expectedWorktreeField !== computeWorktreeId(projectRoot)
+      ) {
+        throw new CliError('INVALID', 'AUTHORITY_INVALID', command + ': accredited --request does not correlate to the validated role-command-grant');
+      }
+    }
+
+    const agentIdForIdentity = validated.binding.agent_key !== undefined ? validated.binding.agent_key : validated.binding.agent_id;
+    const consumeAuthorityIdentity = {
+      schema: rllForConsumeGrant.CLAUDE_AUTHORITY_IDENTITY_SCHEMA, provider: 'claude-hook',
+      repo_id: repoId, runtime_session_key: validated.binding.runtime_session_key, agent_id: agentIdForIdentity,
+    };
+    // M7 CORRECTION C1 (Codex final ruling): the ONE authority
+    // linearization point is successful final admission -- this rendezvous
+    // now sits immediately before admission, after ALL Phase A validation
+    // (grant, requester-scope, and the --request accreditation/correlation
+    // above) has fully run.
+    testM7Rendezvous('command-before-admission', coordRoot);
+    // M7 GREEN section 4.4 (R15-GRANT-EXPIRY-IS-CONSUME-DEADLINE): the
+    // consume-grant deadline is the durable GRANT's own expiry, never the
+    // backing binding's -- a long-lived binding must never let a
+    // short-lived (<=30s TTL) grant be consumed past its own expiry.
+    const admission = rllForConsumeGrant.admitClaudeAuthorityOperation(
+      projectRoot, consumeAuthorityIdentity, 'consume-grant', validated.grantExpiry,
+      { family: claudeAuthorityFamily, bindingId: validated.bindingId },
+    );
+    if (!admission.ok) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant consume-grant admission failed: ' + admission.reason);
+    }
+    consumeCapability = admission.capability;
+  }
+
+  // M7 section 10.3 (M7-COMMAND-ADMISSION-RACE-15 positive control) / M7
+  // CORRECTION C1: this rendezvous stays in its ORIGINAL position -- AFTER
+  // admission (the ONE authority linearization point; its own fence/
+  // classifier/terminal decision is now frozen) and BEFORE consumption. A
+  // cut landing during this exact pause must NEVER retroactively deny an
+  // already-admitted command -- no recheck of any kind runs here anymore.
+  testM7Rendezvous('command-after-admission-before-consume', coordRoot);
+
+  if (isClaudeAuthorityV2Backing) {
+    const guardedResult = rllForConsumeGrant.writeGuardedByClaudeAuthorityAdmission(consumeCapability, 'consume-grant', () => {
+      consumeValidatedRoleCommandGrantOrThrow(repoId, grantId);
+      return { ok: true };
+    });
+    if (!guardedResult.ok) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'role-command-grant consumption denied: ' + guardedResult.reason);
+    }
+  } else {
+    consumeValidatedRoleCommandGrantOrThrow(repoId, grantId);
+  }
+  return validated;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Retained Codex host capability (PLAN §15b) -- non-serializable and held only
+// by runtime-bridge-codex.cjs.  The capability object carries no enumerable
+// authority data; its exact scope lives solely in this module-private WeakMap.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const hostBridgeCapabilityScopes = new WeakMap();
+const hostBridgeCommittedTurnIds = new WeakMap();
+const HOST_BRIDGE_SCOPE_KEYS = Object.freeze([
+  'actorInstanceId', 'expiresAt', 'planDigest', 'projectRoot', 'role',
+  'supervisorInstanceId', 'workerSessionId', 'worktreeId',
+].sort());
+const HOST_BRIDGE_ID_RE = /^[a-f0-9]{32}$/;
+
+// M6+M7 SIXTEENTH CIERRE DEFINITIVO Phase 1 follow-up: requireHostBridgeCapability
+// (hence every rc.hostBridge* call pollRetainedWorkers makes, several times
+// per worker per ~250ms tick) reaches here on EVERY invocation, and this
+// function independently spawns `git rev-parse` twice more (once directly,
+// once again inside computeWorktreeId with the byte-identical
+// '--show-toplevel' args) -- a SEPARATE redundant-git-spawn source from
+// resolveLiveCodexAppServerWorkerUncached's own (already memoized, see
+// runtime-bridge-codex.cjs), not fixed by that change. Measured live (a
+// running retained supervisor's own POLLTICK/worker-start timing dump):
+// per-worker tick time up to ~5s even after that first fix, matching NO-GO
+// Correction B's own historical "~5s for a worker servicing a root-consult
+// intent" figure almost exactly -- this is the remaining source. Same
+// safety argument as that fix: scope.projectRoot's own git worktree
+// toplevel cannot change for the life of this process, so this is a pure,
+// immutable derivation (permitted), memoized once, forever, per distinct
+// projectRoot string -- never a TTL, and never covering discoverPlan (plan
+// CONTENT) or anything about owner/PID/birth/binding/presence/lease, all of
+// which stay fully fresh on every call exactly as before.
+const projectRealOnceForScope = new Map();
+function resolveProjectGitFactsOnceForScope(projectRoot) {
+  const sealed = resolveSealedGitCache(projectRealOnceForScope, projectRoot, (root) => {
+    const projectReal = gitRevParse(root, ['rev-parse', '--show-toplevel']);
+    const gitCommonDirReal = realpathOrSelf(gitRevParse(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
+    return { ok: true, projectReal, gitCommonDirReal, worktreeId: computeWorktreeId(projectReal) };
+  });
+  // Preserves this function's pre-existing throw-on-failure contract (its
+  // one caller below already wraps it in try/catch) -- a sealed-cache
+  // rejection (unresolvable OR a topology-seal mismatch) is exactly as fatal
+  // to this caller as the git spawn itself throwing always was.
+  if (!sealed.ok) throw new Error(sealed.reason);
+  return { projectReal: sealed.derived.projectReal, worktreeId: sealed.derived.worktreeId };
+}
+
+function validateHostBridgeCapabilityScopeInput(scope, requireLiveWorker) {
+  if (!scope || typeof scope !== 'object' || Array.isArray(scope) || !hasExactKeys(scope, HOST_BRIDGE_SCOPE_KEYS)) {
+    return { ok: false, reason: 'host-bridge-scope-shape-invalid' };
+  }
+  if (
+    typeof scope.projectRoot !== 'string' || !path.isAbsolute(scope.projectRoot)
+    || !GRANT_CANONICAL_ROLES.includes(scope.role)
+    || !HOST_BRIDGE_ID_RE.test(scope.supervisorInstanceId)
+    || !HOST_BRIDGE_ID_RE.test(scope.workerSessionId)
+    || !HOST_BRIDGE_ID_RE.test(scope.actorInstanceId)
+    || !isHex64(scope.worktreeId) || !isHex64(scope.planDigest)
+    || !isIsoTimestamp(scope.expiresAt) || Date.now() >= isoToMs(scope.expiresAt)
+  ) return { ok: false, reason: 'host-bridge-scope-value-invalid' };
+
+  let projectReal;
+  let worktreeId;
+  let rll;
+  try {
+    ({ projectReal, worktreeId } = resolveProjectGitFactsOnceForScope(scope.projectRoot));
+    rll = require('./runtime-role-lifecycle.cjs');
+  } catch (err) {
+    return { ok: false, reason: 'host-bridge-project-unresolvable' };
+  }
+  const plan = rll.discoverPlan(projectReal);
+  if (!plan.ok) return { ok: false, reason: 'host-bridge-plan-unresolvable' };
+  if (
+    worktreeId !== scope.worktreeId
+    || plan.planDigest !== scope.planDigest
+  ) return { ok: false, reason: 'host-bridge-scope-not-current' };
+  let live = null;
+  if (requireLiveWorker === true) {
+    let bridge;
+    try {
+      bridge = require('./runtime-bridge-codex.cjs');
+      live = bridge.resolveLiveCodexAppServerWorker(projectReal, scope.role);
+    } catch (err) {
+      return { ok: false, reason: 'host-bridge-worker-proof-unresolvable' };
+    }
+    if (!live || live.ok !== true || live.available !== true || !live.worker) {
+      return { ok: false, reason: 'host-bridge-worker-not-live:' + ((live && live.reason) || 'unresolved') };
+    }
+    if (
+      live.worker.pid !== process.pid
+      || live.worker.worktreeId !== scope.worktreeId
+      || live.worker.planDigest !== scope.planDigest
+      || live.worker.role !== scope.role
+      || live.worker.supervisorInstanceId !== scope.supervisorInstanceId
+      || live.worker.workerSessionId !== scope.workerSessionId
+    ) return { ok: false, reason: 'host-bridge-worker-process-mismatch' };
+  }
+  return { ok: true, projectReal, live };
+}
+
+/**
+ * Mints one in-memory-only HostBridgeCapability.  The caller receives an
+ * opaque frozen object; JSON/string/argv/disk cannot reconstruct its WeakMap
+ * identity.  All transaction methods below revalidate current PLAN/worktree,
+ * request/activation/attempt/epoch before invoking the canonical writers.
+ */
+function createHostBridgeCapability(scope) {
+  // Minting is allowed only inside the exact retained supervisor process
+  // corroborated by the live worker proof.  Exporting this factory for the
+  // sibling bridge module does not make it an ambient mint primitive for an
+  // unrelated Node process that merely knows the public scope fields.
+  const validated = validateHostBridgeCapabilityScopeInput(scope, true);
+  if (!validated.ok) return validated;
+  const capability = Object.freeze(Object.create(null));
+  hostBridgeCapabilityScopes.set(capability, Object.freeze(Object.assign({}, scope, { projectRoot: validated.projectReal })));
+  return { ok: true, capability };
+}
+
+// M6+M7 SIXTEENTH CIERRE DEFINITIVO Phase 1 follow-up: rootConsultIntentContext
+// (below) used to call requireHostBridgeCapability for scope, THEN
+// independently re-derive resolveLiveCodexAppServerWorker(scope.projectRoot,
+// scope.role) a few lines later for the EXACT SAME (projectRoot, role) pair
+// -- a second full owner/action/binding/processOwner/presence re-read within
+// the SAME synchronous function, not across operations. Measured live (a
+// running retained supervisor's own POLLTICK timing dump, after the git-
+// facts memoization fixes above): the ONE role servicing an active root-
+// consult intent still took ~5s per tick, versus ~1s for the four roles
+// with no intent to advance -- this redundant re-derivation, repeated across
+// hostBridgeListRootConsultIntents/hostBridgeAdvanceRootConsult/
+// hostBridgeObserveAndCompleteRootConsult each tick, is that remaining cost.
+// This variant returns the SAME live-worker proof requireHostBridgeCapability
+// itself already computed, so a caller that needs it immediately after
+// (rootConsultIntentContext) can pass it along explicitly instead of asking
+// the OS/disk the identical question again a few lines later -- explicit
+// per-operation reuse, never a cache surviving across two DECISIONS.
+// requireHostBridgeCapability's own return shape (bare scope) is unchanged
+// for its many other existing callers.
+function requireHostBridgeCapabilityWithLiveWorker(capability) {
+  const scope = hostBridgeCapabilityScopes.get(capability);
+  if (!scope) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'unknown HostBridgeCapability');
+  const current = validateHostBridgeCapabilityScopeInput(scope, true);
+  if (!current.ok) throw new CliError('INVALID', 'AUTHORITY_INVALID', current.reason);
+  return { scope, live: current.live };
+}
+
+function requireHostBridgeCapability(capability) {
+  const scope = hostBridgeCapabilityScopes.get(capability);
+  if (!scope) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'unknown HostBridgeCapability');
+  const current = validateHostBridgeCapabilityScopeInput(scope, true);
+  if (!current.ok) throw new CliError('INVALID', 'AUTHORITY_INVALID', current.reason);
+  return scope;
+}
+
+function requireHostBridgeRequestScope(capability, coordRootRaw, requestPathRaw) {
+  const scope = requireHostBridgeCapability(capability);
+  const coordRoot = resolveAbsolute(coordRootRaw);
+  const requestPath = resolveAbsolute(requestPathRaw);
+  const accredited = accreditCanonicalRequest(coordRoot, requestPath);
+  const reqObj = accredited.obj;
+  const resolved = resolveActivationForRequestPath(requestPath);
+  if (
+    !resolved.ok || !resolved.activation
+    || resolved.activation.selected_driver !== 'codex-app-server'
+    || resolved.targetRole !== scope.role
+    || resolved.worktreeId !== scope.worktreeId
+    || resolved.planDigest !== scope.planDigest
+    || reqObj.target_role !== scope.role
+    || reqObj.target_role_profile_digest !== resolved.activation.target_role_profile_digest
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'HostBridgeCapability does not match the current Codex activation');
+  return { scope, coordRoot, requestPath, reqObj, requestDigest: accredited.digest, resolved };
+}
+
+function hostBridgeClaim(capability, coordRoot, requestPath) {
+  const checked = requireHostBridgeRequestScope(capability, coordRoot, requestPath);
+  return cmdClaim({
+    'coordination-root': checked.coordRoot,
+    request: checked.requestPath,
+    role: checked.scope.role,
+    'worker-session': checked.scope.workerSessionId,
+  }, {
+    actorInstanceId: checked.scope.actorInstanceId,
+    role: checked.scope.role,
+    workerSessionId: checked.scope.workerSessionId,
+    driver: 'codex-app-server',
+    hostBridge: true,
+  });
+}
+
+function hostBridgeLeaseHeartbeat(capability, coordRoot, requestPath, claimPath) {
+  const checked = requireHostBridgeRequestScope(capability, coordRoot, requestPath);
+  return cmdLeaseHeartbeat({
+    'coordination-root': checked.coordRoot,
+    request: checked.requestPath,
+    claim: resolveAbsolute(claimPath),
+  }, {
+    actorInstanceId: checked.scope.actorInstanceId,
+    role: checked.scope.role,
+    workerSessionId: checked.scope.workerSessionId,
+    driver: 'codex-app-server',
+    hostBridge: true,
+  });
+}
+
+function assertHostBridgeClaimMatches(checked, claimPath) {
+  const txnDir = path.dirname(checked.requestPath);
+  const auth = resolveAuthoritativeAttempt(checked.reqObj, txnDir);
+  const canonicalClaimPath = claimPathFor(txnDir, auth.attemptId);
+  if (path.resolve(claimPath) !== path.resolve(canonicalClaimPath)) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'host bridge claim is not canonical');
+  }
+  const claimRec = readClosedRecord(canonicalClaimPath, CLAIM_V1_FIELDS, {
+    absentDetail: 'CORRELATION_INVALID', absentMessage: 'host bridge claim does not resolve',
+  });
+  if (
+    claimRec.obj.request_id !== checked.reqObj.request_id
+    || claimRec.obj.attempt_id !== auth.attemptId
+    || claimRec.obj.lease_epoch !== auth.leaseEpoch
+    || claimRec.obj.claimant_role !== checked.scope.role
+    || claimRec.obj.claimant_instance_id !== checked.scope.actorInstanceId
+    || claimRec.obj.worker_session_id !== checked.scope.workerSessionId
+    || claimRec.obj.driver !== 'codex-app-server'
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'host bridge claim does not match capability/current activation');
+  return { auth, claimRec, claimPath: canonicalClaimPath };
+}
+
+function hostBridgeScheduleTurn(capability, coordRoot, requestPath, claimPath) {
+  const checked = requireHostBridgeRequestScope(capability, coordRoot, requestPath);
+  const claim = assertHostBridgeClaimMatches(checked, resolveAbsolute(claimPath));
+  const txnDir = path.dirname(checked.requestPath);
+  // CANCEL-AUDIT-01: reads cancel.json ONLY through the sanctioned choke
+  // point, never an inline shape-check -- also strictly stronger than a bare
+  // shape check, since it additionally accredits the record (matches
+  // request_id, cancelled_by/cancelled_at semantics) rather than trusting an
+  // unaccredited-but-shape-valid file.
+  if (readCanonicalCancelRecordOptional(cancelPathFor(txnDir), coordRoot) !== null) {
+    throw new CliError('CANCELLED', 'TRANSACTION_CANCELLED', 'transaction is cancelled');
+  }
+  if (readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) }) !== null) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction is already accepted');
+  }
+  if (readJsonDurableOptional(resultPathFor(txnDir, claim.auth.attemptId), { shape: (o) => assertClosedShape(o, RESULT_V2_FIELDS) }) !== null) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction already has a current result');
+  }
+  const intent = {
+    schema: 'coordination/activation-intent/v1',
+    request_digest: checked.requestDigest,
+    attempt_id: claim.auth.attemptId,
+    lease_epoch: claim.auth.leaseEpoch,
+    driver: 'codex-app-server',
+    commit_point_pending: true,
+    created_at: nowIso(),
+  };
+  const intentPath = activationIntentPathFor(txnDir, claim.auth.attemptId);
+  publishNoClobber(intentPath, Buffer.from(canonicalJSONStringify(intent), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
+  return {
+    ok: true,
+    requestId: checked.reqObj.request_id,
+    request: checked.reqObj,
+    requestDigest: checked.requestDigest,
+    attemptId: claim.auth.attemptId,
+    leaseEpoch: claim.auth.leaseEpoch,
+    claimPath: claim.claimPath,
+    claimDigest: claim.claimRec.digest,
+    intentPath,
+  };
+}
+
+function hostBridgeRecordTurnStartAccepted(capability, coordRoot, requestPath, claimPath, turnId) {
+  const checked = requireHostBridgeRequestScope(capability, coordRoot, requestPath);
+  const claim = assertHostBridgeClaimMatches(checked, resolveAbsolute(claimPath));
+  const txnDir = path.dirname(checked.requestPath);
+  const intentPath = activationIntentPathFor(txnDir, claim.auth.attemptId);
+  const intentRec = readClosedRecord(intentPath, ACTIVATION_INTENT_V1_FIELDS, {
+    absentDetail: 'CORRELATION_INVALID', absentMessage: 'Codex activation intent does not resolve',
+  });
+  if (
+    intentRec.obj.request_digest !== checked.requestDigest
+    || intentRec.obj.attempt_id !== claim.auth.attemptId
+    || intentRec.obj.lease_epoch !== claim.auth.leaseEpoch
+    || intentRec.obj.driver !== 'codex-app-server'
+    || intentRec.obj.commit_point_pending !== true
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'Codex activation intent is not current');
+  let byRequest = null;
+  if (turnId !== undefined) {
+    if (!isNonEmptyString(turnId) || utf8ByteLength(turnId) > 512) {
+      throw new CliError('INVALID', 'SCHEMA_INVALID', 'host bridge turn id is invalid');
+    }
+    byRequest = hostBridgeCommittedTurnIds.get(capability);
+    const existing = byRequest && byRequest.get(checked.reqObj.request_id);
+    if (existing !== undefined && existing !== turnId) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'host bridge delivery already binds a different first turn');
+    }
+  }
+  const delivery = {
+    schema: 'coordination/delivery/v1',
+    request_id: checked.reqObj.request_id,
+    attempt_id: claim.auth.attemptId,
+    lease_epoch: claim.auth.leaseEpoch,
+    driver: 'codex-app-server',
+    claim_digest: claim.claimRec.digest,
+    commit_point: 'turn-start-accepted',
+    commit_point_at: nowIso(),
+    created_at: nowIso(),
+    delivered: true,
+    outcome: 'possibly-delivered',
+    detail_code: 'NONE',
+  };
+  assertClosedShape(delivery, DELIVERY_V1_FIELDS);
+  const deliveryPath = deliveryPathFor(txnDir, claim.auth.attemptId);
+  publishNoClobber(deliveryPath, Buffer.from(canonicalJSONStringify(delivery), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
+  if (turnId !== undefined) {
+    if (!byRequest) {
+      byRequest = new Map();
+      hostBridgeCommittedTurnIds.set(capability, byRequest);
+    }
+    byRequest.set(checked.reqObj.request_id, turnId);
+  }
+  return { ok: true, requestId: checked.reqObj.request_id, deliveryPath };
+}
+
+function ensureUtf8Bytes(value, maxBytes, label) {
+  if (!Buffer.isBuffer(value) || value.length === 0 || value.length > maxBytes) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', label + ' bytes are missing or exceed the bound');
+  }
+  try {
+    // TextDecoder's fatal mode rejects malformed byte sequences instead of
+    // silently normalizing them through U+FFFD.
+    new TextDecoder('utf-8', { fatal: true }).decode(value);
+  } catch (err) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', label + ' bytes are not valid UTF-8');
+  }
+  return Buffer.from(value);
+}
+
+function publishEvidenceBlob(planRoot, bytes) {
+  const digest = sha256Buffer(bytes);
+  const blobPath = blobPathFor(planRoot, digest);
+  const receipt = publishNoClobber(blobPath, bytes, { allowIdenticalIdempotent: true });
+  assertArtifactMatchesReceipt(blobPath, receipt, bytes);
+  return { blob: digest, digest, size: bytes.length };
+}
+
+/**
+ * Sixteenth §16c host-only evidence writer.  External bytes are accepted only
+ * in-process behind a current HostBridgeCapability/current claim, stored in
+ * the digest-addressed blob store, and then correlated under the transaction
+ * transition lock.  No serialized CLI surface can call this primitive.
+ */
+function hostBridgePublishPatternEvidence(capability, coordRoot, requestPath, claimPath, input) {
+  const checked = requireHostBridgeRequestScope(capability, coordRoot, requestPath);
+  const preClaim = assertHostBridgeClaimMatches(checked, resolveAbsolute(claimPath));
+  if (checked.reqObj.target_role !== 'context-provider') {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'pattern evidence is context-provider-only');
+  }
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'pattern evidence input is invalid');
+  }
+  if (!isNonEmptyString(input.turnId) || !isHex64(input.internalSearchDigest)) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'pattern evidence turn/internal-search identity is invalid');
+  }
+  const committedTurns = hostBridgeCommittedTurnIds.get(capability);
+  if (!committedTurns || committedTurns.get(checked.reqObj.request_id) !== input.turnId) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'pattern evidence turn does not match the committed first CP turn');
+  }
+  const gapValidation = validatePatternGap(input.gap);
+  if (!gapValidation.ok) throw new CliError('INVALID', 'SCHEMA_INVALID', gapValidation.reason);
+  if (!isCanonicalContext7LibraryId(input.libraryId)) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'selected Context7 library id is invalid');
+  }
+  if (input.gap.library_id !== null && input.gap.library_id !== input.libraryId) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'selected Context7 library id does not match the supplied gap id');
+  }
+  const queryDigest = sha256String(input.gap.query);
+  if (input.queryDigest !== undefined && input.queryDigest !== queryDigest) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'query digest does not match the exact gap query');
+  }
+  const gapDigest = sha256String(canonicalJSONStringify(input.gap));
+  if (input.gapDigest !== undefined && input.gapDigest !== gapDigest) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'gap digest does not match the exact validated gap');
+  }
+  const contentBytes = ensureUtf8Bytes(input.contentBytes, 1024 * 1024, 'Context7 content');
+  const suppliedId = input.gap.library_id !== null;
+  if (suppliedId !== (input.resolutionBytes === null || input.resolutionBytes === undefined)) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'Context7 resolution bytes do not match supplied-id/search branch');
+  }
+  const planRoot = planRootFromArtifact(checked.coordRoot, checked.requestPath);
+  const contentRef = publishEvidenceBlob(planRoot, contentBytes);
+  let resolutionRef = null;
+  if (!suppliedId) {
+    const resolutionBytes = ensureUtf8Bytes(input.resolutionBytes, 256 * 1024, 'Context7 resolution');
+    try { JSON.parse(resolutionBytes.toString('utf8')); }
+    catch (err) { throw new CliError('INVALID', 'SCHEMA_INVALID', 'Context7 resolution bytes are not valid JSON'); }
+    resolutionRef = publishEvidenceBlob(planRoot, resolutionBytes);
+  }
+  const txnDir = path.dirname(checked.requestPath);
+  return withLock(txnDir, checked.coordRoot, (lockToken) => {
+    assertLockedScopeIdentity(lockToken);
+    const inLock = requireHostBridgeRequestScope(capability, checked.coordRoot, checked.requestPath);
+    const claim = assertHostBridgeClaimMatches(inLock, preClaim.claimPath);
+    if (claim.auth.attemptId !== preClaim.auth.attemptId || claim.auth.leaseEpoch !== preClaim.auth.leaseEpoch) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'pattern evidence attempt changed before publication');
+    }
+    const evidence = {
+      schema: 'coordination/pattern-evidence/v1',
+      request_id: inLock.reqObj.request_id,
+      request_digest: inLock.requestDigest,
+      attempt_id: claim.auth.attemptId,
+      lease_epoch: claim.auth.leaseEpoch,
+      turn_id: input.turnId,
+      provider: 'context7',
+      internal_search_digest: input.internalSearchDigest,
+      gap_digest: gapDigest,
+      library_id: input.libraryId,
+      query_digest: queryDigest,
+      resolution_ref: resolutionRef,
+      resolution_digest: resolutionRef === null ? null : resolutionRef.digest,
+      source_uri: 'https://context7.com/api/v2/context',
+      content_ref: contentRef,
+      created_at: nowIso(),
+    };
+    assertClosedShape(evidence, PATTERN_EVIDENCE_V1_FIELDS);
+    if (isoToMs(evidence.created_at) >= isoToMs(inLock.reqObj.expiry)) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'request expired before pattern evidence publication');
+    }
+    const evidencePath = patternEvidencePathFor(txnDir);
+    const evidenceBytes = Buffer.from(canonicalJSONStringify(evidence), 'utf8');
+    assertLockedScopeIdentity(lockToken);
+    const receipt = publishNoClobber(evidencePath, evidenceBytes, { allowIdenticalIdempotent: true, raceDetailCode: 'AUTHORITY_INVALID' });
+    assertLockedScopeIdentity(lockToken);
+    assertArtifactMatchesReceipt(evidencePath, receipt, evidenceBytes);
+    const dependency = {
+      evidence_ref: evidenceRelativeRefFor(evidence.request_id),
+      evidence_digest: sha256Buffer(evidenceBytes),
+      provider: 'context7',
+      internal_search_digest: evidence.internal_search_digest,
+      gap_digest: evidence.gap_digest,
+      library_id: evidence.library_id,
+      query_digest: evidence.query_digest,
+      resolution_digest: evidence.resolution_digest,
+    };
+    return {
+      ok: true, dependency, contentRef, contentDigest: contentRef.digest,
+      evidencePath, evidenceDigest: dependency.evidence_digest,
+    };
+  });
+}
+
+function hostBridgePublishTerminalResult(capability, coordRoot, requestPath, claimPath, resultEnvelope, consultationDependencies, patternEvidenceDependency) {
+  const checked = requireHostBridgeRequestScope(capability, coordRoot, requestPath);
+  assertHostBridgeClaimMatches(checked, resolveAbsolute(claimPath));
+  const validation = validateRuntimeTurnEnvelope({
+    schema: 'coordination/runtime-turn-envelope/v1', kind: 'terminal-result', result: resultEnvelope,
+  }, checked.reqObj.expected_result_kind, []);
+  if (!validation.ok) throw new CliError('INVALID', 'SCHEMA_INVALID', 'invalid terminal result envelope: ' + validation.reason);
+  const suppliedPatternDependency = patternEvidenceDependency === undefined ? null : patternEvidenceDependency;
+  if (resultEnvelope.status === 'BLOCKED' && suppliedPatternDependency !== null) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'BLOCKED results must not depend on pattern evidence');
+  }
+  if (suppliedPatternDependency !== null && !isPatternEvidenceDependencyShape(suppliedPatternDependency)) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'invalid host-derived pattern evidence dependency');
+  }
+  const planRoot = planRootFromArtifact(checked.coordRoot, checked.requestPath);
+  const evidenceAuthority = resolveRootEvidenceAuthority(checked.reqObj, checked.requestDigest, checked.coordRoot, checked.scope);
+  const evidencePolicy = evidenceAuthority.policy;
+  if (
+    resultEnvelope.status === 'ANSWERED' && checked.scope.role === 'context-provider'
+    && evidencePolicy === 'context7-required' && suppliedPatternDependency === null
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'context7-required root answer has no host-derived pattern evidence');
+  if (
+    resultEnvelope.status === 'ANSWERED' && checked.scope.role === 'context-provider'
+    && (evidencePolicy === 'context7-required' || evidencePolicy === 'context7-preferred') && evidenceAuthority.libraryId !== null
+    && suppliedPatternDependency !== null && suppliedPatternDependency.library_id !== evidenceAuthority.libraryId
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'host-derived pattern evidence library_id does not match the approved directive');
+  const dependencies = consultationDependencies === undefined ? [] : consultationDependencies;
+  // M6/M7 terminal functional closure, point F: the SAME canonical
+  // consultation_dependencies validator validateResultV2 later reuses on
+  // every reopen -- never a lighter, publish-time-only shape check. The
+  // architect-side "exactly one context-provider dependency, question
+  // preserved" half only ever applies to an ANSWERED result (point F scopes
+  // it to "Bajo un resultado ANSWERED de architect").
+  validateConsultationDependencySet(
+    dependencies, checked.reqObj, planRoot, checked.coordRoot,
+    resultEnvelope.status === 'ANSWERED' ? evidenceAuthority : undefined,
+  );
+  const flags = {
+    'coordination-root': checked.coordRoot,
+    request: checked.requestPath,
+    claim: resolveAbsolute(claimPath),
+  };
+  if (resultEnvelope.status === 'ANSWERED') {
+    flags.content = Buffer.from(resultEnvelope.content, 'utf8').toString('base64url');
+  } else {
+    flags['blocked-reason'] = resultEnvelope.reason;
+  }
+  return cmdPublishResult(flags, {
+    actorInstanceId: checked.scope.actorInstanceId,
+    role: checked.scope.role,
+    workerSessionId: checked.scope.workerSessionId,
+    driver: 'codex-app-server',
+    hostBridge: true,
+    consultationDependencies: dependencies,
+    patternEvidenceDependency: suppliedPatternDependency,
+  });
+}
+
+function hostBridgeAllowedChildRoles(role) {
+  if (role === 'arch-platform' || role === 'arch-testing' || role === 'arch-integration') {
+    return ['context-provider'];
+  }
+  if (
+    role === 'toolkit-specialist' || role === 'test-specialist'
+    || role === 'verifier' || role === 'quality-gater'
+  ) {
+    return ['arch-platform', 'arch-testing', 'arch-integration'];
+  }
+  return [];
+}
+
+/**
+ * Publishes and dispatches one nested consultation on behalf of the exact
+ * in-process Codex role capability that owns the parent request.  The model
+ * supplies only the closed consult intent; the host derives PLAN, subject
+ * bundle, parent, actor, expiry and routing authority from accredited disk
+ * state.  No serialized requester grant is minted or accepted on this path.
+ */
+function hostBridgePublishChildRequest(capability, coordRootRaw, parentRequestPathRaw, consult) {
+  const checked = requireHostBridgeRequestScope(capability, coordRootRaw, parentRequestPathRaw);
+  const allowed = hostBridgeAllowedChildRoles(checked.scope.role);
+  if (
+    !consult || typeof consult !== 'object' || Array.isArray(consult)
+    || !hasExactKeys(consult, ['expected_result_kind', 'question', 'target_role'])
+    || !allowed.includes(consult.target_role)
+    || typeof consult.question !== 'string' || consult.question.length === 0
+    || Buffer.byteLength(consult.question, 'utf8') > RUNTIME_TURN_ENVELOPE_MAX_QUESTION_BYTES
+    || typeof consult.expected_result_kind !== 'string'
+    || !RUNTIME_TURN_ENVELOPE_RESULT_KIND_PATTERN.test(consult.expected_result_kind)
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'nested consult intent is not allowed for this role');
+
+  if (checked.reqObj.depth >= checked.reqObj.max_depth) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'nested consult would exceed max_depth');
+  }
+
+  const planRoot = planRootFromArtifact(checked.coordRoot, checked.requestPath);
+  const transactionsDir = path.join(planRoot, 'transactions');
+  let entries;
+  try { entries = fs.readdirSync(transactionsDir, { withFileTypes: true }); }
+  catch (err) { throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'unable to inspect nested consultation inventory'); }
+  if (entries.length > 4096) throw new CliError('INVALID', 'SECURITY_INVALID', 'nested consultation inventory cap exceeded');
+
+  let existingChildren = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !isHexId(entry.name)) continue;
+    const candidatePath = requestPathFor(planRoot, entry.name);
+    let candidate;
+    try { candidate = readCanonicalRequestRecord(candidatePath, entry.name, {}).obj; }
+    catch (err) { throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'nested consultation inventory contains an unaccredited request'); }
+    if (candidate.parent_request_id === checked.reqObj.request_id) existingChildren += 1;
+  }
+  if (existingChildren >= 2) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'nested consultation intent budget exhausted');
+  }
+
+  const seenRoles = new Set();
+  let cursor = checked.reqObj;
+  for (let depth = 0; depth <= MAX_DEPTH_LIMIT; depth += 1) {
+    seenRoles.add(cursor.source_role);
+    seenRoles.add(cursor.target_role);
+    if (cursor.parent_request_id === null) break;
+    const ancestorPath = requestPathFor(planRoot, cursor.parent_request_id);
+    cursor = validateConsultV2(ancestorPath, checked.coordRoot);
+  }
+  if (seenRoles.has(consult.target_role)) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'nested consultation repeats an ancestor role');
+  }
+
+  const nowMs = Date.now();
+  const childExpiryMs = Math.min(isoToMs(checked.reqObj.expiry) - 20000, nowMs + 3600 * 1000);
+  if (childExpiryMs - nowMs < 120000) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'parent deadline leaves no valid nested consultation lifetime');
+  }
+
+  let rll;
+  try { rll = require('./runtime-role-lifecycle.cjs'); }
+  catch (err) { throw new CliError('INVALID', 'INTERNAL_ERROR', 'role lifecycle module unavailable'); }
+  const plan = rll.discoverPlan(checked.scope.projectRoot);
+  if (!plan.ok || plan.planDigest !== checked.scope.planDigest) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'host bridge PLAN is not current');
+  }
+  const subjectBundlePath = path.join(
+    planRoot, 'subject-bundles', checked.reqObj.subject_scope_digest, 'manifest.json',
+  );
+  const intent = {
+    target_role: consult.target_role,
+    question: consult.question,
+    expected_result_kind: consult.expected_result_kind,
+    expiry: new Date(childExpiryMs).toISOString(),
+    parent_request_id: checked.reqObj.request_id,
+  };
+  const published = cmdPublishRequest({
+    'coordination-root': checked.coordRoot,
+    plan: plan.planPath,
+    'subject-bundle': subjectBundlePath,
+    intent: Buffer.from(canonicalJSONStringify(intent), 'utf8').toString('base64url'),
+  }, {
+    actorInstanceId: checked.scope.actorInstanceId,
+    role: checked.scope.role,
+    workerSessionId: checked.scope.workerSessionId,
+    driver: 'codex-app-server',
+    hostBridge: true,
+  });
+  // Sequence 46 (WAVE1-FUNCTIONAL-CLOSEOUT-REALISTIC-20260822) retained
+  // child-driver repair: PLAN §16b requires the existing retained architect
+  // to publish its context-provider child and resume the same architect
+  // instance after the accepted child result. This HostBridgeCapability path
+  // is already proven to run inside that retained Codex support plane, so its
+  // child dispatch must call the same dispatchCanonical(...,
+  // {requiredDriver:'codex-app-server'}) path retained-root dispatch already
+  // uses (cmdDispatch's own isRootSourceGrantContext branch, ~L11542-11552) --
+  // never ordinary cmdDispatch(), which lets requester-owned claude-agent win
+  // whenever a live top-level Claude MainOrchestratorBinding exists. This
+  // retained host neither owns nor executes a top-level-Claude
+  // activation_action, so an unconstrained child dispatch stalls unclaimed
+  // even though the exact retained codex-app-server target is READY --
+  // WORKER_LEASE_EXPIRED at the parent is only the later downstream symptom
+  // (Codex byte audit sequence45-child-driver-byte-audit.md). requiredDriver
+  // already fails closed if the retained target is genuinely unavailable, so
+  // this changes no TTL, routing-policy order or driver-eligibility rule --
+  // only which candidate this opaque retained-host path is allowed to select.
+  const dispatched = dispatchCanonical({
+    'coordination-root': checked.coordRoot,
+    request: published.artifact_ref,
+  }, { requiredDriver: 'codex-app-server' });
+  return {
+    ok: true,
+    requestId: published.request_id,
+    requestPath: published.artifact_ref,
+    activationPath: dispatched.artifact_ref,
+    selectedDriver: resolveActivationForRequestPath(published.artifact_ref).activation.selected_driver,
+  };
+}
+
+/**
+ * Observes one nested result and, for ANSWERED, accepts it under the same
+ * authenticated parent-role actor that published the child.  Absence is a
+ * normal polling state; malformed, foreign, stale or BLOCKED results never
+ * become accepted dependencies.
+ */
+function hostBridgeObserveChildResult(capability, coordRootRaw, childRequestPathRaw) {
+  const scope = requireHostBridgeCapability(capability);
+  const coordRoot = resolveAbsolute(coordRootRaw);
+  const requestPath = resolveAbsolute(childRequestPathRaw);
+  const accredited = accreditCanonicalRequest(coordRoot, requestPath);
+  const reqObj = accredited.obj;
+  if (
+    reqObj.source_role !== scope.role
+    || reqObj.requester_instance_id !== scope.actorInstanceId
+    || reqObj.requester_worktree_id !== scope.worktreeId
+    || reqObj.plan_digest !== scope.planDigest
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'nested child is not owned by this HostBridgeCapability');
+  const txnDir = path.dirname(requestPath);
+  const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+  const candidatePath = resultPathFor(txnDir, auth.attemptId);
+  const classified = classifyDurableRead(candidatePath, { shape: (o) => assertClosedShape(o, RESULT_V2_FIELDS) });
+  if (classified.state === DURABLE_ABSENT || classified.state === DURABLE_PENDING) {
+    return { ok: true, ready: false };
+  }
+  const validatedRecord = validateResultV2(candidatePath, coordRoot);
+  const validated = validatedRecord.obj;
+  if (validated.status === 'BLOCKED') {
+    const ack = cmdTransactionAck({
+      'coordination-root': coordRoot, request: requestPath, disposition: 'blocked',
+    });
+    const ackRecord = readDurableRecord(ack.artifact_ref);
+    assertClosedShape(ackRecord.obj, ACK_V1_FIELDS);
+    return {
+      ok: true, ready: true, status: 'BLOCKED', reason: validated.reason,
+      requestPath, requestDigest: accredited.digest,
+      resultPath: candidatePath, resultDigest: validatedRecord.digest,
+      acceptedPath: null, acceptedDigest: null,
+      ackPath: ack.artifact_ref, ackDigest: ackRecord.digest,
+    };
+  }
+  const accepted = cmdAcceptResult({ 'coordination-root': coordRoot, request: requestPath }, {
+    actorInstanceId: scope.actorInstanceId,
+    role: scope.role,
+    workerSessionId: scope.workerSessionId,
+    driver: 'codex-app-server',
+    hostBridge: true,
+  });
+  // Dependency digests come from the same fd-bound durable reads that parsed
+  // and validated the records.  Never reopen either pathname merely to hash
+  // it: that would reintroduce a path-swap window after validation.
+  const acceptedRecord = readDurableRecord(accepted.artifact_ref);
+  assertClosedShape(acceptedRecord.obj, ACCEPTED_RESULT_V1_FIELDS);
+  assertAcceptedResultCorrelates(acceptedRecord.obj, txnDir, reqObj, coordRoot);
+  const ack = cmdTransactionAck({
+    'coordination-root': coordRoot, request: requestPath, disposition: 'accepted',
+  });
+  const ackRecord = readDurableRecord(ack.artifact_ref);
+  assertClosedShape(ackRecord.obj, ACK_V1_FIELDS);
+  return {
+    ok: true,
+    ready: true,
+    status: 'ANSWERED',
+    content: validated.content,
+    resultKind: validated.result_kind,
+    acceptedPath: accepted.artifact_ref,
+    acceptedDigest: acceptedRecord.digest,
+    resultPath: candidatePath,
+    resultDigest: validatedRecord.digest,
+    requestPath,
+    requestDigest: accredited.digest,
+    ackPath: ack.artifact_ref,
+    ackDigest: ackRecord.digest,
+    dependency: {
+      request_id: reqObj.request_id,
+      accepted_result_digest: acceptedRecord.digest,
+      result_digest: validatedRecord.digest,
+      from_role: validated.from_role,
+    },
+  };
+}
+
+function hostBridgeListRootConsultIntents(capability, coordRootRaw) {
+  const scope = requireHostBridgeCapability(capability);
+  // Resolve and confine even though lifecycle records themselves are host-
+  // private: the caller must not swap the coordination scope independently.
+  const coordRoot = resolveAbsolute(coordRootRaw);
+  if (computeCoordRootId(coordRoot) !== computeCoordRootId(path.resolve(coordRoot))) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'root-consult coordination root identity invalid');
+  }
+  let rll;
+  try { rll = require('./runtime-role-lifecycle.cjs'); }
+  catch (err) { throw new CliError('INVALID', 'INTERNAL_ERROR', 'role lifecycle module unavailable'); }
+  const listed = rll.listRootConsultIntentsForActor(scope.projectRoot, scope.actorInstanceId);
+  if (!listed || listed.ok !== true || !Array.isArray(listed.intents)) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'root-consult intent scan failed');
+  }
+  if (listed.intents.length > 1024) throw new CliError('INVALID', 'SECURITY_INVALID', 'root-consult intent scan cap exceeded');
+  const output = listed.intents.map((intent) => {
+    const valid = rll.validateRootConsultIntentRecord(intent, {
+      requester_actor_instance_id: scope.actorInstanceId,
+      requester_role: scope.role,
+      worktree_id: scope.worktreeId,
+      plan_digest: scope.planDigest,
+    });
+    if (!valid.ok) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-consult intent does not match HostBridgeCapability');
+    return {
+      intentPath: rll.rootConsultIntentPathFor(scope.projectRoot, intent.intent_id),
+      intentId: intent.intent_id,
+      createdAt: intent.created_at,
+    };
+  });
+  output.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.intentId.localeCompare(b.intentId));
+  return output;
+}
+
+function readLifecycleRecordRequired(rll, recordPath, validator, expected, label) {
+  const classified = classifyDurableRead(recordPath, { parse: true });
+  if (classified.state === DURABLE_ABSENT) return null;
+  if (classified.state === DURABLE_PENDING) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', label + ' is still pending durability');
+  }
+  const valid = validator(classified.obj, expected);
+  if (!valid || valid.ok !== true) throw new CliError('INVALID', 'AUTHORITY_INVALID', label + ' is malformed or foreign');
+  return {
+    obj: valid.record, bytes: classified.bytes,
+    digest: sha256Buffer(classified.bytes), path: recordPath,
+  };
+}
+
+/**
+ * Resolves host-private root-consult policy from the immutable lifecycle
+ * intent.  The request is the lookup key, not the current target actor: the
+ * intent belongs to the source architect while inbox polling runs under the
+ * target capability.  Ordinary and nested requests have no matching intent
+ * and therefore retain policy `none`.
+ */
+function findCorrelatedRootConsultIntent(reqObj, expectedTargetScope) {
+  let rll;
+  try { rll = require('./runtime-role-lifecycle.cjs'); }
+  catch (err) { throw new CliError('INVALID', 'INTERNAL_ERROR', 'role lifecycle module unavailable'); }
+  if (typeof rll.findRootConsultIntentByRequestId !== 'function') {
+    throw new CliError('INVALID', 'INTERNAL_ERROR', 'root-consult request lookup unavailable');
+  }
+  const found = rll.findRootConsultIntentByRequestId({ repoId: reqObj.repo_id }, reqObj.request_id);
+  if (!found || found.ok !== true) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'root-consult request lookup is malformed or ambiguous');
+  }
+  if (found.absent === true) return null;
+  const expected = {
+    request_id: reqObj.request_id,
+    repo_id: reqObj.repo_id,
+    coordination_root_id: reqObj.coordination_root_id,
+    requester_role: reqObj.source_role,
+    requester_actor_instance_id: reqObj.requester_instance_id,
+    target_role: reqObj.target_role,
+    worktree_id: reqObj.requester_worktree_id,
+    plan_digest: reqObj.plan_digest,
+    target_role_profile_version: reqObj.target_role_profile_version,
+    target_role_profile_digest: reqObj.target_role_profile_digest,
+    routing_policy_version: reqObj.routing_policy_version,
+    routing_policy_digest: reqObj.routing_policy_digest,
+    subject_repo_id: reqObj.subject_repo_id,
+    subject_worktree_id: reqObj.subject_worktree_id,
+    subject_head: reqObj.subject_head,
+    subject_scope_digest: reqObj.subject_scope_digest,
+    request_created_at: reqObj.created_at,
+    request_expiry: reqObj.expiry,
+  };
+  const valid = rll.validateRootConsultIntentRecord(found.intent, expected);
+  if (!valid || valid.ok !== true) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-consult intent does not correlate to its request');
+  }
+  if (
+    reqObj.root_request_id !== reqObj.request_id
+    || reqObj.parent_request_id !== null
+    || reqObj.depth !== 0
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-consult intent correlates only to root topology');
+  if (expectedTargetScope && (
+    valid.record.target_role !== expectedTargetScope.role
+    || valid.record.worktree_id !== expectedTargetScope.worktreeId
+    || valid.record.plan_digest !== expectedTargetScope.planDigest
+  )) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-consult intent does not match target HostBridgeCapability');
+  return valid.record;
+}
+
+/**
+ * M6/M7 terminal functional closure, point C: the single canonical
+ * root-aware evidence-authority resolver, superseding the old
+ * root-consult-only rootConsultEvidencePolicyForRequest (which silently
+ * returned 'none' for any root-source-originated request or descendant,
+ * since findCorrelatedRootConsultIntent only ever matches a request whose
+ * OWN request_id equals a minted root-consult intent's request_id -- true
+ * only when reqObj already IS that intent's root).
+ *
+ * For ANY root or descendant reqObj: (1) reopens the ROOT's own canonical
+ * request bytes from root_request_id (a no-op re-read when reqObj already is
+ * the root); (2) resolves EITHER a root-consult intent (existing, byte-exact
+ * unchanged private evidence_policy authority) OR root-source provenance
+ * (point B's lookup, deriving policy+libraryId from the root's own question
+ * text via point A's directive parser) -- never both; (3) revalidates the
+ * descendant's own identity against its root before propagating; (4)
+ * returns the SAME { policy, libraryId } to every descendant of that root.
+ *
+ * `expectedTargetScope`, when supplied, is applied only when reqObj already
+ * is the root (the pre-existing root-consult semantic: "does this root's own
+ * target correlate with the CURRENT worker checking its own obligations") --
+ * never re-applied against a refetched root on behalf of an unrelated
+ * descendant worker, which would compare the wrong role.
+ *
+ * @returns {{policy:'none'|'context7-required'|'context7-preferred', libraryId: string|null}}
+ */
+function resolveRootEvidenceAuthority(reqObj, reqDigest, coordRoot, expectedTargetScope) {
+  const isRoot = reqObj.request_id === reqObj.root_request_id;
+  let rootReqObj = reqObj;
+  let rootDigest = reqDigest;
+  if (!isRoot) {
+    const rootPlanRoot = planRootPath(coordRoot, reqObj.repo_id, reqObj.wave_slug, reqObj.plan_digest);
+    const rootPath = requestPathFor(rootPlanRoot, reqObj.root_request_id);
+    const rootRec = readCanonicalRequestRecord(rootPath, reqObj.root_request_id, {
+      absentDetail: 'CORRELATION_INVALID', absentMessage: 'root request does not resolve for evidence authority resolution',
+    });
+    rootReqObj = rootRec.obj;
+    rootDigest = rootRec.digest;
+    if (
+      rootReqObj.root_request_id !== rootReqObj.request_id || rootReqObj.parent_request_id !== null || rootReqObj.depth !== 0
+      || rootReqObj.repo_id !== reqObj.repo_id || rootReqObj.wave_slug !== reqObj.wave_slug
+      || rootReqObj.plan_digest !== reqObj.plan_digest || rootReqObj.protocol_profile !== reqObj.protocol_profile
+      || rootReqObj.subject_repo_id !== reqObj.subject_repo_id || rootReqObj.subject_worktree_id !== reqObj.subject_worktree_id
+      || rootReqObj.subject_head !== reqObj.subject_head || rootReqObj.subject_scope_digest !== reqObj.subject_scope_digest
+      || rootReqObj.routing_policy_version !== reqObj.routing_policy_version
+      || rootReqObj.routing_policy_digest !== reqObj.routing_policy_digest
+      || rootReqObj.coordination_root_id !== reqObj.coordination_root_id
+    ) throw new CliError('INVALID', 'CORRELATION_INVALID', 'descendant does not correlate with its root for evidence authority resolution');
+  }
+
+  const rootConsultIntent = findCorrelatedRootConsultIntent(rootReqObj, isRoot ? expectedTargetScope : undefined);
+  let rll;
+  try { rll = require('./runtime-role-lifecycle.cjs'); }
+  catch (err) { throw new CliError('INVALID', 'INTERNAL_ERROR', 'role lifecycle module unavailable'); }
+  if (typeof rll.findRootSourceProvenanceForRequestId !== 'function') {
+    throw new CliError('INVALID', 'INTERNAL_ERROR', 'root-source provenance lookup unavailable');
+  }
+  const provenance = rll.findRootSourceProvenanceForRequestId({ repoId: rootReqObj.repo_id }, rootReqObj.request_id);
+  if (!provenance.ok) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'root-source provenance lookup is malformed or ambiguous: ' + provenance.reason);
+  }
+  const hasRootConsult = rootConsultIntent !== null;
+  const hasRootSource = provenance.absent !== true;
+  if (hasRootConsult && hasRootSource) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root request has both root-consult and root-source evidence authority');
+  }
+  if (hasRootConsult) return { policy: rootConsultIntent.evidence_policy, libraryId: null };
+  if (hasRootSource) {
+    const p = provenance.provenance;
+    if (
+      rootReqObj.source_role !== 'toolkit-specialist' || rootReqObj.target_role !== 'arch-platform'
+      || rootDigest !== p.ingress.request_digest
+      || rootReqObj.requester_instance_id !== p.binding.actor_instance_id
+      || rootReqObj.plan_digest !== p.ingress.plan_digest || rootReqObj.plan_digest !== p.binding.plan_digest
+      || rootReqObj.question !== p.bootstrapIntent.question
+      || rootReqObj.expected_result_kind !== p.bootstrapIntent.expected_result_kind
+    ) throw new CliError('INVALID', 'CORRELATION_INVALID', 'root-source provenance does not correlate with its root request');
+    const directive = parseApprovedContext7Directive(rootReqObj.question);
+    const preferredDirective = parsePreferredContext7Directive(rootReqObj.question);
+    if (directive.present && preferredDirective.present) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-source question carries both APPROVED_CONTEXT7_LIBRARY_ID and PREFERRED_CONTEXT7_LIBRARY_ID directives');
+    }
+    if (directive.present) return { policy: 'context7-required', libraryId: directive.libraryId };
+    if (preferredDirective.present) return { policy: 'context7-preferred', libraryId: preferredDirective.libraryId };
+    return { policy: 'none', libraryId: null };
+  }
+  return { policy: 'none', libraryId: null };
+}
+
+function rootConsultIntentContext(capability, coordRootRaw, intentPathRaw) {
+  const { scope, live } = requireHostBridgeCapabilityWithLiveWorker(capability);
+  const coordRoot = resolveAbsolute(coordRootRaw);
+  const intentPath = resolveAbsolute(intentPathRaw);
+  let rll;
+  try { rll = require('./runtime-role-lifecycle.cjs'); }
+  catch (err) { throw new CliError('INVALID', 'INTERNAL_ERROR', 'role lifecycle module unavailable'); }
+  const intentId = path.basename(intentPath, '.json');
+  if (!HOST_BRIDGE_ID_RE.test(intentId) || path.resolve(intentPath) !== path.resolve(rll.rootConsultIntentPathFor(scope.projectRoot, intentId))) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'root-consult intent path is not canonical');
+  }
+  const intentRec = readLifecycleRecordRequired(
+    rll, intentPath, rll.validateRootConsultIntentRecord,
+    {
+      intent_id: intentId, requester_actor_instance_id: scope.actorInstanceId,
+      requester_role: scope.role, worktree_id: scope.worktreeId,
+      plan_digest: scope.planDigest, coordination_root_id: computeCoordRootId(coordRoot),
+    }, 'root-consult intent',
+  );
+  if (!intentRec) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-consult intent is absent');
+  const intent = intentRec.obj;
+  // live is the SAME proof requireHostBridgeCapabilityWithLiveWorker above
+  // already obtained for this exact (scope.projectRoot, scope.role) pair,
+  // moments earlier in this same synchronous call -- reused explicitly
+  // rather than re-derived (see that function's own comment). The
+  // bindingId/sessionGenerationId checks below are genuinely new (this
+  // intent's own recorded actor), never covered by the capability's own
+  // generic liveness proof.
+  if (
+    !live || live.ok !== true || live.available !== true || !live.worker
+    || live.worker.bindingId !== intent.requester_binding_id
+    || live.worker.sessionGenerationId !== intent.session_generation_id
+    || live.worker.workerSessionId !== scope.workerSessionId
+  ) return { scope, coordRoot, intentPath, intentId, intentRec, intent, rll, blocked: 'source-actor-retired' };
+  // NO-GO Correction A (PLAN.md §16a line 53): intent.expiry (<=30s) gates
+  // ONLY whether the source's WAL may still RESERVE this intent -- once
+  // reserved, continued work (publish/dispatch/observe/complete) is bound
+  // to intent.request_expiry (up to 3600s) instead, never re-blocked by the
+  // activation window it already cleared. A raw existence check (not a full
+  // validated read) is deliberate: this is a boolean "did activation
+  // succeed" gate, not a trust decision -- hostBridgeAdvanceRootConsult
+  // below fully re-reads and validates the reservation record itself before
+  // relying on its content.
+  const reservationPath = rll.rootConsultReservationPathFor(scope.projectRoot, intentId);
+  const reservationExists = fs.existsSync(reservationPath);
+  if (!reservationExists) {
+    if (isoToMs(intent.expiry) <= Date.now()) {
+      return { scope, coordRoot, intentPath, intentId, intentRec, intent, rll, blocked: 'intent-expired' };
+    }
+  } else if (isoToMs(intent.request_expiry) <= Date.now()) {
+    return { scope, coordRoot, intentPath, intentId, intentRec, intent, rll, blocked: 'request-expired' };
+  }
+  return { scope, coordRoot, intentPath, intentId, intentRec, intent, rll, blocked: null };
+}
+
+function requestInputForRootIntent(context) {
+  const i = context.intent;
+  // ROOT-INGRESS-E2E finding: subject_bundle_ref is coordination-root-RELATIVE
+  // (s16CoordinationRelativeRef's own output, same shape as root-source's
+  // subject_bundle_ref -- see enforceRootSourceGrantBoundary's identical fix).
+  // resolveAbsolute() alone resolves it against this long-running retained
+  // worker's own process.cwd(), never the intent's own coordRoot -- proven by
+  // a live retained worker crashing (APP_SERVER_POLL_FAILED, artifact not
+  // found under the repo checkout root) the moment it tried to advance a
+  // genuine root-consult intent.
+  const manifestRec = readDurableRecord(path.join(context.coordRoot, i.subject_bundle_ref));
+  const manifest = manifestRec.obj;
+  assertClosedShape(manifest, SUBJECT_BUNDLE_MANIFEST_V1_FIELDS);
+  for (const entry of manifest.entries) assertClosedShape(entry, SUBJECT_BUNDLE_ENTRY_FIELDS);
+  if (sha256Buffer(Buffer.from(canonicalJSONStringify(manifest), 'utf8')) !== i.subject_scope_digest) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'root-consult subject manifest digest mismatch');
+  }
+  const plan = context.rll.discoverPlan(context.scope.projectRoot);
+  if (!plan.ok || plan.planDigest !== i.plan_digest) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-consult PLAN is not current');
+  }
+  return {
+    coordinationRoot: context.coordRoot,
+    planPath: plan.planPath,
+    subjectBundleManifest: manifest,
+    requestId: i.request_id,
+    initialAttemptId: i.initial_attempt_id,
+    createdAt: i.request_created_at,
+    expiry: i.request_expiry,
+    parentRequestId: null,
+    targetRole: i.target_role,
+    targetRoleProfileVersion: i.target_role_profile_version,
+    targetRoleProfileDigest: i.target_role_profile_digest,
+    question: i.question,
+    expectedResultKind: i.expected_result_kind,
+    routingPolicyVersion: i.routing_policy_version,
+    routingPolicyDigest: i.routing_policy_digest,
+  };
+}
+
+function assertBuiltRootRequestMatchesIntent(built, intent, scope) {
+  const r = built.request;
+  const expected = {
+    request_id: intent.request_id,
+    root_request_id: intent.request_id,
+    parent_request_id: null,
+    depth: 0,
+    source_role: scope.role,
+    requester_instance_id: scope.actorInstanceId,
+    requester_worktree_id: intent.worktree_id,
+    repo_id: intent.repo_id,
+    coordination_root_id: intent.coordination_root_id,
+    plan_digest: intent.plan_digest,
+    target_role: intent.target_role,
+    target_role_profile_version: intent.target_role_profile_version,
+    target_role_profile_digest: intent.target_role_profile_digest,
+    subject_repo_id: intent.subject_repo_id,
+    subject_worktree_id: intent.subject_worktree_id,
+    subject_head: intent.subject_head,
+    subject_scope_digest: intent.subject_scope_digest,
+    routing_policy_version: intent.routing_policy_version,
+    routing_policy_digest: intent.routing_policy_digest,
+    created_at: intent.request_created_at,
+    expiry: intent.request_expiry,
+    initial_attempt_id: intent.initial_attempt_id,
+    question: intent.question,
+    expected_result_kind: intent.expected_result_kind,
+  };
+  for (const [key, value] of Object.entries(expected)) {
+    if (r[key] !== value) {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'root-consult request field diverges from immutable intent: ' + key);
+    }
+  }
+}
+
+function rootConsultOperationResult(status, context, values) {
+  return Object.assign({
+    ok: true, status, intent: context.intent,
+    intentPath: context.intentPath, intentId: context.intentId,
+  }, values || {});
+}
+
+function canonicalRequestPathForRootIntent(c) {
+  const plan = c.rll.discoverPlan(c.scope.projectRoot);
+  if (!plan.ok || plan.planDigest !== c.intent.plan_digest) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-consult PLAN is not current');
+  }
+  const waveSlug = path.basename(path.dirname(plan.planPath)).replace(/^wave-/, '');
+  return requestPathFor(
+    planRootPath(c.coordRoot, c.intent.repo_id, waveSlug, c.intent.plan_digest),
+    c.intent.request_id,
+  );
+}
+
+/**
+ * Read-only lifecycle-facing projection for the one root terminal state that
+ * deliberately has no completion record: BLOCKED result + blocked ack.  It
+ * reuses consultation's canonical request/result/ack schemas so lifecycle
+ * never grows a second, weaker transaction parser.
+ */
+function readRootConsultTerminalStatus(projectRootRaw, intentInput) {
+  try {
+    const projectRoot = gitRevParse(resolveAbsolute(projectRootRaw), ['rev-parse', '--show-toplevel']);
+    let rll;
+    try { rll = require('./runtime-role-lifecycle.cjs'); }
+    catch (err) { return { ok: false, reason: 'role-lifecycle-unavailable' }; }
+    const initial = rll.validateRootConsultIntentRecord(intentInput);
+    if (!initial || initial.ok !== true) return { ok: false, reason: 'root-consult-intent-invalid' };
+    const intent = initial.record;
+    const found = rll.findRootConsultIntentByRequestId({ repoId: intent.repo_id }, intent.request_id);
+    if (!found || found.ok !== true || found.absent === true || !found.intent) {
+      return { ok: false, reason: (found && found.reason) || 'root-consult-intent-not-current' };
+    }
+    if (canonicalJSONStringify(found.intent) !== canonicalJSONStringify(intent)) {
+      return { ok: false, reason: 'root-consult-intent-input-mismatch' };
+    }
+    const plan = rll.discoverPlan(projectRoot);
+    const coordRoot = rll.coordinationRootPathFor(projectRoot);
+    if (
+      !plan.ok || plan.planDigest !== intent.plan_digest
+      || computeRepoId(projectRoot) !== intent.repo_id
+      || computeWorktreeId(projectRoot) !== intent.worktree_id
+      || computeCoordRootId(coordRoot) !== intent.coordination_root_id
+    ) return { ok: false, reason: 'root-consult-project-scope-mismatch' };
+    const waveSlug = path.basename(path.dirname(plan.planPath)).replace(/^wave-/, '');
+    const planRoot = planRootPath(coordRoot, intent.repo_id, waveSlug, intent.plan_digest);
+    const requestPath = requestPathFor(planRoot, intent.request_id);
+    const requestState = classifyDurableRead(requestPath, { parse: true });
+    if (requestState.state === DURABLE_ABSENT) return { ok: true, state: 'WAITING' };
+    if (requestState.state === DURABLE_PENDING) return { ok: false, reason: 'root-consult-request-pending-durability' };
+    const requestRec = accreditCanonicalRequest(coordRoot, requestPath);
+    assertBuiltRootRequestMatchesIntent(
+      { request: requestRec.obj }, intent,
+      { role: intent.requester_role, actorInstanceId: intent.requester_actor_instance_id },
+    );
+    const txnDir = path.dirname(requestPath);
+    const auth = resolveAuthoritativeAttempt(requestRec.obj, txnDir);
+    const candidatePath = resultPathFor(txnDir, auth.attemptId);
+    const resultState = classifyDurableRead(candidatePath, { parse: true });
+    if (resultState.state === DURABLE_ABSENT) return { ok: true, state: 'WAITING' };
+    if (resultState.state === DURABLE_PENDING) return { ok: false, reason: 'root-consult-result-pending-durability' };
+    const resultRec = validateResultV2(candidatePath, coordRoot);
+    if (resultRec.obj.status !== 'BLOCKED') return { ok: true, state: 'WAITING' };
+    const acceptedState = classifyDurableRead(acceptedResultPathFor(txnDir), { parse: true });
+    if (acceptedState.state !== DURABLE_ABSENT) {
+      return { ok: false, reason: acceptedState.state === DURABLE_PENDING
+        ? 'root-consult-accepted-result-pending-durability'
+        : 'root-consult-blocked-has-accepted-result' };
+    }
+    const ackPath = ackPathFor(txnDir);
+    const ackState = classifyDurableRead(ackPath, { parse: true });
+    if (ackState.state === DURABLE_ABSENT) return { ok: true, state: 'WAITING' };
+    if (ackState.state === DURABLE_PENDING) return { ok: false, reason: 'root-consult-ack-pending-durability' };
+    assertClosedShape(ackState.obj, ACK_V1_FIELDS);
+    if (
+      ackState.obj.disposition !== 'blocked'
+      || ackState.obj.in_reply_to_attempt_id !== auth.attemptId
+    ) return { ok: false, reason: 'root-consult-blocked-ack-mismatch' };
+    const ackDigest = sha256Buffer(ackState.bytes);
+    return {
+      ok: true,
+      state: 'BLOCKED',
+      request_ref: path.posix.join('transactions', intent.request_id, 'request.json'),
+      request_digest: requestRec.digest,
+      result_ref: path.posix.join('transactions', intent.request_id, 'results', auth.attemptId + '.json'),
+      result_digest: resultRec.digest,
+      ack_ref: path.posix.join('transactions', intent.request_id, 'ack.json'),
+      ack_digest: ackDigest,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: (err && (err.detailCode || err.message)) || 'root-consult-terminal-status-failed',
+    };
+  }
+}
+
+/**
+ * NO-GO Correction C, M7 section 9 update: the ONE canonical read-only
+ * helper for a root-source operation's terminal artifacts -- and now the
+ * SOLE classifier of which terminal (acked, cancelled, or neither yet)
+ * governs, since M7 removes the retirement record that used to tell the
+ * caller which reason to pass. Reopens/accredits request, authoritative
+ * result, accepted-result (acked only) and ack-or-cancel through the SAME
+ * fd-bound primitives production already trusts for ordinary consultation
+ * (never a second, weaker parser -- mirrors readRootConsultTerminalStatus/
+ * validateRootConsultCompletionArtifacts's established root-consult
+ * pattern), and recomputes every digest fresh from disk before emission
+ * (PLAN.md line 226: "any non-null digest is recomputed from fd-bound
+ * bytes"). Returns null when neither ack.json nor cancel.json is durably
+ * present yet -- an ordinary WAITING case, not an error.
+ *
+ * M6+M7 SIXTEENTH CODEX ACCEPTANCE Correction C: 'acked' still requires an
+ * authoritative result (an ack can only ever follow one); 'cancelled' does
+ * NOT -- a cancellation raised before any result ever landed is the common
+ * case, not an error, and must reach BLOCKED/NONE with result_ref/digest
+ * genuinely null rather than throwing (this function's own caller,
+ * handleRootSourceStatus, previously observed that throw as an opaque
+ * DURABILITY_UNPROVEN, indistinguishable from real corruption). ack.json and
+ * cancel.json are mutually exclusive terminal markers for the SAME request
+ * (each is written no-clobber, by disjoint code paths gated on opposite
+ * terminal outcomes) -- both durably present at once is fail-closed here,
+ * never silently resolved by trusting whichever one happens to be read first.
+ */
+function readRootSourceTerminalArtifacts(coordRoot, planRoot, requestId) {
+  const requestPath = requestPathFor(planRoot, requestId);
+  const requestRec = readCanonicalRequestRecord(requestPath, requestId, {
+    absentDetail: 'CORRELATION_INVALID', absentMessage: 'root-source request is absent',
+  });
+  const txnDir = path.dirname(requestPath);
+  const auth = resolveAuthoritativeAttempt(requestRec.obj, txnDir);
+  const resultPath = resultPathFor(txnDir, auth.attemptId);
+
+  const ackPath = ackPathFor(txnDir);
+  const cancelPath = cancelPathFor(txnDir);
+  // M7 CORRECTION C3 (Codex final ruling): a single SHAPE-FREE presence read
+  // of each path decides mutual-exclusion FIRST (S16-RSTA-MUTUAL-EXCLUSION-01:
+  // two contradictory terminal markers is a fail-closed condition in its own
+  // right, and must win over -- never be masked by -- a shape problem in
+  // either individual file). Shape/correlation validation for whichever ONE
+  // terminal actually applies happens further below, from THIS SAME already
+  // -read ack bytes/obj (never a second, independent reopen); the cancel
+  // side stays routed through its own sanctioned choke-point reader
+  // (CANCEL-AUDIT-01/02 restrict CANCEL_V1_FIELDS/accreditCancelRecord to
+  // their three existing entry points, so a shape-free-then-validate split
+  // is not achievable there without a fourth, unsanctioned call site).
+  const ackClassified = classifyDurableRead(ackPath, { parse: true });
+  if (ackClassified.state === DURABLE_PENDING) throw pendingDurableStop(ackPath);
+  // M7 GREEN correction round 2, R3: ONE fd-bound read of cancel.json, via
+  // the SAME sanctioned CANCEL-AUDIT-01 choke point classifyCanonicalCancelRecord
+  // already uses elsewhere -- never a shape-free presence probe followed by
+  // a second, independent reopen purely to obtain shape/correlation/digest.
+  // Every value used below (state, obj, reqObj, bytes, digest) comes from
+  // THIS SAME read.
+  const cancelClassified = classifyCanonicalCancelRecord(cancelPath, coordRoot);
+  if (cancelClassified.state === DURABLE_PENDING) throw pendingDurableStop(cancelPath);
+  if (ackClassified.state !== DURABLE_ABSENT && cancelClassified.state !== DURABLE_ABSENT) {
+    throw new CliError('INVALID', 'SECURITY_INVALID', 'root-source request has both ack and cancel terminal markers');
+  }
+  // M7 section 9: the sole fd-bound classifier/reader -- derives the exact
+  // terminalState from that SAME pair of reads, never a caller-supplied
+  // reason. Neither durably present yet is OPEN, a real, ordinary case
+  // (WAITING at the handler), not an error.
+  const terminalState = ackClassified.state !== DURABLE_ABSENT ? 'ACKED' : (cancelClassified.state !== DURABLE_ABSENT ? 'CANCELLED' : 'OPEN');
+
+  // Result: required once ACKED (an acked request must have an authoritative
+  // result); otherwise included, validated, whenever already durable --
+  // OPEN validates any result already present (a genuine window exists
+  // between publish-result and transaction-ack/cancel). CANCELLED also
+  // reports a result if one happens to already exist (section 9: "ingress +
+  // valid cancel -> ... with request/result-if-present/cancel refs").
+  let resultRef = null;
+  let resultDigest = null;
+  const resultState = classifyDurableRead(resultPath, { parse: true });
+  if (resultState.state === DURABLE_PENDING) throw pendingDurableStop(resultPath);
+  if (resultState.state !== DURABLE_ABSENT) {
+    const resultRec = validateResultV2(resultPath, coordRoot);
+    resultRef = path.posix.join('transactions', requestId, 'results', auth.attemptId + '.json');
+    resultDigest = resultRec.digest;
+  } else if (terminalState === 'ACKED') {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'root-source acked request has no authoritative result');
+  }
+
+  // Accepted-result: required once ACKED; for OPEN, included/validated only
+  // when already durable (the real accept-result-before-transaction-ack
+  // window) -- never for CANCELLED, which section 9's own table never lists
+  // it for.
+  let acceptedResultRef = null;
+  let acceptedResultDigest = null;
+  if (terminalState !== 'CANCELLED') {
+    const acceptedPath = acceptedResultPathFor(txnDir);
+    const acceptedState = classifyDurableRead(acceptedPath, { parse: true });
+    if (acceptedState.state === DURABLE_PENDING) throw pendingDurableStop(acceptedPath);
+    if (acceptedState.state !== DURABLE_ABSENT) {
+      const acceptedRec = readClosedRecord(acceptedPath, ACCEPTED_RESULT_V1_FIELDS, {
+        absentDetail: 'CORRELATION_INVALID', absentMessage: 'root-source accepted-result is absent',
+      });
+      assertAcceptedResultCorrelates(acceptedRec.obj, txnDir, requestRec.obj, coordRoot);
+      acceptedResultRef = path.posix.join('transactions', requestId, 'accepted-result.json');
+      acceptedResultDigest = acceptedRec.digest;
+    } else if (terminalState === 'ACKED') {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'root-source accepted-result is absent');
+    }
+  }
+
+  // M7 GREEN section 4.7: ackRef/ackDigest and cancelRef/cancelDigest are
+  // GENUINELY SEPARATE fields -- ACKED populates only ack*, CANCELLED
+  // populates only cancel* (never reusing the ack* pair for a cancel.json
+  // ref/digest as before), OPEN leaves all four null.
+  let ackRef = null;
+  let ackDigest = null;
+  let cancelRef = null;
+  let cancelDigest = null;
+  if (terminalState === 'ACKED') {
+    // M7 CORRECTION C3: shape+correlation validated from the SAME
+    // ackClassified bytes/obj the presence/terminalState decision above
+    // already read -- never a second, independent reopen.
+    assertClosedShape(ackClassified.obj, ACK_V1_FIELDS);
+    if (ackClassified.obj.disposition !== 'accepted' || ackClassified.obj.in_reply_to_attempt_id !== auth.attemptId) {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'root-source ack does not correlate to the authoritative attempt');
+    }
+    ackRef = path.posix.join('transactions', requestId, 'ack.json');
+    ackDigest = sha256Buffer(ackClassified.bytes);
+  } else if (terminalState === 'CANCELLED') {
+    // M7 GREEN correction round 2, R3: shape+correlation already fully
+    // validated by classifyCanonicalCancelRecord's own accreditCancelRecord
+    // call above (the SAME fd-bound read the presence/terminalState
+    // decision used) -- never a second, independent reopen.
+    if (cancelClassified.reqObj.request_id !== requestId) {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'root-source cancel does not correlate to this request');
+    }
+    cancelRef = path.posix.join('transactions', requestId, 'cancel.json');
+    cancelDigest = cancelClassified.digest;
+  }
+
+  return {
+    terminalState,
+    requestRef: path.posix.join('transactions', requestId, 'request.json'), requestDigest: requestRec.digest,
+    resultRef, resultDigest,
+    acceptedResultRef, acceptedResultDigest,
+    ackRef, ackDigest,
+    cancelRef, cancelDigest,
+  };
+}
+
+function validateRootConsultCompletionArtifacts(c, completionRec) {
+  const completion = completionRec.obj;
+  const requestPath = canonicalRequestPathForRootIntent(c);
+  const requestRec = readCanonicalRequestRecord(requestPath, c.intent.request_id, {
+    absentDetail: 'CORRELATION_INVALID', absentMessage: 'completed root request is absent',
+  });
+  if (requestRec.digest !== completion.request_digest) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'root completion request digest mismatch');
+  }
+  const txnDir = path.dirname(requestPath);
+  const expectedResultPath = resultPathFor(txnDir, c.intent.initial_attempt_id);
+  const expectedResultRef = path.posix.join('transactions', c.intent.request_id, 'results', c.intent.initial_attempt_id + '.json');
+  if (completion.result_ref !== expectedResultRef) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'root completion result ref is not canonical');
+  }
+  const resultRec = validateResultV2(expectedResultPath, c.coordRoot);
+  if (resultRec.digest !== completion.result_digest || resultRec.obj.status !== 'ANSWERED') {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'root completion result is not the accepted answer');
+  }
+  const acceptedPath = acceptedResultPathFor(txnDir);
+  const acceptedRef = path.posix.join('transactions', c.intent.request_id, 'accepted-result.json');
+  if (completion.accepted_result_ref !== acceptedRef) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'root completion accepted-result ref is not canonical');
+  }
+  const acceptedRec = readClosedRecord(acceptedPath, ACCEPTED_RESULT_V1_FIELDS, {
+    absentDetail: 'CORRELATION_INVALID', absentMessage: 'root completion accepted-result is absent',
+  });
+  assertAcceptedResultCorrelates(acceptedRec.obj, txnDir, requestRec.obj, c.coordRoot);
+  if (acceptedRec.digest !== completion.accepted_result_digest) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'root completion accepted-result digest mismatch');
+  }
+  const ackPath = ackPathFor(txnDir);
+  const ackRef = path.posix.join('transactions', c.intent.request_id, 'ack.json');
+  if (completion.ack_ref !== ackRef) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'root completion ack ref is not canonical');
+  }
+  const ackRec = readClosedRecord(ackPath, ACK_V1_FIELDS, {
+    absentDetail: 'CORRELATION_INVALID', absentMessage: 'root completion ack is absent',
+  });
+  if (
+    ackRec.digest !== completion.ack_digest || ackRec.obj.disposition !== 'accepted'
+    || ackRec.obj.in_reply_to_attempt_id !== resultRec.obj.attempt_id
+  ) throw new CliError('INVALID', 'CORRELATION_INVALID', 'root completion ack does not correlate');
+  return {
+    requestPath, requestDigest: requestRec.digest,
+    resultPath: expectedResultPath, resultDigest: resultRec.digest,
+    acceptedPath, acceptedDigest: acceptedRec.digest,
+    ackPath, ackDigest: ackRec.digest,
+    completionPath: completionRec.path, completionDigest: completionRec.digest,
+  };
+}
+
+function readExistingRootConsultCompletion(c) {
+  const completionPath = c.rll.rootConsultCompletionPathFor(c.scope.projectRoot, c.intentId);
+  const rec = readLifecycleRecordRequired(
+    c.rll, completionPath, c.rll.validateRootConsultCompletionRecord,
+    {
+      intent_id: c.intentId, request_id: c.intent.request_id,
+      requester_actor_instance_id: c.scope.actorInstanceId,
+    }, 'root-consult completion',
+  );
+  if (!rec) return null;
+  return Object.assign({ rec }, validateRootConsultCompletionArtifacts(c, rec));
+}
+
+/** Crash-resumable reserved -> request -> published -> required dispatch WAL. */
+function hostBridgeAdvanceRootConsult(capability, coordRootRaw, intentPathRaw) {
+  const c = rootConsultIntentContext(capability, coordRootRaw, intentPathRaw);
+  if (c.blocked) return rootConsultOperationResult('blocked', c, { reason: c.blocked });
+  const completed = readExistingRootConsultCompletion(c);
+  if (completed) return rootConsultOperationResult('completed', c, completed);
+  const input = requestInputForRootIntent(c);
+  const built = buildCanonicalRequest(capability, input);
+  assertBuiltRootRequestMatchesIntent(built, c.intent, c.scope);
+  const lockDir = c.rll.rootConsultLockDirFor(c.scope.projectRoot, c.intentId);
+  const locked = c.rll.withRegistryLock(lockDir, () => {
+    const expectedReservation = {
+      intent_id: c.intentId, intent_digest: c.intentRec.digest,
+      request_id: c.intent.request_id, request_digest: built.digest,
+      requester_actor_instance_id: c.scope.actorInstanceId,
+    };
+    const reservationPath = c.rll.rootConsultReservationPathFor(c.scope.projectRoot, c.intentId);
+    let reservationRec = readLifecycleRecordRequired(
+      c.rll, reservationPath, c.rll.validateRootConsultReservationRecord,
+      expectedReservation, 'root-consult reservation',
+    );
+    if (!reservationRec) {
+      const reservation = Object.assign({ schema: 'runtime/root-consult-reservation/v1' }, expectedReservation, {
+        reserved_at: nowIso(), expiry: c.intent.expiry,
+      });
+      const valid = c.rll.validateRootConsultReservationRecord(reservation, expectedReservation);
+      if (!valid.ok) throw new CliError('INVALID', 'SCHEMA_INVALID', 'root-consult reservation construction failed');
+      const bytes = Buffer.from(canonicalJSONStringify(reservation), 'utf8');
+      c.rll.publishNoClobber(reservationPath, bytes, { allowIdenticalIdempotent: true });
+      reservationRec = { obj: reservation, bytes, digest: sha256Buffer(bytes), path: reservationPath };
+    }
+    const published = publishPreallocatedRequest(capability, input);
+    if (published.request_digest !== built.digest) throw new CliError('INVALID', 'CORRELATION_INVALID', 'published root request digest changed');
+    const requestRef = path.posix.join('transactions', c.intent.request_id, 'request.json');
+    const publishedExpected = {
+      intent_id: c.intentId, intent_digest: c.intentRec.digest,
+      reservation_digest: reservationRec.digest, request_id: c.intent.request_id,
+      request_ref: requestRef, request_digest: built.digest,
+    };
+    const publishedPath = c.rll.rootConsultPublishedPathFor(c.scope.projectRoot, c.intentId);
+    let publishedRec = readLifecycleRecordRequired(
+      c.rll, publishedPath, c.rll.validateRootConsultPublishedRecord,
+      publishedExpected, 'root-consult published marker',
+    );
+    if (!publishedRec) {
+      const marker = Object.assign({ schema: 'runtime/root-consult-published/v1' }, publishedExpected, { published_at: nowIso() });
+      const valid = c.rll.validateRootConsultPublishedRecord(marker, publishedExpected);
+      if (!valid.ok) throw new CliError('INVALID', 'SCHEMA_INVALID', 'root-consult published marker construction failed');
+      const bytes = Buffer.from(canonicalJSONStringify(marker), 'utf8');
+      c.rll.publishNoClobber(publishedPath, bytes, { allowIdenticalIdempotent: true });
+      publishedRec = { obj: marker, bytes, digest: sha256Buffer(bytes), path: publishedPath };
+    }
+    return { published, publishedRec };
+  });
+  if (!locked || locked.ok !== true) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'root-consult WAL lock/advance failed');
+  }
+  const wal = locked.value;
+  const dispatched = dispatchCanonical({
+    'coordination-root': c.coordRoot, request: built.requestPath,
+  }, { requiredDriver: 'codex-app-server', allowIdenticalIdempotent: true });
+  return rootConsultOperationResult('ready', c, {
+    requestPath: built.requestPath,
+    requestRef: wal.publishedRec.obj.request_ref,
+    requestDigest: built.digest,
+    activationPath: dispatched.artifact_ref,
+    item: {
+      requestPath: built.requestPath, requestId: c.intent.request_id,
+      evidencePolicy: c.intent.evidence_policy,
+    },
+  });
+}
+
+function hostBridgeObserveAndCompleteRootConsult(capability, coordRootRaw, intentPathRaw) {
+  const c = rootConsultIntentContext(capability, coordRootRaw, intentPathRaw);
+  if (c.blocked) return rootConsultOperationResult('blocked', c, { reason: c.blocked });
+  const completed = readExistingRootConsultCompletion(c);
+  if (completed) return rootConsultOperationResult('completed', c, completed);
+  const publishedPath = c.rll.rootConsultPublishedPathFor(c.scope.projectRoot, c.intentId);
+  const publishedRec = readLifecycleRecordRequired(
+    c.rll, publishedPath, c.rll.validateRootConsultPublishedRecord,
+    { intent_id: c.intentId, intent_digest: c.intentRec.digest, request_id: c.intent.request_id },
+    'root-consult published marker',
+  );
+  if (!publishedRec) return rootConsultOperationResult('pending', c);
+  const requestPath = canonicalRequestPathForRootIntent(c);
+  const observed = hostBridgeObserveChildResult(capability, c.coordRoot, requestPath);
+  if (!observed.ready) return rootConsultOperationResult('pending', c, { requestPath, requestDigest: publishedRec.obj.request_digest });
+  const completionPath = c.rll.rootConsultCompletionPathFor(c.scope.projectRoot, c.intentId);
+  if (observed.status === 'BLOCKED') {
+    return rootConsultOperationResult('blocked', c, {
+      reason: observed.reason, requestPath, requestDigest: observed.requestDigest,
+      resultRef: path.posix.join('transactions', c.intent.request_id, 'results', path.basename(observed.resultPath)),
+      resultDigest: observed.resultDigest,
+      ackRef: path.posix.join('transactions', c.intent.request_id, 'ack.json'), ackDigest: observed.ackDigest,
+    });
+  }
+  const completion = {
+    schema: 'runtime/root-consult-completion/v1', intent_id: c.intentId,
+    request_id: c.intent.request_id, request_digest: observed.requestDigest,
+    result_ref: path.posix.join('transactions', c.intent.request_id, 'results', path.basename(observed.resultPath)),
+    result_digest: observed.resultDigest,
+    accepted_result_ref: path.posix.join('transactions', c.intent.request_id, 'accepted-result.json'),
+    accepted_result_digest: observed.acceptedDigest,
+    ack_ref: path.posix.join('transactions', c.intent.request_id, 'ack.json'), ack_digest: observed.ackDigest,
+    requester_actor_instance_id: c.scope.actorInstanceId, created_at: nowIso(),
+  };
+  const valid = c.rll.validateRootConsultCompletionRecord(completion, {
+    intent_id: c.intentId, request_id: c.intent.request_id,
+    requester_actor_instance_id: c.scope.actorInstanceId,
+  });
+  if (!valid.ok) throw new CliError('INVALID', 'SCHEMA_INVALID', 'root-consult completion construction failed');
+  const completionBytes = Buffer.from(canonicalJSONStringify(completion), 'utf8');
+  const completionLock = c.rll.withRegistryLock(
+    c.rll.rootConsultLockDirFor(c.scope.projectRoot, c.intentId),
+    () => {
+      // Same actor/capability remains current at the final publication point;
+      // a successor cannot complete the predecessor's root operation.
+      requireHostBridgeCapability(capability);
+      c.rll.publishNoClobber(completionPath, completionBytes, { allowIdenticalIdempotent: true });
+      return true;
+    },
+  );
+  if (!completionLock || completionLock.ok !== true || completionLock.value !== true) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'root-consult completion lock/publication failed');
+  }
+  const completionRec = readLifecycleRecordRequired(
+    c.rll, completionPath, c.rll.validateRootConsultCompletionRecord,
+    completion, 'root-consult completion',
+  );
+  return rootConsultOperationResult('completed', c, {
+    requestPath, requestDigest: observed.requestDigest,
+    resultPath: observed.resultPath, resultDigest: observed.resultDigest,
+    acceptedPath: observed.acceptedPath, acceptedDigest: observed.acceptedDigest,
+    ackPath: observed.ackPath, ackDigest: observed.ackDigest,
+    completionPath, completionDigest: completionRec.digest,
+    item: observed,
+  });
+}
+
+function hostBridgeListInbox(capability, coordRootRaw) {
+  const scope = requireHostBridgeCapability(capability);
+  const coordRoot = resolveAbsolute(coordRootRaw);
+  const repoId = computeRepoId(scope.projectRoot);
+  let rll;
+  try { rll = require('./runtime-role-lifecycle.cjs'); } catch (err) { throw new CliError('INVALID', 'INTERNAL_ERROR', 'role lifecycle module unavailable'); }
+  const plan = rll.discoverPlan(scope.projectRoot);
+  if (!plan.ok || plan.planDigest !== scope.planDigest) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'host bridge PLAN is not current');
+  const waveSlug = path.basename(path.dirname(plan.planPath)).slice('wave-'.length);
+  const planRoot = planRootPath(coordRoot, repoId, waveSlug, scope.planDigest);
+  const inboxDir = path.join(planRoot, 'inbox', scope.role);
+  let entries;
+  try { entries = fs.readdirSync(inboxDir, { withFileTypes: true }); }
+  catch (err) {
+    if (err && err.code === 'ENOENT') return [];
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'unable to scan role inbox');
+  }
+  if (entries.length > 4096) throw new CliError('INVALID', 'SECURITY_INVALID', 'role inbox scan cap exceeded');
+  const out = [];
+  for (const entry of entries) {
+    // ROOT-INGRESS-E2E finding: a root-consult request_id is the CLI's own
+    // preallocated 32-hex id (crypto.randomBytes(16), same shape validated by
+    // isHexId elsewhere in this file -- see INBOX_REF_V1_FIELDS.request_id
+    // above), never genId()'s 64-hex. This filename filter hardcoded exactly
+    // 64 hex chars and silently dropped every root-consult inbox entry before
+    // the target worker ever saw it -- the retained plane advanced the WAL
+    // and published the request (request_ref/request_digest went durable)
+    // but nothing downstream ever claimed it, so consult-root-status stayed
+    // WAITING forever with result_ref/accepted_result_ref/ack_ref all null.
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const inboxRequestId = entry.name.slice(0, -'.json'.length);
+    if (!isHexId(inboxRequestId)) continue;
+    const inboxPath = path.join(inboxDir, entry.name);
+    const inbox = validateInboxRefV1(inboxPath, coordRoot);
+    if (inbox.target_role !== scope.role) continue;
+    const requestPath = requestPathFor(planRoot, inbox.request_id);
+    // A request that has already expired is no longer live/executable authority,
+    // so an unresolvable activation for it is benign, not a correlation failure --
+    // check expiry (via a fresh accredited read, never skipping the correlation
+    // check itself) before ever calling resolveActivationForRequestPath.
+    const accredited = accreditCanonicalRequest(coordRoot, requestPath);
+    if (
+      accredited.digest !== inbox.request_digest
+      || accredited.obj.target_role !== inbox.target_role
+      || accredited.obj.target_role !== scope.role
+    ) {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'accredited request does not correlate with its role inbox entry');
+    }
+    if (currentClockMs() >= isoToMs(accredited.obj.expiry)) continue;
+    // A transaction that already reached a canonical terminal state (cancel,
+    // accepted-result, or an authoritative result) is no longer schedulable
+    // work -- its activation's own, much shorter, liveness naturally expires
+    // once the work is done, so an unresolvable activation for an
+    // already-terminal transaction is benign, not a correlation failure.
+    // Check terminal state (via the SAME durable readers/shapes the
+    // nonterminal path below still uses) before ever calling
+    // resolveActivationForRequestPath.
+    const preTerminalTxnDir = path.dirname(requestPath);
+    const preTerminalAuth = resolveAuthoritativeAttempt(accredited.obj, preTerminalTxnDir);
+    // CANCEL-AUDIT-01: reads cancel.json ONLY through the sanctioned choke
+    // point (see hostBridgeScheduleTurn's identical comment).
+    if (readCanonicalCancelRecordOptional(cancelPathFor(preTerminalTxnDir), coordRoot) !== null) continue;
+    if (readJsonDurableOptional(acceptedResultPathFor(preTerminalTxnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) }) !== null) continue;
+    if (readJsonDurableOptional(resultPathFor(preTerminalTxnDir, preTerminalAuth.attemptId), { shape: (o) => assertClosedShape(o, RESULT_V2_FIELDS) }) !== null) continue;
+    const activation = resolveActivationForRequestPath(requestPath);
+    if (!activation.ok) {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'role inbox request activation is not resolvable');
+    }
+    // Persistent app-server polling is disk-visible but driver-specific.  A
+    // request routed to Claude, MCP, runtime-spawn or noop remains owned by
+    // that driver and is ignored here; it must never make the retained Codex
+    // worker fail merely because all drivers share the same role inbox.
+    if (!activation.activation || activation.activation.selected_driver !== 'codex-app-server') continue;
+    const checked = requireHostBridgeRequestScope(capability, coordRoot, requestPath);
+    const txnDir = path.dirname(requestPath);
+    const auth = resolveAuthoritativeAttempt(checked.reqObj, txnDir);
+    // Host-private correlation only; never part of consult/v2 and never
+    // projected into model-controlled wire data as an authority field.
+    const evidenceAuthority = resolveRootEvidenceAuthority(checked.reqObj, checked.requestDigest, coordRoot, scope);
+    out.push({
+      requestPath,
+      requestId: checked.reqObj.request_id,
+      createdAt: inbox.created_at,
+      attemptId: auth.attemptId,
+      leaseEpoch: auth.leaseEpoch,
+      expectedResultKind: checked.reqObj.expected_result_kind,
+      question: checked.reqObj.question,
+      rootRequestId: checked.reqObj.root_request_id,
+      parentRequestId: checked.reqObj.parent_request_id,
+      depth: checked.reqObj.depth,
+      maxDepth: checked.reqObj.max_depth,
+      evidencePolicy: evidenceAuthority.policy,
+      // M6/M7 terminal functional closure, point C/D: propagated so the
+      // retained worker can host-enforce an exact gap.library_id lock
+      // (never null/search) once a directive already named the library.
+      approvedContext7LibraryId: evidenceAuthority.libraryId,
+    });
+  }
+  out.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.requestId.localeCompare(b.requestId));
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // stdout envelope + top-level dispatch (Frozen CLI ABI, PLAN.md ~L779-781)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -5286,7 +8590,35 @@ function main() {
     // harmless, not load-bearing.
     FIXED_IDS_ACTIVE = isTestCapability() && Boolean(flags['fixed-ids']);
     resolveFixedClockState(flags);
-    const extra = handler(flags) || {};
+    // M7/WP4 (PLAN.md ~L604): role-command-grant/v1 consume+validate,
+    // strictly BEFORE handler(flags) performs any read or mutation.
+    const grantContext = validateAndConsumeRoleCommandGrantForCommand(command, flags, argv.slice(1));
+    // M7/WP4 group A correction: grantContext (undefined for any command
+    // outside ROLE_COMMAND_GRANT_AUTHORITY_FOR_COMMAND) is now threaded to
+    // the handler -- every other handler in COMMANDS keeps its existing
+    // single-arg (flags) signature and simply ignores the extra argument
+    // (JS silently drops an unused parameter), so this is a safe, additive
+    // change for every command except cmdPublishRequest, which now consumes
+    // it to derive an authenticated source_role.
+    // Sixteenth §16b: a root-source-backed publish-request is serialized
+    // under rootSourceLockDirFor(bindingId) -- revalidated fresh inside the
+    // lock, recovered from a bounded actor-scoped scan instead of re-minting
+    // when a prior attempt (this call, or a crashed one) already published,
+    // and bound to exactly one durable root transaction via publishRootIngress
+    // before the command is considered SUCCESS. Every other command/binding
+    // keeps its existing unconditional single call, unchanged.
+    const extra = (command === 'publish-request' && isRootSourceGrantContext(grantContext))
+      ? serializeRootSourcePublishRequest(grantContext, flags, handler)
+      : (handler(flags, grantContext) || {});
+    // M7 section 4/8.5: the retirement-wiring this block used to perform
+    // after transaction-ack/cancel/publish-result/cancel (root-source and
+    // one-shot alike) is REMOVED -- no new retirement artifact is ever
+    // written. root-source's own terminal is cut by canonical ack.json/
+    // cancel.json directly (root-source-status's own section 9 rewrite
+    // reads them, never a retirement marker); one-shot publish-result's
+    // terminal is cut by its own no-clobber write to accepted-result.json
+    // (already enforced at that write site, independent of this block);
+    // cancellation of a one-shot target is cut by canonical cancel.json.
     printResultAndExit(command, 'SUCCESS', 'NONE', extra);
   } catch (err) {
     if (err instanceof CliError) {
@@ -5314,12 +8646,119 @@ function main() {
 // re-serialization -- a byte-for-byte hash, matching this file's own
 // raw-file-digest-equals-canonical-serialization-digest invariant elsewhere).
 const ROUTING_POLICY_VERSION = 'runtime-routing/v1';
-const ROUTING_POLICY_CONTENT = fs.readFileSync(path.join(__dirname, 'runtime-routing.json'));
+
+function routingOverrideInvalid(reason) {
+  return new Error('RUNTIME_TEST_ROUTING_OVERRIDE_INVALID:' + reason);
+}
+
+/**
+ * R2-C (M6-M7-R2C-TEST-SEAM-CLOSURE-20260820): the ONE test-only seam that
+ * lets the REAL canonical runtime-consultation.cjs -- the exact file
+ * root-source-initiated publish-request is structurally pinned to
+ * (findLifecycleCliInvocation's exact CANONICAL_LIFECYCLE_CLI_PATH match +
+ * decodeRootSourceBootstrapIntentFromAction's own __dirname-relative
+ * runtime-consultation.cjs check, both untouched by this seam) -- load its
+ * own ROUTING_POLICY_CONTENT from a private, TMPDIR-confined fixture instead
+ * of the real repo file, so an E2E fixture can prove routing selection
+ * without ever needing a private COPY of this script (which the two checks
+ * above make structurally unreachable for that exact flow).
+ *
+ * Absent/empty RUNTIME_CONSULTATION_TEST_ROUTING_POLICY_PATH: byte-for-byte
+ * the prior unconditional behavior (real scripts/lib/runtime-routing.json,
+ * digest 9fd518e25f...406fa unchanged). Present: gated behind the SAME
+ * isTestCapability() seam as --fixed-ids/--fixed-clock (cjs:208) -- checked
+ * BEFORE the path is even read, so a missing gate never touches the
+ * filesystem at all. Every rejection throws the deterministic
+ * `RUNTIME_TEST_ROUTING_OVERRIDE_INVALID:<reason>` Error, mirroring the
+ * sibling malformed-canonical-routing.json throw below (module-load-time
+ * invariant, never a per-request CliError/detail_code -- there is no
+ * fitting closed enum member for this, and adding one would be a bigger,
+ * unauthorized surface change).
+ */
+function loadRoutingPolicyContent() {
+  const raw = process.env.RUNTIME_CONSULTATION_TEST_ROUTING_POLICY_PATH;
+  if (typeof raw !== 'string' || raw.length === 0) {
+    return fs.readFileSync(path.join(__dirname, 'runtime-routing.json'));
+  }
+  if (!isTestCapability()) {
+    throw routingOverrideInvalid('test-capability-required');
+  }
+  if (!path.isAbsolute(raw)) {
+    throw routingOverrideInvalid('path-not-absolute');
+  }
+  let realOverridePath;
+  try {
+    realOverridePath = fs.realpathSync(raw);
+  } catch (err) {
+    throw routingOverrideInvalid('path-not-real');
+  }
+  if (realOverridePath !== path.resolve(raw)) {
+    // Catches EITHER a symlink anywhere in the path (realpath follows it,
+    // resolve does not) OR a lexical alias (e.g. case-folding on a
+    // case-insensitive-but-case-preserving filesystem) -- one comparison,
+    // no separate symlink-detection logic needed.
+    throw routingOverrideInvalid('path-not-real');
+  }
+  let realTmpdir;
+  try {
+    realTmpdir = fs.realpathSync(os.tmpdir());
+  } catch (err) {
+    throw routingOverrideInvalid('tmpdir-not-secure');
+  }
+  let tmpdirLstat;
+  try {
+    tmpdirLstat = fs.lstatSync(realTmpdir);
+  } catch (err) {
+    throw routingOverrideInvalid('tmpdir-not-secure');
+  }
+  const isPosix = process.platform !== 'win32';
+  if (
+    !tmpdirLstat.isDirectory()
+    || (isPosix && typeof process.getuid === 'function' && tmpdirLstat.uid !== process.getuid())
+    || (isPosix && (tmpdirLstat.mode & 0o777) !== 0o700)
+  ) {
+    throw routingOverrideInvalid('tmpdir-not-secure');
+  }
+  if (realOverridePath === realTmpdir || !realOverridePath.startsWith(realTmpdir + path.sep)) {
+    throw routingOverrideInvalid('path-outside-tmpdir');
+  }
+  let classified;
+  try {
+    classified = classifyDurableRead(realOverridePath, {});
+  } catch (err) {
+    if (err instanceof CliError) {
+      throw routingOverrideInvalid(err.detailCode === 'DURABILITY_UNPROVEN' ? 'file-durability-unproven' : 'file-security-invalid');
+    }
+    throw err;
+  }
+  if (classified.state === DURABLE_ABSENT) {
+    throw routingOverrideInvalid('file-not-found');
+  }
+  if (classified.state === DURABLE_PENDING) {
+    throw routingOverrideInvalid('file-durability-unproven');
+  }
+  const bytes = classified.bytes;
+  let obj;
+  try {
+    obj = JSON.parse(bytes.toString('utf8'));
+  } catch (err) {
+    throw routingOverrideInvalid('schema-invalid');
+  }
+  if (!obj || typeof obj !== 'object' || obj.schema !== ROUTING_POLICY_VERSION || !obj.routes || typeof obj.routes !== 'object' || Array.isArray(obj.routes)) {
+    throw routingOverrideInvalid('schema-invalid');
+  }
+  return bytes;
+}
+
+const ROUTING_POLICY_CONTENT = loadRoutingPolicyContent();
 const ROUTING_POLICY_DIGEST = sha256Buffer(ROUTING_POLICY_CONTENT);
 const ROUTING_POLICY_TABLE = JSON.parse(ROUTING_POLICY_CONTENT.toString('utf8'));
 if (ROUTING_POLICY_TABLE.schema !== ROUTING_POLICY_VERSION || !ROUTING_POLICY_TABLE.routes || typeof ROUTING_POLICY_TABLE.routes !== 'object') {
   // Fail fast at module load, not at first dispatch -- a malformed toolkit
   // routing.json is a harness integrity defect, never a per-request condition.
+  // Unreachable for the test-override path above (loadRoutingPolicyContent
+  // already enforces this exact check, deterministically, before returning),
+  // so this stays exactly what it was: the canonical-file guard only.
   throw new Error('scripts/lib/runtime-routing.json is malformed: schema must be ' + ROUTING_POLICY_VERSION + ' with a routes object');
 }
 const TARGET_ROLE_PROFILE_VERSION = '1.0.0';
@@ -5457,7 +8896,168 @@ function materializeSubjectBundle(planRoot, subjectScopeDigest, manifestObj) {
   return publishNoClobber(dest, bytes, { allowIdenticalIdempotent: true });
 }
 
-function cmdPublishRequest(flags) {
+/**
+ * Pure canonical request constructor shared by ordinary CLI publication and
+ * Sixteenth's preallocated retained-worker root WAL.  All entropy and time
+ * are inputs; this function never reads a clock, generates an id, or writes.
+ */
+function buildCanonicalRequestFromFields(fields) {
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'canonical request fields are invalid');
+  }
+  const requestObj = {
+    schema: 'coordination/consult/v2',
+    request_id: fields.requestId,
+    root_request_id: fields.rootRequestId || fields.requestId,
+    parent_request_id: fields.parentRequestId === undefined ? null : fields.parentRequestId,
+    depth: fields.depth === undefined ? 0 : fields.depth,
+    max_depth: MAX_DEPTH_LIMIT,
+    source_role: fields.sourceRole,
+    target_role: fields.targetRole,
+    target_role_profile_version: fields.targetRoleProfileVersion || TARGET_ROLE_PROFILE_VERSION,
+    target_role_profile_digest: fields.targetRoleProfileDigest || targetRoleProfileDigestFor(fields.targetRole),
+    requester_worktree_id: fields.worktreeId,
+    requester_instance_id: fields.requesterInstanceId,
+    repo_id: fields.repoId,
+    wave_slug: fields.waveSlug,
+    protocol_profile: 'runtime-consultation/v1',
+    coordination_root_id: fields.coordinationRootId,
+    plan_digest: fields.planDigest,
+    subject_repo_id: fields.subjectRepoId || fields.repoId,
+    subject_worktree_id: fields.subjectWorktreeId || fields.worktreeId,
+    subject_head: fields.subjectHead,
+    subject_scope_digest: fields.subjectScopeDigest,
+    created_at: fields.createdAt,
+    question: fields.question,
+    expected_result_kind: fields.expectedResultKind,
+    expiry: fields.expiry,
+    recovery_budget: 1,
+    routing_policy_version: fields.routingPolicyVersion || ROUTING_POLICY_VERSION,
+    routing_policy_digest: fields.routingPolicyDigest || ROUTING_POLICY_DIGEST,
+    initial_attempt_id: fields.initialAttemptId,
+    initial_lease_epoch: 0,
+  };
+  if (fields.contentRef !== undefined && fields.contentRef !== null) requestObj.content_ref = fields.contentRef;
+  assertClosedShape(requestObj, CONSULT_V2_FIELDS);
+  return {
+    request: requestObj,
+    bytes: Buffer.from(canonicalJSONStringify(requestObj), 'utf8'),
+  };
+}
+
+function deriveCanonicalRequestFields(coordRoot, planPath, subjectBundleManifest, authority, input) {
+  const planDigest = sha256File(planPath);
+  const waveSlug = path.basename(path.dirname(planPath)).replace(/^wave-/, '');
+  const repoId = computeRepoId(coordRoot);
+  const worktreeId = computeWorktreeId(coordRoot);
+  const subjectScopeDigest = sha256String(canonicalJSONStringify(subjectBundleManifest));
+  const planRoot = planRootPath(coordRoot, repoId, waveSlug, planDigest);
+  const parentRequestId = input.parentRequestId === undefined ? null : input.parentRequestId;
+  let depth = 0;
+  let rootRequestId = input.requestId;
+  if (parentRequestId !== null) {
+    const parentObj = validateConsultV2(requestPathFor(planRoot, parentRequestId), coordRoot);
+    depth = parentObj.depth + 1;
+    rootRequestId = parentObj.root_request_id;
+    if (depth > parentObj.max_depth) {
+      throw new CliError('INVALID', 'CORRELATION_INVALID', 'nested request would exceed max_depth');
+    }
+  }
+  const built = buildCanonicalRequestFromFields({
+    requestId: input.requestId,
+    initialAttemptId: input.initialAttemptId,
+    createdAt: input.createdAt,
+    expiry: input.expiry,
+    rootRequestId,
+    parentRequestId,
+    depth,
+    sourceRole: authority.role,
+    requesterInstanceId: authority.actorInstanceId,
+    targetRole: input.targetRole,
+    targetRoleProfileVersion: input.targetRoleProfileVersion,
+    targetRoleProfileDigest: input.targetRoleProfileDigest,
+    question: input.question,
+    expectedResultKind: input.expectedResultKind,
+    contentRef: input.contentRef,
+    repoId,
+    worktreeId,
+    waveSlug,
+    coordinationRootId: computeCoordRootId(coordRoot),
+    planDigest,
+    subjectHead: computeSubjectHead(coordRoot),
+    subjectScopeDigest,
+    routingPolicyVersion: input.routingPolicyVersion,
+    routingPolicyDigest: input.routingPolicyDigest,
+  });
+  if (built.request.content_ref) resolveContentRefOrThrow(planRoot, built.request.content_ref);
+  assertRolePolicy(built.request.source_role, built.request.target_role);
+  return Object.assign(built, {
+    coordRoot, planPath, planRoot, planDigest, repoId, worktreeId,
+    subjectBundleManifest, subjectScopeDigest,
+    requestPath: requestPathFor(planRoot, built.request.request_id),
+    digest: sha256Buffer(built.bytes),
+  });
+}
+
+/**
+ * Host-capability-only deterministic constructor for a preallocated request.
+ * The public surface intentionally requires the non-serializable capability;
+ * arbitrary callers cannot use it as a root-authority factory.
+ */
+function buildCanonicalRequest(capability, input) {
+  const scope = requireHostBridgeCapability(capability);
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'preallocated request input is invalid');
+  }
+  const coordRoot = resolveAbsolute(input.coordinationRoot);
+  const planPath = resolveAbsolute(input.planPath);
+  const manifest = input.subjectBundleManifest;
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'subject bundle manifest is invalid');
+  }
+  assertClosedShape(manifest, SUBJECT_BUNDLE_MANIFEST_V1_FIELDS);
+  for (const entry of manifest.entries) assertClosedShape(entry, SUBJECT_BUNDLE_ENTRY_FIELDS);
+  if (input.parentRequestId !== null && input.parentRequestId !== undefined) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'preallocated root request must have parent_request_id:null');
+  }
+  if (
+    input.routingPolicyVersion !== ROUTING_POLICY_VERSION
+    || input.routingPolicyDigest !== ROUTING_POLICY_DIGEST
+    || input.targetRoleProfileVersion !== TARGET_ROLE_PROFILE_VERSION
+    || input.targetRoleProfileDigest !== targetRoleProfileDigestFor(input.targetRole)
+    || !hostBridgeAllowedChildRoles(scope.role).includes(input.targetRole)
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'preallocated root request routing/topology/profile is not current');
+  const built = deriveCanonicalRequestFields(coordRoot, planPath, manifest, {
+    role: scope.role, actorInstanceId: scope.actorInstanceId,
+  }, Object.assign({}, input, { parentRequestId: null }));
+  if (
+    built.worktreeId !== scope.worktreeId || built.planDigest !== scope.planDigest
+    || built.request.source_role !== scope.role
+    || built.request.requester_instance_id !== scope.actorInstanceId
+    || built.request.root_request_id !== built.request.request_id
+    || built.request.depth !== 0
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'preallocated request scope does not match HostBridgeCapability');
+  return built;
+}
+
+/** Publish the exact bytes returned by buildCanonicalRequest; replay is legal only byte-identically. */
+function publishPreallocatedRequest(capability, input) {
+  const built = buildCanonicalRequest(capability, input);
+  fs.mkdirSync(built.planRoot, { recursive: true });
+  materializePlanRef(built.planRoot, built.planPath);
+  materializeRoutingPolicy(built.planRoot);
+  materializeSubjectBundle(built.planRoot, built.subjectScopeDigest, built.subjectBundleManifest);
+  const receipt = publishNoClobber(built.requestPath, built.bytes, { allowIdenticalIdempotent: true });
+  assertArtifactMatchesReceipt(built.requestPath, receipt, built.bytes);
+  return {
+    request_id: built.request.request_id,
+    artifact_ref: built.requestPath,
+    request_digest: built.digest,
+    request: built.request,
+  };
+}
+
+function cmdPublishRequest(flags, grantContext) {
   requireFlags(flags, ['coordination-root', 'plan', 'subject-bundle', 'intent']);
   const coordRoot = resolveAbsolute(flags['coordination-root']);
   const planPath = resolveAbsolute(flags.plan);
@@ -5535,50 +9135,67 @@ function cmdPublishRequest(flags) {
     }
   }
 
+  // M7/WP4 group A correction (dispatch arch-testing-20260810T142647Z):
+  // source_role is now derived EXCLUSIVELY from the authenticated requester
+  // grant/binding this exact command was already required to consume
+  // before this handler ever ran (main()'s own
+  // validateAndConsumeRoleCommandGrantForCommand call, strictly before any
+  // read or mutation) -- never from a caller-supplied environment variable.
+  // RUNTIME_CONSULTATION_SOURCE_ROLE was never reachable from a genuine
+  // hook-mediated call in the first place: an env-var-PREFIXED command
+  // (`FOO=bar node ...`) is not the canonical `node <script> <args...>`
+  // token[0]==='node' shape the requester-grant-injecting hook recognizes,
+  // so a live call always fell back to the literal 'cli-requester', which
+  // could never pass assertRolePolicy's mediated-chain guard for
+  // target_role:'context-provider'. A grant missing its role at this point
+  // (strictly after full grant/binding consumption+validation) is a
+  // genuine authority failure, never a value to silently default away.
+  //
+  // Main-review correction (orchestrating session, Phase 4): this check now
+  // runs BEFORE planRoot's own materialization (mkdirSync/plan_ref/
+  // routing-policy/subject-bundle below) -- mirrors the identical "validate
+  // fully before the first write" discipline the parent-request validation
+  // block above this already established (Codex NO-GO round 3). An
+  // unauthorized-role grant (e.g. a legitimately-minted but non-arch-*
+  // requester grant reaching this handler) must never be able to cause any
+  // of these four writes before being rejected.
+  if (!grantContext || typeof grantContext.role !== 'string' || grantContext.role.length === 0) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'publish-request requires an authenticated requester grant to derive source_role');
+  }
+  const sourceRole = grantContext.role;
+  assertRolePolicy(sourceRole, intent.target_role);
+
   fs.mkdirSync(planRoot, { recursive: true });
   materializePlanRef(planRoot, planPath);
   materializeRoutingPolicy(planRoot);
   materializeSubjectBundle(planRoot, subjectScopeDigest, subjectBundleManifest);
 
-  const sourceRole = process.env.RUNTIME_CONSULTATION_SOURCE_ROLE || 'cli-requester';
-  assertRolePolicy(sourceRole, intent.target_role);
-
   const requestId = genId();
   if (!parentRequestId) rootRequestId = requestId;
 
-  const requestObj = {
-    schema: 'coordination/consult/v2',
-    request_id: requestId,
-    root_request_id: rootRequestId,
-    parent_request_id: parentRequestId,
+  const builtRequest = buildCanonicalRequestFromFields({
+    requestId,
+    rootRequestId,
+    parentRequestId,
     depth,
-    max_depth: MAX_DEPTH_LIMIT,
-    source_role: sourceRole,
-    target_role: intent.target_role,
-    target_role_profile_version: TARGET_ROLE_PROFILE_VERSION,
-    target_role_profile_digest: targetRoleProfileDigestFor(intent.target_role),
-    requester_worktree_id: worktreeId,
-    requester_instance_id: genId(),
-    repo_id: repoId,
-    wave_slug: waveSlug,
-    protocol_profile: 'runtime-consultation/v1',
-    coordination_root_id: coordRootId,
-    plan_digest: planDigest,
-    subject_repo_id: repoId,
-    subject_worktree_id: worktreeId,
-    subject_head: subjectHead,
-    subject_scope_digest: subjectScopeDigest,
-    created_at: nowIso(),
+    sourceRole,
+    targetRole: intent.target_role,
+    requesterInstanceId: grantContext.actorInstanceId,
+    repoId,
+    worktreeId,
+    waveSlug,
+    coordinationRootId: coordRootId,
+    planDigest,
+    subjectHead,
+    subjectScopeDigest,
+    createdAt: nowIso(),
     question: intent.question,
-    expected_result_kind: intent.expected_result_kind,
+    expectedResultKind: intent.expected_result_kind,
     expiry: intent.expiry,
-    recovery_budget: 1,
-    routing_policy_version: ROUTING_POLICY_VERSION,
-    routing_policy_digest: ROUTING_POLICY_DIGEST,
-    initial_attempt_id: genId(),
-    initial_lease_epoch: 0,
-  };
-  if (intent.content_ref) requestObj.content_ref = intent.content_ref;
+    initialAttemptId: genId(),
+    contentRef: intent.content_ref,
+  });
+  const requestObj = builtRequest.request;
 
   // Gap#2 (WP2 conformance, PLAN.md ~L761): "content_ref must equal a freshly
   // revalidated publish-blob handle" -- a shape-valid-but-fabricated content_ref
@@ -5590,14 +9207,108 @@ function cmdPublishRequest(flags) {
 
   // Fail closed on any internal inconsistency rather than publishing a record
   // `validate --kind consult-v2` would later reject.
-  assertClosedShape(requestObj, CONSULT_V2_FIELDS);
-
   const requestPath = requestPathFor(planRoot, requestId);
-  publishNoClobber(requestPath, Buffer.from(canonicalJSONStringify(requestObj), 'utf8'), { allowIdenticalIdempotent: true });
+  publishNoClobber(requestPath, builtRequest.bytes, { allowIdenticalIdempotent: true });
 
   return { request_id: requestId, artifact_ref: requestPath };
 }
 COMMANDS['publish-request'] = cmdPublishRequest;
+
+/**
+ * PLAN.md §16b WAL serialization for the root-source one-shot requester.
+ * Bounded scan of an ALREADY-owned transactions/ directory for a root
+ * (parent_request_id:null) request this exact binding's actor already
+ * published -- actor_instance_id is minted once per root-source binding and
+ * stamped onto any request it publishes via cmdPublishRequest's own
+ * requesterInstanceId field, so it is a reliable, already-existing
+ * idempotency key. No new schema/record type is introduced. Mirrors
+ * hostBridgePublishChildRequest's own bounded transactions/ scan (cap,
+ * isHexId filter, fail-closed on an unaccredited entry) above.
+ */
+function findRootSourceActorRequest(planRoot, actorInstanceId) {
+  const transactionsDir = path.join(planRoot, 'transactions');
+  let entries;
+  try { entries = fs.readdirSync(transactionsDir, { withFileTypes: true }); }
+  catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'unable to inspect root-source publish inventory');
+  }
+  if (entries.length > 4096) throw new CliError('INVALID', 'SECURITY_INVALID', 'root-source publish inventory cap exceeded');
+  let found = null;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !isHexId(entry.name)) continue;
+    const candidatePath = requestPathFor(planRoot, entry.name);
+    let candidate;
+    try { candidate = readCanonicalRequestRecord(candidatePath, entry.name, {}); }
+    catch (err) { throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'root-source publish inventory contains an unaccredited request'); }
+    const obj = candidate.obj;
+    if (obj.source_role === 'toolkit-specialist' && obj.parent_request_id === null && obj.requester_instance_id === actorInstanceId) {
+      if (found) throw new CliError('INVALID', 'CORRELATION_INVALID', 'root-source publish inventory has more than one root request for the same actor');
+      found = { requestId: obj.request_id, path: candidatePath, digest: candidate.digest };
+    }
+  }
+  return found;
+}
+
+/**
+ * PLAN.md §16b: serializes cmdPublishRequest+publishRootIngress under
+ * rootSourceLockDirFor(bindingId) so two concurrent grants for the SAME
+ * binding can never produce two roots, and a crash between request.json
+ * durably publishing and root-ingress durably publishing recovers the
+ * EXISTING request on the next attempt instead of minting another one.
+ * Revalidates the binding fresh INSIDE the lock -- never trusts the
+ * pre-lock grantContext snapshot for the liveness/retirement decision.
+ */
+function serializeRootSourcePublishRequest(grantContext, flags, handler) {
+  const rll = require('./runtime-role-lifecycle.cjs');
+  const repoDescriptor = { repoId: grantContext.repoId };
+  const bindingId = grantContext.bindingId;
+  const lockDir = rll.rootSourceLockDirFor(repoDescriptor, bindingId);
+  const locked = rll.withRegistryLock(lockDir, () => {
+    const revalidated = rll.validateRootSourceBindingFor(
+      repoDescriptor, bindingId, 'toolkit-specialist',
+      grantContext.binding.worktree_id, grantContext.binding.plan_digest,
+    );
+    if (!revalidated.ok) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'root-source binding is no longer valid: ' + revalidated.reason);
+    }
+
+    const coordRoot = resolveAbsolute(flags['coordination-root']);
+    const planPath = resolveAbsolute(flags.plan);
+    const planDigest = sha256File(planPath);
+    const waveSlug = path.basename(path.dirname(planPath)).replace(/^wave-/, '');
+    const repoId = computeRepoId(coordRoot);
+    const planRoot = planRootPath(coordRoot, repoId, waveSlug, planDigest);
+    const existing = findRootSourceActorRequest(planRoot, revalidated.binding.actor_instance_id);
+
+    const extra = existing
+      ? { request_id: existing.requestId, artifact_ref: existing.path }
+      : (handler(flags, grantContext) || {});
+    const reqPath = resolveAbsolute(extra.artifact_ref);
+    const reqRec = readCanonicalRequestRecord(reqPath, extra.request_id, {});
+
+    const existingIngress = rll.readRegistryRecord(rll.rootSourceIngressPathFor(repoDescriptor, bindingId));
+    if (!existingIngress.ok) throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'root-source ingress registry unreadable');
+    if (!existingIngress.absent) {
+      if (existingIngress.obj.request_id !== reqRec.obj.request_id || existingIngress.obj.request_digest !== reqRec.digest) {
+        throw new CliError('INVALID', 'CORRELATION_INVALID', 'root-source ingress does not correlate with the recovered request');
+      }
+      return extra;
+    }
+
+    const ingress = rll.publishRootIngress(repoDescriptor, revalidated.binding, {
+      requestId: reqRec.obj.request_id, requestDigest: reqRec.digest,
+    });
+    if (!ingress || ingress.ok !== true) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'request published but root-source ingress could not be proven durable');
+    }
+    return extra;
+  });
+  if (!locked || locked.ok !== true) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'root-source publish-request WAL lock/advance failed');
+  }
+  return locked.value;
+}
 
 function minIso(a, b) {
   return isoToMs(a) <= isoToMs(b) ? a : b;
@@ -5607,7 +9318,7 @@ function minIso(a, b) {
 // `claim` (PLAN.md ~L764) -- win claim/v1, then publish the initial active-lease
 // ─────────────────────────────────────────────────────────────────────────────
 
-function cmdClaim(flags) {
+function cmdClaim(flags, grantContext) {
   requireFlags(flags, ['coordination-root', 'request', 'role']);
   const coordRoot = resolveAbsolute(flags['coordination-root']);
   const requestPath = resolveAbsolute(flags.request);
@@ -5629,6 +9340,30 @@ function cmdClaim(flags) {
   const preflight = accreditCanonicalRequest(coordRoot, requestPath);
   const reqObj = preflight.obj;
   const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+  if (
+    !grantContext
+    || typeof grantContext.actorInstanceId !== 'string'
+    || !isHexId(grantContext.actorInstanceId)
+    || grantContext.role !== flags.role
+    || reqObj.target_role !== flags.role
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'claim target identity does not match its target grant/capability');
+  const activation = resolveActivationForRequestPath(requestPath);
+  if (
+    !activation.ok || !activation.activation
+    || activation.requestId !== reqObj.request_id
+    || activation.attemptId !== auth.attemptId
+    || activation.leaseEpoch !== auth.leaseEpoch
+    || activation.targetRole !== reqObj.target_role
+    || activation.activation.target_role_profile_digest !== reqObj.target_role_profile_digest
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'claim does not match the current activation');
+  const claimDriver = activation.activation.selected_driver;
+  if (
+    grantContext.driver !== undefined
+    && grantContext.driver !== claimDriver
+  ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'claim capability driver does not match activation');
+  const workerSessionId = grantContext.workerSessionId !== undefined
+    ? grantContext.workerSessionId
+    : (flags['worker-session'] || null);
   testRendezvous(txnDir, 'claim-preflight-pre-election');
 
   // claim/v1 remains the no-clobber ELECTION, outside .lock (PLAN-frozen first-writer-
@@ -5641,10 +9376,10 @@ function cmdClaim(flags) {
     lease_epoch: auth.leaseEpoch,
     claimant_role: flags.role,
     claimant_worktree_id: computeWorktreeId(coordRoot),
-    claimant_instance_id: genId(),
-    worker_session_id: flags['worker-session'] || null,
+    claimant_instance_id: grantContext.actorInstanceId,
+    worker_session_id: workerSessionId,
     target_role_profile_digest: reqObj.target_role_profile_digest,
-    driver: 'noop',
+    driver: claimDriver,
     created_at: nowIso(),
   };
   const claimPath = claimPathFor(txnDir, auth.attemptId);
@@ -5669,7 +9404,52 @@ function cmdClaim(flags) {
     raceDetailCode: 'AUTHORITY_INVALID',
     revalidateBeforeLink: () => {
       testRendezvous(txnDir, 'claim-pre-link-revalidate');
-      assertRequestIdentityMatches(preflight, accreditCanonicalRequest(coordRoot, requestPath), requestPath);
+      const freshAccredited = accreditCanonicalRequest(coordRoot, requestPath);
+      assertRequestIdentityMatches(preflight, freshAccredited, requestPath);
+      // M7 section 8.5: claim gains the SAME final cancel/terminal absence
+      // read already applied by publish-result (cmdPublishResult, below),
+      // at its own last existing no-clobber write boundary -- claim stays
+      // outside the transaction lock exactly as before; this
+      // revalidateBeforeLink callback IS the admission point.
+      const freshExistingAccepted = readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) });
+      if (freshExistingAccepted !== null) {
+        assertAcceptedResultCorrelates(freshExistingAccepted, txnDir, freshAccredited.obj, coordRoot);
+        throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction already has an accepted-result.json');
+      }
+      if (readCanonicalCancelRecordOptional(cancelPathFor(txnDir), coordRoot) !== null) {
+        throw new CliError('CANCELLED', 'TRANSACTION_CANCELLED', 'transaction was already cancelled');
+      }
+      // M7 CORRECTION C3 (Codex final ruling): the AUTHORITATIVE result
+      // (results/<attempt>.json) is a SEPARATE terminal from
+      // accepted-result.json (a downstream, requester-side artifact, never a
+      // substitute for it) -- resolved fresh from the just-reaccredited
+      // request, checked directly here at the admission point via the SAME
+      // canonical fd-bound validateResultV2 pipeline every other
+      // authoritative surface uses (never durability+shape alone). PENDING
+      // fails closed DURABILITY_UNPROVEN before ever attempting validation. A
+      // malformed/non-correlating durable record (validateResultV2's own
+      // CORRELATION_INVALID) is DURABILITY_UNPROVEN too -- never treated as
+      // "no terminal" and never conflated with a genuinely valid, denying
+      // terminal. Only a result that VALIDATES cleanly denies at this frozen
+      // boundary (AUTHORITY_INVALID).
+      const freshAuth = resolveAuthoritativeAttempt(freshAccredited.obj, txnDir);
+      const freshResultPath = resultPathFor(txnDir, freshAuth.attemptId);
+      const freshResultState = classifyDurableRead(freshResultPath, { parse: true });
+      if (freshResultState.state === DURABLE_PENDING) {
+        throw new CliError('INVALID', 'DURABILITY_UNPROVEN', "the current attempt's authoritative result is still in the nlink==2 in-flight window");
+      }
+      if (freshResultState.state !== DURABLE_ABSENT) {
+        try {
+          validateResultV2(freshResultPath, coordRoot);
+        } catch (err) {
+          if (err instanceof CliError && err.detailCode === 'CORRELATION_INVALID') {
+            throw new CliError('INVALID', 'DURABILITY_UNPROVEN', "the current attempt's authoritative result exists but does not correlate to its own request");
+          }
+          throw err;
+        }
+        throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction already has an authoritative result for the current attempt');
+      }
+      testM7Rendezvous('claim-after-admission-before-link', coordRoot);
     },
   });
 
@@ -5862,7 +9642,53 @@ function cmdLeaseHeartbeat(flags) {
     // receipt check is exactly as meaningful here as for any other hardened
     // write in this file.
     assertLockedScopeIdentity(lockToken);
+    // M7 section 8.5: lease-heartbeat gains the SAME final cancel/terminal
+    // absence read already applied by publish-result (cmdPublishResult),
+    // performed here under this function's own existing lock -- a terminal
+    // already durable before this read blocks the effect, and no operation
+    // admitted after cancellation can mutate the target.
+    const heartbeatExistingAccepted = readJsonDurableOptional(acceptedResultPathFor(txnDir), { shape: (o) => assertClosedShape(o, ACCEPTED_RESULT_V1_FIELDS) });
+    if (heartbeatExistingAccepted !== null) {
+      assertAcceptedResultCorrelates(heartbeatExistingAccepted, txnDir, reqObj, coordRoot);
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction already has an accepted-result.json');
+    }
+    if (readCanonicalCancelRecordOptional(cancelPathFor(txnDir), coordRoot) !== null) {
+      throw new CliError('CANCELLED', 'TRANSACTION_CANCELLED', 'transaction was already cancelled');
+    }
     const leaseBytes = Buffer.from(canonicalJSONStringify(merged), 'utf8');
+    testM7Rendezvous('heartbeat-after-admission-before-write', coordRoot);
+    // M7 CORRECTION C1/C3 (Codex final ruling, two-boundary linearization):
+    // this check is heartbeat's own LP2 -- it must run AFTER the rendezvous
+    // pause above, not before, so it can OBSERVE an authoritative result
+    // landing in the exact LP1 (general authority admission, already
+    // resolved earlier in the call chain, before this function's own body
+    // even started)-to-LP2 window the pause simulates ("section 8.5 LP2
+    // observes the result"; a terminal ordered genuinely after LP2 releases
+    // is never retroactively checked and is allowed to complete, per M7's
+    // general "already-admitted may complete bounded" positive-control
+    // semantics). The AUTHORITATIVE result is a SEPARATE terminal from
+    // accepted-result.json -- checked via the SAME canonical fd-bound
+    // validateResultV2 pipeline claim's own revalidateBeforeLink admission
+    // point uses (see its matching comment for the full PENDING/
+    // CORRELATION_INVALID mapping rationale). A terminal that VALIDATES
+    // cleanly denies AUTHORITY_INVALID and leaves the lease bytes unwritten;
+    // malformed/pending is DURABILITY_UNPROVEN.
+    const heartbeatResultPath = resultPathFor(txnDir, auth.attemptId);
+    const heartbeatResultState = classifyDurableRead(heartbeatResultPath, { parse: true });
+    if (heartbeatResultState.state === DURABLE_PENDING) {
+      throw new CliError('INVALID', 'DURABILITY_UNPROVEN', "the current attempt's authoritative result is still in the nlink==2 in-flight window");
+    }
+    if (heartbeatResultState.state !== DURABLE_ABSENT) {
+      try {
+        validateResultV2(heartbeatResultPath, coordRoot);
+      } catch (err) {
+        if (err instanceof CliError && err.detailCode === 'CORRELATION_INVALID') {
+          throw new CliError('INVALID', 'DURABILITY_UNPROVEN', "the current attempt's authoritative result exists but does not correlate to its own request");
+        }
+        throw err;
+      }
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'transaction already has an authoritative result for the current attempt');
+    }
     const leaseReceipt = publishReplace(leasePath, leaseBytes);
     testRendezvous(txnDir, 'heartbeat-post-publish-pre-recheck');
     try {
@@ -6455,7 +10281,24 @@ COMMANDS['transaction-ack'] = cmdTransactionAck;
 // `accept-result` (PLAN.md ~L769) -- under lock, requester-only accepted-result.json
 // ─────────────────────────────────────────────────────────────────────────────
 
-function cmdAcceptResult(flags) {
+/**
+ * M6+M7 requester-authority closure (Group C): the actor holding the
+ * consumed requester grant must be the SAME actor that originally published
+ * this transaction's request.json -- checked independently at each mutation
+ * boundary (never trusted from a single earlier read), mirroring this file's
+ * own established re-verify-under-lock/re-verify-before-publish TOCTOU
+ * discipline for request identity elsewhere.
+ */
+function assertRequesterActorMatchesRequest(grantContext, reqObj) {
+  if (!grantContext || typeof grantContext.actorInstanceId !== 'string' || grantContext.actorInstanceId.length === 0) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'requires an authenticated requester grant/binding');
+  }
+  if (grantContext.actorInstanceId !== reqObj.requester_instance_id) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'requester grant does not match the actor that published this request');
+  }
+}
+
+function cmdAcceptResult(flags, grantContext) {
   requireFlags(flags, ['coordination-root', 'request']);
   const coordRoot = resolveAbsolute(flags['coordination-root']);
   const requestPath = resolveAbsolute(flags.request);
@@ -6490,6 +10333,10 @@ function cmdAcceptResult(flags) {
     const reqRec = accreditCanonicalRequest(coordRoot, requestPath);
     assertRequestIdentityMatches(preflight, reqRec, requestPath);
     const reqObj = reqRec.obj;
+    // M6+M7 requester-authority closure (Group C): before any mutation, the
+    // authenticated grant's own actor must be the same actor that opened
+    // this transaction.
+    assertRequesterActorMatchesRequest(grantContext, reqObj);
     // DUR-J: terminal mutual exclusion reads each terminal fd-bound-durable -- a durable
     // accepted-result/cancel blocks as before; a genuinely absent one lets accept
     // proceed; an nlink==2 / symlink / malformed terminal STOPs rather than being
@@ -6549,7 +10396,7 @@ function cmdAcceptResult(flags) {
       accepted_attempt_id: resultObj.attempt_id,
       accepted_lease_epoch: resultObj.lease_epoch,
       routing_policy_digest: reqObj.routing_policy_digest,
-      requester_instance_id: genId(),
+      requester_instance_id: grantContext.actorInstanceId,
       accepted_at: nowIso(),
       schema_version: 1,
     };
@@ -6559,6 +10406,10 @@ function cmdAcceptResult(flags) {
     // publish too -- the reads above and this write are not atomic with each
     // other.
     assertLockedScopeIdentity(lockToken);
+    // M6+M7 requester-authority closure (Group C): re-verified again at this
+    // exact transaction-authority (write) boundary -- never solely relying
+    // on the earlier check.
+    assertRequesterActorMatchesRequest(grantContext, reqObj);
     // A double-accept no-clobber race lost here is a RACE (another accept won
     // first), not a cancellation -- matches cmdClaim's own claim-race labeling
     // (AUTHORITY_INVALID), not the unrelated TRANSACTION_CANCELLED detail code.
@@ -6620,11 +10471,25 @@ function cmdCleanup(flags) {
   // (durability + parse only) -- a request.json stored at THIS transaction's own path
   // but internally embedding a DIFFERENT request_id (the same confused-deputy shape as
   // the round-3 blocker 1 finding) would have been echoed back verbatim, a non-
-  // authoritative id in cleanup's own response. Now reuses the SAME canonical
+  // authoritative id in cleanup's own response. Reuses the SAME canonical
   // durability+shape+identity validation every other authoritative reader uses; on ANY
-  // failure (absent, non-durable, malformed, or a content/path identity mismatch) the
-  // response simply omits the id (`null`) rather than displaying an unearned one --
-  // reconciliation semantics above are completely unaffected either way.
+  // failure (absent, non-durable, or malformed) the response simply omits the id (`null`)
+  // rather than displaying an unearned one -- reconciliation semantics above are
+  // completely unaffected either way.
+  //
+  // M6+M7 requester-authority closure (Group B): the exact confused-deputy shape this
+  // comment originally targeted (a request.json whose content contradicts its own
+  // canonical path) can no longer reach this code at all in practice -- cleanup is a
+  // transactional requester operation under PLAN §15b's own accreditation requirement
+  // like every other transactional command, so grant-scope resolution
+  // (resolveRequesterGrantScope -> accreditCanonicalRequest, which independently runs
+  // this SAME readCanonicalRequestRecord content/path identity check) now rejects that
+  // exact request.json with SECURITY_INVALID before cmdCleanup's own handler --
+  // including this display-fallback -- is ever invoked. The identity check right below
+  // is kept as genuine defense-in-depth, never assumed redundant/removed just because
+  // an earlier gate now also catches this one shape; it remains the live, load-bearing
+  // check for the OTHER, still-reachable untrustworthy-but-not-confused-deputy failure
+  // modes this fallback was always meant to cover (absent, non-durable, malformed).
   let requestId = null;
   try {
     const rec = readCanonicalRequestRecord(requestPath, path.basename(txnDir), {});
@@ -6651,6 +10516,120 @@ COMMANDS.cleanup = cmdCleanup;
 const AWAIT_POLLABLE_CANDIDATE_DETAILS = new Set(['AUTHORITY_INVALID']);
 function isAwaitPollableCandidateError(err) {
   return err instanceof CliError && err.status === 'INVALID' && AWAIT_POLLABLE_CANDIDATE_DETAILS.has(err.detailCode);
+}
+
+/**
+ * M67-MATRIX3-LIVENESS-REPAIR-FINAL-20260821: the ONE canonical liveness
+ * assessor for cmdAwaitResult's poll loop. A dead/unclaimed worker or an
+ * expired request must be reported promptly (BLOCKED/WORKER_LEASE_EXPIRED,
+ * BLOCKED/WORKER_LEASE_MISSING, BLOCKED/WORKER_NOT_CLAIMED,
+ * TIMEOUT/REQUEST_EXPIRED) -- never silently polled all the way to the CLI's
+ * own --timeout as a generic DEADLINE_EXCEEDED. Called once per iteration,
+ * strictly AFTER the terminal checks (accepted-result/cancel/result -- a
+ * valid terminal observed the same iteration always wins) and strictly
+ * BEFORE the CLI deadline check.
+ *
+ * Pure observer: never writes, cancels, releases, takes over, or repairs
+ * state. Returns `{status, detailCode, message}` when a liveness verdict is
+ * reached this iteration, or `null` when none applies yet (the caller falls
+ * through to its own deadline check, exactly as before this function
+ * existed). Reuses the SAME canonical validators/helpers every other caller
+ * in this file trusts (validateClaimV1, validateActivationV1,
+ * validateActiveLeaseV1, CLAIM_NO_LEASE_WINDOW_S, activationLivenessDeadline)
+ * -- never a duplicated parser.
+ *
+ * Fail-closed discipline: validateClaimV1/validateActivationV1/
+ * validateActiveLeaseV1 each throw on anything that is not a clean,
+ * durable, shape-valid, correctly-correlated record -- malformed JSON, a
+ * symlink, wrong owner/mode, or (for claim, via its own internal check) a
+ * wrong attempt/epoch. Only TWO outcomes of that throw are ever caught and
+ * interpreted here: `.durableAbsent` (the record genuinely does not exist
+ * yet) and `.durablePending` (the record is mid-publish, the SAME nlink==2
+ * in-flight window the rest of this loop already treats as "keep waiting").
+ * Every other error propagates completely unmodified -- it is NEVER
+ * downgraded to a liveness verdict and never swallowed into "keep waiting".
+ * validateActivationV1/validateActiveLeaseV1 do not themselves correlate
+ * attempt_id/lease_epoch/request_id against the current authoritative
+ * attempt (only validateClaimV1 does, internally) -- the explicit checks
+ * below close that gap for activation/lease the same way, throwing the same
+ * AUTHORITY_INVALID a wrong-attempt claim already throws.
+ */
+function assessAwaitResultLiveness(reqObj, txnDir, coordRoot, auth) {
+  const nowMs = currentClockMs();
+
+  let claimObj = null;
+  try {
+    claimObj = validateClaimV1(claimPathFor(txnDir, auth.attemptId), coordRoot);
+  } catch (err) {
+    if (err && err.durableAbsent) {
+      claimObj = null;
+    } else if (err && err.durablePending) {
+      return null;
+    } else {
+      throw err;
+    }
+  }
+
+  if (claimObj === null) {
+    let activationObj = null;
+    try {
+      activationObj = validateActivationV1(activationPathFor(txnDir, auth.attemptId));
+    } catch (err) {
+      if (err && err.durableAbsent) {
+        activationObj = null;
+      } else if (err && err.durablePending) {
+        return null;
+      } else {
+        throw err;
+      }
+    }
+    if (activationObj !== null) {
+      if (
+        activationObj.request_id !== reqObj.request_id
+        || activationObj.attempt_id !== auth.attemptId
+        || activationObj.lease_epoch !== auth.leaseEpoch
+      ) {
+        throw new CliError('INVALID', 'AUTHORITY_INVALID', 'activation request_id/attempt_id/lease_epoch is not the current authoritative triple');
+      }
+      if (nowMs >= isoToMs(activationObj.activation_liveness_expiry)) {
+        return { status: 'BLOCKED', detailCode: 'WORKER_NOT_CLAIMED', message: 'await-result observed a valid activation past its own activation_liveness_expiry with no claim' };
+      }
+    }
+  } else {
+    let leaseObj = null;
+    try {
+      leaseObj = validateActiveLeaseV1(activeLeasePathFor(txnDir, auth.attemptId), coordRoot);
+    } catch (err) {
+      if (err && err.durableAbsent) {
+        leaseObj = null;
+      } else if (err && err.durablePending) {
+        return null;
+      } else {
+        throw err;
+      }
+    }
+    if (leaseObj === null) {
+      const deadline = minIso(
+        isoPlusSeconds(claimObj.created_at, CLAIM_NO_LEASE_WINDOW_S),
+        minIso(activationLivenessDeadline(reqObj), isoPlusSeconds(reqObj.expiry, -REQUEST_EXPIRY_MARGIN_S)),
+      );
+      if (nowMs >= isoToMs(deadline)) {
+        return { status: 'BLOCKED', detailCode: 'WORKER_LEASE_MISSING', message: 'await-result observed an authoritative claim with no active-lease past the claim-no-lease grace window' };
+      }
+    } else {
+      if (leaseObj.attempt_id !== auth.attemptId || leaseObj.lease_epoch !== auth.leaseEpoch) {
+        throw new CliError('INVALID', 'AUTHORITY_INVALID', 'active-lease attempt_id/lease_epoch is not the current authoritative pair');
+      }
+      if (nowMs >= isoToMs(leaseObj.lease_expiry)) {
+        return { status: 'BLOCKED', detailCode: 'WORKER_LEASE_EXPIRED', message: 'await-result observed the authoritative active-lease past its own lease_expiry' };
+      }
+    }
+  }
+
+  if (nowMs >= isoToMs(reqObj.expiry)) {
+    return { status: 'TIMEOUT', detailCode: 'REQUEST_EXPIRED', message: 'await-result observed the request past its own expiry with no terminal and no higher-precedence liveness failure' };
+  }
+  return null;
 }
 
 function cmdAwaitResult(flags) {
@@ -6831,6 +10810,18 @@ function cmdAwaitResult(flags) {
         }
         return { request_id: reqObj.request_id, artifact_ref: candidatePath };
       }
+    }
+
+    // M67-MATRIX3-LIVENESS-REPAIR-FINAL-20260821: liveness is evaluated AFTER
+    // every terminal check above (a valid accepted-result/cancel/result observed
+    // this same iteration always wins -- never converted into a false liveness
+    // failure) and BEFORE the CLI deadline check below (a dead/unclaimed worker
+    // or an expired request must be reported promptly, never silently polled
+    // all the way to a generic DEADLINE_EXCEEDED).
+    const liveness = assessAwaitResultLiveness(reqObj, txnDir, coordRoot, currentAuth);
+    if (liveness !== null) {
+      assertRequestIdentityUnchanged(accreditCanonicalRequest(coordRoot, requestPath));
+      throw new CliError(liveness.status, liveness.detailCode, liveness.message);
     }
 
     if (currentClockMs() >= deadlineMs) {
@@ -7101,15 +11092,47 @@ COMMANDS['publish-blob'] = cmdPublishBlob;
 // ─────────────────────────────────────────────────────────────────────────────
 // `dispatch` (PLAN.md ~L762, ~L798-810) -- validate capability/routing, publish
 // `activation/v1`, publish the requester-owned intent WAL when applicable,
-// publish `inbox-ref`, return one non-authoritative `ActivationAction`. Real
-// driver selection/routing (the per-role `runtime-routing.json` route table) and
-// the five non-noop driver branches (SendMessage/Agent/bridge argv) are WP3 --
-// this WP2 pass implements the ONE driver it can honestly execute end-to-end
-// without fabricating a peer/bridge -- `noop` -- plus the full
-// activation/WAL/inbox-ref ordering and closed ActivationAction shape.
+// publish `inbox-ref`, return one non-authoritative `ActivationAction`. WP3
+// The `claude-agent` mechanism-readiness check is wired, but it is only a
+// necessary precondition: selection remains unavailable until the active
+// top-level host supplies the distinct §15d foreground-Agent correlation.
+// The remaining non-noop driver branches (SendMessage/bridge argv for
+// claude-sendmessage/codex-app-server/codex-mcp/runtime-spawn) still have no
+// wired per-request capability-detection machinery and stay WP3-in-progress.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function cmdDispatch(flags) {
+// PLAN.md record 5b (~L416): the three driver names whose initial `dispatch`
+// durably publishes an `activation-intent/v1` WAL (never `noop`, which has no
+// WAL writer at all -- the core writes its delivery record directly instead).
+// `codex-app-server`/`codex-mcp` are the two Codex frontends -- their OWN WAL
+// writer is the trusted bridge host, only once the scheduler admits/selects
+// the item for service, never this per-request `dispatch` call -- so they are
+// deliberately NOT members of this set.
+const REQUESTER_OWNED_DISPATCH_DRIVERS = Object.freeze(['claude-sendmessage', 'claude-agent', 'runtime-spawn']);
+
+/**
+ * Derives the project/repo root `checkClaudeAgentCapabilityAvailable` expects
+ * (it reads `.claude/settings.json`'s own hook registrations). `.claude/`
+ * config is a property of the CHECKOUT this script itself is installed into
+ * -- never of an arbitrary `--coordination-root` target, which for a
+ * sibling-worktree/cross-project consultation may point at a coordination
+ * tree with no `.claude/settings.json` (or a different one) at all. Resolved
+ * `__dirname`-relative (this file lives at `scripts/lib/runtime-consultation.cjs`,
+ * two levels below the repo root) -- the SAME "find my own repo" convention
+ * `context-provider-gate.js`'s own `CANONICAL_LIFECYCLE_CLI_PATH`/
+ * `CANONICAL_CONSULTATION_CLI_PATH` already use, never derived from
+ * `coordRoot`. Fails soft by construction, never by exception: every caller
+ * of this helper is already wrapped in its own try/catch, so a genuinely
+ * relocated/vendored copy of this file only ever costs
+ * `checkClaudeAgentCapabilityAvailable` a real `{available:false}` -- never a
+ * false grant.
+ * @returns {string}
+ */
+function claudeAgentCapabilityProjectRoot() {
+  return path.resolve(__dirname, '..', '..');
+}
+
+function dispatchCanonical(flags, options) {
   requireFlags(flags, ['coordination-root', 'request']);
   const coordRoot = resolveAbsolute(flags['coordination-root']);
   const requestPath = resolveAbsolute(flags.request);
@@ -7135,19 +11158,36 @@ function cmdDispatch(flags) {
   if (routingPolicyBytes === null) {
     throw new CliError('UNAVAILABLE', 'DRIVER_UNAVAILABLE', 'no routing policy materialized for this plan-root; no driver available');
   }
+  // R2-B (M6-M7-R2-INTEGRITY-CLOSURE-20260820): the path above is
+  // content-addressed by NAMING CONVENTION only -- it does not itself prove
+  // the bytes just read are genuinely the ones the request was correlated
+  // against at publish time. Hash the SAME bytes already read (never a
+  // second read) and require exact equality with the request's own
+  // routing_policy_digest before parsing or selecting any driver. A mismatch
+  // means the materialized snapshot was rewritten in place after publish
+  // (same path, different content) -- fail closed with the same
+  // INVALID/CORRELATION_INVALID shape every other request<->artifact
+  // correlation check in this file already uses, before any
+  // ActivationAction/grant/driver selection can occur.
+  if (sha256Buffer(routingPolicyBytes) !== reqObj.routing_policy_digest) {
+    throw new CliError('INVALID', 'CORRELATION_INVALID', 'materialized routing policy bytes do not match request routing_policy_digest: ' + routingPolicyPath);
+  }
   // WP3 fix: real per-role route-table selection (PLAN.md Routing Registry:
   // "runtime-routing.json chooses a connector for one consultation attempt").
   // Uses the request's OWN pinned, content-addressed snapshot -- never the live
   // scripts/lib/runtime-routing.json -- so a routing.json edit after publish
-  // can never silently change an in-flight request's route table. Full
-  // capability-based selection among the five non-noop drivers (a reachable
-  // retained Claude peer, Codex app-server, etc.) requires the
-  // RoleLifecycleController/runtime-bridge-codex.cjs capability-detection
-  // machinery that does not exist yet (WP3-in-progress) -- `noop` remains the
-  // only driver this dispatch can honestly select end-to-end, but it is now a
-  // REAL lookup against the pinned table (rejecting if the role is unknown to
-  // it or `noop` is not one of its allowed drivers), not an unconditional
-  // hardcode regardless of what the table says.
+  // can never silently change an in-flight request's route table. Iterates
+  // the pinned, routing-preference-ordered driver list and selects the FIRST
+  // one this dispatch can honestly prove capable: `claude-agent` is the one
+  // non-noop driver with a real, wired mechanism-readiness check today
+  // (`checkClaudeAgentCapabilityAvailable`, PLAN.md §15d), but that check is
+  // not itself sufficient to select the driver.
+  // `claude-sendmessage`/`codex-app-server`/`codex-mcp`/`runtime-spawn` still
+  // require the RoleLifecycleController/runtime-bridge-codex.cjs
+  // capability-detection machinery that does not exist yet for a PER-REQUEST
+  // dispatch (WP3-in-progress) and are therefore never selected without real
+  // proof -- `noop` is guaranteed present in `allowedDrivers` (checked above)
+  // and remains the honest final fallback.
   let routingPolicyObj;
   try {
     routingPolicyObj = JSON.parse(routingPolicyBytes.toString('utf8'));
@@ -7158,12 +11198,225 @@ function cmdDispatch(flags) {
   if (!Array.isArray(allowedDrivers) || !allowedDrivers.includes('noop')) {
     throw new CliError('UNAVAILABLE', 'DRIVER_UNAVAILABLE', 'no honestly-selectable driver for target_role ' + reqObj.target_role + ' in the pinned routing policy');
   }
-  const selectedDriver = 'noop';
+  // M6-M7-LIVE-FUNCTIONAL-ACCEPTANCE-20260820 fix round 1: requiredDriver is
+  // validated and applied as a hard candidate filter BEFORE/DURING ordinary
+  // priority-order selection, never merely checked against whatever ordinary
+  // selection already picked -- an already-live higher-priority candidate
+  // (e.g. claude-agent) must never win over a live REQUIRED lower-priority
+  // one (e.g. codex-app-server); each candidate's own existing liveness proof
+  // is unchanged, only which candidates are even considered.
+  // WAVE1-FUNCTIONAL-CLOSEOUT-REALISTIC-20260822 mandatory driver fallback:
+  // resolved here (moved up from just before activationPath below) because
+  // the exclusion logic that follows needs the CURRENT authoritative attempt
+  // -- if a canonical takeover has already superseded the initial attempt,
+  // every candidate below is being selected for that NEW attempt, never the
+  // superseded one.
+  const auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+  const attemptId = auth.attemptId;
+  const leaseEpoch = auth.leaseEpoch;
+  let requiredDriver = options && options.requiredDriver;
+  if (requiredDriver !== undefined && (!DRIVER_ENUM.includes(requiredDriver) || requiredDriver === 'noop')) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'required dispatch driver is invalid');
+  }
+  // Once a canonical takeover has superseded this request's initial attempt,
+  // this dispatch call is for the NEW attempt -- the driver selected for the
+  // superseded attempt must never be reselected here, even if it currently
+  // reports itself live again (it already failed THIS request once). Read
+  // straight off the superseded attempt's own durable activation record; no
+  // new schema field is needed (the takeover binding itself never needs to
+  // know which driver it superseded, only that one did). A caller-required
+  // driver (the root-source caller always requires codex-app-server) that
+  // turns out to be exactly the excluded one is never honored -- silently
+  // fall through to ordinary priority-order selection among the remaining
+  // candidates instead of throwing; that is precisely what this recovery
+  // must do once codex-app-server itself is the excluded driver.
+  let excludedDriver = null;
+  if (attemptId !== reqObj.initial_attempt_id) {
+    const supersededActivationRead = classifyDurableRead(activationPathFor(txnDir, reqObj.initial_attempt_id), { parse: true });
+    if (supersededActivationRead.state === DURABLE_PRESENT) {
+      assertClosedShape(supersededActivationRead.obj, ACTIVATION_V1_FIELDS);
+      excludedDriver = supersededActivationRead.obj.selected_driver;
+    }
+  }
+  if (requiredDriver !== undefined && requiredDriver === excludedDriver) {
+    requiredDriver = undefined;
+  }
+  let selectedDriver = 'noop';
+  let rll = null;
+  for (const candidate of allowedDrivers) {
+    if (requiredDriver !== undefined && candidate !== requiredDriver) continue;
+    if (excludedDriver !== null && candidate === excludedDriver) continue;
+    if (candidate === 'noop') {
+      selectedDriver = 'noop';
+      break;
+    }
+    if (candidate === 'claude-agent') {
+      // Lazily require()s the sibling module -- runtime-role-lifecycle.cjs
+      // requires THIS file at its own top level (WP3: reuse the sibling
+      // module's already-proven fd-bound durability primitives), so a
+      // top-level require() here would be a load-time cycle. Mirrors
+      // resolveSupervisorStartability's own lazy require of
+      // runtime-bridge-codex.cjs for the identical reason.
+      try {
+        rll = require('./runtime-role-lifecycle.cjs');
+      } catch (err) {
+        rll = null;
+        continue; // mechanism unavailable -- never select without proof.
+      }
+      let capabilityResult;
+      try {
+        capabilityResult = rll.checkClaudeAgentCapabilityAvailable(claudeAgentCapabilityProjectRoot());
+      } catch (err) {
+        continue;
+      }
+      if (!capabilityResult || capabilityResult.available !== true) continue;
 
-  const attemptId = reqObj.initial_attempt_id;
-  const leaseEpoch = reqObj.initial_lease_epoch;
+      // M6+M7 FINAL AUTHORITY CORRECTION (Group 4): mechanism-only readiness
+      // (hooks present + registered) is NECESSARY but not SUFFICIENT --
+      // PLAN.md §15d additionally requires the requester not be the running
+      // planner-bootstrap subagent.
+      if (reqObj.source_role === 'planner') continue;
+
+      // PLAN.md §15d also requires "the active top-level host exposes one
+      // foreground Agent call" -- i.e. proof that the CURRENT top-level
+      // orchestrator session (a different session from this detached
+      // cmdDispatch CLI subprocess, and from the requester's own identity --
+      // RequesterBinding and MainOrchestratorBinding are explicitly separate
+      // primitives, PLAN.md ~L594) is genuinely live right now. Two wrong
+      // identities were explicitly ruled out here: findLiveClaudeAgentActivations
+      // can only ever match THIS exact request's own activation/v1 record,
+      // which this same function does not publish until AFTER this
+      // driver-selection loop runs (below) -- a check keyed on this
+      // request's own request_id is structurally unsatisfiable for every
+      // request, never a genuine proof check; substituting the requester's
+      // own CLAUDE-ID-01 attestation would conflate the requester identity
+      // with the top-level-host identity. M6-M7-PRODUCTION-REACHABILITY-
+      // 20260819 closes this gap with the ONE existing primitive PLAN.md
+      // itself defines as modeling "the active top-level orchestrator"
+      // (~L240, ~L594): a genuine, current, unexpired
+      // MainOrchestratorBinding/v1 scoped to this EXACT request's own
+      // requester_worktree_id+plan_digest is real, host-supplied proof that
+      // the top-level orchestrator session is live right now -- read-only,
+      // no new schema/artifact/driver. Unlike checkClaudeAgentCapabilityAvailable
+      // above (a MECHANISM check that is deliberately fixed to the checkout
+      // THIS script file itself lives in, never --coordination-root --
+      // claudeAgentCapabilityProjectRoot()'s own doc comment), the binding
+      // registry is repo-scoped: MainOrchestratorBinding/v1 is minted under
+      // the SAME registryRepoDir(<repo the top-level orchestrator's own
+      // checkout runs in>) that every other WP3 registry primitive uses.
+      // For a same-repo dispatch that repo IS the one `--coordination-root`
+      // resolves into, so the project root is derived the identical way the
+      // codex-app-server branch below already derives its own (never
+      // claudeAgentCapabilityProjectRoot()): gitRevParse(coordRoot,
+      // ['rev-parse', '--show-toplevel']).
+      let hasLiveBinding = false;
+      try {
+        const orchestratorProjectRoot = gitRevParse(coordRoot, ['rev-parse', '--show-toplevel']);
+        hasLiveBinding = rll.hasLiveMainOrchestratorBindingForScope(
+          orchestratorProjectRoot, reqObj.requester_worktree_id, reqObj.plan_digest,
+        );
+      } catch (err) {
+        hasLiveBinding = false; // never let a liveness-check exception select a driver.
+      }
+      if (!hasLiveBinding) continue; // no live top-level-host proof -- never select without it, zero partial activation.
+      selectedDriver = 'claude-agent';
+      break;
+    }
+    if (candidate === 'codex-app-server') {
+      // The bridge is required lazily because it imports this module to reuse
+      // the canonical state machine.  At dispatch time this module is fully
+      // initialized, so the lazy edge is cycle-safe.  Selection requires the
+      // bridge's complete retained-worker proof (READY role binding + active
+      // lifecycle owner + exact supervisor action + live process owner + one
+      // fresh worker-presence record); a file/binary/mechanism check alone is
+      // never capability evidence.
+      let bridge;
+      let projectRoot;
+      try {
+        bridge = require('./runtime-bridge-codex.cjs');
+        projectRoot = gitRevParse(coordRoot, ['rev-parse', '--show-toplevel']);
+      } catch (err) {
+        continue;
+      }
+      let liveWorker;
+      try {
+        // The consultation target-profile digest and the lifecycle role-
+        // template digest are deliberately different namespaces.  The bridge
+        // independently accredits the current canonical lifecycle profile;
+        // request<->activation correlation below accredits the consultation
+        // profile.  Comparing the two unrelated digests would make this
+        // branch structurally unreachable for every valid request.
+        liveWorker = bridge.resolveLiveCodexAppServerWorker(projectRoot, reqObj.target_role);
+      } catch (err) {
+        continue;
+      }
+      if (liveWorker && liveWorker.ok === true && liveWorker.available === true) {
+        selectedDriver = 'codex-app-server';
+        break;
+      }
+      // M6+M7 SIXTEENTH Phase 2D (PLAN.md §16d: "post-intent and post-ingress
+      // target loss on both retained-root and toolkit-root paths... dispatch
+      // fails closed and neither selects noop nor counts noop as delivery/
+      // evidence"; "a lost target falls back to noop" is one of §16d's own
+      // named required-RED mutations). `resolveLiveCodexAppServerWorkerUncached`
+      // (runtime-bridge-codex.cjs) reaches `supervisor-process-not-live`
+      // ONLY after independently confirming the lifecycle owner record is
+      // genuinely ACTIVE/RETAINED and exactly scope-matched -- i.e. this
+      // target WAS a real, live, retained worker for this exact repo/
+      // worktree/plan, and the one remaining reason it is not available now
+      // is that its OS process is confirmed dead. That is "lost", never
+      // "never available" -- falling through to another candidate (or the
+      // routing policy's own noop fallback) would silently launder an
+      // already-possible commitment into a fabricated non-delivery success.
+      // Every OTHER reason (owner never active, scope mismatch, action
+      // absent/mismatched, indeterminate liveness) means this target was
+      // never a proven live commitment in the first place, so the ordinary
+      // routing-policy fallback below remains correct for those.
+      if (liveWorker && liveWorker.ok === true && liveWorker.reason === 'supervisor-process-not-live') {
+        throw new CliError('UNAVAILABLE', 'DRIVER_UNAVAILABLE', 'retained codex-app-server target for ' + reqObj.target_role + ' was genuinely retained and is now lost -- dispatch fails closed rather than falling back to noop or a lower-priority candidate');
+      }
+      continue;
+    }
+    // claude-sendmessage/codex-mcp/runtime-spawn: no wired, non-fabricated
+    // per-request capability evidence exists yet -- never select without
+    // proof; try the next routing-permitted candidate.
+  }
+
+  if (requiredDriver !== undefined && selectedDriver !== requiredDriver) {
+    throw new CliError('UNAVAILABLE', 'DRIVER_UNAVAILABLE', 'required dispatch driver is not currently live: ' + requiredDriver);
+  }
+
   const activationPath = activationPathFor(txnDir, attemptId);
-  const now = nowIso();
+  const idempotentRecovery = !!(options && options.allowIdenticalIdempotent === true);
+  let existingActivation = null;
+  const existingActivationRead = classifyDurableRead(activationPath, { parse: true });
+  if (existingActivationRead.state === DURABLE_PENDING) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'activation is still pending during dispatch recovery');
+  }
+  if (existingActivationRead.state === DURABLE_PRESENT) {
+    assertClosedShape(existingActivationRead.obj, ACTIVATION_V1_FIELDS);
+    existingActivation = existingActivationRead.obj;
+    if (
+      existingActivation.request_id !== reqObj.request_id
+      || existingActivation.request_digest !== reqRec.digest
+      || existingActivation.attempt_id !== attemptId || existingActivation.lease_epoch !== leaseEpoch
+      || existingActivation.target_role_profile_digest !== reqObj.target_role_profile_digest
+      || existingActivation.routing_policy_version !== reqObj.routing_policy_version
+      || existingActivation.routing_policy_digest !== reqObj.routing_policy_digest
+      || existingActivation.selected_driver !== selectedDriver
+      || existingActivation.native_target_binding_id !== null
+      || existingActivation.activation_liveness_expiry !== activationLivenessDeadline(reqObj)
+    ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'existing activation does not match deterministic dispatch recovery');
+    if (!idempotentRecovery) existingActivation = null; // preserve ordinary dispatch's no-clobber replay rejection.
+  }
+  const now = existingActivation ? existingActivation.created_at : nowIso();
+  // Core-generated opaque one-shot action id (PLAN.md §15d: "Dispatch first
+  // commits request, activation (including core-generated
+  // native_spawn_action_id)..."), required only for claude-agent; null for
+  // every other driver (activation/v1's own field constraint, unchanged).
+  const nativeSpawnActionId = existingActivation
+    ? existingActivation.native_spawn_action_id
+    : (selectedDriver === 'claude-agent' ? crypto.randomBytes(16).toString('hex') : null);
   const activationObj = {
     schema: 'coordination/activation/v1',
     version: 1,
@@ -7176,58 +11429,363 @@ function cmdDispatch(flags) {
     routing_policy_digest: reqObj.routing_policy_digest,
     selected_driver: selectedDriver,
     native_target_binding_id: null,
-    native_spawn_action_id: null,
+    native_spawn_action_id: nativeSpawnActionId,
     created_at: now,
     activation_liveness_expiry: activationLivenessDeadline(reqObj),
   };
   assertClosedShape(activationObj, ACTIVATION_V1_FIELDS);
-  publishNoClobber(activationPath, Buffer.from(canonicalJSONStringify(activationObj), 'utf8'), { raceDetailCode: 'AUTHORITY_INVALID' });
+  publishNoClobber(activationPath, Buffer.from(canonicalJSONStringify(activationObj), 'utf8'), {
+    allowIdenticalIdempotent: idempotentRecovery,
+    raceDetailCode: 'AUTHORITY_INVALID',
+  });
 
-  // `noop` is not a requester-owned accelerator (claude-sendmessage/claude-agent/
-  // runtime-spawn) -- no intent WAL is written; the core itself writes the noop
-  // delivery record directly (Activation Drivers table, PLAN.md ~L848: "Receipt
-  // writer: delivery/<attempt_id>.json records driver:'noop' explicitly").
-  const deliveryObj = {
-    schema: 'coordination/delivery/v1',
-    request_id: reqObj.request_id,
-    attempt_id: attemptId,
-    lease_epoch: leaseEpoch,
-    driver: 'noop',
-    claim_digest: null,
-    commit_point: null,
-    commit_point_at: null,
-    created_at: now,
-    delivered: false,
-    outcome: null,
-    detail_code: 'NONE',
-  };
-  assertClosedShape(deliveryObj, DELIVERY_V1_FIELDS);
-  publishNoClobber(
-    deliveryPathFor(txnDir, attemptId),
-    Buffer.from(canonicalJSONStringify(deliveryObj), 'utf8'),
-    { allowIdenticalIdempotent: true },
-  );
+  // Requester-owned accelerators (claude-sendmessage/claude-agent/runtime-spawn)
+  // durably publish their intent WAL here, after activation and before inbox
+  // exposure/action return (record 5b, PLAN.md ~L416-430: "initial dispatch
+  // writes it durably after activation and before inbox exposure/action
+  // return"). `noop` has no WAL writer at all -- the core instead writes the
+  // noop delivery record directly (Activation Drivers table, PLAN.md ~L848:
+  // "Receipt writer: delivery/<attempt_id>.json records driver:'noop'
+  // explicitly").
+  if (REQUESTER_OWNED_DISPATCH_DRIVERS.includes(selectedDriver)) {
+    const activationIntentObj = {
+      schema: 'coordination/activation-intent/v1',
+      request_digest: reqRec.digest,
+      attempt_id: attemptId,
+      lease_epoch: leaseEpoch,
+      driver: selectedDriver,
+      commit_point_pending: true,
+      created_at: now,
+    };
+    publishNoClobber(
+      activationIntentPathFor(txnDir, attemptId),
+      Buffer.from(canonicalJSONStringify(activationIntentObj), 'utf8'),
+      { raceDetailCode: 'AUTHORITY_INVALID' },
+    );
+  } else if (selectedDriver === 'noop') {
+    const deliveryObj = {
+      schema: 'coordination/delivery/v1',
+      request_id: reqObj.request_id,
+      attempt_id: attemptId,
+      lease_epoch: leaseEpoch,
+      driver: 'noop',
+      claim_digest: null,
+      commit_point: null,
+      commit_point_at: null,
+      created_at: now,
+      delivered: false,
+      outcome: null,
+      detail_code: 'NONE',
+    };
+    assertClosedShape(deliveryObj, DELIVERY_V1_FIELDS);
+    publishNoClobber(
+      deliveryPathFor(txnDir, attemptId),
+      Buffer.from(canonicalJSONStringify(deliveryObj), 'utf8'),
+      { allowIdenticalIdempotent: true },
+    );
+  }
 
+  const inboxPath = inboxPathFor(planRoot, reqObj.target_role, reqObj.request_id);
+  let inboxCreatedAt = now;
+  // WAVE1-FUNCTIONAL-CLOSEOUT-REALISTIC-20260822: read any EXISTING,
+  // request-correlated inbox-ref and reuse its created_at UNCONDITIONALLY --
+  // not only when the caller opted into idempotentRecovery. inbox-ref is
+  // keyed by (target_role, request_id) alone, deliberately attempt-agnostic:
+  // "this request entered this role's inbox" is a fact about the REQUEST,
+  // not about any one attempt, so every dispatch for the same request must
+  // converge on the SAME inbox-ref bytes. Before this fix, a legitimate
+  // post-takeover redispatch (a different attempt_id, same request_id) always
+  // computed a fresh inboxCreatedAt and lost the no-clobber race against the
+  // first dispatch's already-durable inbox-ref with AUTHORITY_INVALID,
+  // making the mandatory driver-fallback recovery unreachable in practice --
+  // confirmed by WAVE1-E2E-02-DRIVER-FALLBACK across four independent
+  // reproductions. Deterministically converging on the first writer's
+  // timestamp costs nothing: attempt/epoch fencing (the actual authority
+  // boundary) is enforced by claim/lease/result validation elsewhere, never
+  // by this notification-only artifact's created_at.
+  const existingInbox = classifyDurableRead(inboxPath, { parse: true });
+  if (existingInbox.state === DURABLE_PENDING) {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'inbox ref is still pending during dispatch');
+  }
+  if (existingInbox.state === DURABLE_PRESENT) {
+    assertClosedShape(existingInbox.obj, INBOX_REF_V1_FIELDS);
+    if (
+      existingInbox.obj.request_id !== reqObj.request_id
+      || existingInbox.obj.request_digest !== reqRec.digest
+      || existingInbox.obj.target_role !== reqObj.target_role
+      || existingInbox.obj.kind !== 'consult'
+    ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'existing inbox ref does not match this request');
+    inboxCreatedAt = existingInbox.obj.created_at;
+  }
   const inboxRefObj = {
     schema: 'coordination/inbox-ref/v1',
     request_id: reqObj.request_id,
     request_digest: reqRec.digest,
     kind: 'consult',
     target_role: reqObj.target_role,
-    created_at: now,
+    created_at: inboxCreatedAt,
   };
   assertClosedShape(inboxRefObj, INBOX_REF_V1_FIELDS);
   publishNoClobber(
-    inboxPathFor(planRoot, reqObj.target_role, reqObj.request_id),
+    inboxPath,
     Buffer.from(canonicalJSONStringify(inboxRefObj), 'utf8'),
     { allowIdenticalIdempotent: true },
   );
 
-  // noop requires no caller execution -- activation_action stays null (ABI:
-  // "codex-app-server/noop adds no payload keys and therefore returns no action").
-  return { request_id: reqObj.request_id, artifact_ref: activationPath, activation_action: null };
+  // `noop` requires no caller execution -- activation_action stays null (ABI:
+  // "codex-app-server/noop adds no payload keys and therefore returns no
+  // action"). `claude-agent` returns the transient ActivationAction/v1 the
+  // top-level host uses to invoke exactly one foreground Agent (PLAN.md
+  // §15d) -- built only from already-validated, host-derived fields, never
+  // prompt/prose/model output: `rll` is guaranteed non-null here (the only
+  // way `selectedDriver` becomes 'claude-agent', above, is after a
+  // successful `require`), so `claudeAgentBootstrapMessageFor` (the single
+  // source of truth this exact bootstrap text also uses on the hook/mint
+  // side) is called directly, never re-derived by hand.
+  let activationAction = null;
+  if (selectedDriver === 'claude-agent') {
+    activationAction = {
+      schema: 'coordination/activation-action/v1',
+      driver: 'claude-agent',
+      agent_type: reqObj.target_role,
+      request_ref: requestPath,
+      activation_ref: activationPath,
+      subject_bundle_ref: path.join(planRoot, 'subject-bundles', reqObj.subject_scope_digest, 'manifest.json'),
+      native_spawn_action_id: nativeSpawnActionId,
+      bootstrap_message: rll.claudeAgentBootstrapMessageFor(reqObj.target_role, reqObj.request_id, attemptId),
+    };
+  }
+  return { request_id: reqObj.request_id, artifact_ref: activationPath, activation_action: activationAction };
+}
+function cmdDispatch(flags, grantContext) {
+  // M6-M7-ROOT-SOURCE-CONTINUATION-CLOSURE-20260820: a root-source-
+  // authenticated dispatch is constrained to the retained codex-app-server
+  // architect its action was minted against -- requiredDriver is the
+  // existing, accepted hard candidate filter inside dispatchCanonical, so a
+  // live higher-priority claude-agent candidate can no longer win the
+  // canonical routing race for a root-source transaction. Every ordinary
+  // (non-root-source) dispatch, and every in-process caller that passes no
+  // grantContext, keeps the exact pre-existing empty options and routing.
+  return dispatchCanonical(flags, isRootSourceGrantContext(grantContext) ? { requiredDriver: 'codex-app-server' } : {});
 }
 COMMANDS.dispatch = cmdDispatch;
+
+/**
+ * M7 completeness Part C follow-up (2026-08-09, PLAN.md §15d, user Block 3
+ * point 4): reads the request at `requestPath`, resolves its CURRENT
+ * authoritative attempt, and reads THAT attempt's own live `activation/v1`
+ * record if one genuinely exists and path<->field-correlates (its own
+ * `request_id`/`attempt_id` must equal what was just resolved) -- the
+ * read-side runtime-consultation-target-gate.js uses to determine which
+ * binding type may back a target grant: a DETERMINISTIC branch on
+ * `selected_driver` (arch-integration-prep's own guidance, relayed
+ * 2026-08-09: `'claude-agent'` -> ClaudeOneShotBinding, anything else ->
+ * RoleActorBinding, never a fallback/probe-both). Returns
+ * `{ok:true,activation:null}` (not an error) when no activation exists yet
+ * for the authoritative attempt, or it exists but is malformed/foreign --
+ * dispatch may not have run yet, or (today, always, per cmdDispatch's own
+ * WP2 scoping) never selects claude-agent -- callers treat a null
+ * activation as "not claude-agent", i.e. the persistent, unchanged
+ * RoleActorBinding path. Returns `{ok:false}` only for a genuinely
+ * malformed/absent/non-durable REQUEST -- the caller must reject the
+ * command outright in that case, never guess.
+ * @param {string} requestPath
+ * @returns {{ok:true,requestId:string,attemptId:string,leaseEpoch:number,activation:object|null}|{ok:false}}
+ */
+function resolveActivationForRequestPath(requestPath) {
+  const txnDir = path.dirname(requestPath);
+  let reqObj;
+  let reqDigest;
+  try {
+    // Stage C (M7-FINAL-REMEDIATION-20260818): one fd-bound canonical read
+    // retaining both the parsed request AND the SHA-256 digest of those
+    // exact bytes (readCanonicalRequestRecord -> readClosedRecord ->
+    // readDurableRecord already computes it) -- never a second, separate
+    // reopen of request.json merely to obtain a digest. Mirrors this file's
+    // own readRequestForTxnOrCorrelationInvalid wrapper exactly (same
+    // absentDetail/absentMessage policy), which callers that need only
+    // `.obj` keep using unchanged.
+    const reqRec = readCanonicalRequestRecord(path.join(txnDir, 'request.json'), path.basename(txnDir), {
+      absentDetail: 'CORRELATION_INVALID',
+      absentMessage: 'referenced request.json does not resolve',
+    });
+    reqObj = reqRec.obj;
+    reqDigest = reqRec.digest;
+  } catch (err) {
+    return { ok: false };
+  }
+  let auth;
+  try {
+    auth = resolveAuthoritativeAttempt(reqObj, txnDir);
+  } catch (err) {
+    return { ok: false };
+  }
+  let activationObj = null;
+  try {
+    const classified = classifyDurableRead(activationPathFor(txnDir, auth.attemptId), { parse: true });
+    // M7 GREEN correction round 2, R5: a durably in-flight (nlink=2) write
+    // is neither genuine absence nor a valid activation -- must never be
+    // silently folded into ABSENT (which a general caller reads as
+    // "safe to treat as no activation"). Only genuine DURABLE_ABSENT falls
+    // through to the {ok:true, activation:null} return below.
+    if (classified.state === DURABLE_PENDING) return { ok: false };
+    if (classified.state === DURABLE_PRESENT) {
+      assertClosedShape(classified.obj, ACTIVATION_V1_FIELDS);
+      const a = classified.obj;
+      // Stage C: full DURABLE_PRESENT correlation against the request --
+      // request_id/attempt_id alone (the pre-Stage-C predicate) missed
+      // request_digest, lease_epoch, target_role_profile_digest, and the
+      // routing_policy version/digest pair entirely.
+      if (
+        a.request_id !== reqObj.request_id || a.request_digest !== reqDigest
+        || a.attempt_id !== auth.attemptId || a.lease_epoch !== auth.leaseEpoch
+        || a.target_role_profile_digest !== reqObj.target_role_profile_digest
+        || a.routing_policy_version !== reqObj.routing_policy_version
+        || a.routing_policy_digest !== reqObj.routing_policy_digest
+      ) {
+        // R5 lineage: present but DECORRELATED -- a real, distinct error,
+        // never silently folded into ABSENT either.
+        return { ok: false };
+      }
+      // Stage C: canonical time checks -- created_at never in the future,
+      // never later than its own expiry, and activation_liveness_expiry
+      // must be EXACTLY the same deterministic deadline the write side
+      // computes (activationLivenessDeadline), never merely "some future
+      // timestamp" of the record's own choosing.
+      const createdAtMs = isoToMs(a.created_at);
+      const expiryMs = isoToMs(a.activation_liveness_expiry);
+      const nowMs = currentClockMs();
+      if (
+        createdAtMs > nowMs || createdAtMs > expiryMs
+        || a.activation_liveness_expiry !== activationLivenessDeadline(reqObj)
+        || nowMs >= expiryMs
+      ) {
+        // R5 lineage: present, correlated, but EXPIRED (or a canonical-time
+        // violation) -- never treated as still valid, never folded into
+        // ABSENT.
+        return { ok: false };
+      }
+      // Stage C: driver/native-field coherence -- never infer or repair
+      // either field. Lazy require mirrors this file's own established
+      // circular-dependency-safe pattern (runtime-role-lifecycle.cjs itself
+      // requires this file); only reached once a record is otherwise fully
+      // correlated and live.
+      if (a.selected_driver === 'claude-agent') {
+        const rll = require('./runtime-role-lifecycle.cjs');
+        if (!rll.isHexActionId(a.native_spawn_action_id) || a.native_target_binding_id !== null) return { ok: false };
+      } else if (a.native_spawn_action_id !== null || a.native_target_binding_id !== null) {
+        return { ok: false };
+      }
+      activationObj = a;
+    }
+  } catch (err) {
+    // M7 GREEN section 4.8: a genuinely malformed/unsafe durable activation
+    // record (shape-invalid, symlinked, foreign-owner, etc. -- anything
+    // assertClosedShape/classifyDurableRead itself rejects) is an
+    // INDETERMINATE resolution, never silently folded into "no activation
+    // yet" (ok:true, activation:null) -- the caller must block, never
+    // silently fall through to treating this request as if no claude-agent
+    // activation could ever exist for it.
+    return { ok: false };
+  }
+  // M7 completeness Part C follow-up (retirement wiring, user Block 4 point
+  // 4): also surfaces targetRole/worktreeId/planDigest -- reqObj is already
+  // fully parsed above, so this is a non-invasive extension (no new read),
+  // and cmdCancel's own post-success retirement lookup needs exactly these
+  // fields to resolve the exact-scope ClaudeOneShotBinding it must retire.
+  return {
+    ok: true, requestId: reqObj.request_id, attemptId: auth.attemptId, leaseEpoch: auth.leaseEpoch,
+    activation: activationObj, targetRole: reqObj.target_role, worktreeId: reqObj.subject_worktree_id,
+    planDigest: reqObj.plan_digest,
+  };
+}
+
+/**
+ * M7 completeness Part C follow-up (2026-08-09, PLAN.md §15d, user Block 3
+ * point 2): scans this plan-root's transaction tree for every LIVE
+ * `activation/v1` record with `selected_driver==='claude-agent'` whose
+ * parent request's `target_role` matches `role` -- the read-side half of
+ * "recognize a CURRENT claude-agent ActivationAction" for
+ * agent-spawn-execution-gate.js. Never returns on the first match: collects
+ * EVERY genuinely live candidate so the caller applies the SAME "zero or
+ * more-than-one -> non-owning/ambiguous, never guess" discipline this
+ * codebase's other ownership scans already use (mirrors
+ * findOwningRoleLifecycleCandidate's own convention). A candidate is "live"
+ * only when its own `activation_liveness_expiry` has not yet passed; an
+ * absent/malformed/shape-invalid request or activation is silently skipped
+ * (never a candidate), never thrown -- a scan over many transactions must
+ * not abort on one unrelated malformed entry. `activation.request_id` is
+ * additionally cross-checked against the transaction directory it was found
+ * under (path<->field correlation, mirroring this file's own established
+ * discipline elsewhere) before ever being trusted.
+ *
+ * PRODUCTION REALITY (disclosed, not hidden): `cmdDispatch` above is
+ * WP2-scoped -- its driver selection is unconditionally `noop`, so no
+ * `activation/v1` record with `selected_driver:'claude-agent'` is ever
+ * produced today. This function can therefore only ever return `[]` in
+ * current production, by construction -- see
+ * runtime-role-lifecycle.cjs's own ClaudeAgentSpawnReservation/v1 section
+ * header for the full disclosure. Built completely and correctly against
+ * the real, already-frozen `activation/v1` schema regardless, ready for a
+ * future WP3 dispatch-side producer.
+ * @param {string} coordRoot
+ * @param {string} repoId
+ * @param {string} waveSlug
+ * @param {string} planDigest
+ * @param {string} role
+ * @returns {Array<{activation:object,requestId:string}>}
+ */
+function findLiveClaudeAgentActivations(coordRoot, repoId, waveSlug, planDigest, role) {
+  const planRoot = planRootPath(coordRoot, repoId, waveSlug, planDigest);
+  const txnsDir = path.join(planRoot, 'transactions');
+  let txnEntries;
+  try {
+    txnEntries = fs.readdirSync(txnsDir, { withFileTypes: true });
+  } catch (err) {
+    return [];
+  }
+  const nowMs = currentClockMs();
+  const found = [];
+  for (const txnEntry of txnEntries) {
+    if (!txnEntry.isDirectory() || !isHexId(txnEntry.name)) continue;
+    const requestId = txnEntry.name;
+    const txnDir = path.join(txnsDir, requestId);
+    let reqObj;
+    try {
+      reqObj = readCanonicalRequestRecord(path.join(txnDir, 'request.json'), requestId, {}).obj;
+    } catch (err) {
+      continue; // absent/malformed/foreign request -- never a candidate.
+    }
+    if (reqObj.target_role !== role) continue;
+    const activationsDir = path.join(txnDir, 'activations');
+    let activationEntries;
+    try {
+      activationEntries = fs.readdirSync(activationsDir, { withFileTypes: true });
+    } catch (err) {
+      continue;
+    }
+    for (const activationEntry of activationEntries) {
+      if (!activationEntry.isFile() || !activationEntry.name.endsWith('.json')) continue;
+      let activationObj;
+      try {
+        const classified = classifyDurableRead(path.join(activationsDir, activationEntry.name), { parse: true });
+        if (classified.state !== DURABLE_PRESENT) continue;
+        assertClosedShape(classified.obj, ACTIVATION_V1_FIELDS);
+        activationObj = classified.obj;
+      } catch (err) {
+        continue; // malformed/non-durable -- never a candidate.
+      }
+      if (activationObj.selected_driver !== 'claude-agent') continue;
+      if (activationObj.request_id !== requestId) continue;
+      // activation_liveness_expiry's own canonical-ISO-UTC shape is already
+      // proven by assertClosedShape(activationObj, ACTIVATION_V1_FIELDS)
+      // above -- this is a plain liveness comparison, not a second shape check.
+      if (isoToMs(activationObj.activation_liveness_expiry) <= nowMs) continue;
+      found.push({ activation: activationObj, requestId });
+    }
+  }
+  return found;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // `record-delivery` (PLAN.md ~L763, ~L870-881) -- publish the branch-owned
@@ -7456,7 +12014,7 @@ const BLOCKED_REASON_ENUM = [
   'CONTENT_TOO_LARGE', 'INSUFFICIENT_CONTEXT', 'UNSUPPORTED_REQUEST', 'CONSULTATION_FAILED', 'POLICY_DENIED',
 ];
 
-function cmdPublishResult(flags) {
+function cmdPublishResult(flags, grantContext) {
   requireFlags(flags, ['coordination-root', 'request', 'claim']);
   const hasContent = 'content' in flags;
   const hasBlockedReason = 'blocked-reason' in flags;
@@ -7589,7 +12147,18 @@ function cmdPublishResult(flags) {
       subject_worktree_id: reqObj.subject_worktree_id,
       subject_head: reqObj.subject_head,
       subject_scope_digest: reqObj.subject_scope_digest,
-      consultation_dependencies: [],
+      consultation_dependencies: (
+        grantContext && grantContext.hostBridge === true
+        && Array.isArray(grantContext.consultationDependencies)
+      ) ? grantContext.consultationDependencies.map((dep) => Object.assign({}, dep)) : [],
+      // Host-derived only.  CLI/model input has no flag/field capable of
+      // supplying this dependency; the retained bridge passes it separately
+      // after publishing and validating pattern-evidence/v1.
+      pattern_evidence_dependency: (
+        grantContext && grantContext.hostBridge === true
+        && grantContext.patternEvidenceDependency !== undefined
+      ) ? (grantContext.patternEvidenceDependency === null
+        ? null : Object.assign({}, grantContext.patternEvidenceDependency)) : null,
       producer_worktree_id: computeWorktreeId(coordRoot),
       producer_head: computeSubjectHead(coordRoot),
       created_at: now,
@@ -7601,6 +12170,7 @@ function cmdPublishResult(flags) {
     // own "fail closed" convention).
     assertClosedShape(resultObj, RESULT_V2_FIELDS);
     assertResultContentXor(resultObj);
+    validatePatternEvidenceForResult(resultObj.pattern_evidence_dependency, resultObj, reqRec, txnDir, planRootFromArtifact(coordRoot, requestPath));
 
     // Section 4: publish only after the final inside-lock authority check above --
     // a takeover that won before lock acquisition was already rejected there, so
@@ -7644,8 +12214,11 @@ COMMANDS['publish-result'] = cmdPublishResult;
 // ─────────────────────────────────────────────────────────────────────────────
 // WP3 item C2 (R7 stabilization): RuntimeTurnEnvelope/v1 -- single canonical
 // source (PLAN.md ~L932: "runtimeTurnEnvelopeSchema(...) in
-// runtime-consultation.cjs is the single object used by the local validator
-// and deep-equal turn/start.outputSchema"). Previously kept local to
+// runtime-consultation.cjs remains the single canonical local schema used by
+// the local validator. Codex turn/start receives only the mechanically
+// derived transport projection defined below; the canonical object is never
+// sent directly because the pinned backend rejects its root `oneOf`.
+// Previously kept local to
 // runtime-bridge-codex.cjs as a deliberate, disclosed scope-boundary decision
 // (that file's own C2 history/evidence record); hoisted here per PLAN's own
 // literal naming -- runtime-bridge-codex.cjs now imports this surface under
@@ -7658,6 +12231,147 @@ const RUNTIME_TURN_ENVELOPE_BLOCKED_REASONS = Object.freeze([
 const RUNTIME_TURN_ENVELOPE_RESULT_KIND_PATTERN = /^[A-Z][A-Z0-9_-]{0,63}$/;
 const RUNTIME_TURN_ENVELOPE_MAX_CONTENT_BYTES = 65536;
 const RUNTIME_TURN_ENVELOPE_MAX_QUESTION_BYTES = 8192;
+const RUNTIME_TURN_ENVELOPE_MAX_LIBRARY_NAME_BYTES = 256;
+const CONTEXT7_LIBRARY_ID_RE = /^\/[A-Za-z0-9._~-]+\/[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)?$/;
+
+function isCanonicalContext7LibraryId(value) {
+  return typeof value === 'string' && value.length <= 512 && CONTEXT7_LIBRARY_ID_RE.test(value);
+}
+
+const APPROVED_CONTEXT7_DIRECTIVE_MARKER = 'APPROVED_CONTEXT7_LIBRARY_ID';
+const APPROVED_CONTEXT7_DIRECTIVE_LINE_RE = /^APPROVED_CONTEXT7_LIBRARY_ID: (.+)$/;
+
+/**
+ * M6/M7 terminal functional closure, point A: the single request-scoped
+ * Context7 evidence decision for a root-source root. The exact line
+ * `APPROVED_CONTEXT7_LIBRARY_ID: /owner/repo[/version]` contained in a
+ * request's own `question` bytes IS the decision -- bound to that request's
+ * own digest, never a new schema field/CLI flag/routing mapping/durable
+ * record. Absence of the marker anywhere in the text means no directive
+ * (caller policy: none). Any other shape referencing the marker --
+ * duplicated, or present but not exactly the canonical single line -- fails
+ * closed (thrown), never silently downgraded to "no directive".
+ * @param {string} questionText
+ * @returns {{present:false,libraryId:null}|{present:true,libraryId:string}}
+ */
+function parseApprovedContext7Directive(questionText) {
+  if (typeof questionText !== 'string') {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'directive question text is invalid');
+  }
+  const candidateLines = questionText.split('\n').filter((line) => line.includes(APPROVED_CONTEXT7_DIRECTIVE_MARKER));
+  if (candidateLines.length === 0) return { present: false, libraryId: null };
+  if (candidateLines.length > 1) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'APPROVED_CONTEXT7_LIBRARY_ID directive is duplicated');
+  }
+  const match = APPROVED_CONTEXT7_DIRECTIVE_LINE_RE.exec(candidateLines[0]);
+  if (!match || !isCanonicalContext7LibraryId(match[1])) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'APPROVED_CONTEXT7_LIBRARY_ID directive is malformed or not canonical');
+  }
+  return { present: true, libraryId: match[1] };
+}
+
+const PREFERRED_CONTEXT7_DIRECTIVE_MARKER = 'PREFERRED_CONTEXT7_LIBRARY_ID';
+const PREFERRED_CONTEXT7_DIRECTIVE_LINE_RE = /^PREFERRED_CONTEXT7_LIBRARY_ID: (.+)$/;
+
+/**
+ * WAVE1-FUNCTIONAL-CLOSEOUT-REALISTIC-20260822: the `context7-preferred`
+ * counterpart to parseApprovedContext7Directive above -- identical grammar
+ * and identical fail-closed-on-duplicate/malformed rules, distinguished only
+ * by its own marker so a request's question can never be ambiguous between
+ * "required" and "preferred" evidence authority (resolveRootEvidenceAuthority
+ * rejects a question carrying both).
+ * @param {string} questionText
+ * @returns {{present:false,libraryId:null}|{present:true,libraryId:string}}
+ */
+function parsePreferredContext7Directive(questionText) {
+  if (typeof questionText !== 'string') {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'directive question text is invalid');
+  }
+  const candidateLines = questionText.split('\n').filter((line) => line.includes(PREFERRED_CONTEXT7_DIRECTIVE_MARKER));
+  if (candidateLines.length === 0) return { present: false, libraryId: null };
+  if (candidateLines.length > 1) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'PREFERRED_CONTEXT7_LIBRARY_ID directive is duplicated');
+  }
+  const match = PREFERRED_CONTEXT7_DIRECTIVE_LINE_RE.exec(candidateLines[0]);
+  if (!match || !isCanonicalContext7LibraryId(match[1])) {
+    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'PREFERRED_CONTEXT7_LIBRARY_ID directive is malformed or not canonical');
+  }
+  return { present: true, libraryId: match[1] };
+}
+
+function patternGapExecutionAllowed(executionContext) {
+  return !!(
+    executionContext && typeof executionContext === 'object' && !Array.isArray(executionContext)
+    && executionContext.executingRole === 'context-provider'
+    && executionContext.patternGapAllowed === true
+  );
+}
+
+const TURN_KIND_LOCK_ENUM = Object.freeze(['consult-only', 'gap-only', 'terminal-only']);
+
+/**
+ * M6/M7 terminal functional closure, point D: deterministic turn-kind
+ * control. `executionContext.turnKindLock`, when one of the closed enum
+ * values below, is the SOLE host-derived authority over which
+ * RuntimeTurnEnvelope `kind` branch a turn may produce -- never a prompt
+ * instruction. `null`/absent preserves the pre-existing unrestricted
+ * behavior (terminal always available; consult/gap available per
+ * allowedChildRoles/patternGapExecutionAllowed exactly as before).
+ */
+function requiredTurnKind(executionContext) {
+  if (!executionContext || typeof executionContext !== 'object' || Array.isArray(executionContext)) return null;
+  const lock = executionContext.turnKindLock;
+  return TURN_KIND_LOCK_ENUM.includes(lock) ? lock : null;
+}
+
+/** Point D: byte-exact consult.question the reporting architect's forced consult-intent must carry. */
+function requiredConsultQuestionFor(executionContext) {
+  if (!executionContext || typeof executionContext !== 'object' || Array.isArray(executionContext)) return null;
+  const value = executionContext.requiredConsultQuestion;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/** Point D/E: exact approved Context7 library_id the context-provider's forced pattern-gap must carry. */
+function requiredGapLibraryIdFor(executionContext) {
+  if (!executionContext || typeof executionContext !== 'object' || Array.isArray(executionContext)) return null;
+  const value = executionContext.requiredGapLibraryId;
+  return isCanonicalContext7LibraryId(value) ? value : null;
+}
+
+/**
+ * Single source of truth for how many `oneOf` branches
+ * runtimeTurnEnvelopeSchema builds for a given (allowedChildRoles,
+ * executionContext) pair -- reused unchanged as the Codex-projection drift
+ * detector in codexStructuredRuntimeTurnEnvelopeSchema so the two functions
+ * can never silently disagree.
+ */
+function expectedTurnEnvelopeBranchCount(allowedChildRoles, executionContext) {
+  const lock = requiredTurnKind(executionContext);
+  let count = 0;
+  if (lock === null || lock === 'terminal-only') count += 1;
+  if ((lock === null || lock === 'consult-only') && Array.isArray(allowedChildRoles) && allowedChildRoles.length > 0) count += 1;
+  if ((lock === null || lock === 'gap-only') && patternGapExecutionAllowed(executionContext)) count += 1;
+  return count;
+}
+
+function validatePatternGap(gap) {
+  if (!hasExactKeys(gap, ['library_id', 'library_name', 'provider', 'query'])) {
+    return { ok: false, reason: 'pattern-gap-extra-or-missing-key' };
+  }
+  if (gap.provider !== 'context7') return { ok: false, reason: 'pattern-gap-provider-invalid' };
+  if (
+    typeof gap.library_name !== 'string' || gap.library_name.length === 0
+    || Buffer.byteLength(gap.library_name, 'utf8') > RUNTIME_TURN_ENVELOPE_MAX_LIBRARY_NAME_BYTES
+  ) return { ok: false, reason: 'pattern-gap-library-name-invalid' };
+  if (gap.library_id !== null && !isCanonicalContext7LibraryId(gap.library_id)) {
+    return { ok: false, reason: 'pattern-gap-library-id-invalid' };
+  }
+  if (
+    typeof gap.query !== 'string' || gap.query.length === 0
+    || Buffer.byteLength(gap.query, 'utf8') > RUNTIME_TURN_ENVELOPE_MAX_QUESTION_BYTES
+  ) return { ok: false, reason: 'pattern-gap-query-invalid' };
+  return { ok: true };
+}
 
 // Local, logic-identical copy of runtime-role-lifecycle.cjs's own
 // `hasExactKeys` -- deliberately NOT imported from there: that module itself
@@ -7672,16 +12386,18 @@ function hasExactKeys(obj, sortedExpectedKeys) {
 }
 
 /**
- * Builds the exact `outputSchema` JSON Schema object sent as `turn/start`'s
- * `outputSchema` field, and independently used as the local response
- * validator (PLAN.md ~L930, ~L1018-1071 for the literal shape). When
+ * Builds the canonical local RuntimeTurnEnvelope/v1 JSON Schema authority
+ * (PLAN.md Fourteenth correction). It is the source from which the Codex
+ * transport projection is derived and is independently mirrored by the
+ * local response validator below; it is not sent directly as outputSchema.
+ * When
  * `allowedChildRoles` is empty (leaf role or exhausted consult budget), the
  * entire consult `oneOf` branch is omitted (~L1018 "for a leaf or exhausted
  * intent budget, omit the entire consult oneOf branch").
  * @param {string} expectedResultKind
  * @param {string[]} allowedChildRoles
  */
-function runtimeTurnEnvelopeSchema(expectedResultKind, allowedChildRoles) {
+function runtimeTurnEnvelopeSchema(expectedResultKind, allowedChildRoles, executionContext) {
   const terminalBranch = {
     type: 'object',
     additionalProperties: false,
@@ -7717,10 +12433,19 @@ function runtimeTurnEnvelopeSchema(expectedResultKind, allowedChildRoles) {
       },
     },
   };
-  if (!Array.isArray(allowedChildRoles) || allowedChildRoles.length === 0) {
-    return { oneOf: [terminalBranch] };
+  // M6/M7 terminal functional closure, point D: `turnKindLock` (null unless
+  // an authorized caller sets it) is the sole host-derived gate over which
+  // branches are even constructible -- never a prompt instruction. `null`
+  // preserves the exact pre-existing branch set (terminal always available;
+  // consult/gap available per allowedChildRoles/patternGapExecutionAllowed).
+  const lock = requiredTurnKind(executionContext);
+  const branches = [];
+  if (lock === null || lock === 'terminal-only') {
+    branches.push(terminalBranch);
   }
-  const consultBranch = {
+  if ((lock === null || lock === 'consult-only') && Array.isArray(allowedChildRoles) && allowedChildRoles.length > 0) {
+    const requiredQuestion = requiredConsultQuestionFor(executionContext);
+    const consultBranch = {
     type: 'object',
     additionalProperties: false,
     required: ['schema', 'kind', 'consult'],
@@ -7733,13 +12458,230 @@ function runtimeTurnEnvelopeSchema(expectedResultKind, allowedChildRoles) {
         required: ['target_role', 'question', 'expected_result_kind'],
         properties: {
           target_role: { enum: allowedChildRoles.slice() },
-          question: { type: 'string', minLength: 1, maxLength: RUNTIME_TURN_ENVELOPE_MAX_QUESTION_BYTES },
+          // Point D(c): under a forced consult, question is pinned via enum
+          // to the byte-exact required question (never freeform), so the
+          // consulted question can never diverge from what the parent itself
+          // received -- including any embedded APPROVED_CONTEXT7_LIBRARY_ID line.
+          question: requiredQuestion !== null
+            ? { enum: [requiredQuestion] }
+            : { type: 'string', minLength: 1, maxLength: RUNTIME_TURN_ENVELOPE_MAX_QUESTION_BYTES },
           expected_result_kind: { type: 'string', pattern: '^[A-Z][A-Z0-9_-]{0,63}$' },
         },
       },
     },
+    };
+    branches.push(consultBranch);
+  }
+  if ((lock === null || lock === 'gap-only') && patternGapExecutionAllowed(executionContext)) {
+    const requiredLibraryId = requiredGapLibraryIdFor(executionContext);
+    branches.push({
+      type: 'object',
+      additionalProperties: false,
+      required: ['schema', 'kind', 'gap'],
+      properties: {
+        schema: { enum: ['coordination/runtime-turn-envelope/v1'] },
+        kind: { enum: ['pattern-gap'] },
+        gap: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['provider', 'library_name', 'library_id', 'query'],
+          properties: {
+            provider: { enum: ['context7'] },
+            library_name: { type: 'string', minLength: 1, maxLength: RUNTIME_TURN_ENVELOPE_MAX_LIBRARY_NAME_BYTES },
+            // Point D(e)/E: when an approved library id is already known,
+            // library_id is pinned via enum to that exact id (excluding
+            // null), so a search-branch gap can never be produced -- a hard
+            // zero-search guarantee, not a hopeful prompt hint.
+            library_id: requiredLibraryId !== null
+              ? { enum: [requiredLibraryId] }
+              : {
+                anyOf: [
+                  { type: 'null' },
+                  { type: 'string', pattern: '^\\/[A-Za-z0-9._~-]+\\/[A-Za-z0-9._~-]+(?:\\/[A-Za-z0-9._~-]+)?$' },
+                ],
+              },
+            query: { type: 'string', minLength: 1, maxLength: RUNTIME_TURN_ENVELOPE_MAX_QUESTION_BYTES },
+          },
+        },
+      },
+    });
+  }
+  if (branches.length === 0) throw new Error('runtime-turn-envelope-no-branches-available');
+  return { oneOf: branches };
+}
+
+/**
+ * Builds the Codex Structured Outputs transport projection for the canonical
+ * RuntimeTurnEnvelope/v1 schema.  The canonical schema above remains the
+ * local authority; this function changes only the two union keywords the
+ * pinned Codex backend cannot accept and wraps the candidate under the one
+ * exact transport key `envelope`.
+ *
+ * `purpose === 'bootstrap-ready'` deliberately uses a narrower schema whose
+ * accepted set is exactly ANSWERED/role-bootstrap/READY.  It is not derived
+ * by widening or post-processing the normal schema.
+ *
+ * Any unexpected canonical-schema shape throws before a wire write.  That
+ * makes canonical drift a fail-closed projection error rather than an excuse
+ * to send a relaxed or caller-provided schema.
+ *
+ * @param {string} expectedResultKind
+ * @param {string[]} allowedChildRoles
+ * @param {'normal'|'bootstrap-ready'} [purpose]
+ * @returns {object}
+ */
+function codexStructuredRuntimeTurnEnvelopeSchema(expectedResultKind, allowedChildRoles, purpose, executionContext) {
+  const selectedPurpose = purpose === undefined ? 'normal' : purpose;
+  if (selectedPurpose !== 'normal' && selectedPurpose !== 'bootstrap-ready') {
+    throw new Error('codex-turn-envelope-purpose-invalid');
+  }
+  if (selectedPurpose === 'bootstrap-ready') {
+    if (expectedResultKind !== 'role-bootstrap' || !Array.isArray(allowedChildRoles) || allowedChildRoles.length !== 0) {
+      throw new Error('codex-bootstrap-schema-scope-invalid');
+    }
+    return {
+      type: 'object',
+      additionalProperties: false,
+      required: ['envelope'],
+      properties: {
+        envelope: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['schema', 'kind', 'result'],
+          properties: {
+            schema: { enum: ['coordination/runtime-turn-envelope/v1'] },
+            kind: { enum: ['terminal-result'] },
+            result: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['schema', 'status', 'result_kind', 'content'],
+              properties: {
+                schema: { enum: ['coordination/result-envelope/v1'] },
+                status: { enum: ['ANSWERED'] },
+                result_kind: { enum: ['role-bootstrap'] },
+                content: { enum: ['READY'] },
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  const canonical = runtimeTurnEnvelopeSchema(expectedResultKind, allowedChildRoles, executionContext);
+  if (!hasExactKeys(canonical, ['oneOf']) || !Array.isArray(canonical.oneOf)) {
+    throw new Error('canonical-turn-envelope-root-drift');
+  }
+  // M6/M7 terminal functional closure, point D: expectedTurnEnvelopeBranchCount
+  // is the SAME formula runtimeTurnEnvelopeSchema itself used to decide which
+  // branches to build (turnKindLock-aware), so this drift check can never
+  // silently diverge from the canonical builder. Branches are looked up by
+  // their own `kind` enum value rather than a fixed array position: under a
+  // lock, terminal-result may legitimately be ABSENT (position 0 is no
+  // longer always the terminal branch).
+  const expectedBranchCount = expectedTurnEnvelopeBranchCount(allowedChildRoles, executionContext);
+  if (canonical.oneOf.length !== expectedBranchCount || canonical.oneOf.length === 0) {
+    throw new Error('canonical-turn-envelope-branch-count-drift');
+  }
+  const branches = JSON.parse(JSON.stringify(canonical.oneOf));
+  const branchKind = (branch) => {
+    const kindEnum = branch && branch.properties && branch.properties.kind && branch.properties.kind.enum;
+    return Array.isArray(kindEnum) && kindEnum.length === 1 ? kindEnum[0] : null;
   };
-  return { oneOf: [terminalBranch, consultBranch] };
+  const seenKinds = new Set();
+  for (const branch of branches) {
+    const kind = branchKind(branch);
+    if (kind === null || seenKinds.has(kind)) throw new Error('canonical-turn-envelope-branch-kind-drift');
+    seenKinds.add(kind);
+    if (kind === 'terminal-result') {
+      const resultUnion = branch.properties.result;
+      if (
+        !resultUnion || !hasExactKeys(resultUnion, ['oneOf'])
+        || !Array.isArray(resultUnion.oneOf) || resultUnion.oneOf.length !== 2
+      ) {
+        throw new Error('canonical-turn-envelope-terminal-union-drift');
+      }
+      resultUnion.anyOf = resultUnion.oneOf;
+      delete resultUnion.oneOf;
+    } else if (kind === 'consult-intent') {
+      // Sequence 34 (WAVE1-FUNCTIONAL-CLOSEOUT-REALISTIC-20260822): a
+      // Codex Structured Outputs transport limitation, not a canonical-
+      // schema or authority change. The pinned Codex backend rejects any
+      // JSON Schema enum/const string literal containing a control
+      // character (observed live: sequence 33's real mint-8 multiline
+      // required question -- invalid_json_schema, "\n is not allowed in
+      // string literals for structured outputs (strict=true)"). The
+      // canonical local schema/validator above and
+      // validateRuntimeTurnEnvelope's own byte-exact
+      // consult-question-not-byte-identical-to-required check are both
+      // completely unchanged: this only swaps the WIRE shape of an
+      // already-pinned question, from the exact enum literal to the
+      // existing bounded free-string shape, when (and only when) that
+      // exact literal is itself unrepresentable to the backend. A safe
+      // single-line required question is left exactly enum-pinned, so
+      // this narrows nothing for the common case.
+      const consultProps = branch.properties && branch.properties.consult && branch.properties.consult.properties;
+      if (
+        !consultProps || !hasExactKeys(branch.properties.consult, ['additionalProperties', 'properties', 'required', 'type'])
+        || !hasExactKeys(consultProps, ['expected_result_kind', 'question', 'target_role'])
+      ) {
+        throw new Error('canonical-turn-envelope-consult-branch-drift');
+      }
+      const questionSchema = consultProps.question;
+      if (questionSchema && hasExactKeys(questionSchema, ['enum'])) {
+        if (!Array.isArray(questionSchema.enum) || questionSchema.enum.length !== 1 || typeof questionSchema.enum[0] !== 'string') {
+          throw new Error('canonical-turn-envelope-consult-question-enum-drift');
+        }
+        if (/[\r\n]/.test(questionSchema.enum[0])) {
+          consultProps.question = { type: 'string', minLength: 1, maxLength: RUNTIME_TURN_ENVELOPE_MAX_QUESTION_BYTES };
+        }
+      } else if (!questionSchema || !hasExactKeys(questionSchema, ['maxLength', 'minLength', 'type'])) {
+        throw new Error('canonical-turn-envelope-consult-question-shape-drift');
+      }
+    } else if (kind !== 'pattern-gap') {
+      throw new Error('canonical-turn-envelope-branch-kind-drift');
+    }
+  }
+  const projected = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['envelope'],
+    properties: { envelope: { anyOf: branches } },
+  };
+  const containsOneOf = (value) => {
+    if (!value || typeof value !== 'object') return false;
+    if (Object.prototype.hasOwnProperty.call(value, 'oneOf')) return true;
+    if (Array.isArray(value)) return value.some(containsOneOf);
+    return Object.values(value).some(containsOneOf);
+  };
+  if (containsOneOf(projected)) throw new Error('codex-turn-envelope-oneof-remains');
+  return projected;
+}
+
+/**
+ * Exact-key unwrap of the Codex transport DTO followed by the unchanged
+ * canonical local validator.  No bare-envelope compatibility path,
+ * coercion, normalization, or defaulting exists here.
+ *
+ * @returns {{ok:true,envelope:object}|{ok:false,reason:string}}
+ */
+function unwrapAndValidateCodexStructuredRuntimeTurnEnvelope(value, expectedResultKind, allowedChildRoles, purpose, executionContext) {
+  const selectedPurpose = purpose === undefined ? 'normal' : purpose;
+  if (selectedPurpose !== 'normal' && selectedPurpose !== 'bootstrap-ready') {
+    return { ok: false, reason: 'transport-purpose-invalid' };
+  }
+  if (!hasExactKeys(value, ['envelope'])) return { ok: false, reason: 'transport-wrapper-extra-or-missing-key' };
+  const candidate = value.envelope;
+  const local = validateRuntimeTurnEnvelope(candidate, expectedResultKind, allowedChildRoles, executionContext);
+  if (!local.ok) return { ok: false, reason: 'canonical-envelope-invalid:' + local.reason };
+  if (
+    selectedPurpose === 'bootstrap-ready'
+    && (expectedResultKind !== 'role-bootstrap'
+      || !Array.isArray(allowedChildRoles) || allowedChildRoles.length !== 0)
+  ) {
+    return { ok: false, reason: 'bootstrap-ready-scope-invalid' };
+  }
+  return { ok: true, envelope: candidate };
 }
 
 /**
@@ -7757,10 +12699,16 @@ function runtimeTurnEnvelopeSchema(expectedResultKind, allowedChildRoles) {
  * @param {string[]} allowedChildRoles
  * @returns {{ok:true}|{ok:false,reason:string}}
  */
-function validateRuntimeTurnEnvelope(value, expectedResultKind, allowedChildRoles) {
+function validateRuntimeTurnEnvelope(value, expectedResultKind, allowedChildRoles, executionContext) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, reason: 'not-an-object' };
   if (value.schema !== 'coordination/runtime-turn-envelope/v1') return { ok: false, reason: 'wrong-envelope-schema' };
+  // Point D: turnKindLock is re-checked here too (not only inside the
+  // Codex-facing schema) so a LOCALLY constructed envelope (never routed
+  // through the Codex structured-output projection) is held to the exact
+  // same host-derived turn-kind authority.
+  const lock = requiredTurnKind(executionContext);
   if (value.kind === 'terminal-result') {
+    if (lock === 'consult-only' || lock === 'gap-only') return { ok: false, reason: 'terminal-result-forbidden-by-turn-kind-lock' };
     if (!hasExactKeys(value, ['kind', 'result', 'schema'])) return { ok: false, reason: 'terminal-envelope-extra-or-missing-key' };
     const r = value.result;
     if (!r || typeof r !== 'object' || Array.isArray(r)) return { ok: false, reason: 'result-not-an-object' };
@@ -7781,6 +12729,7 @@ function validateRuntimeTurnEnvelope(value, expectedResultKind, allowedChildRole
     return { ok: false, reason: 'result-status-not-answered-or-blocked' };
   }
   if (value.kind === 'consult-intent') {
+    if (lock === 'gap-only' || lock === 'terminal-only') return { ok: false, reason: 'consult-intent-forbidden-by-turn-kind-lock' };
     if (!Array.isArray(allowedChildRoles) || allowedChildRoles.length === 0) return { ok: false, reason: 'consult-intent-forbidden-leaf-or-exhausted-budget' };
     if (!hasExactKeys(value, ['consult', 'kind', 'schema'])) return { ok: false, reason: 'consult-envelope-extra-or-missing-key' };
     const c = value.consult;
@@ -7788,27 +12737,111 @@ function validateRuntimeTurnEnvelope(value, expectedResultKind, allowedChildRole
     if (!hasExactKeys(c, ['expected_result_kind', 'question', 'target_role'])) return { ok: false, reason: 'consult-extra-or-missing-key' };
     if (!allowedChildRoles.includes(c.target_role)) return { ok: false, reason: 'consult-target-role-not-allowed' };
     if (typeof c.question !== 'string' || c.question.length === 0 || Buffer.byteLength(c.question, 'utf8') > RUNTIME_TURN_ENVELOPE_MAX_QUESTION_BYTES) return { ok: false, reason: 'consult-question-invalid' };
+    const requiredQuestion = requiredConsultQuestionFor(executionContext);
+    if (requiredQuestion !== null && c.question !== requiredQuestion) return { ok: false, reason: 'consult-question-not-byte-identical-to-required' };
     if (typeof c.expected_result_kind !== 'string' || !RUNTIME_TURN_ENVELOPE_RESULT_KIND_PATTERN.test(c.expected_result_kind)) return { ok: false, reason: 'consult-expected-result-kind-invalid' };
+    return { ok: true };
+  }
+  if (value.kind === 'pattern-gap') {
+    if (lock === 'consult-only' || lock === 'terminal-only') return { ok: false, reason: 'pattern-gap-forbidden-by-turn-kind-lock' };
+    if (!patternGapExecutionAllowed(executionContext)) {
+      return { ok: false, reason: 'pattern-gap-forbidden-for-execution-context' };
+    }
+    if (!hasExactKeys(value, ['gap', 'kind', 'schema'])) return { ok: false, reason: 'pattern-gap-envelope-extra-or-missing-key' };
+    const gapResult = validatePatternGap(value.gap);
+    if (!gapResult.ok) return gapResult;
+    const requiredLibraryId = requiredGapLibraryIdFor(executionContext);
+    if (requiredLibraryId !== null && value.gap.library_id !== requiredLibraryId) {
+      return { ok: false, reason: 'pattern-gap-library-id-not-approved' };
+    }
     return { ok: true };
   }
   return { ok: false, reason: 'unknown-envelope-kind' };
 }
 
-if (require.main === module) {
-  main();
-}
-
 module.exports = {
   canonicalJSONStringify, sha256Buffer, sha256String, sha256File, writeAllSync, classifyDurableRead,
+  // NO-GO Correction C: the ONE canonical ack/cancel basename source,
+  // reused by runtime-role-lifecycle.cjs's retirement-record validator to
+  // reject a non-canonical terminal_ref (never a second, separately
+  // hardcoded basename literal). acceptedResultPathFor added for M7 RED 17
+  // (M7-ONESHOT-TERMINAL-CUT): mintRoleCommandGrant's own one-shot-family
+  // terminal check reuses this SAME basename source, never a second literal.
+  // resultPathFor added for M7 defect 6: the one-shot family's own
+  // AUTHORITATIVE terminal is its result (results/<attempt>.json), never
+  // accepted-result.json (section 8.5) -- exported so
+  // runtime-role-lifecycle.cjs's own mintRoleCommandGrant/consultation.cjs's
+  // own consume-time recheck share this SAME path source, never a second
+  // hardcoded literal.
+  ackPathFor, cancelPathFor, acceptedResultPathFor, resultPathFor,
   isValidLockTokenFor, acquireLock, releaseLock, listResultFiles, findResultWithStatus, reconcileOneNoClobberTemp,
   // WP3: reused by runtime-role-lifecycle.cjs's host-private registry (same fd-bound
   // durability primitives, never a second reimplementation of this security-critical logic).
   DURABLE_ABSENT, DURABLE_PENDING, DURABLE_PRESENT, publishNoClobber, gitRevParse, realpathOrSelf,
+  // M6+M7 SIXTEENTH Phase 2C: sealed git-topology cache primitives, reused
+  // by every module that memoizes a per-projectRoot git-derived identity
+  // rather than each hand-rolling its own (weaker, divergence-prone) seal.
+  // sealCorrelatesWithGitCommonDir added post-review (commondir seal gap):
+  // exact self-consistency check between commondir's own resolved target
+  // and the gitCommonDirReal string git itself produced.
+  resolveSealedGitCache, sealGitIdentityFor, gitTopologySealsMatch, sealCorrelatesWithGitCommonDir,
   // WP3 item C: the bridge's own coordination-root check reuses this EXACT
   // confinement primitive rather than a second, weaker one.
   validateRootConfinement,
   // WP3 item C2 (R7): single canonical RuntimeTurnEnvelope/v1 source (PLAN.md ~L932).
   runtimeTurnEnvelopeSchema, validateRuntimeTurnEnvelope,
+  codexStructuredRuntimeTurnEnvelopeSchema,
+  unwrapAndValidateCodexStructuredRuntimeTurnEnvelope,
+  validateContext7LibraryId: isCanonicalContext7LibraryId,
+  // M6/M7 terminal functional closure (points A/C/F): request-scoped
+  // APPROVED_CONTEXT7_LIBRARY_ID directive parser, the unified root-aware
+  // evidence-authority resolver, and the canonical consultation_dependencies
+  // validator -- exported for direct node:test coverage of this
+  // security-critical logic (M67-* RED suites).
+  parseApprovedContext7Directive,
+  resolveRootEvidenceAuthority,
+  validateConsultationDependencySet,
+  patternEvidencePathFor,
+  materializePlanRef,
+  materializeRoutingPolicy,
+  materializeSubjectBundle,
+  targetRoleProfileDigestFor,
+  ROUTING_POLICY_VERSION,
+  ROUTING_POLICY_DIGEST,
+  buildCanonicalRequest,
+  publishPreallocatedRequest,
+  dispatchCanonical,
+  createHostBridgeCapability,
+  hostBridgeListRootConsultIntents,
+  hostBridgeAdvanceRootConsult,
+  hostBridgeObserveAndCompleteRootConsult,
+  readRootConsultTerminalStatus,
+readRootSourceTerminalArtifacts,
+  hostBridgeListInbox,
+  hostBridgeClaim,
+  hostBridgeLeaseHeartbeat,
+  hostBridgeScheduleTurn,
+  hostBridgeRecordTurnStartAccepted,
+  hostBridgePublishPatternEvidence,
+  hostBridgePublishTerminalResult,
+  hostBridgeAllowedChildRoles,
+  hostBridgePublishChildRequest,
+  hostBridgeObserveChildResult,
+  // M7 completeness Part C follow-up: the read-side scan agent-spawn-
+  // execution-gate.js/subagent-start-context-bundle.js use to recognize a
+  // CURRENT claude-agent-driven activation/v1 (PLAN.md §15d). planRootPath
+  // itself is deliberately NOT exported -- nothing outside this file calls
+  // it directly, only findLiveClaudeAgentActivations's own internal use.
+  findLiveClaudeAgentActivations,
+  // M7 completeness Part C follow-up: the per-request driver resolver
+  // runtime-consultation-target-gate.js uses for its deterministic
+  // ClaudeOneShotBinding-vs-RoleActorBinding branch (point 4).
+  resolveActivationForRequestPath,
+  // M6+M7 requester-authority closure (Group B): the ONE shared requester-
+  // grant-scope resolver context-provider-gate.js uses to mint a correctly-
+  // scoped grant, mirroring the SAME resolution this file's own main()
+  // independently re-derives before consuming one.
+  resolveRequesterGrantScope,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7864,6 +12897,27 @@ if (isTestCapability()) {
     checkR33ProfileTupleConformance,
     // Derived contract artifact (see above).
     R33_TUPLE_CORRELATION_KEYS,
+    // M7 §10.1: test-only rendezvous surface -- a test harness that needs to
+    // drive/inspect the rendezvous mechanism directly, rather than only
+    // through a real command call path, can.
+    testM7Rendezvous,
+    resolveSafeM7RendezvousDir,
+    // Stage D (M7-FINAL-REMEDIATION-20260818, mandatory nonsemantic cleanup):
+    // resolveActivationForRequestPath checks activation_liveness_expiry
+    // against this SAME formula -- a test fixture that needs a genuinely-live
+    // activation record derives its own liveness deadline from the real
+    // function, never a second, independently hand-maintained copy that can
+    // silently drift from it. Not a new production public surface -- usable
+    // by tests under the real test capability only.
+    activationLivenessDeadline,
   });
 }
 
+// Publish the complete require()-able surface before entering CLI execution.
+// runtime-role-lifecycle.cjs reuses the durability primitives above and the
+// CLI's requester-grant validator lazily requires lifecycle in return. Running
+// main() before assigning module.exports exposed an empty partial module during
+// that cycle and made every canonical requester binding fail as `read-failed`.
+if (require.main === module) {
+  main();
+}

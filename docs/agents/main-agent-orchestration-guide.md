@@ -4,8 +4,8 @@ slug: main-agent-orchestration-guide
 scope: L0
 sources: ["W31.6 retirement of setup/agent-templates/team-lead.md", "docs/agents/tl-session-setup.md", "docs/agents/tl-dispatch-topology.md"]
 targets: [main agent]
-version: 1.3.0
-description: "Orchestration guide for the main agent running a session: team topology, phase protocol, architect routing, context bundles, quality gates."
+version: 1.4.0
+description: "Orchestration guide for the main agent running a session: team topology, phase protocol, architect routing, context bundles, quality gates, runtime-policy/lifecycle pointers."
 ---
 
 # Main Agent Orchestration Guide
@@ -13,6 +13,8 @@ description: "Orchestration guide for the main agent running a session: team top
 > **W31.6**: The main agent IS the team lead. No separate `team-lead` subagent needed. This guide replaces `setup/agent-templates/team-lead.md` (deprecated W31.6).
 
 > **Execution modes**: the harness runs in **Claude-rich mode** (live background peers + `SendMessage`, an optional accelerator) or **portable mode** (single-use agents and/or the ADR-001 disk-artifact fallback that Codex, Copilot, and future runtimes drive through files). Both land the **same disk artifacts**; the gates read those artifacts, not the mode. See [team-topology § Execution modes](team-topology.md#execution-modes).
+
+> **Runtime-policy/lifecycle**: the persistent support plane (`arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, `doc-updater`) is ensured once per session via the shared role-lifecycle manager (`probe`/`ensureRoles`/`waitReady`), governed by `runtime-collaboration-policy.json`'s `mode` (`auto|persistent|ephemeral|disk-only`) — never a hard-coded roster or ad-hoc per-role dispatch, and never including `quality-gater`. See [runtime-messaging-adapters](runtime-messaging-adapters.md) for the full protocol and [tl-session-start](tl-session-start.md) for the two-pass planner bootstrap that ensures it.
 
 ## Sub-Documents
 
@@ -36,6 +38,7 @@ description: "Orchestration guide for the main agent running a session: team top
 | [tl-pattern-gap-handler](tl-pattern-gap-handler.md) | When context-provider emits `PATTERN-GAP: <topic>`: ask user approval OR proceed without. Dispatch ingestion on approval. |
 | [tl-task-completion-protocol](tl-task-completion-protocol.md) | Specialists send `READY-FOR-REVIEW: <task-id>`. team-lead verifies delivery, then marks task completed. Never accept specialist self-completion. |
 | [context-bundle-schema](context-bundle-schema.md) | Context bundle schema: portable file-based respawn/rotation context — storage, TTL, PATTERNS-only rules, writer/consumer contracts |
+| [runtime-messaging-adapters](runtime-messaging-adapters.md) | Portable Wave-1 consultation system: disk-artifact floor, adapter contract, and the shared role-lifecycle manager the persistent support plane runs on |
 
 ## Context Bundles
 
@@ -85,3 +88,7 @@ One pause primitive, two triggers — an explicit clarifying need OR a mid-fligh
 2. It emits the questions to the orchestrator via `SendMessage(to="team-lead", summary="spec questions", message="Q1… Q2…")` and pauses (does not write or overwrite `PLAN.md` past the pause point). Planner is spawned as `Agent(subagent_type="planner")` — no `team_name` required.
 3. The orchestrator relays via `AskUserQuestion`, gets the answers, and resumes the planner via `SendMessage` (native auto-resume).
 4. The planner weaves the answers in and continues. No mid-write interruption is possible (no preemption API); the pause lands at the next file/commit boundary.
+
+## Post-Wave-1 Qualification Checkpoint
+
+After Wave 1 (Portable Runtime Collaboration & Persistent Role Lifecycle) merges and before Wave 2 becomes NEXT, a read-only **Agent & Skill Behavioral Restoration Qualification** checkpoint runs first — proving the shipped support-plane/consultation/ingestion behavior on this project and one representative KMP consumer before further wave work proceeds. This is a program checkpoint, not a new wave. See `BACKLOG.md`'s Mandatory Post-Wave 1 Qualification section for the required live scenarios and deliverable.

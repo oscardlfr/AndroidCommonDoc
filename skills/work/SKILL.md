@@ -29,11 +29,11 @@ If `$ARGUMENTS` starts with or contains a known skill name, route directly to th
 
 Add entries here when promoting a skill to named-route status (conscious promotion step — staleness is intentional).
 
-> **HARD GATE — Core subagents must be dispatched before any implementation work.**
-> If routing to team-lead/orchestrator (implement/feature/build/plan/wave keywords): verify core subagents are dispatched FIRST.
-> Required roles: context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
-> If NOT dispatched → dispatch all 6 as concurrent Agent subagents (background peers optional) + run pre-flight checklist BEFORE routing any task.
-> DO NOT plan. DO NOT dispatch work agents. DO NOT respond to user task until core setup is done.
+> **HARD GATE — the persistent support plane must be READY before any implementation work.**
+> If routing to the orchestrator (implement/feature/build/plan/wave keywords): ensure the support plane FIRST, through the shared role-lifecycle manager — never raw `Agent()`/`SendMessage()` calls.
+> Support-plane roles: `arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, `doc-updater`. **`quality-gater` is phase-scoped, never part of this persistent set.**
+> `probe(profile)` -> `ensureRoles(profile, roles)` -> `waitReady`, same idempotent sequence as `init-session --orchestrate`, then run the pre-flight checklist BEFORE routing any task.
+> DO NOT plan. DO NOT dispatch work agents. DO NOT respond to user task until the support plane is READY.
 > If ANY pre-flight checkbox fails → fix it first, then re-verify ALL from top.
 
 ## Routing Logic
@@ -74,6 +74,8 @@ Else:
 
 The wave slug (e.g., `bl-w42-pr1`) is the artifact directory key — set via `CLAUDE_WAVE_SLUG` env or derived from the git branch last segment. It determines `.planning/wave-{slug}/` where verdicts and context bundles live.
 
+> **Scope note**: this standalone-task routing is for wave-scoped/on-demand specialists (`wave_scoped_roles` in `runtime-collaboration-policy.json`, dynamically selected per wave) — a distinct concern from the persistent 5-role support plane's own lifecycle manager above. See [runtime-messaging-adapters](../../docs/agents/runtime-messaging-adapters.md).
+
 ### Level 1 — Deterministic Keyword Rules (instant, 0 tokens)
 
 Match `$ARGUMENTS` against these patterns in order. First match wins:
@@ -102,7 +104,7 @@ Match `$ARGUMENTS` against these patterns in order. First match wins:
 
 \* Business agents are opt-in. If the agent doesn't exist in `.claude/agents/`, fall through to Level 2.
 \** **Standalone tasks only (outside a wave).** Direct specialist routing (the rows above marked \**) applies when `/work` handles a one-off task. Inside an active wave/EXECUTE (`.planning/wave-<slug>/PLAN.md` present with an APPROVED arch PREP verdict, or `CLAUDE_WAVE_SLUG` set), do NOT route directly to the specialist by keyword — the specialist is dispatched and owned by its **reporting architect** (the architect owns the task spec + validation; the orchestrator only does the mechanical `Agent()` spawn). Route to the architect (arch-platform/arch-testing/arch-integration), or surface the need for the planner's Spawn Table. When routing directly (standalone only): use the Peer-Aware Routing block above — `SendMessage` if the peer is alive, else `Agent` peer-spawn (no `team_name`).
-\*** T-BUG-010: orchestrator MUST run in-process (main conversation), NEVER via `Agent()`. Sub-agents cannot spawn reliably at depth (Claude Code bug #31977). Per W31.6 canonical pattern, the main agent IS the team-lead. Steps: (1) Dispatch 6 core subagents as concurrent Agent calls (subagent_type=X, name=X — no TeamCreate, no team_name required), (2) Run pre-flight checklist, (3) Dispatch work with scope_doc_path. Load-bearing contract: disk artifacts (`arch-*-verdict.md`, `quality-gate-report.json`, `push-proof.json`).
+\*** T-BUG-010: orchestrator MUST run in-process (main conversation), NEVER via `Agent()`. Sub-agents cannot spawn reliably at depth (Claude Code bug #31977). Per W31.6 canonical pattern, the main agent IS the team-lead. Steps: (1) Ensure the persistent support plane through the shared role-lifecycle manager — `probe(profile)` → `ensureRoles(profile, roles)` over exactly `arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, `doc-updater` (never `quality-gater`) → `waitReady`, the same idempotent sequence as the HARD GATE above — never raw `Agent()`/`SendMessage()` calls or a hard-coded 6-role roster, (2) Run pre-flight checklist, (3) Dispatch work with scope_doc_path. Load-bearing contract: disk artifacts (`arch-*-verdict.md`, `quality-gate-report.json`, `push-proof.json`).
 
 ### Level 2 — Frontmatter Discovery (if no Level 1 match)
 
@@ -111,15 +113,9 @@ Match `$ARGUMENTS` against these patterns in order. First match wins:
 3. If match found → suggest that agent
 4. If no match → act as main-context orchestrator (in-process per W31.6 — see footnote ***)
 
-## Dev Spawn First-Action Protocol
+## Dev Spawn Context-Provider Gate
 
-When team-lead spawns a dev specialist, the dev's FIRST action must be:
-```
-SendMessage(to="context-provider", summary="gate ack")
-```
-
-This satisfies the per-session CP gate (Bug #7 fixed: session-scoped, one consult unblocks all peers).
-Include this instruction in every dev dispatch message from team-lead.
+Post-PLAN, a dispatched specialist's CP-gate branch is satisfied by its **reporting architect's own current accepted CP result** — not by the specialist sending its own message. A specialist never needs a first-action `SendMessage(to="context-provider", ...)`: `context-provider-gate.js` checks for a current accepted result from the exact reporting architect/instance/PLAN/subject on the specialist's own branch, while the architect's branch requires its own exact CP acceptance only when it opened that child consultation. If a specialist's reporting architect has not yet completed its own CP consultation for the current PLAN/subject, route the architect through that consultation first — never have the specialist attempt to satisfy the gate directly.
 
 ## 3-Phase Execution Model
 
@@ -179,7 +175,7 @@ Proceed? (y/n)
 
 When routing to an orchestrator:
 1. Act in-process as the main-context orchestrator (W31.6 canonical pattern — main agent IS the team-lead; no separate team-lead template to read)
-2. Follow the inline steps from footnote ***: dispatch 6 core subagents (no `TeamCreate` or `team_name` needed), run pre-flight checklist, dispatch work
+2. Follow the inline steps from footnote ***: ensure the persistent support plane through the shared role-lifecycle manager (never a hard-coded roster), run pre-flight checklist, dispatch work
 3. The orchestrator role executes **in-process**, not as a sub-agent (T-BUG-010 / Claude Code bug #31977)
 
 `quality-gater` and `planner` are dispatched by the orchestrator as single-use Agent subagents — they DO NOT need `TeamCreate` or `team_name`.

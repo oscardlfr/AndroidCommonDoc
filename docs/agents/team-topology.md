@@ -8,10 +8,10 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "3-phase model with disk-artifact contract. Orchestrator fans out concurrent Agent subagents (+ optional background peers). Load-bearing results live on disk — PLAN.md, arch-*-verdict.md, QG artifacts. Planning → Execution → Quality Gate."
-version: 6
-last_updated: "2026-06"
+version: 7
+last_updated: "2026-08"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
-token_budget: 1500
+token_budget: 1600
 ---
 
 # Team Topology: 3-Phase Model
@@ -44,6 +44,10 @@ The same disk contract runs in either mode — a wave produces identical disk ar
 
 Neither mode changes what the gates read — the disk artifacts. Pick by runtime capability.
 
+## Runtime Messaging Adapters
+
+The **persistent support plane** (`arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, `doc-updater` — session-scoped across PREP/EXECUTE/VERIFY/QG, never including `quality-gater`) is ensured once via the shared role-lifecycle manager (`probe`/`ensureRoles`/`waitReady`) rather than ad-hoc per-role `Agent()`/`SendMessage()` calls. This is a distinct, narrower concern from the Agent Roles/Dynamic Scaling below, which remain team-lead's direct wave-scoped dispatch, unchanged. See [runtime-messaging-adapters](runtime-messaging-adapters.md) for the full protocol, and [runtime-messaging-state-machine](runtime-messaging-state-machine.md) for the transaction fencing behind a mediated consultation (`specialist → architect → context-provider → architect → specialist`, below).
+
 ---
 
 ## Agent Roles
@@ -73,7 +77,7 @@ Five core specialist roles (test-specialist, ui-specialist, domain-model-special
 - **Dispatch**: the orchestrator dispatches the CLASS/scope-required subset when execution begins — as single-use subagents or background peers
 - **Work**: Architects assign tasks; specialists execute across waves and land results on disk
 - **Knowledge**: Specialists accumulate layer expertise across waves when run as background peers; single-use subagents receive per-task context
-- **Rotation**: Rotate (kill-then-respawn with context bundle) only when context fills (7+ waves for background peers)
+- **Rotation**: Rotate (kill-then-respawn with context bundle) only when context fills (7+ waves)
 - **Reporting**: Each specialist reports to specific architect(s) — see Agent table above
 
 ## Pattern Validation Chain
@@ -145,6 +149,8 @@ Phase 3 — Quality Gate (quality-gater subagent)
 **Cross-department check**: If planner flags product/marketing impact, orchestrator spawns product-strategist or content-creator as sub-agents for review before proceeding.
 
 **Skip condition**: Simple/obvious tasks (< 5K tokens, clear path) — orchestrator plans inline, no planner needed.
+
+> Post-PLAN, obtaining the persistent support plane's own CP consultation follows the bounded two-pass bootstrap (draft PLAN → `ensure` the support plane once → final CP `result/v2` → finalize PLAN), not this simplified single-pass description — see [tl-session-start](tl-session-start.md) and [runtime-messaging-protocol](runtime-messaging-protocol.md).
 
 ---
 
@@ -231,3 +237,4 @@ See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 - [Data Handoff Patterns](data-handoff-patterns.md) — structured markers, severity, report formats
 - [Quality Gate Protocol](quality-gate-protocol.md) — detailed gate steps
 - [Context Rotation Guide](context-rotation-guide.md) — managing context across team phases
+- [Runtime Messaging Adapters](runtime-messaging-adapters.md) — the persistent support plane's lifecycle manager and portable consultation protocol

@@ -14,7 +14,7 @@
 // verify-schema-spike.cjs -- same algorithm, already adversarially audited;
 // only the file locations change (tracked paths here, not the gitignored spike
 // directory) and the pass/fail mechanism (node:test assertions here, not
-// throw+process.exit). The raw-source oracle's 40 root fixture files are
+// throw+process.exit). The raw-source oracle's 42 root fixture files are
 // copied byte-identical into fixtures/c2-schema-source-corpus.json (R14
 // Bloque C: one Path-Manifest-tracked artifact, materialized to a temp
 // directory at load time -- see materializeCorpus() below) so this suite has
@@ -37,7 +37,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const BUNDLE_PATH = path.join(REPO_ROOT, 'scripts', 'lib', 'schema', 'c2-schema-bundle.json');
 const GENERATED_PATH = path.join(REPO_ROOT, 'scripts', 'lib', 'generated', 'c2-schema-validators.generated.cjs');
 const GENERATOR_PATH = path.join(REPO_ROOT, 'scripts', 'tools', 'generate-c2-schema-validators.cjs');
-// R14 (Bloque C): the 40 raw-source oracle fixtures now live as ONE
+// R14 (Bloque C): the 42 raw-source oracle fixtures now live as ONE
 // Path-Manifest-tracked artifact (c2-schema-source-corpus.json) instead of
 // 40 individually-untracked files -- materializeCorpus() below writes each
 // entry out to a fresh temp directory so every downstream FIXTURES_DIR
@@ -48,8 +48,10 @@ const AJV_FORMATS_PATH = path.join(REPO_ROOT, 'mcp-server', 'node_modules', 'ajv
 
 const EXPECTED_SCHEMA_SET_FINGERPRINT = 'dfdbacfa269b089e7b33617f3845c924c30510be0f8cd15cf324dd170ba013cd';
 const EXPECTED_SCHEMA_SET_FILE_COUNT = 267;
-const EXPECTED_ROOT_COUNT = 40;
+const EXPECTED_ROOT_COUNT = 42;
 const EXPECTED_DEFINITION_COUNT = 135;
+const EXPECTED_VALIDATOR_COUNT = 177;
+const EXPECTED_TRANSFORMATION_COUNT = 136;
 const EXPECTED_FORMAT_COUNT = 7;
 
 function sha256File(p) {
@@ -142,12 +144,12 @@ describe('bundle shape and provenance', () => {
     assert.strictEqual(bundle.provenance.source_schema_set_file_count, EXPECTED_SCHEMA_SET_FILE_COUNT);
   });
 
-  test('exact root/definition counts: 40 roots + 135 definitions = 175 total validators', () => {
+  test('exact final schema contract: 42 roots + 135 definitions = 177 total validators', () => {
     const rootCount = Object.keys(bundle.roots).length;
     const definitionCount = Object.keys(bundle.definitions).length;
     assert.strictEqual(rootCount, EXPECTED_ROOT_COUNT);
     assert.strictEqual(definitionCount, EXPECTED_DEFINITION_COUNT);
-    assert.strictEqual(rootCount + definitionCount, 175);
+    assert.strictEqual(rootCount + definitionCount, EXPECTED_VALIDATOR_COUNT);
   });
 
   test('generator_sha256 in the bundle matches the ACTUAL current hash of the tracked generator script', () => {
@@ -155,7 +157,8 @@ describe('bundle shape and provenance', () => {
     assert.strictEqual(bundle.provenance.generator_sha256, actual, 'bundle.provenance.generator_sha256 does not match the currently-tracked generator -- bundle was built by a different generator version (cross-pair)');
   });
 
-  test('transformation_log length matches transformation_count, and exactly 7 distinct formats appear', () => {
+  test('final transformation contract is exactly 136 entries, and exactly 7 distinct formats appear', () => {
+    assert.strictEqual(bundle.provenance.transformation_count, EXPECTED_TRANSFORMATION_COUNT);
     assert.strictEqual(bundle.provenance.transformation_log.length, bundle.provenance.transformation_count);
     const formats = new Set(bundle.provenance.transformation_log.map((e) => e.format));
     assert.strictEqual(formats.size, EXPECTED_FORMAT_COUNT, `expected exactly ${EXPECTED_FORMAT_COUNT} distinct pinned format transformations, got ${formats.size}: ${[...formats].sort().join(',')}`);
@@ -171,10 +174,35 @@ describe('bundle shape and provenance', () => {
       assert.ok(bundle.roots[key].producedBy.length > 0, `${key}.producedBy should be non-empty`);
     }
   });
+
+  test('thread/read roots are mapped in their exact runtime directions', () => {
+    assert.deepStrictEqual(bundle.roots['v2::ThreadReadResponse']?.directions, ['INBOUND_RUNTIME']);
+    assert.deepStrictEqual(bundle.roots['v2::ThreadReadParams']?.directions, ['OUTBOUND_PRODUCED']);
+    assert.strictEqual(typeof generated.roots['v2::ThreadReadResponse'], 'function');
+    assert.strictEqual(typeof generated.roots['v2::ThreadReadParams'], 'function');
+  });
+
+  test('directional root census is closed: 25 inbound, 21 outbound, 42 union, 21/17/4 exclusive split', () => {
+    const roots = Object.entries(bundle.roots);
+    const inbound = roots.filter(([, root]) => root.directions.includes('INBOUND_RUNTIME'));
+    const outbound = roots.filter(([, root]) => root.directions.includes('OUTBOUND_PRODUCED'));
+    const dual = roots.filter(([, root]) => root.directions.includes('INBOUND_RUNTIME') && root.directions.includes('OUTBOUND_PRODUCED'));
+    assert.deepStrictEqual(
+      {
+        inbound: inbound.length,
+        outbound: outbound.length,
+        union: new Set([...inbound, ...outbound].map(([name]) => name)).size,
+        inboundOnly: inbound.length - dual.length,
+        outboundOnly: outbound.length - dual.length,
+        dual: dual.length,
+      },
+      { inbound: 25, outbound: 21, union: 42, inboundOnly: 21, outboundOnly: 17, dual: 4 },
+    );
+  });
 });
 
 // ==================== Infra: c2-schema-source-corpus.json integrity (R14 Bloque C) ====================
-// The 40 raw-source oracle fixtures below were previously 40 individually
+// The 42 raw-source oracle fixtures below were previously individually
 // untracked files under scripts/tests/fixtures/c2-schema-source/ -- Codex's
 // NO-GO flagged these as outside the Path-Manifest's single-owner coverage.
 // Consolidated into ONE tracked artifact; this describe block proves the
@@ -190,8 +218,8 @@ describe('c2-schema-source-corpus integrity (consolidated single-file, Path-Mani
     assert.deepStrictEqual(findCorpusViolations(corpus), []);
   });
 
-  test('the real corpus contains exactly 40 entries, materialized byte-identical to their corpus content', () => {
-    assert.strictEqual(corpus.entries.length, 40);
+  test('the real corpus contains exactly 42 entries, materialized byte-identical to their corpus content', () => {
+    assert.strictEqual(corpus.entries.length, 42);
     for (const entry of corpus.entries) {
       const materialized = fs.readFileSync(path.join(FIXTURES_DIR, entry.path), 'utf8');
       assert.strictEqual(materialized, entry.content, `materialized ${entry.path} does not match its corpus content`);
@@ -391,6 +419,7 @@ for (const [key, rootSchema] of Object.entries(bundle.roots)) {
 // above) -- NOT the gitignored spike directory.
 const ROOT_FILES = {
   'v1::InitializeResponse': 'v1/InitializeResponse.json', 'v2::LoginAccountResponse': 'v2/LoginAccountResponse.json',
+  'v2::ThreadReadResponse': 'v2/ThreadReadResponse.json',
   'v2::ThreadStartResponse': 'v2/ThreadStartResponse.json', 'v2::ThreadResumeResponse': 'v2/ThreadResumeResponse.json',
   'v2::TurnStartResponse': 'v2/TurnStartResponse.json', 'v2::TurnInterruptResponse': 'v2/TurnInterruptResponse.json',
   'v2::ThreadArchiveResponse': 'v2/ThreadArchiveResponse.json', 'v2::TurnStartedNotification': 'v2/TurnStartedNotification.json',
@@ -403,6 +432,7 @@ const ROOT_FILES = {
   'base::JSONRPCResponse': 'JSONRPCResponse.json', 'base::JSONRPCError': 'JSONRPCError.json', 'base::JSONRPCRequest': 'JSONRPCRequest.json',
   'base::JSONRPCNotification': 'JSONRPCNotification.json',
   'v1::InitializeParams': 'v1/InitializeParams.json', 'v2::LoginAccountParams': 'v2/LoginAccountParams.json',
+  'v2::ThreadReadParams': 'v2/ThreadReadParams.json',
   'v2::ThreadStartParams': 'v2/ThreadStartParams.json', 'v2::ThreadResumeParams': 'v2/ThreadResumeParams.json',
   'v2::TurnStartParams': 'v2/TurnStartParams.json', 'v2::TurnInterruptParams': 'v2/TurnInterruptParams.json',
   'v2::ThreadArchiveParams': 'v2/ThreadArchiveParams.json', 'base::ChatgptAuthTokensRefreshResponse': 'ChatgptAuthTokensRefreshResponse.json',

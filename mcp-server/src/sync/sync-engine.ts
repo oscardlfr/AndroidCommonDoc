@@ -662,7 +662,22 @@ interface HookRegistrationEntry {
   readonly file: string;
 }
 
-/** The 6 L0 enforcement hook registrations (6 unique hook files) that must be present in L1 settings.json. */
+/**
+ * The 11 L0 enforcement hook registrations (10 unique hook files) that must be
+ * present in L1 settings.json: 6 pre-existing + 4 M6 Block C + M7/WP4 dependency
+ * closure additions (dispatch arch-testing-20260808T142647Z, Section 6) --
+ * context-provider-gate.js (requester gate, re-registered under its own
+ * existing matcher — recognized as already-present, never duplicated),
+ * runtime-consultation-target-gate.js (target gate), context-provider-write-gate.js
+ * (CP bundle grammar gate), and subagent-start-context-bundle.js (existing
+ * SubagentStart capture hook) -- plus 1 M7 completeness Part C follow-up
+ * addition (2026-08-09, PLAN.md §15d, user Block 4 point 1): the SAME
+ * subagent-start-context-bundle.js file, registered ADDITIONALLY under
+ * SubagentStop for one-shot claude-agent binding retirement ("Agent
+ * return") -- a second EVENT registration for an already-listed FILE, not
+ * a new hook file, so the unique-file count stays 10 while the entry count
+ * grows to 11.
+ */
 const L0_REQUIRED_HOOK_REGISTRATIONS: readonly HookRegistrationEntry[] = [
   { event: 'PreToolUse', matcher: 'Write|Edit|Bash', file: 'team-completeness-gate.js' },
   { event: 'PreToolUse', matcher: 'TaskUpdate',      file: 'specialist-task-completion-gate.js' },
@@ -670,6 +685,11 @@ const L0_REQUIRED_HOOK_REGISTRATIONS: readonly HookRegistrationEntry[] = [
   { event: 'PreToolUse', matcher: 'Bash',            file: 'branch-guard.js' },
   { event: 'PreToolUse', matcher: 'Bash',            file: 'push-authorization-gate.js' },
   { event: 'PreToolUse', matcher: 'Bash',            file: 'commit-scope-validation-gate.js' },
+  { event: 'PreToolUse', matcher: 'Grep|Glob|Bash|Read', file: 'context-provider-gate.js' },
+  { event: 'PreToolUse', matcher: 'Bash',            file: 'runtime-consultation-target-gate.js' },
+  { event: 'PreToolUse', matcher: 'Bash',            file: 'context-provider-write-gate.js' },
+  { event: 'SubagentStart', matcher: '.*',           file: 'subagent-start-context-bundle.js' },
+  { event: 'SubagentStop', matcher: '.*',            file: 'subagent-start-context-bundle.js' },
 ] as const;
 
 /** Shape of a single hook entry within a matcher block */

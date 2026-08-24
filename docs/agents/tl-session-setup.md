@@ -8,15 +8,17 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Orchestrator session setup: Phase 2 core specialist dispatch, selective dispatch, bundle-read mandate, rotation protocol, context management, architect routing."
-version: 4
-last_updated: "2026-06"
+version: 5
+last_updated: "2026-08"
 assumes_read: team-topology, tl-phase-execution
-token_budget: 1500
+token_budget: 1600
 ---
 
 # Orchestrator Session Setup
 
 Reference for the orchestrator's session initialization: Phase 2 core specialist dispatch, selective dispatch rules, long-session rotation, context management, and architect routing.
+
+> This doc covers **wave-scoped** specialist dispatch (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist) — direct `Agent()`/`SendMessage()`, unchanged by Wave 1. The **persistent support plane** (`arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, `doc-updater`) uses its own WAITING/reuse/rotate/respawn+bundle semantics through the shared role-lifecycle manager instead — never `TeamCreate`/a hard-coded roster. See [tl-session-start](tl-session-start.md) and [runtime-messaging-bridges](runtime-messaging-bridges.md) for that lifecycle; the rotation pattern below (kill-then-respawn with a context bundle) is the same shape, applied here to wave-scoped roles specifically.
 
 ## Phase 2 Core Specialists
 

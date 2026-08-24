@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 
+// M7 LIFECYCLE -- ATOMIC REVOCATION PREP + NODE HARNESS CONTAINMENT (2026-08-16),
+// PART A: must be the FIRST require in this file, before any require of
+// runtime-role-lifecycle.cjs/runtime-bridge-codex.cjs -- see that file's own
+// doc comment for why (registryBaseDir() is os.tmpdir()-rooted and shared
+// with real production registry data on this machine without this).
+require('./lib/private-registry-tmpdir-preload.cjs');
+
 // runtime-bridge-credential-isolation.test.js -- WP3 item C3
 // (CredentialBroker/v1 + IsolationProvider/v1), PLAN.md "CredentialBroker/v1 +
 // IsolationProvider/v1 (added...)" ~L1120-1249.
@@ -528,6 +535,280 @@ describe('CredentialSourceProvider/v1', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
+// CredentialSourceProvider/v1 REAL backing (Group A / M6 -- user-authorized
+// C4 slice, 2026-08-10). Scope: the user explicitly authorized ONLY this
+// slice of C4 -- see .planning/wave-portable-runtime-messaging-adapters/
+// group-a-c4-slice-authorization-2026-08-10.md and this test-specialist's
+// own mirrored memory record, project_group_a_c4_slice_authorized.md --
+// superseding the narrower "EXECUTE C3 ONLY / no C4" boundary from
+// 2026-07-19/20 (still recorded, unmodified, in
+// project_c3_execute_authorization_confirmed.md) WITHIN THIS SLICE ONLY.
+//
+// Target: the UNCONDITIONAL, no-path-override production factory
+// `createCredentialSourceProvider()` (PLAN.md ~L1144) -- never
+// createCredentialSourceProviderForFdTests (test-only, explicit path
+// override, exercised above). Before the authorized C4 implementation this
+// factory was an unconditional CREDENTIAL_SOURCE_NOT_CONFIGURED stub, so a
+// bare `ok===false` assertion would have been a vacuous negative. Every
+// negative test therefore continues to assert
+// a SPECIFIC, discriminating reason string (reusing the exact reason
+// vocabulary the existing, already-implemented, already fd-bound
+// `readCredentialSourceFd` helper -- runtime-bridge-codex.cjs ~L3897-3989 --
+// already produces for the equivalent low-level condition), never the
+// generic stub reason. Isolation is via a real `HOME` env override on a real
+// Node subprocess (per the user's own authorization text: "Los tests usaran
+// un subprocess con HOME temporal y credenciales sinteticas; nunca
+// credenciales reales ni una ruta configurable anadida a produccion") --
+// deliberately NEVER a dedicated path-override parameter or env var read by
+// production itself, and NEVER touches this machine's real
+// $HOME/.codex/auth.json (a fresh mkdtempSync HOME is used for every case).
+//
+// FLAGGED ASSUMPTION (per this file's own top-of-file convention): the real
+// on-disk ~/.codex/auth.json shape (`{tokens:{access_token,account_id,
+// id_token,refresh_token}}`) is confirmed from this wave's OWN existing
+// prep/gc-verify.cjs `authProbe()`/`readOwnedStableBuffer()` (already reads
+// this exact real file, already extracts `tokens.access_token` /
+// `tokens.account_id`), NOT invented here. This is a DIFFERENT top-level
+// shape than the internal CREDENTIAL_SOURCE_ALLOWED_KEYS_SORTED shape
+// `readCredentialSourceFd` validates ({credentials,otherCredentialFields,
+// expiresAt,sourceIdentity}) -- reconciling the two (adapting the real
+// Codex shape into the internal Provider.read() OUTPUT contract already
+// fixed by PLAN.md ~L1144 and already consumed by the dormant
+// cmdSessionRun login call, runtime-bridge-codex.cjs ~L1564-1567:
+// credentialSource.credentials.accessToken / .chatgptAccountId) is exactly
+// the kind of implementation-strategy decision the original dispatch
+// reserved for its implementation pass. These tests now freeze only the
+// observable, black-box contract at the `.read()` boundary, except where
+// noted (JWT-exp derivation and the identity-change/TOCTOU structural check).
+// Later drift therefore goes RED at the exact boundary instead of silently
+// passing, matching the precedent established by this file's Block 1 tests.
+//
+// JWT expiry: production structurally decodes (never cryptographically
+// verifies) the access_token payload for `exp`, exactly matching
+// gc-verify.cjs's authProbe() and the token bytes the broker actually sends
+// to app-server.  id_token is not a proxy for access-token liveness --
+// the two may have different expiries.  This trusts the same locally-owned,
+// fd-bound-validated file's token fields with no signature check --
+// reasonable for a LOCAL CLI's own already fd-validated credential file,
+// never applicable to a remote-issued, untrusted token. `CREDENTIAL_SOURCE_
+// JWT_EXPIRED` / `CREDENTIAL_SOURCE_JWT_MALFORMED` are NEW reason strings
+// this dispatch proposes (no JWT concept exists anywhere in the current
+// CredentialSourceProvider/v1 design) -- flagged, not silently invented.
+//
+// Owner-mismatch (the other half of "owner/nlink"): NOT independently
+// exercised below -- it requires chown to a genuinely different uid, which
+// needs root and is therefore not hermetically testable in this suite,
+// matching this dispatch's own "if testable without root" qualifier.
+// readCredentialSourceFd ~L3923-3925 already implements and documents that
+// check; the nlink half IS hermetically testable via a real hardlink and is
+// exercised below.
+// ══════════════════════════════════════════════════════════════════════════
+
+describe('CredentialSourceProvider/v1 real backing (Group A / M6, user-authorized C4 slice, 2026-08-10)', () => {
+  function base64url(input) {
+    return Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function makeSyntheticJwt(payload) {
+    const header = base64url(JSON.stringify({ alg: 'none', typ: 'JWT' }));
+    const body = base64url(JSON.stringify(payload));
+    const sig = base64url(crypto.randomBytes(16));
+    return header + '.' + body + '.' + sig;
+  }
+
+  function freshHome() {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'c4-groupA-home-'));
+  }
+
+  function writeSyntheticCodexAuth(homeDir, overrides) {
+    const opts = overrides || {};
+    const codexDir = path.join(homeDir, '.codex');
+    fs.mkdirSync(codexDir, { recursive: true });
+    const authPath = path.join(codexDir, 'auth.json');
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const accessToken = Object.prototype.hasOwnProperty.call(opts, 'accessToken')
+      ? opts.accessToken
+      : makeSyntheticJwt({ sub: 'synthetic-access-subject', exp: nowSeconds + 3600 });
+    const idToken = Object.prototype.hasOwnProperty.call(opts, 'idToken')
+      ? opts.idToken
+      : makeSyntheticJwt({ sub: 'synthetic-subject', exp: nowSeconds + 3600 });
+    const tokens = Object.assign({
+      access_token: accessToken,
+      account_id: 'synthetic-account-' + crypto.randomBytes(4).toString('hex'),
+      id_token: idToken,
+      refresh_token: syntheticSecret('codex-refresh'),
+    }, opts.tokens || {});
+    const body = Object.assign({ tokens }, opts.topLevel || {});
+    const raw = Object.prototype.hasOwnProperty.call(opts, 'rawText') ? opts.rawText : JSON.stringify(body);
+    fs.writeFileSync(authPath, raw, { mode: Object.prototype.hasOwnProperty.call(opts, 'mode') ? opts.mode : 0o600 });
+    return { authPath, codexDir, tokens };
+  }
+
+  function runProviderInHome(homeDir) {
+    const script = 'const m = require(' + JSON.stringify(IMPL) + '); '
+      + 'const r = m.createCredentialSourceProvider().read(); '
+      + 'process.stdout.write(JSON.stringify(r));';
+    const envForChild = Object.assign({}, process.env, { HOME: homeDir });
+    delete envForChild.RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY;
+    const out = execFileSync(process.execPath, ['-e', script], { encoding: 'utf8', env: envForChild });
+    return JSON.parse(out);
+  }
+
+  test('production factory signature is genuinely unconditional -- no path/override parameter required, confirming these subprocess/HOME-only tests exercise the SAME call shape a real caller uses', () => {
+    assert.strictEqual(typeof rbc.createCredentialSourceProvider, 'function');
+    assert.strictEqual(rbc.createCredentialSourceProvider.length <= 1, true, 'must accept at most an optional {clock} options object, never a required path/override parameter');
+  });
+
+  test('POSITIVE: a valid real-shaped ~/.codex/auth.json uses access_token expiry even when id_token is already expired', () => {
+    const home = freshHome();
+    try {
+      const expSeconds = Math.floor(Date.now() / 1000) + 7200;
+      const { tokens } = writeSyntheticCodexAuth(home, {
+        accessToken: makeSyntheticJwt({ sub: 'synthetic-access-subject', exp: expSeconds }),
+        idToken: makeSyntheticJwt({ sub: 'synthetic-id-subject', exp: Math.floor(Date.now() / 1000) - 3600 }),
+      });
+      const result = runProviderInHome(home);
+      assert.strictEqual(result.ok, true, 'a valid, fresh, correctly-permissioned credential file must be read successfully: ' + JSON.stringify(result));
+      assert.strictEqual(result.credentials && result.credentials.accessToken, tokens.access_token, 'credentials.accessToken must be extracted from tokens.access_token');
+      assert.strictEqual(result.credentials && result.credentials.chatgptAccountId, tokens.account_id, 'credentials.chatgptAccountId must be extracted from tokens.account_id');
+      assert.strictEqual(result.expiresAt, new Date(expSeconds * 1000).toISOString(), 'expiresAt must be derived from the access_token JWT exp claim actually delivered to app-server');
+      assert.strictEqual(typeof result.sourceIdentity, 'string');
+      assert.ok(result.sourceIdentity.length > 0);
+    } finally {
+      cleanupDir(home);
+    }
+  });
+
+  test('NEGATIVE (absent): no .codex/auth.json exists at all under HOME -- must fail with a discriminating reason distinct from the generic not-configured stub reason', () => {
+    const home = freshHome();
+    try {
+      const result = runProviderInHome(home);
+      assert.strictEqual(result.ok, false);
+      assert.notStrictEqual(result.reason, 'CREDENTIAL_SOURCE_NOT_CONFIGURED', 'an absent file must be genuinely detected and reported as absent, never conflated with an unwired-source result');
+      assert.strictEqual(typeof result.reason, 'string');
+      assert.ok(result.reason.length > 0);
+    } finally {
+      cleanupDir(home);
+    }
+  });
+
+  test('NEGATIVE (symlink): auth.json is a symlink to a real credential-shaped file -- must be rejected, never followed, reusing the existing CREDENTIAL_SOURCE_SYMLINK_REJECTED reason readCredentialSourceFd already produces for this exact condition', () => {
+    const home = freshHome();
+    try {
+      const codexDir = path.join(home, '.codex');
+      fs.mkdirSync(codexDir, { recursive: true });
+      const realPath = path.join(home, 'real-auth-elsewhere.json');
+      fs.writeFileSync(realPath, JSON.stringify({ tokens: { access_token: syntheticSecret('sym'), account_id: 'a', id_token: makeSyntheticJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }), refresh_token: 'r' } }), { mode: 0o600 });
+      fs.symlinkSync(realPath, path.join(codexDir, 'auth.json'));
+      const result = runProviderInHome(home);
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.reason, 'CREDENTIAL_SOURCE_SYMLINK_REJECTED', 'a symlinked auth.json must never be silently followed and read: ' + JSON.stringify(result));
+    } finally {
+      cleanupDir(home);
+    }
+  });
+
+  test('NEGATIVE (permissions): auth.json exists with mode 0644 (group/other readable) instead of 0600 -- must be rejected, reusing the existing CREDENTIAL_SOURCE_MODE_INVALID reason', () => {
+    const home = freshHome();
+    try {
+      writeSyntheticCodexAuth(home, { mode: 0o644 });
+      const result = runProviderInHome(home);
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.reason, 'CREDENTIAL_SOURCE_MODE_INVALID', 'a world/group-readable credential file must be rejected: ' + JSON.stringify(result));
+    } finally {
+      cleanupDir(home);
+    }
+  });
+
+  test('NEGATIVE (nlink half of owner/nlink): auth.json has nlink!==1 via a real hardlink -- must be rejected, reusing the existing CREDENTIAL_SOURCE_NLINK_INVALID reason', () => {
+    const home = freshHome();
+    try {
+      const { authPath } = writeSyntheticCodexAuth(home);
+      const hardlinkPath = path.join(home, '.codex', 'auth-hardlink.json');
+      fs.linkSync(authPath, hardlinkPath);
+      const result = runProviderInHome(home);
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.reason, 'CREDENTIAL_SOURCE_NLINK_INVALID', 'a hard-linked credential file (nlink!==1) must be rejected: ' + JSON.stringify(result));
+    } finally {
+      cleanupDir(home);
+    }
+  });
+
+  test('NEGATIVE (duplicate JSON key): a hand-authored auth.json with a duplicate top-level "tokens" key -- must be rejected, reusing the existing CREDENTIAL_SOURCE_DUPLICATE_KEY reason, never silently resolved via JSON.parse last-write-wins semantics', () => {
+    const home = freshHome();
+    try {
+      const codexDir = path.join(home, '.codex');
+      fs.mkdirSync(codexDir, { recursive: true });
+      const raw = '{"tokens":{"access_token":"FAKE-FIRST","account_id":"a","id_token":"x.y.z","refresh_token":"r"},"tokens":{"access_token":"FAKE-SECOND-INJECTED","account_id":"a","id_token":"x.y.z","refresh_token":"r"}}';
+      fs.writeFileSync(path.join(codexDir, 'auth.json'), raw, { mode: 0o600 });
+      const result = runProviderInHome(home);
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.reason, 'CREDENTIAL_SOURCE_DUPLICATE_KEY', JSON.stringify(result));
+    } finally {
+      cleanupDir(home);
+    }
+  });
+
+  test('NEGATIVE (malformed JSON): auth.json contains syntactically invalid JSON -- must be rejected, reusing the existing CREDENTIAL_SOURCE_INVALID_JSON reason', () => {
+    const home = freshHome();
+    try {
+      const codexDir = path.join(home, '.codex');
+      fs.mkdirSync(codexDir, { recursive: true });
+      fs.writeFileSync(path.join(codexDir, 'auth.json'), '{"tokens": this is not valid json,,,', { mode: 0o600 });
+      const result = runProviderInHome(home);
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.reason, 'CREDENTIAL_SOURCE_INVALID_JSON', JSON.stringify(result));
+    } finally {
+      cleanupDir(home);
+    }
+  });
+
+  test('NEGATIVE (expired JWT): an expired access_token is rejected even when id_token remains fresh', () => {
+    const home = freshHome();
+    try {
+      const pastExp = Math.floor(Date.now() / 1000) - 3600;
+      writeSyntheticCodexAuth(home, {
+        accessToken: makeSyntheticJwt({ sub: 'synthetic-access-subject', exp: pastExp }),
+        idToken: makeSyntheticJwt({ sub: 'synthetic-id-subject', exp: Math.floor(Date.now() / 1000) + 3600 }),
+      });
+      const result = runProviderInHome(home);
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.reason, 'CREDENTIAL_SOURCE_JWT_EXPIRED', 'an access_token whose exp claim is already in the past must be rejected, never accepted as live: ' + JSON.stringify(result));
+    } finally {
+      cleanupDir(home);
+    }
+  });
+
+  test('NEGATIVE (malformed JWT): access_token is not a genuine 3-part JWT structure -- rejected even when id_token is well formed', () => {
+    const home = freshHome();
+    try {
+      writeSyntheticCodexAuth(home, {
+        accessToken: 'not-a-jwt-at-all',
+        idToken: makeSyntheticJwt({ sub: 'synthetic-id-subject', exp: Math.floor(Date.now() / 1000) + 3600 }),
+      });
+      const result = runProviderInHome(home);
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.reason, 'CREDENTIAL_SOURCE_JWT_MALFORMED', JSON.stringify(result));
+    } finally {
+      cleanupDir(home);
+    }
+  });
+
+  test('STRUCTURAL (identity-change/TOCTOU proxy): createCredentialSourceProvider routes through the fd-bound identity-rechecking reader, never a naive path read', () => {
+    const sourceText = fs.readFileSync(IMPL, 'utf8');
+    const fnStart = sourceText.indexOf('function createCredentialSourceProvider(opts) {');
+    assert.ok(fnStart >= 0, 'test precondition: createCredentialSourceProvider must exist as a named function with this exact signature');
+    const fnStartNext = sourceText.indexOf('function createCredentialSourceProviderForFdTests', fnStart);
+    assert.ok(fnStartNext > fnStart, 'test precondition: the known following factory must be found after createCredentialSourceProvider');
+    const fnBody = sourceText.slice(fnStart, fnStartNext);
+    assert.ok(
+      fnBody.includes('readCredentialSourceFd(') || fnBody.includes('readOwnedStableBuffer('),
+      'createCredentialSourceProvider must route through the existing fd-bound, identity-rechecking reader: ' + fnBody.length + ' characters scanned',
+    );
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
 // IsolationProvider root lifecycle (PLAN.md ~L1155-1207) -- through READY only
 // ══════════════════════════════════════════════════════════════════════════
 
@@ -650,7 +931,7 @@ describe('IsolationProvider root lifecycle', () => {
     }
   });
 
-  test('finalizeRunRoot materializes network.enabled=false correctly nested under [permissions.<role>-profile...], never top-level, and reaches READY', () => {
+  test('finalizeRunRoot materializes a pinned-Codex-valid read-only filesystem profile with network disabled', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'c3-block1-iso-finalize-'));
     const fixture = freshRunFixture(tmp);
     try {
@@ -667,6 +948,15 @@ describe('IsolationProvider root lifecycle', () => {
       assert.ok(profileHeaderIdx >= 0, 'expected a role-bound [permissions.<role>-profile...] table');
       const nextTopLevelIdx = configText.indexOf('\n[', profileHeaderIdx + 1);
       const profileBlock = configText.slice(profileHeaderIdx, nextTopLevelIdx === -1 ? configText.length : nextTopLevelIdx);
+      assert.ok(
+        profileBlock.includes('workspace_roots = { read = false, write = false }'),
+        'WorkspaceRootsToml must be the pinned-Codex boolean structure, never the obsolete array form',
+      );
+      assert.ok(
+        profileBlock.includes('filesystem = { ' + JSON.stringify(STABLE_UNSHARED_WORKSPACE_ROOT) + ' = "read" }'),
+        'the exact fd-accredited read-view path must be the sole explicit read-only filesystem entry',
+      );
+      assert.ok(!/workspace_roots\s*=\s*\[/.test(profileBlock), 'the pinned Codex binary rejects workspace_roots arrays');
       assert.ok(/network\.enabled\s*=\s*false/.test(profileBlock), 'network.enabled=false must be nested INSIDE the role-bound profile block');
       const beforeProfileBlock = configText.slice(0, profileHeaderIdx);
       const afterProfileBlock = nextTopLevelIdx === -1 ? '' : configText.slice(nextTopLevelIdx);
@@ -4481,6 +4771,38 @@ describe('CORRECTION ROUND (REWORKED) -- Section F.5: real C2-connection overflo
       cleanupDir(tmp);
     }
   });
+
+  // PROPERTY 5 (mission-authorized bounded correction, RED-only): reproduces
+  // real captured bytes from the pinned codex binary (codex-cli
+  // 0.145.0-alpha.18, `codex app-server --listen stdio:// --strict-config`)
+  // -- NOT a synthetic hypothesis. The real app-server responded to this
+  // bridge's own `initialize` request with a valid result, and in the SAME
+  // stdout chunk immediately followed it with an unsolicited
+  // `remoteControl/status/changed` notification carrying an extra
+  // `emittedAtMs` field. `generated.roots['base::JSONRPCNotification']`
+  // already accepts this real frame; `classifyIncomingFrame`'s own
+  // supplementary `hasExactKeys(frame, ['method','params'])` check (see
+  // runtime-bridge-codex.cjs:3750) does not, and wrongly rejects it as
+  // 'notification-extra-keys', which STOPs the connection before the
+  // already-valid, already-received initialize response's own `.then()`
+  // continuation ever runs.
+  test('PROPERTY 5: initialize() succeeds even when a genuine server notification carrying additional fields (e.g. remoteControl/status/changed with emittedAtMs) arrives in the same chunk immediately after the initialize response -- real codex-app-server 0.145.0-alpha.18 observed behavior', async () => {
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const connection = rbc.createAppServerConnection({ stdin, stdout, refreshProvider: () => ({}) });
+
+    const initPromise = connection.initialize();
+
+    // Real captured bytes, byte-for-byte, from the pinned binary -- both
+    // lines written in a SINGLE stdout.write call so they arrive in the
+    // same chunk/tick, matching the real observed byte layout.
+    const line1 = '{"id":1,"result":{"userAgent":"...","codexHome":"/Users/oscardelafuenteruiz/.codex","platformFamily":"unix","platformOs":"macos"}}';
+    const line2 = '{"method":"remoteControl/status/changed","params":{"status":"disabled","serverName":"MacBook-Pro-de-Oscar.local","installationId":"3a893416-e6f3-48de-a562-9ec32a1f9d47","environmentId":null},"emittedAtMs":1786578371244}';
+    await new Promise((resolve) => stdout.write(line1 + '\n' + line2 + '\n', 'utf8', resolve));
+
+    const initResult = await initPromise;
+    assert.strictEqual(initResult.ok, true, 'a genuinely valid initialize response must resolve ok:true even when an unsolicited, schema-valid-but-extra-keyed server notification (e.g. remoteControl/status/changed carrying emittedAtMs) arrives in the SAME stdout chunk immediately after it: ' + JSON.stringify(initResult));
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -7187,10 +7509,38 @@ describe('THIRD HARD NO-GO RESPONSE -- Block E: closing residual ACTIVE gaps', (
     }
   });
 
-  test('C3-ISO-D10 status (DOCUMENTATION, not a coverage gap this file can close): confirms a caller-suppliable roleReadViewRoot concept, and its own READ_VIEW_ROOT_INVALID rejection reason, are structurally ABSENT from the shipped IsolationProvider surface -- an unbuilt feature, not merely an untested one. Passes today; if either string starts appearing, D10 needs a genuine behavioral test written against the real new surface, not this documentation check', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
-    assert.strictEqual(sourceText.includes('roleReadViewRoot'), false, 'roleReadViewRoot must remain structurally absent for this documentation test to remain accurate -- if this now exists, D10 needs a real behavioral test instead');
-    assert.strictEqual(sourceText.includes('READ_VIEW_ROOT_INVALID'), false, 'READ_VIEW_ROOT_INVALID must remain structurally absent for this documentation test to remain accurate -- if this now exists, D10 needs a real behavioral test instead');
+  test('C3-ISO-D10 closure: the production TurnReadProjection authority credits one host-selected root to one opaque run+role capability and detects a root inode rebound', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'c3-iso-d10-read-view-'));
+    const readViewRoot = path.join(tmp, 'role-read-view');
+    fs.mkdirSync(readViewRoot, { mode: 0o700 });
+    const authority = rbc.__testOnlyCreateSessionRunReadViewAuthority();
+    const capability = Object.freeze(Object.create(null));
+    try {
+      assert.strictEqual(typeof authority, 'function');
+      assert.strictEqual(typeof authority.register, 'function');
+      const registered = authority.register(capability, { runId: 'run-d10', role: 'verifier', readViewRoot });
+      assert.deepStrictEqual(registered, { ok: true });
+      assert.deepStrictEqual(
+        authority.resolve(capability, { expectedRunId: 'run-d10', expectedRole: 'verifier' }),
+        { ok: true, workspaceRoots: [readViewRoot] },
+      );
+      assert.deepStrictEqual(
+        authority.resolve(Object.freeze(Object.create(null)), { expectedRunId: 'run-d10', expectedRole: 'verifier' }),
+        { ok: false, reason: 'CAPABILITY_REJECTED' },
+      );
+      assert.deepStrictEqual(
+        authority.resolve(capability, { expectedRunId: 'run-d10', expectedRole: 'arch-testing' }),
+        { ok: false, reason: 'CAPABILITY_SCOPE_MISMATCH' },
+      );
+      fs.renameSync(readViewRoot, readViewRoot + '.retired');
+      fs.mkdirSync(readViewRoot, { mode: 0o700 });
+      assert.deepStrictEqual(
+        authority.resolve(capability, { expectedRunId: 'run-d10', expectedRole: 'verifier' }),
+        { ok: false, reason: 'READ_VIEW_ROOT_REBOUND' },
+      );
+    } finally {
+      cleanupDir(tmp);
+    }
   });
 
   test('C3-ISO-D11 closure: a SECOND finalizeRunRoot call on an already-READY handle is rejected ROOT_NOT_PROFILE_PENDING, never silently re-finalized or re-published', () => {
@@ -12915,5 +13265,432 @@ describe('C3 FINAL CLOSURE ROUND (fresh session, 2026-07-22): C3-owned residual 
     } finally {
       cleanupRegistryFor(repoId);
     }
+  });
+});
+
+describe('M6 (production lifecycle + canonical-role activation): session-run to app-server wiring', () => {
+  // cmdSessionRun (this file's own module, ~line 1109) acquires role-owner
+  // claims, reaches state.phase='READY', then ends at an unconditional
+  // `keepAliveHandle = setInterval(() => {}, 1 << 30)` (line 1251) -- it never
+  // calls createAppServerConnection (fully built, exported, extensively
+  // unit-tested in isolation elsewhere in THIS file -- see the
+  // 'THIRD HARD NO-GO RESPONSE' describe block above) nor the child-spawn
+  // registry (createSupervisorOwnedChildRegistry/spawnWithIntent, also fully
+  // built and exported). This mirrors the EXACT structural-assertion
+  // technique this file's own 'THIRD HARD NO-GO RESPONSE -- Block A' describe
+  // block already established (source-text scan bounded between two known
+  // anchors, confirmed by direct source read before writing this test) --
+  // never a new/invented pattern.
+  test('M6 STRUCTURAL: cmdSessionRun reaches the already-built createAppServerConnection or the child-spawn registry, never ending at an idle setInterval alone (session-run to app-server wiring gap) -- confirmed by direct source scan', () => {
+    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    const fnStart = sourceText.indexOf('async function cmdSessionRun');
+    assert.ok(fnStart >= 0, 'test precondition: cmdSessionRun must exist as a named function');
+    const sectionEnd = sourceText.indexOf('// ── C2: app-server JSONL client + schemas ──', fnStart);
+    assert.ok(sectionEnd > fnStart, 'test precondition: the known trailing C2 section marker must be found after cmdSessionRun');
+    const fnBody = sourceText.slice(fnStart, sectionEnd);
+    // Anchor-validity check: the bounded slice must contain a KNOWN,
+    // currently-true fact (the idle setInterval stub) -- proving the slice
+    // genuinely scans cmdSessionRun's real body, not an empty/misaligned
+    // range that would make the assertion below pass or fail for the wrong
+    // reason.
+    assert.ok(fnBody.includes('setInterval'), 'anchor-validity: the bounded body must contain the known CURRENT setInterval stub, confirming the slice scans the right section (' + fnBody.length + ' characters)');
+    assert.ok(
+      fnBody.includes('createAppServerConnection') || fnBody.includes('spawnWithIntent') || fnBody.includes('createSupervisorOwnedChildRegistry'),
+      'cmdSessionRun must reach the app-server client or the child-spawn registry instead of ending at the idle setInterval alone -- currently zero references exist anywhere in its own body, confirmed by direct source scan of ' + fnBody.length + ' characters (M6 gap)',
+    );
+  });
+});
+
+// M6 production Codex executable resolution: the protected host
+// ~/.codex/config.toml CODEX_CLI_PATH assignment is authoritative when the
+// file exists.  An explicit environment value remains a compatibility source
+// only on hosts without that config file.  Neither branch may fall back to
+// the bare PATH-relying `codex` literal.
+
+describe('M6 (P0-3): production codex executable resolution', () => {
+  function makeRealExecutableFixture() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p03-codex-fixture-'));
+    const filePath = path.join(dir, 'fake-codex');
+    fs.writeFileSync(filePath, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    return { dir, filePath };
+  }
+
+  function withoutTestCapability(fn, homeOverride) {
+    const savedNodeEnv = process.env.NODE_ENV;
+    const savedCap = process.env.RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY;
+    const savedCodexPath = process.env.CODEX_CLI_PATH;
+    const savedHome = process.env.HOME;
+    const ownedHome = homeOverride === undefined
+      ? fs.mkdtempSync(path.join(os.tmpdir(), 'p03-codex-home-'))
+      : null;
+    try {
+      delete process.env.RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY;
+      process.env.NODE_ENV = 'production';
+      process.env.HOME = homeOverride === undefined ? ownedHome : homeOverride;
+      return fn();
+    } finally {
+      if (savedNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = savedNodeEnv;
+      if (savedCap === undefined) delete process.env.RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY; else process.env.RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY = savedCap;
+      if (savedCodexPath === undefined) delete process.env.CODEX_CLI_PATH; else process.env.CODEX_CLI_PATH = savedCodexPath;
+      if (savedHome === undefined) delete process.env.HOME; else process.env.HOME = savedHome;
+      if (ownedHome !== null) cleanupDir(ownedHome);
+    }
+  }
+
+  test('resolveAppServerSpawnCommand (P0-3): is unconditionally exported and reachable outside isTestCapability()', () => {
+    assert.strictEqual(typeof rbc.resolveAppServerSpawnCommand, 'function', 'production spawn resolution must be an unconditional export');
+  });
+
+  test('resolveAppServerSpawnCommand: an unset process env still resolves the single protected ~/.codex/config.toml CODEX_CLI_PATH assignment used by gc-verify and the live host', () => {
+    const fixture = makeRealExecutableFixture();
+    const hostHome = fs.mkdtempSync(path.join(os.tmpdir(), 'p03-protected-config-home-'));
+    try {
+      const codexDir = path.join(hostHome, '.codex');
+      fs.mkdirSync(codexDir, { mode: 0o700 });
+      fs.writeFileSync(
+        path.join(codexDir, 'config.toml'),
+        'CODEX_CLI_PATH = ' + JSON.stringify(fixture.filePath) + '\n',
+        { mode: 0o600 },
+      );
+      withoutTestCapability(() => {
+        delete process.env.CODEX_CLI_PATH;
+        const result = rbc.resolveAppServerSpawnCommand();
+        assert.strictEqual(result.command, fixture.filePath, JSON.stringify(result));
+        assert.deepStrictEqual(result.args, ['app-server', '--listen', 'stdio://', '--strict-config']);
+      }, hostHome);
+    } finally {
+      cleanupDir(hostHome);
+      cleanupDir(fixture.dir);
+    }
+  });
+
+  test('resolveAppServerSpawnCommand: a protected config pin wins over a conflicting environment value instead of allowing ambient process state to replace host authority', () => {
+    const protectedFixture = makeRealExecutableFixture();
+    const ambientFixture = makeRealExecutableFixture();
+    const hostHome = fs.mkdtempSync(path.join(os.tmpdir(), 'p03-protected-config-precedence-'));
+    try {
+      const codexDir = path.join(hostHome, '.codex');
+      fs.mkdirSync(codexDir, { mode: 0o700 });
+      fs.writeFileSync(
+        path.join(codexDir, 'config.toml'),
+        'CODEX_CLI_PATH = ' + JSON.stringify(protectedFixture.filePath) + '\n',
+        { mode: 0o600 },
+      );
+      withoutTestCapability(() => {
+        process.env.CODEX_CLI_PATH = ambientFixture.filePath;
+        const result = rbc.resolveAppServerSpawnCommand();
+        assert.strictEqual(result.command, protectedFixture.filePath, JSON.stringify(result));
+      }, hostHome);
+    } finally {
+      cleanupDir(hostHome);
+      cleanupDir(ambientFixture.dir);
+      cleanupDir(protectedFixture.dir);
+    }
+  });
+
+  test('resolveAppServerSpawnCommand (P0-3): outside test mode, with a well-formed CODEX_CLI_PATH pinned to a real, absolute, existing executable file, resolves to EXACTLY that absolute path -- never the bare PATH-relying literal "codex"', () => {
+    assert.strictEqual(typeof rbc.resolveAppServerSpawnCommand, 'function', 'precondition: resolveAppServerSpawnCommand must exist');
+    const fixture = makeRealExecutableFixture();
+    try {
+      withoutTestCapability(() => {
+        process.env.CODEX_CLI_PATH = fixture.filePath;
+        const result = rbc.resolveAppServerSpawnCommand();
+        assert.ok(result && typeof result.command === 'string', 'must return a well-formed command string outside test mode: ' + JSON.stringify(result));
+        assert.strictEqual(result.command, fixture.filePath, 'must resolve to EXACTLY the pinned CODEX_CLI_PATH, never a derived/guessed value: ' + JSON.stringify(result));
+        assert.ok(result.command.startsWith('/'), 'the resolved command must be an absolute path: ' + JSON.stringify(result));
+        assert.notStrictEqual(result.command, 'codex', 'must never be the bare PATH-relying literal');
+        assert.deepStrictEqual(result.args, ['app-server', '--listen', 'stdio://', '--strict-config'], 'PLAN.md ~L921\'s own frozen production argv must be unchanged by this fix');
+      });
+    } finally {
+      cleanupDir(fixture.dir);
+    }
+  });
+
+  test('resolveAppServerSpawnCommand (P0-3): outside test mode, this production-path assertion would FAIL if the code reverted to the bare "codex" literal -- asserts the resolved command is an absolute path, never merely that spawn() was called, and is genuinely independent of RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN (never set anywhere in this test)', () => {
+    assert.strictEqual(typeof rbc.resolveAppServerSpawnCommand, 'function', 'precondition: resolveAppServerSpawnCommand must exist');
+    const fixture = makeRealExecutableFixture();
+    try {
+      withoutTestCapability(() => {
+        process.env.CODEX_CLI_PATH = fixture.filePath;
+        assert.strictEqual(typeof process.env.RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN, 'undefined', 'fixture sanity: the test-only override must be genuinely unset for this to be independent evidence');
+        const result = rbc.resolveAppServerSpawnCommand();
+        assert.ok(result.command.startsWith('/'), 'a reversion to the bare "codex" literal (not starting with "/") must make this assertion fail: got ' + JSON.stringify(result));
+      });
+    } finally {
+      cleanupDir(fixture.dir);
+    }
+  });
+
+  test('resolveAppServerSpawnCommand (P0-3): outside test mode, with CODEX_CLI_PATH entirely UNSET, fails closed with a distinct, discriminating outcome -- NEVER silently falls back to the bare "codex" literal', () => {
+    assert.strictEqual(typeof rbc.resolveAppServerSpawnCommand, 'function', 'precondition: resolveAppServerSpawnCommand must exist');
+    withoutTestCapability(() => {
+      delete process.env.CODEX_CLI_PATH;
+      const result = rbc.resolveAppServerSpawnCommand();
+      if (result && typeof result.command === 'string') {
+        assert.notStrictEqual(result.command, 'codex', 'with no pin configured at all, the bare PATH-relying literal must never be silently used: ' + JSON.stringify(result));
+      } else {
+        assert.strictEqual(result.ok, false, 'an unconfigured pin must fail closed with an explicit, well-formed rejection, never an ambiguous falsy/undefined result: ' + JSON.stringify(result));
+        assert.strictEqual(typeof result.reason, 'string', 'the fail-closed rejection must carry a discriminating reason string: ' + JSON.stringify(result));
+      }
+    });
+  });
+
+  test('resolveAppServerSpawnCommand (P0-3): outside test mode, with CODEX_CLI_PATH pointing at a RELATIVE path, fails closed rather than silently accepting a PATH-relying value', () => {
+    assert.strictEqual(typeof rbc.resolveAppServerSpawnCommand, 'function', 'precondition: resolveAppServerSpawnCommand must exist');
+    withoutTestCapability(() => {
+      process.env.CODEX_CLI_PATH = 'codex'; // relative, PATH-relying -- exactly the shape this fix exists to eliminate.
+      const result = rbc.resolveAppServerSpawnCommand();
+      if (result && typeof result.command === 'string') {
+        assert.ok(result.command.startsWith('/'), 'a relative CODEX_CLI_PATH must never be used as-is: got ' + JSON.stringify(result));
+      } else {
+        assert.strictEqual(result.ok, false, JSON.stringify(result));
+      }
+    });
+  });
+
+  test('resolveAppServerSpawnCommand (P0-3): outside test mode, with CODEX_CLI_PATH pointing at a NONEXISTENT absolute path, fails closed distinctly rather than blindly trusting an unverified pin', () => {
+    assert.strictEqual(typeof rbc.resolveAppServerSpawnCommand, 'function', 'precondition: resolveAppServerSpawnCommand must exist');
+    withoutTestCapability(() => {
+      process.env.CODEX_CLI_PATH = '/this/path/genuinely/does/not/exist/on/this/host/codex-' + crypto.randomBytes(8).toString('hex');
+      const result = rbc.resolveAppServerSpawnCommand();
+      if (result && typeof result.command === 'string') {
+        assert.fail('an absolute-but-nonexistent CODEX_CLI_PATH must never be blindly trusted: ' + JSON.stringify(result));
+      } else {
+        assert.strictEqual(result.ok, false, JSON.stringify(result));
+      }
+    });
+  });
+
+  test('resolveAppServerSpawnCommand negative/mutation control (P0-3): the pinned CODEX_CLI_PATH resolution is used regardless of RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN -- setting the test-only override has ZERO effect outside test mode, proving the production branch is genuinely independent evidence, not accidentally reading the test seam', () => {
+    assert.strictEqual(typeof rbc.resolveAppServerSpawnCommand, 'function', 'precondition: resolveAppServerSpawnCommand must exist');
+    const fixture = makeRealExecutableFixture();
+    try {
+      withoutTestCapability(() => {
+        process.env.CODEX_CLI_PATH = fixture.filePath;
+        process.env.RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN = JSON.stringify({ command: '/should-never-be-used', args: [] });
+        try {
+          const result = rbc.resolveAppServerSpawnCommand();
+          assert.strictEqual(result.command, fixture.filePath, 'outside test mode, the test-only FAKE_APP_SERVER_SPAWN override must have ZERO effect: ' + JSON.stringify(result));
+        } finally {
+          delete process.env.RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN;
+        }
+      });
+    } finally {
+      cleanupDir(fixture.dir);
+    }
+  });
+});
+
+// M6 READY-chain structural choke points. The Bats integration suite proves
+// the live behavior; these assertions ensure the production function still
+// calls the same ordered primitives and cannot regress to a comment-only or
+// initialize-only false positive.
+
+describe('M6 (P0-4): READY gating -- credential readiness and full RPC chain', () => {
+  function cmdSessionRunBody() {
+    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    const fnStart = sourceText.indexOf('async function cmdSessionRun');
+    assert.ok(fnStart >= 0, 'test precondition: cmdSessionRun must exist as a named function');
+    const sectionEnd = sourceText.indexOf('// ── C2: app-server JSONL client + schemas ──', fnStart);
+    assert.ok(sectionEnd > fnStart, 'test precondition: the known trailing C2 section marker must be found after cmdSessionRun');
+    return sourceText.slice(fnStart, sectionEnd);
+  }
+
+  test('cmdSessionRun structural (P0-4): credential read is a genuine call before execution-claim consumption', () => {
+    const fnBody = cmdSessionRunBody();
+    const credentialIndex = fnBody.indexOf('createCredentialSourceProvider().read()');
+    const consumeIndex = fnBody.indexOf('validateAndConsumeExecutionClaim(');
+    assert.ok(credentialIndex >= 0, 'credential source must be invoked, not merely named in prose');
+    assert.ok(consumeIndex > credentialIndex, 'credential validation must precede the first authority-consuming write');
+  });
+
+  test('cmdSessionRun structural (P0-4): initialize -> login -> role profile -> bootstrap thread/turn/completion/archive -> presence -> batch READY remains ordered', () => {
+    const fnBody = cmdSessionRunBody();
+    const calls = [
+      '.initialize(', '.login(', 'resolveCanonicalRoleProfile(', '.threadStart(',
+      '.turnStart(', 'waitForValidatedTurnCompletion(', '.threadArchive(',
+      'publishWorkerPresenceReady(', 'transitionSupervisorBatchToReady(',
+    ];
+    const indices = calls.map((call) => fnBody.indexOf(call));
+    indices.forEach((index, i) => assert.ok(index >= 0, 'missing production call: ' + calls[i]));
+    for (let i = 1; i < indices.length; i += 1) {
+      assert.ok(indices[i] > indices[i - 1], calls[i] + ' must occur after ' + calls[i - 1]);
+    }
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Group A / M6 -- user-authorized C4 slice, 2026-08-10 (sub-items c/d/e).
+// Scope: see group-a-c4-slice-authorization-2026-08-10.md and this
+// test-specialist's mirrored memory record. Design authority for these three
+// is PLAN.md lines 909-974, "App-server worker -- disk-driven, no private
+// dispatch-IPC (frozen contract -- R2-C3)" -- independently re-read and
+// confirmed byte-accurate before writing anything below: (c) READY gating
+// (lines 919-956, exact RPC parameter shapes + commit-point rules), (d) one
+// isolated child per allowlisted active role (line 911: "never one child per
+// request"), (e) `RoleScheduler/v1` (lines 913-914, frozen admission/queue/
+// lease/WAL algorithm, own test-ID convention SCHED-01-poll-vs-mcp-same-role-
+// distinct-roots / SCHED-02-same-root-nested-resume). This is an
+// already-specified contract being tested, not a new design invented here.
+//
+// The spawned fake app-server E2E now lives in runtime-consultation-bridge.bats.
+// These three tests are intentionally smaller structural choke points that
+// keep per-role isolation, scheduler admission and READY publication wired.
+// ══════════════════════════════════════════════════════════════════════════
+
+describe('M6 (Group A / C4 slice, sub-items c/d/e): app-server worker -- READY gating, per-role isolation, RoleScheduler/v1', () => {
+  function cmdSessionRunBody() {
+    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    const fnStart = sourceText.indexOf('async function cmdSessionRun');
+    assert.ok(fnStart >= 0, 'test precondition: cmdSessionRun must exist as a named function');
+    const sectionEnd = sourceText.indexOf('// ── C2: app-server JSONL client + schemas ──', fnStart);
+    assert.ok(sectionEnd > fnStart, 'test precondition: the known trailing C2 section marker must be found after cmdSessionRun');
+    return sourceText.slice(fnStart, sectionEnd);
+  }
+
+  test('sub-item (c): worker presence is published before the complete batch READY transition', () => {
+    const fnBody = cmdSessionRunBody();
+    const presenceIndex = fnBody.indexOf('publishWorkerPresenceReady(');
+    const batchIndex = fnBody.indexOf('transitionSupervisorBatchToReady(');
+    assert.ok(presenceIndex >= 0, 'worker-presence publication call must exist');
+    assert.ok(batchIndex > presenceIndex, 'complete batch READY must occur only after per-role presence publication');
+  });
+
+  test('sub-item (d): the bootstrap section creates root, child, connection and thread inside a loop over every requested role', () => {
+    const fnBody = cmdSessionRunBody();
+    const sectionStart = fnBody.indexOf('const readyEvidence = [];');
+    const sectionEnd = fnBody.indexOf('const batchReadyResult =', sectionStart);
+    assert.ok(sectionStart >= 0 && sectionEnd > sectionStart, 'bootstrap-section anchors must exist');
+    const bootstrap = fnBody.slice(sectionStart, sectionEnd);
+    assert.ok(bootstrap.includes('for (const role of p.roles) {'), 'bootstrap must iterate the complete role set');
+    for (const call of ['createRunRoot(', 'spawnWithIntent(', 'createAppServerConnection(', '.threadStart(']) {
+      assert.ok(bootstrap.includes(call), 'per-role bootstrap is missing ' + call);
+    }
+  });
+
+  test('sub-item (e): disk inbox -> claim/lease -> FIFO queue -> scheduled WAL -> read projection -> turn/start -> delivery/result remains ordered', () => {
+    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    const executeStart = sourceText.indexOf('async function executeRetainedWorkerRequest');
+    const executeEnd = sourceText.indexOf('/**\n * `session-run', executeStart);
+    const executeBody = sourceText.slice(executeStart, executeEnd);
+    const scheduled = executeBody.indexOf('hostBridgeScheduleTurn(');
+    const thread = executeBody.indexOf('.threadStart(', scheduled);
+    const turn = executeBody.indexOf('startAndAwaitWorkerTurn(', thread);
+    assert.ok(scheduled >= 0 && thread > scheduled && turn > thread, 'scheduled intent WAL must precede root thread and turn service');
+
+    const startStart = sourceText.indexOf('async function startAndAwaitWorkerTurn');
+    const startEnd = sourceText.indexOf('async function waitForAcceptedChild', startStart);
+    const startBody = sourceText.slice(startStart, startEnd);
+    const projection = startBody.indexOf('buildTurnReadProjection(');
+    const preflight = startBody.indexOf('validateTurnReadProjection(', projection);
+    const turnStart = startBody.indexOf('.turnStart(', preflight);
+    const delivery = startBody.indexOf('hostBridgeRecordTurnStartAccepted(', turnStart);
+    const completion = startBody.indexOf('waitForValidatedTurnCompletion(', delivery);
+    const postflight = startBody.indexOf('validateTurnReadProjection(', completion);
+    assert.ok(projection >= 0 && preflight > projection && turnStart > preflight && delivery > turnStart && completion > delivery && postflight > completion,
+      'projection preflight, turn/start, delivery commit, completion and postflight must remain strictly ordered');
+
+    const fnBody = cmdSessionRunBody();
+    const listInbox = fnBody.indexOf('hostBridgeListInbox(');
+    const claim = fnBody.indexOf('hostBridgeClaim(', listInbox);
+    const enqueue = fnBody.indexOf('worker.queue.push(', claim);
+    const sort = fnBody.indexOf('worker.queue.sort(', enqueue);
+    const service = fnBody.indexOf('executeRetainedWorkerRequest(', sort);
+    assert.ok(listInbox >= 0 && claim > listInbox && enqueue > claim && sort > enqueue && service > sort,
+      'canonical disk inbox admission must claim, enqueue, sort FIFO and only then begin service');
+  });
+});
+
+// M6 live acceptance defect #2 (2026-08-13): the production credential
+// source deliberately has no accredited plan-type field and therefore sends
+// `chatgptPlanType:null`. PLAN's frozen null->unknown/derived rule requires
+// the first schema-valid account/updated plan to become the effective plan;
+// a genuinely supplied non-null plan remains exact-match authority.
+describe('M6 live login plan semantics: unknown local plan may be derived exactly once', () => {
+  async function makeInitializedConnection() {
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const connection = rbc.createAppServerConnection({ stdin, stdout });
+    const requests = [];
+    let buffered = '';
+    stdin.on('data', (chunk) => {
+      buffered += chunk.toString('utf8');
+      for (;;) {
+        const newline = buffered.indexOf('\n');
+        if (newline < 0) break;
+        const line = buffered.slice(0, newline);
+        buffered = buffered.slice(newline + 1);
+        if (!line.trim()) continue;
+        requests.push(JSON.parse(line));
+      }
+    });
+    async function requestFor(method) {
+      for (let i = 0; i < 50; i += 1) {
+        const request = requests.find((candidate) => candidate.method === method);
+        if (request) return request;
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      throw new Error('timed out waiting for outbound method ' + method + ': ' + JSON.stringify(requests));
+    }
+    const initializePromise = connection.initialize();
+    const initializeRequest = await requestFor('initialize');
+    await new Promise((resolve) => rbc.writeJsonlFrame(stdout, {
+      id: initializeRequest.id,
+      result: { codexHome: '/fake', platformFamily: 'unix', platformOs: 'macos', userAgent: 'fake' },
+    }, resolve));
+    const initializeResult = await initializePromise;
+    assert.strictEqual(initializeResult.ok, true, JSON.stringify(initializeResult));
+    return { connection, stdout, requestFor };
+  }
+
+  test('RED: production-null chatgptPlanType accepts the real server-derived prolite plan, then binds that exact derived value against later conflicting updates', async () => {
+    const { connection, stdout, requestFor } = await makeInitializedConnection();
+    const credentials = {
+      accessToken: 'fake-null-plan-token',
+      chatgptAccountId: 'acct-null-plan',
+      chatgptPlanType: null,
+    };
+    const loginPromise = connection.login(credentials);
+    const loginRequest = await requestFor('account/login/start');
+    assert.strictEqual(loginRequest.params.chatgptPlanType, null,
+      'the host must preserve the accredited unknown/null value on the wire, never guess or parse an uncontracted JWT claim');
+    await new Promise((resolve) => rbc.writeJsonlFrame(stdout, {
+      id: loginRequest.id,
+      result: { type: 'chatgptAuthTokens', accessToken: credentials.accessToken, chatgptAccountId: credentials.chatgptAccountId, chatgptPlanType: null },
+    }, resolve));
+    await new Promise((resolve) => rbc.writeJsonlFrame(stdout, {
+      method: 'account/updated', params: { authMode: 'chatgptAuthTokens', planType: 'prolite' },
+    }, resolve));
+    assert.deepStrictEqual(await loginPromise, { ok: true },
+      'a valid server-derived plan must resolve local null/unknown instead of producing login-conflicting-plan-type');
+    assert.strictEqual(connection.isStopped(), false);
+
+    await new Promise((resolve) => rbc.writeJsonlFrame(stdout, {
+      method: 'account/updated', params: { authMode: 'chatgptAuthTokens', planType: 'plus' },
+    }, resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.strictEqual(connection.isStopped(), true,
+      'after derivation, a different non-null plan must still fail closed');
+    assert.strictEqual(connection.stopReason(), 'post-login-conflicting-plan-type');
+  });
+
+  test('negative control: a non-null accredited plan still rejects a different non-null server plan', async () => {
+    const { connection, stdout, requestFor } = await makeInitializedConnection();
+    const credentials = {
+      accessToken: 'fake-known-plan-token',
+      chatgptAccountId: 'acct-known-plan',
+      chatgptPlanType: 'plus',
+    };
+    const loginPromise = connection.login(credentials);
+    const loginRequest = await requestFor('account/login/start');
+    await new Promise((resolve) => rbc.writeJsonlFrame(stdout, {
+      id: loginRequest.id,
+      result: { type: 'chatgptAuthTokens', accessToken: credentials.accessToken, chatgptAccountId: credentials.chatgptAccountId, chatgptPlanType: credentials.chatgptPlanType },
+    }, resolve));
+    await new Promise((resolve) => rbc.writeJsonlFrame(stdout, {
+      method: 'account/updated', params: { authMode: 'chatgptAuthTokens', planType: 'pro' },
+    }, resolve));
+    assert.deepStrictEqual(await loginPromise, { ok: false, reason: 'login-conflicting-plan-type' });
+    assert.strictEqual(connection.isStopped(), true);
   });
 });

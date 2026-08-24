@@ -110,12 +110,39 @@ WAVE_SLUG="rll-test-wave"
 # Self-minted fixture token -- see "Key interpretive decisions" above.
 TEST_CAPABILITY="bats-runtime-role-lifecycle-fixture-capability"
 
+_assert_isolated_runtime_tmp() {
+  local dir="$1"
+  local real_dir real_bats
+  real_dir="$(cd "$dir" 2>/dev/null && pwd -P)" || return 1
+  real_bats="$(cd "$BATS_TEST_TMPDIR" && pwd -P)" || return 1
+  case "$real_dir" in
+    "$real_bats"|"$real_bats"/*) ;;
+    *) echo "# runtime-tmp escaped BATS_TEST_TMPDIR: $real_dir not under $real_bats" >&2; return 1 ;;
+  esac
+  node -e '
+    const fs = require("fs");
+    let st;
+    try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
+    if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
+    if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
+    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+  ' "$dir"
+}
+
 setup() {
+  RUNTIME_TMP="$BATS_TEST_TMPDIR/runtime-tmp"
+  mkdir -p "$RUNTIME_TMP"
+  chmod 0700 "$RUNTIME_TMP"
+  _assert_isolated_runtime_tmp "$RUNTIME_TMP"
+  export TMPDIR="$RUNTIME_TMP"
+
   PROJ="$(mktemp -d)"
   git -C "$PROJ" init -q 2>/dev/null
   git -C "$PROJ" config user.email "bats@test.local"
   git -C "$PROJ" config user.name "Bats Test"
   git -C "$PROJ" commit -q --allow-empty -m init 2>/dev/null
+  PROJ_REGISTRY_DIR="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.registryRepoDir(process.argv[2]));' "$IMPL" "$PROJ")"
 
   mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
   printf '# Fixture PLAN for runtime-role-lifecycle.bats\n\nThrowaway per-test fixture -- not the real Wave 1 PLAN.md.\n' > "$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
@@ -126,6 +153,17 @@ setup() {
 }
 
 teardown() {
+  if [ -n "$RUNTIME_TMP" ] && _assert_isolated_runtime_tmp "$RUNTIME_TMP" >/dev/null 2>&1; then
+    # M6+M7 SIXTEENTH Phase 2B follow-up: some fixtures materialize a
+    # deliberately read-only projection under here (e.g. a role-read-view,
+    # part of the production isolation model's own security posture) --
+    # restore owner write+traverse on every path THIS test created before
+    # sweeping, or a bare rm -rf leaves permission-denied debris behind
+    # (which then also makes bats' own outer per-test tmpdir cleanup fail
+    # non-silently).
+    chmod -R u+rwX "$RUNTIME_TMP" 2>/dev/null || true
+    rm -rf "$RUNTIME_TMP"
+  fi
   rm -rf "$PROJ"
 }
 
@@ -276,9 +314,9 @@ _assert_lifecycle_result() {
     const expectedCommand = process.argv[2];
     const expectedStatus = process.argv[3];
     const expectedDetail = process.argv[4];
-    const allowedKeys = ["schema","command","ok","status","code","detail_code","bindings","actions"];
-    const statusEnum = ["READY","EPHEMERAL_AVAILABLE","ACTION_REQUIRED","WAITING","UNAVAILABLE","STOPPED","INVALID"];
-    const detailEnum = ["NONE","CAPABILITY_UNAVAILABLE","NATIVE_TOOL_ERROR","ACTION_EXPIRED","ACTION_REPLAY","IDENTITY_MISMATCH","AMBIGUOUS_OWNER","READY_TIMEOUT","POLICY_INVALID","INTERNAL_ERROR"];
+    const allowedKeys = ["schema","command","ok","status","code","detail_code","bindings","actions","operation"];
+    const statusEnum = ["READY","BLOCKED","EPHEMERAL_AVAILABLE","ACTION_REQUIRED","WAITING","UNAVAILABLE","STOPPED","INVALID"];
+    const detailEnum = ["NONE","CAPABILITY_UNAVAILABLE","NATIVE_TOOL_ERROR","ACTION_EXPIRED","ACTION_REPLAY","IDENTITY_MISMATCH","AMBIGUOUS_OWNER","READY_TIMEOUT","POLICY_INVALID","DURABILITY_UNPROVEN","INTERNAL_ERROR"];
     const keys = Object.keys(data);
     const extra = keys.filter((k) => !allowedKeys.includes(k));
     const missing = allowedKeys.filter((k) => !keys.includes(k));
@@ -293,6 +331,11 @@ _assert_lifecycle_result() {
     if (!Array.isArray(data.actions)) { console.error("actions is not an array"); process.exit(1); }
     if (!statusEnum.includes(data.status)) { console.error("status not in closed enum: " + data.status); process.exit(1); }
     if (!detailEnum.includes(data.detail_code)) { console.error("detail_code not in closed enum: " + data.detail_code); process.exit(1); }
+    // PLAN.md ~L226: "operation is literal null for every pre-Sixteenth command" --
+    // every command this file exercises (probe/ensure/ready/notify/status/rotate/
+    // stop-owned/action-failed/wait-ready) predates Sixteenth, so this is a strict
+    // equality, not merely an allowed-key relaxation.
+    if (data.operation !== null) { console.error("operation must be null for this pre-Sixteenth command: " + JSON.stringify(data.operation)); process.exit(1); }
     if (expectedStatus && data.status !== expectedStatus) { console.error("expected status " + expectedStatus + " got " + data.status); process.exit(1); }
     if (expectedDetail && data.detail_code !== expectedDetail) { console.error("expected detail_code " + expectedDetail + " got " + data.detail_code); process.exit(1); }
   ' "$output" "$expected_command" "$expected_status" "$expected_detail"
@@ -513,7 +556,22 @@ _assert_lifecycle_result() {
   _write_policy '{"mode":"disk-only"}'
   _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
   local grant_id; grant_id="$(_mint_lifecycle_grant '"arch-testing"' ensure "$(_sha256_string 'ensure:arch-testing')")"
-  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --lifecycle-binding "$grant_id"
+  # HOME=$PROJ (a fresh mktemp dir with no .codex/ subdirectory, torn down by
+  # this file's own teardown()) hermetically neutralizes
+  # resolveSupervisorStartability's REAL, unconditional (never test-capability
+  # gated -- see runtime-bridge-codex.cjs's createCredentialSourceProvider
+  # docblock: "the ONLY unconditionally-exported constructor") ~/.codex/
+  # config.toml + ~/.codex/auth.json host probes. Without this override, a
+  # developer machine with genuinely valid pinned Codex CLI + credentials
+  # (ambient os.homedir()) makes ensure() correctly, by design, reach
+  # ACTION_REQUIRED via the real first-start path instead of this test's
+  # intended UNAVAILABLE -- mirroring the hermetic temp-HOME + stub
+  # CODEX_CLI_PATH fixture runtime-role-lifecycle-handlers.test.js's own P0-1
+  # positive-path sibling test already established for the SAME reason.
+  run --separate-stderr env NODE_ENV=test \
+    RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    HOME="$PROJ" CODEX_CLI_PATH= \
+    node "$IMPL" ensure --project-root "$PROJ" --role arch-testing --lifecycle-binding "$grant_id"
   [ "$status" -eq 4 ]
   _assert_lifecycle_result "ensure" "UNAVAILABLE" ""
 }
@@ -522,7 +580,13 @@ _assert_lifecycle_result() {
   _write_policy '{"mode":"persistent"}'
   _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
   local grant_id; grant_id="$(_mint_lifecycle_grant '"arch-testing"' ensure "$(_sha256_string 'ensure:arch-testing')")"
-  _run_lifecycle ensure --project-root "$PROJ" --role arch-testing --lifecycle-binding "$grant_id"
+  # See LRL-ensure-diskonly-1's comment immediately above: same hermetic HOME
+  # override, same reason (resolveSupervisorStartability's unconditional real
+  # ~/.codex probes).
+  run --separate-stderr env NODE_ENV=test \
+    RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    HOME="$PROJ" CODEX_CLI_PATH= \
+    node "$IMPL" ensure --project-root "$PROJ" --role arch-testing --lifecycle-binding "$grant_id"
   [ "$status" -eq 4 ]
   _assert_lifecycle_result "ensure" "UNAVAILABLE" ""
 }

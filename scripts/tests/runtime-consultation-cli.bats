@@ -149,18 +149,65 @@ bats_require_minimum_version 1.5.0
 # scripts/sh/run-bats.sh --project-root "$(pwd)" scripts/tests/runtime-consultation-cli.bats
 
 IMPL="$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
+RLL_IMPL="$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs"
+# M7/WP4 Phase B.3 regression fixture (dispatch arch-testing-20260809T092330Z):
+# transparent grant-injecting wrapper -- root-init/root-validate/claim/
+# lease-heartbeat/publish-result/worker-stop-ack are now grant-mandatory
+# (PLAN.md §15b); this suite predates that requirement. GRANT_WRAPPER mints a
+# REAL, correctly-scoped grant matching whatever argv is actually sent (see
+# scripts/tests/fixtures/runtime-consultation-grant-wrapper.cjs's own header
+# for the exact mechanism and its one documented limitation) and is otherwise
+# a byte-for-byte passthrough to $IMPL -- every `node "$GRANT_WRAPPER" ...` call below
+# is mechanically redirected through it so no individual test body needs to
+# change. $IMPL itself is left fully intact for any non-CLI-invocation use.
+GRANT_WRAPPER="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
 WAVE_SLUG="rcc-test-wave"
 MAX_DEPTH=2
 # "Harness-created" test capability (PLAN.md ~L752-753, ~L796).
 TEST_CAPABILITY="bats-runtime-consultation-cli-fixture-capability"
 DEFAULT_REQUEST_ID="$(printf 'a%.0s' {1..64})"
 
+_assert_isolated_runtime_tmp() {
+  local dir="$1"
+  local real_dir real_bats
+  real_dir="$(cd "$dir" 2>/dev/null && pwd -P)" || return 1
+  real_bats="$(cd "$BATS_TEST_TMPDIR" && pwd -P)" || return 1
+  case "$real_dir" in
+    "$real_bats"|"$real_bats"/*) ;;
+    *) echo "# runtime-tmp escaped BATS_TEST_TMPDIR: $real_dir not under $real_bats" >&2; return 1 ;;
+  esac
+  node -e '
+    const fs = require("fs");
+    let st;
+    try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
+    if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
+    if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
+    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+  ' "$dir"
+}
+
 setup() {
+  RUNTIME_TMP="$BATS_TEST_TMPDIR/runtime-tmp"
+  mkdir -p "$RUNTIME_TMP"
+  chmod 0700 "$RUNTIME_TMP"
+  _assert_isolated_runtime_tmp "$RUNTIME_TMP"
+  export TMPDIR="$RUNTIME_TMP"
+
   PROJ="$(mktemp -d)"
+  # GRANT_WRAPPER's own scope-resolution env var (read only by that script,
+  # never by production) -- exported once here so every subsequent
+  # `node "$GRANT_WRAPPER" ..." call in this test automatically resolves the
+  # correct worktree/PLAN scope, mirroring this file's own TEST_CAPABILITY
+  # export-once convention.
+  export RCC_GRANT_PROJECT_ROOT="$PROJ"
   git -C "$PROJ" init -q 2>/dev/null
   git -C "$PROJ" config user.email "bats@test.local"
   git -C "$PROJ" config user.name "Bats Test"
   git -C "$PROJ" commit -q --allow-empty -m init 2>/dev/null
+  # Captured immediately after git init, while .git is known-good -- never
+  # recomputed later from a $PROJ some later test step may have corrupted.
+  PROJ_REGISTRY_DIR="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.registryRepoDir(process.argv[2]));' "$RLL_IMPL" "$PROJ")"
 
   COORD_ROOT="$PROJ/.planning/coordination"
   mkdir -p "$COORD_ROOT"
@@ -183,10 +230,21 @@ setup() {
   # Best-effort root init; several tests below re-init their own fresh root, but a
   # pre-initialized $COORD_ROOT keeps request/result-fixture-only tests simple.
   NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" root-init --coordination-root "$COORD_ROOT" >/dev/null 2>&1 || true
+    node "$GRANT_WRAPPER" root-init --coordination-root "$COORD_ROOT" >/dev/null 2>&1 || true
 }
 
 teardown() {
+  if [ -n "$RUNTIME_TMP" ] && _assert_isolated_runtime_tmp "$RUNTIME_TMP" >/dev/null 2>&1; then
+    # M6+M7 SIXTEENTH Phase 2B follow-up: some fixtures materialize a
+    # deliberately read-only projection under here (e.g. a role-read-view,
+    # part of the production isolation model's own security posture) --
+    # restore owner write+traverse on every path THIS test created before
+    # sweeping, or a bare rm -rf leaves permission-denied debris behind
+    # (which then also makes bats' own outer per-test tmpdir cleanup fail
+    # non-silently).
+    chmod -R u+rwX "$RUNTIME_TMP" 2>/dev/null || true
+    rm -rf "$RUNTIME_TMP"
+  fi
   chmod -R u+rwx "$PROJ" 2>/dev/null || true
   rm -rf "$PROJ"
 }
@@ -346,15 +404,93 @@ _stop_path() {
 # risks failing those for the wrong reason (actual expiry) instead of the
 # reason under test. ──────────────────────────────────────────────────────────
 
+# M6+M7 requester-authority closure (Group G fix): mints (or idempotently
+# reuses, via createRequesterBinding's own lookup-or-create semantics) the
+# EXACT tuple {session:"rcc-grant-wrapper-session", agent:
+# "runtime-consultation-grant-wrapper-agent", role, worktree_id, plan_digest}
+# GRANT_WRAPPER's own tryMintGrant will mint/reuse for its DEFAULT identity
+# (RCC_GRANT_SESSION/RCC_GRANT_AGENT_ID/RCC_GRANT_ROLE all unset in this
+# file) -- so a request fixture's source_role/requester_instance_id set from
+# THIS call genuinely correlates with whatever grant the wrapper mints later
+# for the same tuple, mirroring runtime-consultation-cli.test.js's own
+# knownRequesterIdentity helper (same wrapper, same convergence mechanism,
+# proven there first).
+_known_requester_identity() {
+  local role="${1:-arch-testing}"
+  node -e '
+    const rll = require(process.argv[1]);
+    const projectRoot = process.argv[2];
+    const role = process.argv[3];
+    const worktreeId = process.argv[4];
+    const planDigest = process.argv[5];
+    // M6+M7 FULL CLOSURE (2026-08-11): must stay in lockstep with
+    // GRANT_WRAPPER own RCC_GRANT_PROVIDER default (codex-supervisor) -- a
+    // different provider here would mint a DIFFERENT actor_instance_id
+    // (session-generation is keyed by (provider, session)), breaking the
+    // whole-point convergence this helper exists for. No apostrophes in this
+    // comment block -- bash single-quoted node -e block, no escape mechanism.
+    const identity = { ok: true, provider: process.env.RCC_GRANT_PROVIDER || "codex-supervisor", runtime_session_key: "rcc-grant-wrapper-session" };
+    const bindingResult = rll.createRequesterBinding(projectRoot, identity, "runtime-consultation-grant-wrapper-agent", role, worktreeId, planDigest, 3600);
+    if (!bindingResult.ok) {
+      process.stderr.write("_known_requester_identity: binding mint failed: " + JSON.stringify(bindingResult));
+      process.exit(1);
+    }
+    process.stdout.write(bindingResult.binding.actor_instance_id);
+  ' "$RLL_IMPL" "$PROJ" "$role" "$WORKTREE_ID" "$PLAN_DIGEST"
+}
+
+# M6+M7 requester-authority closure (Group G fix): a handful of pre-existing
+# tests deliberately choose their OWN arbitrary requester_instance_id (e.g.
+# proving cancel.json cancelled_by is stamped from the request own field,
+# never a freshly-generated one) and need the CLI call to genuinely reach
+# THAT identity downstream, not merely a grant-scope AUTHORITY_INVALID
+# reject. actor_instance_id can never be CHOSEN via createRequesterBinding
+# itself (always crypto.randomBytes) -- mints/reuses the SAME wrapper-
+# convergent tuple _known_requester_identity uses, then forges its
+# actor_instance_id field directly on disk to the caller own chosen value
+# (same forge-after-mint technique as runtime-role-lifecycle-registry.test.js
+# own forged-agent_key negative test). Since GRANT_WRAPPER own later mint
+# for the SAME tuple idempotently reuses this exact record (never mints a
+# second one), its consumed actorInstanceId ends up genuinely equal to
+# customInstanceId -- no wrapper change needed.
+_force_requester_binding_identity() {
+  local custom_instance_id="$1" role="${2:-arch-testing}"
+  node -e '
+    const rll = require(process.argv[1]);
+    const fs = require("fs");
+    const projectRoot = process.argv[2];
+    const role = process.argv[3];
+    const worktreeId = process.argv[4];
+    const planDigest = process.argv[5];
+    const customInstanceId = process.argv[6];
+    // M6+M7 FULL CLOSURE (2026-08-11): mirrors _known_requester_identity own
+    // matching comment -- must stay in lockstep with GRANT_WRAPPER default.
+    // No apostrophes in this comment block -- bash single-quoted node -e
+    // block, no escape mechanism.
+    const identity = { ok: true, provider: process.env.RCC_GRANT_PROVIDER || "codex-supervisor", runtime_session_key: "rcc-grant-wrapper-session" };
+    const bindingResult = rll.createRequesterBinding(projectRoot, identity, "runtime-consultation-grant-wrapper-agent", role, worktreeId, planDigest, 3600);
+    if (!bindingResult.ok) {
+      process.stderr.write("_force_requester_binding_identity: binding mint failed: " + JSON.stringify(bindingResult));
+      process.exit(1);
+    }
+    const recordPath = rll.requesterBindingPathFor(projectRoot, bindingResult.binding.binding_id);
+    const raw = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+    raw.actor_instance_id = customInstanceId;
+    fs.writeFileSync(recordPath, JSON.stringify(raw), { mode: 0o600 });
+    fs.chmodSync(recordPath, 0o600);
+  ' "$RLL_IMPL" "$PROJ" "$role" "$WORKTREE_ID" "$PLAN_DIGEST" "$custom_instance_id"
+}
+
 _write_request() {
   local out="$1" overrides="$2"
   mkdir -p "$(dirname "$out")"
+  local known_requester_instance_id; known_requester_instance_id="$(_known_requester_identity arch-testing)"
   local created_at expiry
   created_at="$(_now_iso)"
   expiry="$(_iso_plus_seconds "$created_at" 1800)"
   RCC_REPO_ID="$REPO_ID" RCC_WAVE_SLUG="$WAVE_SLUG" RCC_PLAN_DIGEST="$PLAN_DIGEST" \
   RCC_COORD_ROOT_ID="$COORD_ROOT_ID" RCC_WORKTREE_ID="$WORKTREE_ID" RCC_SUBJECT_HEAD="$SUBJECT_HEAD" \
-  RCC_CREATED_AT="$created_at" RCC_EXPIRY="$expiry" \
+  RCC_CREATED_AT="$created_at" RCC_EXPIRY="$expiry" RCC_KNOWN_REQUESTER_INSTANCE_ID="$known_requester_instance_id" \
   node -e '
     const fs = require("fs");
     const overrides = JSON.parse(process.argv[1]);
@@ -367,12 +503,21 @@ _write_request() {
       parent_request_id: null,
       depth: 0,
       max_depth: 2,
-      source_role: "test-specialist",
+      // M6+M7 requester-authority closure (Group G fix): must match
+      // GRANT_WRAPPER own default minted role (RCC_GRANT_ROLE unset in this
+      // file -- defaults to "arch-testing", see runtime-consultation-grant-
+      // wrapper.cjs own envRole resolution) -- validateAndConsumeRoleCommandGrantForCommand
+      // cross-checks expectedScope.sourceRole (read from THIS request) against
+      // the grant own bound role and rejects AUTHORITY_INVALID on mismatch.
+      source_role: "arch-testing",
       target_role: "arch-testing",
       target_role_profile_version: "1.0.0",
       target_role_profile_digest: "b".repeat(64),
       requester_worktree_id: e.RCC_WORKTREE_ID,
-      requester_instance_id: "c".repeat(64),
+      // M6+M7 requester-authority closure (Group G fix): a REAL, wrapper-
+      // convergent actor_instance_id (see _known_requester_identity own doc
+      // comment) -- never a fabricated placeholder no real grant can match.
+      requester_instance_id: e.RCC_KNOWN_REQUESTER_INSTANCE_ID,
       repo_id: e.RCC_REPO_ID,
       wave_slug: e.RCC_WAVE_SLUG,
       protocol_profile: "runtime-consultation/v1",
@@ -399,6 +544,82 @@ _write_request() {
     fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
     fs.chmodSync(outPath, 0o600);
   ' "$overrides" "$out"
+}
+
+# M6+M7 SIXTEENTH CODEX ACCEPTANCE Correction E: canonical fixture for any
+# test whose OWN subject is claim/lock/heartbeat/publish-result -- those
+# mechanisms require a pre-existing activation/v1 record
+# (cmdClaim's resolveActivationForRequestPath), which only real `dispatch`
+# durably creates. A bare _write_request alone (this file's OTHER ~85 tests'
+# correct fixture, since THEIR subject is request/cancel/accept/await, never
+# claim) skips that prerequisite entirely -- AUTHORITY_INVALID before ever
+# reaching the claim/lock mechanics under test. Never relaxes cmdClaim, never
+# hand-fabricates activation.json: this writes the request, then runs the
+# REAL dispatch CLI, which durably publishes activation.json/inbox-ref.json
+# itself (plus delivery.json under the noop branch below).
+#
+# dispatch requires a routing policy materialized at EXACTLY
+# planRoot/routing-policies/<request's own routing_policy_digest>.json
+# (dispatchCanonical's own DRIVER_UNAVAILABLE-on-absence check) -- so the
+# real routing_policy_digest (scripts/lib/runtime-routing.json's own sha256,
+# identical to the exported ROUTING_POLICY_DIGEST constant) must be folded
+# into the request BEFORE it is written, and that exact file byte-copied to
+# that exact path, or dispatch itself fails closed before claim is ever
+# reachable.
+#
+# The temp fixture project has no live codex-app-server/claude-agent
+# capability, so dispatch's own real driver-selection loop honestly falls
+# through every candidate to noop -- this is dispatch's OWN production
+# decision on absent capability, not a substitute for it. That noop
+# activation is what claim/lock/heartbeat/publish-result need to exist; it
+# is not itself evidence of a Sixteenth M6/M7 delivery.
+_write_activated_request() {
+  local out="$1" overrides="$2"
+  local routing_src="$BATS_TEST_DIRNAME/../lib/runtime-routing.json"
+  local routing_digest; routing_digest="$(_sha256_file "$routing_src")"
+  local merged_overrides; merged_overrides="$(node -e '
+    const overrides = JSON.parse(process.argv[1]);
+    overrides.routing_policy_digest = process.argv[2];
+    process.stdout.write(JSON.stringify(overrides));
+  ' "$overrides" "$routing_digest")"
+  _write_request "$out" "$merged_overrides"
+
+  local routing_dest_dir; routing_dest_dir="$(_plan_root)/routing-policies"
+  mkdir -p "$routing_dest_dir"
+  cp "$routing_src" "$routing_dest_dir/$routing_digest.json"
+  chmod 0600 "$routing_dest_dir/$routing_digest.json"
+
+  _run_cli dispatch --coordination-root "$COORD_ROOT" --request "$out"
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+
+  local activation_path; activation_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$output")"
+  [ -f "$activation_path" ]
+  local target_role request_id attempt_id
+  node -e '
+    const fs = require("fs");
+    const activation = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const req = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+    if (activation.selected_driver !== "noop") {
+      process.stderr.write("expected the temp fixture project to honestly fall through to noop, got: " + activation.selected_driver); process.exit(1);
+    }
+    if (activation.request_id !== req.request_id || activation.attempt_id !== req.initial_attempt_id) {
+      process.stderr.write("activation does not correlate to the request just written"); process.exit(1);
+    }
+    process.stdout.write([req.target_role, req.request_id, req.initial_attempt_id].join(" ") + "\n");
+  ' "$activation_path" "$out" > "$BATS_TEST_TMPDIR/.activated-request-fields"
+  read -r target_role request_id attempt_id < "$BATS_TEST_TMPDIR/.activated-request-fields"
+  rm -f "$BATS_TEST_TMPDIR/.activated-request-fields"
+
+  local delivery_path; delivery_path="$(dirname "$out")/delivery/$attempt_id.json"
+  [ -f "$delivery_path" ]
+  node -e '
+    const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    if (d.driver !== "noop" || d.delivered !== false) { process.stderr.write("expected an honest noop non-delivery record: " + JSON.stringify(d)); process.exit(1); }
+  ' "$delivery_path"
+
+  local inbox_path; inbox_path="$(_plan_root)/inbox/$target_role/$request_id.json"
+  [ -f "$inbox_path" ]
 }
 
 _write_result() {
@@ -435,7 +656,11 @@ _write_result() {
       target_role_profile_version: "1.0.0",
       target_role_profile_digest: "b".repeat(64),
       from_role: "arch-testing",
-      to_role: "test-specialist",
+      // M6+M7 requester-authority closure (Group G fix): must match
+      // _write_request own now-fixed source_role default ("arch-testing") --
+      // await-result cross-checks resultObj.to_role against the request own
+      // source_role field.
+      to_role: "arch-testing",
       result_kind: "TEST_RESULT",
       status: "ANSWERED",
       reason: null,
@@ -447,7 +672,8 @@ _write_result() {
       consultation_dependencies: [],
       producer_worktree_id: e.RCC_WORKTREE_ID,
       producer_head: e.RCC_SUBJECT_HEAD,
-      created_at: e.RCC_CREATED_AT
+      created_at: e.RCC_CREATED_AT,
+      pattern_evidence_dependency: null
     };
     const merged = Object.assign({}, defaults, overrides);
     for (const k of Object.keys(merged)) {
@@ -575,7 +801,7 @@ _write_cancel_record() {
 # deliberately testing production (non-test-capability) behavior.
 _run_cli() {
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" "$@"
+    node "$GRANT_WRAPPER" "$@"
 }
 
 # Invokes with no test-capability env at all -- used by the determinism-gate cases
@@ -585,7 +811,7 @@ _run_cli() {
 # caller environment.
 _run_cli_production() {
   run --separate-stderr env -u NODE_ENV -u RUNTIME_CONSULTATION_TEST_CAPABILITY -u RUNTIME_CONSULTATION_ACL_PROBE \
-    node "$IMPL" "$@"
+    node "$GRANT_WRAPPER" "$@"
 }
 
 # Parses the most recent `run`/`run --separate-stderr` invocation's captured
@@ -939,6 +1165,7 @@ _wait_for_rendezvous_ready() {
   local requester; requester="$(printf '9%.0s' {1..64})"
   local req_f; req_f="$(_request_path "$id")"
   _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","requester_instance_id":"%s"}' "$id" "$id" "$requester")"
+  _force_requester_binding_identity "$requester" arch-testing
 
   _run_cli cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit
   [ "$status" -eq 0 ]
@@ -969,6 +1196,7 @@ _wait_for_rendezvous_ready() {
   local requester; requester="$(printf '9%.0s' {1..64})"
   local req_f; req_f="$(_request_path "$id")"
   _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","requester_instance_id":"%s"}' "$id" "$id" "$requester")"
+  _force_requester_binding_identity "$requester" arch-testing
 
   local cancel_f; cancel_f="$(_plan_root)/transactions/$id/cancel.json"
   _write_cancel_record "$cancel_f" "$(printf '{"request_id":"%s","reason":"explicit","cancelled_by":"some-unrelated-identity-not-requester-not-timeout-authority"}' "$id")"
@@ -1167,24 +1395,47 @@ _wait_for_rendezvous_ready() {
     const fs = require("fs");
     const src = fs.readFileSync(process.argv[1], "utf8");
 
-    // 1. The literal filename string must appear in EXACTLY two places: cancelPathFor
-    //    itself (the sole path constructor) and the filename check inside
-    //    accreditCancelRecord. Anything else means a hand-rolled path.join(...,
-    //    "cancel.json") exists somewhere, bypassing cancelPathFor entirely.
+    // 1. The literal filename string must appear in EXACTLY three places: cancelPathFor
+    //    itself (the sole path constructor), the filename check inside
+    //    accreditCancelRecord, and (NO-GO Correction C) readRootSourceTerminalArtifacts
+    //    own ackRef construction for the cancel-terminal branch -- mirrors the
+    //    ack.json-branch ackRef line immediately above it, a relative REF STRING for
+    //    an already-canonically-read record, never a second path constructor reading
+    //    the file. Anything else means a hand-rolled path.join(..., "cancel.json")
+    //    exists somewhere, bypassing cancelPathFor entirely.
     const filenamePattern = "\x27cancel.json\x27";
     const filenameCount = src.split(filenamePattern).length - 1;
-    if (filenameCount !== 2) {
-      console.error("expected exactly 2 literal cancel.json filename references, found " + filenameCount);
+    if (filenameCount !== 3) {
+      console.error("expected exactly 3 literal cancel.json filename references, found " + filenameCount);
       process.exit(1);
     }
 
-    // 2. cancelPathFor() itself must be called EXACTLY 5 times (excluding its own
-    //    definition) -- every one of the 5 legitimate call sites established across
+    // 2. cancelPathFor() itself must be called EXACTLY 11 times (excluding its own
+    //    definition) -- the original 5 legitimate call sites established across
     //    this pass and round 16 (cmdCancel reader, cmdCancel writer, cmdAcceptResult
     //    reader, cmdAwaitResult reader, and round 16 own cmdPublishResult
     //    terminal-exclusion reader -- PLAN.md ~L443 "absence of committed
-    //    takeover/cancel/accept" requirement, previously missing entirely). A 6th
-    //    call site would mean a new, unaudited consumer was added.
+    //    takeover/cancel/accept" requirement, previously missing entirely), PLUS
+    //    three Sixteenth HostBridge/root-source call sites added since:
+    //    hostBridgeScheduleTurn and hostBridgeListInbox each own a
+    //    cancellation-presence check (both now routed through the sanctioned
+    //    readCanonicalCancelRecordOptional choke point, not inlined -- CANCEL-AUDIT-01
+    //    above enforces that), and enforceRootSourceGrantBoundary own
+    //    pre/post-ingress admission check (M7 correction round 1: upgraded from a
+    //    path.basename(...)-only derivation to a full readCanonicalCancelRecordOptional
+    //    read, so it now genuinely reads cancel.json content -- no longer exempt via
+    //    the basename-only sanctioned category, but still the SAME single call site,
+    //    not a new one), PLUS one more (NO-GO Correction C)
+    //    readRootSourceTerminalArtifacts own cancelPath resolution, immediately
+    //    passed to readCanonicalCancelRecordRequired (see check 3 below) -- that is 9.
+    //    PLUS TWO genuinely NEW call sites (M7 correction round 1, C3
+    //    Codex final ruling: claim and heartbeat must validate/correlate
+    //    authoritative result/v2, not only closed shape): cmdClaim own
+    //    revalidateBeforeLink now also reads cancelPathFor(txnDir) as part of
+    //    its full terminal-absence check (alongside its own pre-existing
+    //    accepted-result check), and cmdLeaseHeartbeat own equivalent
+    //    pre-write terminal-absence check gained the identical cancel read --
+    //    that is 11. A 12th call site would mean a new, unaudited consumer was added.
     const callPattern = "cancelPathFor(";
     const totalCallOccurrences = src.split(callPattern).length - 1;
     const defPattern = "function cancelPathFor(";
@@ -1194,33 +1445,217 @@ _wait_for_rendezvous_ready() {
       process.exit(1);
     }
     const callSiteCount = totalCallOccurrences - defOccurrences;
-    if (callSiteCount !== 5) {
-      console.error("expected exactly 5 cancelPathFor(...) call sites (excluding its own definition), found " + callSiteCount);
+    if (callSiteCount !== 11) {
+      console.error("expected exactly 11 cancelPathFor(...) call sites (excluding its own definition), found " + callSiteCount);
       process.exit(1);
     }
 
     // 3. Every call site must be immediately wrapped by one of the three sanctioned
-    //    reader wrappers, OR be the one known writer assignment (`const cancelPath =
-    //    cancelPathFor(txnDir);`) -- never a bare, unwrapped read of the result.
+    //    reader wrappers, be the one known writer assignment (`const cancelPath =
+    //    cancelPathFor(txnDir);`), or be a bare path.basename(...) extraction (which
+    //    performs no file I/O, so it cannot read cancel.json content) -- never a
+    //    bare, unwrapped READ of the result.
     const lines = src.split("\n");
     const readerWrappers = ["readCanonicalCancelRecordOptional(cancelPathFor(", "readCanonicalCancelRecordRequired(cancelPathFor(", "classifyCanonicalCancelRecord(cancelPathFor("];
     const writerPattern = "const cancelPath = cancelPathFor(txnDir);";
+    const basenameOnlyPattern = "path.basename(cancelPathFor(";
     let sanctionedSeen = 0;
     for (const line of lines) {
       if (!line.includes(callPattern) || line.includes(defPattern)) continue;
       const isSanctionedReader = readerWrappers.some((w) => line.includes(w));
       const isSanctionedWriter = line.trim() === writerPattern;
-      if (!isSanctionedReader && !isSanctionedWriter) {
+      const isSanctionedBasenameOnly = line.includes(basenameOnlyPattern);
+      if (!isSanctionedReader && !isSanctionedWriter && !isSanctionedBasenameOnly) {
         console.error("unsanctioned cancelPathFor(...) call site: " + line.trim());
         process.exit(1);
       }
       sanctionedSeen += 1;
     }
-    if (sanctionedSeen !== 5) {
-      console.error("expected to positively identify all 5 sanctioned call sites by line-scan, found " + sanctionedSeen);
+    if (sanctionedSeen !== 11) {
+      console.error("expected to positively identify all 11 sanctioned call sites by line-scan, found " + sanctionedSeen);
       process.exit(1);
     }
   ' "$IMPL"
+  [ "$status" -eq 0 ]
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# readRootSourceTerminalArtifacts suite (M6+M7 SIXTEENTH CODEX ACCEPTANCE
+# Correction C): direct, unit-level coverage of the exported helper itself --
+# purely consultation-layer (request/result/ack/cancel under a planRoot), no
+# lifecycle/binding/action coupling, so this suite never needs the heavy
+# 5-role E2E plane runtime-consultation-role-gate.bats's own S16-ROOT-SOURCE-*
+# tests require.
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "S16-RSTA-CANCEL-PRE-RESULT-01: a cancelled transaction with no result ever published self-classifies terminalState CANCELLED, with cancelRef/cancelDigest (never ackRef) pointing at cancel.json and every other terminal field null" {
+  local id; id="$(_gen_hex_id)"
+  local req_f; req_f="$(_request_path "$id")"
+  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s"}' "$id" "$id")"
+
+  _run_cli cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+
+  run node -e '
+    const rc = require(process.argv[1]);
+    const terminal = rc.readRootSourceTerminalArtifacts(process.argv[2], process.argv[3], process.argv[4]);
+    process.stdout.write(JSON.stringify(terminal));
+  ' "$IMPL" "$COORD_ROOT" "$(_plan_root)" "$id"
+  [ "$status" -eq 0 ]
+  node -e '
+    const t = JSON.parse(process.argv[1]);
+    const id = process.argv[2];
+    if (t.terminalState !== "CANCELLED") {
+      process.stderr.write("terminalState must self-classify CANCELLED: " + JSON.stringify(t)); process.exit(1);
+    }
+    if (t.requestRef !== "transactions/" + id + "/request.json" || typeof t.requestDigest !== "string" || t.requestDigest.length !== 64) {
+      process.stderr.write("request fields not populated: " + JSON.stringify(t)); process.exit(1);
+    }
+    if (t.resultRef !== null || t.resultDigest !== null) {
+      process.stderr.write("result must stay null pre-result: " + JSON.stringify(t)); process.exit(1);
+    }
+    if (t.acceptedResultRef !== null || t.acceptedResultDigest !== null) {
+      process.stderr.write("accepted-result must stay null for cancelled: " + JSON.stringify(t)); process.exit(1);
+    }
+    if (t.ackRef !== null || t.ackDigest !== null) {
+      process.stderr.write("ackRef/ackDigest must stay null for a cancelled transaction -- cancel data must never flow through the ack fields: " + JSON.stringify(t)); process.exit(1);
+    }
+    if (t.cancelRef !== "transactions/" + id + "/cancel.json") {
+      process.stderr.write("cancelRef must be the exact canonical cancel.json ref: " + JSON.stringify(t)); process.exit(1);
+    }
+    if (typeof t.cancelDigest !== "string" || !/^[0-9a-f]{64}$/.test(t.cancelDigest)) {
+      process.stderr.write("cancelDigest must be 64 lowercase hex: " + JSON.stringify(t)); process.exit(1);
+    }
+    // M7 GREEN correction round 2, R3: cancelDigest must be the REAL sha256
+    // of cancel.json own actual on-disk bytes -- a well-formed-but-WRONG
+    // 64-hex digest (e.g. computed from a placeholder instead of the
+    // fd-bound bytes classifyCanonicalCancelRecord actually read) would
+    // pass every check above; only an independent, out-of-band digest
+    // recomputation catches it. Confirmed by direct mutation: replacing
+    // the digest with sha256 of a fixed placeholder buffer survived every
+    // prior assertion in this file, undetected.
+    const fs = require("fs");
+    const crypto = require("crypto");
+    const cancelPath = require("path").join(require("path").dirname(process.argv[3]), "cancel.json");
+    const realDigest = crypto.createHash("sha256").update(fs.readFileSync(cancelPath)).digest("hex");
+    if (t.cancelDigest !== realDigest) {
+      process.stderr.write("cancelDigest does not match the real sha256 of cancel.json own bytes: reported=" + t.cancelDigest + " real=" + realDigest); process.exit(1);
+    }
+  ' "$output" "$id" "$req_f"
+}
+
+@test "S16-RSTA-CANCEL-WITH-RESULT-01: a cancelled transaction where a result WAS already published still validates and emits it (never forced null just because the terminal is CANCELLED), while acceptedResult and ack stay null and cancelRef/cancelDigest are populated" {
+  local id; id="$(_gen_hex_id)"
+  local req_f; req_f="$(_request_path "$id")"
+  # resolveAuthoritativeAttempt (absent a takeover) resolves to the request's
+  # OWN initial_attempt_id, never request_id -- _write_request's default is
+  # the fixed "f".repeat(64) placeholder; the result fixture's filename and
+  # attempt_id must both match THAT, not this test's own request id.
+  local attempt_id; attempt_id="$(printf 'f%.0s' {1..64})"
+  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s"}' "$id" "$id")"
+  local req_digest; req_digest="$(_sha256_file "$req_f")"
+
+  local result_f; result_f="$(_result_path "$id" "$attempt_id")"
+  _write_result "$result_f" "$(printf '{"attempt_id":"%s","in_reply_to":"%s","root_request_id":"%s","request_digest":"%s","status":"ANSWERED"}' "$attempt_id" "$id" "$id" "$req_digest")"
+
+  _run_cli cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+
+  run node -e '
+    const rc = require(process.argv[1]);
+    const terminal = rc.readRootSourceTerminalArtifacts(process.argv[2], process.argv[3], process.argv[4]);
+    process.stdout.write(JSON.stringify(terminal));
+  ' "$IMPL" "$COORD_ROOT" "$(_plan_root)" "$id"
+  [ "$status" -eq 0 ]
+  node -e '
+    const t = JSON.parse(process.argv[1]);
+    const id = process.argv[2];
+    const attemptId = process.argv[3];
+    if (t.terminalState !== "CANCELLED") {
+      process.stderr.write("terminalState must self-classify CANCELLED: " + JSON.stringify(t)); process.exit(1);
+    }
+    if (t.resultRef !== "transactions/" + id + "/results/" + attemptId + ".json" || typeof t.resultDigest !== "string" || t.resultDigest.length !== 64) {
+      process.stderr.write("an already-published result must still be validated and emitted: " + JSON.stringify(t)); process.exit(1);
+    }
+    if (t.acceptedResultRef !== null || t.acceptedResultDigest !== null) {
+      process.stderr.write("accepted-result must stay null for a cancelled transaction: " + JSON.stringify(t)); process.exit(1);
+    }
+    if (t.ackRef !== null || t.ackDigest !== null) {
+      process.stderr.write("ackRef/ackDigest must stay null for a cancelled transaction: " + JSON.stringify(t)); process.exit(1);
+    }
+    if (t.cancelRef !== "transactions/" + id + "/cancel.json") {
+      process.stderr.write("cancelRef must be the exact canonical cancel.json ref: " + JSON.stringify(t)); process.exit(1);
+    }
+    if (typeof t.cancelDigest !== "string" || !/^[0-9a-f]{64}$/.test(t.cancelDigest)) {
+      process.stderr.write("cancelDigest must be 64 lowercase hex: " + JSON.stringify(t)); process.exit(1);
+    }
+  ' "$output" "$id" "$attempt_id"
+}
+
+@test "S16-RSTA-ACKED-NO-RESULT-01: a durable ack.json with no correlated result present self-classifies as an inconsistent ACKED-without-result state and throws CORRELATION_INVALID, never silently accepted -- the reader must never let a caller-supplied reason paper over the missing result" {
+  local id; id="$(_gen_hex_id)"
+  local req_f; req_f="$(_request_path "$id")"
+  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s"}' "$id" "$id")"
+
+  # A real, durable ack.json -- readRootSourceTerminalArtifacts must
+  # self-classify ACKED from what is actually durable on disk, never from a
+  # caller-supplied hint. Bare presence-only write, mirroring
+  # S16-RSTA-MUTUAL-EXCLUSION-01's own established technique below: the
+  # correlation gap under test here (no result) is independent of ack.json's
+  # own content accreditation.
+  local ack_f; ack_f="$(dirname "$req_f")/ack.json"
+  node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({ planted: true }), { mode: 0o600 })' "$ack_f"
+
+  run node -e '
+    const rc = require(process.argv[1]);
+    try {
+      const out = rc.readRootSourceTerminalArtifacts(process.argv[2], process.argv[3], process.argv[4]);
+      process.stderr.write("expected a throw, got a return value: " + JSON.stringify(out)); process.exit(1);
+    } catch (err) {
+      if (err.detailCode !== "CORRELATION_INVALID") {
+        process.stderr.write("expected CORRELATION_INVALID, got " + JSON.stringify({ detailCode: err.detailCode, message: err.message }));
+        process.exit(1);
+      }
+      process.exit(0);
+    }
+  ' "$IMPL" "$COORD_ROOT" "$(_plan_root)" "$id"
+  [ "$status" -eq 0 ]
+}
+
+@test "S16-RSTA-MUTUAL-EXCLUSION-01: ack.json and cancel.json both durably present for the SAME request fails closed (SECURITY_INVALID) -- the reader must detect this contradiction itself, never be told which terminal to check" {
+  local id; id="$(_gen_hex_id)"
+  local req_f; req_f="$(_request_path "$id")"
+  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s"}' "$id" "$id")"
+
+  _run_cli cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+
+  # Directly plants a durable ack.json alongside the real cancel.json --
+  # readRootSourceTerminalArtifacts's own mutual-exclusion check is a
+  # presence-only gate (classifyDurableRead's ABSENT/PRESENT state) evaluated
+  # BEFORE any content accreditation of either file, so this does not need to
+  # be a genuine, fully-correlated ack/v1 record to exercise it; a single
+  # ordinary write (nlink==1 immediately) is already durable in the same
+  # sense a real writer's record is for READING purposes.
+  local ack_f; ack_f="$(dirname "$req_f")/ack.json"
+  node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({ planted: true }), { mode: 0o600 })' "$ack_f"
+
+  run node -e '
+    const rc = require(process.argv[1]);
+    try {
+      const out = rc.readRootSourceTerminalArtifacts(process.argv[2], process.argv[3], process.argv[4]);
+      process.stderr.write("expected a throw, got a return value: " + JSON.stringify(out)); process.exit(1);
+    } catch (err) {
+      if (err.detailCode !== "SECURITY_INVALID") {
+        process.stderr.write("expected SECURITY_INVALID, got " + JSON.stringify({ detailCode: err.detailCode, message: err.message }));
+        process.exit(1);
+      }
+      process.exit(0);
+    }
+  ' "$IMPL" "$COORD_ROOT" "$(_plan_root)" "$id"
   [ "$status" -eq 0 ]
 }
 
@@ -1346,12 +1781,13 @@ _wait_for_rendezvous_ready() {
   local requester_a; requester_a="$(printf '9%.0s' {1..64})"
   local requester_b; requester_b="$(printf '8%.0s' {1..64})"
   _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","requester_instance_id":"%s"}' "$id" "$id" "$requester_a")"
+  _force_requester_binding_identity "$requester_a" arch-testing
   local txn_dir; txn_dir="$(dirname "$req_f")"
 
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-in-lock-pre-read \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" cancel-in-lock-pre-read
@@ -1398,7 +1834,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=accept-result-in-lock-pre-read \
-      node "$IMPL" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
   local accept_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" accept-result-in-lock-pre-read
@@ -1439,7 +1875,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=await-result-post-iteration \
-      node "$IMPL" await-result --coordination-root "$COORD_ROOT" --request "$req_f" --timeout 3 >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" await-result --coordination-root "$COORD_ROOT" --request "$req_f" --timeout 3 >"$out" 2>&1; echo $? >"$rc_file" ) &
   local await_pid=$!
 
   # Deterministic, not timing-based (Codex NO-GO round 11: a plain sleep here
@@ -1484,7 +1920,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=await-result-post-iteration \
-      node "$IMPL" await-result --coordination-root "$COORD_ROOT" --request "$req_f" --timeout 3 >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" await-result --coordination-root "$COORD_ROOT" --request "$req_f" --timeout 3 >"$out" 2>&1; echo $? >"$rc_file" ) &
   local await_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" await-result-post-iteration
@@ -1533,7 +1969,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-post-publish-pre-recheck \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" cancel-post-publish-pre-recheck
@@ -1567,7 +2003,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=accept-result-post-publish-pre-recheck \
-      node "$IMPL" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
   local accept_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" accept-result-post-publish-pre-recheck
@@ -1601,7 +2037,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-post-publish-pre-recheck \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" cancel-post-publish-pre-recheck
@@ -1630,12 +2066,13 @@ _wait_for_rendezvous_ready() {
   local requester; requester="$(printf '9%.0s' {1..64})"
   local req_f; req_f="$(_request_path "$id")"
   _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","requester_instance_id":"%s"}' "$id" "$id" "$requester")"
+  _force_requester_binding_identity "$requester" arch-testing
   local txn_dir; txn_dir="$(dirname "$req_f")"
 
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-post-publish-pre-recheck \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" cancel-post-publish-pre-recheck
@@ -1667,12 +2104,13 @@ _wait_for_rendezvous_ready() {
   local requester; requester="$(printf '9%.0s' {1..64})"
   local req_f; req_f="$(_request_path "$id")"
   _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","requester_instance_id":"%s"}' "$id" "$id" "$requester")"
+  _force_requester_binding_identity "$requester" arch-testing
   local txn_dir; txn_dir="$(dirname "$req_f")"
 
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-post-publish-pre-recheck \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" cancel-post-publish-pre-recheck
@@ -1717,12 +2155,13 @@ _wait_for_rendezvous_ready() {
   local requester; requester="$(printf '9%.0s' {1..64})"
   local req_f; req_f="$(_request_path "$id")"
   _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","requester_instance_id":"%s"}' "$id" "$id" "$requester")"
+  _force_requester_binding_identity "$requester" arch-testing
   local txn_dir; txn_dir="$(dirname "$req_f")"
 
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-post-publish-pre-recheck \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" cancel-post-publish-pre-recheck
@@ -1762,12 +2201,13 @@ _wait_for_rendezvous_ready() {
   local requester; requester="$(printf '9%.0s' {1..64})"
   local req_f; req_f="$(_request_path "$id")"
   _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","requester_instance_id":"%s"}' "$id" "$id" "$requester")"
+  _force_requester_binding_identity "$requester" arch-testing
   local txn_dir; txn_dir="$(dirname "$req_f")"
 
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-post-publish-pre-recheck \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" cancel-post-publish-pre-recheck
@@ -1815,7 +2255,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=accept-result-post-publish-pre-recheck \
-      node "$IMPL" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
   local accept_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" accept-result-post-publish-pre-recheck
@@ -1853,7 +2293,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=accept-result-post-publish-pre-recheck \
-      node "$IMPL" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
   local accept_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" accept-result-post-publish-pre-recheck
@@ -1900,7 +2340,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=accept-result-post-publish-pre-recheck \
-      node "$IMPL" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
   local accept_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" accept-result-post-publish-pre-recheck
@@ -1943,7 +2383,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=accept-result-post-publish-pre-recheck \
-      node "$IMPL" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
   local accept_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" accept-result-post-publish-pre-recheck
@@ -2034,7 +2474,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-in-lock-pre-read \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" cancel-in-lock-pre-read
@@ -2079,7 +2519,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=accept-result-in-lock-pre-read \
-      node "$IMPL" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
   local accept_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" accept-result-in-lock-pre-read
@@ -2133,7 +2573,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-in-lock-pre-read \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" cancel-in-lock-pre-read
@@ -2166,7 +2606,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=accept-result-in-lock-pre-read \
-      node "$IMPL" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" accept-result --coordination-root "$COORD_ROOT" --request "$req_f" >"$out" 2>&1; echo $? >"$rc_file" ) &
   local accept_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" accept-result-in-lock-pre-read
@@ -2202,7 +2642,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=acquire-lock-before-mkdir-loop \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" acquire-lock-before-mkdir-loop
@@ -2249,7 +2689,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=acquire-lock-before-mkdir-loop \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" acquire-lock-before-mkdir-loop
@@ -2301,13 +2741,13 @@ _wait_for_rendezvous_ready() {
 @test "RCC-acquire-lock-nonsymlink-substitute-mid-mkdir-rejected: a REAL (non-symlink) directory substituted for .lock in the narrow window between this invocation's own mkdirSync succeeding and its immediately-following verification is detected and rejected, never silently adopted (Codex NO-GO round 17, P1: O_NOFOLLOW at acquireLock's own post-mkdir open only rejects a SYMLINK substitute -- it does nothing to stop a real directory planted at the exact same path in that gap, which the open would simply succeed against)." {
   local id; id="$(_gen_hex_id)"
   local req_f; req_f="$(_request_path "$id")"
-  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s"}' "$id" "$id")"
+  _write_activated_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s"}' "$id" "$id")"
   local txn_dir; txn_dir="$(dirname "$req_f")"
 
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=acquire-lock-post-mkdir-pre-verify \
-      node "$IMPL" claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing >"$out" 2>&1; echo $? >"$rc_file" ) &
   local claim_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" acquire-lock-post-mkdir-pre-verify
@@ -2342,13 +2782,13 @@ _wait_for_rendezvous_ready() {
 @test "RCC-lock-ancestor-escape-mid-hold-rejected: a transaction genuinely moved OUTSIDE coordRoot WHILE its lock is held (whole-subtree mv, which preserves txnDir's own dev/ino -- rename never changes inode), with a symlink planted at the ORIGINAL ancestor location pointing back to the new location, is detected and rejected on resume -- not silently accepted, even though txnDir's own identity (dev/ino/mode/uid/gid) is completely unchanged throughout. Uses a FULLY VALID claim fixture (would otherwise reach cmdClaim's own SUCCESS path and its own success-path release) specifically so the rejection cannot be attributed to an unrelated, already-broken fixture (Codex NO-GO round 16, P0, empirically reproduced live: acquireLock's own ancestor walk from round 15 only ran at acquisition; assertLockedScopeIdentity/isValidLockTokenFor/releaseLock never re-verified ancestors afterward, so a token minted before this exact swap remained valid and release succeeded)." {
   local id aid; id="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req_f; req_f="$(_request_path "$id")"
-  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$id" "$id" "$aid")"
+  _write_activated_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$id" "$id" "$aid")"
   local txn_dir; txn_dir="$(dirname "$req_f")"
 
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=with-lock-post-acquire-pre-fn \
-      node "$IMPL" claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing >"$out" 2>&1; echo $? >"$rc_file" ) &
   local claim_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" with-lock-post-acquire-pre-fn
@@ -2409,13 +2849,13 @@ _wait_for_rendezvous_ready() {
   local id; id="$(_gen_hex_id)"
   local aid; aid="$(_gen_hex_id)"
   local req_f; req_f="$(_request_path "$id")"
-  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$id" "$id" "$aid")"
+  _write_activated_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$id" "$id" "$aid")"
   local txn_dir; txn_dir="$(dirname "$req_f")"
 
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=with-lock-post-acquire-pre-fn \
-      node "$IMPL" claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing >"$out" 2>&1; echo $? >"$rc_file" ) &
   local claim_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" with-lock-post-acquire-pre-fn
@@ -2455,14 +2895,14 @@ _wait_for_rendezvous_ready() {
 @test "RCC-claim-request-substituted-before-election-blocks-durable-slot: request.json is substituted (SAME request_id/initial_attempt_id -- preserving attempt/epoch -- but a DIFFERENT target_role_profile_digest) BETWEEN cmdClaim's own preflight accreditation and its election publish. The invocation itself must fail (SECURITY_INVALID) AND, critically, must NEVER durably publish claim.json at all -- a stale election that fails only AFTER already winning the no-clobber first-writer-wins slot would permanently block the correct claimant (a legitimate second attempt would see EEXIST/AUTHORITY_INVALID regardless of whose data was right) (HARD NO-GO after round 17: the round-17 fix only re-verified identity INSIDE the lock, strictly after this election publish already ran -- it protected the lease, never the election itself)." {
   local id aid; id="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req_f; req_f="$(_request_path "$id")"
-  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$id" "$id" "$aid")"
+  _write_activated_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$id" "$id" "$aid")"
   local txn_dir; txn_dir="$(dirname "$req_f")"
   local claim_f; claim_f="$txn_dir/claims/$aid.json"
 
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=claim-preflight-pre-election \
-      node "$IMPL" claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing >"$out" 2>&1; echo $? >"$rc_file" ) &
   local claim_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" claim-preflight-pre-election
@@ -2499,14 +2939,14 @@ _wait_for_rendezvous_ready() {
 @test "RCC-claim-request-substituted-during-noclobber-write-blocks-durable-slot: request.json is substituted (SAME request_id/initial_attempt_id, DIFFERENT target_role_profile_digest) AFTER publishNoClobber's own mkdir/temp-create/harden/write/fsync/fstat/close sequence has ALREADY completed for this election -- strictly past the point the PRECEDING test's rendezvous pauses at -- but still BEFORE the actual linkSync. The invocation must still fail (SECURITY_INVALID) and never durably publish claim.json (Codex HARD NO-GO round 19: the preceding test's own fix re-accredited request.json only immediately before CALLING publishNoClobber, leaving publishNoClobber's OWN internal sequence -- not instantaneous, especially fsync -- entirely unrevalidated; publishNoClobber's revalidateBeforeLink hook, invoked as the LAST statement before linkSync, closes this further window)." {
   local id aid; id="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req_f; req_f="$(_request_path "$id")"
-  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$id" "$id" "$aid")"
+  _write_activated_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$id" "$id" "$aid")"
   local txn_dir; txn_dir="$(dirname "$req_f")"
   local claim_f; claim_f="$txn_dir/claims/$aid.json"
 
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=claim-pre-link-revalidate \
-      node "$IMPL" claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing >"$out" 2>&1; echo $? >"$rc_file" ) &
   local claim_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" claim-pre-link-revalidate
@@ -2546,13 +2986,13 @@ _wait_for_rendezvous_ready() {
 @test "RCC-claim-election-substituted-before-lock-rejected: cmdClaim's own election-then-reread is substituted BETWEEN the pre-lock claim.json publish and the in-lock re-read with a DIFFERENT, still attempt/epoch-matching claim (same attempt_id/lease_epoch/target_role_profile_digest -- only claimant_role differs) -- rejected, never silently adopted as though it were this invocation's own election (Codex NO-GO round 16, P0: the in-lock re-read previously only checked attempt_id/lease_epoch, never that the re-read bytes were the EXACT ones this invocation's own publishNoClobber call actually wrote)." {
   local id aid; id="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req_f; req_f="$(_request_path "$id")"
-  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$id" "$id" "$aid")"
+  _write_activated_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$id" "$id" "$aid")"
   local txn_dir; txn_dir="$(dirname "$req_f")"
 
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=claim-pre-lock \
-      node "$IMPL" claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing >"$out" 2>&1; echo $? >"$rc_file" ) &
   local claim_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" claim-pre-lock
@@ -2609,7 +3049,7 @@ _wait_for_rendezvous_ready() {
 @test "RCC-heartbeat-post-publish-artifact-substituted-poisons-lock: lease-heartbeat's own post-publish re-check (Codex NO-GO round 16's assertArtifactMatchesReceipt call) detects active-lease.json being SUBSTITUTED (a different, still-schema-valid active-lease/v1 record differing only in heartbeat_interval_seconds) AFTER the refresh publish, and POISONS the lock rather than reporting SUCCESS for a record it never actually wrote (Codex NO-GO round 17: cmdCancel/cmdAcceptResult/cmdTakeover each have a dedicated test proving this exact class of check; cmdLeaseHeartbeat's own equivalent check, though present in the code since round 16, had none)." {
   local id aid; id="$(_gen_hex_id)"
   local req_f; req_f="$(_request_path "$id")"
-  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s"}' "$id" "$id")"
+  _write_activated_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s"}' "$id" "$id")"
   local txn_dir; txn_dir="$(dirname "$req_f")"
 
   _run_cli claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing --fixed-ids
@@ -2621,7 +3061,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=heartbeat-post-publish-pre-recheck \
-      node "$IMPL" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req_f" --claim "$claim_path" --fixed-ids >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" lease-heartbeat --coordination-root "$COORD_ROOT" --request "$req_f" --claim "$claim_path" --fixed-ids >"$out" 2>&1; echo $? >"$rc_file" ) &
   local hb_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" heartbeat-post-publish-pre-recheck
@@ -2671,7 +3111,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-in-lock-pre-read \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" cancel-in-lock-pre-read
@@ -2728,7 +3168,7 @@ _wait_for_rendezvous_ready() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=cancel-in-lock-pre-read \
-      node "$IMPL" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" cancel --coordination-root "$COORD_ROOT" --request "$req_f" --reason explicit >"$out" 2>&1; echo $? >"$rc_file" ) &
   local cancel_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" cancel-in-lock-pre-read
@@ -2790,10 +3230,25 @@ _wait_for_rendezvous_ready() {
 # this file's header for the USAGE_ERROR-vs-INVALID interpretive split).
 # ══════════════════════════════════════════════════════════════════════════
 
-@test "RCC-argv-1 FAIL: root-init with no --coordination-root at all is rejected as USAGE_ERROR/rc2/MISSING_ARGUMENT" {
+# M7/WP4 Phase B.3 (dispatch arch-testing-20260809T092330Z): root-init is now
+# grant-mandatory (PLAN.md §15b) -- the core resolves which worktree/PLAN
+# scope to validate the role-command-grant/v1 against FROM --coordination-root
+# itself (mirroring assertRootConfinedToWorktree's own git-worktree-based
+# confinement lookup), so when that exact flag is entirely ABSENT there is no
+# way to correlate ANY grant, valid or not, before ever reaching the
+# downstream MISSING_ARGUMENT check -- empirically confirmed: even a grant
+# freshly minted by GRANT_WRAPPER for this test's own exact (empty) argv
+# still yields AUTHORITY_INVALID, never MISSING_ARGUMENT. This is a genuine,
+# unavoidable consequence of grant validation now running before requireFlags
+# for this one specific flag on this one specific subcommand pair
+# (root-init/root-validate) -- not a test-infrastructure gap, and not a
+# weakened assertion: the test still proves root-init is fully rejected with
+# no side effect for a call this bare, just via the new, earlier, more
+# fundamental authority wall rather than the older argv-completeness one.
+@test "RCC-argv-1 FAIL: root-init with no --coordination-root at all is rejected -- INVALID/rc3/AUTHORITY_INVALID post-M7/WP4 (see comment above; was USAGE_ERROR/rc2/MISSING_ARGUMENT pre-grant)" {
   _run_cli root-init
-  [ "$status" -eq 2 ]
-  _assert_cli_result "USAGE_ERROR" "MISSING_ARGUMENT"
+  [ "$status" -eq 3 ]
+  _assert_cli_result "INVALID" "AUTHORITY_INVALID"
   _assert_stdout_single_json_line
   _assert_stderr_no_json
 }
@@ -2942,7 +3397,7 @@ _assert_not_unknown_command() {
 @test "RCC-publish-result-post-publish-artifact-substituted-poisons-lock: publish-result's own post-publish re-check (Codex NO-GO round 16's assertArtifactMatchesReceipt call) detects the just-published result.json being SUBSTITUTED (a different, still-schema-valid result/v2 record differing only in driver) AFTER publish, and POISONS the lock rather than reporting SUCCESS for a record it never actually wrote (Codex NO-GO round 17: cmdCancel/cmdAcceptResult/cmdTakeover each have a dedicated test proving this exact class of check; cmdPublishResult's own equivalent check, though present in the code since round 16, had none)." {
   local id; id="$(_gen_hex_id)"
   local req_f; req_f="$(_request_path "$id")"
-  _write_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s"}' "$id" "$id")"
+  _write_activated_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s"}' "$id" "$id")"
   local txn_dir; txn_dir="$(dirname "$req_f")"
 
   _run_cli claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing --fixed-ids
@@ -2953,7 +3408,7 @@ _assert_not_unknown_command() {
   local out rc_file; out="$(mktemp)"; rc_file="$(mktemp)"
   ( set +e; env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
       RUNTIME_CONSULTATION_TEST_RENDEZVOUS=publish-result-post-publish-pre-recheck \
-      node "$IMPL" publish-result --coordination-root "$COORD_ROOT" --request "$req_f" --claim "$claim_path" --content "$content_b64" --fixed-ids >"$out" 2>&1; echo $? >"$rc_file" ) &
+      node "$GRANT_WRAPPER" publish-result --coordination-root "$COORD_ROOT" --request "$req_f" --claim "$claim_path" --content "$content_b64" --fixed-ids >"$out" 2>&1; echo $? >"$rc_file" ) &
   local pr_pid=$!
 
   _wait_for_rendezvous_ready "$txn_dir" publish-result-post-publish-pre-recheck
@@ -3082,7 +3537,7 @@ _assert_not_unknown_command() {
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
 
   run --separate-stderr env -u NODE_ENV RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent_b64" --fixed-ids --fixed-clock
 
   [ "$status" -eq 3 ]
@@ -3103,7 +3558,7 @@ _assert_not_unknown_command() {
   # directory", NOT a clean CLI rejection). This is the same option-before-
   # assignment order already used by RCC-determinism-1 and _run_cli_production.
   run --separate-stderr env -u RUNTIME_CONSULTATION_TEST_CAPABILITY NODE_ENV=test \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent_b64" --fixed-ids --fixed-clock
 
   [ "$status" -eq 3 ]
@@ -3130,7 +3585,7 @@ _assert_not_unknown_command() {
 
 @test "RCC-determinism-4 FAIL: production use of RUNTIME_CONSULTATION_ACL_PROBE (no test capability) is rejected as rc3 (PLAN.md ~L752 lists it under the same gate as --fixed-ids/--fixed-clock)" {
   run --separate-stderr env -u NODE_ENV -u RUNTIME_CONSULTATION_TEST_CAPABILITY RUNTIME_CONSULTATION_ACL_PROBE=1 \
-    node "$IMPL" root-validate --coordination-root "$COORD_ROOT"
+    node "$GRANT_WRAPPER" root-validate --coordination-root "$COORD_ROOT"
 
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" ""
@@ -3155,4 +3610,175 @@ _assert_not_unknown_command() {
   [ "$status" -ne 0 ]
   _assert_stdout_single_json_line
   _assert_stderr_no_json
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# M6+M7 FINAL AUTHORITY/ORACLE CORRECTION (2026-08-11, Group 4 -- distinguish
+# mechanism from live claude-agent capability, team-lead-relayed inversion,
+# post-Group-4-implementation): this test's PRIOR body (through the M6+M7
+# requester-authority closure Group I pass, 2026-08-10) asserted that
+# `cmdDispatch` selecting `claude-agent` from `checkClaudeAgentCapabilityAvailable`
+# alone -- mechanism-readiness only (hook files present + registered in
+# .claude/settings.json), with ZERO live session/PLAN/worktree/action
+# correlation -- was the CORRECT, confirmed-passing outcome. That is exactly
+# the defect this correction's own Group 4 exists to close (HANDOFF's P0-C):
+# mechanism-only evidence is NOT live proof, and cmdDispatch must fall through
+# to the frozen fallback (noop) without it. Confirmed empirically (2026-08-11,
+# post-Group-4-landing) against the REAL, unmodified `dispatch` CLI: with the
+# identical real routing-policy/capability groundwork below (never touched --
+# `checkClaudeAgentCapabilityAvailable` genuinely still reports
+# {"available":true} for this repo; the mechanism check itself is correct and
+# unchanged), `cmdDispatch` now correctly selects `selected_driver:"noop"`,
+# `native_spawn_action_id:null`, `activation_action:null` -- mirrors this
+# same inversion shape RQ1 -> RQ1-CLAUDEID01 already established for Group 1's
+# main-orchestrator case. Assertions below flipped to match; name/framing
+# updated so this test no longer describes the closed bug as confirmed-correct.
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "M7WP4-groupB-CLAUDEID01-dispatch-requires-live-proof: a route whose PINNED routing snapshot lists claude-agent BEFORE noop (the REAL production runtime-routing.json), for a role where claude-agent MECHANISM (files-present + settings-registered) is genuinely, currently available in THIS repo but with ZERO live session/PLAN/worktree/action correlation, must dispatch to the frozen fallback (noop), never claude-agent from mechanism-readiness alone" {
+  # Groundwork: claude-agent capability is a REAL, live, currently-true fact
+  # about this exact repo right now -- never fabricated/faked. Grounds "valid
+  # available claude-agent capability" (this dispatch's own wording) as an
+  # empirical fact, not a contrived fixture.
+  local repo_root; repo_root="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  run node -e '
+    const rll = require(process.argv[1]);
+    process.stdout.write(JSON.stringify(rll.checkClaudeAgentCapabilityAvailable(process.argv[2])));
+  ' "$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs" "$repo_root"
+  [ "$status" -eq 0 ]
+  [ "$output" = '{"available":true}' ]
+
+  local id; id="$(_gen_hex_id)"
+  local f; f="$(_request_path "$id")"
+  # arch-testing's REAL routing (scripts/lib/runtime-routing.json, copied
+  # byte-identical below): claude-sendmessage, claude-agent, codex-app-server,
+  # codex-mcp, runtime-spawn, noop -- claude-agent sits BEFORE noop.
+  local routing_digest; routing_digest="$(_sha256_file "$BATS_TEST_DIRNAME/../lib/runtime-routing.json")"
+  _write_request "$f" "$(printf '{"request_id":"%s","root_request_id":"%s","target_role":"arch-testing","routing_policy_digest":"%s"}' "$id" "$id" "$routing_digest")"
+
+  # `cmdDispatch` reads the request's OWN pinned, content-addressed routing
+  # snapshot (never the live scripts/lib/runtime-routing.json directly) --
+  # materialize it at the exact digest-addressed path dispatch looks up.
+  local routing_dest; routing_dest="$(_plan_root)/routing-policies/${routing_digest}.json"
+  mkdir -p "$(dirname "$routing_dest")"
+  cp "$BATS_TEST_DIRNAME/../lib/runtime-routing.json" "$routing_dest"
+  chmod 0600 "$routing_dest"
+
+  _run_cli dispatch --coordination-root "$COORD_ROOT" --request "$f"
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+
+  local artifact_ref activation_action
+  artifact_ref="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$output")"
+  activation_action="$(node -e 'process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).activation_action))' "$output")"
+
+  # CORRECTED, confirmed-passing behavior (post-Group-4): mechanism-readiness
+  # (checkClaudeAgentCapabilityAvailable) alone is NEVER sufficient -- with
+  # zero live session/PLAN/worktree/action correlation, cmdDispatch must fall
+  # through to the frozen fallback. The published activation/v1 record's
+  # selected_driver must be "noop", with native_spawn_action_id null (only
+  # ever generated for a genuinely selected claude-agent driver).
+  run node -e '
+    const fs = require("fs");
+    const obj = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const gotCorrectShape = obj.selected_driver === "noop" && obj.native_spawn_action_id === null;
+    if (!gotCorrectShape) {
+      console.error("expected activation/v1 selected_driver=noop with a null native_spawn_action_id once mechanism-only evidence is correctly distinguished from live proof; got selected_driver=" + JSON.stringify(obj.selected_driver) + " native_spawn_action_id=" + JSON.stringify(obj.native_spawn_action_id));
+      process.exit(1);
+    }
+  ' "$artifact_ref"
+  [ "$status" -eq 0 ]
+
+  # Same corrected shape, second field: the CLI envelope's own
+  # activation_action must be null for the noop fallback, never a
+  # partially-activated claude-agent shape.
+  run node -e '
+    const activationAction = JSON.parse(process.argv[1]);
+    if (activationAction !== null) {
+      console.error("expected a null ActivationAction/v1 in the CLI envelope for the noop fallback (zero partial activation); got " + JSON.stringify(activationAction));
+      process.exit(1);
+    }
+  ' "$activation_action"
+  [ "$status" -eq 0 ]
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# WAVE1-FUNCTIONAL-CLOSEOUT-REALISTIC-20260822 bounded driver-fallback,
+# CLI-entrypoint coverage: dispatchCanonical's excludedDriver logic
+# (runtime-consultation.cjs, ~L11196-11230 at authoring time -- once a
+# takeover has superseded the request's own initial attempt, the superseded
+# attempt's own activation.selected_driver is read back and permanently
+# excluded from candidate selection for the NEW attempt) is already covered
+# at the internal-function level by WAVE1-DISPATCH-FALLBACK-01
+# (runtime-consultation-cli.test.js) and end-to-end by
+# WAVE1-E2E-02-DRIVER-FALLBACK (runtime-consultation-e2e.bats), which calls
+# dispatchCanonical() directly (never the CLI dispatch subcommand) for both
+# of its own dispatch calls -- empirically required there, per that test's
+# own comment, because mixing a grant-wrapped and a grant-free
+# dispatchCanonical() call for the same request hits a real inbox-ref
+# no-clobber collision. The test below is genuinely new coverage: it drives
+# the identical real dispatch->claim->forced-lease-expiry->takeover->
+# redispatch sequence entirely through this file's OWN GRANT_WRAPPER/_run_cli
+# CLI-subprocess convention (consistently grant-wrapped for both dispatch
+# calls, never mixed, so the no-clobber collision the E2E test avoided does
+# not apply here either) -- proving the CLI dispatch subcommand itself
+# correctly targets the new post-takeover attempt end to end.
+#
+# This sandboxed fixture project has no live claude-agent/codex-app-server
+# capability, so both dispatch calls honestly resolve to noop regardless of
+# the exclusion logic (selectedDriver is pre-initialized to 'noop' before the
+# candidate loop even runs, so excluding 'noop' itself has no observable
+# effect on the final selected_driver) -- exactly why WAVE1-E2E-02-DRIVER-
+# FALLBACK itself never asserts a driver CHANGE either, only correct new-
+# attempt targeting and a genuinely new activation artifact_ref. Asserting a
+# driver difference here would be unprovable and dishonest; this test proves
+# what is actually true and CLI-observable instead.
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "RCC-driver-fallback-redispatch-targets-new-attempt: dispatch, after a genuine takeover.json exists for a request (real claim -> forced lease-expiry -> real takeover, all via this file's own GRANT_WRAPPER/_run_cli convention), redispatches to the NEW post-takeover attempt via a fresh activation record, never re-publishing against the superseded attempt" {
+  local id; id="$(_gen_hex_id)"
+  local req_f; req_f="$(_request_path "$id")"
+  _write_activated_request "$req_f" "$(printf '{"request_id":"%s","root_request_id":"%s"}' "$id" "$id")"
+  local txn_dir; txn_dir="$(dirname "$req_f")"
+
+  local first_attempt_id; first_attempt_id="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).initial_attempt_id)' "$req_f")"
+  local first_activation_path; first_activation_path="$txn_dir/activations/$first_attempt_id.json"
+  [ -f "$first_activation_path" ]
+  local first_selected; first_selected="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).selected_driver)' "$first_activation_path")"
+  [ "$first_selected" = "noop" ]
+
+  _run_cli claim --coordination-root "$COORD_ROOT" --request "$req_f" --role arch-testing
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+  local claim_path; claim_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$output")"
+  local claim_attempt_id; claim_attempt_id="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).attempt_id)' "$claim_path")"
+  [ "$claim_attempt_id" = "$first_attempt_id" ]
+  local lease_path; lease_path="$txn_dir/active-leases/$claim_attempt_id.json"
+  [ -f "$lease_path" ]
+  node -e '
+    const fs = require("fs");
+    const lease = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    lease.lease_expiry = "2020-01-01T00:00:00Z";
+    fs.writeFileSync(process.argv[1], JSON.stringify(lease), { mode: 0o600 });
+  ' "$lease_path"
+
+  _run_cli takeover --coordination-root "$COORD_ROOT" --request "$req_f"
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+  [ -f "$txn_dir/takeover.json" ]
+  local new_attempt_id; new_attempt_id="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).new_attempt_id)' "$txn_dir/takeover.json")"
+  [ "$new_attempt_id" != "$first_attempt_id" ]
+
+  _run_cli dispatch --coordination-root "$COORD_ROOT" --request "$req_f"
+  [ "$status" -eq 0 ]
+  _assert_cli_result "SUCCESS" "NONE"
+  local second_activation_path; second_activation_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$output")"
+  [ -f "$second_activation_path" ]
+  [ "$second_activation_path" != "$first_activation_path" ]
+  node -e '
+    const fs = require("fs");
+    const a = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const expected = process.argv[2];
+    if (a.attempt_id !== expected) { process.stderr.write("redispatch activation targets the wrong attempt: " + JSON.stringify(a)); process.exit(1); }
+  ' "$second_activation_path" "$new_attempt_id"
 }

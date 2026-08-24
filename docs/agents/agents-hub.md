@@ -31,6 +31,8 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [arch-topology-protocols](arch-topology-protocols.md) | Architect topology: concern-ownership map (§4), cross-architect coordination, tiebreaker chain (BL-W32-02) |
 | [team-topology](team-topology.md) | 3-phase model on a portable disk-artifact contract: orchestrator + single-use subagents (optional background peers when the runtime supports them) — Planning → Execution → Quality Gate |
 | [ADR-001: Runtime Adapter Contract](../adr/ADR-001-runtime-adapter-contract.md) | Engine-agnostic adapter contract: multi-agent (background peers, `SendMessage`, operator visibility) as an optional accelerator over the disk-artifact floor — 9-op interface, per-engine adapters, anti-degradation guard |
+| [coordination-artifact-schema](coordination-artifact-schema.md) | Portable coordination artifact contract: 6 disk-artifact schemas (consult/result/request/approval/stop/message v1) letting any file-capable engine satisfy CP-gate consult, specialist result, scope-extension/ingestion request/approval, and graceful-shutdown coordination without a live SendMessage channel |
+| [runtime-messaging-adapters](runtime-messaging-adapters.md) | Wave 1 portable consultation system: disk-artifact floor + adapter contract + orchestrator role — protocol, state-machine, drivers, bridges, cp-writer (5 sub-docs) |
 | [data-handoff-patterns](data-handoff-patterns.md) | Structured markers, severity convention, prose fallback, test gaming detection |
 | [agent-consumption-guide](agent-consumption-guide.md) | How agents load and use pattern docs (frontmatter, assumes_read, hub scanning) |
 | [capability-detection](capability-detection.md) | Graceful degradation for optional tools in agent definitions |

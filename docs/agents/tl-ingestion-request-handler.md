@@ -6,7 +6,7 @@ sources: ['docs/agents/main-agent-orchestration-guide.md']
 targets: ['L0', 'L1', 'L2']
 status: active
 layer: L0
-description: "Ingestion-request handler protocol: context-provider → user approval → doc-updater pipeline."
+description: "Ingestion-request handler protocol: context-provider → user approval → doc-updater pipeline, with disk-authoritative doc-updater wake/reuse."
 ---
 
 # Ingestion-Request Handler (context-provider → user → doc-updater)
@@ -29,7 +29,7 @@ When context-provider sends a `summary="ingestion-request: {topic}"` SendMessage
    Approve ingestion? (yes / no / modify-slug / modify-category)
    ```
 3. If the user declines → reply to context-provider with `summary="ingestion-rejected", message="User declined. Not adding to L0."` and halt.
-4. If the user approves → forward to doc-updater with the approval stamp:
+4. If the user approves → the approval is now disk-authoritative (see Portable disk-artifact equivalent below). Wake or reuse `doc-updater` through the shared role-lifecycle manager (`ensureRoles`/`notify` — see [runtime-messaging-adapters](runtime-messaging-adapters.md)), then forward with the approval stamp:
    ```
    SendMessage(to="doc-updater",
      summary="approved ingestion: {topic}",
@@ -42,6 +42,7 @@ When context-provider sends a `summary="ingestion-request: {topic}"` SendMessage
        proposed_category: {final_category}
        content: {full content — request from context-provider if snippet was truncated}")
    ```
+   `SendMessage` is the accelerator for the wake; the durable `approval/v1` artifact is what actually authorizes doc-updater's write, not the message.
 5. Wait for doc-updater's report. On success, track in TaskCreate: "Ingested {topic} → docs/{category}/{slug}.md". On rejection, relay the reason back to the user.
 
 **Never** forward an ingestion-request to doc-updater without the `approved_by: user` stamp. This is the single user-consent gate for modifying L0 docs from external sources.
@@ -52,7 +53,7 @@ The load-bearing contract underneath the SendMessage protocol above is the disk 
 
 1. Read the newest-valid `request/v1` (`kind:"ingestion"`) from `requests/ingestion/` — same parse + present-to-user as steps 1-2 above.
 2. On decline → write `approval/v1` (`decision:"denied"`, `request_kind:"ingestion"`) to `approvals/<request_id>.json`; halt (step 3).
-3. On approval → write `approval/v1` (`decision:"authorized"`, `request_kind:"ingestion"`, `approver: "user"`) to `approvals/<request_id>.json` (step 4).
+3. On approval → write `approval/v1` (`decision:"authorized"`, `request_kind:"ingestion"`, `approver: "user"`) to `approvals/<request_id>.json` (step 4). This durable artifact — not any message — is what wakes/reuses `doc-updater` via the lifecycle manager's `ensureRoles`/`notify`.
 4. Read doc-updater's `result/v1` from `results/doc-updater/` for the completion report (step 5).
 
 `SendMessage` is an optional accelerator over this floor — the invariant holds regardless of channel: no ingestion proceeds without an `approver: "user"` artifact (disk) or the `approved_by: user` stamp (`SendMessage`) on record.

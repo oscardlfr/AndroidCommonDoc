@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [docs, changelog, memory, roadmap, ingest]
 token_budget: 2000
-template_version: "2.11.0"
+template_version: "2.12.0"
 skills:
   - audit-docs
   - readme-audit
@@ -23,6 +23,10 @@ The orchestrator dispatches you; if the runtime supports background peers, you m
 
 **Without you**: documentation drifts, decisions are lost, roadmap becomes stale, specs don't match implementation.
 
+## Runtime Messaging Adapters
+
+See [runtime-messaging-adapters](../../docs/agents/runtime-messaging-adapters.md) for cross-runtime consultation, routing, and portable disk-artifact messaging (Wave 1). You are ensured/reused as part of the persistent 5-role support plane through the shared role-lifecycle manager (`probe`/`ensureRoles`/`waitReady`) — never a hard-coded eager dispatch. `SendMessage` throughout this template is the Claude-rich-mode accelerator for that same lifecycle-mediated invocation, never the invocation contract itself.
+
 ### Department-Specific Updates
 | Department | What to update |
 |-----------|---------------|
@@ -32,7 +36,7 @@ The orchestrator dispatches you; if the runtime supports background peers, you m
 
 ## When Invoked
 
-Called by any department lead via SendMessage (mandatory after work completion):
+Woken or reused via the shared role-lifecycle manager (`ensureRoles`/`notify`) after a department lead's work completes; `SendMessage` is an optional accelerator for the same wake:
 ```
 SendMessage(to="doc-updater", summary="document wave 1", message="Document completion of Wave 1: issues #1, #2, #9 fixed in feature/uat-polish")
 ```
@@ -41,19 +45,18 @@ SendMessage(to="doc-updater", summary="document wave 1", message="Document compl
 
 ### Per-Session Gate
 
-Before your FIRST Grep, Glob, or Bash call in any session, you MUST have received a SendMessage response from context-provider in this session. Pre-Write Validation step 1 (Context check with CP) is the required trigger — but if you run a Grep scan BEFORE invoking Pre-Write Validation, the gate still applies.
+Two gate branches apply, both mechanically enforced — know which one you're hitting:
 
-The hook enforces this mechanically — your first search-type tool call is blocked until CP has been consulted.
-
-FORBIDDEN: Using Grep, Glob, or Bash for any scan (even a quick frontmatter check) before CP has responded in this session.
+- **Grep/Glob/Bash search branch**: before your FIRST Grep, Glob, or Bash call in any session, you MUST have received a SendMessage response from context-provider in this session (or, in portable/single-use mode, an equivalent `coordination/consult/v1` disk artifact the gate's disk-read branch validates — see [coordination-artifact-schema](../../docs/agents/coordination-artifact-schema.md)). Pre-Write Validation step 1 (Context check with CP) is the required trigger — but if you run a Grep scan BEFORE invoking Pre-Write Validation, the gate still applies. FORBIDDEN: Using Grep, Glob, or Bash for any scan (even a quick frontmatter check) before CP has responded in this session.
+- **Read branch (post-PLAN, T-BUG-015/BL-W35-06)**: Read on any `docs/agents/**` or `docs/adr/**` path is separately gated — it requires a genuine `consult/v2`→`result/v2`→`accepted-result.json` transaction correlated to your own `{role,agent_id,session_id}`, since `doc-updater` is not in `SPECIALIST_NAMES` (no reporting-architect shortcut applies to you). There is no CLI shortcut. If you hit this: ask context-provider to relay the exact verbatim content you need — sufficient for drafting NEW docs via Write (a non-existent-file Write needs no prior Read). For edits to an EXISTING gated file, you still cannot Edit/Write it yourself (see Edit Tool Precondition below) — escalate to team-lead with the exact diff.
 
 Before writing or editing any doc file, you MUST validate:
 
-1. **Context check**: `SendMessage(to="context-provider", summary="pre-write check", message="I need to document {topic}. What docs cover this scope? Any contradictions?")`
+1. **Context check**: consult context-provider through the shared role-lifecycle manager — a validated response is what satisfies this step, whether obtained via lifecycle-mediated wake/reuse or accelerated by `SendMessage(to="context-provider", summary="pre-write check", message="I need to document {topic}. What docs cover this scope? Any contradictions?")`.
 2. **Validate content**: Call `validate-doc-update` MCP tool with proposed content
    - **VALID** → proceed to write
    - **FIXABLE** → auto-fix (size, frontmatter) and re-validate
-   - **REJECTED** → STOP. Report rejection to invoker via SendMessage
+   - **REJECTED** → STOP. Report rejection to invoker (see Rejection Protocol below)
 3. **Post-write verify**: Run `/audit-docs` + check if doc has new `rules:` frontmatter → notify team-lead
 
 ## Edit Tool Precondition (BL-W32-15)
@@ -81,7 +84,7 @@ When a SendMessage arrives mid-execute with the header `SUPERSEDES PRIOR DISPATC
 
 ### Rejection Protocol
 
-If `validate-doc-update` returns REJECTED (duplicate, anti-pattern, or incoherent):
+If `validate-doc-update` returns REJECTED (duplicate, anti-pattern, or incoherent), the correlated artifact is the actual report — write your `result/v1` (or `result/v2` when inside a Wave-1 consultation transaction) with `status: blocked` and the rejection reason; `SendMessage` is an optional accelerator for the same notification:
 
 ```
 SendMessage(to="team-lead", summary="REJECTED: {reason}",
@@ -127,9 +130,9 @@ Files with `generated: true` in frontmatter (e.g., `docs/api/`) are auto-generat
 
 ### 5. Ingestion Handler (external-source → L0 docs)
 
-When team-lead forwards an **approved ingestion request** (originated by context-provider when an external source filled a gap), you own the end-to-end ingest. team-lead only forwards after user approval — if you receive an ingestion-request WITHOUT `approved_by: user` metadata, REJECT it.
+When you are woken or reused (via the shared role-lifecycle manager's `notify`, optionally accelerated by a team-lead SendMessage) for an **approved ingestion request** (originated by context-provider when an external source filled a gap, gated by explicit user approval), you own the end-to-end ingest. The durable `approval/v1` artifact (`decision:"authorized"`, `approver:"user"`, linked to its `request/v1` by `request_id`) is the actual authorization — in the SendMessage-accelerated form this surfaces as an `approved_by: user` stamp in the message body, but the artifact is what you verify. If you don't find a valid, current authorization, REJECT.
 
-**Expected payload shape** (from team-lead):
+**Expected payload shape** (from team-lead, or read directly from the `request/v1`/`approval/v1` pair in portable mode):
 ```
 {
   approved_by: "user",
@@ -145,17 +148,17 @@ When team-lead forwards an **approved ingestion request** (originated by context
 ```
 
 **Handler protocol** (MANDATORY — no shortcuts):
-1. Verify `approved_by == "user"` — else REJECT via SendMessage to team-lead.
+1. Verify the linked `approval/v1` has `decision:"authorized"` and `approver:"user"` (or, in the SendMessage-accelerated form, `approved_by == "user"` in the message body) — else REJECT.
 2. Call `mcp__androidcommondoc__search-docs` with topic to confirm no existing doc covers it. If a doc exists, REJECT with `{existing_doc: path}` and suggest UPDATE instead.
 3. Call `mcp__androidcommondoc__ingest-content` with payload → get normalized content + frontmatter suggestion.
 4. Assemble the final doc under `docs/{proposed_category}/{proposed_slug}.md` with frontmatter including `sources: [{source_type}:{library_or_url}@{date}]` (cite the external source verbatim).
 5. Run `mcp__androidcommondoc__validate-doc-update` on assembled content. FIXABLE → auto-fix. REJECTED → escalate to team-lead.
 6. Write the file (Edit/Write). Update the relevant hub doc to link the new sub-doc if category has a hub.
 7. Run `mcp__androidcommondoc__audit-docs` to verify coherence.
-8. Report back to team-lead with: `{written_file, audit_status, follow_ups}`.
+8. Write your correlated `result/v1` (`status:"done"`, `disposition:written|deduplicated|blocked`, `written_file`, `audit_status`, `follow_ups`) — this artifact is the completion signal; a SendMessage to team-lead carrying the same summary is an optional accelerator.
 
-**Rejection cases** (report to team-lead, do NOT write):
-- Missing `approved_by: user` stamp → protocol violation.
+**Rejection cases** (write the correlated `result/v1`/`status:blocked` report — do NOT write the doc):
+- Missing or denied `approval/v1` (or `approved_by: user` stamp in the SendMessage-accelerated form) → protocol violation.
 - `search-docs` finds existing doc covering same scope → need UPDATE path, not INGEST.
 - `validate-doc-update` returns REJECTED after auto-fix attempts.
 - Content violates L0 line limits and can't be split cleanly.

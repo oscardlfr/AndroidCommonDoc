@@ -96,13 +96,50 @@ bats_require_minimum_version 1.5.0
 # ══════════════════════════════════════════════════════════════════════════
 
 IMPL="$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
+# M7/WP4 Phase B.3 regression fixture (dispatch arch-testing-20260809T092330Z):
+# see runtime-consultation-cli.bats's own matching comment -- identical
+# mechanism, mirrored verbatim here.
+GRANT_WRAPPER="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+RLL="$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs"
 WAVE_SLUG="rcr-test-wave"
 # "Harness-created" test capability (PLAN.md ~L752-753, ~L796) -- this bats suite IS
 # the harness for direct-CLI protocol testing, matching
 # runtime-consultation-protocol.bats's own convention of minting its own fixed token.
 TEST_CAPABILITY="bats-runtime-consultation-roots-fixture-capability"
 
+_assert_isolated_runtime_tmp() {
+  local dir="$1"
+  local real_dir real_bats
+  real_dir="$(cd "$dir" 2>/dev/null && pwd -P)" || return 1
+  real_bats="$(cd "$BATS_TEST_TMPDIR" && pwd -P)" || return 1
+  case "$real_dir" in
+    "$real_bats"|"$real_bats"/*) ;;
+    *) echo "# runtime-tmp escaped BATS_TEST_TMPDIR: $real_dir not under $real_bats" >&2; return 1 ;;
+  esac
+  node -e '
+    const fs = require("fs");
+    let st;
+    try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
+    if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
+    if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
+    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+  ' "$dir"
+}
+
 setup() {
+  # This file's host-private registry (registryBaseDir() in
+  # runtime-role-lifecycle.cjs resolves purely from $TMPDIR + this OS user's
+  # uid) is isolated under bats' own per-test tmpdir, never the real shared
+  # canonical registry -- exported before ANY node/hook/bridge/CLI process
+  # starts, so every subprocess this test spawns (including GRANT_WRAPPER)
+  # inherits it. Mirrors runtime-consultation-bridge.bats's own isolation.
+  RUNTIME_TMP="$BATS_TEST_TMPDIR/runtime-tmp"
+  mkdir -p "$RUNTIME_TMP"
+  chmod 0700 "$RUNTIME_TMP"
+  _assert_isolated_runtime_tmp "$RUNTIME_TMP"
+  export TMPDIR="$RUNTIME_TMP"
+
   # Harness test-capability, exported ONCE for the whole test process.
   #
   # The R33 export surface sits behind `isTestCapability()` (`NODE_ENV=test` plus a
@@ -120,10 +157,12 @@ setup() {
   export RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY"
 
   PROJ="$(mktemp -d)"
+  export RCC_GRANT_PROJECT_ROOT="$PROJ"
   git -C "$PROJ" init -q 2>/dev/null
   git -C "$PROJ" config user.email "bats@test.local"
   git -C "$PROJ" config user.name "Bats Test"
   git -C "$PROJ" commit -q --allow-empty -m init 2>/dev/null
+  PROJ_REGISTRY_DIR="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.registryRepoDir(process.argv[2]));' "$RLL" "$PROJ")"
 
   COORD_ROOT="$PROJ/.planning/coordination"
   mkdir -p "$COORD_ROOT"
@@ -161,10 +200,21 @@ setup() {
   # their OWN dedicated sub-paths, so setup() succeeding or failing here never gates
   # any @test's own assertions (mirrors runtime-consultation-protocol.bats's setup()).
   NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" root-init --coordination-root "$COORD_ROOT" >/dev/null 2>&1 || true
+    node "$GRANT_WRAPPER" root-init --coordination-root "$COORD_ROOT" >/dev/null 2>&1 || true
 }
 
 teardown() {
+  if [ -n "$RUNTIME_TMP" ] && _assert_isolated_runtime_tmp "$RUNTIME_TMP" >/dev/null 2>&1; then
+    # M6+M7 SIXTEENTH Phase 2B follow-up: some fixtures materialize a
+    # deliberately read-only projection under here (e.g. a role-read-view,
+    # part of the production isolation model's own security posture) --
+    # restore owner write+traverse on every path THIS test created before
+    # sweeping, or a bare rm -rf leaves permission-denied debris behind
+    # (which then also makes bats' own outer per-test tmpdir cleanup fail
+    # non-silently).
+    chmod -R u+rwX "$RUNTIME_TMP" 2>/dev/null || true
+    rm -rf "$RUNTIME_TMP"
+  fi
   rm -rf "$PROJ"
   if [ -n "$EXTRA_TMP_DIR" ]; then
     rm -rf "$EXTRA_TMP_DIR"
@@ -365,7 +415,7 @@ _write_subject_bundle() {
 _run_validate() {
   local kind="$1" artifact="$2"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" validate --coordination-root "$COORD_ROOT" --kind "$kind" --artifact "$artifact"
+    node "$GRANT_WRAPPER" validate --coordination-root "$COORD_ROOT" --kind "$kind" --artifact "$artifact"
 }
 
 # ── Bucket-2 entry point: drive an exported conformance function IN-PROCESS ──
@@ -483,13 +533,13 @@ _r33_authority_capability_absent() {
 _run_root_init() {
   local root="$1"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" root-init --coordination-root "$root"
+    node "$GRANT_WRAPPER" root-init --coordination-root "$root"
 }
 
 _run_root_validate() {
   local root="$1"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" root-validate --coordination-root "$root"
+    node "$GRANT_WRAPPER" root-validate --coordination-root "$root"
 }
 
 # Parses the most recent `run --separate-stderr` invocation's captured stdout ($output)
@@ -569,13 +619,28 @@ _assert_cli_result() {
   _assert_cli_result "INVALID" "SCHEMA_INVALID"
 }
 
-@test "RCR-root-6 FAIL: root-validate on a path that exists but is a regular file (not a directory) reports INVALID/SCHEMA_INVALID" {
+# M7/WP4 Phase B.3 (dispatch arch-testing-20260809T092330Z): root-validate is
+# now grant-mandatory (PLAN.md §15b). The core resolves which worktree/PLAN
+# scope to validate the role-command-grant/v1 against FROM --coordination-root
+# itself (`git -C <coordination-root> rev-parse --show-toplevel`, mirroring
+# assertRootConfinedToWorktree's own lookup) -- BEFORE ever reaching the
+# is-this-a-directory check this test's own SCHEMA_INVALID targets. `git -C`
+# against a plain file (not a directory) cannot resolve any worktree at all,
+# so grant-scope correlation fails FIRST: empirically confirmed, even a grant
+# freshly minted by GRANT_WRAPPER for this test's own exact argv still yields
+# AUTHORITY_INVALID, never reaching the SCHEMA_INVALID directory check. This
+# is NOT a weakened assertion -- the malformed root is still fully, provably
+# rejected (rc3/INVALID, no side effect) -- only the reason changes, because a
+# more fundamental gate (authority) now runs before requireFlags/shape checks
+# for this exact input, mirroring runtime-consultation-cli.bats's own
+# RCC-argv-1 precedent and rationale.
+@test "RCR-root-6 FAIL: root-validate on a path that exists but is a regular file (not a directory) is rejected -- INVALID/rc3/AUTHORITY_INVALID post-M7/WP4 (see comment above; was SCHEMA_INVALID pre-grant)" {
   mkdir -p "$COORD_ROOT"
   local root="$COORD_ROOT/lifecycle-plain-file-not-a-dir"
   printf 'this is a file, not a coordination root directory' > "$root"
   _run_root_validate "$root"
   [ "$status" -eq 3 ]
-  _assert_cli_result "INVALID" "SCHEMA_INVALID"
+  _assert_cli_result "INVALID" "AUTHORITY_INVALID"
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -585,15 +650,27 @@ _assert_cli_result() {
 # evidence). Each RED result documents a real, precise gap -- not a fixture bug.
 # ══════════════════════════════════════════════════════════════════════════
 
-@test "RCR-confine-1 FAIL: a coordination-root outside any worktree (generic system temp, no explicit override) is rejected fail-closed" {
+# M7/WP4 Phase B.3 (dispatch arch-testing-20260809T092330Z, mirrors RCR-root-6's
+# own comment above): an out-of-worktree --coordination-root cannot resolve
+# ANY worktree via `git -C <coordination-root> rev-parse --show-toplevel`
+# either (it genuinely IS outside every worktree, or resolves into a
+# DIFFERENT one than GRANT_WRAPPER minted the grant against) -- grant-scope
+# correlation fails FIRST, before the older SECURITY_INVALID confinement
+# check this test originally targeted ever runs. NOT a weakened assertion:
+# the out-of-worktree root is still fully, provably rejected (rc3/INVALID, no
+# side effect, .lock/registry writes never happen) -- only the reason
+# changes, because the new grant-authority gate is, by PLAN.md §15b/~L604's
+# own design, more fundamental and runs strictly earlier than any other
+# check, confinement included.
+@test "RCR-confine-1 FAIL: a coordination-root outside any worktree (generic system temp, no explicit override) is rejected -- INVALID/rc3/AUTHORITY_INVALID post-M7/WP4 (see comment above; was SECURITY_INVALID pre-grant)" {
   EXTRA_TMP_DIR="$(mktemp -d)"
   local outside_root="$EXTRA_TMP_DIR/coordination"
   _run_root_init "$outside_root"
   [ "$status" -eq 3 ]
-  _assert_cli_result "INVALID" "SECURITY_INVALID"
+  _assert_cli_result "INVALID" "AUTHORITY_INVALID"
 }
 
-@test "RCR-confine-2 FAIL: a coordination-root path containing traversal segments that resolve outside the worktree is rejected fail-closed" {
+@test "RCR-confine-2 FAIL: a coordination-root path containing traversal segments that resolve outside the worktree is rejected -- INVALID/rc3/AUTHORITY_INVALID post-M7/WP4 (see RCR-confine-1's own comment; was SECURITY_INVALID pre-grant)" {
   local depth upfrag i
   depth="$(printf '%s' "$COORD_ROOT" | tr -cd '/' | wc -c | tr -d ' ')"
   upfrag=""
@@ -604,7 +681,7 @@ _assert_cli_result() {
   local traversal_arg="$COORD_ROOT/${upfrag}${TRAVERSAL_ESCAPE_PATH#/}"
   _run_root_init "$traversal_arg"
   [ "$status" -eq 3 ]
-  _assert_cli_result "INVALID" "SECURITY_INVALID"
+  _assert_cli_result "INVALID" "AUTHORITY_INVALID"
 }
 
 @test "RCR-confine-3 FAIL: root-validate on a path that is itself a symlink to a real, valid, owner-confined root is rejected fail-closed" {
@@ -806,7 +883,7 @@ _assert_cli_result() {
   intent="$(printf '{"target_role":"arch-testing","question":"RCR-noclobber-1 fixture question A","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry")"
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent_b64" --fixed-ids --fixed-clock
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
@@ -828,7 +905,7 @@ _assert_cli_result() {
   intent2="$(printf '{"target_role":"arch-testing","question":"RCR-noclobber-1 fixture question B","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry2")"
   intent2_b64="$(printf '%s' "$intent2" | _base64url_encode)"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent2_b64"
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
@@ -845,7 +922,7 @@ _assert_cli_result() {
   intent="$(printf '{"target_role":"arch-testing","question":"RCR-noclobber-2 fixture question A","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry")"
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent_b64" --fixed-ids --fixed-clock
   [ "$status" -eq 0 ]
 
@@ -867,7 +944,7 @@ _assert_cli_result() {
   intent2="$(printf '{"target_role":"arch-testing","question":"RCR-noclobber-2 fixture question B","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$expiry2")"
   intent2_b64="$(printf '%s' "$intent2" | _base64url_encode)"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent2_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "AUTHORITY_INVALID"
@@ -930,7 +1007,7 @@ _assert_cli_result() {
 _run_publish_blob() {
   local bundle="$1" entry="$2"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-blob --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-blob --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$bundle" --entry "$entry"
 }
 

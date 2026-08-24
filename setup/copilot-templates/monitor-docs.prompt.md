@@ -43,14 +43,14 @@ Additional skill-specific arguments (not in params.json):
 4. On accept (version-drift finding):
    a. Call `bumpManifestVersion(key, newVersion, manifestPath)` from `mcp-server/src/monitoring/manifest-bumper.ts` — updates `versions[key]` + all `profiles.*.key` entries atomically.
    b. Call `resolveCoupledVersions(key, manifest)` — if any coupled keys are returned (e.g. bumping `kotlin` returns `["ksp"]`), notify the user: *"ksp is coupled to kotlin — update ksp version manually before committing."*
-   c. Update the pattern doc frontmatter `version` field and `last_updated`.
+   c. Update the pattern doc frontmatter `version` field and `last_updated` — directly if the invoking agent is `doc-updater`; otherwise via the same lifecycle-mediated `doc-updater` wake/reuse that `/ingest-content` uses (durable `request/v1 kind:"ingestion"`, await correlated result).
    d. Generate conventional commit message: `chore(versions): bump <key> <old> → <new>` and present for approval.
-5. On accept (doc-content-changed finding): update `content_hashes[url]` in `versions-manifest.json` with the new hash, then update the pattern doc if content changed.
+5. On accept (doc-content-changed finding): update `content_hashes[url]` in `versions-manifest.json` with the new hash, then update the pattern doc if content changed, using the same direct-vs-lifecycle-mediated rule as step 4c.
 6. Save review state to `.androidcommondoc/monitoring-state.json` so subsequent runs only surface new findings.
 
 ## Implementation
 
-This skill is an orchestration workflow using the AI agent's built-in tools.
+This skill is an orchestration workflow using the AI agent's built-in tools, plus the shared role-lifecycle manager for the actual document write when the invoking agent isn't `doc-updater`.
 
 The agent performs the following steps:
 1. Call the `monitor-sources` MCP tool with the specified tier and review options.
@@ -59,7 +59,7 @@ The agent performs the following steps:
 4. For each finding the user accepts:
    - **version-drift**: call `bumpManifestVersion(key, newVersion, manifestPath)` via `mcp-server/src/monitoring/manifest-bumper.ts`. Then call `resolveCoupledVersions` and warn if any coupled keys need manual review (e.g. ksp after kotlin bump).
    - **doc-content-changed**: update `content_hashes[url]` in `versions-manifest.json`.
-   - In both cases: use `Edit` to update the affected pattern doc frontmatter (`version`, `last_updated`). Generate and present commit message for approval.
+   - In both cases: if the invoking agent is `doc-updater`, use `Edit` directly to update the affected pattern doc frontmatter (`version`, `last_updated`). Otherwise, wake/reuse `doc-updater` through the shared role-lifecycle manager and publish a durable `request/v1 kind:"ingestion"` carrying the target doc and the accepted finding; await the correlated result before generating the commit message.
 5. For rejected/deferred findings: update the review state via `saveReviewState`.
 
 ## Expected Output

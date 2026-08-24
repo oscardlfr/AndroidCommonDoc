@@ -42,10 +42,20 @@ bats_require_minimum_version 1.5.0
 #     "validate --kind consult-v2" example; PLAN.md does not spell the exact enum.
 #   - Every invocation sets `NODE_ENV=test` + `RUNTIME_CONSULTATION_TEST_CAPABILITY`
 #     (the "harness-created" test capability the CLI ABI requires for `--fixed-ids`/
-#     `--fixed-clock`). WP1/WP4's `role-command-grant/v1` authority layer (tested by
-#     `runtime-consultation-role-gate.bats`, not this file) is assumed to be bypassable
-#     under the same test capability for direct-CLI protocol tests -- this file is
-#     scoped to protocol/schema validation, not grant/authority enforcement.
+#     `--fixed-clock`). CORRECTED (M7 completeness, 2026-08-09): WP1/WP4's
+#     `role-command-grant/v1` authority layer (tested by `runtime-consultation-role-gate.bats`,
+#     not this file) is NOT bypassable under the test capability -- empirically confirmed:
+#     `validateAndConsumeRoleCommandGrantForCommand` (runtime-consultation.cjs) runs
+#     unconditionally in main(), with no isTestCapability() exemption of its own. This
+#     file's own ORIGINAL assumption otherwise was never actually implemented as such,
+#     and broke wholesale once `validate`/`publish-request`/`publish-blob` (this file's
+#     own three CLI-under-test surfaces) joined the FULL 18-command grant matrix. Every
+#     invocation now routes through `runtime-consultation-grant-wrapper.cjs`
+#     (`$GRANT_WRAPPER`, not `$IMPL` directly) -- the SAME transparent grant-injecting
+#     fixture `runtime-consultation-cli.bats`/`-roots.bats`/`-state.bats` already use for
+#     the identical reason -- so this file's own protocol/schema assertions are still
+#     genuinely reached, unaffected by the authority layer, exactly as originally
+#     intended (just via the wrapper, not literal bypass).
 #   - `detail_code` per rejection: SCHEMA_INVALID for field-shape/structural violations
 #     (missing/empty/oversized question, forbidden content, malformed/oversized
 #     content_ref, lifetime bounds, unknown fields); CORRELATION_INVALID for
@@ -62,6 +72,15 @@ bats_require_minimum_version 1.5.0
 # or scripts/sh/run-bats.sh --project-root "$(pwd)" scripts/tests/runtime-consultation-protocol.bats
 
 IMPL="$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
+# M67-SUPERVISOR-TURN-CONTRACT-01 (M67-MATRIX3-LIVENESS-REPAIR-FINAL-20260821):
+# the model-facing turn-contract text lives in runtime-bridge-codex.cjs, not
+# this file's own $IMPL -- required directly, same rationale as $IMPL above.
+BRIDGE="$BATS_TEST_DIRNAME/../lib/runtime-bridge-codex.cjs"
+# M7 completeness (2026-08-09): every invocation below routes through this
+# transparent grant-injecting wrapper, not $IMPL directly -- see the header
+# note above for why. Mirrors runtime-consultation-cli.bats/-roots.bats/
+# -state.bats's own identical fixture exactly.
+GRANT_WRAPPER="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
 # Additive v2 branch (see header note above): coordination-artifact.js's require()-only
 # hasValidV2InboxRef(dir, ctx) wraps this file's own `validate --kind inbox-ref-v1` CLI
 # surface over a subprocess boundary -- exercised by the RCP-artifactv2-* section below.
@@ -75,12 +94,45 @@ TEST_CAPABILITY="bats-runtime-consultation-protocol-fixture-capability"
 # 'a' characters) so path-building code and the JSON defaults never drift apart.
 DEFAULT_REQUEST_ID="$(printf 'a%.0s' {1..64})"
 
+_assert_isolated_runtime_tmp() {
+  local dir="$1"
+  local real_dir real_bats
+  real_dir="$(cd "$dir" 2>/dev/null && pwd -P)" || return 1
+  real_bats="$(cd "$BATS_TEST_TMPDIR" && pwd -P)" || return 1
+  case "$real_dir" in
+    "$real_bats"|"$real_bats"/*) ;;
+    *) echo "# runtime-tmp escaped BATS_TEST_TMPDIR: $real_dir not under $real_bats" >&2; return 1 ;;
+  esac
+  node -e '
+    const fs = require("fs");
+    let st;
+    try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
+    if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
+    if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
+    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+  ' "$dir"
+}
+
 setup() {
+  RUNTIME_TMP="$BATS_TEST_TMPDIR/runtime-tmp"
+  mkdir -p "$RUNTIME_TMP"
+  chmod 0700 "$RUNTIME_TMP"
+  _assert_isolated_runtime_tmp "$RUNTIME_TMP"
+  export TMPDIR="$RUNTIME_TMP"
+
   PROJ="$(mktemp -d)"
+  # GRANT_WRAPPER's own scope-resolution env var (read only by that script,
+  # never by production) -- exported once here so every subsequent
+  # `node "$GRANT_WRAPPER" ..." call in this test automatically resolves the
+  # correct worktree/PLAN scope. Mirrors runtime-consultation-cli.bats's own
+  # identical export-once convention.
+  export RCC_GRANT_PROJECT_ROOT="$PROJ"
   git -C "$PROJ" init -q 2>/dev/null
   git -C "$PROJ" config user.email "bats@test.local"
   git -C "$PROJ" config user.name "Bats Test"
   git -C "$PROJ" commit -q --allow-empty -m init 2>/dev/null
+  PROJ_REGISTRY_DIR="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.registryRepoDir(process.argv[2]));' "$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs" "$PROJ")"
 
   COORD_ROOT="$PROJ/.planning/coordination"
   mkdir -p "$COORD_ROOT"
@@ -104,10 +156,21 @@ setup() {
   # re-init their own fresh root anyway -- every @test independently asserts
   # its own exit-code/JSON-shape expectations, not via setup() succeeding.
   NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" root-init --coordination-root "$COORD_ROOT" >/dev/null 2>&1 || true
+    node "$GRANT_WRAPPER" root-init --coordination-root "$COORD_ROOT" >/dev/null 2>&1 || true
 }
 
 teardown() {
+  if [ -n "$RUNTIME_TMP" ] && _assert_isolated_runtime_tmp "$RUNTIME_TMP" >/dev/null 2>&1; then
+    # M6+M7 SIXTEENTH Phase 2B follow-up: some fixtures materialize a
+    # deliberately read-only projection under here (e.g. a role-read-view,
+    # part of the production isolation model's own security posture) --
+    # restore owner write+traverse on every path THIS test created before
+    # sweeping, or a bare rm -rf leaves permission-denied debris behind
+    # (which then also makes bats' own outer per-test tmpdir cleanup fail
+    # non-silently).
+    chmod -R u+rwX "$RUNTIME_TMP" 2>/dev/null || true
+    rm -rf "$RUNTIME_TMP"
+  fi
   rm -rf "$PROJ"
 }
 
@@ -380,7 +443,8 @@ _write_result() {
       consultation_dependencies: [],
       producer_worktree_id: "2".repeat(64),
       producer_head: "5".repeat(40),
-      created_at: "2025-01-01T00:05:00Z"
+      created_at: "2025-01-01T00:05:00Z",
+      pattern_evidence_dependency: null
     };
     const merged = Object.assign({}, defaults, overrides);
     for (const k of Object.keys(merged)) {
@@ -465,7 +529,7 @@ _build_chain() {
 _run_validate() {
   local kind="$1" artifact="$2"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" validate --coordination-root "$COORD_ROOT" --kind "$kind" --artifact "$artifact"
+    node "$GRANT_WRAPPER" validate --coordination-root "$COORD_ROOT" --kind "$kind" --artifact "$artifact"
 }
 
 # Parses the most recent `run --separate-stderr` invocation's captured stdout ($output)
@@ -505,21 +569,29 @@ _assert_cli_result() {
 # optional JSON object string merged over the default
 # {coordRoot, projectRoot, runtimeConsultationPath} ctx; defaults to "{}" when omitted or
 # empty. Two deliberate departures from the arch-testing spec's literal harness snippet,
-# both harness-only fixes (no impl file touched), covered by RCP-artifactv2-1's initial RED:
+# both harness-only fixes (no impl file touched), covered by RCP-artifactv2-1's initial regression:
 #   - Default value: NOT the spec's literal `"${2:-\{\}}"` -- verified empirically that
 #     bash's brace-escaping inside a default-value expansion drops only the SECOND
 #     backslash, producing the 3-char string `\{}` (invalid JSON) whenever the caller omits
 #     $2, which 4 of the 5 cases below do. Replaced with a plain -z guard.
-#   - runtimeConsultationPath: always explicitly defaulted to $IMPL (the real CLI under
-#     test), NOT left to isV2InboxRefCandidateValid's own
+#   - runtimeConsultationPath: always explicitly defaulted to $GRANT_WRAPPER (M7
+#     completeness, 2026-08-09 -- was $IMPL, the real CLI under test), NOT left to
+#     isV2InboxRefCandidateValid's own
 #     `path.join(ctx.projectRoot, 'scripts', 'lib', 'runtime-consultation.cjs')` fallback.
 #     This file's $PROJ fixture (mktemp -d + bare `git init`, per setup()) intentionally has
 #     no scripts/lib/ of its own -- passing $PROJ as ctx.projectRoot without this override
 #     made the fallback resolve to a path that never exists, so the delegate spawnSync
-#     always failed regardless of candidate content (proven by RCP-artifactv2-1 going RED:
+#     always failed regardless of candidate content (proven by RCP-artifactv2-1 going regression:
 #     a well-formed, fresh candidate returned false instead of true). RCP-artifactv2-4 still
 #     independently overrides this same field to a genuinely-broken path via extra_ctx_json
 #     (Object.assign below applies overrides AFTER this default, so it wins as intended).
+#     $GRANT_WRAPPER (not $IMPL) as of M7 completeness: `validate` is now grant-mandatory
+#     (PLAN.md §15b) and isV2InboxRefCandidateValid's own delegate spawnSync call carries no
+#     grant of its own -- routing through the SAME transparent grant-injecting wrapper this
+#     file's own direct CLI calls already use (see file header) lets a well-formed candidate
+#     genuinely reach hasValidV2InboxRef's real correlation/freshness logic again.
+#     runtimeConsultationPath is a pure ctx parameter isV2InboxRefCandidateValid already
+#     accepts for exactly this kind of override -- no production file is touched by this fix.
 # $status is always expected 0 -- hasValidV2InboxRef never throws by contract.
 _run_has_valid_v2_inbox_ref() {
   local dir="$1"
@@ -535,7 +607,7 @@ _run_has_valid_v2_inbox_ref() {
       JSON.parse(process.argv[5])
     );
     process.stdout.write(hasValidV2InboxRef(dir, ctx) ? "true" : "false");
-  ' "$HOOK_ARTIFACT" "$dir" "$COORD_ROOT" "$PROJ" "$extra_ctx_json" "$IMPL"
+  ' "$HOOK_ARTIFACT" "$dir" "$COORD_ROOT" "$PROJ" "$extra_ctx_json" "$GRANT_WRAPPER"
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1011,7 +1083,7 @@ _run_has_valid_v2_inbox_ref() {
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
 
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent_b64" --fixed-ids --fixed-clock
 
   [ "$status" -eq 0 ]
@@ -1037,7 +1109,7 @@ _run_has_valid_v2_inbox_ref() {
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
 
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent_b64" --fixed-ids --fixed-clock
   [ "$status" -eq 0 ]
   local root_request_id; root_request_id="$(node -e 'console.log(JSON.parse(process.argv[1]).request_id)' "$output")"
@@ -1061,7 +1133,7 @@ _run_has_valid_v2_inbox_ref() {
   # this test's actual subject (root/parent/depth linkage) needs no determinism
   # on the child at all.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$child_intent_b64"
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
@@ -1085,7 +1157,7 @@ _run_has_valid_v2_inbox_ref() {
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
 
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent_b64" --fixed-ids --fixed-clock
 
   [ "$status" -ne 0 ]
@@ -1113,7 +1185,7 @@ _run_has_valid_v2_inbox_ref() {
   intent_a="$(printf '{"target_role":"arch-testing","question":"RCP-publish-4 fixture question A","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$frozen_expiry")"
   intent_a_b64="$(printf '%s' "$intent_a" | _base64url_encode)"
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$bundle_a" --intent "$intent_a_b64" --fixed-ids --fixed-clock
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
@@ -1135,7 +1207,7 @@ _run_has_valid_v2_inbox_ref() {
   # different subject-bundle manifests produce two different
   # subject_scope_digest values.
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$bundle_b" --intent "$intent_b_b64"
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
@@ -1165,7 +1237,7 @@ _run_has_valid_v2_inbox_ref() {
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
 
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent_b64" --fixed-ids --fixed-clock
 
   [ "$status" -eq 3 ]
@@ -1187,7 +1259,7 @@ _run_has_valid_v2_inbox_ref() {
   _write_subject_bundle "$blob_bundle_file" "$(printf '{"entries":[{"path":"%s","size":%s,"digest":"%s"}]}' "$blob_entry_rel" "$blob_size" "$blob_digest")"
 
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-blob --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-blob --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$blob_bundle_file" --entry "$blob_entry_rel"
   [ "$status" -eq 0 ]
   _assert_cli_result "SUCCESS" "NONE"
@@ -1198,7 +1270,7 @@ _run_has_valid_v2_inbox_ref() {
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
 
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent_b64" --fixed-ids --fixed-clock
 
   [ "$status" -eq 0 ]
@@ -1239,7 +1311,7 @@ _run_has_valid_v2_inbox_ref() {
   child_intent_b64="$(printf '%s' "$child_intent" | _base64url_encode)"
 
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$child_intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "SCHEMA_INVALID"
@@ -1269,7 +1341,7 @@ _run_has_valid_v2_inbox_ref() {
   child_intent_b64="$(printf '%s' "$child_intent" | _base64url_encode)"
 
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$child_intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "CORRELATION_INVALID"
@@ -1334,7 +1406,7 @@ _run_has_valid_v2_inbox_ref() {
   child_intent_b64="$(printf '%s' "$child_intent" | _base64url_encode)"
 
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$child_intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "SCHEMA_INVALID"
@@ -1362,7 +1434,7 @@ _run_has_valid_v2_inbox_ref() {
   child_intent_b64="$(printf '%s' "$child_intent" | _base64url_encode)"
 
   run --separate-stderr env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$TEST_CAPABILITY" \
-    node "$IMPL" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
+    node "$GRANT_WRAPPER" publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
       --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$child_intent_b64"
   [ "$status" -eq 3 ]
   _assert_cli_result "INVALID" "SCHEMA_INVALID"
@@ -1487,5 +1559,1054 @@ _run_has_valid_v2_inbox_ref() {
     if (res.ok) { process.stderr.write("a byte-oversized (char-count-ok) content string was accepted\n"); process.exit(1); }
     if (res.reason !== "answered-content-too-large") { process.stderr.write("wrong reason: " + res.reason + "\n"); process.exit(1); }
   ' "$IMPL"
+  [ "$status" -eq 0 ]
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# M7/WP4 ingestion consumer contract, RED (dispatch arch-testing-20260810T142647Z
+# follow-on): validateIngestionResultFor(requestPath, approvalPath, resultPath,
+# ctx) -> {valid, reason} -- the NAMED, independently-callable consumer
+# function PLAN.md ~L216 itself names (validate_ingestion_result_for(
+# request_v1, approval_v1, result_v1) -> valid|reason) and whose full
+# correlation contract PLAN.md ~L219 spells out: request.kind and
+# approval.request_kind must equal "ingestion"; approval.request_id ==
+# request.request_id, decision == "authorized", approver (from) == "user";
+# result must be current, from == "doc-updater", to == request.from, and
+# carry body fields request_id, request_kind:"ingestion", approval_sha256,
+# disposition:written|deduplicated|blocked, audit_status, files_touched, and
+# bounded follow_ups. The validator recomputes the exact approval digest,
+# rejects a denied/missing/stale/mismatched approval, and treats "written"
+# as valid only with non-empty confined files_touched; "deduplicated" is a
+# successful no-new-file completion with the existing document reference
+# (written_file). A generic schema-valid result/v1 remains compatible but
+# cannot by itself complete ingestion (case RCP-D3 below).
+#
+# Confirmed live: this exact function does not exist anywhere in production.
+# coordination-artifact.js's isIngestionResultValid is close in SPIRIT but
+# (a) takes an already-parsed obj/reqObj, never raw paths -- a different
+# signature than the one this dispatch names; (b) is not exported at all
+# (module.exports carries only validate/hasValidConsult/hasValidV2InboxRef);
+# and (c) correlates request<->result purely by FILENAME
+# (path.basename(resultPath,'.json') as the request id) -- which the NEW
+# canonical result path this dispatch requires,
+# results/doc-updater/<doc-updater-timestamp-unique>.json, makes
+# structurally impossible (the basename is a producer-chosen unique id,
+# never the request_id). PLAN.md ~L219's own explicit result body-field list
+# (request_id, request_kind) is the field-based correlation mechanism the
+# new canonical path requires instead of filename correlation -- this is
+# what makes validateIngestionResultFor a genuinely NEW, wider contract, not
+# merely isIngestionResultValid renamed.
+#
+# Every case below is RED for the IDENTICAL top-level reason today (the
+# named function does not exist) -- proven via _assert_ingestion_result_for's
+# own explicit typeof-function check, never a raw uncaught TypeError/crash.
+# Each case still builds a fully realistic, scenario-distinct fixture at the
+# canonical requests/ingestion/<id>.json + approvals/<id>.json +
+# results/doc-updater/<unique-id>.json paths (never the old, retired
+# results/<request-id>.json shape the PRIOR RCP-ingestion-1..4 tests used --
+# git history, not this comment, has that prior state -- which is not how
+# the real doc-updater producer names files) so the fixture set is
+# immediately reusable, case-by-case, the moment the function lands -- this
+# mirrors the codebase's own established "propose the minimal interface,
+# today it does not exist, which IS the RED" precedent (see
+# context-provider-gate.test.js's own Section 4/5 header notes).
+#
+# MAX_INGESTION_FOLLOW_UPS is this test file's OWN named bound constant
+# (dispatch requirement: "the bound lives in the test file as a named
+# constant only" -- no second design/spec doc) mirroring PLAN.md ~L219's
+# "bounded follow_ups" without PLAN.md itself pinning the exact number.
+# ══════════════════════════════════════════════════════════════════════════
+
+MAX_INGESTION_FOLLOW_UPS=16
+
+_ingestion_wave_dir() { printf '%s' "$PROJ/.planning/wave-$WAVE_SLUG"; }
+_ingestion_request_path() { printf '%s/requests/ingestion/%s.json' "$(_ingestion_wave_dir)" "$1"; }
+_ingestion_approval_path() { printf '%s/approvals/%s.json' "$(_ingestion_wave_dir)" "$1"; }
+_ingestion_result_path() { printf '%s/results/doc-updater/%s.json' "$(_ingestion_wave_dir)" "$1"; }
+
+# M6+M7 RESIDUAL AUTHORITY CORRECTION (2026-08-11, dispatch arch-testing
+# arch-testing-20260811T162225Z), Section E / item 8: "Result: ... basename
+# conforme exactamente a: ^doc-updater-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{5,}\.json$.
+# Actualizar los fixtures positivos para usar esa gramática." Used ONLY by the
+# TRUE-expecting ("PASS") ingestion-result fixtures below (RCP-D1/D2/D25) so
+# they stay conformant once toolkit-specialist lands the filename-grammar
+# check this pass's own RCP-D33 (below) proves is currently absent -- harmless
+# pre-fix (no such check exists yet, confirmed by RCP-D33's own RED), and
+# required for those three to keep validating true afterward. D3..D32 (all
+# FALSE-expecting) are deliberately left on the pre-existing
+# "rcp-dN-<hex>.json" naming -- untouched, since a filename-grammar rejection
+# would only ever ADD a second, equally-valid reason for their own already-false
+# outcome, never flip any of them from false to true.
+_ingestion_result_path_canonical() {
+  local ts; ts="$(node -e 'process.stdout.write(new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d{3}Z$/,"Z"))')"
+  local hexid; hexid="$(_gen_hex_id)"
+  printf '%s/results/doc-updater/doc-updater-%s-%s.json' "$(_ingestion_wave_dir)" "$ts" "$hexid"
+}
+
+# Canonical, otherwise-fully-valid ingestion request/v1 (PLAN.md ~L219:
+# "request.kind ... must equal ingestion") at the canonical
+# requests/ingestion/<id>.json path. overrides (a JSON object string) is
+# merged over the defaults; the literal string "__OMIT__" deletes a key --
+# same idiom as this file's own pre-existing _write_request/_write_result.
+_write_ingestion_request() {
+  local out="$1" overrides="$2" req_id="$3"
+  mkdir -p "$(dirname "$out")"
+  node -e '
+    const fs = require("fs");
+    const overrides = JSON.parse(process.argv[1]);
+    const outPath = process.argv[2];
+    const defaults = {
+      schema: "coordination/request/v1",
+      wave_slug: process.argv[3],
+      from: "context-provider",
+      to: "orchestrator",
+      created_at: new Date().toISOString(),
+      head: process.argv[4],
+      plan_sha256: process.argv[5],
+      request_id: process.argv[6],
+      kind: "ingestion",
+    };
+    const merged = Object.assign({}, defaults, overrides);
+    for (const k of Object.keys(merged)) { if (merged[k] === "__OMIT__") delete merged[k]; }
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+  ' "$overrides" "$out" "$WAVE_SLUG" "$SUBJECT_HEAD" "$PLAN_DIGEST" "$req_id"
+}
+
+# Canonical approval/v1 (PLAN.md ~L219: "approval.request_kind ... must
+# equal ingestion") at the canonical approvals/<id>.json path.
+_write_ingestion_approval() {
+  local out="$1" overrides="$2" req_id="$3"
+  mkdir -p "$(dirname "$out")"
+  node -e '
+    const fs = require("fs");
+    const overrides = JSON.parse(process.argv[1]);
+    const outPath = process.argv[2];
+    const defaults = {
+      schema: "coordination/approval/v1",
+      wave_slug: process.argv[3],
+      from: "user",
+      to: "orchestrator",
+      created_at: new Date().toISOString(),
+      head: process.argv[4],
+      plan_sha256: process.argv[5],
+      decision: "authorized",
+      approver: "user",
+      request_id: process.argv[6],
+      request_kind: "ingestion",
+    };
+    const merged = Object.assign({}, defaults, overrides);
+    for (const k of Object.keys(merged)) { if (merged[k] === "__OMIT__") delete merged[k]; }
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+  ' "$overrides" "$out" "$WAVE_SLUG" "$SUBJECT_HEAD" "$PLAN_DIGEST" "$req_id"
+}
+
+# Canonical result/v1 at the NEW canonical results/doc-updater/<unique-id>.json
+# path (never the retired results/<request-id>.json shape) -- PLAN.md ~L219's
+# own required ingestion body-field profile as the default shape, so every
+# case below overrides ONLY the single field(s) actually under test.
+_write_ingestion_result() {
+  local out="$1" overrides="$2" req_id="$3" approval_digest="$4" result_to="$5"
+  mkdir -p "$(dirname "$out")"
+  node -e '
+    const fs = require("fs");
+    const overrides = JSON.parse(process.argv[1]);
+    const outPath = process.argv[2];
+    const defaults = {
+      schema: "coordination/result/v1",
+      wave_slug: process.argv[3],
+      from: "doc-updater",
+      to: process.argv[7],
+      created_at: new Date().toISOString(),
+      head: process.argv[4],
+      plan_sha256: process.argv[5],
+      status: "done",
+      request_id: process.argv[6],
+      request_kind: "ingestion",
+      approval_sha256: process.argv[8],
+      disposition: "written",
+      audit_status: "audited",
+      files_touched: ["docs/example-ingested.md"],
+      follow_ups: [],
+    };
+    const merged = Object.assign({}, defaults, overrides);
+    for (const k of Object.keys(merged)) { if (merged[k] === "__OMIT__") delete merged[k]; }
+    fs.writeFileSync(outPath, JSON.stringify(merged), { mode: 0o600 });
+  ' "$overrides" "$out" "$WAVE_SLUG" "$SUBJECT_HEAD" "$PLAN_DIGEST" "$req_id" "$result_to" "$approval_digest"
+}
+
+# Asserts validateIngestionResultFor(requestPath, approvalPath, resultPath,
+# ctx) exists AND returns the DESIRED {valid, reason} outcome for this
+# scenario. Every named failure path below (function missing, threw, wrong
+# shape, wrong valid) is its own explicit, scenario-labeled message -- never
+# a raw uncaught crash (bats captures $output on a failing `[ "$status" -eq
+# 0 ]` automatically, so $label always surfaces in the failure report).
+# pre-fix this exits 1 for every single case (the function does not exist at
+# all yet) -- that IS the intended RED.
+_assert_ingestion_result_for() {
+  local label="$1" request_path="$2" approval_path="$3" result_path="$4" expected_valid="$5"
+  run node -e '
+    const label = process.argv[1];
+    const ca = require(process.argv[2]);
+    const requestPath = process.argv[3];
+    const approvalPath = process.argv[4];
+    const resultPath = process.argv[5];
+    const ctx = { slug: process.argv[6], projectRoot: process.argv[7] };
+    const expectedValid = process.argv[8] === "true";
+    if (typeof ca.validateIngestionResultFor !== "function") {
+      console.error("[" + label + "] validateIngestionResultFor is not exported from coordination-artifact.js -- the M7/WP4 ingestion consumer contract (PLAN.md ~L216: validate_ingestion_result_for(request_v1, approval_v1, result_v1) -> valid|reason) does not exist yet as a named, independently-callable function.");
+      process.exit(1);
+    }
+    let result;
+    try {
+      result = ca.validateIngestionResultFor(requestPath, approvalPath, resultPath, ctx);
+    } catch (e) {
+      console.error("[" + label + "] validateIngestionResultFor threw instead of returning {valid, reason}: " + (e && e.stack || e));
+      process.exit(1);
+    }
+    if (!result || typeof result.valid !== "boolean") {
+      console.error("[" + label + "] validateIngestionResultFor did not return a {valid, reason} shape: " + JSON.stringify(result));
+      process.exit(1);
+    }
+    if (result.valid !== expectedValid) {
+      console.error("[" + label + "] expected valid=" + expectedValid + " got valid=" + result.valid + " reason=" + result.reason);
+      process.exit(1);
+    }
+  ' "$label" "$HOOK_ARTIFACT" "$request_path" "$approval_path" "$result_path" "$WAVE_SLUG" "$PROJ" "$expected_valid"
+  [ "$status" -eq 0 ]
+}
+
+@test "RCP-D1 PASS: a genuinely written result (correct producer/to/correlation/approval digest/non-empty confined files_touched/audit_status) validates true" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  # M6+M7 FINAL AUTHORITY CORRECTION (2026-08-11, team-lead-relayed fixture
+  # gap, post-Group-3-implementation): _write_ingestion_result's own default
+  # files_touched (["docs/example-ingested.md"]) was never actually created
+  # on disk -- this positive only ever passed because of the exact
+  # 'missing'-tolerant bug Group 3 correctly closed (checkIngestionResultFields
+  # now requires disposition:"written" files_touched entries to be genuinely
+  # 'ok', never 'missing'). Mirrors RCP-D2's own real-file-creation pattern
+  # immediately below.
+  local touched_doc="$PROJ/docs/example-ingested.md"
+  mkdir -p "$(dirname "$touched_doc")"
+  printf '# Example ingested doc\n' > "$touched_doc"
+  # Section E / item 8: canonical basename grammar, since this is a
+  # TRUE-expecting fixture (see _ingestion_result_path_canonical's own header note).
+  local result_f; result_f="$(_ingestion_result_path_canonical)"
+  _write_ingestion_result "$result_f" '{}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D1" "$req_f" "$appr_f" "$result_f" "true"
+}
+
+@test "RCP-D2 PASS: a genuinely deduplicated result referencing an EXISTING document (written_file) validates true" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local existing_doc="$PROJ/docs/already-existing-pattern.md"
+  mkdir -p "$(dirname "$existing_doc")"
+  printf '# Already-existing pattern doc\n' > "$existing_doc"
+  # Section E / item 8: canonical basename grammar, since this is a
+  # TRUE-expecting fixture (see _ingestion_result_path_canonical's own header note).
+  local result_f; result_f="$(_ingestion_result_path_canonical)"
+  _write_ingestion_result "$result_f" "$(printf '{"disposition":"deduplicated","files_touched":[],"written_file":"%s"}' "$existing_doc")" "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D2" "$req_f" "$appr_f" "$result_f" "true"
+}
+
+@test "RCP-D3: generic validate('result',...) alone is NECESSARY but NOT SUFFICIENT to imply ingestion completion -- passes for a base-field-valid-but-forged result at the new canonical path, while validateIngestionResultFor correctly rejects it" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d3-$(_gen_hex_id)")"
+  # Forged: wrong producer (from) -- otherwise every generic base/v1 field
+  # (schema/wave_slug/to/created_at/head/plan_sha256) is genuinely valid, and
+  # this result lives at the NEW unique-id-named canonical path, so the OLD
+  # filename-correlation the generic validator's ingestion detection relies
+  # on (path.basename(resultPath,'.json') as a request-id lookup) can never
+  # even find this fixture's sibling request -- the generic check falls
+  # through to its unchanged, pre-existing "non-ingestion result: status
+  # only" contract and passes it regardless of the forged producer.
+  _write_ingestion_result "$result_f" '{"from":"totally-unrelated-imposter-actor"}' "$req_id" "$appr_digest" "context-provider"
+
+  run node -e '
+    const ca = require(process.argv[1]);
+    const ok = ca.validate("result", process.argv[2], { slug: process.argv[3], projectRoot: process.argv[4] });
+    if (!ok) { console.error("necessary-but-not-sufficient precondition failed: the generic validate(\"result\",...) check was expected to ACCEPT this base-field-valid, new-canonical-path, forged-producer result (proving it cannot by itself imply ingestion completion) but rejected it instead"); process.exit(1); }
+  ' "$HOOK_ARTIFACT" "$result_f" "$WAVE_SLUG" "$PROJ"
+  [ "$status" -eq 0 ]
+
+  _assert_ingestion_result_for "RCP-D3" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D4 FAIL: result.request_id does not match the request's own request_id" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local wrong_id; wrong_id="$(_gen_hex_id)"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d4-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" "$(printf '{"request_id":"%s"}' "$wrong_id")" "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D4" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D5 FAIL: approval.request_kind is not 'ingestion' (wrong request_kind never authorizes ingestion completion)" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{"request_kind":"scope-extension"}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d5-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D5" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D6 FAIL: forged approver -- approval.approver is not 'user'" {
+  # M6+M7 requester-authority closure (Group G fix): checkIngestionResultFields
+  # requires approver as an EXPLICIT own property, NEVER inferred from `from`
+  # (coordination-artifact.js own comment) -- forging `from` alone (the
+  # ORIGINAL fixture here) no longer exercises this check at all now that the
+  # default template also carries a correct approver:"user"; the genuine
+  # forge is on approver itself.
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{"approver":"test-specialist"}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d6-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D6" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D7 FAIL: denied approval (decision=denied) grants zero write/result authority" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{"decision":"denied"}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d7-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D7" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D8 FAIL: missing approval (no approval file at all for this request_id)" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  # Deliberately never written.
+  local result_f; result_f="$(_ingestion_result_path "rcp-d8-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{}' "$req_id" "$(printf '0%.0s' {1..64})" "context-provider"
+  _assert_ingestion_result_for "RCP-D8" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D9 FAIL: stale approval (created_at far in the past)" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{"created_at":"2020-01-01T00:00:00.000Z"}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d9-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D9" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D10 FAIL: approval-byte digest swap -- result.approval_sha256 is a well-formed-looking but WRONG digest that does not match the real, on-disk approval bytes" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local real_digest; real_digest="$(_sha256_file "$appr_f")"
+  # Flip the last hex character -- same length/character-class, genuinely a
+  # different value (mirrors this file's own established RCP-ingestion-3 technique).
+  local wrong_digest; wrong_digest="$(node -e '
+    const real = process.argv[1];
+    const last = real.slice(-1);
+    const flipped = last === "0" ? "1" : "0";
+    process.stdout.write(real.slice(0, -1) + flipped);
+  ' "$real_digest")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d10-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{}' "$req_id" "$wrong_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D10" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D11 FAIL: wrong result 'from' -- not 'doc-updater'" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d11-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{"from":"context-provider"}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D11" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D12 FAIL: wrong result 'to' -- PLAN.md ~L219 requires to == request.from, not merely == request.to" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d12-$(_gen_hex_id)")"
+  # The default request's own "from" is context-provider (see
+  # _write_ingestion_request's defaults) -- "orchestrator" is the request's
+  # own "to", a plausible-but-wrong value distinguishing this exact-source
+  # correlation from a looser "any known role" check.
+  _write_ingestion_result "$result_f" '{}' "$req_id" "$appr_digest" "orchestrator"
+  _assert_ingestion_result_for "RCP-D12" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D13 FAIL: missing audit_status" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d13-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{"audit_status":"__OMIT__"}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D13" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D14 FAIL: malformed/empty audit_status (present but empty string)" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d14-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{"audit_status":""}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D14" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D15 FAIL: non-array follow_ups" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d15-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{"follow_ups":"not-an-array"}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D15" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D16 FAIL: follow_ups over MAX_INGESTION_FOLLOW_UPS" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d16-$(_gen_hex_id)")"
+  local over_limit_follow_ups; over_limit_follow_ups="$(node -e 'process.stdout.write(JSON.stringify(Array.from({length: Number(process.argv[1]) + 4}, (_, i) => "follow-up-" + i)))' "$MAX_INGESTION_FOLLOW_UPS")"
+  _write_ingestion_result "$result_f" "$(printf '{"follow_ups":%s}' "$over_limit_follow_ups")" "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D16" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D17 FAIL: unsafe/path-traversal file reference in files_touched" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d17-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{"files_touched":["../../../../etc/passwd"]}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D17" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D18 FAIL: symlinked file reference in files_touched" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local real_target="$PROJ/docs/real-target-outside-approval.md"
+  mkdir -p "$(dirname "$real_target")"
+  printf '# real target\n' > "$real_target"
+  local symlinked_ref="$PROJ/docs/symlinked-ingested.md"
+  ln -s "$real_target" "$symlinked_ref"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d18-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" "$(printf '{"files_touched":["%s"]}' "$symlinked_ref")" "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D18" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D19 FAIL: non-regular file reference in files_touched (a directory, not a file)" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local a_dir="$PROJ/docs/a-directory-not-a-file"
+  mkdir -p "$a_dir"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d19-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" "$(printf '{"files_touched":["%s"]}' "$a_dir")" "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D19" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D20 FAIL: invalid disposition/status combination (disposition=written with status=blocked)" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d20-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{"status":"blocked"}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D20" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D21 FAIL: written disposition with MISSING files_touched" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d21-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{"files_touched":"__OMIT__"}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D21" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D22 FAIL: written disposition with EMPTY files_touched ([])" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d22-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{"files_touched":[]}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D22" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D23 FAIL: deduplicated disposition WITHOUT an existing written_file" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d23-$(_gen_hex_id)")"
+  # written_file omitted entirely; a non-existent path would be an equally
+  # valid variant of this same case (no genuine backing document either way).
+  _write_ingestion_result "$result_f" '{"disposition":"deduplicated","files_touched":[]}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D23" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D24 FAIL: deduplicated disposition with NON-EMPTY files_touched (must be exactly [] for dedup)" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local existing_doc="$PROJ/docs/already-existing-pattern-d24.md"
+  mkdir -p "$(dirname "$existing_doc")"
+  printf '# Already-existing pattern doc\n' > "$existing_doc"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d24-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" "$(printf '{"disposition":"deduplicated","files_touched":["docs/example-ingested.md"],"written_file":"%s"}' "$existing_doc")" "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D24" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D25 PASS (boundary): exactly MAX_INGESTION_FOLLOW_UPS (16) follow_ups validates true" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  # M6+M7 FINAL AUTHORITY CORRECTION (2026-08-11, team-lead-relayed fixture
+  # gap, post-Group-3-implementation): same gap/fix as RCP-D1 above -- the
+  # default files_touched (["docs/example-ingested.md"]) was never actually
+  # created on disk.
+  local touched_doc="$PROJ/docs/example-ingested.md"
+  mkdir -p "$(dirname "$touched_doc")"
+  printf '# Example ingested doc\n' > "$touched_doc"
+  # Section E / item 8: canonical basename grammar, since this is a
+  # TRUE-expecting fixture (see _ingestion_result_path_canonical's own header note).
+  local result_f; result_f="$(_ingestion_result_path_canonical)"
+  local exactly_16; exactly_16="$(node -e 'process.stdout.write(JSON.stringify(Array.from({length: Number(process.argv[1])}, (_, i) => "follow-up-" + i)))' "$MAX_INGESTION_FOLLOW_UPS")"
+  _write_ingestion_result "$result_f" "$(printf '{"follow_ups":%s}' "$exactly_16")" "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D25" "$req_f" "$appr_f" "$result_f" "true"
+}
+
+@test "RCP-D26 FAIL (boundary): exactly MAX_INGESTION_FOLLOW_UPS+1 (17) follow_ups is rejected" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d26-$(_gen_hex_id)")"
+  local exactly_17; exactly_17="$(node -e 'process.stdout.write(JSON.stringify(Array.from({length: Number(process.argv[1]) + 1}, (_, i) => "follow-up-" + i)))' "$MAX_INGESTION_FOLLOW_UPS")"
+  _write_ingestion_result "$result_f" "$(printf '{"follow_ups":%s}' "$exactly_17")" "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D26" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# M6+M7 FINAL AUTHORITY/ORACLE CORRECTION (2026-08-11, RED phase, dispatch
+# team-lead "M6+M7 FINAL AUTHORITY/ORACLE CORRECTION"): Group 3 -- close
+# ingestion request/write evidence. Confirmed by direct read (2026-08-11) of
+# validateIngestionResultFor/checkIngestionResultFields
+# (.claude/hooks/coordination-artifact.js):
+#   - no verification anywhere that the CALLER-SUPPLIED requestPath's realpath
+#     equals the canonical waveDir/requests/<kind>/<request_id>.json path
+#     isApprovalValid (~L435-451) itself internally resolves and validates --
+#     validateIngestionResultFor only compares apprObj.request_id !==
+#     reqObj.request_id BY VALUE (~L399), never that requestPath IS the file
+#     the approval is actually anchored to;
+#   - the files_touched loop (~L329-337) explicitly TOLERATES a 'missing'
+#     classification (the referenced file does not currently exist on disk)
+#     even when disposition==='written', which PLAN.md ~L219 requires to have
+#     genuine non-empty CONFINED evidence.
+#
+# RCP-D4/D8's existing coverage ("wrong request_id VALUE" / "approval file
+# absent entirely") does NOT cover this gap -- both keep requestPath pinned
+# to the canonical path throughout; team-lead's cases 1/2 are specifically
+# about a caller passing a DIFFERENT FILE that merely CLAIMS the same
+# request_id value, while the approval's own internal resolution silently
+# keeps validating the real, canonical, untouched sibling. RCP-D21/D22 cover
+# "files_touched missing/empty" but not "present, confined, and genuinely
+# absent from disk" (D28 below) -- a materially different scenario the
+# 'missing'-tolerant bug in checkIngestionResultFields specifically produces.
+#
+# team-lead's cases 4 (symlink), 5 (directory), 6 (traversal), 7 (foreign
+# producer from!=='doc-updater'), and 9 (approval digest swap) are ALREADY
+# fully covered, unmodified, by this file's own pre-existing RCP-D18, RCP-D19,
+# RCP-D17, RCP-D11, and RCP-D10 respectively -- confirmed still green in this
+# session's verification run; no new test added for any of them to avoid
+# duplicating existing coverage. Case 8 (missing/wrong approver) is PARTLY
+# covered by RCP-D6 (wrong VALUE); RCP-D29 below adds the missing half
+# (approver key entirely ABSENT, not merely wrong) as a locking-in
+# confirmation, since checkIngestionResultFields's own
+# `!hasOwnProperty(...) || apprObj.approver !== 'user'` already covers both
+# halves in one condition and no existing test isolates the hasOwnProperty
+# half specifically.
+#
+# HARD NO-GO correction (2026-08-11, spec item 7 bullet 3): shadow-approval
+# and shadow-result negatives were NOT yet covered by any of the above (D27 is
+# a shadow REQUEST -- caller-supplied requestPath pointing at a different
+# file, not a shadow approvalPath/resultPath; D28 is a confined-but-nonexistent
+# files_touched entry, a materially different scenario). RCP-D30 (shadow
+# approval path), RCP-D31 (shadow result path -- extra nesting under
+# results/doc-updater/), and RCP-D32 (symlinked result file) below close this
+# gap, matching Codex's own empirical repro (approval/result files placed
+# under an arbitrary confined shadow/ subdirectory instead of their canonical
+# locations both wrongly validate true today).
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "RCP-D27 REJECT (regression): a caller-supplied requestPath that is NOT the canonical file the approval is actually anchored to (a 'shadow' request sharing only the SAME request_id VALUE, at a different path, with genuinely different content) must be rejected -- pre-fix it wrongly validates true, because validateIngestionResultFor reads reqObj from whatever path the caller supplies and only ever compares request_id by VALUE against the approval's own (separately, correctly re-resolved) canonical sibling, never confirming requestPath IS that same file" {
+  local req_id; req_id="$(_gen_hex_id)"
+  # The GENUINE, canonical request -- this is what isApprovalValid itself
+  # will independently resolve and validate when it checks the approval below.
+  local canonical_req_f; canonical_req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$canonical_req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  # A SEPARATE, non-canonical "shadow" request file, living OUTSIDE
+  # requests/ingestion/ entirely, sharing the identical request_id VALUE but
+  # genuinely different content (from) -- exactly the "different inode/bytes
+  # with the same ID" scenario (cases 1+2 together: same request_id value,
+  # different file/path/content, and the caller is the one passing the
+  # non-canonical one).
+  local shadow_req_f; shadow_req_f="$(_ingestion_wave_dir)/shadow-requests/$req_id.json"
+  _write_ingestion_request "$shadow_req_f" '{"from":"totally-different-shadow-opener"}' "$req_id"
+  # result.to matches the SHADOW's own "from" (not the canonical request's) --
+  # proving the bug reads reqObj from the caller-supplied shadow path, not
+  # from whatever the approval is genuinely anchored to.
+  local result_f; result_f="$(_ingestion_result_path "rcp-d27-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{}' "$req_id" "$appr_digest" "totally-different-shadow-opener"
+  _assert_ingestion_result_for "RCP-D27" "$shadow_req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D28 REJECT (regression): written disposition whose files_touched entry is a genuinely CONFINED but NONEXISTENT file (present in the array, resolves safely under the project root, but nothing is actually there on disk) must be rejected -- pre-fix it wrongly validates true, because checkIngestionResultFields's files_touched loop explicitly tolerates a 'missing' classification even for disposition==='written', which PLAN.md ~L219 requires to have genuine non-empty confined evidence" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  # Deliberately never created on disk -- but a well-formed, confined,
+  # non-traversal, non-symlink relative path (isolates this from RCP-D17/
+  # RCP-D18/RCP-D19's own outside/symlink/not-regular scenarios).
+  local result_f; result_f="$(_ingestion_result_path "rcp-d28-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{"files_touched":["docs/rcp-d28-genuinely-never-created.md"]}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D28" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D29 FAIL (locking-in): approval.approver key entirely ABSENT (never merely a wrong value, isolates the hasOwnProperty half of checkIngestionResultFields's own '!hasOwnProperty(...) || approver !== user' check from RCP-D6's existing wrong-value half)" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{"approver":"__OMIT__"}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d29-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D29" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D30 REJECT (regression): an approval file that is well-formed, confined, and correctly correlates by VALUE, but lives at a NON-canonical path (not waveDir/approvals/<request_id>.json -- a 'shadow' location instead) must be rejected -- pre-fix validateIngestionResultFor never verifies approvalPath's realpath equals the canonical approvals/<request_id>.json location, only the generic confined-JSON content checks" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  # Well-formed, otherwise-fully-valid approval content, but planted at a
+  # NON-canonical, merely-confined "shadow" location instead of the canonical
+  # approvals/<request_id>.json path (mirrors RCP-D27's own "shadow-*" naming
+  # convention for its shadow REQUEST fixture).
+  local shadow_appr_f; shadow_appr_f="$(_ingestion_wave_dir)/shadow/approvals/$req_id.json"
+  _write_ingestion_approval "$shadow_appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$shadow_appr_f")"
+  # M6+M7 FINAL AUTHORITY CORRECTION-style fixture fix (same gap/fix as
+  # RCP-D1/RCP-D25 above): _write_ingestion_result's own default files_touched
+  # (["docs/example-ingested.md"]) is never actually created on disk by
+  # default -- without this, the result fails closed for the WRONG reason
+  # (files_touched 'missing' classification, already correctly rejected by
+  # the pre-existing Group 3 fix) before ever reaching the approvalPath
+  # canonicalization check this test means to isolate.
+  local touched_doc="$PROJ/docs/example-ingested.md"
+  mkdir -p "$(dirname "$touched_doc")"
+  printf '# Example ingested doc\n' > "$touched_doc"
+  local result_f; result_f="$(_ingestion_result_path "rcp-d30-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" '{}' "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D30" "$req_f" "$shadow_appr_f" "$result_f" "false"
+}
+
+@test "RCP-D31 REJECT (regression): a result file that is well-formed, confined, and correctly correlates by VALUE, but is NOT a direct child of results/doc-updater/ (nested one level deeper, under a shadow/ subdirectory) must be rejected -- pre-fix validateIngestionResultFor never verifies resultPath resolves to a direct child of the canonical results/doc-updater/ directory" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local touched_doc="$PROJ/docs/rcp-d31-example.md"
+  mkdir -p "$(dirname "$touched_doc")"
+  printf '# RCP-D31 example\n' > "$touched_doc"
+  local shadow_result_f; shadow_result_f="$(_ingestion_wave_dir)/results/doc-updater/shadow/rcp-d31-$(_gen_hex_id).json"
+  _write_ingestion_result "$shadow_result_f" "$(printf '{"files_touched":["%s"]}' "$touched_doc")" "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D31" "$req_f" "$appr_f" "$shadow_result_f" "false"
+}
+
+@test "RCP-D32 REJECT (regression): a result file that IS ITSELF a symlink (whose target resolves to an otherwise well-formed, correctly-correlated, canonically-located result) must be rejected -- pre-fix validateIngestionResultFor performs no fs.lstatSync symlink check on resultPath itself, only a realpath-following confined-JSON read that transparently follows the link" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local touched_doc="$PROJ/docs/rcp-d32-example.md"
+  mkdir -p "$(dirname "$touched_doc")"
+  printf '# RCP-D32 example\n' > "$touched_doc"
+  local real_result_f; real_result_f="$(_ingestion_result_path "rcp-d32-real-$(_gen_hex_id)")"
+  _write_ingestion_result "$real_result_f" "$(printf '{"files_touched":["%s"]}' "$touched_doc")" "$req_id" "$appr_digest" "context-provider"
+  # The symlink itself lives DIRECTLY in results/doc-updater/ (satisfying the
+  # "direct child" shape RCP-D31 targets) -- isolates the "must not be a
+  # symlink" check specifically.
+  local symlinked_result_f; symlinked_result_f="$(_ingestion_wave_dir)/results/doc-updater/rcp-d32-symlink-$(_gen_hex_id).json"
+  ln -s "$real_result_f" "$symlinked_result_f"
+  _assert_ingestion_result_for "RCP-D32" "$req_f" "$appr_f" "$symlinked_result_f" "false"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# M6+M7 RESIDUAL AUTHORITY CORRECTION (2026-08-11, dispatch arch-testing
+# arch-testing-20260811T162225Z), Section E / item 8: "Result: regular file,
+# no FIFO/directorio/socket/symlink; hijo directo de results/doc-updater/;
+# basename conforme exactamente a:
+# ^doc-updater-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{5,}\.json$." RCP-D19/D31/D32 above
+# already cover "regular file"/"direct child"/"never a symlink" respectively.
+# The exact basename GRAMMAR itself is confirmed by direct read of
+# coordination-artifact.js's own validateIngestionResultFor to be genuinely
+# unenforced today -- that function's own comment states this as a deliberate
+# design choice: "No separately 'frozen' filename regex exists anywhere in
+# production beyond safe-segment + .json -- the system deliberately avoids
+# filename-based correlation, relying on body fields instead; do not invent a
+# new filename format here." Section E of THIS pass's frozen spec now requires
+# exactly that grammar, which is why RCP-D1/D2/D25 above were updated to the
+# new _ingestion_result_path_canonical fixture (their own TRUE-expecting
+# outcome would otherwise flip to false the moment the fix lands) -- this test
+# is the corresponding RED proving the gap still exists today.
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "RCP-D33 REJECT (regression, item 8): a result file whose basename does NOT conform to the canonical doc-updater-<8-digit-date>T<6-digit-time>Z-<hex>.json grammar (otherwise a well-formed, direct child of results/doc-updater/, correctly correlated, non-symlinked, genuinely-written result with non-empty confined files_touched) is wrongly accepted as valid pre-fix" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local touched_doc="$PROJ/docs/rcp-d33-example.md"
+  mkdir -p "$(dirname "$touched_doc")"
+  printf '# RCP-D33 example\n' > "$touched_doc"
+  # Deliberately NON-canonical basename (this file's own pre-existing
+  # "rcp-dN-<hex>.json" naming convention, otherwise a direct child of
+  # results/doc-updater/, never symlinked, fully correlated) -- the ONLY
+  # thing under test here.
+  local result_f; result_f="$(_ingestion_result_path "rcp-d33-$(_gen_hex_id)")"
+  _write_ingestion_result "$result_f" "$(printf '{"files_touched":["%s"]}' "$touched_doc")" "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D33" "$req_f" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D34: a symlink alias to the canonical ingestion request is not itself the canonical request path" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local req_alias="$(_ingestion_wave_dir)/requests/ingestion/alias-$req_id.json"
+  ln -s "$req_f" "$req_alias"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local touched_doc="$PROJ/docs/rcp-d34-example.md"
+  mkdir -p "$(dirname "$touched_doc")"
+  printf '# RCP-D34 example\n' > "$touched_doc"
+  local result_f; result_f="$(_ingestion_result_path_canonical)"
+  _write_ingestion_result "$result_f" "$(printf '{\"files_touched\":[\"%s\"]}' "$touched_doc")" "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D34" "$req_alias" "$appr_f" "$result_f" "false"
+}
+
+@test "RCP-D35: a symlink alias to the canonical approval is not itself the canonical approval path" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_alias="$(_ingestion_wave_dir)/approvals/alias-$req_id.json"
+  ln -s "$appr_f" "$appr_alias"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local touched_doc="$PROJ/docs/rcp-d35-example.md"
+  mkdir -p "$(dirname "$touched_doc")"
+  printf '# RCP-D35 example\n' > "$touched_doc"
+  local result_f; result_f="$(_ingestion_result_path_canonical)"
+  _write_ingestion_result "$result_f" "$(printf '{\"files_touched\":[\"%s\"]}' "$touched_doc")" "$req_id" "$appr_digest" "context-provider"
+  _assert_ingestion_result_for "RCP-D35" "$req_f" "$appr_alias" "$result_f" "false"
+}
+
+@test "RCP-D36: a FIFO with a canonical result basename is rejected before any JSON read" {
+  local req_id; req_id="$(_gen_hex_id)"
+  local req_f; req_f="$(_ingestion_request_path "$req_id")"
+  _write_ingestion_request "$req_f" '{}' "$req_id"
+  local appr_f; appr_f="$(_ingestion_approval_path "$req_id")"
+  _write_ingestion_approval "$appr_f" '{}' "$req_id"
+  local appr_digest; appr_digest="$(_sha256_file "$appr_f")"
+  local touched_doc="$PROJ/docs/rcp-d36-example.md"
+  mkdir -p "$(dirname "$touched_doc")"
+  printf '# RCP-D36 example\n' > "$touched_doc"
+  local result_f; result_f="$(_ingestion_result_path_canonical)"
+  _write_ingestion_result "$result_f" "$(printf '{\"files_touched\":[\"%s\"]}' "$touched_doc")" "$req_id" "$appr_digest" "context-provider"
+  local payload; payload="$(cat "$result_f")"
+  rm "$result_f"
+  mkfifo "$result_f"
+  (printf '%s' "$payload" > "$result_f"; printf '%s' "$payload" > "$result_f") &
+  local writer_pid=$!
+  local assertion_rc=0
+  _assert_ingestion_result_for "RCP-D36" "$req_f" "$appr_f" "$result_f" "false" || assertion_rc=$?
+  kill "$writer_pid" 2>/dev/null || true
+  wait "$writer_pid" 2>/dev/null || true
+  [ "$assertion_rc" -eq 0 ]
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# M67-SUPERVISOR-TURN-CONTRACT-01 (M67-MATRIX3-LIVENESS-REPAIR-FINAL-20260821):
+# every host-generated turn must declare, unambiguously, that the host (never
+# the model) owns CLI/filesystem/network/MCP/dispatch, that the model must
+# not invoke Bash/Read/Grep/Glob/Agent/SendMessage/MCP/web/any native tool,
+# and that it returns exactly one RuntimeTurnEnvelope JSON object -- plus the
+# per-phase restrictions (architect-initial under context7-required:
+# consult-intent only; context-provider-initial under context7-required:
+# pattern-gap only; context-provider-resumed: terminal only; architect-
+# resumed after an accepted child under context7-required: terminal only).
+# Preserved pre-fix RED expectation (current bytes are GREEN): before this
+# fix, SUPERVISOR_BASE_INSTRUCTIONS instead told
+# the model to "Communicate exclusively through the runtime-consultation.cjs
+# CLI" (the model never executes that CLI -- the host does), and none of the
+# per-phase turn-input builders said anything about tool use or which envelope
+# kind was expected. The __testOnly* seams below are pure, closure-free text
+# builders -- exported only under RUNTIME_CONSULTATION_TEST_CAPABILITY (never
+# reachable in production), same rationale as this file/runtime-bridge-
+# codex.cjs already export several other pure helpers for direct testing.
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "M67-SUPERVISOR-TURN-CONTRACT-01a: SUPERVISOR_BASE_INSTRUCTIONS unambiguously states host ownership, the native-tool prohibition, and the exact-one-JSON-object contract, and no longer tells the model to operate the CLI itself" {
+  run --separate-stderr env NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x \
+    node -e '
+      const bridge = require(process.argv[1]);
+      const text = bridge.__testOnlySupervisorBaseInstructions;
+      if (typeof text !== "string" || text.length === 0) { process.stderr.write("SUPERVISOR_BASE_INSTRUCTIONS is not a non-empty string\n"); process.exit(1); }
+      const mustContain = [
+        "host", "CLI", "filesystem", "network", "MCP", "dispatch",
+        "MUST NOT", "Bash", "Read", "Grep", "Glob", "Agent", "SendMessage", "web",
+        "RuntimeTurnEnvelope", "exactly one", "Markdown",
+      ];
+      for (const phrase of mustContain) {
+        if (!text.includes(phrase)) { process.stderr.write("missing required phrase " + JSON.stringify(phrase) + " in: " + text + "\n"); process.exit(1); }
+      }
+      if (text.includes("Communicate") && text.includes("runtime-consultation.cjs CLI")) {
+        process.stderr.write("still instructs the model to operate the CLI itself: " + text + "\n");
+        process.exit(1);
+      }
+    ' "$BRIDGE"
+  [ "$status" -eq 0 ]
+}
+
+@test "M67-SUPERVISOR-TURN-CONTRACT-01b: the architect initial turn under context7-required forbids answering directly and requires a consult-intent-only envelope targeting context-provider with the byte-identical question and ARCHITECTURE_RECOMMENDATION -- absent when evidence_policy is none" {
+  run --separate-stderr env NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x \
+    node -e '
+      const bridge = require(process.argv[1]);
+      const worker = { role: "arch-platform", readViewRoot: "/tmp/m67-rv", waveSlug: "m67-wave" };
+      const item = {
+        requestId: "a".repeat(64), expectedResultKind: "ARCHITECTURE_RECOMMENDATION",
+        question: "APPROVED_CONTEXT7_LIBRARY_ID: /ktorio/ktor-documentation\nDoes X govern Y",
+        evidencePolicy: "context7-required", approvedContext7LibraryId: "/ktorio/ktor-documentation",
+      };
+      const gated = bridge.__testOnlyBuildRootTurnInput(worker, item);
+      const mustContain = ["do not answer", "consult-intent", "context-provider", "ARCHITECTURE_RECOMMENDATION", "identical"];
+      for (const phrase of mustContain) {
+        if (!gated.toLowerCase().includes(phrase.toLowerCase())) { process.stderr.write("missing required phrase " + JSON.stringify(phrase) + " under context7-required in: " + gated + "\n"); process.exit(1); }
+      }
+      if (!gated.includes(item.question)) { process.stderr.write("byte-identical question is not embedded verbatim: " + gated + "\n"); process.exit(1); }
+      const ungated = bridge.__testOnlyBuildRootTurnInput(worker, Object.assign({}, item, { evidencePolicy: "none" }));
+      if (ungated.toLowerCase().includes("consult-intent")) { process.stderr.write("evidence_policy none must not carry the consult-intent-only restriction: " + ungated + "\n"); process.exit(1); }
+    ' "$BRIDGE"
+  [ "$status" -eq 0 ]
+}
+
+@test "M67-SUPERVISOR-TURN-CONTRACT-01c: the context-provider initial turn under context7-required forbids tool use and requires a pattern-gap-only envelope naming provider context7 and the inherited library_id -- absent when evidence_policy is none" {
+  run --separate-stderr env NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x \
+    node -e '
+      const bridge = require(process.argv[1]);
+      const worker = { role: "context-provider", readViewRoot: "/tmp/m67-rv", waveSlug: "m67-wave" };
+      const item = {
+        requestId: "a".repeat(64), expectedResultKind: "ARCHITECTURE_RECOMMENDATION",
+        question: "child question about X",
+        evidencePolicy: "context7-required", approvedContext7LibraryId: "/ktorio/ktor-documentation",
+      };
+      const gated = bridge.__testOnlyBuildRootTurnInput(worker, item);
+      const mustContain = ["pattern-gap", "context7", "/ktorio/ktor-documentation"];
+      for (const phrase of mustContain) {
+        if (!gated.includes(phrase)) { process.stderr.write("missing required phrase " + JSON.stringify(phrase) + " under context7-required in: " + gated + "\n"); process.exit(1); }
+      }
+      const ungated = bridge.__testOnlyBuildRootTurnInput(worker, Object.assign({}, item, { evidencePolicy: "none", approvedContext7LibraryId: null }));
+      if (ungated.includes("pattern-gap")) { process.stderr.write("evidence_policy none must not carry the pattern-gap-only restriction: " + ungated + "\n"); process.exit(1); }
+    ' "$BRIDGE"
+  [ "$status" -eq 0 ]
+}
+
+@test "M67-SUPERVISOR-TURN-CONTRACT-01d: the architect turn resumed after an accepted child under context7-required forbids opening another child or consulting Context7 itself and requires a terminal-only envelope -- absent when evidence_policy is none" {
+  run --separate-stderr env NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x \
+    node -e '
+      const bridge = require(process.argv[1]);
+      const worker = { role: "arch-platform", readViewRoot: "/tmp/m67-rv", waveSlug: "m67-wave" };
+      const child = { dependency: { request_id: "b".repeat(64), from_role: "context-provider" }, content: "the answer" };
+      const gatedItem = { requestId: "a".repeat(64), evidencePolicy: "context7-required" };
+      const gated = bridge.__testOnlyBuildResumedTurnInput(worker, gatedItem, child);
+      const mustContain = ["terminal", "not open another", "not consult Context7"];
+      for (const phrase of mustContain) {
+        if (!gated.includes(phrase)) { process.stderr.write("missing required phrase " + JSON.stringify(phrase) + " under context7-required in: " + gated + "\n"); process.exit(1); }
+      }
+      const ungatedItem = { requestId: "a".repeat(64), evidencePolicy: "none" };
+      const ungated = bridge.__testOnlyBuildResumedTurnInput(worker, ungatedItem, child);
+      if (ungated.includes("not open another")) { process.stderr.write("evidence_policy none must not carry the terminal-only restriction: " + ungated + "\n"); process.exit(1); }
+    ' "$BRIDGE"
+  [ "$status" -eq 0 ]
+}
+
+@test "M67-SUPERVISOR-TURN-CONTRACT-01e: the context-provider turn resumed after HOST_PATTERN_EVIDENCE forbids consulting again and requires a terminal-only envelope, never another pattern-gap or a consult-intent" {
+  run --separate-stderr env NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x \
+    node -e '
+      const bridge = require(process.argv[1]);
+      const evidence = {
+        contentBytes: Buffer.from("ktor evidence text", "utf8"),
+        contentRef: { blob: "d".repeat(64), digest: "d".repeat(64), size: 3 },
+        contentDigest: "d".repeat(64),
+      };
+      const text = bridge.__testOnlyBuildPatternEvidenceTurnInput(evidence);
+      const mustContain = ["terminal", "not consult again", "pattern-gap is forbidden", "consult-intent"];
+      for (const phrase of mustContain) {
+        if (!text.includes(phrase)) { process.stderr.write("missing required phrase " + JSON.stringify(phrase) + " in: " + text + "\n"); process.exit(1); }
+      }
+    ' "$BRIDGE"
+  [ "$status" -eq 0 ]
+}
+
+# M67-MATRIX3-EVIDENCE-CONTRACT-REPAIR-20260821: the mission mandate names the
+# exact signature "M67-SUPERVISOR-TURN-CONTRACT-01" (no a/b/c/d/e suffix). The
+# five tests above cover each phase in isolation with a focused failure
+# message per phase; this umbrella test exercises all five phases in one
+# shot, under the exact mandated name, so that name alone is independently
+# provable as RED before the fix and GREEN after it -- never merely implied
+# by the sum of its five more granular siblings.
+@test "M67-SUPERVISOR-TURN-CONTRACT-01: every host-generated turn declares host ownership plus the native-tool prohibition, and each of the four phase-scoped restrictions (architect-initial, context-provider-initial, architect-resumed, context-provider-resumed) is present exactly where context7-required requires it" {
+  run --separate-stderr env NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x \
+    node -e '
+      const bridge = require(process.argv[1]);
+
+      const base = bridge.__testOnlySupervisorBaseInstructions;
+      const baseMustContain = [
+        "host", "CLI", "filesystem", "network", "MCP", "dispatch",
+        "MUST NOT", "Bash", "Read", "Grep", "Glob", "Agent", "SendMessage", "web",
+        "RuntimeTurnEnvelope", "exactly one", "Markdown",
+      ];
+      for (const phrase of baseMustContain) {
+        if (!base.includes(phrase)) { process.stderr.write("[base] missing required phrase " + JSON.stringify(phrase) + " in: " + base + "\n"); process.exit(1); }
+      }
+      if (base.includes("Communicate") && base.includes("runtime-consultation.cjs CLI")) {
+        process.stderr.write("[base] still instructs the model to operate the CLI itself: " + base + "\n");
+        process.exit(1);
+      }
+
+      const architectWorker = { role: "arch-platform", readViewRoot: "/tmp/m67-umbrella-rv", waveSlug: "m67-umbrella-wave" };
+      const cpWorker = { role: "context-provider", readViewRoot: "/tmp/m67-umbrella-rv", waveSlug: "m67-umbrella-wave" };
+      const gatedItem = {
+        requestId: "a".repeat(64), expectedResultKind: "ARCHITECTURE_RECOMMENDATION",
+        question: "APPROVED_CONTEXT7_LIBRARY_ID: /ktorio/ktor-documentation\nDoes X govern Y",
+        evidencePolicy: "context7-required", approvedContext7LibraryId: "/ktorio/ktor-documentation",
+      };
+
+      const architectInitial = bridge.__testOnlyBuildRootTurnInput(architectWorker, gatedItem);
+      for (const phrase of ["do not answer", "consult-intent", "context-provider", "ARCHITECTURE_RECOMMENDATION"]) {
+        if (!architectInitial.toLowerCase().includes(phrase.toLowerCase())) { process.stderr.write("[architect-initial] missing " + JSON.stringify(phrase) + " in: " + architectInitial + "\n"); process.exit(1); }
+      }
+
+      const cpInitial = bridge.__testOnlyBuildRootTurnInput(cpWorker, gatedItem);
+      for (const phrase of ["pattern-gap", "context7", "/ktorio/ktor-documentation"]) {
+        if (!cpInitial.includes(phrase)) { process.stderr.write("[context-provider-initial] missing " + JSON.stringify(phrase) + " in: " + cpInitial + "\n"); process.exit(1); }
+      }
+
+      const child = { dependency: { request_id: "b".repeat(64), from_role: "context-provider" }, content: "the answer" };
+      const architectResumed = bridge.__testOnlyBuildResumedTurnInput(architectWorker, gatedItem, child);
+      for (const phrase of ["terminal", "not open another", "not consult Context7"]) {
+        if (!architectResumed.includes(phrase)) { process.stderr.write("[architect-resumed] missing " + JSON.stringify(phrase) + " in: " + architectResumed + "\n"); process.exit(1); }
+      }
+
+      const evidence = {
+        contentBytes: Buffer.from("ktor evidence text", "utf8"),
+        contentRef: { blob: "d".repeat(64), digest: "d".repeat(64), size: 3 },
+        contentDigest: "d".repeat(64),
+      };
+      const cpResumed = bridge.__testOnlyBuildPatternEvidenceTurnInput(evidence);
+      for (const phrase of ["terminal", "not consult again", "pattern-gap is forbidden", "consult-intent"]) {
+        if (!cpResumed.includes(phrase)) { process.stderr.write("[context-provider-resumed] missing " + JSON.stringify(phrase) + " in: " + cpResumed + "\n"); process.exit(1); }
+      }
+    ' "$BRIDGE"
   [ "$status" -eq 0 ]
 }

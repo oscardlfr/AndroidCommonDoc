@@ -30,22 +30,62 @@ RLL="$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs"
 WAVE_SLUG="gate-test-wave"
 TEST_CAPABILITY="bats-bash-cli-spawn-gate-fixture-capability"
 
+_assert_isolated_runtime_tmp() {
+  local dir="$1"
+  local real_dir real_bats
+  real_dir="$(cd "$dir" 2>/dev/null && pwd -P)" || return 1
+  real_bats="$(cd "$BATS_TEST_TMPDIR" && pwd -P)" || return 1
+  case "$real_dir" in
+    "$real_bats"|"$real_bats"/*) ;;
+    *) echo "# runtime-tmp escaped BATS_TEST_TMPDIR: $real_dir not under $real_bats" >&2; return 1 ;;
+  esac
+  node -e '
+    const fs = require("fs");
+    let st;
+    try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
+    if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
+    if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
+    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+  ' "$dir"
+}
+
 setup() {
+  # Isolates this file's host-private registry (registryBaseDir() in
+  # runtime-role-lifecycle.cjs resolves purely from $TMPDIR + this OS user's
+  # uid) under bats' own per-test tmpdir, never the real shared canonical
+  # registry -- exported before any node/CLI process starts so every
+  # subprocess this test spawns inherits it. Mirrors
+  # runtime-consultation-bridge.bats's own isolation.
+  RUNTIME_TMP="$BATS_TEST_TMPDIR/runtime-tmp"
+  mkdir -p "$RUNTIME_TMP"
+  chmod 0700 "$RUNTIME_TMP"
+  _assert_isolated_runtime_tmp "$RUNTIME_TMP"
+  export TMPDIR="$RUNTIME_TMP"
+
   PROJ="$(mktemp -d)"
   git -C "$PROJ" init -q 2>/dev/null
   git -C "$PROJ" config user.email "bats@test.local"
   git -C "$PROJ" config user.name "Bats Test"
   git -C "$PROJ" commit -q --allow-empty -m init 2>/dev/null
+  PROJ_REGISTRY_DIR="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.registryRepoDir(process.argv[2]));' "$RLL" "$PROJ")"
   mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
   printf '# Fixture PLAN for bash-cli-spawn-gate.bats\n' > "$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
   mkdir -p "$PROJ/scripts/lib"
 }
 
 teardown() {
-  node -e '
-    const rll = require(process.argv[1]);
-    try { require("fs").rmSync(rll.registryRepoDir(process.argv[2]), { recursive: true, force: true }); } catch (e) { /* best effort */ }
-  ' "$RLL" "$PROJ" 2>/dev/null || true
+  if [ -n "$RUNTIME_TMP" ] && _assert_isolated_runtime_tmp "$RUNTIME_TMP" >/dev/null 2>&1; then
+    # M6+M7 SIXTEENTH Phase 2B follow-up: some fixtures materialize a
+    # deliberately read-only projection under here (e.g. a role-read-view,
+    # part of the production isolation model's own security posture) --
+    # restore owner write+traverse on every path THIS test created before
+    # sweeping, or a bare rm -rf leaves permission-denied debris behind
+    # (which then also makes bats' own outer per-test tmpdir cleanup fail
+    # non-silently).
+    chmod -R u+rwX "$RUNTIME_TMP" 2>/dev/null || true
+    rm -rf "$RUNTIME_TMP"
+  fi
   rm -rf "$PROJ"
 }
 
@@ -54,8 +94,10 @@ teardown() {
 # lifecycle action. Prints `<action_id>\t<bridge_command_or_empty>` on stdout.
 # role=verifier + capability=["codex-app-server"] (routing.json lists
 # codex-app-server FIRST for verifier) yields a real supervisor-start action;
-# role=arch-testing + capability=["claude-sendmessage"] yields a role-spawn
-# action instead (used by the wrong-kind test).
+# The wrong-kind test below derives its fixture from a genuine minted
+# supervisor-start action and changes only its enum-valid `kind` field on
+# disk. That keeps the test independent of any unrelated Claude capability
+# oracle while still exercising this gate's own kind boundary.
 _mint_action() {
   local role="$1" capability="$2"
   NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$TEST_CAPABILITY" node -e '
@@ -246,10 +288,21 @@ _assert_blocked() {
 }
 
 @test "GATE-wrongkind-1: an action that exists but is NOT kind=supervisor-start is rejected even if a caller crafts a bridge-shaped command around its id" {
-  local minted action_id
-  minted="$(_mint_action arch-testing '["claude-sendmessage"]')"
+  local minted action_id action_path
+  minted="$(_mint_supervisor_start_action)"
   action_id="${minted%%$'\t'*}"
   [ -n "$action_id" ]
+  action_path="$(node -e '
+    const rll = require(process.argv[1]);
+    process.stdout.write(rll.actionPathFor(process.argv[2], process.argv[3]));
+  ' "$RLL" "$PROJ" "$action_id")"
+  node -e '
+    const fs = require("fs");
+    const p = process.argv[1];
+    const action = JSON.parse(fs.readFileSync(p, "utf8"));
+    action.kind = "role-spawn";
+    fs.writeFileSync(p, JSON.stringify(action));
+  ' "$action_path"
   local fake_cmd="'node' '/tmp/does-not-matter/runtime-bridge-codex.cjs' 'session-run' '--action' '$action_id' '--coordination-root' '/tmp/x' '--role' 'arch-testing' '--session-expiry' '2099-01-01T00:00:00Z'"
   _run_gate "$fake_cmd" 'true' ''
   _assert_blocked 'not a supervisor-start'
@@ -332,4 +385,58 @@ _assert_blocked() {
   bridge_command="${minted#*$'\t'}"
   _run_gate "${bridge_command} &" 'true' ''
   _assert_blocked 'canonical renderPosixDirect'
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# M6-CODEX-SUPERVISOR-ACTIVATION-CLOSURE: no sequential-hook assumption.
+# CONFIRMED, not RED (mirrors context-provider-gate.test.js's own precedent
+# for a deliberately-non-RED persisted regression witness, e.g. GROUP F /
+# GROUPF-1 there): direct read of .claude/settings.json shows a Bash tool
+# call fires FOUR INDEPENDENT PreToolUse matcher blocks -- "Write|Edit|Bash"
+# (premature-execution-gate.js), "Bash" (12 hooks including THIS gate),
+# "Grep|Glob|Bash|Read" (context-provider-gate.js ALONE), and
+# "Bash|Task|Agent" (wave-phase-gate.js) -- never a single chained pipeline
+# where one hook's updatedInput becomes the next hook's own input.
+# context-provider-gate.js's own tryInjectLifecycleGrant/tryInjectRequesterGrant
+# already prove this mechanism is real and production-active TODAY (both
+# rewrite updatedInput.command for a Bash call in this exact multi-hook
+# environment) -- this test grounds the SAME architectural fact in THIS
+# gate's own real supervisor-start logic instead of guessing at internals:
+# the model's own plausible FIRST attempt at a supervisor-start Bash call may
+# well carry run_in_background:false (context-provider-gate.js's M6 job,
+# once implemented, is to FORCE it true in ITS OWN separate updatedInput,
+# never this gate's). Fed that SAME genuine original (unforced) payload --
+# exactly what Claude Code's harness actually delivers to this gate, never a
+# chained, already-forced one -- this gate's own real, already-shipped
+# validateSupervisorStartLaunch short-circuits on `!runInBackground` and
+# allows silently, WITHOUT consuming the action's one-use launch marker
+# (GATE-foreground-1's own established behavior) -- correct ONLY if this
+# gate genuinely never observes a forced-true value from a sibling hook. If
+# hooks were (wrongly) assumed to chain, a future change to this gate could
+# be tempted to trust an already-forced run_in_background as proof of prior
+# validation; this test pins that no such trust is ever legitimate, and the
+# marker's one-use genuinely survives for a REAL subsequent background
+# launch.
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "GATE-nosequential-1: this gate processes the ORIGINAL raw PreToolUse Bash payload (run_in_background:false, exactly as the top-level model actually issued it) -- never a sibling hook's own forced-true updatedInput -- and therefore takes no action at all on it, leaving the one-use launch marker genuinely untouched for a real subsequent background launch" {
+  local minted bridge_command
+  minted="$(_mint_supervisor_start_action)"
+  bridge_command="${minted#*$'\t'}"
+  [ -n "$bridge_command" ]
+
+  # The genuine original event this gate actually receives -- run_in_background
+  # still false, since forcing it true is context-provider-gate.js's own,
+  # separate M6 job, never chained into what THIS gate is given.
+  _run_gate "$bridge_command" '' ''
+  _assert_allowed
+
+  # Proof the one-use marker was genuinely never touched by that call: a
+  # REAL subsequent background launch of the identical command still
+  # succeeds exactly once -- would be impossible if this gate had instead
+  # observed (and acted on) an already-forced run_in_background:true.
+  _run_gate "$bridge_command" 'true' ''
+  _assert_allowed
+  _run_gate "$bridge_command" 'true' ''
+  _assert_blocked 'one-use'
 }

@@ -1,6 +1,6 @@
 ---
 name: init-session
-description: "Show project context dashboard. Optionally kicks off core subagent dispatch with --orchestrate <slug> flag."
+description: "Show project context dashboard. Optionally ensures the persistent support plane with --orchestrate <slug> flag."
 intent: [session, init, context, agents, skills, modules]
 copilot: false
 ---
@@ -13,29 +13,27 @@ Show project context — available agents, skills, modules, and business docs.
 
 ```
 /init-session                              # dashboard-only (read-only, default)
-/init-session --orchestrate <slug>         # dispatch core subagents, then dashboard
+/init-session --orchestrate <slug>         # ensure core support plane, then dashboard
 ```
 
 The `<slug>` is required when `--orchestrate` is passed. Example: `/init-session --orchestrate bl-w32-07`.
 
-## Step 0 — Core Subagent Dispatch (when --orchestrate <slug> is passed)
+## Step 0 — Core Support-Plane Dispatch (when --orchestrate <slug> is passed)
 
 Skip this step if `--orchestrate` flag is absent. Default behavior is read-only dashboard.
 
 When `--orchestrate <slug>` is passed:
 
 1. Validate slug is present: if `--orchestrate` is passed without a slug, emit error: "Usage: /init-session --orchestrate <slug>" and exit.
-2. Dispatch 6 core roles as concurrent `Agent` subagents. These may run as background peers (when the runtime supports `run_in_background=true`) or as single-use subagents — both are valid. No `team_name` or `TeamCreate` required:
-   - `Agent(subagent_type="context-provider", name="context-provider", run_in_background=true, prompt="...")`
-   - `Agent(subagent_type="doc-updater", name="doc-updater", run_in_background=true, prompt="...")`
-   - `Agent(subagent_type="arch-platform", name="arch-platform", run_in_background=true, prompt="...")`
-   - `Agent(subagent_type="arch-testing", name="arch-testing", run_in_background=true, prompt="...")`
-   - `Agent(subagent_type="arch-integration", name="arch-integration", run_in_background=true, prompt="...")`
-   - `Agent(subagent_type="quality-gater", name="quality-gater", run_in_background=true, prompt="...")`
-3. Consult context-provider: dispatch a context-provider query to get current project state (MEMORY.md, open items). Wait for response.
+2. Ensure the persistent support plane through the shared role-lifecycle manager — never raw `Agent()`/`SendMessage()` calls and never a hard-coded roster:
+   - `probe(profile)` reads the active `runtime-collaboration-policy.json` profile (`auto|persistent|ephemeral|disk-only`) and connector capabilities.
+   - `ensureRoles(profile, roles)` over exactly the default support plane — `arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, `doc-updater`. **Never add `quality-gater`** — it stays phase-scoped and is dispatched fresh per wave, never parked in the persistent plane.
+   - `waitReady` for the resulting bindings, bounded by the policy's `ready_timeout_seconds`.
+   - This is idempotent: a second `--orchestrate` call in the same session reuses the existing healthy bindings instead of respawning. `auto|persistent` launches at most one retained connector (Claude Agent Teams peer or Codex supervisor) per role; `ephemeral`/`disk-only` fall back per policy without a false READY claim.
+3. Once the support plane is READY, context-provider is addressable for the rest of the session — no separate mandatory "consult and wait" step is required here. An optional light consult may accelerate loading current project state before the dashboard, but rendering never blocks on it.
 4. Continue to Step 1 (dashboard render)
 
-> **Note**: The `<slug>` wave slug determines the wave artifact directory (`.planning/wave-<slug>/`). The load-bearing contract is disk artifacts — verdicts, stamps, and the QG report — not named-team membership.
+> **Note**: The `<slug>` wave slug determines the wave artifact directory (`.planning/wave-<slug>/`). The load-bearing contract is disk artifacts — verdicts, stamps, and the QG report — not named-team membership or a live message.
 
 ## Steps
 
