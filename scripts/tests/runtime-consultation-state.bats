@@ -773,7 +773,16 @@ _assert_cli_result() {
 @test "DUR-J-Gap2-await-nlink2-result-STOP FAIL (allowlist NEGATIVE): await-result must PROPAGATE + STOP (DURABILITY_UNPROVEN) on a result candidate in the nlink==2 in-flight window, never keep polling past it" {
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
-  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  # Stale-fixture fix: _write_request's global default created_at/expiry are
+  # fixed at 2025-01-01 -- by the time this suite runs "now", that request is
+  # already expired, so await-result correctly returns TIMEOUT/REQUEST_EXPIRED
+  # before ever reaching this test's own intended assertion below. Overriding
+  # with live created_at/expiry (matching many other tests in this same file,
+  # e.g. XACT-09/TO-03a/TO-04) restores the intended bounded-window scenario
+  # without touching the global fixed-2025 defaults other tests rely on.
+  local created_at; created_at="$(_iso_now)"
+  local expiry; expiry="$(_iso_plus_seconds "$created_at" 3600)"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s","created_at":"%s","expiry":"%s"}' "$rid" "$rid" "$aid" "$created_at" "$expiry")"
   local req_digest; req_digest="$(_sha256_file "$req")"
   local result_f; result_f="$(_result_path "$rid" "$aid")"
   _write_result "$result_f" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED"}' "$rid" "$req_digest" "$rid" "$aid")"
@@ -3034,7 +3043,16 @@ _write_takeover() {
 @test "XACT-07-await-pending-becomes-present PASS: a result observed PENDING (nlink==2) that transitions to nlink==1 before the deadline yields SUCCESS" {
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
-  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  # Stale-fixture fix: _write_request's global default created_at/expiry are
+  # fixed at 2025-01-01 -- by the time this suite runs "now", that request is
+  # already expired, so await-result correctly returns TIMEOUT/REQUEST_EXPIRED
+  # before ever reaching this test's own intended assertion below. Overriding
+  # with live created_at/expiry (matching many other tests in this same file,
+  # e.g. XACT-09/TO-03a/TO-04) restores the intended bounded-window scenario
+  # without touching the global fixed-2025 defaults other tests rely on.
+  local created_at; created_at="$(_iso_now)"
+  local expiry; expiry="$(_iso_plus_seconds "$created_at" 3600)"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s","created_at":"%s","expiry":"%s"}' "$rid" "$rid" "$aid" "$created_at" "$expiry")"
   local req_digest; req_digest="$(_sha256_file "$req")"
   local result_f; result_f="$(_result_path "$rid" "$aid")"
   _write_result "$result_f" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED"}' "$rid" "$req_digest" "$rid" "$aid")"
@@ -3053,7 +3071,16 @@ _write_takeover() {
 @test "XACT-08-await-persistent-pending FAIL: a result that stays PENDING (nlink==2) through the whole deadline reports DURABILITY_UNPROVEN, never a generic TIMEOUT" {
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
-  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  # Stale-fixture fix: _write_request's global default created_at/expiry are
+  # fixed at 2025-01-01 -- by the time this suite runs "now", that request is
+  # already expired, so await-result correctly returns TIMEOUT/REQUEST_EXPIRED
+  # before ever reaching this test's own intended assertion below. Overriding
+  # with live created_at/expiry (matching many other tests in this same file,
+  # e.g. XACT-09/TO-03a/TO-04) restores the intended bounded-window scenario
+  # without touching the global fixed-2025 defaults other tests rely on.
+  local created_at; created_at="$(_iso_now)"
+  local expiry; expiry="$(_iso_plus_seconds "$created_at" 3600)"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s","created_at":"%s","expiry":"%s"}' "$rid" "$rid" "$aid" "$created_at" "$expiry")"
   local req_digest; req_digest="$(_sha256_file "$req")"
   local result_f; result_f="$(_result_path "$rid" "$aid")"
   _write_result "$result_f" "$(printf '{"in_reply_to":"%s","request_digest":"%s","root_request_id":"%s","attempt_id":"%s","status":"ANSWERED"}' "$rid" "$req_digest" "$rid" "$aid")"
@@ -3284,9 +3311,27 @@ _write_takeover() {
 @test "FM-08-delivered-no-result-timeout: delivered=true with no result ever appearing -- await-result times out" {
   local rid aid; rid="$(_gen_hex_id)"; aid="$(_gen_hex_id)"
   local req; req="$(_request_path "$rid")"
-  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s"}' "$rid" "$rid" "$aid")"
+  # Stale-fixture fix: _write_request's global default created_at/expiry are
+  # fixed at 2025-01-01 -- by the time this suite runs "now", that request is
+  # already expired, so await-result correctly returns TIMEOUT/REQUEST_EXPIRED
+  # before ever reaching this test's own intended assertion below. Overriding
+  # with live created_at/expiry (matching many other tests in this same file,
+  # e.g. XACT-09/TO-03a/TO-04) restores the intended bounded-window scenario
+  # without touching the global fixed-2025 defaults other tests rely on.
+  local created_at; created_at="$(_iso_now)"
+  local expiry; expiry="$(_iso_plus_seconds "$created_at" 3600)"
+  _write_request "$req" "$(printf '{"request_id":"%s","root_request_id":"%s","initial_attempt_id":"%s","created_at":"%s","expiry":"%s"}' "$rid" "$rid" "$aid" "$created_at" "$expiry")"
   local claim_f; claim_f="$(_claim_path "$rid" "$aid")"
-  _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s"}' "$rid" "$aid")"
+  # Empirically confirmed (isolated diagnostic run): _write_claim's own default
+  # created_at is ALSO fixed at 2025-01-01. With a fresh request but a stale
+  # claim, await-result took a different, earlier branch than intended
+  # (BLOCKED/WORKER_LEASE_MISSING instead of the bounded-wait-then-TIMEOUT this
+  # test proves) -- reusing this same live created_at keeps claim and request
+  # mutually consistent, restoring the intended scenario without publishing an
+  # active-lease record (the whole point of this test: no lease was ever
+  # published, so a bounded poll must eventually give up, never hang or
+  # fabricate success).
+  _write_claim "$claim_f" "$(printf '{"request_id":"%s","attempt_id":"%s","created_at":"%s"}' "$rid" "$aid" "$created_at")"
   local delivery_f; delivery_f="$(_delivery_path "$rid" "$aid")"
   _write_delivery "$delivery_f" "$(printf '{"request_id":"%s","attempt_id":"%s","delivered":true,"commit_point":"sendmessage-returned","commit_point_at":"2025-01-01T00:00:07Z","outcome":"possibly-delivered"}' "$rid" "$aid")"
   # No results/<attempt_id>.json ever appears -- bounded poll must time out, never

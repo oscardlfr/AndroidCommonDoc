@@ -39,9 +39,11 @@ ADR-001 §1 separately draws a three-*concept* distinction (portable orchestrato
 
 - **context7-preferred** evidence policy shipped alongside the existing strict `context7-required` — detail in [runtime-messaging-drivers § Context7 Evidence Policy](runtime-messaging-drivers.md#context7-evidence-policy).
 - **Driver fallback** (takeover-and-redispatch on lease loss) implemented and end-to-end verified, including a real inbox-ref `created_at` collision bug found and fixed this session — detail in [runtime-messaging-drivers § Driver Fallback](runtime-messaging-drivers.md#driver-fallback-takeover-and-redispatch).
+- **Matrix 3** (live Codex app-server, real mission): GREEN (mailbox Sequence 48) — the real five-role support plane completed its disk-authoritative chain (`toolkit-specialist -> arch-platform -> context-provider -> same arch-platform -> original toolkit-specialist`) with a current accepted result, an ack, real cited Context7 evidence, and zero repository mutation. The earlier Matrix-3 execution blocker is superseded for this live path; the separate request-scoped human-consent/actor-auth hardening gap remains open in `BACKLOG.md` and is not required to classify the measured Matrix-3 run as GREEN.
+- **M9-A** local E2E: GREEN `11/11` (Sequence 49), no skips, leaks or repository writes. Real Windows remote execution remains `PENDING_REAL_WINDOWS_REMOTE_EXECUTION` — local GREEN is not an overall M9-A or Windows GREEN claim.
+- **Stabilization**: full native Bats `3198/3198` and Node `2611/2611` GREEN (Sequence 59); all previously observed Bats failures were investigated, none deleted, skipped, weakened or quarantined.
 - **R33 native (M2-M5/M9-NATIVE)**: `PENDING_EXTERNAL_RELEASE` — does not block Wave 1 functional closure (`BACKLOG.md` § Backlog and memory impact).
 - **Matrix 2** (2026-08-20): the accepted historical real-Context7 capability proof; re-validated read-only this session. It predates `context7-required`'s pattern-evidence enforcement (landed 2026-08-21) and should not be read as demonstrating that current enforcement path.
-- **Matrix 3** (live Codex app-server, real mission): not completed this session — blocked by an unresolved orchestrator-vs-specialist authority-verification gap (a specialist declined a one-shot root-source bootstrap without independently verifiable proof of fresh mission authorization), not a protocol defect. OPEN ITEM, no owning wave yet. The full Matrix-3-shaped chain is separately verified end-to-end via the fake-driver `WAVE1-E2E-04-MIXED-RUNTIME-CHAIN` test.
 
 ## Related Docs
 

@@ -62,7 +62,12 @@ SKILL_MAP["npm test"]="rtk vitest run"
 SKILL_MAP["npx vitest"]="rtk vitest run"
 
 usage() {
-    sed -n '/^# skill-leak/,/^[^#]/{ /^[^#]/d; s/^# \{0,1\}//; p }' "$0"
+    # Explicit `;` before the closing `}` -- BSD sed (macOS /usr/bin/sed)
+    # requires a command terminator before a brace-group's closing brace;
+    # GNU sed tolerates `p }` without one. Without it, this previously
+    # aborted with "extra characters at the end of p command" under
+    # `set -euo pipefail`, taking down --help/-h with it.
+    sed -n '/^# skill-leak/,/^[^#]/{ /^[^#]/d; s/^# \{0,1\}//; p; }' "$0"
     exit 0
 }
 

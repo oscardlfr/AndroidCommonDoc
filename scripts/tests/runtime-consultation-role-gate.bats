@@ -3178,6 +3178,16 @@ const mode = process.argv[2] || 'cooperative';
 const pidFile = process.argv[3] || '';
 const eventFile = process.argv[4] || '';
 const gapSpecRaw = process.argv[5] || '';
+// M67-ROOT-CONTEXT7-E2E-01 fixture fix: optional exact required-consult-question
+// passthrough. When the real wire schema retains an enum, the enum branch below
+// is used unchanged (existing callers that never set this stay on that path).
+// When the enum is intentionally absent (the real required question contains
+// CR/LF, so the production Codex wire projection uses a bounded free string
+// instead of an enum), this stub must relay the caller-supplied EXACT question
+// bytes rather than inventing a second, different copy -- production still
+// enforces byte identity against the real required question, so any invented
+// value is correctly rejected.
+const requiredQuestionRaw = process.argv[6] || '';
 let gapSpec = null;
 if ((mode === 'context-provider-gap-once' || mode === 'context-provider-gap-always' || mode === 'consult-context-provider-once') && gapSpecRaw) {
   try { gapSpec = JSON.parse(gapSpecRaw); } catch { gapSpec = null; }
@@ -3299,7 +3309,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
       && consultBranch.properties.consult.properties.target_role.enum[0];
     const consultQuestionSchema = emitConsult && consultBranch.properties.consult.properties.question;
     const consultQuestion = emitConsult
-      && (Array.isArray(consultQuestionSchema.enum) ? consultQuestionSchema.enum[0] : 'fake-codex-consult-question');
+      && (Array.isArray(consultQuestionSchema.enum) ? consultQuestionSchema.enum[0] : (requiredQuestionRaw || 'fake-codex-consult-question'));
     const envelope = emitConsult
       ? (consultEmittedForThread.add(frame.params.threadId), {
         schema: 'coordination/runtime-turn-envelope/v1',
@@ -3361,9 +3371,9 @@ STUBEOF
   S16E2E_FAKE_APP_SERVER_SPAWN_JSON="$(node -e '
     process.stdout.write(JSON.stringify({
       command: process.execPath,
-      args: [process.argv[1], process.argv[3], "", process.argv[2], process.argv[4]],
+      args: [process.argv[1], process.argv[3], "", process.argv[2], process.argv[4], process.argv[5]],
     }));
-  ' "$S16E2E_FAKE_CODEX" "$S16E2E_FAKE_APP_SERVER_EVENTS" "${S16E2E_FAKE_MODE:-cooperative}" "${S16E2E_FAKE_GAP_SPEC:-}")"
+  ' "$S16E2E_FAKE_CODEX" "$S16E2E_FAKE_APP_SERVER_EVENTS" "${S16E2E_FAKE_MODE:-cooperative}" "${S16E2E_FAKE_GAP_SPEC:-}" "${S16E2E_FAKE_REQUIRED_QUESTION:-}")"
 }
 
 # Mirrors _mint_raw_action from runtime-consultation-bridge.bats: mints a
@@ -4068,6 +4078,11 @@ _r2c_s16_integrity_postdispatch() {
   S16E2E_FAKE_MODE="consult-context-provider-once"
   S16E2E_FAKE_GAP_SPEC='{"provider":"context7","library_name":"Ktor Documentation","library_id":"/ktorio/ktor-documentation","query":"Does HttpTimeout requestTimeoutMillis govern an upgraded WebSocket session?"}'
   local question; question="$(printf 'APPROVED_CONTEXT7_LIBRARY_ID: /ktorio/ktor-documentation\nDetermine whether Ktor HttpTimeout requestTimeoutMillis governs an upgraded WebSocket session, and return the architecture recommendation with official source evidence; do not modify repository files.')"
+  # Fixture fix (not a production change): this question's embedded newline means
+  # the real wire schema omits the enum for it, so the fake app-server's default
+  # fallback ('fake-codex-consult-question') would diverge from the byte-identical
+  # value production requires -- pass the exact bytes through explicitly instead.
+  S16E2E_FAKE_REQUIRED_QUESTION="$question"
   _s16e2e_setup_through_ingress "m67-rce2e-session" "m67-rce2e-agent" "arch-platform" "$question" "ARCHITECTURE_RECOMMENDATION"
   local session_id="$S16E2E_SESSION_ID" agent_id="$S16E2E_AGENT_ID"
   local action_id="$S16E2E_ACTION_ID"

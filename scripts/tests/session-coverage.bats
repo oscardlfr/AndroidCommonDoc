@@ -59,8 +59,11 @@ teardown() {
 }
 
 @test "parity: PS1 kover does NOT use --rerun-tasks as argument" {
-    # --rerun-tasks removed: core-storage-secure fails on re-execution
-    count=$(grep -c '^\s.*\+= "--rerun-tasks"' "$PS1_DIR/run-parallel-coverage-suite.ps1" || true)
+    # --rerun-tasks removed: core-storage-secure fails on re-execution.
+    # Portable ERE: [[:space:]]+ instead of GNU-only \s, -E instead of \+ (BRE
+    # shorthand) -- BSD grep (macOS /usr/bin/grep) rejects \s/\+ with
+    # "repetition-operator operand invalid"; proves what this test proves.
+    count=$(grep -cE '^[[:space:]]+.*\+= "--rerun-tasks"' "$PS1_DIR/run-parallel-coverage-suite.ps1" || true)
     [ "$count" -eq 0 ]
 }
 
@@ -106,7 +109,10 @@ teardown() {
 }
 
 @test "parity: PS1 run-parallel has kover batch (no --rerun-tasks as arg)" {
-    count=$(grep -c '^\s.*\+= "--rerun-tasks"' "$PS1_DIR/run-parallel-coverage-suite.ps1" || true)
+    # Portable ERE: [[:space:]]+ instead of GNU-only \s, -E instead of \+ (BRE
+    # shorthand) -- BSD grep (macOS /usr/bin/grep) rejects \s/\+ with
+    # "repetition-operator operand invalid"; proves what this test proves.
+    count=$(grep -cE '^[[:space:]]+.*\+= "--rerun-tasks"' "$PS1_DIR/run-parallel-coverage-suite.ps1" || true)
     [ "$count" -eq 0 ]
 }
 

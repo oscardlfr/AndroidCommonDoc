@@ -263,8 +263,11 @@ _setup_git_repo() {
 @test "run-parallel-coverage-suite.ps1: coverage phase does NOT use --rerun-tasks" {
     PS1_SCRIPT="$BATS_TEST_DIRNAME/../ps1/run-parallel-coverage-suite.ps1"
     [ -f "$PS1_SCRIPT" ] || skip "PS1 script not found"
-    # Only in comments (line with "# Do NOT use"), not as actual arguments
-    count=$(grep -c '^\s.*\+= "--rerun-tasks"' "$PS1_SCRIPT" || true)
+    # Only in comments (line with "# Do NOT use"), not as actual arguments.
+    # Portable ERE: [[:space:]]+ instead of GNU-only \s, -E instead of \+ (BRE
+    # shorthand) -- BSD grep (macOS /usr/bin/grep) rejects \s/\+ with
+    # "repetition-operator operand invalid"; proves what this test proves.
+    count=$(grep -cE '^[[:space:]]+.*\+= "--rerun-tasks"' "$PS1_SCRIPT" || true)
     [ "$count" -eq 0 ]
 }
 

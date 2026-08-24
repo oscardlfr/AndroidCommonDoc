@@ -157,7 +157,7 @@ describe('dev template structural invariants', () => {
     'data-layer-specialist.md',
   ];
 
-  it('all 4 dev templates are at most 300 lines', () => {
+  it('all 4 dev templates are within their per-template line budget', () => {
     // BL-W32-06b (2026-05-01): bumped 315→350 to accommodate test-specialist.md kmp-test-runner v0.6.2
     // awareness section (+27 lines, line 136-163). Other 3 dev templates (ui/data/domain) remain ≤315.
     // BL-W33 PR4 (2026-05-02): bumped 350→360 for BL-W32-15 Edit precondition escalation block (+6 lines).
@@ -166,8 +166,11 @@ describe('dev template structural invariants', () => {
     // BL-W40 PR3 (2026-05-04): +7 lines (Numbered Step Gate) — ui 315→322, domain 215→222, data 208→215.
     // BL-W47-prep-10 C7 (2026-05-17): +11 lines each (Task Completion Protocol section) — test 370→381, ui 322→333, domain 222→233, data 216→227.
     // BL-W47-prep-13 C5 (2026-05-18): +1 line each (./gradlew check exit criteria) — test 381→382, ui 333→334, domain 233→234, data 227→228.
+    // Wave 1 (2026-08-24): +5 lines to test-specialist.md only — the planned
+    // "Runtime Messaging Adapters" pointer section (cross-runtime consultation
+    // routing doc reference) — test 382→387. ui/domain/data untouched.
     const PER_TEMPLATE_LIMIT: Record<string, number> = {
-      'test-specialist.md': 382,
+      'test-specialist.md': 387,
       'ui-specialist.md': 334,
       'domain-model-specialist.md': 234,
       'data-layer-specialist.md': 228,

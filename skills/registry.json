@@ -2920,12 +2920,7 @@
           "validator"
         ],
         "token_budget": 3000,
-        "template_version": "1.9.0",
-        "memory": "project",
-        "skills": [
-          "test",
-          "validate-patterns"
-        ]
+        "template_version": "1.9.0"
       }
     },
     {

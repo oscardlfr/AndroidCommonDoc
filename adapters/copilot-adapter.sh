@@ -83,10 +83,14 @@ for skill_dir in "$SKILLS_DIR"/*/; do
   [ -f "$skill_file" ] || continue
 
   # Parse frontmatter fields
-  name=$(awk '/^---$/{n++; next} n==1 && /^name:/{gsub(/^name:\s*"?|"?\s*$/,"",$0); print; exit}' "$skill_file")
-  description=$(awk '/^---$/{n++; next} n==1 && /^description:/{sub(/^description:\s*"?/,""); sub(/"?\s*$/,""); print; exit}' "$skill_file")
-  copilot_enabled=$(awk '/^---$/{n++; next} n==1 && /^copilot:/{gsub(/^copilot:\s*/,"",$0); gsub(/\s*$/,"",$0); print; exit}' "$skill_file")
-  template_type=$(awk '/^---$/{n++; next} n==1 && /^copilot-template-type:/{gsub(/^copilot-template-type:\s*/,"",$0); gsub(/\s*$/,"",$0); print; exit}' "$skill_file")
+  # NOTE: POSIX [[:space:]] used throughout (not GNU/PCRE \s) -- macOS's
+  # default /usr/bin/awk (BWK/one-true-awk) does not support \s, so it
+  # previously matched literally/incorrectly and silently mis-parsed or
+  # dropped frontmatter fields on that platform.
+  name=$(awk '/^---$/{n++; next} n==1 && /^name:/{gsub(/^name:[[:space:]]*"?|"?[[:space:]]*$/,"",$0); print; exit}' "$skill_file")
+  description=$(awk '/^---$/{n++; next} n==1 && /^description:/{sub(/^description:[[:space:]]*"?/,""); sub(/"?[[:space:]]*$/,""); print; exit}' "$skill_file")
+  copilot_enabled=$(awk '/^---$/{n++; next} n==1 && /^copilot:/{gsub(/^copilot:[[:space:]]*/,"",$0); gsub(/[[:space:]]*$/,"",$0); print; exit}' "$skill_file")
+  template_type=$(awk '/^---$/{n++; next} n==1 && /^copilot-template-type:/{gsub(/^copilot-template-type:[[:space:]]*/,"",$0); gsub(/[[:space:]]*$/,"",$0); print; exit}' "$skill_file")
 
   # Warn on missing copilot field
   if [ -z "$copilot_enabled" ]; then
@@ -106,9 +110,9 @@ for skill_dir in "$SKILLS_DIR"/*/; do
   param_names=$(awk '
     /^---$/{n++; next}
     n>=2{exit}
-    n==1 && /^\s+params:/{in_params=1; next}
-    n==1 && in_params && /^\s+-\s+/{gsub(/^\s+-\s+/,""); print; next}
-    n==1 && in_params && !/^\s+-/{exit}
+    n==1 && /^[[:space:]]+params:/{in_params=1; next}
+    n==1 && in_params && /^[[:space:]]+-[[:space:]]+/{gsub(/^[[:space:]]+-[[:space:]]+/,""); print; next}
+    n==1 && in_params && !/^[[:space:]]+-/{exit}
   ' "$skill_file")
 
   # Build parameter prompt lines using cached copilot data
@@ -132,7 +136,7 @@ for skill_dir in "$SKILLS_DIR"/*/; do
       /^---$/ && !in_fm { in_fm=1; next }
       /^---$/ && in_fm && !past_fm { past_fm=1; next }
       past_fm { print }
-    ' "$skill_file" | sed '1{/^$/d}')
+    ' "$skill_file" | sed '1{/^$/d;}')
 
     section_header="## Instructions"
     if [ "$template_type" = "reference" ]; then
@@ -198,7 +202,7 @@ for skill_dir in "$SKILLS_DIR"/*/; do
       echo "## Implementation"
       echo ""
       if [ "$is_orchestration" = "yes" ]; then
-        awk '/^## Implementation/{found=1; next} found && /^## /{exit} found{print}' "$skill_file" | sed '1{/^$/d}'
+        awk '/^## Implementation/{found=1; next} found && /^## /{exit} found{print}' "$skill_file" | sed '1{/^$/d;}'
       else
         echo "### macOS / Linux"
         echo '```bash'

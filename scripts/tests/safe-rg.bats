@@ -87,6 +87,21 @@ teardown() {
     echo "$result" | grep -q "Repo.kt"
 }
 
+@test "safe_rg: --exclude-dir excludes a nested (non-root-level) occurrence with an absolute search root" {
+    # Proves exclusion works at ANY depth under an absolute root, not only
+    # directly under it -- the prior "!DIR/**" glob (no leading **/) is
+    # anchored to the search root and silently failed to exclude with an
+    # absolute root; "!**/DIR/**" excludes root-level AND nested alike.
+    mkdir -p "$WORK_DIR/src/main/kotlin/build/deeper"
+    echo 'nested java.time' > "$WORK_DIR/src/main/kotlin/build/deeper/Nested.kt"
+    result=$(safe_rg "java.time" "$WORK_DIR" --exclude-dir=build)
+    if echo "$result" | grep -q "Nested.kt"; then
+        echo "FAIL: nested build/ occurrence should have been excluded"
+        return 1
+    fi
+    echo "$result" | grep -q "Repo.kt"
+}
+
 @test "safe_rg: --exclude-dir skips .gradle directory" {
     result=$(safe_rg "java.time" "$WORK_DIR" --exclude-dir=.gradle)
     if echo "$result" | grep -q "Cache.kt"; then

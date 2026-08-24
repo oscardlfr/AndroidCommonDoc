@@ -73,7 +73,7 @@ OK_COUNT=0
 
 # Helper: extract name from frontmatter
 extract_name() {
-    sed -n '/^---$/,/^---$/{/^name:/p}' "$1" | head -1 | sed 's/^name: *//' | sed 's/^["'"'"']//' | sed 's/["'"'"']$//'
+    sed -n '/^---$/,/^---$/{/^name:/p; }' "$1" | head -1 | sed 's/^name: *//' | sed 's/^["'"'"']//' | sed 's/["'"'"']$//'
 }
 
 # Helper: extract body after frontmatter

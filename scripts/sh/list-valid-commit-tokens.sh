@@ -62,14 +62,27 @@ fi
 
 # --- Parse valid_types from YAML default: field ---
 # Matches: `        default: "feat,fix,docs,..."` (the valid_types input default)
+# POSIX-only extraction (no gawk 3-arg match(string,regexp,array) extension --
+# macOS's default /usr/bin/awk is BWK/one-true-awk, which only supports the
+# 2-argument match(string,regexp) form; the 3-arg capture-array form previously
+# silently failed to populate the value, exiting 1 with "Could not parse
+# valid_types default" on that platform). Preserves the original's two-path
+# fallback: try a quoted value first, then an unquoted (whitespace-delimited)
+# value, exactly as before.
 TYPES_RAW=$(awk '
     /valid_types:/ { found_types=1 }
     found_types && /default:/ {
-        match($0, /default:[[:space:]]*"([^"]+)"/, arr)
-        if (arr[1] != "") { print arr[1]; exit }
-        # fallback: unquoted default
-        match($0, /default:[[:space:]]*([^[:space:]]+)/, arr2)
-        if (arr2[1] != "") { print arr2[1]; exit }
+        line = $0
+        sub(/^.*default:[[:space:]]*/, "", line)
+        if (line ~ /^"[^"]*"/) {
+            val = line
+            sub(/^"/, "", val)
+            sub(/".*$/, "", val)
+            if (val != "") { print val; exit }
+        }
+        val2 = line
+        sub(/[[:space:]].*$/, "", val2)
+        if (val2 != "") { print val2; exit }
     }
 ' "$TYPES_FILE")
 

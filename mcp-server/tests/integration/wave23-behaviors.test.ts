@@ -116,16 +116,24 @@ describe("S8: team-lead template has Token Meter + retrospective rule", () => {
 // ---------------------------------------------------------------------------
 
 describe("5.16.0 hotfix: team-lead session setup uses subagent_type on peer spawns", () => {
-  it("main-agent-orchestration-guide.md spawns context-provider with subagent_type (W31.6)", () => {
+  // N03 (Sequence 55): the persistent support plane (context-provider,
+  // doc-updater, and the 3 architects) is now ensured once per session via
+  // the shared role-lifecycle manager's `ensureRoles` -- never a raw
+  // `Agent(subagent_type=...)` spawn per role. The prior two tests asserted
+  // the retired raw-spawn literal (`subagent_type="context-provider"` /
+  // `subagent_type="doc-updater"`), which the guide no longer contains for
+  // either role. Replaced with assertions that each role is declared inside
+  // the documented `ensureRoles` persistent-support-plane roster instead.
+  it("main-agent-orchestration-guide.md declares context-provider in the ensureRoles persistent-support-plane roster (W31.6/BL-W48)", () => {
     // BL-W45 hub-split: content may be in tl-* sub-docs
     const raw = readOrchestrationGuide();
-    expect(raw).toMatch(/subagent_type="context-provider"/);
+    expect(raw).toMatch(/persistent support plane[\s\S]{0,200}`context-provider`[\s\S]{0,200}ensureRoles/);
   });
 
-  it("main-agent-orchestration-guide.md spawns doc-updater with subagent_type (W31.6)", () => {
+  it("main-agent-orchestration-guide.md declares doc-updater in the ensureRoles persistent-support-plane roster (W31.6/BL-W48)", () => {
     // BL-W45 hub-split: content may be in tl-* sub-docs
     const raw = readOrchestrationGuide();
-    expect(raw).toMatch(/subagent_type="doc-updater"/);
+    expect(raw).toMatch(/persistent support plane[\s\S]{0,200}`doc-updater`[\s\S]{0,200}ensureRoles/);
   });
 
   it("main-agent-orchestration-guide.md has NEVER self-assign guard for context-provider (W31.6)", () => {
