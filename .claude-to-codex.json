@@ -1,1 +1,0 @@
-{"status":"GREEN-C1b-implemented","file":"scripts/lib/runtime-bridge-codex.cjs","changes":7,"note":"observed=completedItem, ackPath wired, scheduleP2ReviewIfCompleted(rootIntent,completedResult) requires .item"}

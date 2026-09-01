@@ -18,7 +18,7 @@ bats_require_minimum_version 1.5.0
 #   #20:    verify-proof covers all required steps with PASS
 #   #21-23: Predicate enforcement (kt_files_changed TRUE/FALSE)
 #   #P1a:   deliberation-role-incomplete Path A (consulted list missing role)
-#   #P1b:   deliberation-role-incomplete Path B (verdict file absent)
+#   #P1b:   verdict-head-binding Path B (required verdict file absent)
 #   #P2a:   env_attested SKIP allowed (runtime-ui-validation + ui-baseline present)
 #   #P2b:   inconsistent-skip (coverage SKIP + kt_files_changed TRUE, no env_attested)
 #   #R1:    required step SKIP (test-suite ran=false result=SKIP) → step-not-pass (a62fe89 #4)
@@ -995,12 +995,13 @@ PYEOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #P1b  deliberation_role_incomplete_verdict — Path B
-# Required verdict file absent → exit 2 deliberation-role-incomplete.
-# die path: L387 "deliberation-role-incomplete: required verdict file 'arch-<role>-verdict.md'
-# missing or not VERIFY-FINAL+HEAD-bound in <wave_dir>"
+# #P1b  verdict_head_binding_missing_verdict — Path B
+# Required canonical verdict file absent → exit 2 verdict-head-binding.
+# This is deliberately distinct from Path A's deliberation-role-incomplete:
+# the report names all required architects, but the exact per-role VERIFY-FINAL
+# artifact is absent and therefore cannot be HEAD-bound.
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#P1b BLOCK: required verdict file absent (arch-integration missing) → exit 2 deliberation-role-incomplete" {
+@test "#P1b BLOCK: required verdict file absent (arch-integration missing) → exit 2 verdict-head-binding" {
   # All 3 roles in architects_consulted (Path A passes), but arch-integration verdict absent.
   write_quality_gate_report \
     '' \
@@ -1026,7 +1027,7 @@ EOF
   done
   run_emitter --subcommand run-qg
   [ "$status" -eq 2 ]
-  [[ "$output" =~ "deliberation-role-incomplete" ]]
+  [[ "$output" =~ "verdict-head-binding" ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

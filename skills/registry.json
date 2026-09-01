@@ -1832,14 +1832,14 @@
       "name": "work",
       "type": "skill",
       "path": "skills/work/SKILL.md",
-      "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
+      "description": "Smart task routing through the canonical runtime collaboration entrypoint.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:f6c6ab7255fbeaff865441c91c3510854dcf26f97f654a0f2af19b5731a03dd4",
       "dependencies": [],
       "frontmatter": {
         "name": "work",
-        "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
+        "description": "Smart task routing through the canonical runtime collaboration entrypoint.",
         "copilot": false,
         "intent": [
           "route",
