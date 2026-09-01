@@ -72,6 +72,19 @@ setup() {
   mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
   printf '# Fixture PLAN for bash-cli-spawn-gate.bats\n' > "$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
   mkdir -p "$PROJ/scripts/lib"
+  # This suite validates the Codex supervisor-start gate, not the repository's
+  # current host-selection preference. Pin a project-local v1 policy so a future
+  # toolkit-level v2 selection (for example Claude with fallback=deny) cannot
+  # silently redirect this deliberately single-driver Codex fixture.
+  node -e '
+    const fs = require("fs");
+    const policy = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    policy.schema = "runtime-collaboration-policy/v1";
+    policy.version = 1;
+    delete policy.selection;
+    fs.writeFileSync(process.argv[2], JSON.stringify(policy) + "\n", { mode: 0o600 });
+  ' "$BATS_TEST_DIRNAME/../lib/runtime-collaboration-policy.json" "$PROJ/scripts/lib/runtime-collaboration-policy.json"
+  cp "$BATS_TEST_DIRNAME/../lib/runtime-routing.json" "$PROJ/scripts/lib/runtime-routing.json"
 }
 
 teardown() {
